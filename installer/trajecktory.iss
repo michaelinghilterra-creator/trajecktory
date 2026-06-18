@@ -6,8 +6,8 @@
 ;   "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\trajecktory.iss
 ;
 ; UNTESTED: authored without a build machine. Compile + clean-VM test before use.
-; TODO before shipping: provide assets\trajecktory.ico, and decide code signing
-; (an unsigned .exe shows a SmartScreen "unknown publisher" warning).
+; TODO before shipping: decide code signing (an unsigned .exe shows a SmartScreen
+; "unknown publisher" warning). App icon is wired below (assets\trajecktory.ico).
 
 #define AppName "trajecktory"
 #define AppVersion "1.7.0"
@@ -27,7 +27,7 @@ OutputBaseFilename=TrajecktorySetup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-; SetupIconFile=assets\trajecktory.ico            ; provide before shipping
+SetupIconFile=assets\trajecktory.ico
 ; SignTool=signtool $f                            ; configure if code-signing
 
 [Files]

@@ -45,7 +45,8 @@ the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 - `launch-trajecktory.ps1`, `stop-trajecktory.ps1` — start/stop the server.
 
 ## Open items (TODO before shipping)
-- **App icon:** provide `installer\assets\trajecktory.ico` and uncomment
+- **App icon:** done. `installer\assets\trajecktory.ico` (multi-resolution
+  256/64/48/32/16, generated from the brand favicon) is wired up via
   `SetupIconFile` in `trajecktory.iss`.
 - **Code signing:** an unsigned `.exe` triggers a SmartScreen "unknown
   publisher" warning a non-technical user may not click past. Either sign it
