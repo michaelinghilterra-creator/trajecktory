@@ -11,6 +11,12 @@
 $ErrorActionPreference = 'Stop'
 
 $InstallDir = $PSScriptRoot
+
+# Log everything to the install dir so a failed launch leaves a diagnostic the
+# user can share (the shortcut runs this hidden, so console errors are otherwise
+# invisible). Best-effort: never let logging itself break startup.
+try { Start-Transcript -Path (Join-Path $InstallDir 'launch-log.txt') -Force | Out-Null } catch {}
+
 $NodeDir    = Join-Path $InstallDir 'node'
 $AppRoot    = Join-Path $InstallDir 'trajecktory'
 $WebDir     = Join-Path $AppRoot 'dashboard-web'
@@ -58,7 +64,9 @@ if (-not (Test-Path $loginMarker)) {
 Push-Location $WebDir
 & (Join-Path $NodeDir 'node.exe') 'build.mjs'
 $server = Start-Process -FilePath (Join-Path $NodeDir 'node.exe') `
-  -ArgumentList 'server\index.mjs' -PassThru -WindowStyle Hidden
+  -ArgumentList 'server\index.mjs' -PassThru -WindowStyle Hidden `
+  -RedirectStandardOutput (Join-Path $InstallDir 'server-out.log') `
+  -RedirectStandardError  (Join-Path $InstallDir 'server-err.log')
 Pop-Location
 
 # Record the port + PID so "Stop trajecktory" finds this exact server, whatever
@@ -72,6 +80,10 @@ for ($i = 0; $i -lt 60; $i++) {
   catch { Start-Sleep -Milliseconds 500 }
 }
 Start-Process $Url
+
+# Flush the launch log now that startup is done (the server keeps writing its own
+# server-out.log / server-err.log while it runs).
+try { Stop-Transcript | Out-Null } catch {}
 
 # 6. Keep this process tied to the server so "Stop trajecktory" (or ending this
 #    process) takes the server down with it.
