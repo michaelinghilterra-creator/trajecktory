@@ -1,0 +1,174 @@
+import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import { exec } from 'child_process';
+import { DEMO } from '../config.mjs';
+import { SETUP_ROOT, SETUP_FILES, setupSetScalar, SETUP_SCALAR_FIELDS, setupComputeState, SETUP_GUARDRAIL, setupHandoffPrompt } from '../lib/setup.mjs';
+
+export const router = express.Router();
+
+// ── Launchpad / guided setup ──────────────────────────────────────────────────
+// Thin, deterministic endpoints backing the visual onboarding module. The
+// dashboard NEVER calls an LLM here: generative work (parse CV, draft narrative,
+// suggest roles/companies, merge portals.yml) is handed to the user's OWN
+// Claude Code via copy-prompt-and-poll. These routes only read config-file
+// state, save structured scalar fields, and shell out to existing scripts.
+//
+// DATA CONTRACT: setup writes touch config only (config/profile.yml,
+// modes/_profile.md, data/pipeline.md). They NEVER write applications.md,
+// reports/, or scan history. Writes are blocked entirely in DEMO mode.
+router.get('/api/setup/state', (req, res) => {
+  try { res.json(setupComputeState()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/setup/preflight — run doctor.mjs --json and return parsed checks.
+router.post('/api/setup/preflight', (req, res) => {
+  exec('node doctor.mjs --json', { cwd: SETUP_ROOT, maxBuffer: 2 * 1024 * 1024 }, (err, stdout) => {
+    try { res.json(JSON.parse((stdout || '').trim())); }
+    catch { res.status(500).json({ ok: false, error: 'preflight parse failed', raw: (stdout || '').slice(0, 500) }); }
+  });
+});
+
+// POST /api/setup/healthcheck — run the verify scripts and report pass/fail.
+router.post('/api/setup/healthcheck', (req, res) => {
+  const cmd = 'node verify-pipeline.mjs && node verify-reports.mjs && node verify-actionable.mjs';
+  exec(cmd, { cwd: SETUP_ROOT, maxBuffer: 5 * 1024 * 1024 }, (err, stdout, stderr) => {
+    const output = (stdout || '') + (stderr ? '\n[stderr]\n' + stderr : '');
+    res.json({ ok: !err, output: output.slice(-4000) });
+  });
+});
+
+// POST /api/setup/handoff/:section — return the prompt to paste into Claude Code.
+router.post('/api/setup/handoff/:section', (req, res) => {
+  res.json({ prompt: setupHandoffPrompt(req.params.section) });
+});
+
+// POST /api/setup/save/:section — write structured scalar fields into profile.yml.
+router.post('/api/setup/save/:section', (req, res) => {
+  if (DEMO) return res.status(403).json({ error: 'Setup is read-only in demo mode' });
+  const fields = SETUP_SCALAR_FIELDS[req.params.section];
+  if (!fields) return res.status(400).json({ error: `No scalar fields for section: ${req.params.section}` });
+  const body = req.body || {};
+  try {
+    const abs = path.join(SETUP_ROOT, SETUP_FILES.profile);
+    let text = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '';
+    let changed = 0;
+    for (const [section, key] of fields) {
+      if (!(key in body)) continue;
+      const val = body[key];
+      // Skip empty values so optional fields left blank don't pollute the file
+      // with empty keys. Use /api/setup/reset to explicitly clear a section.
+      if (val == null || String(val).trim() === '') continue;
+      text = setupSetScalar(text, section, key, val);
+      changed++;
+    }
+    fs.writeFileSync(abs, text, 'utf8');
+    res.json({ ok: true, changed, state: setupComputeState() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/setup/reset/:section — blank a section's scalar fields (config only).
+router.post('/api/setup/reset/:section', (req, res) => {
+  if (DEMO) return res.status(403).json({ error: 'Setup is read-only in demo mode' });
+  const fields = SETUP_SCALAR_FIELDS[req.params.section];
+  if (!fields) return res.status(400).json({ error: `Cannot reset section: ${req.params.section}` });
+  try {
+    const abs = path.join(SETUP_ROOT, SETUP_FILES.profile);
+    let text = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '';
+    for (const [section, key] of fields) text = setupSetScalar(text, section, key, '');
+    fs.writeFileSync(abs, text, 'utf8');
+    res.json({ ok: true, state: setupComputeState() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/setup/first-eval — stage one job URL in data/pipeline.md and return
+// a handoff prompt. The scored result is read back via /api/applications.
+router.post('/api/setup/first-eval', (req, res) => {
+  const url = (req.body && req.body.url || '').trim();
+  if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'A valid http(s) job URL is required' });
+  const prompt = `Evaluate this job posting end to end (score, report, tracker): ${url}. ${SETUP_GUARDRAIL.replace('only edit config files', 'this run may add a report and a tracker row as normal evaluation output, but do not otherwise edit unrelated config')}`;
+  if (DEMO) return res.json({ ok: true, demo: true, prompt });
+  try {
+    const abs = path.join(SETUP_ROOT, SETUP_FILES.pipeline);
+    let text = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '# Pipeline\n\n';
+    if (!text.includes(url)) {
+      if (!text.endsWith('\n')) text += '\n';
+      text += `- [ ] ${url}\n`;
+      fs.writeFileSync(abs, text, 'utf8');
+    }
+    res.json({ ok: true, prompt });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET/POST /api/setup/stage/:key — small JSON staging files under data/setup/
+// backing the "split" sections. The dashboard saves the user's deterministic
+// picks here (seniority + titles, radius + chosen companies, manual certs); the
+// handoff prompts tell the user's Claude Code to read the same file, do the
+// generative half (suggestions, careers-url resolution, config writes), and
+// write suggestion lists back for the UI to render. Config files are still only
+// written by the agent — staging is scratch, never the source of truth.
+const SETUP_STAGE_KEYS = new Set(['roles', 'companies', 'certs']);
+router.get('/api/setup/stage/:key', (req, res) => {
+  if (!SETUP_STAGE_KEYS.has(req.params.key)) return res.status(400).json({ error: 'unknown staging key' });
+  const abs = path.join(SETUP_ROOT, 'data', 'setup', `${req.params.key}.json`);
+  try { res.json(JSON.parse(fs.readFileSync(abs, 'utf8'))); }
+  catch { res.json({}); }
+});
+router.post('/api/setup/stage/:key', (req, res) => {
+  if (DEMO) return res.status(403).json({ error: 'Setup is read-only in demo mode' });
+  if (!SETUP_STAGE_KEYS.has(req.params.key)) return res.status(400).json({ error: 'unknown staging key' });
+  try {
+    const dir = path.join(SETUP_ROOT, 'data', 'setup');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${req.params.key}.json`), JSON.stringify(req.body || {}, null, 2));
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/setup/cv-upload — stage an uploaded CV file (base64) for the user's
+// Claude Code to convert into cv.md. A .docx also seeds templates/cv-master.docx
+// (the resume master) when one does not already exist. Conversion is agent work.
+router.post('/api/setup/cv-upload', (req, res) => {
+  if (DEMO) return res.status(403).json({ error: 'Setup is read-only in demo mode' });
+  const { filename, dataBase64 } = req.body || {};
+  if (!filename || !dataBase64) return res.status(400).json({ error: 'filename and dataBase64 are required' });
+  const safe = path.basename(String(filename));
+  const ext = path.extname(safe).toLowerCase();
+  if (!['.docx', '.pdf', '.md', '.txt'].includes(ext)) {
+    return res.status(400).json({ error: `Unsupported file type ${ext || '(none)'}. Use .docx, .pdf, .md, or .txt` });
+  }
+  try {
+    const stageDir = path.join(SETUP_ROOT, 'data', 'setup');
+    fs.mkdirSync(stageDir, { recursive: true });
+    const buf = Buffer.from(String(dataBase64).replace(/^data:[^,]*,/, ''), 'base64');
+    const stagedRel = `data/setup/uploaded-cv${ext}`;
+    fs.writeFileSync(path.join(SETUP_ROOT, stagedRel), buf);
+    let seededMaster = false;
+    if (ext === '.docx') {
+      const masterAbs = path.join(SETUP_ROOT, SETUP_FILES.cvMaster);
+      if (!fs.existsSync(masterAbs)) {
+        fs.mkdirSync(path.dirname(masterAbs), { recursive: true });
+        fs.copyFileSync(path.join(SETUP_ROOT, stagedRel), masterAbs);
+        seededMaster = true;
+      }
+    }
+    const masterNote = ext === '.docx'
+      ? (seededMaster ? ' I also seeded templates/cv-master.docx from it for resume tailoring.'
+                      : ' Note: templates/cv-master.docx already exists; do not overwrite it.')
+      : '';
+    const prompt = `I uploaded my CV to ${stagedRel}. Convert it into a clean cv.md (Summary, Experience, Projects, Education, Skills).${masterNote} ${SETUP_GUARDRAIL}`;
+    res.json({ ok: true, saved: stagedRel, seededMaster, prompt });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Fallback — serve index.html for any non-API route
+

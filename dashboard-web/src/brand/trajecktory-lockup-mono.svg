@@ -1,0 +1,17 @@
+<svg width="248" height="56" viewBox="0 0 248 56" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="trajecktory">
+  <defs>
+    <linearGradient id="trajArcLk" x1="10" y1="44" x2="44" y2="10" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C5CF0"></stop>
+      <stop offset="1" stop-color="#C4B5FD"></stop>
+    </linearGradient>
+  </defs>
+  
+  <g transform="translate(2,4)">
+    <circle cx="11" cy="42" r="2.7" fill="#5D5D66"></circle>
+    <path d="M11 42 C 22.5 38.5 34 29 42 11" stroke="url(#trajArcLk)" stroke-width="3.8" stroke-linecap="round"></path>
+    <circle cx="42" cy="11" r="5.4" fill="#C4B5FD"></circle>
+  </g>
+  
+  <text x="62" y="30" font-family="&#39;JetBrains Mono&#39;, ui-monospace, monospace" font-size="23" font-weight="600" letter-spacing="-0.5" fill="#E8E8EA">traje<tspan fill="#A78BFA">ck</tspan>tory</text>
+  <text x="63" y="45" font-family="&#39;JetBrains Mono&#39;, ui-monospace, monospace" font-size="9" letter-spacing="2.2" fill="#5D5D66">CAREER PIPELINE V3.0</text>
+</svg>

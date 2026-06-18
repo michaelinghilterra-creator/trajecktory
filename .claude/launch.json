@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "trajecktory-dashboard",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "dashboard-web",
+      "port": 3333
+    },
+    {
+      "name": "trajecktory-dashboard-demo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:demo"],
+      "cwd": "dashboard-web",
+      "port": 3333
+    }
+  ]
+}

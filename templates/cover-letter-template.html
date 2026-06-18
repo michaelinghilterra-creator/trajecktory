@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="{{LANG}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{NAME}} — Cover Letter</title>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    font-family: Arial, sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #1a1a2e;
+    background: #ffffff;
+    padding: 0;
+    margin: 0;
+  }
+
+  .page {
+    width: 100%;
+    max-width: {{PAGE_WIDTH}};
+    margin: 0 auto;
+    padding: 0.6in;
+  }
+
+  /* === HEADER (matches CV header) === */
+  .header {
+    margin-bottom: 20px;
+  }
+
+  .header h1 {
+    font-family: Arial, sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: #1a1a2e;
+    letter-spacing: -0.02em;
+    margin-bottom: 2px;
+    line-height: 1.1;
+  }
+
+  .divider {
+    height: 2px;
+    background: linear-gradient(to right, hsl(187, 74%, 32%), hsl(270, 70%, 45%));
+    margin: 6px 0 8px 0;
+  }
+
+  .contact-row {
+    display: block;
+    font-family: Arial, sans-serif;
+    font-size: 11.5px;
+    line-height: 1.4;
+    color: #555;
+  }
+
+  .contact-row a {
+    color: #555;
+    text-decoration: none;
+  }
+
+  /* === DATE + RECIPIENT === */
+  .date-line {
+    font-size: 12px;
+    color: #555;
+    margin-bottom: 20px;
+  }
+
+  .recipient {
+    margin-bottom: 20px;
+  }
+
+  .recipient-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 2px;
+  }
+
+  .recipient-company {
+    font-size: 12px;
+    color: #333;
+  }
+
+  /* === SALUTATION === */
+  .salutation {
+    font-size: 12px;
+    color: #1a1a2e;
+    margin-bottom: 16px;
+  }
+
+  /* === BODY === */
+  .body-text p {
+    font-size: 12px;
+    line-height: 1.65;
+    color: #2f2f2f;
+    margin-bottom: 14px;
+  }
+
+  /* === CLOSING === */
+  .closing {
+    margin-top: 24px;
+  }
+
+  .closing-line {
+    font-size: 12px;
+    color: #2f2f2f;
+    margin-bottom: 32px;
+  }
+
+  .signature-name {
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+
+  .signature-contact {
+    font-size: 11.5px;
+    color: #555;
+    margin-top: 3px;
+  }
+
+  /* === PRINT === */
+  @media print {
+    body {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .page {
+      padding: 0;
+    }
+  }
+
+  /* Links must never break across lines */
+  a {
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <h1>{{NAME}}</h1>
+    <div class="divider"></div>
+    <div class="contact-row">{{EMAIL}} &nbsp;|&nbsp; <a href="{{LINKEDIN_URL}}">{{LINKEDIN_DISPLAY}}</a> &nbsp;|&nbsp; {{LOCATION}}</div>
+  </div>
+
+  <!-- DATE -->
+  <div class="date-line">{{DATE}}</div>
+
+  <!-- RECIPIENT -->
+  <div class="recipient">
+    <div class="recipient-name">{{RECIPIENT_NAME}}</div>
+    <div class="recipient-company">{{RECIPIENT_COMPANY}}</div>
+  </div>
+
+  <!-- SALUTATION -->
+  <div class="salutation">{{SALUTATION}}</div>
+
+  <!-- BODY -->
+  <div class="body-text">
+    {{BODY}}
+  </div>
+
+  <!-- CLOSING -->
+  <div class="closing">
+    <div class="closing-line">{{CLOSING_LINE}}</div>
+    <div class="signature-name">{{NAME}}</div>
+    <div class="signature-contact">{{EMAIL}} &nbsp;|&nbsp; {{PHONE}}</div>
+  </div>
+
+</div>
+</body>
+</html>

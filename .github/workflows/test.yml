@@ -1,0 +1,22 @@
+name: Tests
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run lint
+      - run: node test-all.mjs --quick
+      # Build the dashboard-web app so a broken React/esbuild change fails CI.
+      - run: npm ci
+        working-directory: dashboard-web
+      - run: npm run build
+        working-directory: dashboard-web

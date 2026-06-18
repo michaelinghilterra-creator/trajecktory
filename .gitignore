@@ -1,0 +1,82 @@
+# Personal data (user fills these)
+cv.md
+# All of data/ is user-layer (real + demo); ship none of it. Demo data is
+# regenerated from the seed scripts. Keep the dir via .gitkeep only.
+data/*
+!data/.gitkeep
+data/applications.md
+data/pipeline.md
+data/scan-history.tsv
+data/insights/
+reports/*.md
+!reports/.gitkeep
+output/*
+!output/.gitkeep
+batch/logs/*
+!batch/logs/.gitkeep
+batch/batch-state.tsv
+batch/batch-input.tsv
+batch/tracker-additions/**/*.tsv
+!batch/tracker-additions/.gitkeep
+batch/ws-tmp/
+jds/*
+!jds/.gitkeep
+interview-prep/*
+!interview-prep/.gitkeep
+
+# User config and customization (never auto-updated)
+config/profile.yml
+portals.yml
+modes/_profile.md
+templates/cv-master.docx
+.update-dismissed
+.update-lock
+
+# Secrets (never commit — use .env.example as template)
+.env
+
+# Generated
+.resolved-prompt-*
+node_modules/
+bun.lock
+
+# Server logs and backups
+dashboard-web/server-out.txt
+dashboard-web/server-err.txt
+dashboard-web/server.log
+*.bak
+*.bak-*
+*-pre-update.patch
+
+# OS
+.DS_Store
+*.mov
+*.mp4
+
+# Claude Code local
+.claude/settings.local.json
+.claude/memory/
+dashboard-web/src/dist/
+
+# Installer build artifacts (staged/compiled on a build machine)
+installer/payload/
+installer/Output/
+
+# Local-only scratch / tooling (never ship)
+dashboard-web/.claude/
+ignore-old_design_audit_files/
+# Internal point-in-time audit (references security findings + the owner name)
+AUDIT.md
+# Pre-archive backups (created by archive-discarded.mjs runs)
+data/applications.md.bak-*
+
+# Full-project zip backups (created on demand)
+backups/
+.backup-*/
+
+# Claude Code runtime lock files
+.claude/*.lock
+
+# Follow-up snooze state (runtime, per-user)
+data/followup-snooze.json
+data/apply-dates.json

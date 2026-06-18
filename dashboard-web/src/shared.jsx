@@ -1,0 +1,600 @@
+// Shared components: Sidebar, Topbar, pills, drawer, command palette, toasts
+const { useState: useStateS, useEffect: useEffectS, useRef: useRefS, useMemo: useMemoS } = React;
+
+// ---------- User identity (for draft signature blocks) ----------
+// Populated by app.jsx from GET /api/identity so the client bundle hardcodes no
+// name / email / phone. Read lazily at click time; falls back to empty strings
+// before the fetch resolves (the signature just omits whatever isn't loaded).
+window.myIdentity = () => (typeof window !== 'undefined' && window.__TJK_IDENTITY) || {};
+window.mySignoff = () => `Best,\n${window.myIdentity().fullName || ''}`;
+window.myEmailSignature = () => {
+  const m = window.myIdentity();
+  const lines = ['Best,', m.fullName || ''];
+  const contact = [m.phoneDisplay, m.email].filter(Boolean).join(' | ');
+  const links = [m.linkedinDisplay, m.portfolioHost].filter(Boolean).join(' | ');
+  if (contact) lines.push(contact);
+  if (links) lines.push(links);
+  return lines.join('\n');
+};
+
+// ---------- Canonical icon set ----------
+// One source of truth so PI / TI / REC_I and any subtab icons stay visually
+// identical. Loads via shared.js which is imported before every page file.
+window.ICON = {
+  // navigation / structure
+  pulse:     'M22 12h-4l-3 9L9 3l-3 9H2',
+  grid2:     'M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18',
+  list:      'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  layers:    'M12 2 2 7l10 5 10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
+  chart:     'M3 3v18h18M7 14l4-4 3 3 5-6',
+  trend:     'M22 7l-8.5 8.5-5-5L2 17',
+  // people / orgs
+  users:     'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
+  building:  'M3 21h18M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M19 21V11a1 1 0 0 0-1-1h-3M9 7h2M9 11h2M9 15h2',
+  briefcase: 'M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2',
+  // actions / motion
+  send:      'M22 2 11 13M22 2l-7 20-4-9-9-4z',
+  outbound:  'M12 19V5M5 12l7-7 7 7',
+  inbound:   'M12 5v14M5 12l7 7 7-7',
+  refresh:   'M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16',
+  undo:      'M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-1',
+  arrowR:    'M5 12h14M13 6l6 6-6 6',
+  chevR:     'M9 6l6 6-6 6',
+  // utility
+  search:    'M11 11m-8 0a8 8 0 1 0 16 0a8 8 0 1 0-16 0M21 21l-4.3-4.3',
+  x:         'M18 6 6 18M6 6l12 12',
+  check:     'M20 6 9 17l-5-5',
+  flag:      'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7',
+  star:      'M12 2l3 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.9 21l1.2-6.8-5-4.9 6.9-1z',
+  zap:       'M13 2 3 14h9l-1 8 10-12h-9z',
+  spark:     'M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8',
+  clock:     'M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0-18 0M12 7v5l3 2',
+  msg:       'M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-4.2A8.4 8.4 0 0 1 4 11.5 8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z',
+  mail:      'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 7l-10 6L2 7',
+  pen:       'M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z',
+  copy:      'M9 9h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V11a2 2 0 0 1 2-2zM5 15H4a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1',
+  ext:       'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3',
+  download:  'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  filter:    'M22 3H2l8 9.5V19l4 2v-8.5z',
+  sort:      'M3 6h18M6 12h12M10 18h4',
+  rocket:    'M4.5 16.5c-1.5 1.3-2 5-2 5s3.7-.5 5-2c.7-.8.7-2.1-.1-2.9a2.1 2.1 0 0 0-2.9 0zM12 15l-3-3a22 22 0 0 1 8-10c2.6 0 4 1.4 4 4a22 22 0 0 1-10 8zM9 12H4s.5-2.8 2-4 4 0 4 0M12 15v5s2.8-.5 4-2 0-4 0-4',
+};
+
+// ---------- Status Pill ----------
+window.StatusPill = function StatusPill({ status, size = "md" }) {
+  const meta = window.STATUS_META[status] || window.STATUS_META.Evaluated;
+  return (
+    <span className="pill mono" style={{ background: meta.bg, color: meta.color, fontSize: size === "sm" ? 10 : 11 }}>
+      <span className="dot" style={{ background: meta.color }}></span>
+      {status.toUpperCase()}
+    </span>
+  );
+};
+
+// ---------- Score chip with bar ----------
+window.ScoreChip = function ScoreChip({ score }) {
+  if (score == null) return <span className="score-chip" style={{ color: "var(--text-mute)" }}>N/A</span>;
+  const c = window.scoreColor(score);
+  const pct = ((score - 1) / 4) * 100;
+  return (
+    <span className="score-chip" style={{ color: c }}>
+      <span className="bar"><i style={{ width: `${pct}%`, background: c }} /></span>
+      {score.toFixed(1)}
+    </span>
+  );
+};
+
+// ---------- Sidebar ----------
+window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState }) {
+  // Numeric (1-9) keyboard hotkeys for tab switching removed per user request.
+  // The `hint` field is gone too. Overview carries the pending-decisions
+  // badge now that the standalone Actions tab is merged into it.
+  const items = [
+    { key: "overview",      label: "Overview",           icon: "▦", badge: stats.pending },
+    { key: "pipeline",      label: "Pipeline",           icon: "▥" },
+    { key: "followups",     label: "Follow-Ups",         icon: "↻", badge: stats.followups || null },
+    { key: "target-talent", label: "TA Outreach",        icon: "◎" },
+    { key: "linkedin-ssi",  label: "LinkedIn SSI",       icon: "🔗" },
+    { key: "recruiters",    label: "Recruiters",         icon: "☎" },
+    { key: "analytics",     label: "Insights",           icon: "✦" },
+    { key: "run",           label: "Job Search",         icon: "▸" },
+  ];
+
+  // Launchpad: front-and-centre with an incomplete-count badge while setup is
+  // unfinished; demoted to a quiet "Setup" hub entry once everything is ready.
+  if (setupState) {
+    const REQ = ["cv","identity","roles","edge","comp","location","evaluation","companies","outputs"];
+    const incomplete = REQ.filter(id => (setupState.sections?.[id]?.status || "empty") !== "complete").length;
+    if (setupState.firstRun || incomplete > 0) {
+      items.unshift({ key: "launchpad", label: "Launchpad", icon: "🚀", badge: incomplete || null });
+    } else {
+      items.push({ key: "launchpad", label: "Setup", icon: "🚀" });
+    }
+  }
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-brand">
+        <div className="brand-mark trajecktory">
+          <svg width="22" height="22" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+            <circle cx="14" cy="50" r="3.2" fill="#5D5D66"/>
+            <path d="M14 50 C 27 46 41 35 50 14" stroke="#C4B5FD" strokeWidth="5" strokeLinecap="round"/>
+            <circle cx="50" cy="14" r="7" fill="#C4B5FD"/>
+          </svg>
+        </div>
+        <div className="brand-text">
+          <strong className="mono">traje<span style={{ color: "var(--accent)" }}>ck</span>tory</strong>
+          <span>Career Pipeline v3.0</span>
+        </div>
+      </div>
+
+      <div className="nav-group">
+        <div className="nav-label">Navigate</div>
+        {items.map(it => (
+          <div key={it.key} className={`nav-item ${tab === it.key ? "active" : ""}`} onClick={() => setTab(it.key)}>
+            <span className="mono" style={{ width: 14, textAlign: "center", color: tab === it.key ? "var(--accent)" : "inherit" }}>{it.icon}</span>
+            <span>{it.label}</span>
+            {it.badge ? (
+              <span className="kbd" style={{ background: "var(--accent)", color: "#0a0a0c", borderColor: "var(--accent)", fontWeight: 700 }}>{it.badge}</span>
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      <div className="streak">
+        <div className="streak-flame">🔥</div>
+        <div>
+          <div className="streak-num">{streak}</div>
+          <div className="streak-label">day streak</div>
+        </div>
+      </div>
+
+      <window.WorkflowPanel />
+
+      <div className="sidebar-stats">
+        <div className="stat">
+          <span className="stat-label">Total</span>
+          <span className="stat-value">{stats.total}</span>
+        </div>
+        <div className="stat">
+          <span className="stat-label">Applied</span>
+          <span className="stat-value">{stats.applied}</span>
+        </div>
+        <div className="stat">
+          <span className="stat-label">In Flight</span>
+          <span className="stat-value yellow">{stats.inFlight}</span>
+        </div>
+        <div className="stat">
+          <span className="stat-label">Offers</span>
+          <span className="stat-value green">{stats.offers}</span>
+        </div>
+      </div>
+    </aside>
+  );
+};
+
+// ── WorkflowPanel ─────────────────────────────────────────────────────────────
+// Click-driven morning workflow. Each button shells out to a node script
+// via the /api/workflow endpoint. Two of the steps (Agent Scan, Evaluate
+// Pipeline) need a Claude Code session, so they show a copy-to-clipboard
+// command instead of running directly.
+window.WorkflowPanel = function WorkflowPanel() {
+  const { useState, useRef } = React;
+  const [jobs, setJobs] = useState({});            // { stepId: { status, summary, error, output } }
+  const pollersRef = useRef({});
+
+  const STEPS = [
+    { id: 'discover',  label: '1. Expand Coverage',  hint: 'Register new companies',  type: 'auto'   },
+    { id: 'api-scan',  label: '2. API Scan',         hint: 'Greenhouse/Ashby/Lever',  type: 'auto'   },
+    { id: 'cli-scan',  label: '3. Agent Scan',       hint: 'Discover roles (Claude)', type: 'agent', mode: 'scan',
+      command: '/career-ops scan' },
+    { id: 'gate',      label: '4. Liveness Gate',    hint: 'Drop dead URLs',          type: 'auto'   },
+    { id: 'cli-eval',  label: '5. Evaluate Pipeline',hint: 'Score pending (Claude)',  type: 'agent', mode: 'pipeline',
+      command: '/career-ops pipeline' },
+    { id: 'merge',     label: '6. Merge Tracker',    hint: 'TSVs → applications.md',  type: 'auto'   },
+    { id: 'verify',    label: '7. Verify Actionable',hint: 'Safety-net dead links',   type: 'auto'   },
+    { id: 'health',    label: '8. Health Check',     hint: 'Report parser drift',     type: 'auto'   },
+  ];
+
+  function runStep(step) {
+    if (step.type === 'agent') {
+      // Drives the user's local Claude Code in the background via /api/agent.
+      setJobs(j => ({ ...j, [step.id]: { status: 'running', activity: 'Starting agent…' } }));
+      fetch(`/api/agent/${step.mode}`, { method: 'POST' })
+        .then(r => r.json().then(body => ({ ok: r.ok, body })))
+        .then(({ ok, body }) => {
+          if (!ok || body.error || !body.jobId) {
+            setJobs(j => ({ ...j, [step.id]: { status: 'error', error: body.error || 'failed to start' } }));
+            return;
+          }
+          const poll = setInterval(() => {
+            fetch(`/api/agent/status/${body.jobId}`)
+              .then(r => r.json())
+              .then(job => {
+                // Live update every tick (activity, toolCount, subSteps)
+                setJobs(j => ({ ...j, [step.id]: job }));
+                if (job.status === 'done' || job.status === 'error') {
+                  clearInterval(poll);
+                  delete pollersRef.current[step.id];
+                }
+              })
+              .catch(() => { clearInterval(poll); });
+          }, 2000);
+          pollersRef.current[step.id] = poll;
+        })
+        .catch(err => setJobs(j => ({ ...j, [step.id]: { status: 'error', error: err.message } })));
+      return;
+    }
+    if (step.type === 'cli') {
+      // Copy command to clipboard, mark as "queued" so user knows what to do
+      navigator.clipboard?.writeText(step.command).catch(() => {});
+      setJobs(j => ({ ...j, [step.id]: { status: 'cli-pending', summary: `Copied "${step.command}" — paste into Claude CLI, then click ✓ when done` } }));
+      return;
+    }
+    setJobs(j => ({ ...j, [step.id]: { status: 'running', summary: 'Starting…' } }));
+    fetch(`/api/workflow/${step.id}`, { method: 'POST' })
+      .then(r => r.json())
+      .then(({ jobId, error }) => {
+        if (error || !jobId) {
+          setJobs(j => ({ ...j, [step.id]: { status: 'error', error: error || 'failed to start' } }));
+          return;
+        }
+        const poll = setInterval(() => {
+          fetch(`/api/workflow/status/${jobId}`)
+            .then(r => r.json())
+            .then(job => {
+              if (job.status === 'done' || job.status === 'error') {
+                clearInterval(poll);
+                delete pollersRef.current[step.id];
+                setJobs(j => ({ ...j, [step.id]: job }));
+              }
+            })
+            .catch(() => { clearInterval(poll); });
+        }, 2000);
+        pollersRef.current[step.id] = poll;
+      })
+      .catch(err => setJobs(j => ({ ...j, [step.id]: { status: 'error', error: err.message } })));
+  }
+
+  function markCliDone(stepId) {
+    setJobs(j => ({ ...j, [stepId]: { status: 'done', summary: 'Marked complete' } }));
+  }
+
+  function statusGlyph(s) {
+    if (!s)                  return { ch: '○', color: 'var(--text-mute)' };
+    if (s === 'running')     return { ch: '◐', color: 'var(--yellow)' };
+    if (s === 'cli-pending') return { ch: '⧖', color: 'var(--accent)' };
+    if (s === 'done')        return { ch: '✓', color: 'var(--green)' };
+    if (s === 'warn')        return { ch: '⚠', color: 'var(--yellow)' };
+    if (s === 'error')       return { ch: '✕', color: 'var(--red)' };
+    return { ch: '○', color: 'var(--text-mute)' };
+  }
+
+  // Agent steps share data/pipeline.md + the Claude quota — only one at a time.
+  const anyAgentRunning = STEPS.some(s => s.type === 'agent' && jobs[s.id]?.status === 'running');
+
+  return (
+    <div className="workflow-panel">
+      <div className="workflow-head">
+        <span>Morning Workflow</span>
+        <button
+          className="workflow-reset"
+          title="Reset all steps"
+          onClick={() => { setJobs({}); Object.values(pollersRef.current).forEach(clearInterval); pollersRef.current = {}; }}
+        >↺</button>
+      </div>
+      <div className="workflow-steps">
+        {STEPS.map(step => {
+          const job = jobs[step.id];
+          const g = statusGlyph(job?.status);
+          const isRunning = job?.status === 'running';
+          const isDone    = job?.status === 'done';
+          const isAgent   = step.type === 'agent';
+          const isCli     = step.type === 'cli';
+          const isCliP    = job?.status === 'cli-pending';
+          const agentBusy = isAgent && anyAgentRunning;
+          return (
+            <div key={step.id} className={`workflow-step ${isDone ? 'done' : ''} ${isRunning ? 'running' : ''}`}>
+              <button
+                className="workflow-btn"
+                disabled={isRunning || agentBusy}
+                onClick={() => runStep(step)}
+                title={isAgent ? `Runs "${step.command}" in Claude Code (background)` : isCli ? `Copies "${step.command}" to clipboard` : `Runs: ${step.label}`}
+              >
+                <span className="workflow-status-glyph" style={{ color: g.color }}>{g.ch}</span>
+                <span className="workflow-label">
+                  <span className="workflow-name">{step.label}</span>
+                  <span className="workflow-hint">{step.hint}</span>
+                </span>
+              </button>
+              {isCliP && (
+                <button className="workflow-ack" title="Mark CLI step complete" onClick={() => markCliDone(step.id)}>✓</button>
+              )}
+              {isAgent && Array.isArray(job?.subSteps) && (
+                <div className="workflow-substeps">
+                  {job.subSteps.map(ss => {
+                    const sg = statusGlyph(ss.status);
+                    return (
+                      <span key={ss.key} className="workflow-substep" title={ss.summary || ss.label}>
+                        <span style={{ color: sg.color }}>{sg.ch}</span> {ss.label}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+              {isAgent && isRunning && (
+                <div className="workflow-summary" title={job.output || ''}>
+                  {(job.activity || 'Working…')}{job.toolCount ? ` · ${job.toolCount} steps` : ''}
+                </div>
+              )}
+              {job?.summary && !(isAgent && isRunning) && (
+                <div className="workflow-summary" title={job.output || ''}>{job.summary}</div>
+              )}
+              {job?.warning && (
+                <div className="workflow-summary" style={{ color: 'var(--yellow)' }}>{job.warning}</div>
+              )}
+              {job?.error && (
+                <div className="workflow-summary" style={{ color: 'var(--red)' }}>{job.error}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ---------- Topbar ----------
+window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, density, setDensity, theme, setTheme, openCmd, openTweaks }) {
+  return (
+    <div className="topbar">
+      <div className="search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input
+          type="text"
+          placeholder={searchPlaceholder || "Search by company, role, status…"}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+        <span className="kbd-hint kbd">/</span>
+      </div>
+
+      <div className="row" style={{ marginLeft: "auto", gap: 10 }}>
+        <button className="btn ghost sm" onClick={openCmd} title="Command palette (⌘K)">
+          <span style={{ opacity: 0.7 }}>⌘</span>K
+          <span style={{ marginLeft: 6, opacity: 0.8 }}>commands</span>
+        </button>
+
+        <div className="conn">
+          <span className="conn-dot"></span>
+          <span>data/applications.md</span>
+          <span className="muted" style={{ fontSize: 10 }}>· synced 2s ago</span>
+        </div>
+
+        <button
+          className="icon-btn"
+          title={density === "compact" ? "Comfortable density" : "Compact density"}
+          onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}
+        >
+          {density === "compact"
+            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 5h18M3 12h18M3 19h18"/></svg>
+          }
+        </button>
+
+        <button
+          className="icon-btn"
+          title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+        >
+          {theme === "dark"
+            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          }
+        </button>
+
+        <button className="icon-btn" title="Tweaks" onClick={openTweaks}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ---------- Drawer (Pipeline row detail) ----------
+window.Drawer = function Drawer({ app, onClose, onAction }) {
+  useEffectS(() => {
+    const onKey = e => { if (e.key === "Escape") onClose(); };
+    if (app) window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [app, onClose]);
+
+  return (
+    <>
+      <div className={`drawer-backdrop ${app ? "open" : ""}`} onClick={onClose}></div>
+      <div className={`drawer ${app ? "open" : ""}`}>
+        {app && (
+          <>
+            <div className="drawer-head">
+              <div>
+                <div className="row" style={{ gap: 10, marginBottom: 4 }}>
+                  <span className="mono dim" style={{ fontSize: 11 }}>#{String(app.id).padStart(3, "0")}</span>
+                  <window.StatusPill status={app.status} />
+                </div>
+                <h3>{app.company}</h3>
+                <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>{app.role}</div>
+              </div>
+              <button className="icon-btn" onClick={onClose} title="Close (Esc)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            <div className="drawer-body">
+              <div className="kv">
+                <span className="k">Score</span>
+                <span className="v"><window.ScoreChip score={app.score} /> <span className="dim mono" style={{ marginLeft: 8, fontSize: 11 }}>{window.scoreBucket(app.score) === "strong" ? "strong match" : window.scoreBucket(app.score) === "borderline" ? "borderline" : "weak"}</span></span>
+
+                <span className="k">Archetype</span>
+                <span className="v mono">{app.archetype}</span>
+
+                <span className="k">Sector</span>
+                <span className="v">{app.sector} <span className="dim">· {app.size}-stage</span></span>
+
+                <span className="k">Comp posted</span>
+                <span className="v mono">${app.salary}k <span className={app.salary >= app.target ? "" : ""} style={{ color: app.salary >= app.target ? "var(--green)" : "var(--red)", marginLeft: 8 }}>{app.salary >= app.target ? `+${app.salary - app.target}k` : `−${app.target - app.salary}k`} vs target</span></span>
+
+                <span className="k">Date logged</span>
+                <span className="v mono">{app.date} <span className="dim">· {window.daysAgo(app.date)}d ago</span></span>
+
+                <span className="k">Notes</span>
+                <span className="v">{app.notes}</span>
+              </div>
+
+              <div className="report-preview">
+                <h4>Evaluation Report — Auto-generated</h4>
+                <p style={{ marginTop: 0 }}><strong style={{ color: "var(--text)" }}>Verdict:</strong> {app.score == null ? "Score unavailable." : app.score >= 4.0 ? "Strong fit. Apply within 48h." : app.score >= 3.0 ? "Borderline. Review JD detail before applying." : "Weak fit. Consider skipping."}</p>
+                <h4 style={{ marginTop: 12 }}>Why this scored {app.score != null ? app.score.toFixed(1) : "N/A"}</h4>
+                <ul>
+                  <li>Role archetype <span className="mono" style={{ color: "var(--accent)" }}>{app.archetype}</span> matches your profile</li>
+                  <li>Posted comp <span className="mono">${app.salary}k</span> {app.salary >= app.target ? "meets" : "is below"} your target band</li>
+                  <li>Sector exposure to <span className="mono">{app.sector}</span> aligns with stated preferences</li>
+                  <li>{app.size === "Late" ? "Late-stage growth — proven motion, lower equity upside" : app.size === "Mid" ? "Mid-stage — fastest learning curve" : "Early-stage — high equity, high risk"}</li>
+                </ul>
+                <h4>Risks</h4>
+                <ul>
+                  <li>{app.score >= 4.0 ? "Competitive process — recruiter may already have a shortlist" : "Comp gap may surface in screen"}</li>
+                  <li>JD emphasis on tooling not yet validated against your stack</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="drawer-foot">
+              {app.status === "Evaluated" && (
+                <>
+                  <button className="btn primary" onClick={() => onAction(app, "Applied")}>Mark Applied</button>
+                  <button className="btn" onClick={() => onAction(app, "SKIP")}>Skip</button>
+                </>
+              )}
+              {app.status === "Applied" && (
+                <>
+                  <button className="btn success" onClick={() => onAction(app, "Responded")}>Mark Responded</button>
+                  <button className="btn danger" onClick={() => onAction(app, "Rejected")}>Mark Rejected</button>
+                </>
+              )}
+              {app.status === "Responded" && <button className="btn success" onClick={() => onAction(app, "Interview")}>Move to Interview</button>}
+              {app.status === "Interview" && <button className="btn success" onClick={() => onAction(app, "Offer")}>Mark Offer</button>}
+              <button className="btn">Open Report ↗</button>
+              <button className="btn">Generate CV ⌘G</button>
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+};
+
+// ---------- Command Palette ----------
+window.CommandPalette = function CommandPalette({ open, onClose, commands }) {
+  const [q, setQ] = useStateS("");
+  const [idx, setIdx] = useStateS(0);
+  const inputRef = useRefS();
+
+  useEffectS(() => {
+    if (open) { setQ(""); setIdx(0); setTimeout(() => inputRef.current?.focus(), 50); }
+  }, [open]);
+
+  const filtered = useMemoS(() => {
+    if (!q) return commands;
+    const ql = q.toLowerCase();
+    return commands.filter(c => c.label.toLowerCase().includes(ql) || (c.section || "").toLowerCase().includes(ql));
+  }, [q, commands]);
+
+  useEffectS(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); onClose(); }
+      if (e.key === "ArrowDown") { e.preventDefault(); setIdx(i => Math.min(i + 1, filtered.length - 1)); }
+      if (e.key === "ArrowUp")   { e.preventDefault(); setIdx(i => Math.max(i - 1, 0)); }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const cmd = filtered[idx];
+        if (cmd) { cmd.run(); onClose(); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, idx, filtered, onClose]);
+
+  if (!open) return null;
+
+  // group by section
+  const bySection = {};
+  filtered.forEach((c, i) => {
+    const s = c.section || "Actions";
+    (bySection[s] ||= []).push({ ...c, _i: i });
+  });
+
+  return (
+    <div className="cmdk-back" onClick={onClose}>
+      <div className="cmdk" onClick={e => e.stopPropagation()}>
+        <input ref={inputRef} className="cmdk-input" placeholder="Type a command or search…" value={q} onChange={e => { setQ(e.target.value); setIdx(0); }} />
+        <div className="cmdk-list">
+          {filtered.length === 0 && <div className="no-data">No matches</div>}
+          {Object.entries(bySection).map(([sec, items]) => (
+            <div key={sec}>
+              <div className="cmdk-section">{sec}</div>
+              {items.map(c => (
+                <div
+                  key={c.label + c._i}
+                  className={`cmdk-item ${c._i === idx ? "active" : ""}`}
+                  onMouseEnter={() => setIdx(c._i)}
+                  onClick={() => { c.run(); onClose(); }}
+                >
+                  <span className="mono dim" style={{ fontSize: 11, width: 16 }}>{c.icon || "›"}</span>
+                  <span className="label">{c.label}</span>
+                  {c.hint && <span className="hint">{c.hint}</span>}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------- Toasts ----------
+window.ToastStack = function ToastStack({ toasts }) {
+  return (
+    <div className="toast-stack">
+      {toasts.map(t => (
+        <div key={t.id} className={`toast ${t.kind || ""}`}>
+          <span className="mono" style={{ color: t.kind === "success" ? "var(--green)" : t.kind === "warn" ? "var(--orange)" : "var(--accent)" }}>{t.kind === "success" ? "✓" : t.kind === "warn" ? "!" : "›"}</span>
+          <span>{t.msg}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ---------- Tab strip ----------
+window.TabStrip = function TabStrip({ tab, setTab, counts }) {
+  const tabs = [
+    { key: "overview",  label: "Overview",    num: counts.pending },
+    { key: "pipeline",  label: "Pipeline",    num: counts.active },
+    { key: "followups", label: "Follow-Ups" },
+    { key: "target-talent", label: "TA Outreach" },
+    { key: "linkedin-ssi", label: "LinkedIn SSI" },
+    { key: "recruiters",label: "Recruiters" },
+    { key: "analytics", label: "Analytics" },
+  ];
+  return (
+    <div className="tabs">
+      {tabs.map(t => (
+        <button key={t.key} className={tab === t.key ? "active" : ""} onClick={() => setTab(t.key)}>
+          {t.label}
+          {t.num != null && <span className="num">{t.num}</span>}
+        </button>
+      ))}
+    </div>
+  );
+};

@@ -1,0 +1,152 @@
+import express from 'express';
+import cors from 'cors';
+import path from 'path';
+import { randomBytes } from 'crypto';
+import { STATIC, OUTPUT_DIR, PORT, HOST } from './config.mjs';
+import { router as applicationsRoutes } from './routes/applications.mjs';
+import { router as followupsRoutes } from './routes/followups.mjs';
+import { router as applyRoutes, applyJobs } from './routes/apply.mjs';
+import { router as workflowRoutes, workflowJobs } from './routes/workflow.mjs';
+import { router as agentRoutes, agentJobs } from './routes/agent.mjs';
+import { router as recruitersRoutes } from './routes/recruiters.mjs';
+import { router as targetTalentRoutes } from './routes/target-talent.mjs';
+import { router as ttReconcileRoutes } from './routes/tt-reconcile.mjs';
+import { router as linkedinSsiRoutes } from './routes/linkedin-ssi.mjs';
+import { router as linkedinDraftsRoutes } from './routes/linkedin-drafts.mjs';
+import { router as reportsRoutes } from './routes/reports.mjs';
+import { router as insightsRoutes } from './routes/insights.mjs';
+import { router as setupRoutes } from './routes/setup.mjs';
+import { getIdentity } from './lib/profile.mjs';
+
+const app = express();
+
+// The dashboard has no user accounts; it is a local single-user tool. These
+// two controls keep it that way even though it speaks HTTP:
+//   1. CORS is scoped to localhost origins (any port) instead of wildcard, so
+//      a page on another site cannot read the dashboard's API responses.
+//   2. A per-start token, delivered as a SameSite=Strict cookie when the
+//      dashboard HTML loads, is required on every state-changing request.
+//      The browser sends the cookie automatically on same-origin requests, so
+//      the UI needs no changes; a cross-site (CSRF) request never carries it.
+//      CLI/curl callers can instead pass the x-tjk-token header printed at
+//      startup. The token rotates on restart, so reload the page after one.
+const AUTH_TOKEN = randomBytes(24).toString('hex');
+const AUTH_COOKIE = 'tjk_token';
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+app.use(cors({
+  origin(origin, cb) {
+    // No Origin header = same-origin / non-browser client (curl, the CLI).
+    if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
+    cb(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
+app.use(express.json({ limit: '12mb' })); // 12mb so the Launchpad can accept a base64 CV upload
+
+function readCookie(req, name) {
+  for (const part of (req.headers.cookie || '').split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim();
+  }
+  return null;
+}
+
+// Hand the SPA its token cookie on any top-level HTML navigation (covers '/',
+// '/index.html', and the deep-link SPA fallback), so it is present before any
+// fetch the page makes.
+app.use((req, res, next) => {
+  if (req.method === 'GET' && (req.headers.accept || '').includes('text/html')) {
+    res.setHeader('Set-Cookie', `${AUTH_COOKIE}=${AUTH_TOKEN}; Path=/; SameSite=Strict; HttpOnly`);
+  }
+  next();
+});
+
+// Require the token on state-changing requests (which include the agent-spawn
+// and workflow routes, all POST). Reads stay open so the UI loads cleanly.
+app.use((req, res, next) => {
+  if (!MUTATING_METHODS.has(req.method)) return next();
+  const provided = readCookie(req, AUTH_COOKIE) || req.headers['x-tjk-token'];
+  if (provided === AUTH_TOKEN) return next();
+  res.status(403).json({
+    error: 'Forbidden: missing or invalid dashboard token. Reload the dashboard in your browser, or pass the x-tjk-token header printed at server startup.',
+  });
+});
+// Lightweight request logger so long-running endpoints (tt-reconcile/discover,
+// Claude drafts) are visible in server stdout for debugging.
+app.use((req, res, next) => {
+  if (req.path === '/' || /\.(css|js|jsx|woff2?|ico|png|svg)$/.test(req.path)) return next();
+  const t0 = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - t0;
+    console.log(`[${new Date().toISOString().slice(11, 19)}] ${req.method} ${req.path} → ${res.statusCode} (${ms}ms)`);
+  });
+  next();
+});
+// Use revalidation (no-cache) instead of no-store so the browser can reuse
+// transpiled bundles when ETags match — UI fixes still take effect on refresh.
+app.use(express.static(STATIC, {
+  etag: true,
+  setHeaders: (res, filepath) => {
+    if (/\.(jsx|js|css|html)$/.test(filepath)) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  },
+}));
+app.use('/output', express.static(OUTPUT_DIR));
+
+// ── Mount per-domain routers (same order the routes were defined in) ──────────
+app.use(applicationsRoutes);
+app.use(followupsRoutes);
+app.use(applyRoutes);
+app.use(workflowRoutes);
+app.use(agentRoutes);
+app.use(recruitersRoutes);
+app.use(targetTalentRoutes);
+app.use(ttReconcileRoutes);
+app.use(linkedinSsiRoutes);
+app.use(linkedinDraftsRoutes);
+app.use(reportsRoutes);
+app.use(insightsRoutes);
+app.use(setupRoutes);
+
+// Public identity for the frontend's signature blocks, so no name/email/phone
+// is hardcoded in the client bundle. Reads config/profile.yml via the cached
+// loader. Open GET (reads stay unauthenticated like the rest of the UI data).
+app.get('/api/identity', (req, res) => res.json(getIdentity()));
+
+app.get('*', (req, res) => {
+  res.sendFile(path.join(STATIC, 'index.html'));
+});
+
+// Bound the in-memory job maps so a long-running server does not accumulate
+// finished jobs forever (they were only ever .set, never deleted). Keep every
+// running job plus the most recent N terminal (done/error) ones; Map preserves
+// insertion order, so evict the oldest terminal entries first. A running job is
+// never evicted, so status polling for active jobs is unaffected.
+const MAX_TERMINAL_JOBS = 50;
+function pruneJobMap(map) {
+  const terminalIds = [];
+  for (const [id, job] of map) {
+    if (!job || job.status !== 'running') terminalIds.push(id);
+  }
+  const excess = terminalIds.length - MAX_TERMINAL_JOBS;
+  for (let i = 0; i < excess; i++) map.delete(terminalIds[i]);
+}
+const _jobSweep = setInterval(() => {
+  pruneJobMap(applyJobs);
+  pruneJobMap(workflowJobs);
+  pruneJobMap(agentJobs);
+}, 5 * 60 * 1000);
+if (_jobSweep.unref) _jobSweep.unref();
+
+app.listen(PORT, HOST, () => {
+  const shown = HOST === '0.0.0.0' || HOST === '::' ? `your machine on port ${PORT} (all interfaces)` : `http://localhost:${PORT}`;
+  console.log(`trajecktory Dashboard → ${shown}`);
+  if (HOST === '0.0.0.0' || HOST === '::') {
+    console.log('  ⚠ Bound to all interfaces with no authentication — anyone on your network can reach this.');
+  }
+  console.log(`  Auth token for CLI/curl (x-tjk-token header): ${AUTH_TOKEN}`);
+});
+

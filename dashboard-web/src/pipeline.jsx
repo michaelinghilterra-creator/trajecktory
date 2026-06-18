@@ -1,0 +1,1998 @@
+// Pipeline Module — Console redesign with sub-tabs.
+// Overview (default) · Table · All · Analytics.
+// Reuses the existing window.Drawer for the application drawer.
+//
+// NOTE: wrapped in an IIFE so locals don't collide with other modules
+// (target-talent.jsx declares ContactsView/AnalyticsView etc; the IIFE
+// keeps our 'Analytics', 'PipelineTable' etc. private).
+
+(function () {
+const { useState: useStateP, useMemo: useMemoP, useEffect: useEffectP, useRef: useRefP, useCallback: useCallbackP } = React;
+
+// ─── Status / Source / Engine metadata ─────────────────────────────────────
+const STATUS = [
+  { id: 'Evaluated', short: 'Eval',    color: 'var(--accent)', hex: '#a78bfa', rgb: '167,139,250', stage: 0, icon: '◆' },
+  { id: 'Applied',   short: 'Applied', color: 'var(--blue)',   hex: '#60a5fa', rgb: '96,165,250',  stage: 1, icon: '↗' },
+  { id: 'Responded', short: 'Replied', color: 'var(--cyan)',   hex: '#22d3ee', rgb: '34,211,238',  stage: 2, icon: '↩' },
+  { id: 'Interview', short: 'Intvw',   color: 'var(--orange)', hex: '#f59e0b', rgb: '245,158,11',  stage: 3, icon: '●' },
+  { id: 'Offer',     short: 'Offer',   color: 'var(--green)',  hex: '#22c55e', rgb: '34,197,94',   stage: 4, icon: '★' },
+];
+const STATUS_MAP = Object.fromEntries(STATUS.map(s => [s.id, s]));
+const ACTIVE_STATUSES = STATUS.map(s => s.id);
+
+const SOURCE = {
+  'Self-sourced': { short: 'Self',   color: 'var(--accent)', hex: '#a78bfa', rgb: '167,139,250' },
+  'Referral':     { short: 'Ref',    color: 'var(--green)',  hex: '#22c55e', rgb: '34,197,94' },
+  'CoWork':       { short: 'CoWork', color: 'var(--pink)',   hex: '#ec4899', rgb: '236,72,153' },
+  'API Scan':     { short: 'API',    color: 'var(--blue)',   hex: '#60a5fa', rgb: '96,165,250' },
+  'Agent Scan':   { short: 'Agent',  color: 'var(--orange)', hex: '#f59e0b', rgb: '245,158,11' },
+};
+
+const ENGINE_META = {
+  'CareerOps':   { color: 'var(--accent)', hex: '#a78bfa', rgb: '167,139,250' },
+  'Claude':      { color: 'var(--orange)', hex: '#f59e0b', rgb: '245,158,11' },
+  'Cowork':      { color: 'var(--cyan)',   hex: '#22d3ee', rgb: '34,211,238' },
+  'CoWork':      { color: 'var(--green)',  hex: '#22c55e', rgb: '34,197,94' },
+  'CoWorkv32':   { color: 'var(--blue)',   hex: '#60a5fa', rgb: '96,165,250' },
+  'trajecktory': { color: 'var(--accent)', hex: '#a78bfa', rgb: '167,139,250' },
+};
+
+const STALE_DAYS = 14;
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+const daysAgo = (iso) => {
+  if (!iso) return 0;
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+};
+const fmtScore = (s) => s == null ? 'N/A' : s.toFixed(1);
+const scoreBucket = (s) => s == null ? 'na' : s >= 4.0 ? 'strong' : s >= 3.0 ? 'border' : 'weak';
+const scoreColor = (s) => s == null ? 'var(--text-mute)' : s >= 4.0 ? 'var(--green)' : s >= 3.0 ? 'var(--yellow)' : 'var(--red)';
+
+function shortenComp(raw) {
+  if (!raw) return '—';
+  const nums = (raw.match(/\$[\d,]+/g) || []).map(s => parseInt(s.replace(/[^\d]/g, ''), 10));
+  if (nums.length === 0) return raw.length > 22 ? raw.slice(0, 21) + '…' : raw;
+  const k = (n) => (n >= 1000 ? '$' + Math.round(n / 1000) + 'K' : '$' + n);
+  if (nums.length === 1) return k(nums[0]);
+  return `${k(nums[0])}–${k(nums[1])}`;
+}
+
+// Compact comp display for tables: a single midpoint dollar amount when comp
+// is disclosed, "Not Stated" when it isn't. Reads the parsed `salary` field
+// (midpoint in $K) populated at app load time by window.parseComp.
+function formatCompMidpoint(a) {
+  if (a.salary == null || a.salary <= 0) return 'Not Stated';
+  return '$' + (a.salary * 1000).toLocaleString('en-US');
+}
+
+function relAge(days) {
+  if (days <= 0) return 'today';
+  if (days === 1) return '1d';
+  if (days < 14) return days + 'd';
+  if (days < 60) return Math.round(days / 7) + 'w';
+  return Math.round(days / 30) + 'mo';
+}
+
+function monogram(name) {
+  const clean = (name || '').replace(/[^A-Za-z0-9 ]/g, '').trim();
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (!parts.length) return '—';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+// Live `resume` field can be: a known engine name ("CareerOps", "trajecktory"),
+// a filename ("Jane_Doe_Resume_Acme_06-07-2026.docx"), or empty.
+// Returns whatever identifier is most useful for display. Falls back to the
+// raw string for unrecognized values (so new engines populate without code
+// changes); only `null` for truly missing data.
+function engineOf(resume) {
+  if (!resume) return null;
+  const cleaned = String(resume).trim();
+  if (!cleaned || cleaned === '—' || cleaned === '-') return null;
+  if (ENGINE_META[cleaned]) return cleaned; // known engine
+  // Filenames map to the default generator
+  if (/\.docx$/i.test(cleaned)) return 'CareerOps';
+  // Unknown but non-empty: render the raw value (EnginePill grey-falls-back)
+  return cleaned;
+}
+
+// ─── Icons ─────────────────────────────────────────────────────────────────
+// Canonical icon paths live in shared.jsx (window.ICON). Local PI alias kept
+// for the existing call sites that read PI.foo.
+const PI = window.ICON;
+
+function PIcon({ d, size = 16, stroke = 1.6, style, fill = false }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24"
+      fill={fill ? 'currentColor' : 'none'}
+      stroke={fill ? 'none' : 'currentColor'}
+      strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" style={style}>
+      <path d={d} />
+    </svg>
+  );
+}
+
+// ─── Primitives ────────────────────────────────────────────────────────────
+function ScoreChip({ score }) {
+  const b = scoreBucket(score);
+  if (b === 'na') return <span className="score-chip na">N/A</span>;
+  const c = scoreColor(score);
+  const rgb = b === 'strong' ? '34,197,94' : b === 'border' ? '234,179,8' : '239,68,68';
+  return (
+    <span className="score-chip" style={{
+      color: c, borderColor: `rgba(${rgb},0.42)`, background: `rgba(${rgb},0.12)`,
+    }}>{score.toFixed(1)}</span>
+  );
+}
+
+function StatusBadge({ status, size = 'md' }) {
+  const m = STATUS_MAP[status] || { hex: '#5d5d66', rgb: '93,93,102', id: status, color: 'var(--text-mute)' };
+  const sm = size === 'sm';
+  return (
+    <span className="status-badge" style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      fontFamily: 'var(--mono)', fontWeight: 500, letterSpacing: '0.03em',
+      border: '1px solid', borderRadius: 4, whiteSpace: 'nowrap',
+      color: m.color, borderColor: `rgba(${m.rgb},0.42)`, background: `rgba(${m.rgb},0.12)`,
+      fontSize: sm ? 9.5 : 10.5, padding: sm ? '2px 8px' : '3px 9px',
+    }}>
+      <span className="sb-dot" style={{
+        width: 6, height: 6, borderRadius: 999, background: m.color,
+        boxShadow: `0 0 6px ${m.color}`,
+      }} />
+      {status}
+    </span>
+  );
+}
+
+function SourcePill({ source }) {
+  const s = SOURCE[source] || { short: source || '—', color: 'var(--text-dim)', rgb: '139,139,148' };
+  return (
+    <span className="src-pill" style={{ color: s.color, borderColor: `rgba(${s.rgb},0.38)`, background: `rgba(${s.rgb},0.1)` }}>
+      <span className="sp-dot" style={{ background: s.color }} />
+      {s.short}
+    </span>
+  );
+}
+
+function EnginePill({ engine }) {
+  if (!engine) return <span style={{ color: 'var(--text-mute)', fontFamily: 'var(--mono)', fontSize: 11 }}>—</span>;
+  const e = ENGINE_META[engine] || { color: 'var(--text-dim)', rgb: '139,139,148' };
+  return (
+    <span className="src-pill" style={{ color: e.color, borderColor: `rgba(${e.rgb},0.38)`, background: `rgba(${e.rgb},0.1)` }}>
+      <span className="sp-dot" style={{ background: e.color }} />
+      {engine}
+    </span>
+  );
+}
+
+function SitBadge({ days, stale }) {
+  const cls = stale ? 'danger' : days > 7 ? 'warn' : '';
+  return <span className={'sit-badge ' + cls}>{days}d</span>;
+}
+
+function Kpi({ k, v, sub, icon, color }) {
+  return (
+    <div className="kpi">
+      {icon && <span className="ico"><PIcon d={icon} size={15} /></span>}
+      <span className="kpi-label">{k}</span>
+      <span className="kpi-value" style={color ? { color } : null}>{v}</span>
+      {sub && <span className="kpi-delta">{sub}</span>}
+    </div>
+  );
+}
+
+// ─── Pipeline Pulse ────────────────────────────────────────────────────────
+function PipelinePulse({ rows, onOpen, selId, isStale = () => false }) {
+  const [tip, setTip] = useStateP(null);
+  const wrapRef = useRefP(null);
+
+  const total = rows.length || 1;
+  const stageData = STATUS.map(s => {
+    const items = rows.filter(r => r.status === s.id);
+    return { ...s, n: items.length, items };
+  });
+  const inFlight = rows.filter(r => ['Responded', 'Interview', 'Offer'].includes(r.status)).length;
+
+  const scored = rows.filter(r => r.score != null);
+  const strong = scored.filter(r => r.score >= 4.0);
+  const border = scored.filter(r => r.score >= 3.0 && r.score < 4.0);
+  const weak = scored.filter(r => r.score < 3.0);
+  const avg = scored.length ? (scored.reduce((s, r) => s + r.score, 0) / scored.length).toFixed(2) : '—';
+  const bands = [
+    { key: 'strong', label: 'Strong ≥4.0', c: 'var(--green)', items: strong },
+    { key: 'border', label: 'Borderline 3.0–3.9', c: 'var(--yellow)', items: border },
+    { key: 'weak',   label: 'Weak <3.0', c: 'var(--red)', items: weak },
+  ];
+
+  const R = 38, C = 2 * Math.PI * R;
+  let off = 0;
+  const donutSegs = bands.map(b => {
+    const len = (b.items.length / (scored.length || 1)) * C;
+    const seg = { ...b, dasharray: `${len} ${C - len}`, dashoffset: -off };
+    off += len;
+    return seg;
+  });
+
+  let oppMode = 'hot';
+  let top = rows
+    .filter(r => r.status === 'Evaluated' && r.score != null && r.score >= 4.0)
+    .sort((a, b) => b.score - a.score || daysAgo(b.date) - daysAgo(a.date))
+    .slice(0, 3);
+  if (top.length === 0) {
+    oppMode = 'stale';
+    // Only rows the canonical Follow-Ups engine actually flags as stale —
+    // not just "old Applied rows". A row with a recent cross-logged TA touch
+    // is current, even if the original apply date is months ago.
+    top = rows
+      .filter(r => isStale(r))
+      .sort((a, b) => daysAgo(b.date) - daysAgo(a.date))
+      .slice(0, 3);
+  }
+
+  const showTip = (which, key, e) => {
+    if (!wrapRef.current) return;
+    const r = wrapRef.current.getBoundingClientRect();
+    setTip({ which, key, x: e.clientX - r.left, y: e.clientY - r.top });
+  };
+  const moveTip = (e) => {
+    if (!tip || !wrapRef.current) return;
+    const r = wrapRef.current.getBoundingClientRect();
+    setTip(t => t && ({ ...t, x: e.clientX - r.left, y: e.clientY - r.top }));
+  };
+  const hide = () => setTip(null);
+
+  const tipBody = (() => {
+    if (!tip) return null;
+    if (tip.which === 'stage') {
+      const sc = stageData.find(x => x.id === tip.key);
+      if (!sc) return null;
+      const pct = Math.round((sc.n / total) * 100);
+      const top3 = sc.items.slice().sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 3);
+      const sc2 = sc.items.filter(i => i.score != null);
+      const sAvg = sc2.length ? (sc2.reduce((s, a) => s + a.score, 0) / sc2.length).toFixed(2) : '—';
+      const oldest = sc.items.length ? Math.max(...sc.items.map(a => daysAgo(a.date))) : 0;
+      const insight = sc.n === 0 ? 'Empty stage — nothing here yet.'
+        : sc.id === 'Evaluated' && sc.items.filter(a => a.score != null && a.score >= 4.0).length ? `${sc.items.filter(a => a.score != null && a.score >= 4.0).length} hot lead(s) — apply now.`
+        : sc.id === 'Applied' && oldest > STALE_DAYS ? `Oldest sat ${oldest}d — send follow-ups.`
+        : sc.id === 'Interview' ? 'Prep cycles in progress.'
+        : sc.id === 'Offer' ? 'Negotiate with leverage.' : `${pct}% of pipeline lives here.`;
+      return (
+        <>
+          <div className="tip-head"><b>{sc.id}</b><span>{pct}% of view</span></div>
+          <div className="tip-row"><span className="l">Roles</span><span className="v">{sc.n}</span></div>
+          <div className="tip-row"><span className="l">Avg score</span><span className="v">{sAvg}</span></div>
+          {oldest > 0 && <div className="tip-row"><span className="l">Oldest</span><span className="v">{oldest}d</span></div>}
+          {top3.length > 0 && <div className="tip-co">{top3.map((a, i) => <span key={a.id}><b style={{ color: 'var(--text)' }}>{a.company}</b> {fmtScore(a.score)}{i < top3.length - 1 ? ' · ' : ''}</span>)}</div>}
+          <div className="tip-co" style={{ fontStyle: 'italic', color: 'var(--text-mute)' }}>{insight}</div>
+        </>
+      );
+    }
+    if (tip.which === 'quality') {
+      const seg = bands.find(x => x.key === tip.key);
+      if (!seg) return null;
+      const pct = Math.round((seg.items.length / (scored.length || 1)) * 100);
+      const top3 = seg.items.slice().sort((a, b) => b.score - a.score).slice(0, 3);
+      const acted = seg.items.filter(a => a.status !== 'Evaluated').length;
+      const insight = seg.items.length === 0 ? 'Empty band in current view.'
+        : seg.key === 'strong' ? `${seg.items.length - acted} of ${seg.items.length} still Evaluated — highest leverage.`
+        : seg.key === 'border' ? `Read JD detail first. ${acted}/${seg.items.length} progressed.`
+        : `Skip unless rescored. ${acted}/${seg.items.length} progressed.`;
+      return (
+        <>
+          <div className="tip-head"><b>{seg.label}</b><span style={{ color: seg.c }}>{pct}%</span></div>
+          <div className="tip-row"><span className="l">Roles</span><span className="v">{seg.items.length}</span></div>
+          <div className="tip-row"><span className="l">Past Eval</span><span className="v">{acted}/{seg.items.length}</span></div>
+          {top3.length > 0 && <div className="tip-co">{top3.map((a, i) => <span key={a.id}><b style={{ color: 'var(--text)' }}>{a.company}</b> {a.score.toFixed(1)}{i < top3.length - 1 ? ' · ' : ''}</span>)}</div>}
+          <div className="tip-co" style={{ fontStyle: 'italic', color: 'var(--text-mute)' }}>{insight}</div>
+        </>
+      );
+    }
+    if (tip.which === 'opp') {
+      const a = top.find(x => x.id === tip.key);
+      if (!a) return null;
+      const sit = daysAgo(a.date);
+      const gap = (a.salary || 0) - (a.target || 0);
+      const insight = oppMode === 'stale'
+        ? (isStale(a) ? `Stale ${sit}d — follow up or let go.` : 'Awaiting response — nudge soon.')
+        : (sit > 14 ? 'Cooling off — apply today or skip.' : sit > 7 ? "Sitting > 1 week — don't let it drift." : 'Fresh and hot — apply within 48h.');
+      return (
+        <>
+          <div className="tip-head"><b>{a.company}</b><span style={{ color: scoreColor(a.score) }}>{fmtScore(a.score)}</span></div>
+          <div className="tip-row"><span className="l">Role</span><span className="v" style={{ fontFamily: 'inherit', maxWidth: 130, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.role}</span></div>
+          <div className="tip-row"><span className="l">Archetype</span><span className="v">{a.archetype}</span></div>
+          {a.salary != null && a.target != null && (
+            <div className="tip-row"><span className="l">Comp vs tgt</span><span className="v" style={{ color: gap >= 0 ? 'var(--green)' : 'var(--red)' }}>{gap >= 0 ? `+${gap}k` : `${gap}k`}</span></div>
+          )}
+          <div className="tip-row"><span className="l">Sat</span><span className="v">{sit}d</span></div>
+          <div className="tip-co" style={{ fontStyle: 'italic', color: 'var(--text-mute)' }}>{insight}</div>
+        </>
+      );
+    }
+  })();
+
+  return (
+    <div className="pulse-grid" ref={wrapRef} onMouseMove={moveTip}>
+      {/* 1. Stage Mix */}
+      <div className="pulse-card">
+        <div className="pulse-head">
+          <span className="pulse-title">Stage Mix <span className="info" title="Hover any segment for detail">i</span></span>
+          <span className="pulse-meta">{inFlight} in flight</span>
+        </div>
+        <div className="stagebar">
+          {stageData.map(s => s.n > 0 ? (
+            <div key={s.id} className="seg" style={{ flex: s.n, background: s.color }}
+              onMouseEnter={(e) => showTip('stage', s.id, e)} onMouseLeave={hide}>
+              {(s.n / total) >= 0.07 ? s.n : ''}
+            </div>
+          ) : (
+            <div key={s.id} className="seg ghost" style={{ flex: 0.5 }}
+              onMouseEnter={(e) => showTip('stage', s.id, e)} onMouseLeave={hide}>0</div>
+          ))}
+        </div>
+        <div className="stage-legend">
+          {stageData.map(s => (
+            <span key={s.id} className={'li' + (s.n === 0 ? ' zero' : '')}
+              onMouseEnter={(e) => showTip('stage', s.id, e)} onMouseLeave={hide}>
+              <span className="d" style={{ background: s.color }} />{s.id} <b>{s.n}</b>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* 2. Quality */}
+      <div className="pulse-card">
+        <div className="pulse-head">
+          <span className="pulse-title">Quality <span className="info" title="Hover any band for detail">i</span></span>
+          <span className="pulse-meta">avg {avg}</span>
+        </div>
+        <div className="donut-wrap">
+          <svg width="96" height="96" viewBox="0 0 100 100" style={{ flexShrink: 0 }}>
+            <circle cx="50" cy="50" r={R} fill="none" stroke="var(--panel-2)" strokeWidth="11" />
+            {donutSegs.map((s, i) => s.items.length > 0 && (
+              <circle key={i} cx="50" cy="50" r={R} fill="none" stroke={s.c} strokeWidth="11"
+                strokeDasharray={s.dasharray} strokeDashoffset={s.dashoffset} strokeLinecap="butt"
+                transform="rotate(-90 50 50)" style={{ cursor: 'pointer' }}
+                onMouseEnter={(e) => showTip('quality', s.key, e)} onMouseLeave={hide} />
+            ))}
+            <text x="50" y="47" textAnchor="middle" fill="var(--text)" fontSize="21" fontWeight="700" fontFamily="JetBrains Mono, monospace">{strong.length}</text>
+            <text x="50" y="61" textAnchor="middle" fill="var(--text-mute)" fontSize="7.5" fontFamily="JetBrains Mono, monospace" letterSpacing="0.12em">STRONG</text>
+          </svg>
+          <div className="donut-legend">
+            {bands.map(b => (
+              <div key={b.key} className="row" onMouseEnter={(e) => showTip('quality', b.key, e)} onMouseLeave={hide}>
+                <span className="lbl"><span className="d" style={{ background: b.c }} />{b.label}</span>
+                <span className="n">{b.items.length}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Top Opportunities */}
+      <div className="pulse-card">
+        <div className="pulse-head">
+          <span className="pulse-title">{oppMode === 'hot' ? 'Top Opportunities' : 'Most Stale Applied'}</span>
+          <span className="pulse-meta" style={{ color: oppMode === 'hot' ? 'var(--accent-2)' : 'var(--orange)' }}>
+            {oppMode === 'hot' ? 'act on these' : 'needs follow-up'}
+          </span>
+        </div>
+        <div className="opp-list">
+          {top.length === 0 && <div className="opp-empty">Nothing awaiting action — pipeline is clear.</div>}
+          {top.map((a, i) => {
+            const sit = daysAgo(a.date);
+            const stale = isStale(a);
+            return (
+              <div key={a.id} className={'opp-row' + (oppMode === 'stale' ? ' alt' : '') + (selId === a.id ? ' sel' : '')}
+                onClick={() => onOpen(a)}
+                onMouseEnter={(e) => showTip('opp', a.id, e)} onMouseLeave={hide}>
+                <span className="opp-rank">{i + 1}</span>
+                <div className="opp-main">
+                  <div className="opp-co">{a.company}</div>
+                  <div className="opp-sub">{a.archetype} · {a.sector}</div>
+                </div>
+                <ScoreChip score={a.score} />
+                <SitBadge days={sit} stale={stale} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {tip && tipBody && <div className="pl-tip" style={{ left: tip.x, top: tip.y }}>{tipBody}</div>}
+    </div>
+  );
+}
+
+// ─── Overview sub-tab ──────────────────────────────────────────────────────
+function OverviewKpis({ apps, isStale = () => false }) {
+  const inFlight = apps.filter(a => ['Responded', 'Interview', 'Offer'].includes(a.status)).length;
+  const scored = apps.filter(a => a.score != null);
+  const avg = scored.length ? (scored.reduce((s, a) => s + a.score, 0) / scored.length).toFixed(2) : '—';
+  const strong = scored.filter(a => a.score >= 4.0).length;
+  const stale = apps.filter(a => isStale(a)).length;
+  const interviews = apps.filter(a => a.status === 'Interview').length;
+  return (
+    <div className="grid cols-4" style={{ marginBottom: 16 }}>
+      <Kpi k="Active Roles" v={apps.length} sub={`${inFlight} in flight · ${interviews} interviewing`} icon={PI.layers} color="var(--accent-2)" />
+      <Kpi k="Strong Fits" v={strong} sub={`score ≥ 4.0 · avg ${avg}`} icon={PI.star} />
+      <Kpi k="Interviewing" v={interviews} sub="active loops in progress" icon={PI.briefcase} color="var(--orange)" />
+      <Kpi k="Stale" v={stale} sub="per Follow-Ups engine" icon={PI.clock} color={stale ? 'var(--red)' : 'var(--text)'} />
+    </div>
+  );
+}
+
+function NeedsAttention({ apps, onOpen, selId, isStale = () => false, staleDays = () => null }) {
+  // Stale rows come from the canonical Follow-Ups engine — same data the
+  // parent PipelineTab fetched once and now shares with every sub-view.
+  const hot = apps.filter(a => a.status === 'Evaluated' && a.score != null && a.score >= 4.0)
+    .map(a => ({ a, label: 'Hot lead — apply', icon: PI.zap, color: 'var(--accent)' }));
+  const stale = apps.filter(a => isStale(a))
+    .sort((x, y) => (staleDays(y) || 0) - (staleDays(x) || 0))
+    .map(a => ({ a, label: `Follow up · ${staleDays(a) ?? daysAgo(a.date)}d silent`, icon: PI.send, color: 'var(--red)' }));
+  const intv = apps.filter(a => a.status === 'Interview')
+    .map(a => ({ a, label: 'Interview prep due', icon: PI.briefcase, color: 'var(--orange)' }));
+  // Dedupe by app id — a row that's both Interview status AND stale by the
+  // Follow-Ups engine would otherwise produce a duplicate-key React warning.
+  // Priority order: hot > stale > interview-prep.
+  const seen = new Set();
+  const queue = [];
+  for (const item of [...hot, ...stale, ...intv]) {
+    if (seen.has(item.a.id)) continue;
+    seen.add(item.a.id);
+    queue.push(item);
+    if (queue.length >= 7) break;
+  }
+
+  return (
+    <div className="card padded-lg">
+      <div className="card-head">
+        <span className="card-title"><span className="dot" />Needs Attention</span>
+        <span className="card-meta mono">{queue.length} items</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {queue.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>Nothing urgent — pipeline is clear.</div>}
+        {queue.map(({ a, label, icon, color }) => (
+          <div key={a.id} onClick={() => onOpen(a)}
+            style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto auto', gap: 12, alignItems: 'center',
+              padding: '9px 11px', borderRadius: 9, cursor: 'pointer',
+              background: selId === a.id ? 'var(--accent-bg)' : 'var(--panel-2)',
+              border: '1px solid var(--border)' }}>
+            <span style={{ width: 28, height: 28, borderRadius: 7, display: 'grid', placeItems: 'center',
+              background: 'var(--panel)', border: '1px solid var(--border)', color }}>
+              <PIcon d={icon} size={14} />
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.company}</div>
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.role}</div>
+            </div>
+            <span className="mono" style={{ fontSize: 11, color, whiteSpace: 'nowrap' }}>{label}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <StatusBadge status={a.status} size="sm" />
+              <ScoreChip score={a.score} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FunnelSnapshot({ apps }) {
+  const counts = STATUS.map(s => ({ s, n: apps.filter(a => a.status === s.id).length }));
+  const max = Math.max(...counts.map(c => c.n), 1);
+  return (
+    <div className="card padded-lg">
+      <div className="card-head">
+        <span className="card-title"><span className="dot" />Funnel Snapshot</span>
+        <span className="card-meta mono">active stages</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 2 }}>
+        {counts.map(({ s, n }) => (
+          <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 34px', gap: 11, alignItems: 'center' }}>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ width: 7, height: 7, borderRadius: 99, background: s.color }} />{s.id}
+            </span>
+            <div style={{ height: 10, borderRadius: 99, background: 'var(--panel-2)', overflow: 'hidden' }}>
+              <span style={{ display: 'block', height: '100%', width: `${Math.max((n / max) * 100, n ? 6 : 0)}%`, background: s.color, opacity: 0.85, borderRadius: 99 }} />
+            </div>
+            <span className="mono" style={{ fontSize: 12, textAlign: 'right', color: n ? 'var(--text)' : 'var(--text-mute)' }}>{n}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OverviewView({ apps, onOpen, selId, onExport, totalTracker, isStale = () => false, staleDays = () => null }) {
+  return (
+    <div className="fade-up">
+      <div className="pl-head">
+        <div>
+          <h1>Pipeline</h1>
+          <div className="sub">
+            <span className="refresh-dot" />
+            <span><b>{apps.length}</b> active roles · {totalTracker} in tracker</span>
+          </div>
+        </div>
+        <div className="act">
+          <button className="btn sm" onClick={onExport}><PIcon d={PI.download} size={13} /> Export CSV</button>
+        </div>
+      </div>
+
+      <OverviewKpis apps={apps} isStale={isStale} />
+
+      <div style={{ marginBottom: 16 }}>
+        <PipelinePulse rows={apps} onOpen={onOpen} selId={selId} isStale={isStale} />
+      </div>
+
+      <NeedsAttention apps={apps} onOpen={onOpen} selId={selId} isStale={isStale} staleDays={staleDays} />
+    </div>
+  );
+}
+
+// ─── Filter toolbar (shared by Board + Table) ──────────────────────────────
+const ARCHETYPES = ['RevOps', 'SalesOps', 'Analytics', 'BizDev', 'SalesDev', 'Strategy'];
+
+function applyFilters(apps, filters, search) {
+  return apps.filter(a => {
+    if (filters.statuses.length && !filters.statuses.includes(a.status)) return false;
+    if (filters.archetype && a.archetype !== filters.archetype) return false;
+    if (filters.scoreMin && (a.score == null || a.score < filters.scoreMin)) return false;
+    if (search && search.trim()) {
+      const q = search.toLowerCase();
+      const hay = `${a.company} ${a.role} ${a.status} ${a.archetype} ${a.sector || ''} ${a.source || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, right }) {
+  const toggleStatus = (s) => setFilters(f => ({ ...f, statuses: f.statuses.includes(s) ? f.statuses.filter(x => x !== s) : [...f.statuses, s] }));
+  const active = filters.statuses.length || filters.archetype || filters.scoreMin || (search && search.trim());
+  const scoreSteps = [0, 3.0, 3.5, 4.0, 4.5];
+  return (
+    <div className="pl-toolbar">
+      <div className="tb-row">
+        <div className="statline">
+          {STATUS.map(s => {
+            const n = apps.filter(a => a.status === s.id).length;
+            const on = filters.statuses.includes(s.id);
+            return (
+              <button key={s.id} className={'stat-chip' + (on ? ' on' : '') + (n === 0 ? ' zero' : '')} onClick={() => toggleStatus(s.id)}>
+                <span className="sc-dot" style={{ background: s.color, boxShadow: n ? `0 0 6px ${s.color}` : 'none' }} />
+                {s.id}<span className="sc-n">{n}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="tb-row">
+        <select className="sel" value={filters.archetype} onChange={(e) => setFilters(f => ({ ...f, archetype: e.target.value }))}>
+          <option value="">All archetypes</option>
+          {ARCHETYPES.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <div className="score-seg" title="Minimum score">
+          {scoreSteps.map(s => (
+            <button key={s} className={filters.scoreMin === s ? 'on' : ''} onClick={() => setFilters(f => ({ ...f, scoreMin: s }))}>
+              {s === 0 ? 'any' : '≥' + s.toFixed(1)}
+            </button>
+          ))}
+        </div>
+        {active ? (
+          <button className="btn ghost sm" onClick={() => setFilters({ statuses: [], archetype: '', scoreMin: 0 })}>
+            <PIcon d={PI.x} size={12} /> Clear
+          </button>
+        ) : null}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="pl-count">{filtered.length} of {apps.length}</span>
+          {right}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Table view ────────────────────────────────────────────────────────────
+function TableView({ apps, filtered, filters, setFilters, search, setSearch, onOpen, selId, isStale = () => false, staleDays = () => null }) {
+  const [sortKey, setSortKey] = useStateP('date');
+  const [sortDir, setSortDir] = useStateP('desc');
+  const setSort = (k) => {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(k); setSortDir(k === 'score' || k === 'date' ? 'desc' : 'asc'); }
+  };
+  const sorted = useMemoP(() => {
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      let av = a[sortKey], bv = b[sortKey];
+      if (sortKey === 'score') { av = av == null ? -1 : av; bv = bv == null ? -1 : bv; }
+      if (sortKey === 'status') { av = STATUS_MAP[a.status]?.stage ?? 99; bv = STATUS_MAP[b.status]?.stage ?? 99; }
+      if (sortKey === 'engine')  { av = engineOf(a.resume) || ''; bv = engineOf(b.resume) || ''; }
+      if (sortKey === 'salary')  { av = a.salary || 0; bv = b.salary || 0; }
+      if (av < bv) return sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return sortDir === 'asc' ? 1 : -1;
+      return (b.score || 0) - (a.score || 0);
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
+  const cols = [
+    { k: 'id',        label: '#',         w: 42,  cls: 'id' },
+    { k: 'date',      label: 'Date',      w: 90,  cls: 't-date' },
+    { k: 'company',   label: 'Company',   w: 156 },
+    { k: 'role',      label: 'Role',      w: 174, cls: 't-role' },
+    { k: 'archetype', label: 'Archetype', w: 90,  cls: 't-arch' },
+    { k: 'salary',    label: 'Comp',      w: 112, cls: 't-comp' },
+    { k: 'status',    label: 'Status',    w: 116 },
+    { k: 'score',     label: 'Score',     w: 80 },
+    { k: 'source',    label: 'Source',    w: 92 },
+    { k: 'engine',    label: 'Resume',    w: 120 },
+  ];
+
+  return (
+    <div className="fade-up card padded-lg">
+      <div className="card-head">
+        <span className="card-title">Active Roles</span>
+        <span className="card-meta mono">{sorted.length} of {apps.length} item{sorted.length === 1 ? '' : 's'}</span>
+      </div>
+      <FilterBar apps={apps} filtered={filtered} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} />
+      <div className="tbl-wrap"
+        style={{ maxHeight: 'calc(100vh - 360px)', border: 'none', borderRadius: 0, background: 'transparent', marginTop: 8 }}>
+        <table className="tbl pl-tbl">
+          <thead>
+            <tr>
+              {cols.map(c => (
+                <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? 'sorted' : ''} onClick={() => setSort(c.k)}>
+                  {c.label}<span className="sort-ind">{sortKey === c.k ? (sortDir === 'asc' ? '↑' : '↓') : '·'}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.length === 0 && (
+              <tr><td colSpan={cols.length}><div className="no-data" style={{ padding: 40, textAlign: 'center' }}>No matches. Try clearing filters.</div></td></tr>
+            )}
+            {sorted.map(a => {
+              const sit = daysAgo(a.date);
+              const stale = isStale(a);
+              const gap = (a.salary || 0) - (a.target || 0);
+              const eng = engineOf(a.resume);
+              return (
+                <tr key={a.id} className={(selId === a.id ? 'selected ' : '') + (stale ? 'stale' : '')} onClick={() => onOpen(a)}>
+                  <td className="id">{String(a.id).padStart(3, '0')}</td>
+                  <td className="t-date">{a.date?.slice(5)}<span className="age">{relAge(sit)}</span></td>
+                  <td className="t-co-cell">
+                    <div className="co-cell">
+                      <span className="co-name">{a.company}</span>
+                      {stale && (
+                        <span className="stale-tag" title="Flagged by Follow-Ups engine — overdue for a nudge">
+                          ↻ {staleDays(a) ?? sit}d overdue
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="t-role">{a.role}</td>
+                  <td className="t-arch">{a.archetype}</td>
+                  <td className="t-comp" title={a.compStated || 'Not Stated'}>
+                    {formatCompMidpoint(a)}
+                  </td>
+                  <td><StatusBadge status={a.status} /></td>
+                  <td><ScoreChip score={a.score} /></td>
+                  <td><SourcePill source={a.source} /></td>
+                  <td title={eng ? `${eng} generated this résumé` : 'No résumé generated yet'}><EnginePill engine={eng} /></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Analytics view ────────────────────────────────────────────────────────
+function Insight({ children, kind }) {
+  const ic = kind === 'warn' ? PI.flag : kind === 'good' ? PI.star : PI.zap;
+  return (
+    <>
+      <div className="divider" />
+      <div className={'insight' + (kind === 'warn' ? ' warn' : '')}>
+        <span className="ic"><PIcon d={ic} size={15} /></span>
+        <span className="tx">{children}</span>
+      </div>
+    </>
+  );
+}
+
+// Comp Positioning visual — four-band stacked bar driven by user's
+// walk-away / target-floor / target-ceiling thresholds (from Tweaks).
+function CompPositioningCard(props) {
+  const { apps, withComp, belowWalk, stretch, inTarget, aboveTgt, avgComp, inOrAbovePct, walkAway, targetLow, targetHigh } = props;
+  const bands = [
+    { n: belowWalk.length, color: 'var(--red)',    label: 'walk-away' },
+    { n: stretch.length,   color: 'var(--yellow)', label: 'stretch' },
+    { n: inTarget.length,  color: 'var(--green)',  label: 'on target' },
+    { n: aboveTgt.length,  color: 'var(--accent)', label: 'above target' },
+  ];
+  const dollar = (n) => '$' + n + 'K';
+  return (
+    <div className="card padded-lg">
+      <div className="card-head">
+        <span className="card-title"><span className="dot" />Comp Positioning</span>
+        <span className="card-meta mono">{withComp.length} of {apps.length} active have stated comp</span>
+      </div>
+      {withComp.length === 0 ? (
+        <div className="empty" style={{ padding: '16px 4px', color: 'var(--text-mute)', fontSize: 12.5 }}>
+          No active roles have JD-stated comp yet. Roles without disclosed salary aren't plotted.
+        </div>
+      ) : (
+        <div>
+          <div style={{ display: 'flex', height: 28, borderRadius: 6, overflow: 'hidden', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
+            {bands.filter(b => b.n > 0).map((b, i) => (
+              <div key={i} title={b.label + ': ' + b.n}
+                   style={{ flex: b.n, background: b.color, opacity: 0.85, display: 'grid', placeItems: 'center',
+                            color: 'var(--bg)', fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700 }}>
+                {b.n}
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 8, fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '.04em' }}>
+            <div style={{ color: 'var(--red)' }}>
+              {'< ' + dollar(walkAway)}
+              <div style={{ color: 'var(--text-mute)', fontSize: 9.5, marginTop: 2 }}>walk-away</div>
+            </div>
+            <div style={{ color: 'var(--yellow)' }}>
+              {dollar(walkAway) + '-' + dollar(targetLow)}
+              <div style={{ color: 'var(--text-mute)', fontSize: 9.5, marginTop: 2 }}>stretch</div>
+            </div>
+            <div style={{ color: 'var(--green)' }}>
+              {dollar(targetLow) + '-' + dollar(targetHigh)}
+              <div style={{ color: 'var(--text-mute)', fontSize: 9.5, marginTop: 2 }}>target band</div>
+            </div>
+            <div style={{ color: 'var(--accent)' }}>
+              {'> ' + dollar(targetHigh)}
+              <div style={{ color: 'var(--text-mute)', fontSize: 9.5, marginTop: 2 }}>above target</div>
+            </div>
+          </div>
+          <Insight kind={inOrAbovePct < 40 ? 'warn' : null}>
+            <b>{inOrAbovePct + '%'}</b>{' of active roles sit in or above your target band (' + dollar(targetLow) + '-' + dollar(targetHigh) + '). Avg posted comp '}<b>{dollar(avgComp)}</b>{'.' + (belowWalk.length > 0 ? ' ' + belowWalk.length + ' role' + (belowWalk.length === 1 ? '' : 's') + ' below your walk-away.' : '')}
+          </Insight>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnalyticsView({ apps, allApps, compTweaks }) {
+  const walkAway = compTweaks?.walkAway ?? 160;
+  const targetLow = compTweaks?.targetLow ?? 220;
+  const targetHigh = compTweaks?.targetHigh ?? 250;
+  const stageOf = (a) => STATUS_MAP[a.status]?.stage ?? -1;
+  const reached = (a, s) => stageOf(a) >= s;
+
+  // Time-to-rejection: days from application to the date a row was marked
+  // Rejected, served from the status-event sidecar (fills in over time).
+  const [rejTiming, setRejTiming] = useStateP(null);
+  useEffectP(() => {
+    let alive = true;
+    fetch('/api/insights/rejection-timing')
+      .then(r => r.json())
+      .then(d => { if (alive) setRejTiming(d); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const engineKeys = Object.keys(ENGINE_META);
+  const byEngine = engineKeys.map(k => {
+    const items = apps.filter(a => engineOf(a.resume) === k);
+    const applied = items.filter(a => reached(a, 1));
+    const responded = items.filter(a => reached(a, 2));
+    const interviewed = items.filter(a => reached(a, 3));
+    const scored = items.filter(a => a.score != null);
+    const avg = scored.length ? scored.reduce((s, a) => s + a.score, 0) / scored.length : 0;
+    const respRate = applied.length ? Math.round((responded.length / applied.length) * 100) : 0;
+    const intvRate = applied.length ? Math.round((interviewed.length / applied.length) * 100) : 0;
+    return { k, meta: ENGINE_META[k], n: items.length, applied: applied.length, respRate, intvRate, avg };
+  }).filter(e => e.n > 0).sort((a, b) => b.respRate - a.respRate || b.avg - a.avg);
+  const eligible = byEngine.filter(e => e.applied >= 3);
+  const best = eligible[0] || byEngine[0];
+  const fieldAvgResp = (() => {
+    const ap = apps.filter(a => engineOf(a.resume) && reached(a, 1));
+    const re = apps.filter(a => engineOf(a.resume) && reached(a, 2));
+    return ap.length ? Math.round((re.length / ap.length) * 100) : 0;
+  })();
+
+  const srcKeys = Object.keys(SOURCE);
+  const bySource = srcKeys.map(k => {
+    const items = apps.filter(a => a.source === k);
+    const scored = items.filter(a => a.score != null);
+    const avg = scored.length ? scored.reduce((s, a) => s + a.score, 0) / scored.length : 0;
+    const strong = items.filter(a => a.score != null && a.score >= 4.0).length;
+    const advanced = items.filter(a => reached(a, 2)).length;
+    const strongRate = items.length ? Math.round((strong / items.length) * 100) : 0;
+    return { k, meta: SOURCE[k], n: items.length, avg, strong, strongRate, advanced };
+  }).filter(s => s.n > 0).sort((a, b) => b.avg - a.avg);
+  const bestSource = [...bySource].sort((a, b) => b.strongRate - a.strongRate)[0];
+
+  const byArch = ARCHETYPES.map(k => {
+    const items = apps.filter(a => a.archetype === k);
+    const applied = items.filter(a => reached(a, 1)).length;
+    const interviewed = items.filter(a => reached(a, 3)).length;
+    const conv = applied ? Math.round((interviewed / applied) * 100) : 0;
+    return { k, n: items.length, applied, interviewed, conv };
+  }).filter(a => a.n > 0).sort((a, b) => b.conv - a.conv);
+  const bestArch = byArch.find(a => a.applied >= 2) || byArch[0];
+
+  // Comp positioning: bucket each role's midpoint salary into four bands.
+  // walkAway / targetLow / targetHigh come from the Tweaks panel.
+  const withComp = apps.filter(a => a.salary != null && a.salary > 0);
+  const belowWalk = withComp.filter(a => a.salary < walkAway);
+  const stretch  = withComp.filter(a => a.salary >= walkAway && a.salary < targetLow);
+  const inTarget = withComp.filter(a => a.salary >= targetLow && a.salary <= targetHigh);
+  const aboveTgt = withComp.filter(a => a.salary > targetHigh);
+  const avgComp  = withComp.length ? Math.round(withComp.reduce((s, a) => s + a.salary, 0) / withComp.length) : 0;
+  const inOrAbovePct = withComp.length ? Math.round(((inTarget.length + aboveTgt.length) / withComp.length) * 100) : 0;
+
+  const vel = STATUS.map(s => {
+    const items = apps.filter(a => a.status === s.id);
+    const avgAge = items.length ? Math.round(items.reduce((x, a) => x + daysAgo(a.date), 0) / items.length) : 0;
+    return { s, avgAge, n: items.length };
+  });
+  const maxAge = Math.max(...vel.map(v => v.avgAge), 1);
+  const bottleneck = [...vel].filter(v => v.n > 0 && v.s.stage < 4).sort((a, b) => b.avgAge - a.avgAge)[0];
+
+  const appliedAll = apps.filter(a => reached(a, 1)).length;
+  const respAll = apps.filter(a => reached(a, 2)).length;
+  const intvAll = apps.filter(a => reached(a, 3)).length;
+  const respRate = appliedAll ? Math.round((respAll / appliedAll) * 100) : 0;
+  const intvRate = appliedAll ? Math.round((intvAll / appliedAll) * 100) : 0;
+
+  return (
+    <div className="fade-up">
+      <div className="pl-head">
+        <div>
+          <h1>Pipeline Analytics</h1>
+          <div className="sub"><span className="refresh-dot" /><span>what's working & where to focus across <b>{apps.length}</b> active roles</span></div>
+        </div>
+      </div>
+
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)', marginBottom: 14 }}>
+        <Kpi k="Top Engine" v={best ? best.k : '—'} sub={best ? `${best.respRate}% response rate` : 'no data'} color="var(--accent-2)" icon={PI.zap} />
+        <Kpi k="Response Rate" v={respRate + '%'} sub={`${respAll} of ${appliedAll} applied`} icon={PI.msg} />
+        <Kpi k="Interview Rate" v={intvRate + '%'} sub={`${intvAll} reached interview`} icon={PI.briefcase} />
+        <Kpi
+          k="Avg Days to Rejection"
+          v={rejTiming && rejTiming.n > 0 ? rejTiming.avgDays + 'd' : '—'}
+          sub={rejTiming && rejTiming.n > 0 ? `median ${rejTiming.medianDays}d · n=${rejTiming.n}` : 'fills as you mark rejections'}
+          icon={PI.clock}
+        />
+        <Kpi k="On / Above Target" v={inOrAbovePct + '%'} sub={`avg posted comp $${avgComp}K`} color={inOrAbovePct < 40 ? 'var(--red)' : 'var(--text)'} icon={PI.trend} />
+      </div>
+
+      <div className="grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, alignItems: 'start', marginBottom: 14 }}>
+        <div className="card padded-lg">
+          <div className="card-head"><span className="card-title"><span className="dot" />Engine Performance</span><span className="card-meta mono">response rate · ranked</span></div>
+          {byEngine.length === 0 ? (
+            <div className="no-data" style={{ padding: 14 }}>No résumés generated yet — apply with an engine to see comparisons.</div>
+          ) : (
+            <div className="lol" style={{ marginTop: 2 }}>
+              {byEngine.map((e, i) => (
+                <div className="lol-row" key={e.k}>
+                  <span className="lol-rank">{i + 1}</span>
+                  <span className="lol-name"><span className="d" style={{ background: e.meta.color }} />{e.k}{best && e.k === best.k && <span className="best">BEST</span>}</span>
+                  <div className="lol-track">
+                    <div className="lol-base" />
+                    <div className="lol-fill" style={{ width: `${e.respRate}%`, background: e.meta.color, opacity: 0.45 }} />
+                    <div className="lol-bench" style={{ left: `${fieldAvgResp}%` }} />
+                    <div className="lol-dot" style={{ left: `${e.respRate}%`, background: e.meta.color, boxShadow: `0 0 8px ${e.meta.color}` }} />
+                  </div>
+                  <span className="lol-val">{e.respRate}%<span className="s"> · {e.avg.toFixed(1)}★</span></span>
+                </div>
+              ))}
+              <div className="lol-benchcap"><span className="ln" /> dashed = {fieldAvgResp}% field average · ★ avg score</div>
+            </div>
+          )}
+          {best && (
+            <Insight kind="good">
+              <b>{best.k}</b> is your strongest engine — {best.respRate}% of its résumés draw a response vs {fieldAvgResp}% across all engines. Route more roles through {best.k}.
+            </Insight>
+          )}
+        </div>
+
+        <div className="card padded-lg">
+          <div className="card-head"><span className="card-title"><span className="dot" />Source Effectiveness</span><span className="card-meta mono">quality by channel</span></div>
+          <table className="atbl" style={{ marginTop: 2 }}>
+            <thead><tr><th>Source</th><th>Roles</th><th>Avg</th><th>Strong</th><th>Adv</th></tr></thead>
+            <tbody>
+              {bySource.map(s => (
+                <tr key={s.k} className={bestSource && s.k === bestSource.k ? 'top' : ''}>
+                  <td><span className="s-name"><span className="d" style={{ background: s.meta.color }} />{s.k}</span></td>
+                  <td>{s.n}</td>
+                  <td>{s.avg.toFixed(1)}</td>
+                  <td className={s.strongRate >= 60 ? 'pos' : ''}>{s.strongRate}%</td>
+                  <td className="mut">{s.advanced}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {bestSource && (
+            <Insight>
+              <b>{bestSource.k}</b> surfaces the highest-quality roles ({bestSource.strongRate}% score ≥4.0). Spend more sourcing time here.
+            </Insight>
+          )}
+        </div>
+      </div>
+
+      <div className="grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, alignItems: 'start', marginBottom: 14 }}>
+        <div className="card padded-lg">
+          <div className="card-head"><span className="card-title"><span className="dot" />Archetype Conversion</span><span className="card-meta mono">apply → interview</span></div>
+          <div className="afun" style={{ marginTop: 2 }}>
+            {byArch.map(a => (
+              <div className="afun-row" key={a.k}>
+                <span className="afun-lbl"><span className="d" />{a.k}</span>
+                <div className="afun-track">
+                  <div className="afun-applied" />
+                  <div className="afun-intv" style={{ width: `${Math.max(a.conv, 4)}%` }}>{a.conv >= 16 ? a.conv + '%' : ''}</div>
+                </div>
+                <span className="afun-cap">{a.conv < 16 ? <b>{a.conv}% · </b> : null}<b>{a.interviewed}</b>/{a.applied} to intv</span>
+              </div>
+            ))}
+          </div>
+          {bestArch && (
+            <Insight kind="good">
+              <b>{bestArch.k}</b> roles convert best — {bestArch.conv}% reach interview. Weight your daily applications toward {bestArch.k}.
+            </Insight>
+          )}
+        </div>
+
+        <CompPositioningCard
+          apps={apps}
+          withComp={withComp}
+          belowWalk={belowWalk}
+          stretch={stretch}
+          inTarget={inTarget}
+          aboveTgt={aboveTgt}
+          avgComp={avgComp}
+          inOrAbovePct={inOrAbovePct}
+          walkAway={walkAway}
+          targetLow={targetLow}
+          targetHigh={targetHigh}
+        />
+      </div>
+
+      <div className="card padded-lg">
+        <div className="card-head"><span className="card-title"><span className="dot" />Time in Stage</span><span className="card-meta mono">avg age · bottleneck finder</span></div>
+        <div className="pl-histo" style={{ marginTop: 4 }}>
+          {vel.map(({ s, avgAge, n }) => (
+            <div className="pl-histo-col" key={s.id}>
+              <div className="pl-histo-bar" style={{ height: `${n ? Math.max((avgAge / maxAge) * 100, 4) : 0}%`, background: s.color, opacity: 0.85 }}>
+                <span className="hn">{n ? avgAge + 'd' : '—'}</span>
+              </div>
+              <span className="pl-histo-x" style={{ color: s.color }}>{s.id}</span>
+            </div>
+          ))}
+        </div>
+        <Insight kind="warn">
+          {bottleneck ? <>Roles pile up longest in <b>{bottleneck.s.id}</b> (avg {bottleneck.avgAge}d). That's your bottleneck — {bottleneck.s.id === 'Applied' ? 'send follow-up nudges on anything past 14 days' : bottleneck.s.id === 'Evaluated' ? 'decide and apply on the oldest sitting reports today' : 'chase the stalled threads to keep momentum'}.</> : 'Pipeline is moving cleanly — no stage is aging out.'}
+        </Insight>
+      </div>
+
+      {/* Pipeline Flow Sankey — moved from main Analytics tab per user request */}
+      <div className="card padded-lg" style={{ marginTop: 14 }}>
+        <div className="card-head">
+          <span className="card-title">Pipeline Flow · archetype → offer</span>
+          <span className="card-meta mono">how every role moved through the funnel, by archetype</span>
+        </div>
+        {window.Sankey ? <window.Sankey apps={allApps || apps} /> : <div className="dim" style={{ fontSize: 12, padding: 12 }}>Sankey unavailable.</div>}
+      </div>
+    </div>
+  );
+}
+
+// ─── CSV export ────────────────────────────────────────────────────────────
+function exportCSV(rows) {
+  const cols = ['id', 'date', 'company', 'role', 'archetype', 'score', 'status', 'compStated', 'salary', 'target', 'sector', 'source', 'resume'];
+  const esc = (v) => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [cols.join(',')];
+  rows.forEach(a => lines.push(cols.map(c => esc(a[c])).join(',')));
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url; link.download = `pipeline_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// ─── Sub-tabs ──────────────────────────────────────────────────────────────
+const PL_SUBTABS = [
+  { id: 'overview',  label: 'Overview',  icon: PI.pulse },
+  { id: 'table',     label: 'Table',     icon: PI.list },
+  { id: 'all',       label: 'All',       icon: PI.list },
+  { id: 'analytics', label: 'Analytics', icon: PI.chart },
+];
+
+// ─── All Entries sub-tab ───────────────────────────────────────────────────
+// Unfiltered view of every row across every status, including closed-state
+// (SKIP / Rejected / Closed / Discarded / Not a Fit). Mirrors the legacy
+// /tracker tab's filter UI and table, but routes opens through Pipeline's
+// local drawer so users can Reopen a row back to Evaluated in one click.
+const ALL_ENTRIES_STATUSES = [
+  'Evaluated', 'Applied', 'Responded', 'Interview', 'Offer',
+  'Rejected', 'Discarded', 'SKIP', 'Closed', 'Not a Fit',
+];
+function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays = () => null }) {
+  const [sortKey, setSortKey] = useStateP('date');
+  const [sortDir, setSortDir] = useStateP('desc');
+  const [filters, setFilters] = useStateP({ statuses: [], archetypes: [], scoreMin: 0 });
+
+  const filtered = useMemoP(() => {
+    return apps.filter(a => {
+      if (filters.statuses.length && !filters.statuses.includes(a.status)) return false;
+      if (filters.archetypes.length && !filters.archetypes.includes(a.archetype)) return false;
+      if (filters.scoreMin && a.score < filters.scoreMin) return false;
+      if (search) {
+        const ql = search.toLowerCase();
+        const hay = `${a.company} ${a.role} ${a.status} ${a.archetype} ${a.sector}`.toLowerCase();
+        if (!hay.includes(ql)) return false;
+      }
+      return true;
+    });
+  }, [apps, filters, search]);
+
+  const sorted = useMemoP(() => {
+    const arr = [...filtered];
+    const dir = sortDir === 'asc' ? 1 : -1;
+    arr.sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'id') {
+        cmp = (a.id || 0) - (b.id || 0);
+      } else if (sortKey === 'score') {
+        const as = a.score != null ? a.score : -1;
+        const bs = b.score != null ? b.score : -1;
+        cmp = as - bs;
+      } else if (sortKey === 'date') {
+        cmp = (a.date || '').localeCompare(b.date || '');
+        if (cmp === 0) {
+          const as = a.score != null ? a.score : -1;
+          const bs = b.score != null ? b.score : -1;
+          return bs - as;
+        }
+      } else {
+        const av = (a[sortKey] || '').toString().toLowerCase();
+        const bv = (b[sortKey] || '').toString().toLowerCase();
+        cmp = av.localeCompare(bv);
+      }
+      return cmp * dir;
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
+  const toggleStatus = (s) => setFilters(f => ({ ...f, statuses: f.statuses.includes(s) ? f.statuses.filter(x => x !== s) : [...f.statuses, s] }));
+  const toggleArch = (a) => setFilters(f => ({ ...f, archetypes: f.archetypes.includes(a) ? f.archetypes.filter(x => x !== a) : [...f.archetypes, a] }));
+  const setSort = (k) => {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(k); setSortDir(k === 'score' || k === 'date' ? 'desc' : 'asc'); }
+  };
+
+  const breakdown = useMemoP(() => {
+    return ALL_ENTRIES_STATUSES
+      .map(s => ({ s, n: apps.filter(a => a.status === s).length, meta: window.STATUS_META[s] }))
+      .filter(x => x.n > 0 && x.meta);
+  }, [apps]);
+
+  const archetypes = useMemoP(() => window.ARCHETYPES || [], []);
+
+  return (
+    <div className="fade-up card padded-lg">
+      <div className="card-head">
+        <span className="card-title">All Entries</span>
+        <span className="card-meta mono">{sorted.length} of {apps.length} item{sorted.length === 1 ? '' : 's'}</span>
+      </div>
+
+      {/* Status breakdown — flat row, no inner card */}
+      <div className="row" style={{ flexWrap: 'wrap', gap: 14, marginBottom: 10 }}>
+        {breakdown.map(({ s, n, meta }) => (
+          <span key={s} className="row mono" style={{ gap: 6, fontSize: 11.5, color: 'var(--text-dim)', cursor: 'pointer' }} onClick={() => toggleStatus(s)}>
+            <span style={{ width: 7, height: 7, borderRadius: 50, background: meta.color, display: 'inline-block', flexShrink: 0 }}></span>
+            {s}
+            <span style={{ color: filters.statuses.includes(s) ? 'var(--accent)' : 'var(--text)' }}>{n}</span>
+          </span>
+        ))}
+        <span className="mono dim" style={{ fontSize: 11, marginLeft: 'auto' }}>click to filter</span>
+      </div>
+
+      {/* Filter chips — flat, no inner card */}
+      <div className="col" style={{ gap: 8, marginBottom: 10 }}>
+        <div className="filterbar">
+          <span className="mono dim" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Status</span>
+          {ALL_ENTRIES_STATUSES.map(s => window.STATUS_META[s] && (
+            <span key={s} className={`chip ${filters.statuses.includes(s) ? 'on' : ''}`} onClick={() => toggleStatus(s)}>
+              <span className="dot" style={{ width: 6, height: 6, borderRadius: 50, background: window.STATUS_META[s].color, display: 'inline-block' }}></span>
+              {s}
+            </span>
+          ))}
+        </div>
+        <div className="filterbar">
+          <span className="mono dim" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Archetype</span>
+          {archetypes.map(a => (
+            <span key={a} className={`chip ${filters.archetypes.includes(a) ? 'on' : ''}`} onClick={() => toggleArch(a)}>{a}</span>
+          ))}
+        </div>
+        <div className="filterbar">
+          <span className="mono dim" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Score ≥</span>
+          {[0, 3.0, 3.5, 4.0, 4.5].map(s => (
+            <span key={s} className={`chip ${filters.scoreMin === s ? 'on' : ''}`} onClick={() => setFilters(f => ({ ...f, scoreMin: s }))}>{s === 0 ? 'any' : s.toFixed(1)}</span>
+          ))}
+          {(filters.statuses.length || filters.archetypes.length || filters.scoreMin) ? (
+            <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={() => setFilters({ statuses: [], archetypes: [], scoreMin: 0 })}>Clear all</button>
+          ) : null}
+        </div>
+      </div>
+
+      <window.PipelineTable rows={sorted} sortKey={sortKey} sortDir={sortDir} setSort={setSort} onOpen={onOpen} isStale={isStale} staleDays={staleDays} flat />
+    </div>
+  );
+}
+
+// ─── Pipeline Drawer (760px) — inline evaluation report ──────────────────
+const DRAWER_TABS = [
+  { id: 'overview',  label: 'Overview',   icon: PI.pulse },
+  { id: 'cv',        label: 'CV Match',   icon: PI.briefcase },
+  { id: 'comp',      label: 'Comp',       icon: PI.trend },
+  { id: 'interview', label: 'Interview',  icon: PI.msg },
+  { id: 'customize', label: 'Customize',  icon: PI.flag },
+  { id: 'legit',     label: 'Legitimacy', icon: PI.check },
+];
+
+function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () => false }) {
+  const [tab, setTab] = useStateP('overview');
+  // Structured cheat-sheet object from /api/cheatsheets/:id — exactly the
+  // shape Claude Design's prototype consumed (PIPE_CHEATS).
+  const [cs, setCs] = useStateP(null);
+  const [loading, setLoading] = useStateP(false);
+  const [starOpen, setStarOpen] = useStateP(0);
+  const [customWhich, setCustomWhich] = useStateP('cv');
+  const [applyJob, setApplyJob] = useStateP(null);     // { mode, status: 'running'|'error', error? }
+  const [applyResult, setApplyResult] = useStateP(null); // completed job data
+  const [elapsed, setElapsed] = useStateP(0);
+
+  useEffectP(() => {
+    setTab('overview'); setStarOpen(0); setCustomWhich('cv');
+    setApplyJob(null); setApplyResult(null); setElapsed(0);
+  }, [app && app.id]);
+
+  useEffectP(() => {
+    if (!applyJob || applyJob.status !== 'running') { setElapsed(0); return; }
+    setElapsed(0);
+    const t = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [applyJob && applyJob.status]);
+
+  function startApply(mode) {
+    // window.open must fire synchronously inside the click gesture or browsers
+    // block it as a popup. Skip for BYO — user has already applied elsewhere.
+    if (app && app.url && mode !== 'byo') window.open(app.url, '_blank');
+    setApplyJob({ mode, status: 'running' });
+    setApplyResult(null);
+    fetch(`/api/apply/${app.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, company: app.company }),
+    })
+      .then(r => r.json())
+      .then(({ jobId, error }) => {
+        if (!jobId) { setApplyJob({ mode, status: 'error', error: error || 'Failed to start' }); return; }
+        const poll = setInterval(() => {
+          fetch(`/api/apply/status/${jobId}`)
+            .then(r => r.json())
+            .then(job => {
+              if (job.status === 'done') {
+                clearInterval(poll);
+                setApplyJob(null);
+                setApplyResult({ ...job, mode });
+                // Advance status to Applied (parent handles tracker + drawerApp update)
+                if (onAction) onAction(app, 'already_applied');
+              } else if (job.status === 'error') {
+                clearInterval(poll);
+                setApplyJob({ mode, status: 'error', error: job.error || 'Generation failed' });
+              }
+            })
+            .catch(() => { clearInterval(poll); setApplyJob({ mode, status: 'error', error: 'Poll failed' }); });
+        }, 2000);
+      })
+      .catch(err => setApplyJob({ mode, status: 'error', error: err.message }));
+  }
+
+  const APPLY_MODES = { apply_manual: 'manual', apply_claude: 'claude', already_applied: 'byo' };
+  const handleFooterClick = (b) => {
+    const mode = APPLY_MODES[b.id];
+    if (mode) { startApply(mode); return; }
+    if (onAction) onAction(app, b.id);
+  };
+
+  useEffectP(() => {
+    if (!app) return;
+    setLoading(true);
+    fetch(`/api/cheatsheets/${app.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { setCs(d); setLoading(false); })
+      .catch(() => { setCs(null); setLoading(false); });
+  }, [app && app.id]);
+
+  useEffectP(() => {
+    if (!app) return;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [app, onClose]);
+
+  if (!app) {
+    return (
+      <div className="pl-drawer-overlay">
+        <div className="drawer-backdrop" onClick={onClose}></div>
+        <div className="pl-drawer"></div>
+      </div>
+    );
+  }
+
+  const m = STATUS_MAP[app.status] || { color: 'var(--text-mute)', rgb: '93,93,102', stage: 0 };
+  const sit = daysAgo(app.date);
+  const stale = isStale(app);
+  const engine = engineOf(app.resume);
+  const engMeta = engine ? ENGINE_META[engine] : { hex: '#8b8b94', rgb: '139,139,148' };
+
+  // status-aware footer
+  const st = app.status;
+  let primary = [];
+  if (st === 'Evaluated') {
+    primary = [
+      { id: 'apply_manual', label: 'Manual Apply', cls: 'primary' },
+      { id: 'apply_claude', label: 'Claude Apply', cls: 'claude', spark: true },
+      { id: 'already_applied', label: 'Already Applied', check: true },
+    ];
+  } else if (st === 'Applied') {
+    primary = [{ id: 'responded', label: 'Mark Responded', cls: 'primary', check: true }];
+  } else if (st === 'Responded') {
+    primary = [{ id: 'interview', label: 'Move to Interview', cls: 'primary', check: true }];
+  } else if (st === 'Interview') {
+    primary = [{ id: 'offer', label: 'Mark Offer', cls: 'primary', check: true }];
+  } else if (st === 'Offer') {
+    primary = [{ id: 'accept', label: 'Accept Offer', cls: 'success', check: true }];
+  } else if (['SKIP', 'Rejected', 'Closed', 'Discarded', 'Not a Fit'].includes(st)) {
+    primary = [{ id: 'reopen', label: 'Reopen → Evaluated', cls: 'primary', check: true }];
+  }
+  const closers = st === 'Evaluated'
+    ? [{ id: 'SKIP', label: 'Skip' }, { id: 'Not a Fit', label: 'Not a Fit' }, { id: 'Closed', label: 'Closed' }]
+    : [{ id: 'Rejected', label: 'Rejected', danger: true }, { id: 'Not a Fit', label: 'Not a Fit' }, { id: 'Closed', label: 'Closed' }];
+
+  const gap = (app.salary || 0) - (app.target || 0);
+  const remoteChip = (cs && cs.remote) || (app.size ? `${app.size}-stage` : null);
+  // Real structured fields from /api/cheatsheets/:id when present
+  const tldr = cs && cs.tldr;
+  const recommendation = cs && cs.recommendation;
+  const companyBrief = cs && cs.companyBrief;
+  const keywords = (cs && cs.keywords) || [];
+  const globalScore = (cs && Array.isArray(cs.globalScore)) ? cs.globalScore : [];
+  const cvMatch = (cs && Array.isArray(cs.cvMatch)) ? cs.cvMatch : [];
+  const gaps = (cs && Array.isArray(cs.gaps)) ? cs.gaps : [];
+  const levelMatch = (cs && cs.levelMatch) || null;
+  const sellSenior = (cs && Array.isArray(cs.sellSenior)) ? cs.sellSenior : [];
+  const downlevelPlan = cs && cs.downlevelPlan;
+  const comp = (cs && cs.comp) || null;
+  const customizationCV = (cs && Array.isArray(cs.customizationCV)) ? cs.customizationCV : [];
+  const customizationLI = (cs && Array.isArray(cs.customizationLI)) ? cs.customizationLI : [];
+  const starStories = (cs && Array.isArray(cs.starStories)) ? cs.starStories : [];
+  const leadStory = cs && cs.leadStory;
+  const redFlagQs = (cs && Array.isArray(cs.redFlagQs)) ? cs.redFlagQs : [];
+  const legitSignals = (cs && Array.isArray(cs.legitimacySignals)) ? cs.legitimacySignals : [];
+  const legitConclusion = cs && cs.legitimacyConclusion;
+  const sectorRaw = (cs && cs.domain) || app.sectorRaw;
+
+  return (
+    <div className="pl-drawer-overlay">
+      <div className={'drawer-backdrop' + (app ? ' open' : '')} onClick={onClose}></div>
+      <div className={'pl-drawer' + (app ? ' open' : '')}>
+        <div className="drawer-head">
+          <div className="drawer-head-top">
+            <span className="id">#{String(app.id).padStart(3, '0')}</span>
+            <StatusBadge status={app.status} size="sm" />
+            {app.legitimacy && <span className="tag accent">✓ {app.legitimacy}</span>}
+            {stale && <span className="tag" style={{ color: 'var(--red)', borderColor: 'rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.1)' }}>stale · {sit}d</span>}
+            <button className="icon-btn x" onClick={onClose} title="Close (Esc)">
+              <PIcon d={PI.x} size={15} />
+            </button>
+          </div>
+          <div className="drawer-id-block">
+            <span className="mono-av" style={{ borderColor: m.color, color: m.color }}>{monogram(app.company)}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h3>{app.company}</h3>
+              <div className="role">{app.role}</div>
+              <div className="co">{app.archetype}{app.sector ? ` · ${app.sector}` : ''}{remoteChip ? ` · ${remoteChip}` : ''}</div>
+            </div>
+            <ScoreChip score={app.score} />
+          </div>
+          <div className="dr-chips">
+            {(cs && cs.remote) && <span className="dr-chip">{cs.remote}</span>}
+            {sectorRaw && <span className="dr-chip">{sectorRaw}</span>}
+            {app.url && <a className="dr-chip link" href={app.url} target="_blank" rel="noreferrer">JD ↗</a>}
+          </div>
+        </div>
+
+        <div className="drawer-body">
+          {/* Stage track */}
+          <div className="ds-section">
+            <div className="ds-label"><PIcon d={PI.trend} size={12} /> Pipeline stage <span className="r">stage {m.stage + 1}/5</span></div>
+            <div className="pipe-track">
+              {STATUS.map(s => {
+                const cls = m.stage > s.stage ? 'done' : m.stage === s.stage ? 'cur' : '';
+                return (
+                  <button key={s.id} className={'pipe-step ' + cls} onClick={() => onStatusChange && onStatusChange(app, s.id)}>
+                    <span className="pipe-bar" />
+                    <span className="pipe-lbl">{s.short}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="pipe-foot">
+              <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Stage {m.stage + 1} of 5 · <span style={{ color: m.color }}>{app.status}</span></span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {m.stage > 0 && <button className="btn ghost sm" onClick={() => onStatusChange && onStatusChange(app, STATUS[m.stage - 1].id)}>← Back</button>}
+                {m.stage < 4 && <button className="btn ghost sm" style={{ color: 'var(--accent-2)' }} onClick={() => onStatusChange && onStatusChange(app, STATUS[m.stage + 1].id)}>Advance →</button>}
+              </div>
+            </div>
+          </div>
+
+          {/* Engine attribution banner */}
+          <div className="rp-engine">
+            <span className="ico" style={{ background: `rgba(${engMeta.rgb},0.14)`, color: engMeta.hex }}>
+              <PIcon d={PI.zap} size={15} />
+            </span>
+            <span className="tx">
+              {engine
+                ? <>Résumé &amp; report generated by the <b>{engine}</b> engine · sourced via {app.source || 'unknown'}</>
+                : <>Sourced via <b>{app.source || 'unknown'}</b> · no résumé generated yet</>}
+            </span>
+            {app.resume && app.resume !== engine && (
+              <span className="mono" style={{ fontSize: 10, color: 'var(--text-mute)' }}>{app.resume}</span>
+            )}
+          </div>
+
+          {/* Report tab strip */}
+          <div className="dr-tabs">
+            {DRAWER_TABS.map(t => (
+              <button key={t.id} className={'dr-tab' + (tab === t.id ? ' on' : '')} onClick={() => setTab(t.id)}>
+                <PIcon d={t.icon} size={13} />{t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content — all sourced from structured cheat-sheet (cs) */}
+          {tab === 'overview' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {tldr && (
+                <div className="rp-callout accent">
+                  <div className="rp-callout-label">TL;DR</div>
+                  <div className="rp-callout-body">{tldr}</div>
+                </div>
+              )}
+
+              <div className="rp-snap-grid">
+                <div className="rp-snap">
+                  <div className="rp-snap-label">Score</div>
+                  <div className="rp-snap-value" style={{ color: scoreColor(app.score) }}>
+                    {fmtScore(app.score)}<span style={{ color: 'var(--text-mute)', fontSize: 11, marginLeft: 3 }}>{app.score != null ? '/5' : ''}</span>
+                  </div>
+                  <div className="rp-snap-sub">{scoreBucket(app.score) === 'na' ? 'unscored' : scoreBucket(app.score) + ' match'}</div>
+                </div>
+                <div className="rp-snap">
+                  <div className="rp-snap-label">Comp</div>
+                  <div className="rp-snap-value mono" style={{ fontSize: 16 }}>
+                    {comp && comp.stated ? (comp.stated.length > 16 ? comp.stated.slice(0, 15) + '…' : comp.stated) : (app.salary != null ? `$${app.salary}k` : '—')}
+                  </div>
+                  {app.salary != null && app.target != null && (
+                    <div className="rp-snap-sub" style={{ color: gap >= 0 ? 'var(--green)' : 'var(--red)' }}>{gap >= 0 ? '+' : ''}{gap}k vs target</div>
+                  )}
+                </div>
+                <div className="rp-snap">
+                  <div className="rp-snap-label">Domain</div>
+                  <div className="rp-snap-value sm">{app.sector || '—'}</div>
+                  <div className="rp-snap-sub">{(cs && cs.archetypeDetected) || app.archetype || ''}</div>
+                </div>
+                <div className="rp-snap">
+                  <div className="rp-snap-label">Setup</div>
+                  <div className="rp-snap-value sm">{(cs && cs.remote) || app.status}</div>
+                  <div className="rp-snap-sub">{app.size ? `${app.size}-stage` : relAge(sit) + ' ago'}</div>
+                </div>
+              </div>
+
+              {globalScore.length > 0 && (
+                <div className="rp-section">
+                  <div className="rp-section-head">
+                    <span>Global Score Breakdown</span>
+                    <span className="meta">{globalScore.filter(d => d.val > 0).reduce((s, d) => s + d.val, 0).toFixed(2)} / {globalScore.reduce((s, d) => s + d.max, 0)}</span>
+                  </div>
+                  <div className="rp-bars">
+                    {globalScore.map(d => {
+                      const neg = d.val < 0;
+                      const pct = neg ? 18 : (d.val / d.max) * 100;
+                      const col = neg ? 'var(--red)' : pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--yellow)' : 'var(--orange)';
+                      return (
+                        <div key={d.dim} className="rp-bar-row">
+                          <span className="rp-bar-label">{d.dim}{d.note && <span style={{ color: 'var(--text-mute)', fontSize: 10 }}> · {d.note}</span>}</span>
+                          <div className="rp-bar-track"><div className="rp-bar-fill" style={{ width: `${pct}%`, background: col }} /></div>
+                          <span className="rp-bar-val" style={{ color: neg ? 'var(--red)' : 'var(--text)' }}>{neg ? d.val : `${d.val}/${d.max}`}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {recommendation && (
+                <div className="rp-callout accent">
+                  <div className="rp-callout-label">Recommendation</div>
+                  <div className="rp-callout-body">{recommendation}</div>
+                </div>
+              )}
+
+              {companyBrief && (
+                <div className="rp-section">
+                  <div className="rp-section-head"><span>Company Brief</span></div>
+                  <p className="rp-prose">{companyBrief}</p>
+                </div>
+              )}
+
+              {keywords.length > 0 && (
+                <div className="rp-section">
+                  <div className="rp-section-head"><span>Extracted Keywords</span><span className="meta">{keywords.length}</span></div>
+                  <div className="rp-kw">
+                    {keywords.map(k => <span key={k} className="rp-kw-tag">{k}</span>)}
+                  </div>
+                </div>
+              )}
+
+              {loading && <div className="no-data" style={{ padding: 14 }}>Loading report…</div>}
+              {!loading && !cs && <div className="no-data" style={{ padding: 14 }}>No report attached.</div>}
+            </div>
+          )}
+
+          {tab === 'cv' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {cvMatch.length > 0 && (
+                <div className="rp-section">
+                  <div className="rp-section-head">
+                    <span>JD Requirements → CV Evidence</span>
+                    <span className="meta">
+                      <span style={{ color: 'var(--green)' }}>● {cvMatch.filter(m => m.strength === 'strong').length}</span>
+                      {' · '}<span style={{ color: 'var(--yellow)' }}>{cvMatch.filter(m => m.strength === 'moderate').length}</span>
+                      {' · '}<span style={{ color: 'var(--red)' }}>{cvMatch.filter(m => m.strength === 'weak').length}</span>
+                    </span>
+                  </div>
+                  <div className="rp-match">
+                    {cvMatch.map((mr, i) => (
+                      <div key={i} className="rp-match-row">
+                        <span className={'rp-strength ' + mr.strength}>{mr.strength === 'strong' ? '✓' : mr.strength === 'moderate' ? '~' : '!'}</span>
+                        <div>
+                          <div className="rp-match-req">{mr.req}</div>
+                          <div className="rp-match-ev">{mr.evidence}</div>
+                          {mr.note && <div className="rp-match-note">{mr.note}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {gaps.length > 0 && (
+                <div className="rp-section">
+                  <div className="rp-section-head"><span>Gaps &amp; Mitigation</span><span className="meta">{gaps.length} flagged</span></div>
+                  <table className="rp-table">
+                    <thead><tr><th>Gap</th><th>Blocker?</th><th>Mitigation</th></tr></thead>
+                    <tbody>
+                      {gaps.map((g, i) => (
+                        <tr key={i}><td><b>{g.gap}</b></td><td><span className="blk">{g.blocker}</span></td><td className="dim">{g.mitigation}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {levelMatch && (
+                <div className="rp-section">
+                  <div className="rp-section-head"><span>Level Match</span></div>
+                  <div className="info-card">
+                    <div className="info-row" style={{ gridTemplateColumns: '116px 1fr' }}><span className="ik">JD level</span><span className="iv">{levelMatch.jdLevel}</span></div>
+                    <div className="info-row" style={{ gridTemplateColumns: '116px 1fr' }}><span className="ik">Natural level</span><span className="iv">{levelMatch.naturalLevel}</span></div>
+                    <div className="info-row" style={{ gridTemplateColumns: '116px 1fr' }}><span className="ik">Read</span><span className="iv">{levelMatch.verdict}</span></div>
+                  </div>
+                </div>
+              )}
+
+              {sellSenior.length > 0 && (
+                <div className="rp-section">
+                  <div className="rp-section-head"><span>Sell senior without lying</span></div>
+                  <div>
+                    {sellSenior.map((s, i) => (
+                      <div key={i} className="rp-sell">
+                        <div className="rp-sell-claim"><span className="n">{String(i + 1).padStart(2, '0')}</span>{s.claim}</div>
+                        <div className="rp-sell-proof"><span className="l">proof</span>{s.proof}</div>
+                        <blockquote className="rp-sell-phrase">"{s.phrase}"</blockquote>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {downlevelPlan && (
+                <div className="rp-callout warn">
+                  <div className="rp-callout-label">If they downlevel</div>
+                  <div className="rp-callout-body">{downlevelPlan}</div>
+                </div>
+              )}
+
+              {!cvMatch.length && !gaps.length && !levelMatch && !sellSenior.length && (
+                <div className="rp-callout">
+                  <div className="rp-callout-label">No structured CV match data</div>
+                  <div className="rp-callout-body">This report doesn't expose CV match dimensions. Detailed CV breakdown requires structured report data.</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'comp' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {comp ? (
+                <>
+                  <div className="rp-snap-grid three">
+                    <div className="rp-snap"><div className="rp-snap-label">Stated OTE</div><div className="rp-snap-value sm">{comp.stated || '—'}</div>{comp.score && <div className="rp-snap-sub">{comp.score}/5 comp score</div>}</div>
+                    <div className="rp-snap"><div className="rp-snap-label">Posted vs target</div><div className="rp-snap-value mono" style={{ fontSize: 18, color: gap >= 0 ? 'var(--green)' : 'var(--red)' }}>{gap >= 0 ? '+' : '−'}{Math.abs(gap)}k</div>{app.salary != null && app.target != null && <div className="rp-snap-sub">${app.salary}k · ${app.target}k tgt</div>}</div>
+                    {comp.walkaway && <div className="rp-snap"><div className="rp-snap-label">Walk-away</div><div className="rp-snap-value mono" style={{ fontSize: 18 }}>${comp.walkaway}k</div><div className="rp-snap-sub" style={{ color: app.salary >= comp.walkaway ? 'var(--green)' : 'var(--red)' }}>{app.salary >= comp.walkaway ? 'cleared' : 'below'}</div></div>}
+                  </div>
+                  {Array.isArray(comp.sources) && comp.sources.length > 0 && (
+                    <div className="rp-section">
+                      <div className="rp-section-head"><span>Sources &amp; Benchmarks</span></div>
+                      <table className="rp-table">
+                        <thead><tr><th>Source</th><th>Data</th><th>Notes</th></tr></thead>
+                        <tbody>
+                          {comp.sources.map((s, i) => (
+                            <tr key={i}><td><b>{s.src}</b></td><td className="dim">{s.data}</td><td className="dim">{s.note}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {comp.verdict && (
+                    <div className="rp-callout"><div className="rp-callout-label">Verdict</div><div className="rp-callout-body">{comp.verdict}</div></div>
+                  )}
+                  {comp.market && (
+                    <div className="rp-callout accent"><div className="rp-callout-label">Market Context</div><div className="rp-callout-body">{comp.market}</div></div>
+                  )}
+                </>
+              ) : (
+                <div className="rp-callout">
+                  <div className="rp-callout-label">No structured comp data</div>
+                  <div className="rp-callout-body">This report doesn't include a comp breakdown. {app.compStated && <>JD-stated: <b>{app.compStated}</b></>}</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'interview' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {leadStory && (
+                <div className="rp-callout accent">
+                  <div className="rp-callout-label">▶ Lead with — {leadStory.title}</div>
+                  <div className="rp-callout-body" style={{ marginBottom: 8 }}>{leadStory.reason}</div>
+                  {leadStory.script && <blockquote className="rp-sell-phrase" style={{ borderLeftColor: 'rgba(var(--accent-rgb),0.6)' }}>"{leadStory.script}"</blockquote>}
+                </div>
+              )}
+              {starStories.length > 0 && (
+                <div className="rp-section">
+                  <div className="rp-section-head"><span>STAR Stories</span><span className="meta">{starStories.length} mapped</span></div>
+                  <div>
+                    {starStories.map((s, i) => (
+                      <div key={i} className="rp-star">
+                        <button className="rp-star-head" onClick={() => setStarOpen(starOpen === i ? -1 : i)}>
+                          <span className="n">{String(i + 1).padStart(2, '0')}</span>
+                          <span className="rp-star-title">{s.title}</span>
+                          <span className="rp-star-req">{s.req}</span>
+                          <span className="rp-star-tog">{starOpen === i ? '−' : '+'}</span>
+                        </button>
+                        {starOpen === i && (
+                          <div className="rp-star-body">
+                            {[['S', s.S], ['T', s.T], ['A', s.A]].map(([k, v]) => v ? <div key={k} className="rp-star-row"><span className="rp-star-tag">{k}</span><span>{v}</span></div> : null)}
+                            {s.R && <div className="rp-star-row"><span className="rp-star-tag result">R</span><span>{s.R}</span></div>}
+                            {s.Reflection && <div className="rp-star-row"><span className="rp-star-tag">▸</span><span style={{ fontStyle: 'italic', color: 'var(--text-mute)' }}>{s.Reflection}</span></div>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {redFlagQs.length > 0 && (
+                <div className="rp-section">
+                  <div className="rp-section-head"><span>Red-Flag Questions</span><span className="meta">{redFlagQs.length} prepped</span></div>
+                  <div>
+                    {redFlagQs.map((q, i) => (
+                      <details key={i} className="rp-rf">
+                        <summary><span className="q">?</span><span>{q.q}</span></summary>
+                        <div className="rp-rf-body">
+                          {q.behind && <div className="rp-rf-behind"><span className="l">behind: </span>{q.behind}</div>}
+                          <div className="rp-rf-answer">{q.a}</div>
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!leadStory && !starStories.length && !redFlagQs.length && (
+                <div className="rp-callout">
+                  <div className="rp-callout-label">No structured interview prep</div>
+                  <div className="rp-callout-body">This report doesn't include STAR stories or red-flag question prep.</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'customize' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {(customizationCV.length > 0 || customizationLI.length > 0) ? (
+                <>
+                  <div className="rp-seg">
+                    <button className={customWhich === 'cv' ? 'on' : ''} onClick={() => setCustomWhich('cv')}>CV Changes ({customizationCV.length})</button>
+                    <button className={customWhich === 'li' ? 'on' : ''} onClick={() => setCustomWhich('li')}>LinkedIn ({customizationLI.length})</button>
+                  </div>
+                  <div>
+                    {(customWhich === 'cv' ? customizationCV : customizationLI).map((c, i) => (
+                      <div key={i} className="rp-custom">
+                        <div className="rp-custom-head"><span className="n">{String(i + 1).padStart(2, '0')}</span><span className="sec">{c.section}</span></div>
+                        {c.current && <div className="rp-custom-row"><span className="rp-ctag current">current</span><span style={{ color: 'var(--text-dim)' }}>{c.current}</span></div>}
+                        <div className="rp-custom-row"><span className="rp-ctag change">change</span><span>{c.change}</span></div>
+                        <div className="rp-custom-row"><span className="rp-ctag why">why</span><span style={{ color: 'var(--text-dim)' }}>{c.why}</span></div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="rp-callout">
+                  <div className="rp-callout-label">No personalization plan</div>
+                  <div className="rp-callout-body">This report doesn't include CV / LinkedIn customization steps.</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'legit' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {(app.legitimacy || legitConclusion) && (
+                <div className="rp-callout accent">
+                  <div className="rp-callout-label">✓ {app.legitimacy || 'Assessment'}</div>
+                  {legitConclusion && <div className="rp-callout-body">{legitConclusion}</div>}
+                </div>
+              )}
+              {legitSignals.length > 0 && (
+                <div className="rp-section">
+                  <div className="rp-section-head"><span>Signal Analysis</span></div>
+                  <div>
+                    {legitSignals.map((s, i) => (
+                      <div key={i} className="rp-signal">
+                        <span className={'rp-signal-dot ' + (s.good ? 'good' : 'bad')}>{s.good ? '✓' : '✕'}</span>
+                        <div>
+                          <div className="rp-signal-label">{s.signal}</div>
+                          {s.finding && <div className="rp-signal-finding">{s.finding}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="rp-section">
+                <div className="rp-section-head"><span>Source Links</span></div>
+                <div className="info-card">
+                  {app.url && (
+                    <div className="info-row" style={{ gridTemplateColumns: '116px 1fr' }}>
+                      <span className="ik">JD URL</span>
+                      <a className="iv link" href={app.url} target="_blank" rel="noreferrer" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.url}</a>
+                    </div>
+                  )}
+                  {app.resume && (
+                    <div className="info-row" style={{ gridTemplateColumns: '116px 1fr' }}>
+                      <span className="ik">Generated CV</span>
+                      <span className="iv mono" style={{ fontSize: 11, color: 'var(--text-dim)' }}>{app.resume}</span>
+                    </div>
+                  )}
+                  {app.source && (
+                    <div className="info-row" style={{ gridTemplateColumns: '116px 1fr' }}>
+                      <span className="ik">Source</span>
+                      <span><SourcePill source={app.source} /></span>
+                    </div>
+                  )}
+                  <div className="info-row" style={{ gridTemplateColumns: '116px 1fr' }}>
+                    <span className="ik">Résumé engine</span>
+                    <span>{engine ? <EnginePill engine={engine} /> : <span style={{ color: 'var(--text-mute)', fontFamily: 'var(--mono)', fontSize: 11 }}>not generated</span>}</span>
+                  </div>
+                </div>
+              </div>
+              {!legitSignals.length && !legitConclusion && !app.legitimacy && (
+                <div className="rp-callout">
+                  <div className="rp-callout-label">No legitimacy assessment</div>
+                  <div className="rp-callout-body">This report doesn't include a legitimacy signal breakdown.</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Apply-job banner (running / error / result) */}
+        {applyJob && applyJob.status === 'running' && (
+          <div className="dr-foot" style={{ borderTop: '1px solid var(--border)' }}>
+            <span className="mono dim" style={{ fontSize: 11 }}>
+              ⟳ {applyJob.mode === 'claude' ? 'Generating CV + form responses…'
+                : applyJob.mode === 'byo'    ? 'Logging application…'
+                :                              'Generating tailored CV…'} {elapsed > 0 && `(${elapsed}s)`}
+            </span>
+          </div>
+        )}
+        {applyJob && applyJob.status === 'error' && (
+          <div className="dr-foot" style={{ borderTop: '1px solid var(--border)' }}>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--red)' }}>✕ {applyJob.error}</span>
+            <button className="btn sm ghost" onClick={() => setApplyJob(null)}>Dismiss</button>
+          </div>
+        )}
+        {applyResult && (() => {
+          const r = applyResult.result || {};
+          const fileName = p => p ? p.replace(/\\/g, '/').split('/').pop() : null;
+          const hrefFor = p => {
+            if (!p) return null;
+            const f = fileName(p);
+            return f.endsWith('.md') ? `/output-preview/${f}` : `/output/${f}`;
+          };
+          const isByo = r.byo === true;
+          return (
+            <div className="dr-foot" style={{ borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
+              <span style={{ color: 'var(--green)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
+                {isByo ? `✓ Logged as applied to ${app.company} — no assets generated` : `✓ Applied to ${app.company}`}
+              </span>
+              {(r.docx || r.pdf) && <a className="btn sm" href={hrefFor(r.docx || r.pdf)} target="_blank" rel="noreferrer">{r.docx ? 'CV DOCX ↗' : 'CV PDF ↗'}</a>}
+              {r.cover && <a className="btn sm" href={hrefFor(r.cover)} target="_blank" rel="noreferrer">Cover Letter ↗</a>}
+              {r.apply && <a className="btn sm accent" href={hrefFor(r.apply)} target="_blank" rel="noreferrer">Form Responses ↗</a>}
+              {app.url && <a className="btn sm" href={app.url} target="_blank" rel="noreferrer">JD ↗</a>}
+              <button className="btn sm ghost" onClick={() => setApplyResult(null)}>✕</button>
+            </div>
+          );
+        })()}
+
+        {/* Sticky action footer */}
+        <div className="dr-foot">
+          {primary.map(b => (
+            <button key={b.id} className={'btn ' + (b.cls || '')} disabled={applyJob && applyJob.status === 'running'} onClick={() => handleFooterClick(b)}>
+              {b.spark && <PIcon d={PI.zap} size={12} />}{b.label}{b.check && <PIcon d={PI.check} size={12} style={{ marginLeft: 4 }} />}
+            </button>
+          ))}
+          {primary.length > 0 && closers.length > 0 && <span className="dr-foot-div" />}
+          {closers.map(b => (
+            <button key={b.id} className={'btn ghost' + (b.danger ? ' danger' : '')} onClick={() => onAction && onAction(app, b.id)}>
+              {b.label}
+            </button>
+          ))}
+          {app.url && <a className="btn ghost jd" href={app.url} target="_blank" rel="noreferrer">Open JD <PIcon d={PI.arrowR} size={12} /></a>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Root: PipelineTab (replaces the existing) ─────────────────────────────
+window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFilters, onOpen, search, compTweaks }) {
+  // Use the external view prop when it matches a known subtab, otherwise default to 'overview'.
+  // This lets the command palette in app.jsx jump directly to the All subtab.
+  const VALID_SUBVIEWS = ['overview', 'table', 'all', 'analytics'];
+  const initialSub = VALID_SUBVIEWS.includes(view) ? view : 'overview';
+  const [subView, setSubViewRaw] = useStateP(initialSub);
+  const setSubView = (s) => { setSubViewRaw(s); if (setView) setView(s); };
+  useEffectP(() => { if (VALID_SUBVIEWS.includes(view) && view !== subView) setSubViewRaw(view); }, [view]);
+  const [drawerApp, setDrawerApp] = useStateP(null);
+
+  const activeApps = useMemoP(() => apps.filter(a => ACTIVE_STATUSES.includes(a.status)), [apps]);
+  const filtered = useMemoP(() => applyFilters(activeApps, filters, search), [activeApps, filters, search]);
+
+  // Canonical "stale by the Follow-Ups engine" data — shared across every
+  // sub-view (Table / Board / Pipeline Overview / Drawer / Analytics) so they
+  // all agree. Replaces the naive `daysAgo(applyDate) > 14` check that was
+  // flagging rows the user had already cross-logged TA touches against.
+  const [staleSet, setStaleSet] = useStateP(new Set());
+  const [staleMeta, setStaleMeta] = useStateP(new Map());
+  useEffectP(() => {
+    let cancelled = false;
+    fetch('/api/followups/stale')
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return;
+        const ids = new Set();
+        const meta = new Map();
+        for (const it of (d.items || [])) {
+          if (it.source !== 'app') continue;
+          ids.add(it.id);
+          meta.set(it.id, { days: it.daysSinceLastTouch, verdict: it.coachVerdict });
+        }
+        setStaleSet(ids);
+        setStaleMeta(meta);
+      })
+      .catch(() => { if (!cancelled) { setStaleSet(new Set()); setStaleMeta(new Map()); } });
+    return () => { cancelled = true; };
+  }, [apps.length]);
+  const isStale = (a) => staleSet.has(a.id);
+  const staleDays = (a) => staleMeta.get(a.id)?.days ?? null;
+
+  const selId = drawerApp && drawerApp.id;
+  // Local drawer: don't bubble up to the shared window.Drawer for Pipeline rows
+  const handleOpen = (a) => { setDrawerApp(a); };
+
+  const onExport = () => {
+    const rows = subView === 'table' ? filtered : activeApps;
+    exportCSV(rows);
+  };
+
+  // Drawer action handlers — primary actions advance status via API PATCH
+  const advance = async (a, newStatus) => {
+    try {
+      await fetch(`/api/applications/${a.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      // Update local app object for instant visual feedback
+      a.status = newStatus;
+      setDrawerApp({ ...a });
+    } catch (err) { /* swallow — toast comes from parent */ }
+  };
+
+  const onAction = (a, actionId) => {
+    const MAP = {
+      apply_manual: 'Applied', apply_claude: 'Applied', already_applied: 'Applied',
+      responded: 'Responded', interview: 'Interview', offer: 'Offer', accept: 'Offer',
+      reopen: 'Evaluated',
+      // closer ids map to themselves
+      SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded',
+    };
+    const next = MAP[actionId];
+    if (!next) return;
+    advance(a, next).then(() => {
+      // Closed states leave the pipeline
+      if (!ACTIVE_STATUSES.includes(next)) setDrawerApp(null);
+    });
+  };
+
+  const onStatusChange = (a, newStatus) => advance(a, newStatus);
+
+  return (
+    <div className="col" style={{ gap: 0 }}>
+      <div className="subtabs">
+        {PL_SUBTABS.map(s => (
+          <div key={s.id} className={'subtab' + (subView === s.id ? ' active' : '')} onClick={() => setSubView(s.id)}>
+            <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
+              <PIcon d={s.icon} size={14} />
+            </span>
+            {s.label}
+          </div>
+        ))}
+      </div>
+
+      {subView === 'overview' && (
+        <OverviewView apps={activeApps} onOpen={handleOpen} selId={selId} onExport={onExport} totalTracker={apps.length} isStale={isStale} staleDays={staleDays} />
+      )}
+      {subView === 'table' && (
+        <TableView apps={activeApps} filtered={filtered} filters={filters} setFilters={setFilters} search={search} setSearch={() => {}} onOpen={handleOpen} selId={selId} isStale={isStale} staleDays={staleDays} />
+      )}
+      {subView === 'all' && (
+        <AllEntriesView apps={apps} onOpen={handleOpen} search={search} isStale={isStale} staleDays={staleDays} />
+      )}
+      {subView === 'analytics' && (
+        <AnalyticsView apps={activeApps} allApps={apps} compTweaks={compTweaks} isStale={isStale} />
+      )}
+
+      {drawerApp && (
+        <PipelineDrawer
+          app={drawerApp}
+          onClose={() => setDrawerApp(null)}
+          onAction={onAction}
+          onStatusChange={onStatusChange}
+          isStale={isStale}
+        />
+      )}
+    </div>
+  );
+};
+
+// Backwards-compat: expose the new TableView under the legacy
+// window.PipelineTable name with the old call signature
+// ({ rows, sortKey, sortDir, setSort, onOpen }) so tracker.jsx (which
+// renders the full All-Entries view including closed statuses) keeps
+// working without modification. The legacy signature is sort-controlled
+// by the parent; our internal TableView is filter/sort-controlled by
+// itself, so we render a parallel minimal table here matching the old
+// columns + behavior.
+window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, setSort, onOpen, isStale = () => false, staleDays = () => null, flat = false }) {
+  const cols = [
+    { k: 'id',         label: '#',         w: 50 },
+    { k: 'date',       label: 'Date',      w: 80 },
+    { k: 'company',    label: 'Company',   w: 180 },
+    { k: 'role',       label: 'Role',      w: 220 },
+    { k: 'archetype',  label: 'Archetype', w: 90 },
+    { k: 'compStated', label: 'Comp',      w: 110 },
+    { k: 'sector',     label: 'Sector',    w: 110 },
+    { k: 'status',     label: 'Status',    w: 116 },
+    { k: 'score',      label: 'Score',     w: 80 },
+    { k: 'source',     label: 'Source',    w: 92 },
+    { k: 'resume',     label: 'Resume',    w: 120 },
+  ];
+  return (
+    <div className="tbl-wrap" style={{
+      maxHeight: 'calc(100vh - ' + (flat ? '360px' : '280px') + ')',
+      ...(flat ? { border: 'none', borderRadius: 0, background: 'transparent', marginTop: 8 } : {}),
+    }}>
+      <table className="tbl">
+        <thead>
+          <tr>
+            {cols.map(c => (
+              <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? 'sorted' : ''} onClick={() => setSort(c.k)}>
+                {c.label}
+                <span className="sort-ind">{sortKey === c.k ? (sortDir === 'asc' ? '↑' : '↓') : '·'}</span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && (
+            <tr><td colSpan={cols.length}><div className="no-data">No matches. Try clearing filters.</div></td></tr>
+          )}
+          {rows.map(a => {
+            const stale = isStale(a);
+            return (
+            <tr key={a.id} className={stale ? 'stale' : ''} onClick={() => onOpen(a)}>
+              <td className="id">{String(a.id).padStart(3, '0')}</td>
+              <td className="date">{a.date?.slice(5)}</td>
+              <td className="company t-co-cell">
+                <div className="co-cell">
+                  <span className="co-name">{a.company}</span>
+                  {stale && (
+                    <span className="stale-tag" title="Flagged by Follow-Ups engine — overdue for a nudge">
+                      ↻ {staleDays(a) ?? ''}{staleDays(a) != null ? 'd overdue' : 'overdue'}
+                    </span>
+                  )}
+                </div>
+              </td>
+              <td className="role" title={a.role}
+                style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>
+                {a.role}
+              </td>
+              <td><span className="mono dim" style={{ fontSize: 11 }}>{a.archetype}</span></td>
+              <td className="mono dim" style={{ fontSize: 11 }} title={a.compStated || 'Not Stated'}>
+                {formatCompMidpoint(a)}
+              </td>
+              <td className="dim" style={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 0 }}
+                title={a.sectorRaw || a.sector || ''}>
+                {a.sector || '—'}
+              </td>
+              <td><StatusBadge status={a.status} /></td>
+              <td><ScoreChip score={a.score} /></td>
+              <td><SourcePill source={a.source} /></td>
+              <td title={a.resume ? `${engineOf(a.resume)} generated this résumé` : 'No résumé generated yet'}>
+                <EnginePill engine={engineOf(a.resume)} />
+              </td>
+            </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+})(); // end pipeline IIFE
