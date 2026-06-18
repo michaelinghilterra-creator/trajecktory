@@ -374,8 +374,8 @@ tracked_companies:
     enabled: true
 
   - name: Temporal
-    careers_url: https://job-boards.greenhouse.io/temporal
-    api: https://boards-api.greenhouse.io/v1/boards/temporal/jobs
+    careers_url: https://job-boards.greenhouse.io/temporaltechnologies
+    api: https://boards-api.greenhouse.io/v1/boards/temporaltechnologies/jobs
     notes: "Workflow orchestration."
     enabled: true
 
