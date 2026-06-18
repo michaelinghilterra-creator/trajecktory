@@ -14,7 +14,14 @@
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT">
 </p>
 
-<!-- Dashboard screenshot goes here (clean demo capture) -->
+<p align="center">
+  <img src="docs/dashboard-overview.png" alt="trajecktory dashboard — Overview" width="820">
+</p>
+
+<p align="center">
+  <img src="docs/dashboard-pipeline.png" alt="Pipeline view" width="405">
+  <img src="docs/dashboard-recruiters.png" alt="Recruiters CRM" width="405">
+</p>
 
 ---
 
