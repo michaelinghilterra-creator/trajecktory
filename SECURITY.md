@@ -4,7 +4,7 @@
 
 **Do NOT open a public issue for security vulnerabilities.**
 
-Instead, please email **hi@santifer.io** with:
+Instead, please email **michaelinghilterra@gmail.com** with:
 
 1. Description of the vulnerability
 2. Steps to reproduce
@@ -18,7 +18,7 @@ You will receive a response within 72 hours. We will work with you to understand
 Security issues in the following are in scope:
 
 - **Scripts** (`*.mjs`) — command injection, path traversal, SSRF
-- **Dashboard** (`dashboard/`) — any Go binary vulnerabilities
+- **Dashboard** (`dashboard-web/`) — XSS, auth/CSRF bypass, or SSRF in the local Express/React app
 - **Templates** (`templates/`) — XSS in generated HTML/PDF
 - **Configuration** — secrets exposure, unsafe defaults
 

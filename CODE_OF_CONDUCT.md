@@ -24,7 +24,7 @@ We as members, contributors, and maintainers pledge to make participation in tra
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting **hi@santifer.io**. All complaints will be reviewed and investigated.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported by contacting **michaelinghilterra@gmail.com**. All complaints will be reviewed and investigated.
 
 Maintainers have the right and responsibility to remove, edit, or reject comments, commits, code, issues, and other contributions that violate this Code of Conduct, and to temporarily or permanently ban any contributor for behaviors they deem inappropriate, threatening, or harmful.
 

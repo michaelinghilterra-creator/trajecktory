@@ -10,8 +10,8 @@
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/santifer/career-ops.git
-cd career-ops
+git clone https://github.com/michaelinghilterra-creator/trajecktory.git
+cd trajecktory
 npm install
 npx playwright install chromium   # Required for liveness checks and portal scanning
 ```
