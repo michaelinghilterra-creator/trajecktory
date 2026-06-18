@@ -3,13 +3,14 @@
 [English](README.md) | [한국어](README.ko-KR.md) | [日本語](README.ja.md) | [Русский](README.ru.md) | [简体中文](README.cn.md) | [繁體中文](README.zh-TW.md)
 
 <p align="center">
-  <a href="https://x.com/santifer"><img src="docs/hero-banner.jpg" alt="trajecktory — Multi-Agent Job Search System" width="800"></a>
+  <img src="docs/hero-banner.jpg" alt="trajecktory — Multi-Agent Job Search System" width="800">
 </p>
 
 <p align="center">
-  <em>I spent months applying to jobs the hard way. So I engineered the system I wish I had.</em><br>
+  <em>"I spent months applying to jobs the hard way. So I engineered the system I wish I had.</em><br>
   Companies use AI to filter candidates. <strong>I just gave candidates AI to <em>choose</em> companies.</strong><br>
-  <em>Now it's open source.</em>
+  <em>Now it's open source."</em><br>
+  — <a href="https://x.com/santifer">santifer</a>, original creator
 </p>
 
 <p align="center">
@@ -38,7 +39,7 @@
   <img src="docs/demo.gif" alt="trajecktory Demo" width="800">
 </p>
 
-<p align="center"><strong>740+ job listings evaluated · 100+ personalized CVs · 1 dream role landed</strong></p>
+<p align="center"><strong>The creator's results: 740+ job listings evaluated · 100+ personalized CVs · 1 dream role landed</strong></p>
 
 ## What Is This
 
@@ -56,7 +57,7 @@ trajecktory is agentic: Claude Code navigates career pages with Playwright, eval
 
 > **Heads up: the first evaluations won't be great.** The system doesn't know you yet. Feed it context -- your CV, your career story, your proof points, your preferences, what you're good at, what you want to avoid. The more you nurture it, the better it gets. Think of it as onboarding a new recruiter: the first week they need to learn about you, then they become invaluable.
 
-Built by someone who used it to evaluate 740+ job offers, generate 100+ tailored CVs, and land a Head of Applied AI role. [Read the full case study](https://santifer.io/career-ops-system).
+Originally built by **santifer**, who used it to evaluate 740+ job offers, generate 100+ tailored CVs, and land a Head of Applied AI role. [Read his case study](https://santifer.io/career-ops-system).
 
 ## Features
 
