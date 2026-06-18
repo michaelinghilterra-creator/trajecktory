@@ -48,22 +48,21 @@ if (-not (Test-Path $NodeExe)) { throw "node.exe not found at $NodeExe" }
 # Make the bundled Node the one used for every install step below.
 $env:Path = "$PayloadNode;$env:Path"
 
-# ── 3. Copy the trajecktory tree, EXCLUDING all user-layer + machine data ──────
-# IMPORTANT: the repo now ships clean history, but this exclusion list plus the
-# PII scan in step 7 remain the backstop keeping the user's CV / profile /
-# tracker / reports / keys out of the staged payload. Review both whenever the
-# tree changes.
-$excludeDirs = @(
-  '.git', 'node_modules', 'ms-playwright', 'output', 'reports', 'backups',
-  'data', 'interview-prep', 'jds', 'ignore-old_design_audit_files', '.claude\projects'
-)
-$excludeFiles = @(
-  '.env', '*.env', '*.bak', '*.bak-*', 'cv.md', 'profile.yml',
-  '_profile.md', 'article-digest.md', 'portals.yml', 'server.log', '*.patch'
-)
-# robocopy: /MIR mirror, /XD exclude dirs, /XF exclude files. Exit codes 0-7 are success.
-robocopy $RepoRoot $PayloadApp /MIR /XD @excludeDirs /XF @excludeFiles /NFL /NDL /NJH /NJS /NP | Out-Null
-if ($LASTEXITCODE -ge 8) { throw "robocopy failed with code $LASTEXITCODE" }
+# ── 3. Stage the tracked tree — exactly what the public repo ships ────────────
+# Use `git archive` so ONLY committed files reach the payload. The working tree
+# also holds gitignored local data (cv.md, config/profile.yml, the
+# templates/cv-master.docx resume, AUDIT.md, .env, tracker, reports) — none of it
+# is tracked, so none of it can leak here. .gitignore IS the ship boundary; the
+# PII scan in step 7 is the backstop.
+New-Item -ItemType Directory -Force -Path $PayloadApp | Out-Null
+$treeZip = Join-Path $env:TEMP 'trajecktory-tree.zip'
+if (Test-Path $treeZip) { Remove-Item $treeZip -Force }
+git -C $RepoRoot archive --format=zip -o $treeZip HEAD
+if ($LASTEXITCODE -ne 0) { throw "git archive failed with code $LASTEXITCODE" }
+Expand-Archive -Path $treeZip -DestinationPath $PayloadApp -Force
+Remove-Item $treeZip -Force
+# The installer's own source is tracked but doesn't belong inside the shipped app.
+Remove-Item (Join-Path $PayloadApp 'installer') -Recurse -Force -ErrorAction SilentlyContinue
 
 # Recreate the empty writable dirs onboarding/Launchpad expects.
 foreach ($d in 'data', 'output', 'reports') {
@@ -113,9 +112,21 @@ if (Test-Path $srcProfile) {
     if ($prof -match $rx) { $piiPatterns += $Matches[1].Trim() }
   }
 }
+# Files where the maintainer's name/email legitimately appear (attribution +
+# contact). Mirrors the allowlist in test-all.mjs; matched by file name.
+$piiAllow = @(
+  'README.md', 'LICENSE', 'CITATION.cff', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md',
+  'SECURITY.md', 'SUPPORT.md', 'NOTICE.md', 'AGENTS.md', 'CLAUDE.md', 'package.json'
+)
+# -SimpleMatch: treat patterns as literals. The phone begins with "+", which is
+# not a valid regex quantifier and would otherwise crash Select-String.
 $hits = Get-ChildItem $Payload -Recurse -File |
-  Where-Object { $_.FullName -notmatch '\\node_modules\\' -and $_.FullName -notmatch '\\ms-playwright\\' } |
-  Select-String -Pattern $piiPatterns -List -ErrorAction SilentlyContinue
+  Where-Object {
+    $_.FullName -notmatch '\\node_modules\\' -and
+    $_.FullName -notmatch '\\ms-playwright\\' -and
+    ($piiAllow -notcontains $_.Name)
+  } |
+  Select-String -Pattern $piiPatterns -SimpleMatch -List -ErrorAction SilentlyContinue
 if ($hits) {
   $hits | ForEach-Object { Write-Warning "PII in payload: $($_.Path)" }
   throw "Refusing to build: personal data found in payload (see warnings above)."
