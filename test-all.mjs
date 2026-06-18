@@ -182,9 +182,8 @@ try {
 
 const scanExtensions = ['md', 'yml', 'html', 'mjs', 'js', 'jsx', 'sh', 'json'];
 const allowedFiles = [
-  // English README + localized translations (all legitimately credit Santiago)
-  'README.md', 'README.es.md', 'README.ja.md', 'README.ko-KR.md',
-  'README.pt-BR.md', 'README.ru.md',
+  // English README (legitimately credits the upstream author, santifer)
+  'README.md',
   // Standard project files
   'LICENSE', 'CITATION.cff', 'CONTRIBUTING.md',
   'package.json', '.github/FUNDING.yml', 'CLAUDE.md', 'test-all.mjs',
