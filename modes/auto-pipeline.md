@@ -84,7 +84,7 @@ If the final score is >= 4.5, generate draft responses for the application form:
 **Language**: Always in the JD's language (English default). Apply `/tech-translate` if needed.
 
 ## Step 4 — Update Tracker
-Register in `data/applications.md`. PDF column is always ❌ at evaluation time — CV is generated only when the user explicitly applies (`/career-ops apply` or `/career-ops pdf`).
+Register in `data/applications.md`. PDF column is always ❌ at evaluation time — CV is generated only when the user explicitly applies (`/trajecktory apply` or `/trajecktory pdf`).
 
 **Source tagging in Notes column (CRITICAL — controls auto-discard behavior):**
 - If `source = "self-sourced"`: prefix the notes with `[self-sourced] ` — e.g., `[self-sourced] Strong fit — apply`
@@ -105,11 +105,11 @@ After the tracker is updated, if the global score is >= 4.0, display this prompt
 
 Ready to apply? Two more tools available:
 
-  /career-ops cover-letter  → Generates a tailored cover letter + optional PDF
+  /trajecktory cover-letter  → Generates a tailored cover letter + optional PDF
                               (uses your voice rules, proof points from this report,
                                and hiring manager info from your answers above)
 
-  /career-ops cheat-sheet   → Generates a 1–2 page interview cheat sheet
+  /trajecktory cheat-sheet   → Generates a 1–2 page interview cheat sheet
                               (STAR stories, red-flag Q&As, comp anchor, lead story)
                               + optional push to your Obsidian vault
 ─────────────────────────────────────────────

@@ -144,8 +144,8 @@ Store any insights the user shares in `config/profile.yml` (under narrative), `m
 Once all files exist, confirm:
 > "You're all set! You can now:
 > - Paste a job URL to evaluate it
-> - Run `/career-ops scan` (or `/career-ops-scan` if using OpenCode) to search portals
-> - Run `/career-ops` to see all commands
+> - Run `/trajecktory scan` (or `/trajecktory-scan` if using OpenCode) to search portals
+> - Run `/trajecktory` to see all commands
 >
 > Everything is customizable — just ask me to change anything.
 >
@@ -154,7 +154,7 @@ Once all files exist, confirm:
 Then suggest automation:
 > "Want me to scan for new offers automatically? I can set up a recurring scan every few days so you don't miss anything. Just say 'scan every 3 days' and I'll configure it."
 
-If the user accepts, use the `/loop` or `/schedule` skill (if available) to set up a recurring `/career-ops scan` (or `/career-ops-scan` if using OpenCode). If those aren't available, suggest adding a cron job or remind them to run `/career-ops scan` (or `/career-ops-scan` if using OpenCode) periodically.
+If the user accepts, use the `/loop` or `/schedule` skill (if available) to set up a recurring `/trajecktory scan` (or `/trajecktory-scan` if using OpenCode). If those aren't available, suggest adding a cron job or remind them to run `/trajecktory scan` (or `/trajecktory-scan` if using OpenCode) periodically.
 
 ### Launchpad — Visual Onboarding (dashboard)
 
@@ -323,7 +323,7 @@ node scan.mjs
 node gate-pipeline.mjs
 
 # 3. Run the batch (only "- [ ]" items get evaluated; "- [!]" are skipped)
-#    via /career-ops pipeline in your CLI
+#    via /trajecktory pipeline in your CLI
 
 # 4. Merge results into applications.md
 node merge-tracker.mjs

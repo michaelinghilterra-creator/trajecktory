@@ -167,7 +167,7 @@ function normalizeSector(raw) {
 //   Self-sourced — user pasted the JD manually (notes tagged [self-sourced])
 //   Referral     — came via a referral (notes tagged [referral: NAME])
 //   API Scan     — zero-token scanner hit a Greenhouse/Ashby/Lever endpoint
-//   Agent Scan   — agent ran /career-ops scan against a non-API portal
+//   Agent Scan   — agent ran /trajecktory scan against a non-API portal
 function classifySource(notes, url) {
   if (/\[self-sourced\]/i.test(notes)) return 'Self-sourced';
   if (/\[referral:/i.test(notes))      return 'Referral';

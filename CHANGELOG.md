@@ -9,7 +9,7 @@ Hardening pass from the repo audit (see `AUDIT.md`). Not yet versioned.
 
 ### Added
 - Single canonical `applications.md` parser (`lib/tracker.mjs`) shared by every script and the dashboard.
-- `/trajecktory` command alias (Claude skill + Gemini commands) alongside `/career-ops` during the rebrand.
+- Slash command renamed to `/trajecktory` (Claude skill + Gemini commands); the legacy `/career-ops` command was retired.
 - ESLint gate, committed lockfiles with `npm ci`, dashboard-web build, and unit tests for the core ingest/merge logic, all wired into CI.
 
 ### Fixed

@@ -184,14 +184,14 @@ New added to pipeline.md: N
   + {company} | {title} | {query_name}
   ...
 
-→ Run /career-ops pipeline to evaluate the new postings.
+→ Run /trajecktory pipeline to evaluate the new postings.
 ```
 
 ## Push Notification
 
 After printing the summary, send a push notification:
 
-- If new offers found: `"Scan done: {N} new offers — run /career-ops pipeline to evaluate"`
+- If new offers found: `"Scan done: {N} new offers — run /trajecktory pipeline to evaluate"`
 - If nothing new: `"Scan done: 0 new offers ({N} dupes, {N} expired)"`
 
 Keep it under 120 characters. Use the PushNotification tool with status: "proactive".

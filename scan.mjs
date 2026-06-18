@@ -553,7 +553,7 @@ async function main() {
     }
   }
 
-  console.log(`\n→ Run /career-ops pipeline to evaluate new offers.`);
+  console.log(`\n→ Run /trajecktory pipeline to evaluate new offers.`);
 }
 
 main().catch(err => {

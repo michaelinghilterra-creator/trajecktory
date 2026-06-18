@@ -108,7 +108,7 @@ If the candidate confirms they submitted the application, run in order:
      - If exists at a different filename (older naming): ask the user whether to overwrite in place or create a new note at the current format
      - If not exists: `mcp__obsidian-vault__obsidian_append_content`
    - Confirm: `✅ Obsidian → {applied_folder}/{resolved_filename}.md`
-4. **Suggest next step**: `/career-ops contacto` for LinkedIn outreach post-apply
+4. **Suggest next step**: `/trajecktory contacto` for LinkedIn outreach post-apply
 
 ## Scroll handling
 

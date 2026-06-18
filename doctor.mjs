@@ -147,7 +147,7 @@ function readEnvFile(p) {
 }
 
 // Surface API-key configuration at preflight rather than letting a workflow
-// fail mid-run. This is a WARNING, never a hard failure: the main /career-ops
+// fail mid-run. This is a WARNING, never a hard failure: the main /trajecktory
 // pipeline runs on the user's Claude Code login and needs no key at all, so a
 // missing key must not flip the dashboard Launchpad preflight red.
 function checkApiKeys() {
@@ -181,7 +181,7 @@ function checkApiKeys() {
     warn: true,
     label: 'No ANTHROPIC_API_KEY detected',
     fix: [
-      'The main /career-ops pipeline runs on your Claude Code login and needs no key.',
+      'The main /trajecktory pipeline runs on your Claude Code login and needs no key.',
       'ANTHROPIC_API_KEY (dashboard-web/.env) powers the dashboard draft endpoints (cover letters, outreach).',
     ],
   };

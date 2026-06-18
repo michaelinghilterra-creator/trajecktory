@@ -32,7 +32,7 @@ It binds to `127.0.0.1` only. Set `HOST=0.0.0.0` to expose it on your LAN
 
 Copy `.env.example` to `.env` and fill in keys for the optional features:
 - `ANTHROPIC_API_KEY` — the dashboard's draft endpoints (cover letters,
-  outreach). The main `/career-ops` pipeline runs on your Claude Code login and
+  outreach). The main `/trajecktory` pipeline runs on your Claude Code login and
   needs no key.
 - `OBSIDIAN_API_KEY` / `OBSIDIAN_PORT` — optional Obsidian vault push.
 

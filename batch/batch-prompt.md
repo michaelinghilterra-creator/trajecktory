@@ -359,7 +359,7 @@ Si algo falla:
 2. Modify cv.md, i18n.ts, or portfolio files
 3. Share the phone number in generated content
 4. Recommend comp below market
-5. Generate CV or PDF at any point — only at `/career-ops pdf` or `/career-ops apply`
+5. Generate CV or PDF at any point — only at `/trajecktory pdf` or `/trajecktory apply`
 6. Use corporate-speak
 7. Set status to SKIP, Discarded, or any non-Evaluated value — the user decides what to skip, not the agent
 
