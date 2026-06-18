@@ -56,8 +56,10 @@ the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
   the demo seed scripts during build (they now use the fictional "Jordan Avery"
   persona) and ship `data\demo\`; otherwise the dashboard defaults to live data
   and an empty tracker for new users.
-- **Port 3333:** the launcher assumes it is free. Add fallback handling if you
-  expect conflicts.
+- **Port 3333:** handled. The launcher prefers 3333 but falls back to a free
+  OS-assigned port if it's taken, passes it to the server via `PORT`, opens the
+  right URL, and records the port + PID so `stop-trajecktory.ps1` finds the
+  server wherever it landed.
 - **Repo history:** the repo was rebuilt with clean history, but
   `build-bundle.ps1`'s exclusion list and PII scan remain the backstop against
   staging tracked personal data into the payload. Keep both in sync with the tree.
