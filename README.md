@@ -1,6 +1,10 @@
 # trajecktory
 
 <p align="center">
+  <img src="docs/og-image.png" alt="trajecktory: AI-driven job-search pipeline with a local dashboard" width="820">
+</p>
+
+<p align="center">
   <strong>The complete job hunt, run from one dashboard.</strong><br>
   Companies use AI to filter candidates. trajecktory gives you AI to <em>choose</em> companies — scan, evaluate, tailor, apply, track, and follow up, all from a local web dashboard.
 </p>
