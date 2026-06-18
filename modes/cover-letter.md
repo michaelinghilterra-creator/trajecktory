@@ -1,6 +1,6 @@
 # Mode: cover-letter — Generate Cover Letter
 
-Invoked as `/career-ops cover-letter` or surfaced as a "What's next?" option after auto-pipeline.
+Invoked as `/trajecktory cover-letter` or surfaced as a "What's next?" option after auto-pipeline.
 
 Generates a cover letter that follows the voice and structure rules in `modes/_profile.md`. Outputs markdown for review and optionally a PDF using the same Playwright pipeline as the CV.
 

@@ -105,7 +105,7 @@
 候補者が応募を送信したことを確認した場合：
 1. `applications.md` のステータスを「Evaluated」から「Applied」に更新
 2. レポートのブロック G を最終回答で更新
-3. 次のステップを提案：LinkedIn アウトリーチ用に `/career-ops contacto`
+3. 次のステップを提案：LinkedIn アウトリーチ用に `/trajecktory contacto`
 
 ## スクロール対応
 

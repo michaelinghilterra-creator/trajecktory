@@ -56,12 +56,12 @@ Then paste a job offer URL or description. trajecktory will automatically evalua
 | Action | How |
 |--------|-----|
 | Evaluate an offer | Paste a URL or JD text |
-| Search for offers | `/career-ops scan` |
-| Process pending URLs | `/career-ops pipeline` |
-| Generate a tailored CV (Word) | `/career-ops docx` (PDF flow `/career-ops pdf` is legacy) |
-| Batch evaluate | `/career-ops batch` |
-| Check tracker status | `/career-ops tracker` |
-| Fill application form | `/career-ops apply` |
+| Search for offers | `/trajecktory scan` |
+| Process pending URLs | `/trajecktory pipeline` |
+| Generate a tailored CV (Word) | `/trajecktory docx` (PDF flow `/trajecktory pdf` is legacy) |
+| Batch evaluate | `/trajecktory batch` |
+| Check tracker status | `/trajecktory tracker` |
+| Fill application form | `/trajecktory apply` |
 
 ## Verify Setup
 
@@ -83,4 +83,4 @@ npm start            # then open the URL shown (default http://localhost:3333)
 It runs locally only (binds `127.0.0.1`). For the dashboard's optional draft
 features (cover letters, outreach) and Obsidian push, copy
 `dashboard-web/.env.example` to `dashboard-web/.env` and fill in your keys.
-The main `/career-ops` pipeline runs on your Claude Code login and needs no key.
+The main `/trajecktory` pipeline runs on your Claude Code login and needs no key.

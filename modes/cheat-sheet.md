@@ -1,8 +1,8 @@
 # Mode: cheat-sheet — Interview Cheat Sheet
 
-Invoked as `/career-ops cheat-sheet` or surfaced as a "What's next?" option after auto-pipeline.
+Invoked as `/trajecktory cheat-sheet` or surfaced as a "What's next?" option after auto-pipeline.
 
-Generates a compact, scannable 1–2 page cheat sheet from an existing evaluation report. Designed for a 15-minute pre-interview review — not deep prep (use `/career-ops interview-prep` for that).
+Generates a compact, scannable 1–2 page cheat sheet from an existing evaluation report. Designed for a 15-minute pre-interview review — not deep prep (use `/trajecktory interview-prep` for that).
 
 Saves to `interview-prep/` and optionally pushes to Obsidian vault.
 
@@ -21,7 +21,7 @@ Saves to `interview-prep/` and optionally pushes to Obsidian vault.
 
 1. **Find the report**: `Grep reports/ -i {company}` → read the matching `.md` file in full
 2. If multiple reports match: use the most recent (sort by date in filename)
-3. If no report found: ask the user to run `/career-ops oferta` first, or paste the JD so the full pipeline can run
+3. If no report found: ask the user to run `/trajecktory oferta` first, or paste the JD so the full pipeline can run
 
 ---
 

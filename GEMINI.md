@@ -39,21 +39,21 @@ When using [Gemini CLI](https://github.com/google-gemini/gemini-cli), the follow
 
 | Command | Claude Code Equivalent | Description |
 |---------|------------------------|-------------|
-| `/career-ops` | `/career-ops` | Show menu or evaluate JD |
-| `/career-ops-pipeline` | `/career-ops pipeline` | Process pending URLs from inbox |
-| `/career-ops-evaluate` | `/career-ops oferta` | Evaluate job offer (A-G scoring) |
-| `/career-ops-compare` | `/career-ops ofertas` | Compare and rank multiple offers |
-| `/career-ops-contact` | `/career-ops contacto` | LinkedIn outreach |
-| `/career-ops-deep` | `/career-ops deep` | Deep company research |
-| `/career-ops-pdf` | `/career-ops pdf` | Generate ATS-optimized CV |
-| `/career-ops-training` | `/career-ops training` | Evaluate course/cert |
-| `/career-ops-project` | `/career-ops project` | Evaluate portfolio project |
-| `/career-ops-tracker` | `/career-ops tracker` | Application status overview |
-| `/career-ops-apply` | `/career-ops apply` | Live application assistant |
-| `/career-ops-scan` | `/career-ops scan` | Scan portals for new offers |
-| `/career-ops-batch` | `/career-ops batch` | Batch processing |
-| `/career-ops-patterns` | `/career-ops patterns` | Analyze rejection patterns |
-| `/career-ops-followup` | `/career-ops followup` | Follow-up cadence tracker |
+| `/trajecktory` | `/trajecktory` | Show menu or evaluate JD |
+| `/trajecktory-pipeline` | `/trajecktory pipeline` | Process pending URLs from inbox |
+| `/trajecktory-evaluate` | `/trajecktory oferta` | Evaluate job offer (A-G scoring) |
+| `/trajecktory-compare` | `/trajecktory ofertas` | Compare and rank multiple offers |
+| `/trajecktory-contact` | `/trajecktory contacto` | LinkedIn outreach |
+| `/trajecktory-deep` | `/trajecktory deep` | Deep company research |
+| `/trajecktory-pdf` | `/trajecktory pdf` | Generate ATS-optimized CV |
+| `/trajecktory-training` | `/trajecktory training` | Evaluate course/cert |
+| `/trajecktory-project` | `/trajecktory project` | Evaluate portfolio project |
+| `/trajecktory-tracker` | `/trajecktory tracker` | Application status overview |
+| `/trajecktory-apply` | `/trajecktory apply` | Live application assistant |
+| `/trajecktory-scan` | `/trajecktory scan` | Scan portals for new offers |
+| `/trajecktory-batch` | `/trajecktory batch` | Batch processing |
+| `/trajecktory-patterns` | `/trajecktory patterns` | Analyze rejection patterns |
+| `/trajecktory-followup` | `/trajecktory followup` | Follow-up cadence tracker |
 
 **All commands share the same evaluation logic** in `modes/*.md`. The `modes/` files are shared between Claude Code, OpenCode, and Gemini CLI.
 

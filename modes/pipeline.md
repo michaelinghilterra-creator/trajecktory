@@ -1,6 +1,6 @@
 # Modo: pipeline — Inbox de URLs (Second Brain)
 
-Procesa URLs de ofertas acumuladas en `data/pipeline.md`. El usuario agrega URLs cuando quiera y luego ejecuta `/career-ops pipeline` para procesarlas todas.
+Procesa URLs de ofertas acumuladas en `data/pipeline.md`. El usuario agrega URLs cuando quiera y luego ejecuta `/trajecktory pipeline` para procesarlas todas.
 
 ## Workflow
 
@@ -21,7 +21,7 @@ Procesa URLs de ofertas acumuladas en `data/pipeline.md`. El usuario agrega URLs
 ```
 
 5. **Push notification** — after the summary table, send a push notification:
-   - Format: `"Pipeline done: {N} evaluated — {top company} {top score}🟢[, {2nd}...] | run /career-ops apply to proceed"`
+   - Format: `"Pipeline done: {N} evaluated — {top company} {top score}🟢[, {2nd}...] | run /trajecktory apply to proceed"`
    - List up to 3 highest-scoring roles (≥4.0) in the message
    - If nothing scored ≥4.0: `"Pipeline done: {N} evaluated — no strong matches (best: {score})"`
    - Keep under 160 characters. Use PushNotification tool with status: "proactive".

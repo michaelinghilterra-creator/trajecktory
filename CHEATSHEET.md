@@ -7,7 +7,7 @@
 
 | Type | Where | When to use |
 |------|-------|-------------|
-| `/career-ops ...` | In Claude Code chat | When you need Claude's brain (evaluation, writing, analysis) |
+| `/trajecktory ...` | In Claude Code chat | When you need Claude's brain (evaluation, writing, analysis) |
 | `node ....mjs` | PowerShell terminal | Automated tasks that don't need Claude (free, fast) |
 
 ---
@@ -18,40 +18,40 @@
 
 | Command | ELI5 |
 |---------|------|
-| `/career-ops` | Show the full command menu |
-| `/career-ops {paste JD or URL}` | **The big one.** Paste a job description or URL and Claude evaluates it, scores it, writes the report, generates a tailored CV PDF, and adds it to your tracker — all in one shot |
-| `/career-ops oferta` | Same evaluation as above but no auto-PDF. Use when you just want the score and report first |
-| `/career-ops ofertas` | Compare two or more job offers side by side and rank them |
-| `/career-ops pipeline` | Process everything sitting in your `data/pipeline.md` inbox (URLs that the scanner found) |
-| `/career-ops batch` | Evaluate a big pile of jobs in parallel using background workers |
-| `/career-ops scan` | Have Claude search job boards (Greenhouse, Ashby, Lever, Remotive, etc.) for new roles matching your profile. Uses WebSearch + covers companies that can't be API-scanned |
+| `/trajecktory` | Show the full command menu |
+| `/trajecktory {paste JD or URL}` | **The big one.** Paste a job description or URL and Claude evaluates it, scores it, writes the report, generates a tailored CV PDF, and adds it to your tracker — all in one shot |
+| `/trajecktory oferta` | Same evaluation as above but no auto-PDF. Use when you just want the score and report first |
+| `/trajecktory ofertas` | Compare two or more job offers side by side and rank them |
+| `/trajecktory pipeline` | Process everything sitting in your `data/pipeline.md` inbox (URLs that the scanner found) |
+| `/trajecktory batch` | Evaluate a big pile of jobs in parallel using background workers |
+| `/trajecktory scan` | Have Claude search job boards (Greenhouse, Ashby, Lever, Remotive, etc.) for new roles matching your profile. Uses WebSearch + covers companies that can't be API-scanned |
 
 ### Applying & Prepping
 
 | Command | ELI5 |
 |---------|------|
-| `/career-ops apply` | You open the application form in Chrome, Claude reads it, loads your report for that company, and writes tailored answers for every field |
-| `/career-ops cover-letter` | Generates a full cover letter for a specific company using your report + CV. Under 350 words, no fluff |
-| `/career-ops cheat-sheet` | Makes a 1-2 page cram doc for a company: proof points, STAR stories, red flag Q&As, comp anchor. For the 15 minutes before your interview |
-| `/career-ops interview-prep` | Deep interview prep (longer than cheat sheet) — full story bank, likely questions, company intel |
-| `/career-ops contacto` | Finds the right person at a company on LinkedIn and drafts an outreach message for after you apply |
+| `/trajecktory apply` | You open the application form in Chrome, Claude reads it, loads your report for that company, and writes tailored answers for every field |
+| `/trajecktory cover-letter` | Generates a full cover letter for a specific company using your report + CV. Under 350 words, no fluff |
+| `/trajecktory cheat-sheet` | Makes a 1-2 page cram doc for a company: proof points, STAR stories, red flag Q&As, comp anchor. For the 15 minutes before your interview |
+| `/trajecktory interview-prep` | Deep interview prep (longer than cheat sheet) — full story bank, likely questions, company intel |
+| `/trajecktory contacto` | Finds the right person at a company on LinkedIn and drafts an outreach message for after you apply |
 
 ### Research & Analysis
 
 | Command | ELI5 |
 |---------|------|
-| `/career-ops deep` | Deep research on a specific company — culture, funding, team, red flags |
-| `/career-ops tracker` | Shows your application status overview — what's applied, in interview, pending, etc. |
-| `/career-ops patterns` | Looks at your rejection history and tells you what's working and what isn't |
-| `/career-ops followup` | Checks which applications are overdue for a follow-up and drafts the messages |
+| `/trajecktory deep` | Deep research on a specific company — culture, funding, team, red flags |
+| `/trajecktory tracker` | Shows your application status overview — what's applied, in interview, pending, etc. |
+| `/trajecktory patterns` | Looks at your rejection history and tells you what's working and what isn't |
+| `/trajecktory followup` | Checks which applications are overdue for a follow-up and drafts the messages |
 
 ### Other
 
 | Command | ELI5 |
 |---------|------|
-| `/career-ops pdf` | Regenerate your CV PDF without evaluating anything |
-| `/career-ops training` | Evaluate whether a course or certification is worth your time for your target roles |
-| `/career-ops project` | Evaluate a portfolio project idea — will it actually help your job search? |
+| `/trajecktory pdf` | Regenerate your CV PDF without evaluating anything |
+| `/trajecktory training` | Evaluate whether a course or certification is worth your time for your target roles |
+| `/trajecktory project` | Evaluate a portfolio project idea — will it actually help your job search? |
 
 ---
 
@@ -83,8 +83,8 @@ node verify-pipeline.mjs             # Health check — finds broken links, miss
 ```powershell
 node doctor.mjs                      # Full system health check — tells you if anything is broken
 node check-liveness.mjs              # Check if job postings in your pipeline are still active
-node analyze-patterns.mjs            # Pattern analysis (same as /career-ops patterns but raw JSON)
-node followup-cadence.mjs            # Follow-up calculator (same as /career-ops followup but raw JSON)
+node analyze-patterns.mjs            # Pattern analysis (same as /trajecktory patterns but raw JSON)
+node followup-cadence.mjs            # Follow-up calculator (same as /trajecktory followup but raw JSON)
 ```
 
 ### System Updates
@@ -111,11 +111,11 @@ $env:ALLOW_PAGE_OVERFLOW=1; node generate-pdf.mjs input.html output/name.pdf
 
 ```
 1. node scan.mjs              ← Free. Hits Greenhouse/Ashby/Lever APIs directly.
-2. /career-ops scan           ← Claude + WebSearch. Covers companies scan.mjs can't reach.
-3. /career-ops pipeline       ← Evaluate everything that landed in pipeline.md.
+2. /trajecktory scan           ← Claude + WebSearch. Covers companies scan.mjs can't reach.
+3. /trajecktory pipeline       ← Evaluate everything that landed in pipeline.md.
 ```
 
-Always run `node scan.mjs` before `/career-ops scan` — free before paid.
+Always run `node scan.mjs` before `/trajecktory scan` — free before paid.
 
 ---
 
