@@ -192,8 +192,17 @@ function classifySource(notes, url) {
 let _appsCache = null; // { mtimeMs, rows }
 function parseApplicationsMd() {
   let mtimeMs = 0;
-  try { mtimeMs = fs.statSync(APPS_MD).mtimeMs; } catch { /* missing file: readFileSync below throws as before */ }
+  let missing = false;
+  try { mtimeMs = fs.statSync(APPS_MD).mtimeMs; } catch { missing = true; }
   if (_appsCache && _appsCache.mtimeMs === mtimeMs) return _appsCache.rows;
+  if (missing) {
+    // Fresh install / pre-onboarding: the tracker doesn't exist yet. Return an
+    // empty set instead of throwing so /api/applications and the follow-up
+    // endpoints don't 500 on first launch (caches as mtime 0; once onboarding
+    // creates applications.md, statSync returns a real mtime and this misses).
+    _appsCache = { mtimeMs: 0, rows: [] };
+    return _appsCache.rows;
+  }
   const text = fs.readFileSync(APPS_MD, 'utf8');
   const lines = text.split('\n');
   const rows = [];
