@@ -3,7 +3,7 @@
   launch-trajecktory.ps1 — start the dashboard from an installed bundle.
 
   Installed at <InstallDir>\launch-trajecktory.ps1, with <InstallDir>\node and
-  <InstallDir>\career-ops as siblings. The Start Menu / desktop shortcut points
+  <InstallDir>\trajecktory as siblings. The Start Menu / desktop shortcut points
   here (run via: powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File ...).
 
   UNTESTED: authored without a build machine. Verify on a clean VM.
@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 
 $InstallDir = $PSScriptRoot
 $NodeDir    = Join-Path $InstallDir 'node'
-$AppRoot    = Join-Path $InstallDir 'career-ops'
+$AppRoot    = Join-Path $InstallDir 'trajecktory'
 $WebDir     = Join-Path $AppRoot 'dashboard-web'
 $Url        = 'http://localhost:3333'
 

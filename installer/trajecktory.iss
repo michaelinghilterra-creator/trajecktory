@@ -31,10 +31,10 @@ WizardStyle=modern
 ; SignTool=signtool $f                            ; configure if code-signing
 
 [Files]
-; The staged offline payload: portable Node, the career-ops tree with installed
+; The staged offline payload: portable Node, the trajecktory tree with installed
 ; node_modules + Claude Code + bundled Chromium.
 Source: "payload\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
-; The launcher scripts (sit alongside node\ and career-ops\ under {app}).
+; The launcher scripts (sit alongside node\ and trajecktory\ under {app}).
 Source: "launch-trajecktory.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "stop-trajecktory.ps1";   DestDir: "{app}"; Flags: ignoreversion
 
@@ -97,7 +97,7 @@ begin
     key := Trim(ApiKeyPage.Values[0]);
     if key <> '' then
     begin
-      envPath := ExpandConstant('{app}\career-ops\dashboard-web\.env');
+      envPath := ExpandConstant('{app}\trajecktory\dashboard-web\.env');
       SaveStringToFile(envPath, 'ANTHROPIC_API_KEY=' + key + #13#10, False);
     end;
   end;
@@ -110,10 +110,10 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
-    dataDir := ExpandConstant('{app}\career-ops\data');
+    dataDir := ExpandConstant('{app}\trajecktory\data');
     if DirExists(dataDir) then
       if MsgBox('Delete your job-search data (tracker, reports, config) too? Choose No to keep it.',
         mbConfirmation, MB_YESNO) = IDYES then
-        DelTree(ExpandConstant('{app}\career-ops'), True, True, True);
+        DelTree(ExpandConstant('{app}\trajecktory'), True, True, True);
   end;
 end;

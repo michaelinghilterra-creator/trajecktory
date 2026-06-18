@@ -21,11 +21,11 @@ $NodeVersion = '20.18.1'
 $NodeZipName = "node-v$NodeVersion-win-x64"
 $NodeUrl     = "https://nodejs.org/dist/v$NodeVersion/$NodeZipName.zip"
 
-$InstallerDir = $PSScriptRoot                                   # career-ops\installer
-$RepoRoot     = Split-Path $InstallerDir -Parent                # career-ops
+$InstallerDir = $PSScriptRoot                                   # trajecktory\installer
+$RepoRoot     = Split-Path $InstallerDir -Parent                # trajecktory
 $Payload      = Join-Path $InstallerDir 'payload'
 $PayloadNode  = Join-Path $Payload 'node'
-$PayloadApp   = Join-Path $Payload 'career-ops'
+$PayloadApp   = Join-Path $Payload 'trajecktory'
 $BrowsersPath = Join-Path $PayloadApp 'ms-playwright'
 
 Write-Host "Repo root : $RepoRoot"
@@ -48,11 +48,11 @@ if (-not (Test-Path $NodeExe)) { throw "node.exe not found at $NodeExe" }
 # Make the bundled Node the one used for every install step below.
 $env:Path = "$PayloadNode;$env:Path"
 
-# ── 3. Copy the career-ops tree, EXCLUDING all user-layer + machine data ──────
-# IMPORTANT: until the repo history is rewritten (the "fresh-history repo"
-# Milestone-1 task), this exclusion list is the ONLY thing keeping the user's
-# CV / profile / tracker / reports / keys out of the shipped bundle. The PII
-# scan in step 7 is the backstop. Review both whenever the tree changes.
+# ── 3. Copy the trajecktory tree, EXCLUDING all user-layer + machine data ──────
+# IMPORTANT: the repo now ships clean history, but this exclusion list plus the
+# PII scan in step 7 remain the backstop keeping the user's CV / profile /
+# tracker / reports / keys out of the staged payload. Review both whenever the
+# tree changes.
 $excludeDirs = @(
   '.git', 'node_modules', 'ms-playwright', 'output', 'reports', 'backups',
   'data', 'interview-prep', 'jds', 'ignore-old_design_audit_files', '.claude\projects'

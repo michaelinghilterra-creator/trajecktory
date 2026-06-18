@@ -14,7 +14,7 @@ the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
   bundled `claude` CLI (`claude login`, one time). No API key, no cost to you.
 - **Resume / cover-letter / outreach drafts** use the user's **own Anthropic API
   key**, prompted (optionally) during install and written to
-  `career-ops\dashboard-web\.env`. They can skip it and add it later; draft
+  `trajecktory\dashboard-web\.env`. They can skip it and add it later; draft
   endpoints return a clear "add your key" message until they do.
 - None of your keys ship. `build-bundle.ps1` excludes `.env` and scans the staged
   payload for personal data, failing the build if any is found.
@@ -39,7 +39,7 @@ the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 ## What gets bundled
 - `payload\node\` — pinned portable Node (set `$NodeVersion` in build-bundle.ps1)
   plus the `claude` CLI installed into it.
-- `payload\career-ops\` — the repo's system layer with production `node_modules`,
+- `payload\trajecktory\` — the repo's system layer with production `node_modules`,
   bundled Chromium under `ms-playwright\`, and example configs. **No** user CV /
   profile / tracker / reports / keys (excluded + PII-scanned).
 - `launch-trajecktory.ps1`, `stop-trajecktory.ps1` — start/stop the server.
@@ -57,6 +57,6 @@ the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
   and an empty tracker for new users.
 - **Port 3333:** the launcher assumes it is free. Add fallback handling if you
   expect conflicts.
-- **Repo history:** until the planned fresh-history repo lands, `build-bundle.ps1`
-  is the last line of defense against shipping tracked personal data. Keep its
-  exclusion list and PII scan in sync with the tree.
+- **Repo history:** the repo was rebuilt with clean history, but
+  `build-bundle.ps1`'s exclusion list and PII scan remain the backstop against
+  staging tracked personal data into the payload. Keep both in sync with the tree.
