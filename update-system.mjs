@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * update-system.mjs — Safe auto-updater for career-ops
+ * update-system.mjs — Safe auto-updater for trajecktory
  *
  * Updates ONLY system layer files (modes, scripts, dashboard, templates).
  * NEVER touches user data (cv.md, profile.yml, _profile.md, data/, reports/).
@@ -23,9 +23,9 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
 
-const CANONICAL_REPO = 'https://github.com/santifer/career-ops.git';
-const RAW_VERSION_URL = 'https://raw.githubusercontent.com/santifer/career-ops/main/VERSION';
-const RELEASES_API = 'https://api.github.com/repos/santifer/career-ops/releases/latest';
+const CANONICAL_REPO = 'https://github.com/michaelinghilterra-creator/trajecktory.git';
+const RAW_VERSION_URL = 'https://raw.githubusercontent.com/michaelinghilterra-creator/trajecktory/main/VERSION';
+const RELEASES_API = 'https://api.github.com/repos/michaelinghilterra-creator/trajecktory/releases/latest';
 
 // System layer paths — ONLY these files get updated
 const SYSTEM_PATHS = [
@@ -166,7 +166,7 @@ async function check() {
       fetch(RELEASES_API, {
         headers: {
           'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'career-ops-update-checker',
+          'User-Agent': 'trajecktory-update-checker',
         },
         signal: controller.signal,
       }),
@@ -261,7 +261,7 @@ async function apply() {
 
     // 2. Save a patch of any local customizations to system files so we can
     //    re-apply them automatically after the upstream overwrite.
-    const customPatchPath = join(ROOT, '.career-ops-custom.patch');
+    const customPatchPath = join(ROOT, '.trajecktory-custom.patch');
     let customPatchSaved = false;
     let customFileCount = 0;
     try {
@@ -364,7 +364,7 @@ async function apply() {
       } catch {
         customConflicted = true;
         console.log('Custom changes: could not auto-merge — resolve conflicts then run:');
-        console.log('  git apply --3way .career-ops-custom.patch');
+        console.log('  git apply --3way .trajecktory-custom.patch');
       }
     }
 
