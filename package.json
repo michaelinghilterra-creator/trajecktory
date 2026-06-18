@@ -1,7 +1,7 @@
 {
-  "name": "career-ops",
+  "name": "trajecktory",
   "version": "1.7.0",
-  "description": "AI-powered job search pipeline built on Claude Code",
+  "description": "AI-driven job-search pipeline with a local dashboard",
   "scripts": {
     "doctor": "node doctor.mjs",
     "verify": "node verify-pipeline.mjs",
@@ -20,15 +20,15 @@
   "keywords": [
     "ai",
     "job-search",
-    "claude-code",
-    "career",
+    "trajecktory",
+    "dashboard",
     "automation"
   ],
-  "author": "Santiago Fernández de Valderrama <hi@santifer.io> (https://santifer.io)",
-  "homepage": "https://santifer.io",
+  "author": "michaelinghilterra-creator",
+  "homepage": "https://github.com/michaelinghilterra-creator/trajecktory",
   "repository": {
     "type": "git",
-    "url": "https://github.com/santifer/career-ops"
+    "url": "https://github.com/michaelinghilterra-creator/trajecktory"
   },
   "license": "MIT",
   "engines": {
