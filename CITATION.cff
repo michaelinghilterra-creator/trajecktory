@@ -6,8 +6,8 @@ authors:
   - family-names: "Fernández de Valderrama"
     given-names: "Santiago"
     website: "https://santifer.io"
-url: "https://santifer.io"
-repository-code: "https://github.com/santifer/career-ops"
+url: "https://github.com/michaelinghilterra-creator/trajecktory"
+repository-code: "https://github.com/michaelinghilterra-creator/trajecktory"
 license: MIT
 keywords:
   - ai
@@ -16,4 +16,3 @@ keywords:
   - career
   - automation
   - llmops
-  - go-tui

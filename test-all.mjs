@@ -187,9 +187,10 @@ const allowedFiles = [
   // Standard project files
   'LICENSE', 'CITATION.cff', 'CONTRIBUTING.md',
   'package.json', '.github/FUNDING.yml', 'CLAUDE.md', 'test-all.mjs',
-  // Community / governance files (added in v1.3.0, all legitimately reference the maintainer)
-  'CODE_OF_CONDUCT.md', 'GOVERNANCE.md', 'SECURITY.md', 'SUPPORT.md',
-  '.github/SECURITY.md',
+  // Community + attribution files that legitimately reference the maintainer's
+  // contact email or the upstream author (santifer) for credit.
+  'CODE_OF_CONDUCT.md', 'SECURITY.md', 'SUPPORT.md', '.github/SECURITY.md',
+  'NOTICE.md', 'AGENTS.md',
 ];
 
 // Build pathspec for git grep — only scan tracked files matching these

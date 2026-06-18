@@ -7,7 +7,7 @@ body:
     attributes:
       label: Code of Conduct
       options:
-        - label: I agree to follow the [Code of Conduct](https://github.com/santifer/career-ops/blob/main/CODE_OF_CONDUCT.md)
+        - label: I agree to follow the [Code of Conduct](https://github.com/michaelinghilterra-creator/trajecktory/blob/main/CODE_OF_CONDUCT.md)
           required: true
   - type: checkboxes
     id: search
@@ -36,9 +36,9 @@ body:
       label: Area
       options:
         - Evaluation / Scoring
-        - PDF Generation
+        - CV / Document Generation
         - Portal Scanner
-        - Dashboard TUI
+        - Dashboard
         - Batch Processing
         - Language / i18n
         - Documentation

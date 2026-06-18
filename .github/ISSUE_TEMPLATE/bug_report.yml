@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a bug in career-ops
+description: Report a bug in trajecktory
 labels: ["bug"]
 body:
   - type: checkboxes
@@ -7,7 +7,7 @@ body:
     attributes:
       label: Code of Conduct
       options:
-        - label: I agree to follow the [Code of Conduct](https://github.com/santifer/career-ops/blob/main/CODE_OF_CONDUCT.md)
+        - label: I agree to follow the [Code of Conduct](https://github.com/michaelinghilterra-creator/trajecktory/blob/main/CODE_OF_CONDUCT.md)
           required: true
   - type: checkboxes
     id: search

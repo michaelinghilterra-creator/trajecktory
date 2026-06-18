@@ -17,16 +17,16 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           pr_message: |
-            Welcome to career-ops, @${{ github.actor }}! Thanks for your first PR.
+            Welcome to trajecktory, @${{ github.actor }}! Thanks for your first PR.
 
             A few things to know:
             - Tests will run automatically — check the status below
             - Make sure you've linked a related issue (required for features)
-            - Read [CONTRIBUTING.md](https://github.com/santifer/career-ops/blob/main/CONTRIBUTING.md) if you haven't
+            - Read [CONTRIBUTING.md](https://github.com/michaelinghilterra-creator/trajecktory/blob/main/CONTRIBUTING.md) if you haven't
 
             We'll review your PR soon.
           issue_message: |
             Thanks for opening your first issue, @${{ github.actor }}! We'll take a look soon.
 
             In the meantime:
-            - Check [SUPPORT.md](https://github.com/santifer/career-ops/blob/main/SUPPORT.md) for setup help
+            - Check [SUPPORT.md](https://github.com/michaelinghilterra-creator/trajecktory/blob/main/SUPPORT.md) for setup help
