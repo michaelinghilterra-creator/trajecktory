@@ -1,1 +1,1 @@
-../../../.agents/skills/career-ops/SKILL.md
+../../../.agents/skills/trajecktory/SKILL.md
