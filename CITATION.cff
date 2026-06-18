@@ -3,9 +3,8 @@ message: "If you use trajecktory, please cite it using these metadata."
 title: "trajecktory: AI-Powered Job Search Pipeline"
 type: software
 authors:
-  - family-names: "Fernández de Valderrama"
-    given-names: "Santiago"
-    website: "https://santifer.io"
+  - family-names: "Inghilterra"
+    given-names: "Michael"
 url: "https://github.com/michaelinghilterra-creator/trajecktory"
 repository-code: "https://github.com/michaelinghilterra-creator/trajecktory"
 license: MIT
@@ -16,3 +15,12 @@ keywords:
   - career
   - automation
   - llmops
+references:
+  - type: software
+    title: "career-ops"
+    authors:
+      - family-names: "Fernández de Valderrama"
+        given-names: "Santiago"
+        website: "https://santifer.io"
+    url: "https://github.com/santifer/career-ops"
+    license: MIT
