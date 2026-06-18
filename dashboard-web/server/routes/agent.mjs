@@ -7,7 +7,7 @@ export const router = express.Router();
 
 // ── Headless Agent Runner ─────────────────────────────────────────────────────
 // Drives the user's local Claude Code (`claude -p`) for the two LLM workflow
-// steps — Agent Scan (/career-ops scan) and Evaluate Pipeline (/career-ops
+// steps — Agent Scan (/trajecktory scan) and Evaluate Pipeline (/trajecktory
 // pipeline) — so non-technical users never open a terminal. Runs on the user's
 // own Claude login (no API key). Progress is parsed from --output-format
 // stream-json into a job record the frontend polls, mirroring the Workflow
@@ -38,7 +38,7 @@ function summarizeToolUse(block) {
   return name;
 }
 
-// Spawn `claude -p "/career-ops <mode>"` and stream-parse progress into the
+// Spawn `claude -p "/trajecktory <mode>"` and stream-parse progress into the
 // job record. Resolves { ok, result, error } when the child closes. When
 // `composed` is true the caller owns terminal status (used by the Evaluate
 // sequence); otherwise this sets the job's final status itself.
@@ -52,7 +52,7 @@ function runClaudeAgent(jobId, mode, { composed = false } = {}) {
     // shell:true does NOT escape args, so quote the (space-containing) prompt
     // ourselves; the remaining flags have no spaces or backslashes. On posix
     // no shell is needed — the args array handles the space natively.
-    const prompt = `/career-ops ${mode}`;
+    const prompt = `/trajecktory ${mode}`;
     const args = ['-p', isWin ? `"${prompt}"` : prompt,
                   '--output-format', 'stream-json', '--verbose',
                   '--permission-mode', 'acceptEdits'];
