@@ -192,13 +192,17 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   };
 
   const sectionStatus = useCallback((id) => {
-    if (id === 'preflight') return preflight ? (preflight.ok ? 'complete' : 'error') : 'empty';
+    if (id === 'preflight') return preflight ? ((preflight.engineOk ?? preflight.ok) ? 'complete' : 'error') : 'empty';
     if (id === 'health')    return health ? (health.ok ? 'complete' : 'error') : 'empty';
     if (pendingGen[id])     return 'pending';
     return state?.sections?.[id]?.status || 'empty';
   }, [state, preflight, health, pendingGen]);
 
-  const preflightOk = preflight?.ok;
+  // Gate the steps on ENGINE readiness only (Node, deps, Playwright, folders).
+  // Missing cv.md / profile.yml / portals.yml are non-blocking: they're created
+  // in the steps below, so they must not lock those steps. Fall back to .ok for
+  // older preflight payloads that predate engineOk.
+  const preflightOk = preflight?.engineOk ?? preflight?.ok;
   const gated = (id) => id !== 'preflight' && !preflightOk;
 
   const readiness = (() => {
@@ -649,21 +653,32 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <button className="btn primary" onClick={runPreflight}>{preflight?.running ? 'Checking…' : 'Run preflight check'}</button>
           {preflight && !preflight.running && (
             <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {(preflight.checks || []).map((c, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
-                  <span className="mono" style={{ color: c.pass ? 'var(--green)' : 'var(--red)' }}>{c.pass ? '✓' : '✕'}</span>
-                  <span style={{ flex: 1 }}>
-                    <span style={{ color: 'var(--text)' }}>{c.label}</span>
-                    {!c.pass && (c.fix || []).map((f, j) => (
-                      <span key={j} style={{ display: 'block', color: 'var(--text-mute)', fontSize: 12, fontFamily: 'var(--mono)' }}>→ {f}</span>
-                    ))}
-                  </span>
-                </div>
-              ))}
+              {(preflight.checks || []).map((c, i) => {
+                const tone = c.pass ? 'var(--green)' : (c.blocking ? 'var(--red)' : 'var(--orange)');
+                const mark = c.pass ? '✓' : (c.blocking ? '✕' : '○');
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
+                    <span className="mono" style={{ color: tone }}>{mark}</span>
+                    <span style={{ flex: 1 }}>
+                      <span style={{ color: 'var(--text)' }}>{c.label}</span>
+                      {!c.pass && c.blocking && (c.fix || []).map((f, j) => (
+                        <span key={j} style={{ display: 'block', color: 'var(--text-mute)', fontSize: 12, fontFamily: 'var(--mono)' }}>→ {f}</span>
+                      ))}
+                      {!c.pass && !c.blocking && (
+                        <span style={{ display: 'block', color: 'var(--text-mute)', fontSize: 12 }}>You'll add this in the steps below.</span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
               {preflight.error && <div style={{ color: 'var(--red)', fontSize: 13 }}>{preflight.error}</div>}
             </div>
           )}
-          {!preflightOk && <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-mute)' }}>The remaining steps unlock once preflight is green.</div>}
+          {!preflightOk
+            ? <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-mute)' }}>The remaining steps unlock once the engine checks above pass.</div>
+            : (preflight.checks || []).some(c => !c.pass)
+              ? <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-mute)' }}>Engine ready. The amber items above are part of setup — add them in the steps below. Nothing is locked.</div>
+              : null}
         </div>
       );
     }

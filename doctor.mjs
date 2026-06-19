@@ -69,6 +69,7 @@ function checkCv() {
   }
   return {
     pass: false,
+    blocking: false,
     label: 'cv.md not found',
     fix: [
       'Create cv.md in the project root with your CV in markdown',
@@ -83,6 +84,7 @@ function checkProfile() {
   }
   return {
     pass: false,
+    blocking: false,
     label: 'config/profile.yml not found',
     fix: [
       'Run: cp config/profile.example.yml config/profile.yml',
@@ -97,6 +99,7 @@ function checkPortals() {
   }
   return {
     pass: false,
+    blocking: false,
     label: 'portals.yml not found',
     fix: [
       'Run: cp templates/portals.example.yml portals.yml',
@@ -228,13 +231,19 @@ async function mainJson() {
   const checks = await gatherChecks();
   const failures = checks.filter(c => !c.pass).length;
   const warnings = checks.filter(c => c.pass && c.warn).length;
+  // Engine readiness gates the Launchpad: only the blocking checks (Node, deps,
+  // Playwright, data folders). The config files (cv.md, profile.yml, portals.yml)
+  // are created DURING onboarding, so a fresh install must not let them lock the
+  // steps that create them. They still show as ✕ to-dos; they just don't gate.
+  const engineFailures = checks.filter(c => !c.pass && c.blocking !== false).length;
   const normalized = checks.map(c => ({
     label: c.label,
     pass: !!c.pass,
     warn: !!c.warn,
+    blocking: c.blocking !== false,
     fix: c.fix == null ? [] : (Array.isArray(c.fix) ? c.fix : [c.fix]),
   }));
-  console.log(JSON.stringify({ ok: failures === 0, failures, warnings, checks: normalized }));
+  console.log(JSON.stringify({ ok: failures === 0, engineOk: engineFailures === 0, failures, warnings, checks: normalized }));
   process.exit(0);
 }
 
