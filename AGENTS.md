@@ -40,6 +40,18 @@ Parse the JSON output:
 The user can also say "check for updates" or "update trajecktory" at any time to force a check.
 To rollback: `node update-system.mjs rollback`
 
+## Starting the live dashboard
+
+When the user says "start the live dashboard" (or "start the dashboard" / "launch
+trajecktory"), do NOT open a browser tab yourself. Start it like this:
+
+- **Installed bundle** (a `launch-trajecktory.ps1` sits one folder up from this one): run
+  `powershell -ExecutionPolicy Bypass -File ..\launch-trajecktory.ps1`. It uses the bundled
+  Node, builds the UI, starts the server on a free port, and opens the dashboard in its own
+  Chromium window.
+- **Dev checkout** (no bundled launcher present): run `npm start` from `dashboard-web` for
+  live data (use `npm run dev:demo` only when the user explicitly asks for demo data).
+
 ## What is trajecktory
 
 AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluation, CV generation, portal scanning, batch processing. Runs on any AI coding CLI that follows the [open agent skill standard](https://agentskills.io) (Claude Code, Codex, Gemini, OpenCode, Qwen, Copilot, Kimi).

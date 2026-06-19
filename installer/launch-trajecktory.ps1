@@ -45,12 +45,13 @@ $env:Path = "$NodeDir;$env:Path"
 # 2. Point Playwright at the bundled Chromium (offline, no global cache).
 $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $AppRoot 'ms-playwright'
 
-# 3. First run only: authenticate Claude Code against the user's own Claude Pro
-#    account so Evaluate / Scan work. Best-effort and interactive; never blocks
-#    the dashboard from starting. The pasted API key (if any) powers only the
-#    draft features, not eval.
+# 3. First run only: if the user isn't already signed in to Claude (the bundled
+#    CLI shares the per-user credentials created by the Claude Desktop app), do
+#    an interactive sign-in so Evaluate / Scan work. Skipped when credentials
+#    already exist. Best-effort; never blocks the dashboard from starting.
 $loginMarker = Join-Path $InstallDir '.claude-login-done'
-if (-not (Test-Path $loginMarker)) {
+$claudeCreds = Join-Path $env:USERPROFILE '.claude\.credentials.json'
+if ((-not (Test-Path $loginMarker)) -and (-not (Test-Path $claudeCreds))) {
   try {
     Write-Host 'First run: sign in to your Claude account so Evaluate/Scan can run.'
     & (Join-Path $NodeDir 'claude.cmd') login
@@ -74,12 +75,21 @@ Pop-Location
 Set-Content -Path (Join-Path $InstallDir '.tjk-port') -Value "$Port" -NoNewline
 Set-Content -Path (Join-Path $InstallDir '.tjk-pid')  -Value "$($server.Id)" -NoNewline
 
-# 5. Wait for the server to answer, then open the default browser.
+# 5. Wait for the server to answer, then open the dashboard in the bundled
+#    Chromium as a clean app window (no Edge). Falls back to the default browser
+#    only if the bundled Chromium can't be found.
 for ($i = 0; $i -lt 60; $i++) {
   try { Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 2 | Out-Null; break }
   catch { Start-Sleep -Milliseconds 500 }
 }
-Start-Process $Url
+$chrome = Get-ChildItem (Join-Path $AppRoot 'ms-playwright') -Recurse -Filter 'chrome.exe' -ErrorAction SilentlyContinue |
+  Where-Object { $_.FullName -like '*chrome-win64*' } | Select-Object -First 1
+if ($chrome) {
+  $profileDir = Join-Path $InstallDir '.chrome-profile'
+  Start-Process -FilePath $chrome.FullName -ArgumentList "--app=$Url", "--user-data-dir=`"$profileDir`""
+} else {
+  Start-Process $Url
+}
 
 # Flush the launch log now that startup is done (the server keeps writing its own
 # server-out.log / server-err.log while it runs).

@@ -10,7 +10,7 @@
 ; "unknown publisher" warning). App icon is wired below (assets\trajecktory.ico).
 
 #define AppName "trajecktory"
-#define AppVersion "1.7.0"
+#define AppVersion "1.7.1"
 #define AppPublisher "trajecktory"
 
 [Setup]
@@ -23,7 +23,7 @@ DefaultDirName={localappdata}\{#AppName}
 DefaultGroupName={#AppName}
 PrivilegesRequired=lowest
 DisableProgramGroupPage=yes
-OutputBaseFilename=TrajecktorySetup
+OutputBaseFilename=TrajecktorySetup-v{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
