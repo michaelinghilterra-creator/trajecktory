@@ -6,7 +6,7 @@
   <InstallDir>\trajecktory as siblings. The Start Menu / desktop shortcut points
   here (run via: powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File ...).
 
-  UNTESTED: authored without a build machine. Verify on a clean VM.
+  Built + smoke-tested; the launch flow is pending clean-VM verification.
 #>
 $ErrorActionPreference = 'Stop'
 
