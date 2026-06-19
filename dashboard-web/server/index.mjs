@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { randomBytes } from 'crypto';
-import { existsSync, readdirSync } from 'fs';
+import { existsSync } from 'fs';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { STATIC, OUTPUT_DIR, PORT, HOST } from './config.mjs';
@@ -151,30 +151,21 @@ if (_jobSweep.unref) _jobSweep.unref();
 // A normal dev checkout has neither, so `npm start` never pops a window. Disable
 // with TJK_NO_OPEN=1.
 const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url));
-function findBundledChrome() {
-  const roots = [];
-  if (process.env.PLAYWRIGHT_BROWSERS_PATH) roots.push(process.env.PLAYWRIGHT_BROWSERS_PATH);
-  roots.push(path.resolve(SERVER_DIR, '../../ms-playwright'));
-  for (const root of roots) {
-    try {
-      if (!existsSync(root)) continue;
-      for (const dir of readdirSync(root)) {
-        if (!dir.startsWith('chromium-') || dir.includes('headless')) continue;
-        const exe = path.join(root, dir, 'chrome-win64', 'chrome.exe');
-        if (existsSync(exe)) return exe;
-      }
-    } catch { /* ignore unreadable roots */ }
-  }
-  return null;
+// The bundled Playwright Chromium ships under ../../ms-playwright; its presence
+// marks the installed bundle (a dev checkout doesn't have it there).
+function isInstalledBundle() {
+  try { return existsSync(path.resolve(SERVER_DIR, '../../ms-playwright')); } catch { return false; }
 }
 function openDashboardWindow(url) {
+  // Open the user's DEFAULT browser (they get tabs and their own profile), but
+  // only in the installed bundle so a dev `npm start` never pops a browser.
+  // Disable with TJK_NO_OPEN=1.
   if (process.env.TJK_NO_OPEN || HOST === '0.0.0.0' || HOST === '::') return;
+  if (!isInstalledBundle()) return;
   try {
-    const chrome = findBundledChrome();
-    if (!chrome) return; // dev / no bundled browser — leave it to the user
-    const profileDir = path.resolve(SERVER_DIR, '../../.chrome-profile');
-    spawn(chrome, [`--app=${url}`, `--user-data-dir=${profileDir}`], { detached: true, stdio: 'ignore' }).unref();
-  } catch { /* never let opening a window break the server */ }
+    // `start` (via cmd) launches whatever browser the user set as default.
+    spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  } catch { /* never let opening a browser break the server */ }
 }
 
 app.listen(PORT, HOST, () => {

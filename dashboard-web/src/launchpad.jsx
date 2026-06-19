@@ -185,6 +185,26 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         .then(d => setStages(s => ({ ...s, [k]: d || {} }))).catch(() => {}));
   }, []);
   useEffect(() => { loadStages(); }, [loadStages]);
+
+  // While a generative step is pending (the user is running its prompt in Claude
+  // Code), poll setup state so the step checks itself off the instant its file
+  // lands — no "did it work?" guessing and no manual refresh needed.
+  useEffect(() => {
+    if (!Object.keys(pendingGen).length) return;
+    const t = setInterval(() => {
+      fetch('/api/setup/state').then(r => r.json()).then(s => {
+        setState(s);
+        setPendingGen(p => {
+          const next = { ...p }; let changed = false;
+          for (const id of Object.keys(next)) {
+            if (s.sections?.[id]?.status === 'complete') { delete next[id]; changed = true; }
+          }
+          return changed ? next : p;
+        });
+      }).catch(() => {});
+    }, 3000);
+    return () => clearInterval(t);
+  }, [pendingGen]);
   const saveStage = (key, data) => {
     setStages(s => ({ ...s, [key]: data }));
     if (state?.demo) { toast && toast('Setup is read-only in demo mode', 'warn'); return; }
@@ -331,10 +351,14 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <button className="btn" onClick={() => startHandoff('cv', 'cv-talk')}>Talk it through</button>
         </div>
         {pendingGen.cv && (
-          <div style={{ marginTop: 14 }}>
-            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>Copied to your clipboard. Paste it into your Claude Code, then click done.</div>
+          <div style={{ marginTop: 14, border: '1px solid var(--accent)', borderRadius: 'var(--r-card)', padding: 14, background: 'var(--accent-bg)' }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>One more step — trajecktory doesn't read your CV by itself</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.55 }}>The prompt below was copied to your clipboard. Paste it into Claude Code (the same chat you used to start the dashboard) and run it — that's what converts your CV into the format trajecktory uses. This step checks itself off the moment it finishes; you don't have to come back here.</div>
             <textarea readOnly value={pendingGen.cv} rows={4} className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
-            <div style={{ marginTop: 8 }}><button className="btn success" onClick={() => ackHandoff('cv')}>✓ I ran it — refresh status</button></div>
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, color: 'var(--accent)' }}>⧖ Waiting for you to run it in Claude Code…</span>
+              <button className="btn ghost sm" onClick={() => ackHandoff('cv')}>Check now</button>
+            </div>
           </div>
         )}
       </div>
