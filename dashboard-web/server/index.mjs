@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { randomBytes } from 'crypto';
+import { existsSync, readdirSync } from 'fs';
+import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
 import { STATIC, OUTPUT_DIR, PORT, HOST } from './config.mjs';
 import { router as applicationsRoutes } from './routes/applications.mjs';
 import { router as followupsRoutes } from './routes/followups.mjs';
@@ -141,6 +144,39 @@ const _jobSweep = setInterval(() => {
 }, 5 * 60 * 1000);
 if (_jobSweep.unref) _jobSweep.unref();
 
+// Open the dashboard in the bundled Chromium as a clean app window, so it lands
+// there no matter how the server was started (the launcher, npm start, or Claude
+// Code starting it directly). Gated to the installed bundle: only fires when a
+// bundled Chromium is found (via PLAYWRIGHT_BROWSERS_PATH or ../../ms-playwright).
+// A normal dev checkout has neither, so `npm start` never pops a window. Disable
+// with TJK_NO_OPEN=1.
+const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url));
+function findBundledChrome() {
+  const roots = [];
+  if (process.env.PLAYWRIGHT_BROWSERS_PATH) roots.push(process.env.PLAYWRIGHT_BROWSERS_PATH);
+  roots.push(path.resolve(SERVER_DIR, '../../ms-playwright'));
+  for (const root of roots) {
+    try {
+      if (!existsSync(root)) continue;
+      for (const dir of readdirSync(root)) {
+        if (!dir.startsWith('chromium-') || dir.includes('headless')) continue;
+        const exe = path.join(root, dir, 'chrome-win64', 'chrome.exe');
+        if (existsSync(exe)) return exe;
+      }
+    } catch { /* ignore unreadable roots */ }
+  }
+  return null;
+}
+function openDashboardWindow(url) {
+  if (process.env.TJK_NO_OPEN || HOST === '0.0.0.0' || HOST === '::') return;
+  try {
+    const chrome = findBundledChrome();
+    if (!chrome) return; // dev / no bundled browser — leave it to the user
+    const profileDir = path.resolve(SERVER_DIR, '../../.chrome-profile');
+    spawn(chrome, [`--app=${url}`, `--user-data-dir=${profileDir}`], { detached: true, stdio: 'ignore' }).unref();
+  } catch { /* never let opening a window break the server */ }
+}
+
 app.listen(PORT, HOST, () => {
   const shown = HOST === '0.0.0.0' || HOST === '::' ? `your machine on port ${PORT} (all interfaces)` : `http://localhost:${PORT}`;
   console.log(`trajecktory Dashboard → ${shown}`);
@@ -148,5 +184,6 @@ app.listen(PORT, HOST, () => {
     console.log('  ⚠ Bound to all interfaces with no authentication — anyone on your network can reach this.');
   }
   console.log(`  Auth token for CLI/curl (x-tjk-token header): ${AUTH_TOKEN}`);
+  openDashboardWindow(`http://localhost:${PORT}`);
 });
 
