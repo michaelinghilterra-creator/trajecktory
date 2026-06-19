@@ -4,11 +4,12 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `TrajecktorySetup-v1.7.1.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.3.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. Remaining verification is the
-> end-to-end launch flow on a clean VM (the Code-mode "Start the live dashboard"
-> path and Claude sign-in reuse) — see the Clean-VM test below.
+> the dashboard with healthy API endpoints. v1.7.3 adds the in-dashboard **"Sign in
+> to Claude"** button (opens a console running the bundled `claude login`) and an
+> **"AI draft key (optional)"** field in the Launchpad. Remaining verification is the
+> end-to-end VM round: click Sign in, then confirm Evaluate / Scan return results.
 
 ## Credential model (important)
 - **Evaluate / Scan** run on each user's **own Claude Pro/Max login** via the
@@ -16,12 +17,15 @@ the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
   inherit the Claude Desktop sign-in (separate credential stores), so eval/scan
   need a one-time bundled `claude login`. The launcher no longer attempts an
   interactive login (it hung when run hidden); the dashboard and all data views
-  start fine without it, and the bundled sign-in is surfaced on demand when
-  Evaluate / Scan are first used. No API key, no cost to you.
+  start fine without it. The Launchpad's First Evaluation step has a **"Sign in to
+  Claude"** button that opens a console running the bundled `claude login`. No API
+  key, no cost to you.
 - **Resume / cover-letter / outreach drafts** use the user's **own Anthropic API
   key**, prompted (optionally) during install and written to
-  `trajecktory\dashboard-web\.env`. They can skip it and add it later; draft
-  endpoints return a clear "add your key" message until they do.
+  `trajecktory\dashboard-web\.env`. They can skip it and add it later via the
+  Launchpad's **"AI draft key (optional)"** field (saves to `.env` and takes effect
+  without a restart); draft endpoints return a clear "add your key" message until
+  they do.
 - None of your keys ship. `build-bundle.ps1` excludes `.env` and scans the staged
   payload for personal data, failing the build if any is found.
 
@@ -36,7 +40,7 @@ the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
    & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\trajecktory.iss
    ```
    Produces `installer\Output\trajecktory-setup-v<version>.exe` (versioned from the
-   `.iss` AppVersion / `VERSION`, e.g. `trajecktory-setup-v1.7.2.exe`).
+   `.iss` AppVersion / `VERSION`, e.g. `trajecktory-setup-v1.7.3.exe`).
 3. **Clean-VM test** (critical): on a Windows VM with **no Node, no git, no
    Chromium, no Claude Code**, run the installer, optionally paste a test API key,
    and finish. Then the PRIMARY launch path: open the Claude Desktop app in Code
