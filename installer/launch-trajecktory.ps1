@@ -45,21 +45,11 @@ $env:Path = "$NodeDir;$env:Path"
 # 2. Point Playwright at the bundled Chromium (offline, no global cache).
 $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $AppRoot 'ms-playwright'
 
-# 3. First run only: if the user isn't already signed in to Claude (the bundled
-#    CLI shares the per-user credentials created by the Claude Desktop app), do
-#    an interactive sign-in so Evaluate / Scan work. Skipped when credentials
-#    already exist. Best-effort; never blocks the dashboard from starting.
-$loginMarker = Join-Path $InstallDir '.claude-login-done'
-$claudeCreds = Join-Path $env:USERPROFILE '.claude\.credentials.json'
-if ((-not (Test-Path $loginMarker)) -and (-not (Test-Path $claudeCreds))) {
-  try {
-    Write-Host 'First run: sign in to your Claude account so Evaluate/Scan can run.'
-    & (Join-Path $NodeDir 'claude.cmd') login
-    New-Item -ItemType File -Path $loginMarker -Force | Out-Null
-  } catch {
-    Write-Warning "Claude sign-in skipped/failed; run 'claude login' later to enable Evaluate/Scan. ($_)"
-  }
-}
+# 3. No interactive `claude login` here. It would hang this launcher when run
+#    hidden (the desktop shortcut), and the bundled CLI does not inherit the
+#    Claude Desktop sign-in anyway. The dashboard and all data views start fine
+#    without it; Evaluate / Scan need a one-time bundled sign-in, surfaced in the
+#    dashboard when first used.
 
 # 4. Build the front-end bundle, then start the server (single Express process).
 Push-Location $WebDir

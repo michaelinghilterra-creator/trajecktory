@@ -12,12 +12,12 @@ the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
 ## Credential model (important)
 - **Evaluate / Scan** run on each user's **own Claude Pro/Max login** via the
-  bundled `claude` CLI. The launcher REUSES the sign-in created by the Claude
-  Desktop app (shared per-user credentials under `%USERPROFILE%\.claude\`): if
-  those exist, no separate sign-in happens. Only if the user is not signed in
-  anywhere does the launcher do a one-time interactive `claude login`. No API key,
-  no cost to you. (Shared-sign-in reuse is the v1.7.1 behavior; the clean-VM test
-  confirms the bundled CLI actually sees the Desktop creds.)
+  bundled `claude` CLI. CONFIRMED on the v1.7.1 VM test: the bundled CLI does NOT
+  inherit the Claude Desktop sign-in (separate credential stores), so eval/scan
+  need a one-time bundled `claude login`. The launcher no longer attempts an
+  interactive login (it hung when run hidden); the dashboard and all data views
+  start fine without it, and the bundled sign-in is surfaced on demand when
+  Evaluate / Scan are first used. No API key, no cost to you.
 - **Resume / cover-letter / outreach drafts** use the user's **own Anthropic API
   key**, prompted (optionally) during install and written to
   `trajecktory\dashboard-web\.env`. They can skip it and add it later; draft
@@ -35,18 +35,19 @@ the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
    ```powershell
    & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\trajecktory.iss
    ```
-   Produces `installer\Output\TrajecktorySetup-v<version>.exe` (versioned from the
-   `.iss` AppVersion / `VERSION`, e.g. `TrajecktorySetup-v1.7.1.exe`).
+   Produces `installer\Output\trajecktory-setup-v<version>.exe` (versioned from the
+   `.iss` AppVersion / `VERSION`, e.g. `trajecktory-setup-v1.7.2.exe`).
 3. **Clean-VM test** (critical): on a Windows VM with **no Node, no git, no
    Chromium, no Claude Code**, run the installer, optionally paste a test API key,
    and finish. Then the PRIMARY launch path: open the Claude Desktop app in Code
-   mode at the installed app folder (`%LOCALAPPDATA%\trajecktory\trajecktory`) and
+   mode at the installed app folder (`%USERPROFILE%\trajecktory\trajecktory`) and
    type **"Start the live dashboard."** Expect: bundled Node builds + starts the
-   server, the dashboard opens in the bundled Chromium app window (not Edge), the
-   Launchpad lets you walk setup (engine-ready gates; missing CV/profile/portals
-   are to-dos, not blockers), Evaluate/Scan run on the reused Claude sign-in, and a
-   draft uses the key. The Start Menu / desktop shortcut is a fallback that runs
-   the same `launch-trajecktory.ps1`.
+   server, the dashboard opens in your DEFAULT browser (set Chrome as default to
+   avoid Edge), the Launchpad lets you walk setup (engine-ready gates; missing
+   CV/profile/portals are to-dos, not blockers), and a draft uses the key.
+   Evaluate / Scan need the one-time bundled `claude login` (see Credential model).
+   The Start Menu / desktop shortcut is a fallback that runs the same
+   `launch-trajecktory.ps1`.
 
 ## What gets bundled
 - `payload\node\` — pinned portable Node (set `$NodeVersion` in build-bundle.ps1)

@@ -10,20 +10,21 @@
 ; "unknown publisher" warning). App icon is wired below (assets\trajecktory.ico).
 
 #define AppName "trajecktory"
-#define AppVersion "1.7.1"
+#define AppVersion "1.7.2"
 #define AppPublisher "trajecktory"
 
 [Setup]
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
-; Per-user install under LocalAppData: no admin prompt, and the app dir stays
-; writable so onboarding can create data/ and reports/ in place.
-DefaultDirName={localappdata}\{#AppName}
+; Per-user install in the user's home folder (C:\Users\<you>\trajecktory): easy to
+; find, no admin prompt, and the app dir stays writable so onboarding can create
+; data/ and reports/ in place.
+DefaultDirName={%USERPROFILE}\{#AppName}
 DefaultGroupName={#AppName}
 PrivilegesRequired=lowest
 DisableProgramGroupPage=yes
-OutputBaseFilename=TrajecktorySetup-v{#AppVersion}
+OutputBaseFilename=trajecktory-setup-v{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

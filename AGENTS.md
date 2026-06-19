@@ -47,8 +47,8 @@ trajecktory"), do NOT open a browser tab yourself. Start it like this:
 
 - **Installed bundle** (a `launch-trajecktory.ps1` sits one folder up from this one): run
   `powershell -ExecutionPolicy Bypass -File ..\launch-trajecktory.ps1`. It uses the bundled
-  Node, builds the UI, starts the server on a free port, and opens the dashboard in its own
-  Chromium window.
+  Node, builds the UI, starts the server on a free port, and opens the dashboard in your
+  default browser.
 - **Dev checkout** (no bundled launcher present): run `npm start` from `dashboard-web` for
   live data (use `npm run dev:demo` only when the user explicitly asks for demo data).
 
