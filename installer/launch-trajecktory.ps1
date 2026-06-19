@@ -75,20 +75,13 @@ Pop-Location
 Set-Content -Path (Join-Path $InstallDir '.tjk-port') -Value "$Port" -NoNewline
 Set-Content -Path (Join-Path $InstallDir '.tjk-pid')  -Value "$($server.Id)" -NoNewline
 
-# 5. Wait for the server to answer, then open the dashboard in the bundled
-#    Chromium as a clean app window (no Edge). Falls back to the default browser
-#    only if the bundled Chromium can't be found.
+# 5. Wait for the server to answer. The server opens the dashboard in the bundled
+#    Chromium app window itself (openDashboardWindow in server/index.mjs), so it
+#    lands in the same window whether started here or by Claude Code directly —
+#    never Edge. We just confirm it came up.
 for ($i = 0; $i -lt 60; $i++) {
   try { Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 2 | Out-Null; break }
   catch { Start-Sleep -Milliseconds 500 }
-}
-$chrome = Get-ChildItem (Join-Path $AppRoot 'ms-playwright') -Recurse -Filter 'chrome.exe' -ErrorAction SilentlyContinue |
-  Where-Object { $_.FullName -like '*chrome-win64*' } | Select-Object -First 1
-if ($chrome) {
-  $profileDir = Join-Path $InstallDir '.chrome-profile'
-  Start-Process -FilePath $chrome.FullName -ArgumentList "--app=$Url", "--user-data-dir=`"$profileDir`""
-} else {
-  Start-Process $Url
 }
 
 # Flush the launch log now that startup is done (the server keeps writing its own
