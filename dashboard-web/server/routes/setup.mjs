@@ -1,7 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { DEMO } from '../config.mjs';
 import { SETUP_ROOT, SETUP_FILES, setupSetScalar, SETUP_SCALAR_FIELDS, setupComputeState, SETUP_GUARDRAIL, setupHandoffPrompt } from '../lib/setup.mjs';
 
@@ -28,6 +28,53 @@ router.post('/api/setup/preflight', (req, res) => {
     try { res.json(JSON.parse((stdout || '').trim())); }
     catch { res.status(500).json({ ok: false, error: 'preflight parse failed', raw: (stdout || '').slice(0, 500) }); }
   });
+});
+
+// POST /api/claude-login — open a visible console running the bundled `claude login`
+// so the user signs in once (enables Evaluate / Scan, which spawn the bundled CLI).
+// Only meaningful in the installed bundle, where a bundled claude.cmd sits next to
+// the app (../node/claude.cmd from the project root); falls back to PATH otherwise.
+// NOTE: the exact console-spawn quoting is pending a clean-VM confirmation.
+router.post('/api/claude-login', (req, res) => {
+  try {
+    const bundled = path.resolve(SETUP_ROOT, '..', 'node', 'claude.cmd');
+    const claudeCmd = fs.existsSync(bundled) ? bundled : 'claude.cmd';
+    spawn('cmd', ['/c', 'start', 'Sign in to Claude', 'cmd', '/k', claudeCmd, 'login'],
+      { detached: true, stdio: 'ignore' }).unref();
+    res.json({ ok: true, bundled: fs.existsSync(bundled) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/setup/anthropic-key — report whether a draft API key is set (never the key).
+router.get('/api/setup/anthropic-key', (req, res) => {
+  res.json({ hasKey: !!(process.env.ANTHROPIC_API_KEY || '').trim() });
+});
+
+// POST /api/setup/anthropic-key { key } — save the user's Anthropic API key to
+// dashboard-web/.env AND into the live process (so it works immediately, no restart).
+// Powers the AI draft features (cover letters, resume tailoring, outreach). NOT
+// needed for Evaluate / Scan, which run on the Claude sign-in.
+router.post('/api/setup/anthropic-key', (req, res) => {
+  if (DEMO) return res.status(403).json({ error: 'Read-only in demo mode' });
+  const key = ((req.body && req.body.key) || '').trim();
+  if (!key) return res.status(400).json({ error: 'Paste your Anthropic API key (it starts with sk-ant-).' });
+  if (!key.startsWith('sk-ant-')) return res.status(400).json({ error: 'That does not look like an Anthropic key — they start with "sk-ant-".' });
+  try {
+    const envPath = path.join(SETUP_ROOT, 'dashboard-web', '.env');
+    let text = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+    if (/^ANTHROPIC_API_KEY=.*$/m.test(text)) {
+      text = text.replace(/^ANTHROPIC_API_KEY=.*$/m, `ANTHROPIC_API_KEY=${key}`);
+    } else {
+      text = text.replace(/\s*$/, '') + (text ? '\n' : '') + `ANTHROPIC_API_KEY=${key}\n`;
+    }
+    fs.writeFileSync(envPath, text, 'utf8');
+    process.env.ANTHROPIC_API_KEY = key;   // take effect now, no restart needed
+    res.json({ ok: true, hasKey: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/setup/healthcheck — run the verify scripts and report pass/fail.
