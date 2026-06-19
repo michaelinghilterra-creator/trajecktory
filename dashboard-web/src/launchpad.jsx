@@ -56,6 +56,7 @@ const LP_SECTIONS = [
 ];
 
 const LP_OPTIONAL = [
+  { id: 'apikey',    label: 'AI draft key (optional)', why: 'Paste an Anthropic API key to enable tailored resumes, cover letters, and outreach drafts. Evaluate and Scan do not need it.' },
   { id: 'obsidian',  label: 'Obsidian vault', why: 'Push applied-role notes into your vault.' },
   { id: 'language',  label: 'Market / language modes', why: 'Target DACH, French, or Japanese postings.' },
   { id: 'intensity', label: 'Search intensity', why: 'Set a weekly goal and scan cadence.' },
@@ -151,6 +152,8 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const [health, setHealth] = useState(null);           // {ok, output}
   const [evalUrl, setEvalUrl] = useState('');
   const [evalPrompt, setEvalPrompt] = useState('');
+  const [claudeLoginMsg, setClaudeLoginMsg] = useState('');
+  const [apiKey, setApiKey] = useState({ has: null, input: '', saving: false, msg: '' });
   const [forms, setForms] = useState({});               // local form drafts
 
   const refresh = useCallback(() => {
@@ -161,6 +164,13 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Whether a draft API key is already saved (for the optional booster's status
+  // line). Never fetches the key itself — only the boolean.
+  useEffect(() => {
+    fetch('/api/setup/anthropic-key').then(r => r.json())
+      .then(d => setApiKey(k => ({ ...k, has: !!d.hasKey }))).catch(() => {});
+  }, []);
 
   // Auto-run preflight on open so a healthy setup unlocks every section right
   // away. Without this, all sections sit disabled (showing a not-allowed
@@ -302,6 +312,35 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       setEvalPrompt(res.prompt);
       toast && toast('Queued — prompt copied for your Claude Code', 'success');
     }).catch(() => toast && toast('Could not queue evaluation', 'error'));
+  };
+
+  // Open a visible console running the bundled `claude login` so Evaluate / Scan
+  // (which spawn the bundled CLI) have a signed-in session. The browser cannot
+  // run an interactive login itself — the server opens a real console window.
+  const signInClaude = () => {
+    setClaudeLoginMsg('Opening a sign-in window…');
+    fetch('/api/claude-login', { method: 'POST' }).then(r => r.json()).then(res => {
+      if (res.error) { setClaudeLoginMsg(''); toast && toast(res.error, 'error'); return; }
+      setClaudeLoginMsg(res.bundled
+        ? 'A console window opened. Follow its prompts to sign in, then come back and run your evaluation.'
+        : 'Tried to open a sign-in console. If nothing appeared, open a terminal and run "claude login" once.');
+      toast && toast('Sign-in window opened', 'success');
+    }).catch(() => { setClaudeLoginMsg(''); toast && toast('Could not open the sign-in window', 'error'); });
+  };
+
+  // Save the user's Anthropic API key (drafts only). The server writes
+  // dashboard-web/.env and updates the live process, so it works without a restart.
+  const saveApiKey = () => {
+    const key = (apiKey.input || '').trim();
+    if (!key) { toast && toast('Paste your Anthropic API key first', 'warn'); return; }
+    setApiKey(k => ({ ...k, saving: true, msg: '' }));
+    fetch('/api/setup/anthropic-key', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }),
+    }).then(r => r.json()).then(res => {
+      if (res.error) { setApiKey(k => ({ ...k, saving: false, msg: res.error })); toast && toast(res.error, 'error'); return; }
+      setApiKey({ has: true, input: '', saving: false, msg: 'Saved. Draft features are enabled.' });
+      toast && toast('API key saved', 'success');
+    }).catch(() => { setApiKey(k => ({ ...k, saving: false, msg: 'Save failed' })); toast && toast('Save failed', 'error'); });
   };
 
   if (!state) {
@@ -709,6 +748,13 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     if (section.id === 'firstEval') {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 8 }}>
+              Evaluate and Scan run on your <strong style={{ color: 'var(--text)' }}>Claude sign-in</strong> (your Claude Pro/Max login), not an API key. If reports never appear, sign in once on this machine:
+            </div>
+            <button className="btn" onClick={signInClaude}>Sign in to Claude ⧉</button>
+            {claudeLoginMsg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)', lineHeight: 1.5 }}>{claudeLoginMsg}</div>}
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input type="text" value={evalUrl} onChange={e => setEvalUrl(e.target.value)} placeholder="Paste a job posting URL…"
               className="inp" style={{ flex: 1 }} />
@@ -809,6 +855,26 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         <div className="card padded-lg" style={{ flex: '1 1 560px', minWidth: 0, minHeight: 280, padding: '22px 26px' }}>
           {active.startsWith('opt:') ? (() => {
             const o = LP_OPTIONAL.find(x => 'opt:' + x.id === active);
+            if (o.id === 'apikey') {
+              return (
+                <div>
+                  <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
+                  <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>{o.why}</p>
+                  {apiKey.has
+                    ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 10 }}>✓ A key is saved. Draft features are enabled. Paste a new key to replace it.</div>
+                    : <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 10 }}>○ No key yet. Evaluate and Scan still work without one.</div>}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input type="password" value={apiKey.input} onChange={e => setApiKey(k => ({ ...k, input: e.target.value }))}
+                      placeholder="sk-ant-…" className="inp" style={{ flex: 1 }} autoComplete="off" />
+                    <button className="btn primary" disabled={apiKey.saving} onClick={saveApiKey}>{apiKey.saving ? 'Saving…' : 'Save key'}</button>
+                  </div>
+                  {apiKey.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{apiKey.msg}</div>}
+                  <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-mute)', lineHeight: 1.5 }}>
+                    Get a key at console.anthropic.com → API keys. Stored locally in dashboard-web/.env; only ever sent to Anthropic.
+                  </div>
+                </div>
+              );
+            }
             return (
               <div>
                 <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
