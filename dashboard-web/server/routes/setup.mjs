@@ -47,6 +47,20 @@ router.post('/api/claude-login', (req, res) => {
   }
 });
 
+// GET /api/claude-status — best-effort: is the bundled CLI signed in? `claude
+// login` writes credentials under the user's home .claude dir. Detection may miss
+// (creds can live elsewhere), so `signedIn: false` means "unknown", not "signed
+// out" — the UI keeps the sign-in button available either way.
+router.get('/api/claude-status', (req, res) => {
+  const home = process.env.USERPROFILE || process.env.HOME || '';
+  const candidates = [
+    path.join(home, '.claude', '.credentials.json'),
+    path.join(home, '.claude', 'credentials.json'),
+  ];
+  const signedIn = candidates.some(p => { try { return fs.existsSync(p); } catch { return false; } });
+  res.json({ signedIn });
+});
+
 // GET /api/setup/anthropic-key — report whether a draft API key is set (never the key).
 router.get('/api/setup/anthropic-key', (req, res) => {
   res.json({ hasKey: !!(process.env.ANTHROPIC_API_KEY || '').trim() });
