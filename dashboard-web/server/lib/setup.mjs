@@ -85,6 +85,38 @@ function setupHasListItems(text, section, key) {
   return false;
 }
 
+// Return the `- item` strings under a `section:` then nested `key:` (the values
+// behind setupHasListItems). Used to show the user what's already configured
+// (target roles, scanner titles) so a step never looks empty-but-done.
+function setupGetList(text, section, key) {
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  let inSection = false, atKey = false, keyIndent = -1;
+  const out = [];
+  for (const ln of lines) {
+    if (!inSection) {
+      if (new RegExp('^' + section + ':\\s*$').test(ln)) inSection = true;
+      continue;
+    }
+    if (/^\S/.test(ln)) break;
+    if (!atKey) {
+      const m = ln.match(new RegExp('^(\\s+)' + key + ':\\s*$'));
+      if (m) { atKey = true; keyIndent = m[1].length; }
+      continue;
+    }
+    if (ln.trim() === '') continue;
+    const indent = (ln.match(/^(\s*)/) || ['', ''])[1].length;
+    if (indent <= keyIndent) break;
+    const im = ln.match(/^\s*-\s+(.*\S)\s*$/);
+    if (im) {
+      let v = im[1].trim();
+      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+      out.push(v);
+    }
+  }
+  return out;
+}
+
 // Surgical scalar write: replace the value on an existing `key:` line (preserving
 // its indentation), insert under an existing `section:`, or append a new section.
 // Comment-safe for every line except the one value being changed.
@@ -153,6 +185,13 @@ function setupComputeState() {
   const modeProfile = setupReadText(SETUP_FILES.modeProfile);
   const cv = setupReadText(SETUP_FILES.cv);
 
+  // "You've seen it work" — at least one evaluation report exists in reports/.
+  // (Top-level *.md only; reports/demo/ is a sample dir, not a real run.)
+  const hasReport = (() => {
+    try { return fs.readdirSync(path.join(SETUP_ROOT, 'reports')).some(f => /\.md$/i.test(f)); }
+    catch { return false; }
+  })();
+
   const PLACEHOLDERS = new Set(['', 'Jane Smith', 'jane@example.com']);
   const filled = (section, key) => {
     const v = setupGetScalar(profile, section, key);
@@ -170,7 +209,7 @@ function setupComputeState() {
     evaluation: { kind: 'gen',  status: (modeProfile && /evaluation tuning/i.test(modeProfile)) ? 'complete' : 'empty' },
     companies:  { kind: 'gen',  status: (portals && /^\s*-\s+name:/m.test(portals)) ? 'complete' : 'empty' },
     outputs:    { kind: 'form', status: setupGetScalar(profile, 'outputs', 'resume_dir') ? 'complete' : 'empty' },
-    firstEval:  { kind: 'action' },
+    firstEval:  { kind: 'action', status: hasReport ? 'complete' : 'empty' },
     health:     { kind: 'action' },
   };
 
@@ -204,6 +243,16 @@ function setupComputeState() {
       resume_dir: setupGetScalar(profile, 'outputs', 'resume_dir') || 'output',
       interview_prep_dir: setupGetScalar(profile, 'outputs', 'interview_prep_dir') || 'interview-prep',
     },
+    // Read-backs so the Launchpad can SHOW what's configured (not just "Done").
+    configured: {
+      targetRoles: [
+        ...setupGetList(profile, 'target_roles', 'primary'),
+        ...setupGetList(profile, 'target_roles', 'secondary'),
+      ],
+      scannerTitles: setupGetList(portals, 'title_filter', 'positive').length,
+      locationPolicy: !!(portals && /^location_policy:/m.test(portals)),
+      evalTuning: !!(modeProfile && /evaluation tuning/i.test(modeProfile)),
+    },
   };
 
   const coreReady = meta.cv.exists && meta.profile.exists && meta.portals.exists && meta.modeProfile.exists;
@@ -230,6 +279,11 @@ const SETUP_CV_FULL =
   ' (5) Scanner — if portals.yml does not exist, create it from templates/portals.example.yml, then set title_filter.positive and search_queries to match the target roles above; if modes/_profile.md does not exist, create it from modes/_profile.template.md.' +
   ' Leave compensation, visa status, and specific company picks for me to set later. Finish with a short summary of what you filled in so I can review it in the dashboard.';
 
+// The CV step's friendly recap was a hit in testing, so end every paste-into-Claude
+// step the same way — the user gets a clear "here's what changed" without guessing.
+const SETUP_SUMMARY =
+  ' When done, finish with a short, friendly summary of exactly what you changed and where, so I can review it in the dashboard.';
+
 function setupHandoffPrompt(section) {
   switch (section) {
     case 'cv':
@@ -241,17 +295,17 @@ function setupHandoffPrompt(section) {
     case 'cv-talk':
       return `Let's build my CV by talking it through. Ask me about my roles, scope, and biggest results, then draft a clean cv.md (Summary, Experience, Projects, Education, Skills).${SETUP_CV_FULL} ${SETUP_GUARDRAIL}`;
     case 'identity-certs':
-      return `Read my cv.md and detect certifications / completed coursework. Write what you find into data/setup/certs.json under a "detected" array (each {name, issuer}) so the Launchpad can show them. Then merge any entries in that file's "items" array into config/profile.yml under credentials.certifications. ${SETUP_GUARDRAIL}`;
+      return `Read my cv.md and detect certifications / completed coursework. Write what you find into data/setup/certs.json under a "detected" array (each {name, issuer}) so the Launchpad can show them. Then merge any entries in that file's "items" array into config/profile.yml under credentials.certifications.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     case 'roles':
-      return `Read my picks in data/setup/roles.json (the "seniority" levels and "titles" I chose in the Launchpad). Populate config/profile.yml target_roles (primary/secondary) and archetypes (with title_variants and resume_framing), and regenerate portals.yml title_filter.positive, seniority_boost, and search_queries to match. Then suggest a few adjacent roles that widen my funnel and write them back into data/setup/roles.json under a "suggestions" array (each {title, why}) so I can pick them in the Launchpad. ${SETUP_GUARDRAIL}`;
+      return `Read my picks in data/setup/roles.json (the "seniority" levels and "titles" I chose in the Launchpad). Populate config/profile.yml target_roles (primary/secondary) and archetypes (with title_variants and resume_framing), and regenerate portals.yml title_filter.positive, seniority_boost, and search_queries to match. Then suggest a few adjacent roles that widen my funnel and write them back into data/setup/roles.json under a "suggestions" array (each {title, why}) so I can pick them in the Launchpad.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     case 'edge':
-      return `Read my cv.md and draft my narrative for config/profile.yml: a one-line headline, my top 3 superpowers, and 3 to 5 proof points (each with a hero metric). Also fill resume_framing summary_lead and aoe_priority per archetype. Show me drafts to confirm. ${SETUP_GUARDRAIL}`;
+      return `Read my cv.md and draft my narrative for config/profile.yml: a one-line headline, my top 3 superpowers, and 3 to 5 proof points (each with a hero metric). Also fill resume_framing summary_lead and aoe_priority per archetype. Show me drafts to confirm.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     case 'location':
-      return `Geocode my home city and build the scanner geo filter in portals.yml location_policy (home lat/lon, commute radius, metro_allow list) from my location.policy in config/profile.yml (remote/hybrid/onsite rules, hard-no cities). ${SETUP_GUARDRAIL}`;
+      return `Help me build my scanner geo filter. FIRST, unless config/profile.yml already records my location preferences, ASK me (do not assume): am I after remote, hybrid, or on-site roles (or a mix), how far am I willing to commute, and are there any cities I will not work in? Save my answers to config/profile.yml location.policy. THEN geocode my home city and build portals.yml location_policy (home lat/lon, commute radius, metro_allow list) from those preferences.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     case 'evaluation':
-      return `Capture my evaluation priorities and deal-breakers into modes/_profile.md under an "Evaluation Tuning" section (what I optimize for, ranked; hard deal-breakers like company stage, excluded industries). Mirror the deal-breakers into portals.yml title_filter.negative where they map to title/keyword exclusions. ${SETUP_GUARDRAIL}`;
+      return `Capture my evaluation priorities and deal-breakers into modes/_profile.md under an "Evaluation Tuning" section (what I optimize for, ranked; hard deal-breakers like company stage, excluded industries). If you are unsure of my priorities, ask me a couple of quick questions first rather than guessing. Mirror the deal-breakers into portals.yml title_filter.negative where they map to title/keyword exclusions.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     case 'companies':
-      return `Read data/setup/companies.json (my "radiusMiles" and any companies I added under "picks"). Suggest companies to track: (a) employers within my commute radius of home (use portals.yml location_policy.home lat/lon) and (b) companies in industries matching my target roles. Write suggestions back into data/setup/companies.json under a "suggestions" array (each {name, kind:"local"|"industry", meta, api:true|false}) so I can pick them in the Launchpad. For every company in "picks", resolve the careers_url and detect the ATS (Greenhouse/Ashby/Lever for free API scans) and APPEND to portals.yml tracked_companies. CRITICAL: merge only — preserve every existing entry, all "enabled: false # auto-disabled" states and their comments, retest-policy comments, notes, and scan_query tuning byte-for-byte. ${SETUP_GUARDRAIL}`;
+      return `Read data/setup/companies.json (my "radiusMiles" and any companies I added under "picks"). Suggest companies to track: (a) employers within my commute radius of home (use portals.yml location_policy.home lat/lon) and (b) companies in industries matching my target roles. Write suggestions back into data/setup/companies.json under a "suggestions" array (each {name, kind:"local"|"industry", meta, api:true|false}) so I can pick them in the Launchpad. For every company in "picks", resolve the careers_url and detect the ATS (Greenhouse/Ashby/Lever for free API scans) and APPEND to portals.yml tracked_companies. CRITICAL: merge only — preserve every existing entry, all "enabled: false # auto-disabled" states and their comments, retest-policy comments, notes, and scan_query tuning byte-for-byte.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     default:
       return `Continue trajecktory onboarding for the "${section}" step. ${SETUP_GUARDRAIL}`;
   }

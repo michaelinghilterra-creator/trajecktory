@@ -144,6 +144,29 @@ function LpCheck({ on }) {
   );
 }
 
+// Contains a render crash to the active step instead of blanking the whole
+// dashboard. A malformed staging file (e.g. an agent wrote companies.json in an
+// unexpected shape) used to throw in renderCompanies and take down the entire
+// app; now the user sees a friendly note and every other tab keeps working.
+class LpErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidUpdate(prev) { if (prev.resetKey !== this.props.resetKey && this.state.err) this.setState({ err: null }); }
+  render() {
+    if (this.state.err) {
+      return (
+        <div style={{ padding: 16, border: '1px solid var(--red)', borderRadius: 'var(--r-card)', background: 'rgba(239,68,68,0.06)' }}>
+          <div style={{ fontWeight: 600, color: 'var(--red)', marginBottom: 6 }}>This step hit a display problem</div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55 }}>
+            The rest of the dashboard is fine. This usually means a config file came back in an unexpected shape. Switch to another step and back, or re-run this step in Claude Code.
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const [state, setState] = useState(null);
   const [active, setActive] = useState('preflight');
@@ -152,7 +175,8 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const pendingBaseline = useRef({});                   // sectionId -> status when the handoff started (for empty→complete auto-clear)
   const [health, setHealth] = useState(null);           // {ok, output}
   const [evalUrl, setEvalUrl] = useState('');
-  const [evalPrompt, setEvalPrompt] = useState('');
+  const [evalJob, setEvalJob] = useState(null);         // in-browser first-eval job (reuses /api/agent/pipeline)
+  const [claudeSignedIn, setClaudeSignedIn] = useState(false);
   const [claudeLoginMsg, setClaudeLoginMsg] = useState('');
   const [apiKey, setApiKey] = useState({ has: null, input: '', saving: false, msg: '' });
   const [forms, setForms] = useState({});               // local form drafts
@@ -172,6 +196,14 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     fetch('/api/setup/anthropic-key').then(r => r.json())
       .then(d => setApiKey(k => ({ ...k, has: !!d.hasKey }))).catch(() => {});
   }, []);
+
+  // Best-effort "signed in to Claude" indicator (the eval working is the real
+  // proof; a false reading just leaves the sign-in button visible).
+  const refreshClaudeStatus = useCallback(() => {
+    fetch('/api/claude-status').then(r => r.json())
+      .then(d => setClaudeSignedIn(!!d.signedIn)).catch(() => {});
+  }, []);
+  useEffect(() => { refreshClaudeStatus(); }, [refreshClaudeStatus]);
 
   // Auto-run preflight on open so a healthy setup unlocks every section right
   // away. Without this, all sections sit disabled (showing a not-allowed
@@ -196,6 +228,14 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         .then(d => setStages(s => ({ ...s, [k]: d || {} }))).catch(() => {}));
   }, []);
   useEffect(() => { loadStages(); }, [loadStages]);
+
+  // When the user tabs back from Claude Desktop, re-read everything so changes
+  // they ran there appear without a manual browser reload.
+  useEffect(() => {
+    const onFocus = () => { refresh(); loadStages(); refreshClaudeStatus(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refresh, loadStages, refreshClaudeStatus]);
 
   // While a generative step is pending (the user is running its prompt in Claude
   // Code), poll setup state so the step checks itself off the instant its file
@@ -312,15 +352,35 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const setFormVal = (group, key, val) =>
     setForms(f => ({ ...f, [group]: { ...(f[group] || {}), [key]: val } }));
 
+  const pollEvalJob = (jobId) => {
+    const tick = () => fetch(`/api/agent/status/${jobId}`).then(r => r.json()).then(j => {
+      if (j.error && j.status == null) { setEvalJob({ status: 'error', error: j.error }); return; }
+      setEvalJob(j);
+      if (j.status === 'running') { setTimeout(tick, 2000); return; }
+      refresh(); // pipeline rows + the First-evaluation checkmark update from disk
+      toast && toast(j.status === 'done' ? 'Evaluation complete' : 'Evaluation finished — see details', j.status === 'done' ? 'success' : 'warn');
+    }).catch(() => setEvalJob(prev => (prev && prev.status === 'running') ? prev : { status: 'error', error: 'Lost contact with the evaluation.' }));
+    tick();
+  };
+
   const startFirstEval = () => {
+    const url = (evalUrl || '').trim();
+    if (!/^https?:\/\//i.test(url)) { toast && toast('Paste a full job posting URL (it should start with http) — the actual job page, not a LinkedIn search.', 'warn'); return; }
+    setEvalJob({ status: 'running', activity: 'Adding the posting…', subSteps: [] });
+    // Stage the URL, then run the SAME evaluate pipeline the dashboard uses
+    // (gate → evaluate → merge-tracker → verify → health) on the signed-in CLI,
+    // so the tracker is written correctly and the result lands in the pipeline.
     fetch('/api/setup/first-eval', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: evalUrl }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
     }).then(r => r.json()).then(res => {
-      if (res.error) { toast && toast(res.error, 'error'); return; }
-      navigator.clipboard?.writeText(res.prompt).catch(() => {});
-      setEvalPrompt(res.prompt);
-      toast && toast('Queued — prompt copied for your Claude Code', 'success');
-    }).catch(() => toast && toast('Could not queue evaluation', 'error'));
+      if (res.error) { setEvalJob({ status: 'error', error: res.error }); toast && toast(res.error, 'error'); return; }
+      if (res.demo) { setEvalJob({ status: 'done', summary: 'Demo mode — evaluation not run.' }); return; }
+      return fetch('/api/agent/pipeline', { method: 'POST' }).then(r => r.json()).then(j => {
+        if (j.error) { setEvalJob({ status: 'error', error: j.error }); toast && toast(j.error, 'error'); return; }
+        toast && toast('Evaluating — this runs on your Claude sign-in', 'success');
+        pollEvalJob(j.jobId);
+      });
+    }).catch(() => { setEvalJob({ status: 'error', error: 'Could not start the evaluation.' }); });
   };
 
   // Open a visible console running the bundled `claude login` so Evaluate / Scan
@@ -416,10 +476,16 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
 
   function renderHandoff(section) {
     const prompt = pendingGen[section.id];
+    const isDone = sectionStatus(section.id) === 'complete';
     return (
       <div>
+        {isDone && !prompt && (
+          <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+            <span style={{ color: 'var(--green)', fontWeight: 500 }}>✓ This is set up</span> — Claude Code saved it from your inputs, so nothing more is required here. To see exactly what it set or change it, re-run below, or ask Claude Code in chat to "show me my current {section.label.toLowerCase()}."
+          </div>
+        )}
         <button className="btn primary" disabled={gated(section.id)} onClick={() => startHandoff(section.id, section.handoff)}>
-          {section.handoffLabel || 'Hand off to my Claude Code'} ⧉
+          {isDone ? `Re-run ${(section.handoffLabel || 'this step').toLowerCase()}` : (section.handoffLabel || 'Hand off to my Claude Code')} ⧉
         </button>
         {prompt && (
           <div style={{ marginTop: 14 }}>
@@ -448,10 +514,13 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
 
   function renderRoles() {
     const SENIORITY = ['Manager', 'Director', 'Senior Director', 'VP', 'Head of'];
-    const r = stages.roles || {};
-    const seniority = r.seniority || [];
-    const titles = r.titles || [];
-    const suggestions = r.suggestions || [];
+    const r = (stages.roles && typeof stages.roles === 'object') ? stages.roles : {};
+    const seniority = (Array.isArray(r.seniority) ? r.seniority : []).filter(s => typeof s === 'string');
+    const titles = (Array.isArray(r.titles) ? r.titles : []).filter(t => typeof t === 'string');
+    const suggestions = (Array.isArray(r.suggestions) ? r.suggestions : []).filter(s => s && typeof s === 'object' && s.title);
+    const cfg = (state && state.values && state.values.configured) || {};
+    const cfgRoles = Array.isArray(cfg.targetRoles) ? cfg.targetRoles : [];
+    const scannerTitles = cfg.scannerTitles != null ? cfg.scannerTitles : titles.length;
     const toggleSen = (s) => saveStage('roles', { ...r, seniority: seniority.includes(s) ? seniority.filter(x => x !== s) : [...seniority, s] });
     const addTitle = () => {
       const el = document.getElementById('lp-role-input'); const v = (el.value || '').trim();
@@ -463,6 +532,17 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <LpLegend />
+        {cfgRoles.length > 0 && (
+          <div style={{ padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
+            <div style={{ fontSize: 12.5, color: 'var(--green)', fontWeight: 500, marginBottom: 6 }}>✓ Already targeting (set from your CV)</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {cfgRoles.map((t, i) => <span key={i} style={lpChipStyle()}>{t}</span>)}
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-mute)', marginTop: 8, lineHeight: 1.5 }}>
+              Your scanner already searches <b>{scannerTitles}</b> title{scannerTitles === 1 ? '' : 's'} for these. Nothing more is required here — add or change roles below only if you want to, then re-run to update the scanner.
+            </div>
+          </div>
+        )}
         <div>
           <div style={LP_SUB}>Seniority</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -502,7 +582,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
           <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Titles the scanner will search</span>
-          <span className="mono" style={{ fontSize: 18, color: 'var(--accent)' }}>{titles.length}</span>
+          <span className="mono" style={{ fontSize: 18, color: 'var(--accent)' }}>{scannerTitles}</span>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="btn primary" disabled={gated('roles')} onClick={() => startHandoff('roles', 'roles')}>Generate roles + scanner config ⧉</button>
@@ -514,10 +594,10 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   }
 
   function renderCompanies() {
-    const c = stages.companies || {};
-    const radius = c.radiusMiles != null ? c.radiusMiles : 50;
-    const picks = c.picks || [];
-    const suggestions = c.suggestions || [];
+    const c = (stages.companies && typeof stages.companies === 'object') ? stages.companies : {};
+    const radius = (typeof c.radiusMiles === 'number' && !isNaN(c.radiusMiles)) ? c.radiusMiles : 50;
+    const picks = (Array.isArray(c.picks) ? c.picks : []).filter(x => typeof x === 'string');
+    const suggestions = (Array.isArray(c.suggestions) ? c.suggestions : []).filter(s => s && typeof s === 'object' && s.name);
     const addCompany = () => {
       const el = document.getElementById('lp-co-input'); const v = (el.value || '').trim();
       if (v && !picks.includes(v)) saveStage('companies', { ...c, picks: [...picks, v] });
@@ -547,6 +627,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <LpLegend />
         <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>A neutral starter set ships by default. Add your own below, or pick from Claude Code's suggestions.</div>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5, padding: '8px 11px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>💡 Tip: add a few companies you already care about <i>before</i> you run the suggestions — Claude Code uses them to tune what it recommends, so you'll get sharper local and industry matches.</div>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={LP_SUB}>Commute radius</div>
           <input type="number" min="5" max="200" step="5" className="inp" value={radius} style={{ width: 90 }} onChange={e => saveStage('companies', { ...c, radiusMiles: parseInt(e.target.value || '0', 10) })} />
@@ -680,8 +761,14 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     }
     if (section.id === 'location') {
       const c = forms.location || {};
+      const geoSet = !!(state && state.values && state.values.configured && state.values.configured.locationPolicy);
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {geoSet && (
+            <div style={{ padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+              <span style={{ color: 'var(--green)', fontWeight: 500 }}>✓ Your geo filter is set</span> in <span className="mono">portals.yml</span> (home, commute radius, and remote/hybrid/on-site rules). Re-build it below to change those, or ask Claude Code to "show me my location rules."
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
             <LpField label="City" value={c.city} onChange={v => setFormVal('location', 'city', v)} placeholder="City, ST" />
             <LpField label="Country" value={c.country} onChange={v => setFormVal('location', 'country', v)} />
@@ -693,6 +780,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             <button className="btn" onClick={() => startHandoff('location', 'location')}>Build geo filter (remote/onsite rules) ⧉</button>
             <button className="btn ghost sm" onClick={() => resetForm('location')}>Reset</button>
           </div>
+          <div style={{ fontSize: 11.5, color: 'var(--text-mute)', lineHeight: 1.5 }}>"Build geo filter" first asks whether you want remote, hybrid, or on-site roles (and any cities you'd rule out), then sets your scanner's location rules. It won't assume your preferences.</div>
           {pendingGen.location && (
             <textarea readOnly value={pendingGen.location} rows={3}
               className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
@@ -704,6 +792,9 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       const c = forms.outputs || {};
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55 }}>
+            These are just folders where trajecktory saves the files it makes for you — your tailored resumes and your interview-prep notes. <b>You can leave these as they are;</b> the defaults work and the folders are created automatically. Only change them if you want those files saved somewhere specific on your computer.
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>
             <LpField label="Resume output folder" value={c.resume_dir} onChange={v => setFormVal('outputs', 'resume_dir', v)} placeholder="output" />
             <LpField label="Interview-prep folder" value={c.interview_prep_dir} onChange={v => setFormVal('outputs', 'interview_prep_dir', v)} placeholder="interview-prep" />
@@ -756,27 +847,63 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       );
     }
     if (section.id === 'firstEval') {
+      const ej = evalJob;
+      const running = ej && ej.status === 'running';
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 8 }}>
-              Evaluate and Scan run on your <strong style={{ color: 'var(--text)' }}>Claude sign-in</strong> (your Claude Pro/Max login), not an API key. If reports never appear, sign in once on this machine:
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Step 1 — sign in (prominent, with state) */}
+          {claudeSignedIn ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
+              <span style={{ color: 'var(--green)' }}>✓</span>
+              <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>Signed in to Claude — Evaluate and Scan are ready.</span>
+              <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={signInClaude}>Re-sign in</button>
             </div>
-            <button className="btn" onClick={signInClaude}>Sign in to Claude ⧉</button>
-            {claudeLoginMsg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)', lineHeight: 1.5 }}>{claudeLoginMsg}</div>}
+          ) : (
+            <div style={{ padding: '12px 14px', borderRadius: 'var(--r-card)', background: 'var(--accent-bg)', border: '1px solid var(--accent)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Step 1 — sign in to Claude (one time)</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 10 }}>
+                Evaluating jobs runs on your Claude Pro/Max login. Click below: a console window opens with a couple of quick questions, and your browser opens a Claude page where you click <b>Authorize</b>. Then come back here — this banner turns green.
+              </div>
+              <button className="btn primary" onClick={signInClaude}>Sign in to Claude ⧉</button>
+              {claudeLoginMsg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)', lineHeight: 1.5 }}>{claudeLoginMsg}</div>}
+            </div>
+          )}
+
+          {/* Step 2 — evaluate a real posting, in the dashboard */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Step 2 — evaluate a job</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 8 }}>
+              Paste a real job posting URL (the actual job page, not a LinkedIn search). trajecktory fetches it, scores the fit, writes a report, and adds it to your pipeline — right here, no copy-paste.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input type="text" value={evalUrl} onChange={e => setEvalUrl(e.target.value)} placeholder="https://…/job/…"
+                className="inp" style={{ flex: 1 }} disabled={running} />
+              <button className="btn primary" disabled={gated('firstEval') || running} onClick={startFirstEval}>{running ? 'Evaluating…' : 'Evaluate'}</button>
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input type="text" value={evalUrl} onChange={e => setEvalUrl(e.target.value)} placeholder="Paste a job posting URL…"
-              className="inp" style={{ flex: 1 }} />
-            <button className="btn primary" disabled={gated('firstEval')} onClick={startFirstEval}>Evaluate ⧉</button>
-          </div>
-          {evalPrompt && (
-            <>
-              <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Copied. Paste into your Claude Code to run the evaluation; the scored report appears in your pipeline.</div>
-              <textarea readOnly value={evalPrompt} rows={3}
-                className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
-              <div><button className="btn" onClick={() => setTab && setTab('overview')}>Go to Overview ↗</button></div>
-            </>
+
+          {/* progress + result */}
+          {ej && (
+            <div style={{ padding: '12px 14px', borderRadius: 'var(--r-card)', border: `1px solid ${ej.status === 'error' ? 'var(--red)' : ej.status === 'done' ? 'var(--green)' : 'var(--border)'}`, background: 'var(--panel-2)' }}>
+              {Array.isArray(ej.subSteps) && ej.subSteps.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 8 }}>
+                  {ej.subSteps.map((s, i) => {
+                    const ic = s.status === 'done' ? '✓' : s.status === 'error' ? '✕' : s.status === 'running' ? '⧖' : s.status === 'warn' ? '!' : '○';
+                    const col = s.status === 'done' ? 'var(--green)' : s.status === 'error' ? 'var(--red)' : s.status === 'running' ? 'var(--accent)' : s.status === 'warn' ? 'var(--orange)' : 'var(--text-mute)';
+                    return <div key={i} style={{ display: 'flex', gap: 8, fontSize: 12.5 }}><span className="mono" style={{ color: col }}>{ic}</span><span style={{ color: 'var(--text-dim)' }}>{s.label}</span></div>;
+                  })}
+                </div>
+              )}
+              {ej.status === 'running' && <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>{ej.activity || 'Working…'}</div>}
+              {ej.status === 'done' && (
+                <>
+                  <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ {ej.summary || 'Evaluation complete — see it in your pipeline.'}</div>
+                  <button className="btn" onClick={() => setTab && setTab('pipeline')}>See it in Pipeline ↗</button>
+                </>
+              )}
+              {ej.status === 'error' && <div style={{ fontSize: 12.5, color: 'var(--red)', lineHeight: 1.5 }}>{ej.error || 'Something went wrong.'}{!claudeSignedIn ? ' Make sure you completed Step 1 (sign in to Claude).' : ''}</div>}
+              {ej.warning && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--orange)', lineHeight: 1.5 }}>{ej.warning}</div>}
+            </div>
           )}
         </div>
       );
@@ -784,10 +911,18 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     if (section.id === 'health') {
       return (
         <div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 10 }}>
+            Optional safety net. This double-checks that your saved data is formatted the way the dashboard expects. You don't need to run it to use trajecktory.
+          </div>
           <button className="btn primary" disabled={gated('health')} onClick={runHealth}>{health?.running ? 'Running…' : 'Run health check'}</button>
           {health && !health.running && (
             <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 13, color: health.ok ? 'var(--green)' : 'var(--red)', marginBottom: 6 }}>{health.ok ? '✓ All verify scripts passed' : '✕ Issues found — see output'}</div>
+              <div style={{ fontSize: 13, color: health.ok ? 'var(--green)' : 'var(--orange)', marginBottom: 6 }}>{health.ok ? '✓ Everything looks good' : 'Found a few formatting nits'}</div>
+              {!health.ok && (
+                <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 8, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.25)' }}>
+                  These are data-formatting issues, not crashes, and they usually clear up once evaluations run through the normal flow. Safe to ignore for now — or paste <span className="mono">fix the trajecktory pipeline health issues</span> into Claude Code and it will read the details below and clean them up.
+                </div>
+              )}
               {health.output && <pre style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-dim)', padding: 10, fontSize: 11, fontFamily: 'var(--mono)', maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{health.output}</pre>}
             </div>
           )}
@@ -863,6 +998,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         </div>
 
         <div className="card padded-lg" style={{ flex: '1 1 560px', minWidth: 0, minHeight: 280, padding: '22px 26px' }}>
+          <LpErrorBoundary resetKey={active}>
           {active.startsWith('opt:') ? (() => {
             const o = LP_OPTIONAL.find(x => 'opt:' + x.id === active);
             if (o.id === 'apikey') {
@@ -922,6 +1058,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               )}
             </div>
           )}
+          </LpErrorBoundary>
         </div>
       </div>
     </div>

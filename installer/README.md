@@ -4,15 +4,17 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.4.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.5.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.4 makes one CV paste set up the
-> whole profile (identity, target roles, edge, scanner defaults) for the fastest path
-> to a first evaluation; gives the Start Menu / desktop shortcuts the trajecktory icon
-> instead of PowerShell's; and adds a stable AppId so a newer version upgrades in
-> place (user data and config are preserved — they are not part of the shipped
-> payload). Remaining verification is the end-to-end VM round: sign in to Claude, then
-> confirm Evaluate / Scan return results.
+> the dashboard with healthy API endpoints. v1.7.5 makes the **First Evaluation run
+> in the dashboard** (one click → fetch JD, score, report, tracker via the real
+> pipeline on the signed-in CLI, with live progress — no paste-a-prompt), hardens the
+> Launchpad against a malformed-config crash (error boundary), surfaces what each step
+> configured (roles/scanner/geo filter), prompts for location preferences instead of
+> assuming, and adds non-technical guardrails + auto-refresh on focus. v1.7.4 (one CV
+> paste sets up the whole profile, shortcut icon, stable AppId for in-place upgrades)
+> and v1.7.3 (sign-in + key field) carry forward. Remaining verification is the VM
+> round: sign in, run a First Evaluation, confirm the result lands in the pipeline.
 
 ## Credential model (important)
 - **Evaluate / Scan** run on each user's **own Claude Pro/Max login** via the
