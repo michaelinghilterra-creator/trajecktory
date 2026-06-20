@@ -346,11 +346,19 @@ function loadSeenUrls(maxHistoryDays = 30) {
     }
   }
 
-  // pipeline.md — extract URLs from checkbox lines
+  // pipeline.md — extract the first URL from each checkbox line. Lines come in
+  // two shapes: a bare `- [ ] https://…` and the dominant table form
+  // `- [x] #NNN | https://… | company | …`, so the URL is matched ANYWHERE on the
+  // line, not just immediately after the checkbox (the old `(https?…)` capture
+  // only caught the bare form and missed every table-form line — ~93% of them).
+  // `[!]` = a gate-flagged dead posting, still a URL we've seen — keep it in the
+  // dedup set. URL terminator [^\s|)] matches the applications.md reader below.
   if (existsSync(PIPELINE_PATH)) {
     const text = readFileSync(PIPELINE_PATH, 'utf-8');
-    for (const match of text.matchAll(/- \[[ x]\] (https?:\/\/\S+)/g)) {
-      seen.add(normalizeUrl(match[1]));
+    for (const line of text.split('\n')) {
+      if (!/^- \[[ x!]\]/.test(line)) continue;
+      const m = line.match(/https?:\/\/[^\s|)]+/);
+      if (m) seen.add(normalizeUrl(m[0]));
     }
   }
 
