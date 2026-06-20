@@ -15,8 +15,8 @@ const LP_SECTIONS = [
     title: 'Make sure the engine runs',
     why: 'Confirms Node, dependencies, Playwright, and the data folders are in place before you invest time in setup.' },
   { id: 'cv',         kind: 'gen', req: 'Required',        icon: 'cv', label: 'Your CV',
-    title: 'Bring in your CV',
-    why: 'The source of truth for scoring, tailored resumes, and interview prep. Paste it, share a LinkedIn URL, or upload a .docx/.pdf into the project — a .docx also seeds your resume master.',
+    title: 'Start here — your CV sets up the rest',
+    why: 'The fastest path to value. From your CV we draft your identity, target roles, and your edge, so most of setup becomes a quick review and you can go straight to evaluating jobs. Paste it, share a LinkedIn URL, or upload a .docx/.pdf — a .docx also seeds your resume master.',
     handoff: 'cv' },
   { id: 'identity',   kind: 'form', req: 'Required',       icon: 'identity', label: 'Identity & links',
     title: 'Who you are',
@@ -149,6 +149,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const [active, setActive] = useState('preflight');
   const [preflight, setPreflight] = useState(null);     // {ok, checks}
   const [pendingGen, setPendingGen] = useState({});     // sectionId -> prompt (copied, awaiting ack)
+  const pendingBaseline = useRef({});                   // sectionId -> status when the handoff started (for empty→complete auto-clear)
   const [health, setHealth] = useState(null);           // {ok, output}
   const [evalUrl, setEvalUrl] = useState('');
   const [evalPrompt, setEvalPrompt] = useState('');
@@ -207,7 +208,13 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         setPendingGen(p => {
           const next = { ...p }; let changed = false;
           for (const id of Object.keys(next)) {
-            if (s.sections?.[id]?.status === 'complete') { delete next[id]; changed = true; }
+            // Only auto-clear on an empty→complete transition. If the step was
+            // already complete when the handoff started (e.g. re-running a step
+            // on a machine that already has the file), leave the prompt up until
+            // the user acks it, so it doesn't vanish on the first poll.
+            if (s.sections?.[id]?.status === 'complete' && pendingBaseline.current[id] !== 'complete') {
+              delete next[id]; changed = true;
+            }
           }
           return changed ? next : p;
         });
@@ -260,6 +267,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   };
 
   const startHandoff = (sectionId, handoffKey) => {
+    pendingBaseline.current[sectionId] = state?.sections?.[sectionId]?.status || 'empty';
     fetch(`/api/setup/handoff/${handoffKey || sectionId}`, { method: 'POST' })
       .then(r => r.json())
       .then(({ prompt }) => {
@@ -272,6 +280,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
 
   const ackHandoff = (sectionId) => {
     setPendingGen(p => { const n = { ...p }; delete n[sectionId]; return n; });
+    delete pendingBaseline.current[sectionId];
     refresh();
     loadStages(); // pick up suggestions / detected items the agent wrote back
   };
@@ -362,6 +371,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           body: JSON.stringify({ filename: file.name, dataBase64: reader.result }),
         }).then(r => r.json()).then(res => {
           if (res.error) { toast && toast(res.error, 'error'); return; }
+          pendingBaseline.current.cv = state?.sections?.cv?.status || 'empty';
           navigator.clipboard?.writeText(res.prompt).catch(() => {});
           setPendingGen(p => ({ ...p, cv: res.prompt }));
           toast && toast(res.seededMaster ? 'Uploaded — also seeded resume master' : 'Uploaded — prompt copied', 'success');
@@ -391,8 +401,8 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         </div>
         {pendingGen.cv && (
           <div style={{ marginTop: 14, border: '1px solid var(--accent)', borderRadius: 'var(--r-card)', padding: 14, background: 'var(--accent-bg)' }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>One more step — trajecktory doesn't read your CV by itself</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.55 }}>The prompt below was copied to your clipboard. Paste it into Claude Code (the same chat you used to start the dashboard) and run it — that's what converts your CV into the format trajecktory uses. This step checks itself off the moment it finishes; you don't have to come back here.</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>One step in Claude Code sets up your whole profile</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.55 }}>The prompt below was copied to your clipboard. Paste it into Claude Code (the same chat you used to start the dashboard) and run it. It reads your CV and drafts your identity, target roles, and your edge, so the steps below fill in for you to review — then you can go straight to the first evaluation. This checks itself off the moment it finishes; you don't have to come back here.</div>
             <textarea readOnly value={pendingGen.cv} rows={4} className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: 'var(--accent)' }}>⧖ Waiting for you to run it in Claude Code…</span>

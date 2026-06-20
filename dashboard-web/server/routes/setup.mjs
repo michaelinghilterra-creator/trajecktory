@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { exec, spawn } from 'child_process';
 import { DEMO } from '../config.mjs';
-import { SETUP_ROOT, SETUP_FILES, setupSetScalar, SETUP_SCALAR_FIELDS, setupComputeState, SETUP_GUARDRAIL, setupHandoffPrompt } from '../lib/setup.mjs';
+import { SETUP_ROOT, SETUP_FILES, setupSetScalar, SETUP_SCALAR_FIELDS, setupComputeState, SETUP_GUARDRAIL, SETUP_CV_FULL, setupHandoffPrompt } from '../lib/setup.mjs';
 
 export const router = express.Router();
 
@@ -210,7 +210,7 @@ router.post('/api/setup/cv-upload', (req, res) => {
       ? (seededMaster ? ' I also seeded templates/cv-master.docx from it for resume tailoring.'
                       : ' Note: templates/cv-master.docx already exists; do not overwrite it.')
       : '';
-    const prompt = `I uploaded my CV to ${stagedRel}. Convert it into a clean cv.md (Summary, Experience, Projects, Education, Skills).${masterNote} ${SETUP_GUARDRAIL}`;
+    const prompt = `I uploaded my CV to ${stagedRel}. Convert it into a clean cv.md (Summary, Experience, Projects, Education, Skills).${masterNote}${SETUP_CV_FULL} ${SETUP_GUARDRAIL}`;
     res.json({ ok: true, saved: stagedRel, seededMaster, prompt });
   } catch (err) {
     res.status(500).json({ error: err.message });

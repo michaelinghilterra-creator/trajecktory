@@ -214,18 +214,32 @@ function setupComputeState() {
 // pastes into their own Claude Code. They align with the AGENTS.md "First Run"
 // steps and always restate the no-touch guardrail.
 const SETUP_GUARDRAIL =
-  'IMPORTANT: only edit config files (cv.md, config/profile.yml, portals.yml, modes/_profile.md). ' +
+  'IMPORTANT: only edit config files (cv.md, config/profile.yml, portals.yml, modes/_profile.md, templates/cv-master.docx). ' +
   'Never modify data/applications.md, anything under reports/, or scan history.';
+
+// Appended to every CV-entry prompt. The CV already contains identity, history,
+// and skills, so one paste should set up the whole profile (as editable drafts)
+// and get the user straight to evaluating jobs. The deterministic Launchpad forms
+// then read these back, so the steps light up green without re-typing.
+const SETUP_CV_FULL =
+  ' Then, so I can start evaluating jobs right away, set up the rest of my profile FROM the CV as editable drafts I can refine later in the dashboard:' +
+  ' (1) Identity — if config/profile.yml does not exist, create it from config/profile.example.yml, then fill candidate.full_name, email, phone, location, linkedin, github, and portfolio_url from the CV (leave blank anything the CV does not show).' +
+  ' (2) Target roles — from my recent titles and trajectory, set target_roles.primary and target_roles.secondary to the roles I am most likely targeting next (a best guess I can adjust), and add archetypes with title_variants and resume_framing (summary_lead, aoe_priority).' +
+  ' (3) Edge — draft narrative in config/profile.yml: a one-line headline, my top 3 superpowers, and 3 to 5 proof_points each with a hero metric, all drawn from the CV.' +
+  ' (4) Location — fill location.country and location.city from the CV.' +
+  ' (5) Scanner — if portals.yml does not exist, create it from templates/portals.example.yml, then set title_filter.positive and search_queries to match the target roles above; if modes/_profile.md does not exist, create it from modes/_profile.template.md.' +
+  ' Leave compensation, visa status, and specific company picks for me to set later. Finish with a short summary of what you filled in so I can review it in the dashboard.';
+
 function setupHandoffPrompt(section) {
   switch (section) {
     case 'cv':
-      return `Help me set up my trajecktory CV. I will paste my resume text, share a LinkedIn URL, or have uploaded a .docx/.pdf into the project. Convert it into a clean cv.md (Summary, Experience, Projects, Education, Skills). If I provided a .docx, also save it as templates/cv-master.docx so tailored Word resumes can be generated. ${SETUP_GUARDRAIL}`;
+      return `Help me set up trajecktory from my CV. I will paste my resume text, share a LinkedIn URL, or have uploaded a .docx/.pdf into the project (check data/setup/ for the uploaded file). Convert it into a clean cv.md (Summary, Experience, Projects, Education, Skills). If I provided a .docx, also save it as templates/cv-master.docx so tailored Word resumes can be generated.${SETUP_CV_FULL} ${SETUP_GUARDRAIL}`;
     case 'cv-paste':
-      return `I'm going to paste my CV text. Convert it into a clean cv.md with standard sections (Summary, Experience, Projects, Education, Skills). ${SETUP_GUARDRAIL}`;
+      return `I'm going to paste my CV text. Convert it into a clean cv.md with standard sections (Summary, Experience, Projects, Education, Skills).${SETUP_CV_FULL} ${SETUP_GUARDRAIL}`;
     case 'cv-linkedin':
-      return `Here is my LinkedIn profile URL (pasted next). Extract my experience, skills, and education and draft a clean cv.md from it for me to review. ${SETUP_GUARDRAIL}`;
+      return `Here is my LinkedIn profile URL (pasted next). Extract my experience, skills, and education and draft a clean cv.md from it for me to review.${SETUP_CV_FULL} ${SETUP_GUARDRAIL}`;
     case 'cv-talk':
-      return `Let's build my CV by talking it through. Ask me about my roles, scope, and biggest results, then draft a clean cv.md (Summary, Experience, Projects, Education, Skills). ${SETUP_GUARDRAIL}`;
+      return `Let's build my CV by talking it through. Ask me about my roles, scope, and biggest results, then draft a clean cv.md (Summary, Experience, Projects, Education, Skills).${SETUP_CV_FULL} ${SETUP_GUARDRAIL}`;
     case 'identity-certs':
       return `Read my cv.md and detect certifications / completed coursework. Write what you find into data/setup/certs.json under a "detected" array (each {name, issuer}) so the Launchpad can show them. Then merge any entries in that file's "items" array into config/profile.yml under credentials.certifications. ${SETUP_GUARDRAIL}`;
     case 'roles':
@@ -248,6 +262,6 @@ function setupHandoffPrompt(section) {
 export {
   SETUP_ROOT, SETUP_FILES, setupFileMeta, setupReadText,
   setupGetScalar, setupHasListItems, setupSetScalar, SETUP_SCALAR_FIELDS,
-  setupComputeState, SETUP_GUARDRAIL, setupHandoffPrompt,
+  setupComputeState, SETUP_GUARDRAIL, SETUP_CV_FULL, setupHandoffPrompt,
 };
 

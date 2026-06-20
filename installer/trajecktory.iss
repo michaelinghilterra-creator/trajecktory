@@ -10,10 +10,13 @@
 ; "unknown publisher" warning). App icon is wired below (assets\trajecktory.ico).
 
 #define AppName "trajecktory"
-#define AppVersion "1.7.3"
+#define AppVersion "1.7.4"
 #define AppPublisher "trajecktory"
 
 [Setup]
+; Stable AppId so a newer version installs OVER the existing one (in-place upgrade)
+; that preserves the user's data, rather than a second copy. NEVER change this GUID.
+AppId={{7A3F1E2C-8B4D-4E9A-AF12-3C5D7E9B1A04}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
@@ -38,18 +41,20 @@ Source: "payload\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 ; The launcher scripts (sit alongside node\ and trajecktory\ under {app}).
 Source: "launch-trajecktory.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "stop-trajecktory.ps1";   DestDir: "{app}"; Flags: ignoreversion
+; App icon for the shortcuts (so they show the trajecktory mark, not PowerShell's).
+Source: "assets\trajecktory.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "powershell.exe"; \
   Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\launch-trajecktory.ps1"""; \
-  WorkingDir: "{app}"
+  WorkingDir: "{app}"; IconFilename: "{app}\trajecktory.ico"
 Name: "{group}\Stop {#AppName}"; Filename: "powershell.exe"; \
   Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\stop-trajecktory.ps1"""; \
-  WorkingDir: "{app}"
+  WorkingDir: "{app}"; IconFilename: "{app}\trajecktory.ico"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "powershell.exe"; \
   Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\launch-trajecktory.ps1"""; \
-  WorkingDir: "{app}"; Tasks: desktopicon
+  WorkingDir: "{app}"; Tasks: desktopicon; IconFilename: "{app}\trajecktory.ico"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
