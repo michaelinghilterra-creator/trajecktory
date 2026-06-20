@@ -147,27 +147,6 @@ router.post('/api/setup/reset/:section', (req, res) => {
   }
 });
 
-// POST /api/setup/first-eval — stage one job URL in data/pipeline.md and return
-// a handoff prompt. The scored result is read back via /api/applications.
-router.post('/api/setup/first-eval', (req, res) => {
-  const url = (req.body && req.body.url || '').trim();
-  if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'A valid http(s) job URL is required' });
-  const prompt = `Evaluate this job posting end to end (score, report, tracker): ${url}. ${SETUP_GUARDRAIL.replace('only edit config files', 'this run may add a report and a tracker row as normal evaluation output, but do not otherwise edit unrelated config')}`;
-  if (DEMO) return res.json({ ok: true, demo: true, prompt });
-  try {
-    const abs = path.join(SETUP_ROOT, SETUP_FILES.pipeline);
-    let text = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '# Pipeline\n\n';
-    if (!text.includes(url)) {
-      if (!text.endsWith('\n')) text += '\n';
-      text += `- [ ] ${url}\n`;
-      fs.writeFileSync(abs, text, 'utf8');
-    }
-    res.json({ ok: true, prompt });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // GET/POST /api/setup/stage/:key — small JSON staging files under data/setup/
 // backing the "split" sections. The dashboard saves the user's deterministic
 // picks here (seniority + titles, radius + chosen companies, manual certs); the

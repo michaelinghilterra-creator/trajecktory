@@ -178,9 +178,29 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState }) {
 // Pipeline) need a Claude Code session, so they show a copy-to-clipboard
 // command instead of running directly.
 window.WorkflowPanel = function WorkflowPanel() {
-  const { useState, useRef } = React;
+  const { useState, useRef, useEffect } = React;
   const [jobs, setJobs] = useState({});            // { stepId: { status, summary, error, output } }
+  const [claudeSignedIn, setClaudeSignedIn] = useState(false);
+  const [claudeLoginMsg, setClaudeLoginMsg] = useState('');
   const pollersRef = useRef({});
+
+  // Agent Scan and Evaluate Pipeline spawn the bundled Claude CLI, which needs a
+  // one-time `claude login`. The sign-in control lives here, next to the steps
+  // that use it (it used to be buried in the Setup First-Evaluation step).
+  useEffect(() => {
+    fetch('/api/claude-status').then(r => r.json())
+      .then(d => setClaudeSignedIn(!!d.signedIn)).catch(() => {});
+  }, []);
+
+  function signInClaude() {
+    setClaudeLoginMsg('Opening a sign-in window…');
+    fetch('/api/claude-login', { method: 'POST' }).then(r => r.json()).then(res => {
+      if (res.error) { setClaudeLoginMsg(res.error); return; }
+      setClaudeLoginMsg(res.bundled
+        ? 'A console window opened. Follow its prompts to sign in, then run Agent Scan or Evaluate Pipeline.'
+        : 'Tried to open a sign-in console. If nothing appeared, open a terminal and run "claude login" once.');
+    }).catch(() => setClaudeLoginMsg('Could not open the sign-in window.'));
+  }
 
   const STEPS = [
     { id: 'discover',  label: '1. Expand Coverage',  hint: 'Register new companies',  type: 'auto'   },
@@ -282,6 +302,22 @@ window.WorkflowPanel = function WorkflowPanel() {
           onClick={() => { setJobs({}); Object.values(pollersRef.current).forEach(clearInterval); pollersRef.current = {}; }}
         >↺</button>
       </div>
+
+      {/* Sign in to Claude — Agent Scan + Evaluate Pipeline run on the bundled
+          CLI's login, so the control lives here next to the steps that use it. */}
+      <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 11.5 }}>
+        {claudeSignedIn ? (
+          <span style={{ color: 'var(--green)' }}>✓ Signed in to Claude</span>
+        ) : (
+          <button onClick={signInClaude}
+            title="One-time sign-in so Agent Scan and Evaluate Pipeline can run"
+            style={{ background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '3px 8px', fontSize: 11.5, cursor: 'pointer', width: '100%' }}>
+            Sign in to Claude ⧉
+          </button>
+        )}
+        {claudeLoginMsg && <div style={{ marginTop: 6, color: 'var(--text-mute)', lineHeight: 1.4 }}>{claudeLoginMsg}</div>}
+      </div>
+
       <div className="workflow-steps">
         {STEPS.map(step => {
           const job = jobs[step.id];
