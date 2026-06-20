@@ -60,5 +60,17 @@ check(openFilter('Summer Intern') === false, 'empty positive list still applies 
 const noFilter = buildTitleFilter(undefined);
 check(noFilter('Any Title') === true, 'undefined filter config passes everything');
 
+// Negative keywords match WHOLE tokens, not fragments inside unrelated words.
+// Regression: substring matching silently dropped real, relevant postings —
+// "hr" hit "Anthropic"/"Threat", "java" hit "JavaScript", "engineer" hit
+// "Engineering". These must now PASS, while real standalone tokens still drop.
+const wb = buildTitleFilter({ positive: ['director', 'analyst'], negative: ['hr', 'java', 'engineer'] });
+check(wb('Anthropic Data Analyst') === true, 'negative "hr" does not drop "Anthropic" (ant-hr-opic)');
+check(wb('Threat Intelligence Analyst') === true, 'negative "hr" does not drop "Threat" (t-hr-eat)');
+check(wb('Director of JavaScript Analytics') === true, 'negative "java" does not drop "JavaScript"');
+check(wb('Director, GTM Engineering') === true, 'negative "engineer" does not drop "Engineering"');
+check(wb('HR Director') === false, 'negative "hr" still drops a standalone "HR" token');
+check(wb('Java Director') === false, 'negative "java" still drops a standalone "Java" token');
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

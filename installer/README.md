@@ -4,9 +4,17 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.8.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.9.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.8 **un-bundles the workflow**: every
+> the dashboard with healthy API endpoints. v1.7.9 removes the last bundling (the
+> Job Search page no longer has a "Run full workflow" chain — every phase runs on
+> its own) and fixes two scanner bugs that wrongly suppressed real postings: the
+> title filter matched negative keywords as substrings (so "hr" dropped "Anthropic"
+> and "Threat Intelligence", "java" dropped "JavaScript") — now whole-token only;
+> and scan-history never aged out "skipped_dup" entries, permanently blocking real
+> repostings — now aged like "added". (Note: a separate auth issue can surface as a
+> 401 if the user's `claude login` token has expired; re-run `claude login`.) v1.7.8
+> **un-bundled the workflow**: every
 > left-sidebar command (Expand Coverage, API Scan, Agent Scan, Liveness Gate, Evaluate
 > Pipeline, Merge Tracker, Verify, Health) now runs exactly one thing, so the user runs
 > each individually and a failure is visible and isolated. "Evaluate Pipeline" no longer
