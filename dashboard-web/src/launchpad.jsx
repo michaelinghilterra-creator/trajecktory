@@ -47,9 +47,6 @@ const LP_SECTIONS = [
   { id: 'outputs',    kind: 'form', req: 'Required',       icon: 'outputs', label: 'Output locations',
     title: 'Where files land',
     why: 'Choose folders for tailored resumes and interview prep. Company reports always stay in the project.' },
-  { id: 'firstEval',  kind: 'action', req: 'payoff',       icon: 'firstEval', label: 'First evaluation',
-    title: 'See it work, then automate',
-    why: 'Paste one job URL for a scored fit report, then set a recurring scan so new matches find you.' },
   { id: 'health',     kind: 'action', req: 'verify',       icon: 'health', label: 'Health check',
     title: 'Confirm everything works',
     why: 'Runs the verify scripts so you start on a clean, green pipeline.' },
@@ -128,7 +125,6 @@ function LpIcon({ name, size = 16, color = 'currentColor', style }) {
     case 'evaluation': return <svg {...s}><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" /></svg>;
     case 'companies':return <svg {...s}><path d="M3 21h18M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M19 21V11a1 1 0 0 0-1-1h-3" /><path d="M9 7h2M9 11h2M9 15h2" /></svg>;
     case 'outputs':  return <svg {...s}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>;
-    case 'firstEval':return <svg {...s}><path d="M22 2L11 13" /><path d="M22 2l-7 20-4-9-9-4z" /></svg>;
     case 'health':   return <svg {...s}><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>;
     case 'bolt':     return <svg {...s}><path d="M13 2L3 14h9l-1 8 10-12h-9z" /></svg>;
     case 'plus':     return <svg {...s}><path d="M12 5v14M5 12h14" /></svg>;
@@ -174,10 +170,6 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const [pendingGen, setPendingGen] = useState({});     // sectionId -> prompt (copied, awaiting ack)
   const pendingBaseline = useRef({});                   // sectionId -> status when the handoff started (for empty→complete auto-clear)
   const [health, setHealth] = useState(null);           // {ok, output}
-  const [evalUrl, setEvalUrl] = useState('');
-  const [evalJob, setEvalJob] = useState(null);         // in-browser first-eval job (reuses /api/agent/pipeline)
-  const [claudeSignedIn, setClaudeSignedIn] = useState(false);
-  const [claudeLoginMsg, setClaudeLoginMsg] = useState('');
   const [apiKey, setApiKey] = useState({ has: null, input: '', saving: false, msg: '' });
   const [forms, setForms] = useState({});               // local form drafts
 
@@ -197,13 +189,6 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       .then(d => setApiKey(k => ({ ...k, has: !!d.hasKey }))).catch(() => {});
   }, []);
 
-  // Best-effort "signed in to Claude" indicator (the eval working is the real
-  // proof; a false reading just leaves the sign-in button visible).
-  const refreshClaudeStatus = useCallback(() => {
-    fetch('/api/claude-status').then(r => r.json())
-      .then(d => setClaudeSignedIn(!!d.signedIn)).catch(() => {});
-  }, []);
-  useEffect(() => { refreshClaudeStatus(); }, [refreshClaudeStatus]);
 
   // Auto-run preflight on open so a healthy setup unlocks every section right
   // away. Without this, all sections sit disabled (showing a not-allowed
@@ -232,10 +217,10 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   // When the user tabs back from Claude Desktop, re-read everything so changes
   // they ran there appear without a manual browser reload.
   useEffect(() => {
-    const onFocus = () => { refresh(); loadStages(); refreshClaudeStatus(); };
+    const onFocus = () => { refresh(); loadStages(); };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [refresh, loadStages, refreshClaudeStatus]);
+  }, [refresh, loadStages]);
 
   // While a generative step is pending (the user is running its prompt in Claude
   // Code), poll setup state so the step checks itself off the instant its file
@@ -352,50 +337,6 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const setFormVal = (group, key, val) =>
     setForms(f => ({ ...f, [group]: { ...(f[group] || {}), [key]: val } }));
 
-  const pollEvalJob = (jobId) => {
-    const tick = () => fetch(`/api/agent/status/${jobId}`).then(r => r.json()).then(j => {
-      if (j.error && j.status == null) { setEvalJob({ status: 'error', error: j.error }); return; }
-      setEvalJob(j);
-      if (j.status === 'running') { setTimeout(tick, 2000); return; }
-      refresh(); // pipeline rows + the First-evaluation checkmark update from disk
-      toast && toast(j.status === 'done' ? 'Evaluation complete' : 'Evaluation finished — see details', j.status === 'done' ? 'success' : 'warn');
-    }).catch(() => setEvalJob(prev => (prev && prev.status === 'running') ? prev : { status: 'error', error: 'Lost contact with the evaluation.' }));
-    tick();
-  };
-
-  const startFirstEval = () => {
-    const url = (evalUrl || '').trim();
-    if (!/^https?:\/\//i.test(url)) { toast && toast('Paste a full job posting URL (it should start with http) — the actual job page, not a LinkedIn search.', 'warn'); return; }
-    setEvalJob({ status: 'running', activity: 'Adding the posting…', subSteps: [] });
-    // Stage the URL, then run the SAME evaluate pipeline the dashboard uses
-    // (gate → evaluate → merge-tracker → verify → health) on the signed-in CLI,
-    // so the tracker is written correctly and the result lands in the pipeline.
-    fetch('/api/setup/first-eval', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
-    }).then(r => r.json()).then(res => {
-      if (res.error) { setEvalJob({ status: 'error', error: res.error }); toast && toast(res.error, 'error'); return; }
-      if (res.demo) { setEvalJob({ status: 'done', summary: 'Demo mode — evaluation not run.' }); return; }
-      return fetch('/api/agent/pipeline', { method: 'POST' }).then(r => r.json()).then(j => {
-        if (j.error) { setEvalJob({ status: 'error', error: j.error }); toast && toast(j.error, 'error'); return; }
-        toast && toast('Evaluating — this runs on your Claude sign-in', 'success');
-        pollEvalJob(j.jobId);
-      });
-    }).catch(() => { setEvalJob({ status: 'error', error: 'Could not start the evaluation.' }); });
-  };
-
-  // Open a visible console running the bundled `claude login` so Evaluate / Scan
-  // (which spawn the bundled CLI) have a signed-in session. The browser cannot
-  // run an interactive login itself — the server opens a real console window.
-  const signInClaude = () => {
-    setClaudeLoginMsg('Opening a sign-in window…');
-    fetch('/api/claude-login', { method: 'POST' }).then(r => r.json()).then(res => {
-      if (res.error) { setClaudeLoginMsg(''); toast && toast(res.error, 'error'); return; }
-      setClaudeLoginMsg(res.bundled
-        ? 'A console window opened. Follow its prompts to sign in, then come back and run your evaluation.'
-        : 'Tried to open a sign-in console. If nothing appeared, open a terminal and run "claude login" once.');
-      toast && toast('Sign-in window opened', 'success');
-    }).catch(() => { setClaudeLoginMsg(''); toast && toast('Could not open the sign-in window', 'error'); });
-  };
 
   // Save the user's Anthropic API key (drafts only). The server writes
   // dashboard-web/.env and updates the live process, so it works without a restart.
@@ -843,68 +784,6 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             : (preflight.checks || []).some(c => !c.pass)
               ? <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-mute)' }}>Engine ready. The amber items above are part of setup — add them in the steps below. Nothing is locked.</div>
               : null}
-        </div>
-      );
-    }
-    if (section.id === 'firstEval') {
-      const ej = evalJob;
-      const running = ej && ej.status === 'running';
-      return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {/* Step 1 — sign in (prominent, with state) */}
-          {claudeSignedIn ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
-              <span style={{ color: 'var(--green)' }}>✓</span>
-              <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>Signed in to Claude — Evaluate and Scan are ready.</span>
-              <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={signInClaude}>Re-sign in</button>
-            </div>
-          ) : (
-            <div style={{ padding: '12px 14px', borderRadius: 'var(--r-card)', background: 'var(--accent-bg)', border: '1px solid var(--accent)' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Step 1 — sign in to Claude (one time)</div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 10 }}>
-                Evaluating jobs runs on your Claude Pro/Max login. Click below: a console window opens with a couple of quick questions, and your browser opens a Claude page where you click <b>Authorize</b>. Then come back here — this banner turns green.
-              </div>
-              <button className="btn primary" onClick={signInClaude}>Sign in to Claude ⧉</button>
-              {claudeLoginMsg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)', lineHeight: 1.5 }}>{claudeLoginMsg}</div>}
-            </div>
-          )}
-
-          {/* Step 2 — evaluate a real posting, in the dashboard */}
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>Step 2 — evaluate a job</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 8 }}>
-              Paste a real job posting URL (the actual job page, not a LinkedIn search). trajecktory fetches it, scores the fit, writes a report, and adds it to your pipeline — right here, no copy-paste.
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input type="text" value={evalUrl} onChange={e => setEvalUrl(e.target.value)} placeholder="https://…/job/…"
-                className="inp" style={{ flex: 1 }} disabled={running} />
-              <button className="btn primary" disabled={gated('firstEval') || running} onClick={startFirstEval}>{running ? 'Evaluating…' : 'Evaluate'}</button>
-            </div>
-          </div>
-
-          {/* progress + result */}
-          {ej && (
-            <div style={{ padding: '12px 14px', borderRadius: 'var(--r-card)', border: `1px solid ${ej.status === 'error' ? 'var(--red)' : ej.status === 'done' ? 'var(--green)' : 'var(--border)'}`, background: 'var(--panel-2)' }}>
-              {Array.isArray(ej.subSteps) && ej.subSteps.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 8 }}>
-                  {ej.subSteps.map((s, i) => {
-                    const ic = s.status === 'done' ? '✓' : s.status === 'error' ? '✕' : s.status === 'running' ? '⧖' : s.status === 'warn' ? '!' : '○';
-                    const col = s.status === 'done' ? 'var(--green)' : s.status === 'error' ? 'var(--red)' : s.status === 'running' ? 'var(--accent)' : s.status === 'warn' ? 'var(--orange)' : 'var(--text-mute)';
-                    return <div key={i} style={{ display: 'flex', gap: 8, fontSize: 12.5 }}><span className="mono" style={{ color: col }}>{ic}</span><span style={{ color: 'var(--text-dim)' }}>{s.label}</span></div>;
-                  })}
-                </div>
-              )}
-              {ej.status === 'running' && <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>{ej.activity || 'Working…'}</div>}
-              {ej.status === 'done' && (
-                <>
-                  <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ {ej.summary || 'Evaluation complete — see it in your pipeline.'}</div>
-                  <button className="btn" onClick={() => setTab && setTab('pipeline')}>See it in Pipeline ↗</button>
-                </>
-              )}
-              {ej.status === 'error' && <div style={{ fontSize: 12.5, color: 'var(--red)', lineHeight: 1.5 }}>{ej.error || 'Something went wrong.'}{!claudeSignedIn ? ' Make sure you completed Step 1 (sign in to Claude).' : ''}</div>}
-              {ej.warning && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--orange)', lineHeight: 1.5 }}>{ej.warning}</div>}
-            </div>
-          )}
         </div>
       );
     }

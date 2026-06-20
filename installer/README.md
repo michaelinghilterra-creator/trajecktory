@@ -4,12 +4,19 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.7.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.8.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.7 makes the **API Scan show its full
-> funnel** instead of just the new count, so a scan that adds 0 new offers now reads
-> as "14,338 found, 14,264 below your title filter, 28 already tracked" rather than
-> looking broken. v1.7.6 fixed the run-6 VM feedback: the "Claude usage or limit
+> the dashboard with healthy API endpoints. v1.7.8 **un-bundles the workflow**: every
+> left-sidebar command (Expand Coverage, API Scan, Agent Scan, Liveness Gate, Evaluate
+> Pipeline, Merge Tracker, Verify, Health) now runs exactly one thing, so the user runs
+> each individually and a failure is visible and isolated. "Evaluate Pipeline" no longer
+> chains a gate + merge + verify + health around the eval (that bundling hid where the
+> pipeline broke and multiplied Claude usage). The confusing in-dashboard **First
+> Evaluation step is removed** from Setup, and **Sign in to Claude** moved to the sidebar
+> next to the commands that use it. v1.7.7 made the **API Scan show its full funnel**
+> instead of just the new count, so a scan that adds 0 new offers reads as "14,338 found,
+> 14,264 below your title filter, 28 already tracked" rather than looking broken. v1.7.6
+> fixed the run-6 VM feedback: the "Claude usage or limit
 > pressure" warning now fires only on a real rate-limit or overload signal (HTTP
 > 429/529, `overloaded_error`) instead of any job description that merely mentions
 > "rate limiting", and the dashboard Evaluate and Scan runs are now inline and headless

@@ -1,7 +1,6 @@
 import express from 'express';
-import { exec, spawn } from 'child_process';
+import { spawn } from 'child_process';
 import { ROOT_DIR } from '../config.mjs';
-import { WORKFLOW_STEPS, gateSummary, tailLines, verifySummary } from '../lib/workflow.mjs';
 
 export const router = express.Router();
 
@@ -43,7 +42,7 @@ const PRESSURE_WARNING = 'Claude usage or limit pressure detected. The run may s
 function dashboardConstraints(mode) {
   const common = 'Dashboard run, follow these constraints strictly. Work inline and never spawn subagents or background agents, because this run shares a single Claude subscription and parallel agents trip usage limits. Playwright is unavailable in this environment.';
   if (mode === 'pipeline') {
-    return ' ' + common + ' Evaluate only the URLs already pending in data/pipeline.md and do not scan for new roles. The liveness gate has already been run for you, so do not run gate-pipeline.mjs again. Read each job description with WebFetch first and WebSearch as a fallback, and if a posting cannot be read, mark it skipped in data/pipeline.md and move on. Record every evaluation as a single line nine column TSV in batch/tracker-additions/ and do not edit data/applications.md directly, the dashboard merges the TSVs after you finish. Always write the report to reports/ even for a low score so the result is visible.';
+    return ' ' + common + ' Evaluate only the URLs already pending in data/pipeline.md and do not scan for new roles. Do not run gate-pipeline.mjs or any browser tool; just evaluate the pending unchecked URLs as they are. Read each job description with WebFetch first and WebSearch as a fallback, and if a posting cannot be read, mark it skipped in data/pipeline.md and move on. Record every evaluation as a single line nine column TSV in batch/tracker-additions/ and do not edit data/applications.md directly. Always write the report to reports/ even for a low score so the result is visible. When done, the user will run Merge Tracker to fold your TSVs into the pipeline.';
   }
   if (mode === 'scan') {
     return ' ' + common + ' Use only the ATS API tier and the WebSearch tier, and skip the Playwright tier. Pace the searches a few at a time. Add new live postings to data/pipeline.md as usual.';
@@ -63,10 +62,9 @@ function summarizeToolUse(block) {
 }
 
 // Spawn `claude -p "/trajecktory <mode>"` and stream-parse progress into the
-// job record. Resolves { ok, result, error } when the child closes. When
-// `composed` is true the caller owns terminal status (used by the Evaluate
-// sequence); otherwise this sets the job's final status itself.
-function runClaudeAgent(jobId, mode, { composed = false } = {}) {
+// job record. Resolves { ok, result, error } when the child closes and sets the
+// job's final status itself.
+function runClaudeAgent(jobId, mode) {
   return new Promise((resolve) => {
     const projectRoot = ROOT_DIR;
     const isWin = process.platform === 'win32';
@@ -87,7 +85,7 @@ function runClaudeAgent(jobId, mode, { composed = false } = {}) {
     };
     const fail = (msg) => {
       const job = agentJobs.get(jobId) || {};
-      if (!composed) agentJobs.set(jobId, { ...job, status: 'error', error: msg, finishedAt: Date.now() });
+      agentJobs.set(jobId, { ...job, status: 'error', error: msg, finishedAt: Date.now() });
       resolve({ ok: false, error: msg });
     };
 
@@ -189,113 +187,35 @@ function runClaudeAgent(jobId, mode, { composed = false } = {}) {
       }
       const err = isError ? (resultText || 'Agent reported an error') : closeErr;
       const ok = !err;
-      if (!composed) {
-        agentJobs.set(jobId, {
-          ...job,
-          status: ok ? 'done' : 'error',
-          summary: ok ? (resultText ? agentTail(resultText) : (job.activity || 'Agent finished')) : undefined,
-          error: ok ? undefined : err,
-          finishedAt: Date.now(),
-        });
-      }
+      agentJobs.set(jobId, {
+        ...job,
+        status: ok ? 'done' : 'error',
+        summary: ok ? (resultText ? agentTail(resultText) : (job.activity || 'Agent finished')) : undefined,
+        error: ok ? undefined : err,
+        finishedAt: Date.now(),
+      });
       resolve({ ok, result: resultText, error: err });
     });
   });
 }
 
-// Run one deterministic node step (reuses the WORKFLOW_STEPS command strings).
-function runNodeStep(cmd) {
-  return new Promise((resolve) => {
-    const projectRoot = ROOT_DIR;
-    exec(cmd, { cwd: projectRoot, maxBuffer: 5 * 1024 * 1024 }, (err, stdout, stderr) => {
-      const output = (stdout || '') + (stderr ? '\n[stderr]\n' + stderr : '');
-      resolve({ ok: !(err && err.code), output, error: err && err.code ? err.message : null });
-    });
-  });
-}
-
-// Single agent run (Agent Scan): no pre/post node steps.
+// Single agent run for BOTH Agent Scan and Evaluate Pipeline. Each dashboard
+// command does exactly ONE thing now — no bundled gate -> merge -> verify ->
+// health chain around the eval. The user runs Liveness Gate, Merge Tracker,
+// Verify, and Health as their own sidebar steps, so a failure in one is visible
+// and isolated. Bundling hid where the pipeline broke and multiplied Claude
+// usage (the eval fanned out subagents inside a chain that also ran a gate).
 async function runAgent(jobId, mode) {
   agentJobs.set(jobId, { mode, status: 'running', activity: 'Starting agent…', toolCalls: [], toolCount: 0, output: '', startedAt: Date.now() });
-  await runClaudeAgent(jobId, mode);
-}
-
-// Composed Evaluate Pipeline: gate → agent → merge → verify → health.
-// Matches the AGENTS.md "one true batch workflow" ordering.
-async function runEvaluatePipeline(jobId) {
-  const subSteps = [
-    { key: 'gate',   label: 'Liveness gate',     status: 'pending' },
-    { key: 'agent',  label: 'Evaluate (Claude)', status: 'pending' },
-    { key: 'merge',  label: 'Merge tracker',     status: 'pending' },
-    { key: 'verify', label: 'Verify actionable', status: 'pending' },
-    { key: 'health', label: 'Health check',      status: 'pending' },
-  ];
-  const commit = () => {
+  const res = await runClaudeAgent(jobId, mode);
+  // Evaluate writes tracker TSVs; folding them into applications.md is the
+  // separate Merge Tracker step. Point the user at it so a written-but-not-yet-
+  // merged result doesn't read as "nothing happened".
+  if (mode === 'pipeline' && res.ok) {
     const job = agentJobs.get(jobId) || {};
-    agentJobs.set(jobId, { ...job, subSteps: subSteps.map(s => ({ ...s })) });
-  };
-  const setSub = (key, patch) => {
-    const s = subSteps.find(x => x.key === key);
-    if (s) Object.assign(s, patch);
-    commit();
-  };
-
-  agentJobs.set(jobId, {
-    mode: 'pipeline', status: 'running', activity: 'Gating pipeline…',
-    toolCalls: [], toolCount: 0, output: '',
-    subSteps: subSteps.map(s => ({ ...s })), startedAt: Date.now(),
-  });
-
-  // 1. Liveness gate (Playwright in the main process — agent can't run it headless)
-  setSub('gate', { status: 'running' });
-  const gate = await runNodeStep(WORKFLOW_STEPS.gate.cmd);
-  setSub('gate', { status: gate.ok ? 'done' : 'error', summary: gate.ok ? gateSummary(gate.output) : (gate.error || 'gate failed') });
-  if (!gate.ok) {
-    const job = agentJobs.get(jobId) || {};
-    agentJobs.set(jobId, { ...job, status: 'error', error: 'Liveness gate failed — aborted before spending tokens. See the gate sub-step.', finishedAt: Date.now() });
-    return;
+    const note = 'Evaluations written. Run Merge Tracker (step 6) to add them to your pipeline.';
+    agentJobs.set(jobId, { ...job, summary: job.summary ? `${job.summary} · ${note}` : note });
   }
-
-  // 2. Evaluate (headless Claude Code)
-  setSub('agent', { status: 'running' });
-  update_activity(jobId, 'Evaluating pending postings…');
-  const agent = await runClaudeAgent(jobId, 'pipeline', { composed: true });
-  setSub('agent', { status: agent.ok ? 'done' : 'error', summary: agent.ok ? agentTail(agent.result || 'evaluation complete') : (agent.error || 'agent error') });
-  if (!agent.ok) {
-    const job = agentJobs.get(jobId) || {};
-    agentJobs.set(jobId, { ...job, warning: 'Evaluation stopped early (often a Claude usage limit). Partial results are still merged below. Re-run later to finish the remaining items.' });
-  }
-
-  // 3. Merge tracker
-  setSub('merge', { status: 'running' });
-  const merge = await runNodeStep(WORKFLOW_STEPS.merge.cmd);
-  setSub('merge', { status: merge.ok ? 'done' : 'error', summary: merge.ok ? tailLines(merge.output) : (merge.error || 'merge failed') });
-
-  // 4. Verify actionable (safety-net dead-link flip)
-  setSub('verify', { status: 'running' });
-  const verify = await runNodeStep(WORKFLOW_STEPS.verify.cmd);
-  setSub('verify', { status: verify.ok ? 'done' : 'error', summary: verify.ok ? verifySummary(verify.output) : (verify.error || 'verify failed') });
-
-  // 5. Health check (report parser drift)
-  setSub('health', { status: 'running' });
-  const health = await runNodeStep(WORKFLOW_STEPS.health.cmd);
-  const drift = /⚠|drift|FAIL/i.test(health.output || '');
-  setSub('health', { status: !health.ok ? 'error' : (drift ? 'warn' : 'done'), summary: tailLines(health.output) });
-
-  const job = agentJobs.get(jobId) || {};
-  const warning = job.warning || (drift ? 'Report drift detected. Some drawer entries may not parse. Re-run health or fix the report format.' : undefined);
-  agentJobs.set(jobId, {
-    ...job,
-    status: 'done',
-    summary: agent.ok ? 'Pipeline evaluated · reports + tracker updated' : 'Partial evaluation merged — re-run to finish',
-    warning,
-    finishedAt: Date.now(),
-  });
-}
-
-function update_activity(jobId, activity) {
-  const job = agentJobs.get(jobId) || {};
-  agentJobs.set(jobId, { ...job, activity });
 }
 
 // POST /api/agent/:mode — start a headless Claude Code job (scan | pipeline)
@@ -311,7 +231,7 @@ router.post('/api/agent/:mode', (req, res) => {
     }
   }
   const jobId = `agent-${mode}-${Date.now()}`;
-  const start = mode === 'scan' ? runAgent(jobId, 'scan') : runEvaluatePipeline(jobId);
+  const start = runAgent(jobId, mode);
   Promise.resolve(start).catch((e) => {
     agentJobs.set(jobId, { mode, status: 'error', error: (e && e.message) || 'Agent run failed', finishedAt: Date.now() });
   });
