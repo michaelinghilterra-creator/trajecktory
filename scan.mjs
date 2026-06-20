@@ -321,8 +321,15 @@ function loadSeenUrls(maxHistoryDays = 30) {
   const seen = new Set();
   const cutoffMs = maxHistoryDays > 0 ? Date.now() - maxHistoryDays * 86400000 : 0;
 
-  // scan-history.tsv — age out "added" entries older than maxHistoryDays;
-  // keep skipped_expired/skipped_dup/etc. permanently (dead posts stay dead)
+  // scan-history.tsv — age out "added" and TRANSIENT skip statuses
+  // (skipped_dup / skipped_title) older than maxHistoryDays, so a genuinely-new
+  // reposting can resurface. A skipped_dup is NOT a dead post: it duplicated a
+  // then-live posting, and once that twin churns out of pipeline.md /
+  // applications.md the dup must be allowed back, or real repostings are
+  // suppressed forever (the scanner had ~115 URLs permanently trapped this way).
+  // Genuinely-dead (skipped_expired) and geo-blocked (skipped_location, stable
+  // policy) stay permanent.
+  const AGEABLE = new Set(['added', 'skipped_dup', 'skipped_title']);
   if (existsSync(SCAN_HISTORY_PATH)) {
     const lines = readFileSync(SCAN_HISTORY_PATH, 'utf-8').split('\n');
     for (const line of lines.slice(1)) { // skip header
@@ -331,7 +338,7 @@ function loadSeenUrls(maxHistoryDays = 30) {
       const dateStr = parts[1];
       const status = parts[5];
       if (!url) continue;
-      if (cutoffMs > 0 && status === 'added' && dateStr) {
+      if (cutoffMs > 0 && AGEABLE.has(status) && dateStr) {
         const entryTime = new Date(dateStr).getTime();
         if (!isNaN(entryTime) && entryTime < cutoffMs) continue; // aged out
       }
