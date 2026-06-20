@@ -27,6 +27,30 @@ function claudeErrorMessage(e) {
   return (e && e.message) || 'Failed to start Claude Code.';
 }
 
+// Genuine API pressure surfaces in Claude Code's STDERR (HTTP 429/529, the
+// Anthropic `overloaded_error` / `rate_limit_error` types) or an explicit
+// usage-limit message — NOT inside assistant text or a fetched job description.
+// Match those precise tokens only, so a backend JD that merely says "rate
+// limiting" never trips a scary warning (the old broad scan did exactly that).
+const PRESSURE_RE = /\b(?:429|529)\b|overloaded_error|rate_limit_error|too many requests|usage limit (?:reached|exceeded)|approaching your usage limit/i;
+const PRESSURE_WARNING = 'Claude usage or limit pressure detected. The run may slow or stop early.';
+
+// Dashboard-driven runs share ONE Claude subscription, so they must stay inline
+// (no subagent fan-out — that is what trips usage limits) and headless (no
+// Playwright). These constraints are appended to the slash command; the mode
+// still routes normally. Kept to a SINGLE line on purpose — the Windows cmd
+// shell mangles multi-line quoted args.
+function dashboardConstraints(mode) {
+  const common = 'Dashboard run, follow these constraints strictly. Work inline and never spawn subagents or background agents, because this run shares a single Claude subscription and parallel agents trip usage limits. Playwright is unavailable in this environment.';
+  if (mode === 'pipeline') {
+    return ' ' + common + ' Evaluate only the URLs already pending in data/pipeline.md and do not scan for new roles. The liveness gate has already been run for you, so do not run gate-pipeline.mjs again. Read each job description with WebFetch first and WebSearch as a fallback, and if a posting cannot be read, mark it skipped in data/pipeline.md and move on. Record every evaluation as a single line nine column TSV in batch/tracker-additions/ and do not edit data/applications.md directly, the dashboard merges the TSVs after you finish. Always write the report to reports/ even for a low score so the result is visible.';
+  }
+  if (mode === 'scan') {
+    return ' ' + common + ' Use only the ATS API tier and the WebSearch tier, and skip the Playwright tier. Pace the searches a few at a time. Add new live postings to data/pipeline.md as usual.';
+  }
+  return '';
+}
+
 function summarizeToolUse(block) {
   const name = block.name || 'tool';
   const inp = block.input || {};
@@ -52,7 +76,7 @@ function runClaudeAgent(jobId, mode, { composed = false } = {}) {
     // shell:true does NOT escape args, so quote the (space-containing) prompt
     // ourselves; the remaining flags have no spaces or backslashes. On posix
     // no shell is needed — the args array handles the space natively.
-    const prompt = `/trajecktory ${mode}`;
+    const prompt = `/trajecktory ${mode}.${dashboardConstraints(mode)}`;
     const args = ['-p', isWin ? `"${prompt}"` : prompt,
                   '--output-format', 'stream-json', '--verbose',
                   '--permission-mode', 'acceptEdits'];
@@ -107,8 +131,12 @@ function runClaudeAgent(jobId, mode, { composed = false } = {}) {
     });
 
     child.stderr && child.stderr.on('data', (chunk) => {
+      const text = chunk.toString();
       const job = agentJobs.get(jobId) || {};
-      agentJobs.set(jobId, { ...job, output: ((job.output || '') + chunk.toString()).slice(-8192) });
+      const patch = { output: ((job.output || '') + text).slice(-8192) };
+      // Real rate-limit / overload retries are logged here, not in the JSON stream.
+      if (PRESSURE_RE.test(text)) patch.warning = PRESSURE_WARNING;
+      agentJobs.set(jobId, { ...job, ...patch });
     });
 
     function handleEvent(ev) {
@@ -140,10 +168,11 @@ function runClaudeAgent(jobId, mode, { composed = false } = {}) {
         update({ turns: ev.num_turns, cost: ev.total_cost_usd });
         return;
       }
-      // rate-limit / retry pressure → soft warning, keep running
-      const flat = JSON.stringify(ev).toLowerCase();
-      if (/api_retry|overloaded|rate.?limit|usage limit/.test(flat)) {
-        update({ warning: 'Claude usage/limit pressure — run may slow or stop early.' });
+      // Genuine pressure surfaces in `system` events (or stderr, handled above)
+      // with precise tokens — never from assistant text or a fetched JD that
+      // merely mentions "rate limiting". Do NOT scan `user`/tool_result content.
+      if (ev.type === 'system' && PRESSURE_RE.test(JSON.stringify(ev))) {
+        update({ warning: PRESSURE_WARNING });
       }
     }
 
@@ -234,7 +263,7 @@ async function runEvaluatePipeline(jobId) {
   setSub('agent', { status: agent.ok ? 'done' : 'error', summary: agent.ok ? agentTail(agent.result || 'evaluation complete') : (agent.error || 'agent error') });
   if (!agent.ok) {
     const job = agentJobs.get(jobId) || {};
-    agentJobs.set(jobId, { ...job, warning: 'Evaluation stopped early (often a Claude usage limit). Partial results are still merged below — re-run later to finish remaining items.' });
+    agentJobs.set(jobId, { ...job, warning: 'Evaluation stopped early (often a Claude usage limit). Partial results are still merged below. Re-run later to finish the remaining items.' });
   }
 
   // 3. Merge tracker
@@ -254,7 +283,7 @@ async function runEvaluatePipeline(jobId) {
   setSub('health', { status: !health.ok ? 'error' : (drift ? 'warn' : 'done'), summary: tailLines(health.output) });
 
   const job = agentJobs.get(jobId) || {};
-  const warning = job.warning || (drift ? 'Report drift detected — some drawer entries may not parse. Re-run health or fix report format.' : undefined);
+  const warning = job.warning || (drift ? 'Report drift detected. Some drawer entries may not parse. Re-run health or fix the report format.' : undefined);
   agentJobs.set(jobId, {
     ...job,
     status: 'done',

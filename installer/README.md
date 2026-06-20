@@ -4,17 +4,23 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.5.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.6.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.5 makes the **First Evaluation run
-> in the dashboard** (one click → fetch JD, score, report, tracker via the real
-> pipeline on the signed-in CLI, with live progress — no paste-a-prompt), hardens the
-> Launchpad against a malformed-config crash (error boundary), surfaces what each step
-> configured (roles/scanner/geo filter), prompts for location preferences instead of
-> assuming, and adds non-technical guardrails + auto-refresh on focus. v1.7.4 (one CV
-> paste sets up the whole profile, shortcut icon, stable AppId for in-place upgrades)
-> and v1.7.3 (sign-in + key field) carry forward. Remaining verification is the VM
-> round: sign in, run a First Evaluation, confirm the result lands in the pipeline.
+> the dashboard with healthy API endpoints. v1.7.6 fixes the run-6 VM feedback: the
+> "Claude usage or limit pressure" warning now fires only on a real rate-limit or
+> overload signal (HTTP 429/529, `overloaded_error`) instead of any job description
+> that merely mentions "rate limiting", and the dashboard Evaluate and Scan runs are
+> now inline and headless (no parallel subagents, which were tripping the single
+> subscription's usage limits) and write their tracker rows deterministically so a
+> first evaluation actually lands in the pipeline. v1.7.5 made the **First Evaluation
+> run in the dashboard** (one click: fetch JD, score, report, tracker via the real
+> pipeline on the signed-in CLI, with live progress, no paste-a-prompt), hardened the
+> Launchpad against a malformed-config crash (error boundary), surfaced what each step
+> configured (roles/scanner/geo filter), prompts for location preferences, and added
+> auto-refresh on focus. v1.7.4 (one CV paste sets up the whole profile, shortcut icon,
+> stable AppId for in-place upgrades) carries forward. Remaining verification is the VM
+> round: sign in, run a First Evaluation, confirm the result lands in the pipeline and
+> no false-alarm warning appears.
 
 ## Credential model (important)
 - **Evaluate / Scan** run on each user's **own Claude Pro/Max login** via the
