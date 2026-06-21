@@ -4,9 +4,14 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.12.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.13.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.12 adds a TEMPORARY TEST CAP so
+> the dashboard with healthy API endpoints. v1.7.13 makes the dashboard **auto-refresh
+> instead of needing a manual browser reload**: the applications list and the "Signed
+> in to Claude" status now re-sync when you tab back to the dashboard (after editing
+> config/CV in Claude Code or signing in), and the Workflow steps (Evaluate, Merge)
+> re-sync the data the instant they finish, so evaluated jobs appear in the Pipeline
+> and drawer with no reload. v1.7.12 added a TEMPORARY TEST CAP so
 > test builds don't burn the whole Claude quota: `TJK_TEST_LIMIT` (set to 5 in the
 > launcher) caps how many postings the scan adds and the Evaluate Pipeline scores.
 > Remove that line in `launch-trajecktory.ps1` (and any `TJK_TEST_LIMIT` in `.env`)
