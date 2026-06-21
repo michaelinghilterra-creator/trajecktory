@@ -4,9 +4,15 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.13.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.14.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.13 makes the dashboard **auto-refresh
+> the dashboard with healthy API endpoints. v1.7.14: the topbar "synced N ago" is now
+> a **live timestamp** (updates each second, tied to the last data sync); **Agent Scan
+> auto-adds** discovered companies with a Greenhouse/Ashby/Lever board to
+> `portals.yml` `tracked_companies` (merge-only) so the free API Scan catches them next
+> time instead of paying Claude to re-discover them; and **Merge/Verify/Health are
+> disabled with a "waiting on Evaluate" note** while Evaluate Pipeline is still running,
+> so clicking ahead no longer shows a confusing "0 to review". v1.7.13 makes the dashboard **auto-refresh
 > instead of needing a manual browser reload**: the applications list and the "Signed
 > in to Claude" status now re-sync when you tab back to the dashboard (after editing
 > config/CV in Claude Code or signing in), and the Workflow steps (Evaluate, Merge)
