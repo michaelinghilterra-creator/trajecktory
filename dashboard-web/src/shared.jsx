@@ -97,7 +97,6 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState }) {
     { key: "linkedin-ssi",  label: "LinkedIn SSI",       icon: "🔗" },
     { key: "recruiters",    label: "Recruiters",         icon: "☎" },
     { key: "analytics",     label: "Insights",           icon: "✦" },
-    { key: "run",           label: "Job Search",         icon: "▸" },
   ];
 
   // Launchpad: front-and-centre with an incomplete-count badge while setup is
