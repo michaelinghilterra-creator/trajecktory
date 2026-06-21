@@ -45,6 +45,11 @@ $env:Path = "$NodeDir;$env:Path"
 # 2. Point Playwright at the bundled Chromium (offline, no global cache).
 $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $AppRoot 'ms-playwright'
 
+# 2b. TEMP TEST CAP (remove before any public release): limit scans and the
+#     Evaluate Pipeline to this many postings so test builds do not burn the
+#     whole Claude quota. scan.mjs / discover.mjs / the eval agent all honor it.
+$env:TJK_TEST_LIMIT = '5'
+
 # 3. No interactive `claude login` here. It would hang this launcher when run
 #    hidden (the desktop shortcut), and the bundled CLI does not inherit the
 #    Claude Desktop sign-in anyway. The dashboard and all data views start fine

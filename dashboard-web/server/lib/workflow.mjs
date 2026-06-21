@@ -36,7 +36,7 @@ function scanSummary(output) {
   const n = (x) => (x == null ? '?' : x.toLocaleString('en-US'));
   const filtered = [];
   if (offTitle) filtered.push(`${n(offTitle)} off-title`);
-  if (dupes)    filtered.push(`${n(dupes)} already tracked`);
+  if (dupes)    filtered.push(`${n(dupes)} duplicates`);
   if (geo)      filtered.push(`${n(geo)} geo-blocked`);
   if (stale)    filtered.push(`${n(stale)} stale`);
   const funnel = filtered.length

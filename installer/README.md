@@ -4,9 +4,17 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.11.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.12.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.11 fixes a batch of FRESH-INSTALL
+> the dashboard with healthy API endpoints. v1.7.12 adds a TEMPORARY TEST CAP so
+> test builds don't burn the whole Claude quota: `TJK_TEST_LIMIT` (set to 5 in the
+> launcher) caps how many postings the scan adds and the Evaluate Pipeline scores.
+> Remove that line in `launch-trajecktory.ps1` (and any `TJK_TEST_LIMIT` in `.env`)
+> before a public release. Also: the spawned `claude -p` no longer waits on stdin
+> ("no stdin data in 3 seconds" gone), the CV setup prompt no longer tells the user
+> to hand-edit profile.yml (those fields are GUI-editable), and the scan funnel
+> labels in-run duplicates as "duplicates" rather than "already tracked". v1.7.11
+> fixed a batch of FRESH-INSTALL
 > crashes found on a clean VM: the workflow scripts threw ENOENT on a brand-new
 > install that has no data/pipeline.md, data/applications.md, or reports/ yet.
 > `scan.mjs` (and `discover.mjs`) now create pipeline.md instead of crashing when the
