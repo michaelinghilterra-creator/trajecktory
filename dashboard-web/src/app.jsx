@@ -202,7 +202,6 @@ function App() {
   const commands = useMemo(() => {
     const navCmds = [
       { section: "Navigate", icon: "▦", label: "Go to Overview",     run: () => setTab("overview") },
-      { section: "Navigate", icon: "▸", label: "Go to Job Search", run: () => setTab("run") },
       { section: "Navigate", icon: "▥", label: "Go to Pipeline",     run: () => setTab("pipeline") },
       { section: "Navigate", icon: "↻", label: "Go to Follow-Ups",   run: () => setTab("followups") },
       { section: "Navigate", icon: "≡", label: "Go to All Entries",  run: () => { setTab("pipeline"); setPipelineView("all"); } },
@@ -322,7 +321,6 @@ function App() {
 
         <div className="content" data-screen-label={`trajecktory · ${tab}`} data-tab={tab}>
           {tab === "overview"  && <window.OverviewTab  apps={apps} onOpen={setDrawerApp} onAction={handleAction} setTab={setTab} search={search} />}
-          {tab === "run"       && <window.RunWizardTab toast={toast} />}
           {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} search={search} compTweaks={{ walkAway: tweaks.walkAway, targetLow: tweaks.targetLow, targetHigh: tweaks.targetHigh }} />}
           {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} />}
           {tab === "followups" && <window.FollowupsTab onAction={handleAction} openTaContact={openTaContact} search={search} />}
