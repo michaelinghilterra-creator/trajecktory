@@ -55,9 +55,11 @@ function App() {
     };
   });
 
-  // Load real data from API
-  useEffect(() => {
-    fetch('/api/applications')
+  // Load real data from API. Extracted into refreshApps so a window-focus return
+  // (after editing config/CV in Claude Code) and a finished Workflow step
+  // (Evaluate, Merge) can re-sync the applications without a manual browser reload.
+  const refreshApps = useCallback(() => {
+    return fetch('/api/applications')
       .then(r => r.json())
       .then(data => { setApps(enrichApps(data)); setLoading(false); })
       .catch(() => {
@@ -66,6 +68,20 @@ function App() {
         setLoading(false);
       });
   }, []);
+  useEffect(() => { refreshApps(); }, [refreshApps]);
+  // Re-sync when the user tabs back to the dashboard.
+  useEffect(() => {
+    const onFocus = () => refreshApps();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refreshApps]);
+  // If a row-detail drawer is open when apps re-syncs (e.g. Merge wrote new
+  // rows), swap in the fresh row so the panel isn't a stale snapshot.
+  useEffect(() => {
+    if (!drawerApp) return;
+    const fresh = apps.find(a => a.id === drawerApp.id);
+    if (fresh && fresh !== drawerApp) setDrawerApp(fresh);
+  }, [apps]);
 
   // Load pending follow-up count (stale items)
   useEffect(() => {
@@ -307,7 +323,7 @@ function App() {
 
   return (
     <div className="app" data-density={tweaks.density}>
-      <window.Sidebar tab={tab} setTab={setTab} stats={stats} streak={streak} setupState={setupState} />
+      <window.Sidebar tab={tab} setTab={setTab} stats={stats} streak={streak} setupState={setupState} onDataChanged={refreshApps} />
 
       <div className="main">
         <window.Topbar

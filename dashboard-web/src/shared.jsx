@@ -85,7 +85,7 @@ window.ScoreChip = function ScoreChip({ score }) {
 };
 
 // ---------- Sidebar ----------
-window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState }) {
+window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState, onDataChanged }) {
   // Numeric (1-9) keyboard hotkeys for tab switching removed per user request.
   // The `hint` field is gone too. Overview carries the pending-decisions
   // badge now that the standalone Actions tab is merged into it.
@@ -147,7 +147,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState }) {
         </div>
       </div>
 
-      <window.WorkflowPanel />
+      <window.WorkflowPanel onDataChanged={onDataChanged} />
 
       <div className="sidebar-stats">
         <div className="stat">
@@ -176,7 +176,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState }) {
 // via the /api/workflow endpoint. Two of the steps (Agent Scan, Evaluate
 // Pipeline) need a Claude Code session, so they show a copy-to-clipboard
 // command instead of running directly.
-window.WorkflowPanel = function WorkflowPanel() {
+window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const { useState, useRef, useEffect } = React;
   const [jobs, setJobs] = useState({});            // { stepId: { status, summary, error, output } }
   const [claudeSignedIn, setClaudeSignedIn] = useState(false);
@@ -187,8 +187,13 @@ window.WorkflowPanel = function WorkflowPanel() {
   // one-time `claude login`. The sign-in control lives here, next to the steps
   // that use it (it used to be buried in the Setup First-Evaluation step).
   useEffect(() => {
-    fetch('/api/claude-status').then(r => r.json())
+    const check = () => fetch('/api/claude-status').then(r => r.json())
       .then(d => setClaudeSignedIn(!!d.signedIn)).catch(() => {});
+    check();
+    // After the user signs in via the popped console and tabs back, re-check so
+    // the button flips to "✓ Signed in to Claude" without a manual reload.
+    window.addEventListener('focus', check);
+    return () => window.removeEventListener('focus', check);
   }, []);
 
   function signInClaude() {
@@ -234,6 +239,8 @@ window.WorkflowPanel = function WorkflowPanel() {
                 if (job.status === 'done' || job.status === 'error') {
                   clearInterval(poll);
                   delete pollersRef.current[step.id];
+                  // Evaluate Pipeline wrote reports/TSVs — re-sync the dashboard.
+                  if (job.status === 'done') onDataChanged && onDataChanged();
                 }
               })
               .catch(() => { clearInterval(poll); });
@@ -265,6 +272,8 @@ window.WorkflowPanel = function WorkflowPanel() {
                 clearInterval(poll);
                 delete pollersRef.current[step.id];
                 setJobs(j => ({ ...j, [step.id]: job }));
+                // Merge Tracker / Verify wrote to applications.md — re-sync.
+                if (job.status === 'done') onDataChanged && onDataChanged();
               }
             })
             .catch(() => { clearInterval(poll); });
