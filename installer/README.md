@@ -4,9 +4,18 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.10.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.11.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.10 fixes two scanner dedup
+> the dashboard with healthy API endpoints. v1.7.11 fixes a batch of FRESH-INSTALL
+> crashes found on a clean VM: the workflow scripts threw ENOENT on a brand-new
+> install that has no data/pipeline.md, data/applications.md, or reports/ yet.
+> `scan.mjs` (and `discover.mjs`) now create pipeline.md instead of crashing when the
+> first scan finds offers; `gate-pipeline.mjs`, `verify-actionable.mjs`, and
+> `verify-reports.mjs` exit cleanly with a "nothing to do" message; `merge-tracker.mjs`
+> now CREATES data/applications.md (header only) and merges into it instead of bailing
+> with "No applications.md found" (which previously dropped every evaluated result).
+> Each fix was proven on a simulated fresh tree. Also renamed the sidebar "Morning
+> Workflow" to "Workflow". v1.7.10 fixed two scanner dedup
 > false-negatives that produced duplicate tracker/pipeline rows: `normalizeUrl` now
 > strips a trailing `/apply` (Lever) as well as `/application`, and `loadSeenUrls`
 > now reads the dominant `- [x] #NNN | URL | ...` pipeline.md format (the old regex

@@ -16,7 +16,7 @@
 //
 // Exit code: 0 always (a low live rate is not a script error).
 
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { chromium } from 'playwright';
@@ -31,6 +31,12 @@ const concIdx = args.indexOf('--concurrency');
 const concurrency = concIdx >= 0 ? parseInt(args[concIdx + 1], 10) || 4 : 4;
 
 // ── Parse pipeline.md ─────────────────────────────────────────────────────────
+// Fresh install (or an empty pipeline) has no file yet — exit gracefully so the
+// dashboard shows "nothing to gate" instead of an ENOENT crash.
+if (!existsSync(PIPELINE)) {
+  console.log('No pending [ ] items in pipeline.md (file not found).');
+  process.exit(0);
+}
 const text = readFileSync(PIPELINE, 'utf8').replace(/\r/g, '');
 const lines = text.split('\n');
 

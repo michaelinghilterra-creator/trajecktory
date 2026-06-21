@@ -23,7 +23,7 @@
  *   node discover.mjs --verbose  # show filtered/skipped detail
  */
 
-import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import yaml from 'js-yaml';
 
 const DRY_RUN   = process.argv.includes('--dry-run');
@@ -34,6 +34,10 @@ const PIPELINE_PATH = 'data/pipeline.md';
 const HISTORY_PATH  = 'data/scan-history.tsv';
 const APPS_PATH     = 'data/applications.md';
 const ENV_PATH      = 'dashboard-web/.env';
+
+// Fresh install may not have data/ yet — ensure it so pipeline.md / scan-history
+// writes don't ENOENT on the directory.
+mkdirSync('data', { recursive: true });
 
 // ─── Load API keys from .env file ──────────────────────────────────
 
@@ -225,7 +229,9 @@ function writePortals(portalsRaw, newEntries) {
 }
 
 function writePipeline(newJobs, today) {
-  let text = readFileSync(PIPELINE_PATH, 'utf8');
+  // Fresh install has no pipeline.md yet — start empty and let the section be
+  // created below. data/ is ensured at startup so the writeFileSync succeeds.
+  let text = existsSync(PIPELINE_PATH) ? readFileSync(PIPELINE_PATH, 'utf8') : '';
   const sectionTitle = `## Discovered — ${today}`;
   const jobBlock = newJobs.map(j => `- [ ] ${j.url} | ${j.company} | ${j.title}`).join('\n');
 
@@ -336,6 +342,10 @@ async function main() {
   console.log(`\n🔍 discover.mjs${DRY_RUN ? ' [dry-run]' : ''} — ${today}`);
   console.log(`   Active: ${activePhases.join(', ')}\n`);
 
+  if (!existsSync(PORTALS_PATH)) {
+    console.log('portals.yml not found — finish setup first, then run Expand Coverage.');
+    process.exit(0);
+  }
   const portalsRaw    = readFileSync(PORTALS_PATH, 'utf8');
   const portals       = yaml.load(portalsRaw);
   const titleFilter   = portals.title_filter;
