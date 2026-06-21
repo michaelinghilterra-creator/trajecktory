@@ -277,7 +277,7 @@ const SETUP_CV_FULL =
   ' (3) Edge — draft narrative in config/profile.yml: a one-line headline, my top 3 superpowers, and 3 to 5 proof_points each with a hero metric, all drawn from the CV.' +
   ' (4) Location — fill location.country and location.city from the CV.' +
   ' (5) Scanner — if portals.yml does not exist, create it from templates/portals.example.yml, then set title_filter.positive and search_queries to match the target roles above; if modes/_profile.md does not exist, create it from modes/_profile.template.md.' +
-  ' Leave compensation, visa status, and specific company picks for me to set later. Finish with a short summary of what you filled in so I can review it in the dashboard.';
+  ' Leave compensation, visa status, and specific company picks blank for now. Finish with a short, friendly summary of what you filled in. IMPORTANT for that summary: do NOT tell me to hand-edit config/profile.yml or any file. Every remaining field (compensation, visa, GitHub, company picks) is editable right in the dashboard Setup tab, so just note which are still blank and that I can fill them there.';
 
 // The CV step's friendly recap was a hit in testing, so end every paste-into-Claude
 // step the same way — the user gets a clear "here's what changed" without guessing.

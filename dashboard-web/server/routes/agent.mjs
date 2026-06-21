@@ -41,11 +41,16 @@ const PRESSURE_WARNING = 'Claude usage or limit pressure detected. The run may s
 // shell mangles multi-line quoted args.
 function dashboardConstraints(mode) {
   const common = 'Dashboard run, follow these constraints strictly. Work inline and never spawn subagents or background agents, because this run shares a single Claude subscription and parallel agents trip usage limits. Playwright is unavailable in this environment.';
+  // TEST CAP (temporary): when TJK_TEST_LIMIT is set, hard-limit how many
+  // postings the Claude steps touch, so testing does not burn the whole quota.
+  const limit = parseInt(process.env.TJK_TEST_LIMIT, 10) || 0;
   if (mode === 'pipeline') {
-    return ' ' + common + ' Evaluate only the URLs already pending in data/pipeline.md and do not scan for new roles. Do not run gate-pipeline.mjs or any browser tool; just evaluate the pending unchecked URLs as they are. Read each job description with WebFetch first and WebSearch as a fallback, and if a posting cannot be read, mark it skipped in data/pipeline.md and move on. Record every evaluation as a single line nine column TSV in batch/tracker-additions/ and do not edit data/applications.md directly. Always write the report to reports/ even for a low score so the result is visible. When done, the user will run Merge Tracker to fold your TSVs into the pipeline.';
+    const cap = limit > 0 ? ` TEST MODE (TJK_TEST_LIMIT=${limit}): evaluate ONLY the first ${limit} pending unchecked URLs in data/pipeline.md, then STOP immediately and do not evaluate any more even if others remain.` : '';
+    return ' ' + common + ' Evaluate only the URLs already pending in data/pipeline.md and do not scan for new roles.' + cap + ' Do not run gate-pipeline.mjs or any browser tool; just evaluate the pending unchecked URLs as they are. Read each job description with WebFetch first and WebSearch as a fallback, and if a posting cannot be read, mark it skipped in data/pipeline.md and move on. Record every evaluation as a single line nine column TSV in batch/tracker-additions/ and do not edit data/applications.md directly. Always write the report to reports/ even for a low score so the result is visible. When done, the user will run Merge Tracker to fold your TSVs into the pipeline.';
   }
   if (mode === 'scan') {
-    return ' ' + common + ' Use only the ATS API tier and the WebSearch tier, and skip the Playwright tier. Pace the searches a few at a time. Add new live postings to data/pipeline.md as usual.';
+    const cap = limit > 0 ? ` TEST MODE (TJK_TEST_LIMIT=${limit}): add at most ${limit} new postings to data/pipeline.md, then stop.` : '';
+    return ' ' + common + ' Use only the ATS API tier and the WebSearch tier, and skip the Playwright tier. Pace the searches a few at a time. Add new live postings to data/pipeline.md as usual.' + cap;
   }
   return '';
 }
@@ -107,6 +112,10 @@ function runClaudeAgent(jobId, mode) {
     } catch (e) {
       return fail(claudeErrorMessage(e));
     }
+    // `claude -p` has the prompt as an argument and needs no piped stdin. Close
+    // the child's stdin so the CLI doesn't sit waiting on it ("no stdin data in
+    // 3 seconds" warning the user saw on Agent Scan).
+    if (child.stdin) { try { child.stdin.end(); } catch { /* already closed */ } }
 
     let buf = '';
     let resultText = '';

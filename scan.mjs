@@ -35,6 +35,13 @@ mkdirSync('data', { recursive: true });
 const CONCURRENCY = 10;
 const FETCH_TIMEOUT_MS = 10_000;
 
+// TEST CAP (temporary): when TJK_TEST_LIMIT is set (e.g. a line in
+// dashboard-web/.env), only the first N new offers are written to the pipeline,
+// so a test run does not flood it and the Evaluate Pipeline that follows does
+// not burn through Claude usage. Inert in production when the env var is unset.
+// Remove the env var (or this block) to restore full scans.
+const TEST_LIMIT = parseInt(process.env.TJK_TEST_LIMIT, 10) || 0;
+
 // ── API detection ───────────────────────────────────────────────────
 
 function detectApi(company) {
@@ -531,6 +538,12 @@ async function main() {
   });
 
   await parallelFetch(tasks, CONCURRENCY);
+
+  // TEST CAP: keep only the first N new offers when TJK_TEST_LIMIT is set.
+  if (TEST_LIMIT > 0 && newOffers.length > TEST_LIMIT) {
+    console.log(`[TEST] TJK_TEST_LIMIT=${TEST_LIMIT}: capping ${newOffers.length} new offers to ${TEST_LIMIT}`);
+    newOffers.splice(TEST_LIMIT);
+  }
 
   // 5. Write results
   if (!dryRun && newOffers.length > 0) {

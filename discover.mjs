@@ -39,6 +39,10 @@ const ENV_PATH      = 'dashboard-web/.env';
 // writes don't ENOENT on the directory.
 mkdirSync('data', { recursive: true });
 
+// TEST CAP (temporary): when TJK_TEST_LIMIT is set, cap how many new jobs get
+// registered, so a test run stays cheap. Inert in production (env var unset).
+const TEST_LIMIT = parseInt(process.env.TJK_TEST_LIMIT, 10) || 0;
+
 // ─── Load API keys from .env file ──────────────────────────────────
 
 function loadEnvKey(key) {
@@ -452,7 +456,11 @@ async function main() {
     console.log(`\n✅ portals.yml — ${totalNewCompanies} companies added`);
   }
 
-  const allNewJobs = [...phase2Jobs, ...phase3Jobs];
+  let allNewJobs = [...phase2Jobs, ...phase3Jobs];
+  if (TEST_LIMIT > 0 && allNewJobs.length > TEST_LIMIT) {
+    console.log(`[TEST] TJK_TEST_LIMIT=${TEST_LIMIT}: capping ${allNewJobs.length} discovered jobs to ${TEST_LIMIT}`);
+    allNewJobs = allNewJobs.slice(0, TEST_LIMIT);
+  }
   if (allNewJobs.length > 0) {
     writePipeline(allNewJobs, today);
     appendHistory(phase2Jobs, today, 'discovery_brave');
