@@ -295,7 +295,7 @@ window.WorkflowPanel = function WorkflowPanel() {
   return (
     <div className="workflow-panel">
       <div className="workflow-head">
-        <span>Morning Workflow</span>
+        <span>Workflow</span>
         <button
           className="workflow-reset"
           title="Reset all steps"

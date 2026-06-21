@@ -379,7 +379,10 @@ function loadSeenUrls(maxHistoryDays = 30) {
 function appendToPipeline(offers) {
   if (offers.length === 0) return;
 
-  let text = readFileSync(PIPELINE_PATH, 'utf-8');
+  // Fresh install has no pipeline.md yet — start from empty and let the block
+  // below create the "## Pendientes" section. (Reading it unguarded ENOENT'd a
+  // brand-new install the moment the first scan found a new offer.)
+  let text = existsSync(PIPELINE_PATH) ? readFileSync(PIPELINE_PATH, 'utf-8') : '';
 
   // Find "## Pendientes" section and append after it
   const marker = '## Pendientes';

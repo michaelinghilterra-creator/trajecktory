@@ -22,10 +22,13 @@ import { parseScore, shouldAutoDiscard, recommendsAgainst } from './lib/discard.
 import { parseTrackerLine } from './lib/tracker.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
-// Support both layouts: data/applications.md (boilerplate) and applications.md (original)
-const APPS_FILE = existsSync(join(CAREER_OPS, 'data/applications.md'))
-  ? join(CAREER_OPS, 'data/applications.md')
-  : join(CAREER_OPS, 'applications.md');
+// Support both layouts: data/applications.md (boilerplate, default) and the
+// original root applications.md. On a fresh install NEITHER exists yet — default
+// to the canonical data/applications.md so a created tracker lands where the
+// dashboard actually reads it (root would be invisible to the UI).
+const DATA_APPS = join(CAREER_OPS, 'data/applications.md');
+const ROOT_APPS = join(CAREER_OPS, 'applications.md');
+const APPS_FILE = existsSync(DATA_APPS) ? DATA_APPS : (existsSync(ROOT_APPS) ? ROOT_APPS : DATA_APPS);
 const ADDITIONS_DIR = join(CAREER_OPS, 'batch/tracker-additions');
 const MERGED_DIR = join(ADDITIONS_DIR, 'merged');
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -221,10 +224,17 @@ function parseTsvContent(content, filename) {
 
 // ---- Main ----
 
-// Read applications.md
+// Read applications.md — on a fresh install it does not exist yet, so CREATE it
+// (header only) instead of bailing. The evaluated TSVs need somewhere to land,
+// and "Evaluate Pipeline then Merge Tracker" on a brand-new install otherwise
+// dropped every result on the floor ("No applications.md found. Nothing to merge").
 if (!existsSync(APPS_FILE)) {
-  console.log('No applications.md found. Nothing to merge into.');
-  process.exit(0);
+  mkdirSync(dirname(APPS_FILE), { recursive: true });
+  writeFileSync(APPS_FILE,
+    '# Applications Tracker\n\n' +
+    '| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes |\n' +
+    '|---|------|---------|------|-------|--------|-----|--------|--------|-------|\n');
+  console.log(`Created ${APPS_FILE} (fresh install).`);
 }
 const appContent = readFileSync(APPS_FILE, 'utf-8');
 const appLines = appContent.split('\n');

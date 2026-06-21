@@ -64,6 +64,11 @@ const extractSection = (md, letter) => {
   return next ? rest.slice(0, next.index) : rest;
 };
 
+// Fresh install has no reports/ directory yet — nothing to verify, exit clean.
+if (!fs.existsSync(REPORTS)) {
+  console.log('No reports/ directory yet — nothing to verify.');
+  process.exit(0);
+}
 let files = fs.readdirSync(REPORTS)
   .filter(f => /^\d+.*\.md$/.test(f))
   .sort((a, b) => parseInt(b) - parseInt(a));

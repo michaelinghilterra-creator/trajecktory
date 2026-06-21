@@ -12,7 +12,7 @@
 // Uses check-liveness.mjs under the hood. Exit code 0 if all clean,
 // 1 if anything stale was found.
 
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -25,6 +25,11 @@ const apply = args.includes('--apply');
 const scoreThreshold = args.includes('--score') ? parseFloat(args[args.indexOf('--score') + 1]) : 0;
 
 // Parse Evaluated entries with score >= threshold
+// Fresh install has no tracker yet — nothing to verify, so exit clean.
+if (!existsSync(APPS)) {
+  console.log('All checked entries are still live (no applications.md yet).');
+  process.exit(0);
+}
 const lines = readFileSync(APPS, 'utf8').split('\n');
 const targets = [];
 for (let idx = 0; idx < lines.length; idx++) {
