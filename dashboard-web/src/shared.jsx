@@ -126,6 +126,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState, onDa
         </div>
       </div>
 
+      <div className="sidebar-scroll">
       <div className="nav-group">
         <div className="nav-label">Navigate</div>
         {items.map(it => (
@@ -148,6 +149,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState, onDa
       </div>
 
       <window.WorkflowPanel onDataChanged={onDataChanged} />
+      </div>
 
       <div className="sidebar-stats">
         <div className="stat">

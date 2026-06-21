@@ -4,9 +4,15 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.14.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.15.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.14: the topbar "synced N ago" is now
+> the dashboard with healthy API endpoints. v1.7.15 makes the **left sidebar fit any
+> Windows monitor** (1080p through 4K) without the janky whole-rail scrollbar: the
+> brand pins to the top and the totals pin to the bottom while only the middle (nav +
+> workflow) scrolls if a monitor is genuinely too short, and a height media query
+> tightens the rail on 1080p-and-shorter displays so it fits with no scroll at all
+> (verified filling the viewport at 1080p and 4K; no mobile/tablet breakpoints, desktop
+> Windows only by design). v1.7.14: the topbar "synced N ago" is now
 > a **live timestamp** (updates each second, tied to the last data sync); **Agent Scan
 > auto-adds** discovered companies with a Greenhouse/Ashby/Lever board to
 > `portals.yml` `tracked_companies` (merge-only) so the free API Scan catches them next
