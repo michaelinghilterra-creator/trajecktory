@@ -85,7 +85,17 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;            /* the brand + stats stay pinned; only .sidebar-scroll scrolls */
+}
+/* The middle of the rail (nav + streak + workflow) scrolls internally on short
+   monitors so the brand pins at the top and the totals pin at the bottom — no
+   more whole-rail scrollbar at 1080p. On tall monitors it just fills the space. */
+.sidebar-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 .sidebar-brand {
   display: flex; align-items: center; gap: 10px;
@@ -152,9 +162,8 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px 14px;
-  /* Pin to bottom of the sidebar flex column so the totals always
-     anchor at the foot of the rail. */
-  margin-top: auto;
+  /* Sits directly below the workflow panel; the streak's auto top-margin
+     pushes this whole lower block to the foot of the rail on tall monitors. */
 }
 .stat {
   display: flex; flex-direction: column;
@@ -167,11 +176,12 @@ body {
 .stat-sub { font-size: 10.5px; color: var(--text-mute); font-family: "JetBrains Mono", monospace; }
 
 .streak {
-  /* Big top margin pushes the streak + workflow block visually down
-     toward the lower half of the sidebar, away from the nav. When the
-     viewport is short enough that content overflows, the sidebar
-     scrolls — the margin is a comfortable spacer, not a hard layout. */
-  margin: 72px 14px 14px;
+  /* Flexible top margin (auto) pushes the streak + workflow + stats block to
+     the bottom of the rail on tall monitors, and COLLAPSES to 0 on shorter ones
+     (1080p) so the sidebar fits without a scrollbar. Replaces the old fixed 72px
+     spacer that overflowed at 1080p. overflow-y:auto on .sidebar is the safety
+     net if a viewport is genuinely too short. */
+  margin: auto 14px 14px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -190,7 +200,7 @@ body {
 
 /* ---- Workflow Panel (sidebar) ---- */
 .workflow-panel {
-  margin: 32px 14px 12px;
+  margin: 0 14px 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
@@ -271,6 +281,17 @@ body {
   padding: 2px 8px 4px 30px;
 }
 .workflow-substep { white-space: nowrap; }
+
+/* Monitor-responsive density: on 1080p and shorter monitors, tighten the rail so
+   the nav + workflow fit without an inner scroll. Tall monitors (1440p, 4K) keep
+   the comfortable spacing. .sidebar-scroll is the safety net below this. */
+@media (max-height: 1000px) {
+  .workflow-steps { gap: 2px; }
+  .workflow-btn { padding: 4px 8px; }
+  .streak { margin: auto 14px 10px; padding: 8px 12px; }
+  .nav-item { padding: 6px 10px; }
+  .nav-group { padding: 10px 10px 4px; }
+}
 
 /* ---- Main ---- */
 .main {
