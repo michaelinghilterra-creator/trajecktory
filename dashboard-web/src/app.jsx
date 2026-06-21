@@ -15,6 +15,7 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
 function App() {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [lastSync, setLastSync] = useState(null);   // ms timestamp of the last apps refetch
   const [tab, setTab] = useState("overview");
   const [search, setSearch] = useState("");
   const [drawerApp, setDrawerApp] = useState(null);
@@ -61,7 +62,7 @@ function App() {
   const refreshApps = useCallback(() => {
     return fetch('/api/applications')
       .then(r => r.json())
-      .then(data => { setApps(enrichApps(data)); setLoading(false); })
+      .then(data => { setApps(enrichApps(data)); setLoading(false); setLastSync(Date.now()); })
       .catch(() => {
         // Fallback to mock data if API unreachable
         setApps(enrichApps(window.APPS ? window.APPS.map(a => ({ ...a })) : []));
@@ -329,6 +330,7 @@ function App() {
         <window.Topbar
           search={search} setSearch={setSearch}
           searchPlaceholder={searchPlaceholder}
+          lastSync={lastSync}
           density={tweaks.density} setDensity={(d) => setTweak("density", d)}
           theme={tweaks.theme} setTheme={(t) => setTweak("theme", t)}
           openCmd={() => setCmdOpen(true)}

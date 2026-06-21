@@ -50,7 +50,7 @@ function dashboardConstraints(mode) {
   }
   if (mode === 'scan') {
     const cap = limit > 0 ? ` TEST MODE (TJK_TEST_LIMIT=${limit}): add at most ${limit} new postings to data/pipeline.md, then stop.` : '';
-    return ' ' + common + ' Use only the ATS API tier and the WebSearch tier, and skip the Playwright tier. Pace the searches a few at a time. Add new live postings to data/pipeline.md as usual.' + cap;
+    return ' ' + common + ' Use only the ATS API tier and the WebSearch tier, and skip the Playwright tier. Pace the searches a few at a time. Add new live postings to data/pipeline.md as usual. When you find a company via WebSearch that has a Greenhouse, Ashby, or Lever job board and is not already in portals.yml tracked_companies, append it there with its careers_url and api endpoint (merge only: preserve every existing entry and comment byte for byte), so the free zero-token API Scan catches its postings next time instead of paying Claude to re-discover it.' + cap;
   }
   return '';
 }

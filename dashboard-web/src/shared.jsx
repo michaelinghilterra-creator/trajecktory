@@ -299,6 +299,10 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
 
   // Agent steps share data/pipeline.md + the Claude quota — only one at a time.
   const anyAgentRunning = STEPS.some(s => s.type === 'agent' && jobs[s.id]?.status === 'running');
+  // Merge/Verify/Health consume Evaluate Pipeline's output. Keep them disabled
+  // while Evaluate is still running so clicking ahead doesn't show "0 to review".
+  const evalRunning = jobs['cli-eval']?.status === 'running';
+  const POST_EVAL = ['merge', 'verify', 'health'];
 
   return (
     <div className="workflow-panel">
@@ -336,13 +340,14 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           const isCli     = step.type === 'cli';
           const isCliP    = job?.status === 'cli-pending';
           const agentBusy = isAgent && anyAgentRunning;
+          const blockedByEval = evalRunning && POST_EVAL.includes(step.id);
           return (
             <div key={step.id} className={`workflow-step ${isDone ? 'done' : ''} ${isRunning ? 'running' : ''}`}>
               <button
                 className="workflow-btn"
-                disabled={isRunning || agentBusy}
+                disabled={isRunning || agentBusy || blockedByEval}
                 onClick={() => runStep(step)}
-                title={isAgent ? `Runs "${step.command}" in Claude Code (background)` : isCli ? `Copies "${step.command}" to clipboard` : `Runs: ${step.label}`}
+                title={blockedByEval ? 'Waiting for Evaluate Pipeline to finish' : isAgent ? `Runs "${step.command}" in Claude Code (background)` : isCli ? `Copies "${step.command}" to clipboard` : `Runs: ${step.label}`}
               >
                 <span className="workflow-status-glyph" style={{ color: g.color }}>{g.ch}</span>
                 <span className="workflow-label">
@@ -350,6 +355,9 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                   <span className="workflow-hint">{step.hint}</span>
                 </span>
               </button>
+              {blockedByEval && (
+                <div className="workflow-summary" style={{ color: 'var(--text-mute)' }}>waiting on Evaluate Pipeline…</div>
+              )}
               {isCliP && (
                 <button className="workflow-ack" title="Mark CLI step complete" onClick={() => markCliDone(step.id)}>✓</button>
               )}
@@ -387,8 +395,27 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   );
 };
 
+// Live "synced N ago" indicator. Driven by lastSync (set whenever the app
+// refetches applications) plus a 1s tick, so it stays honest instead of the old
+// hardcoded "synced 2s ago". Isolated in its own component so only this text
+// re-renders each second, not the whole Topbar (and its search input).
+window.SyncIndicator = function SyncIndicator({ lastSync }) {
+  const [, setTick] = useStateS(0);
+  useEffectS(() => {
+    const t = setInterval(() => setTick(x => x + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  if (!lastSync) return null;
+  const secs = Math.max(0, Math.round((Date.now() - lastSync) / 1000));
+  const label = secs < 5 ? 'just now'
+    : secs < 60 ? `${secs}s ago`
+    : secs < 3600 ? `${Math.round(secs / 60)}m ago`
+    : `${Math.round(secs / 3600)}h ago`;
+  return <span className="muted" style={{ fontSize: 10 }}>· synced {label}</span>;
+};
+
 // ---------- Topbar ----------
-window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, density, setDensity, theme, setTheme, openCmd, openTweaks }) {
+window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, density, setDensity, theme, setTheme, openCmd, openTweaks, lastSync }) {
   return (
     <div className="topbar">
       <div className="search">
@@ -411,7 +438,7 @@ window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, density,
         <div className="conn">
           <span className="conn-dot"></span>
           <span>data/applications.md</span>
-          <span className="muted" style={{ fontSize: 10 }}>· synced 2s ago</span>
+          <window.SyncIndicator lastSync={lastSync} />
         </div>
 
         <button

@@ -246,4 +246,5 @@ Fallback: if you only have the direct ATS URL, first navigate to the company's w
 - Disable queries with `enabled: false` if they generate too much noise
 - Adjust filtering keywords as target roles evolve
 - Add companies to `tracked_companies` when you want to follow them closely
+- **Auto-add discovered companies:** when a WebSearch (Tier 3) surfaces a NEW company that has a Greenhouse / Ashby / Lever board and is not already in `tracked_companies`, append it (merge-only, preserving every existing entry and comment) with its `careers_url` and `api:` endpoint — so the zero-token API scan (Tier 2) catches it on future runs instead of paying Claude to re-discover it via WebSearch
 - Verify `careers_url` periodically — companies change ATS platforms
