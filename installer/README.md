@@ -4,9 +4,20 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.19.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.20.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.19 **defaults the dashboard's Claude
+> the dashboard with healthy API endpoints. v1.7.20 **scales the first run for new
+> users**: discovery stays broad, but Evaluate now processes a bounded **batch of 15
+> per run** (`TJK_EVAL_BATCH`, default 15) instead of every pending posting, so a fresh
+> user with hundreds of scanned roles never burns their whole Claude quota in one go;
+> hit Evaluate again to do the next 15. The scan now **ranks postings best-fit first**
+> (a pure, no-LLM `scoreOffer`: positive-keyword density + seniority boost + recency),
+> so the first batches evaluated are the strongest matches. And evaluated rows are now
+> **marked done** in `pipeline.md` (the agent flips `- [ ]` to `- [x]` after each
+> complete report, plus a deterministic merge-tracker safety net that matches report
+> URLs and logs any it cannot resolve), so re-running Evaluate advances to the next
+> batch instead of re-scoring the same roles. The temporary `TJK_TEST_LIMIT` cap is
+> **removed from the launcher** (the 15-batch protects the quota on its own). v1.7.19 **defaults the dashboard's Claude
 > work (Agent Scan + Evaluate Pipeline) to Sonnet** to keep the user's 5-hour Claude
 > subscription quota in check (these were previously model-unpinned, inheriting the
 > CLI's default, usually Opus). The spawn now passes `--model sonnet`, overridable per

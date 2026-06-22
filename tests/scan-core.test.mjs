@@ -8,7 +8,7 @@
  * Run: node tests/scan-core.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { normalizeUrl, buildTitleFilter, normalizeForMatch } from '../lib/scan-core.mjs';
+import { normalizeUrl, buildTitleFilter, normalizeForMatch, scoreOffer } from '../lib/scan-core.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -83,6 +83,24 @@ check(wb('Director of JavaScript Analytics') === true, 'negative "java" does not
 check(wb('Director, GTM Engineering') === true, 'negative "engineer" does not drop "Engineering"');
 check(wb('HR Director') === false, 'negative "hr" still drops a standalone "HR" token');
 check(wb('Java Director') === false, 'negative "java" still drops a standalone "Java" token');
+
+// ── scoreOffer (best-fit ranking) ─────────────────────────────────────────────
+// Drives the order scan.mjs writes pipeline.md, so the dashboard's batch
+// evaluation scores the best matches first. postedAt omitted = no recency term,
+// keeping these assertions deterministic.
+const tf = { positive: ['AI', 'Platform Engineer', 'Product Manager'], seniority_boost: ['Senior', 'Staff', 'Director'] };
+check(scoreOffer({ title: 'Senior AI Platform Engineer' }, tf) > scoreOffer({ title: 'Marketing Coordinator' }, tf),
+  'a strong title outranks an off-target one');
+check(scoreOffer({ title: 'Staff AI Engineer' }, tf) > scoreOffer({ title: 'AI Engineer' }, tf),
+  'seniority boost lifts an otherwise-equal title');
+check(scoreOffer({ title: 'Marketing Coordinator' }, tf) === 0,
+  'no positive-keyword match scores 0');
+check(scoreOffer({ title: '' }, tf) === 0 && scoreOffer({}, tf) === 0,
+  'empty / missing title scores 0 (no throw)');
+// Recency adds on top of the same title (fresh > old), proving the date term applies.
+check(scoreOffer({ title: 'AI Product Manager', postedAt: new Date().toISOString() }, tf) >
+      scoreOffer({ title: 'AI Product Manager', postedAt: '2000-01-01T00:00:00Z' }, tf),
+  'a fresh posting outranks an identical stale one');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

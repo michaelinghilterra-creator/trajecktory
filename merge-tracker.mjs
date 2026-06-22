@@ -20,6 +20,7 @@ import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
 import { parseScore, shouldAutoDiscard, recommendsAgainst } from './lib/discard.mjs';
 import { parseTrackerLine } from './lib/tracker.mjs';
+import { normalizeUrl } from './lib/scan-core.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate, default) and the
@@ -31,6 +32,7 @@ const ROOT_APPS = join(CAREER_OPS, 'applications.md');
 const APPS_FILE = existsSync(DATA_APPS) ? DATA_APPS : (existsSync(ROOT_APPS) ? ROOT_APPS : DATA_APPS);
 const ADDITIONS_DIR = join(CAREER_OPS, 'batch/tracker-additions');
 const MERGED_DIR = join(ADDITIONS_DIR, 'merged');
+const PIPELINE_FILE = join(CAREER_OPS, 'data/pipeline.md');
 const DRY_RUN = process.argv.includes('--dry-run');
 const VERIFY = process.argv.includes('--verify');
 
@@ -253,6 +255,48 @@ for (const line of appLines) {
 
 console.log(`📊 Existing: ${existingApps.length} entries, max #${maxNum}`);
 
+// ── Mark evaluated rows done in pipeline.md ───────────────────────────────────
+// Deterministic safety net for the batch-evaluate flow: nothing else flips an
+// evaluated URL's pipeline.md row from "- [ ]" to "- [x]", so without this a
+// re-run of Evaluate would re-score the same top-of-list roles. We match by the
+// report's own URL (v1 JSON frontmatter, or the legacy **URL:** header). The
+// Evaluate prompt also marks rows as it goes; this guarantees it even if it didn't.
+function reportUrl(reportLink) {
+  const m = reportLink && reportLink.match(/\(([^)]*reports\/[^)]+\.md)\)/);
+  if (!m) return null;
+  const full = join(CAREER_OPS, m[1]);
+  if (!existsSync(full)) return null;
+  try {
+    const text = readFileSync(full, 'utf-8');
+    const j = text.match(/"url"\s*:\s*"([^"]+)"/);          // v1 JSON frontmatter
+    if (j) return j[1];
+    const h = text.match(/\*\*URL:\*\*\s*(\S+)/);            // legacy header
+    return h ? h[1] : null;
+  } catch { return null; }
+}
+
+function markPipelineDone(reportLinks) {
+  // unresolved = reports we could not turn into a URL (file missing, no url field,
+  // unreadable). Those rows stay "- [ ]" and get re-evaluated next run, which is
+  // the safe fallback — but we surface the count so it is never a SILENT skip.
+  let unresolved = 0;
+  if (!existsSync(PIPELINE_FILE)) return { flipped: 0, unresolved: reportLinks.length };
+  const done = new Set();
+  for (const link of reportLinks) {
+    const u = reportUrl(link);
+    if (u) done.add(normalizeUrl(u)); else unresolved++;
+  }
+  if (!done.size) return { flipped: 0, unresolved };
+  let flipped = 0;
+  const out = readFileSync(PIPELINE_FILE, 'utf-8').split('\n').map(line => {
+    const m = line.match(/^(\s*-\s*)\[ \](\s+)(https?:\/\/[^\s|)]+)(.*)$/);
+    if (m && done.has(normalizeUrl(m[3]))) { flipped++; return `${m[1]}[x]${m[2]}${m[3]}${m[4]}`; }
+    return line;
+  }).join('\n');
+  if (flipped > 0) writeFileSync(PIPELINE_FILE, out, 'utf-8');
+  return { flipped, unresolved };
+}
+
 // Read tracker additions
 if (!existsSync(ADDITIONS_DIR)) {
   console.log('No tracker-additions directory found.');
@@ -278,11 +322,13 @@ let added = 0;
 let updated = 0;
 let skipped = 0;
 const newLines = [];
+const processedReports = [];
 
 for (const file of tsvFiles) {
   const content = readFileSync(join(ADDITIONS_DIR, file), 'utf-8').trim();
   const addition = parseTsvContent(content, file);
   if (!addition) { skipped++; continue; }
+  processedReports.push(addition.report);
 
   // Check for duplicate by:
   // 1. Exact report number match (same company required — number collision ≠ same role)
@@ -410,6 +456,12 @@ if (newLines.length > 0) {
 // Write back
 if (!DRY_RUN) {
   writeFileSync(APPS_FILE, appLines.join('\n'));
+
+  // Flip evaluated URLs' pipeline.md rows to done so re-running Evaluate advances
+  // to the next batch instead of re-scoring these.
+  const { flipped, unresolved } = markPipelineDone(processedReports);
+  if (flipped > 0) console.log(`✓ Marked ${flipped} pipeline.md row${flipped === 1 ? '' : 's'} done (evaluated this batch)`);
+  if (unresolved > 0) console.log(`⚠️  ${unresolved} evaluated report${unresolved === 1 ? '' : 's'} had no resolvable URL — those pipeline rows stay pending and will be re-evaluated next run.`);
 
   // Move processed files to merged/
   if (!existsSync(MERGED_DIR)) mkdirSync(MERGED_DIR, { recursive: true });
