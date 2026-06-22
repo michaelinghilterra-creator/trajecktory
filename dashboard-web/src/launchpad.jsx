@@ -172,13 +172,38 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const [health, setHealth] = useState(null);           // {ok, output}
   const [apiKey, setApiKey] = useState({ has: null, input: '', saving: false, msg: '' });
   const [forms, setForms] = useState({});               // local form drafts
+  const dirty = useRef(new Set());                       // "group.key" the user has actually edited
+
+  // Merge fresh server values into the form state WITHOUT clobbering fields the
+  // user is mid-edit on. Only "group.key" paths in `dirty` keep their local
+  // value; everything else takes the server's value. This is what lets data the
+  // user set up in Claude Desktop (name, email, location parsed from the CV)
+  // appear on focus-refresh instead of needing a manual browser reload — the old
+  // `{...s.values, ...f}` kept ALL stale local values once `f` was populated.
+  const mergeServerValues = useCallback((f, serverValues) => {
+    const sv = serverValues || {};
+    const out = {};
+    const groups = new Set([...Object.keys(sv), ...Object.keys(f || {})]);
+    for (const g of groups) {
+      const s = sv[g] || {}, l = (f && f[g]) || {};
+      const merged = {};
+      const keys = new Set([...Object.keys(s), ...Object.keys(l)]);
+      for (const k of keys) {
+        merged[k] = dirty.current.has(`${g}.${k}`)
+          ? l[k]
+          : (s[k] !== undefined ? s[k] : l[k]);
+      }
+      out[g] = merged;
+    }
+    return out;
+  }, []);
 
   const refresh = useCallback(() => {
     fetch('/api/setup/state').then(r => r.json()).then(s => {
       setState(s);
-      setForms(f => ({ ...s.values, ...f }));            // seed once, keep edits
+      setForms(f => mergeServerValues(f, s.values));      // pull fresh values, keep my edits
     }).catch(() => {});
-  }, []);
+  }, [mergeServerValues]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -321,6 +346,10 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     }).then(r => r.json()).then(res => {
       if (res.error) { toast && toast(res.error, 'error'); return; }
       if (res.state) { setState(res.state); }
+      // Saved values now match the server, so drop their dirty marks — future
+      // focus-refreshes should track the server again (e.g. if I edit them in
+      // Claude Desktop later).
+      for (const key of [...dirty.current]) if (key.startsWith(`${g}.`)) dirty.current.delete(key);
       toast && toast('Saved', 'success');
     }).catch(() => toast && toast('Save failed', 'error'));
   };
@@ -329,13 +358,17 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     fetch(`/api/setup/reset/${sectionId}`, { method: 'POST' }).then(r => r.json()).then(res => {
       if (res.state) setState(res.state);
       const groups = { identity: 'candidate', comp: 'compensation', location: 'location', outputs: 'outputs' };
-      setForms(f => ({ ...f, [groups[sectionId]]: (res.state?.values?.[groups[sectionId]]) || {} }));
+      const g = groups[sectionId];
+      for (const key of [...dirty.current]) if (key.startsWith(`${g}.`)) dirty.current.delete(key);
+      setForms(f => ({ ...f, [g]: (res.state?.values?.[g]) || {} }));
       toast && toast('Section reset', 'warn');
     }).catch(() => {});
   };
 
-  const setFormVal = (group, key, val) =>
+  const setFormVal = (group, key, val) => {
+    dirty.current.add(`${group}.${key}`);                 // protect this field from focus-refresh overwrite
     setForms(f => ({ ...f, [group]: { ...(f[group] || {}), [key]: val } }));
+  };
 
 
   // Save the user's Anthropic API key (drafts only). The server writes

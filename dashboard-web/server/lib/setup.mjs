@@ -284,6 +284,15 @@ const SETUP_CV_FULL =
 const SETUP_SUMMARY =
   ' When done, finish with a short, friendly summary of exactly what you changed and where, so I can review it in the dashboard.';
 
+// Appended to every step that asks the user to choose something. Nudges the agent
+// (Claude Desktop / Claude Code) to use the interactive option picker (the
+// AskUserQuestion tool) so the user clicks selectable choices instead of typing
+// free text — the "little pop-up box" testers liked and missed when an agent
+// fell back to prose. It's a strong nudge, not a guarantee (the model still
+// decides), but it makes the structured UI the default for known-answer questions.
+const SETUP_ASK_UI =
+  ' When you need a decision from me, ASK with a structured multiple-choice question: use the AskUserQuestion tool (the option picker) and present the likely answers as selectable options I can click, rather than asking in plain prose. Use it for every question that has a small, known set of answers (e.g. remote/hybrid/on-site, yes/no, pick-from-a-list); fall back to free text only for genuinely open-ended ones.';
+
 function setupHandoffPrompt(section) {
   switch (section) {
     case 'cv':
@@ -293,7 +302,7 @@ function setupHandoffPrompt(section) {
     case 'cv-linkedin':
       return `Here is my LinkedIn profile URL (pasted next). Extract my experience, skills, and education and draft a clean cv.md from it for me to review.${SETUP_CV_FULL} ${SETUP_GUARDRAIL}`;
     case 'cv-talk':
-      return `Let's build my CV by talking it through. Ask me about my roles, scope, and biggest results, then draft a clean cv.md (Summary, Experience, Projects, Education, Skills).${SETUP_CV_FULL} ${SETUP_GUARDRAIL}`;
+      return `Let's build my CV by talking it through. Ask me about my roles, scope, and biggest results, then draft a clean cv.md (Summary, Experience, Projects, Education, Skills).${SETUP_CV_FULL}${SETUP_ASK_UI} ${SETUP_GUARDRAIL}`;
     case 'identity-certs':
       return `Read my cv.md and detect certifications / completed coursework. Write what you find into data/setup/certs.json under a "detected" array (each {name, issuer}) so the Launchpad can show them. Then merge any entries in that file's "items" array into config/profile.yml under credentials.certifications.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     case 'roles':
@@ -301,9 +310,9 @@ function setupHandoffPrompt(section) {
     case 'edge':
       return `Read my cv.md and draft my narrative for config/profile.yml: a one-line headline, my top 3 superpowers, and 3 to 5 proof points (each with a hero metric). Also fill resume_framing summary_lead and aoe_priority per archetype. Show me drafts to confirm.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     case 'location':
-      return `Help me build my scanner geo filter. FIRST, unless config/profile.yml already records my location preferences, ASK me (do not assume): am I after remote, hybrid, or on-site roles (or a mix), how far am I willing to commute, and are there any cities I will not work in? Save my answers to config/profile.yml location.policy. THEN geocode my home city and build portals.yml location_policy (home lat/lon, commute radius, metro_allow list) from those preferences.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
+      return `Help me build my scanner geo filter. FIRST, unless config/profile.yml already records my location preferences, ASK me (do not assume): am I after remote, hybrid, or on-site roles (or a mix), how far am I willing to commute, and are there any cities I will not work in? Save my answers to config/profile.yml location.policy. THEN geocode my home city and build portals.yml location_policy (home lat/lon, commute radius, metro_allow list) from those preferences.${SETUP_ASK_UI}${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     case 'evaluation':
-      return `Capture my evaluation priorities and deal-breakers into modes/_profile.md under an "Evaluation Tuning" section (what I optimize for, ranked; hard deal-breakers like company stage, excluded industries). If you are unsure of my priorities, ask me a couple of quick questions first rather than guessing. Mirror the deal-breakers into portals.yml title_filter.negative where they map to title/keyword exclusions.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
+      return `Capture my evaluation priorities and deal-breakers into modes/_profile.md under an "Evaluation Tuning" section (what I optimize for, ranked; hard deal-breakers like company stage, excluded industries). If you are unsure of my priorities, ask me a couple of quick questions first rather than guessing. Mirror the deal-breakers into portals.yml title_filter.negative where they map to title/keyword exclusions.${SETUP_ASK_UI}${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     case 'companies':
       return `Read data/setup/companies.json (my "radiusMiles" and any companies I added under "picks"). Suggest companies to track: (a) employers within my commute radius of home (use portals.yml location_policy.home lat/lon) and (b) companies in industries matching my target roles. Write suggestions back into data/setup/companies.json under a "suggestions" array (each {name, kind:"local"|"industry", meta, api:true|false}) so I can pick them in the Launchpad. For every company in "picks", resolve the careers_url and detect the ATS (Greenhouse/Ashby/Lever for free API scans) and APPEND to portals.yml tracked_companies. CRITICAL: merge only — preserve every existing entry, all "enabled: false # auto-disabled" states and their comments, retest-policy comments, notes, and scan_query tuning byte-for-byte.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     default:

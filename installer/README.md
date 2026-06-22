@@ -4,9 +4,20 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.15.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.16.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.15 makes the **left sidebar fit any
+> the dashboard with healthy API endpoints. v1.7.16 closes two gaps from the v1.7.14
+> VM run. First, the **Launchpad now shows profile data that was set up in Claude
+> Desktop without a manual browser reload**: when you tab back, fields the CV-setup
+> agent just wrote (name, email, location) now appear, because the focus-refresh
+> merges fresh server values into the forms instead of keeping whatever was loaded
+> first (it still preserves any field you're mid-edit on). Previously only the
+> section checkboxes updated and the field values needed a reload. Second, the
+> **setup handoff prompts now ask with the interactive option picker**: the Location,
+> Evaluation, and talk-it-through-CV prompts explicitly tell the agent to use the
+> AskUserQuestion tool (clickable multiple-choice) for known-answer questions
+> (remote/hybrid/on-site, etc.) instead of asking in prose, so testers get the
+> "little pop-up box" consistently rather than having to type answers. v1.7.15 makes the **left sidebar fit any
 > Windows monitor** (1080p through 4K) without the janky whole-rail scrollbar: the
 > brand pins to the top and the totals pin to the bottom while only the middle (nav +
 > workflow) scrolls if a monitor is genuinely too short, and a height media query
