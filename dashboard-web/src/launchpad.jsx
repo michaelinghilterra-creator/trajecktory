@@ -75,9 +75,11 @@ function LpDot({ status }) {
   return <span className="mono" style={{ color: g.color, width: 16, display: 'inline-flex', justifyContent: 'center' }}>{g.ch}</span>;
 }
 
-function LpField({ label, value, onChange, placeholder, optional }) {
+function LpField({ label, value, onChange, placeholder, optional, hint }) {
   // Uses the app's canonical .field + .inp styling so onboarding inputs match
   // every other form in the dashboard (mono, --bg-2, accent focus ring).
+  // `hint` renders a PERSISTENT helper line below the input (unlike a
+  // placeholder, it stays visible while typing — e.g. a pay-range example).
   return (
     <div className="field">
       <label>{label}{optional ? ' · optional' : ''}</label>
@@ -85,9 +87,33 @@ function LpField({ label, value, onChange, placeholder, optional }) {
         className="inp" type="text" value={value || ''} placeholder={placeholder || ''}
         onChange={e => onChange(e.target.value)}
       />
+      {hint && <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 3, lineHeight: 1.4 }}>{hint}</div>}
     </div>
   );
 }
+
+// Dropdown twin of LpField. Keeps an existing value that isn't in the curated
+// list selectable (prepended), so prior setup (e.g. a CV-derived "United States"
+// or "CST") round-trips instead of being wiped to blank.
+function LpSelect({ label, value, onChange, options, optional, hint }) {
+  const opts = (value && !options.includes(value)) ? [value, ...options] : options;
+  return (
+    <div className="field">
+      <label>{label}{optional ? ' · optional' : ''}</label>
+      <select className="inp" value={value || ''} onChange={e => onChange(e.target.value)}>
+        <option value="">— select —</option>
+        {opts.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+      {hint && <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 3, lineHeight: 1.4 }}>{hint}</div>}
+    </div>
+  );
+}
+
+// Curated dropdown option sets for the Location section (#3). Existing custom
+// values still round-trip via LpSelect's prepend.
+const TZ_OPTIONS = ['Eastern (ET)', 'Central (CT)', 'Mountain (MT)', 'Pacific (PT)', 'Alaska (AKT)', 'Hawaii (HT)', 'UTC', 'London (GMT/BST)', 'Central Europe (CET)', 'India (IST)', 'Japan (JST)', 'Sydney (AET)'];
+const COUNTRY_OPTIONS = ['United States', 'Canada', 'United Kingdom', 'Ireland', 'Germany', 'France', 'Netherlands', 'Spain', 'Italy', 'Switzerland', 'Austria', 'Belgium', 'Sweden', 'Denmark', 'Norway', 'Finland', 'Portugal', 'Poland', 'Australia', 'New Zealand', 'Japan', 'Singapore', 'India', 'United Arab Emirates', 'Mexico', 'Brazil'];
+const VISA_OPTIONS = ['U.S. Citizen', 'U.S. Permanent Resident (Green Card)', 'Authorized to work, no sponsorship needed', 'Will need sponsorship now', 'Will need sponsorship in future (e.g., F-1/OPT)', 'H-1B', 'TN', 'EU Citizen', 'UK Right to Work'];
 
 const LP_SUB = { fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginBottom: 7 };
 function lpPillStyle(on) {
@@ -748,9 +774,9 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
-            <LpField label="Target range" value={c.target_range} onChange={v => setFormVal('compensation', 'target_range', v)} placeholder="$160K-210K" />
-            <LpField label="Minimum (walk-away)" value={c.minimum} onChange={v => setFormVal('compensation', 'minimum', v)} placeholder="$140K" />
-            <LpField label="Currency" value={c.currency} onChange={v => setFormVal('compensation', 'currency', v)} placeholder="USD" />
+            <LpField label="Target range" value={c.target_range} onChange={v => setFormVal('compensation', 'target_range', v)} placeholder="$160K-210K" hint="Your ideal pay band. Example: $160K-210K" />
+            <LpField label="Minimum (walk-away)" value={c.minimum} onChange={v => setFormVal('compensation', 'minimum', v)} placeholder="$140K" hint="The floor you would not go below. Example: $140K" />
+            <LpField label="Currency" value={c.currency} onChange={v => setFormVal('compensation', 'currency', v)} placeholder="USD" hint="Example: USD" />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn primary" disabled={state.demo} onClick={() => saveForm('comp')}>Save</button>
@@ -771,9 +797,9 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
             <LpField label="City" value={c.city} onChange={v => setFormVal('location', 'city', v)} placeholder="City, ST" />
-            <LpField label="Country" value={c.country} onChange={v => setFormVal('location', 'country', v)} />
-            <LpField label="Timezone" value={c.timezone} onChange={v => setFormVal('location', 'timezone', v)} placeholder="CST" />
-            <LpField label="Visa status" value={c.visa_status} onChange={v => setFormVal('location', 'visa_status', v)} optional />
+            <LpSelect label="Country" value={c.country} onChange={v => setFormVal('location', 'country', v)} options={COUNTRY_OPTIONS} />
+            <LpSelect label="Timezone" value={c.timezone} onChange={v => setFormVal('location', 'timezone', v)} options={TZ_OPTIONS} />
+            <LpSelect label="Visa status" value={c.visa_status} onChange={v => setFormVal('location', 'visa_status', v)} options={VISA_OPTIONS} optional />
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <button className="btn primary" disabled={state.demo} onClick={() => saveForm('location')}>Save</button>
@@ -793,7 +819,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55 }}>
-            These are just folders where trajecktory saves the files it makes for you — your tailored resumes and your interview-prep notes. <b>You can leave these as they are;</b> the defaults work and the folders are created automatically. Only change them if you want those files saved somewhere specific on your computer.
+            This is where trajecktory saves the files it generates for you: every <b>tailored resume</b> (when you apply to a role) lands in the resume folder, and every <b>interview-prep note</b> lands in the prep folder. Check these folders after you apply or prep for an interview, that is where your documents are. <b>You can leave these as they are;</b> they default to your Documents folder (<span className="mono">Documents\trajecktory resumes</span> and <span className="mono">Documents\trajecktory interview prep</span>) and are created automatically. Only change them if you want the files somewhere specific.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>
             <LpField label="Resume output folder" value={c.resume_dir} onChange={v => setFormVal('outputs', 'resume_dir', v)} placeholder="output" />

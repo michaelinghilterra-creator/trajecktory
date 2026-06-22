@@ -177,6 +177,14 @@ const SETUP_SCALAR_FIELDS = {
   ],
 };
 
+// Suggested default output folder under the user's Documents (e.g.
+// C:\Users\me\Documents\trajecktory resumes). Falls back to a relative dir when
+// the home path can't be resolved (headless/odd environments).
+function setupDefaultOutputDir(name, fallback) {
+  const home = process.env.USERPROFILE || process.env.HOME || '';
+  return home ? path.join(home, 'Documents', name) : fallback;
+}
+
 function setupComputeState() {
   const meta = {};
   for (const [k, rel] of Object.entries(SETUP_FILES)) meta[k] = setupFileMeta(rel);
@@ -240,8 +248,11 @@ function setupComputeState() {
       visa_status: setupGetScalar(profile, 'location', 'visa_status'),
     },
     outputs: {
-      resume_dir: setupGetScalar(profile, 'outputs', 'resume_dir') || 'output',
-      interview_prep_dir: setupGetScalar(profile, 'outputs', 'interview_prep_dir') || 'interview-prep',
+      // Default the two output folders to the user's Documents so a non-technical
+      // user gets sensible, findable locations out of the box (they can still
+      // change them). Falls back to relative dirs if the home path is unknown.
+      resume_dir: setupGetScalar(profile, 'outputs', 'resume_dir') || setupDefaultOutputDir('trajecktory resumes', 'output'),
+      interview_prep_dir: setupGetScalar(profile, 'outputs', 'interview_prep_dir') || setupDefaultOutputDir('trajecktory interview prep', 'interview-prep'),
     },
     // Read-backs so the Launchpad can SHOW what's configured (not just "Done").
     configured: {

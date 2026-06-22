@@ -1,6 +1,7 @@
 import express from 'express';
 import { spawn } from 'child_process';
 import { ROOT_DIR } from '../config.mjs';
+import { logAgentRun } from '../lib/agent-log.mjs';
 
 export const router = express.Router();
 
@@ -47,7 +48,7 @@ function dashboardConstraints(mode) {
   // First-run scaling: evaluate a bounded BATCH per run (default 15) instead of
   // every pending URL, so a fresh user with hundreds of scanned roles never burns
   // their whole Claude quota in one go. TJK_TEST_LIMIT (if set) overrides for tests.
-  const evalCap = limit > 0 ? limit : (parseInt(process.env.TJK_EVAL_BATCH, 10) || 15);
+  const evalCap = limit > 0 ? limit : (parseInt(process.env.TJK_EVAL_BATCH, 10) || 5);
   if (mode === 'pipeline') {
     const capWhy = limit > 0 ? `TJK_TEST_LIMIT=${limit}` : `the per-run batch size is ${evalCap}`;
     return ' ' + common +
@@ -219,6 +220,20 @@ function runClaudeAgent(jobId, mode) {
         summary: ok ? (resultText ? agentTail(resultText) : (job.activity || 'Agent finished')) : undefined,
         error: ok ? undefined : err,
         finishedAt: Date.now(),
+      });
+      // Rotating diagnostic log: one record per run, captures tool-calls (incl.
+      // any `Subagent:` fan-out) + pressure warning. Best-effort, never throws.
+      logAgentRun({
+        ts: new Date().toISOString(),
+        mode,
+        status: ok ? 'done' : 'error',
+        turns: job.turns,
+        cost: job.cost,
+        warning: job.warning || null,
+        toolCount: job.toolCount || 0,
+        tools: (job.toolCalls || []).slice(-50),
+        error: ok ? null : (err ? String(err).slice(0, 300) : null),
+        outputTail: (job.output || '').slice(-2000),
       });
       resolve({ ok, result: resultText, error: err });
     });

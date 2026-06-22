@@ -4,9 +4,20 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.20.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.21.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.20 **scales the first run for new
+> the dashboard with healthy API endpoints. v1.7.21 is a batch of onboarding
+> refinements from the v1.7.20 VM run: the Evaluate **batch is now 5 per run** (was 15,
+> which took too long between steps; `TJK_EVAL_BATCH` still overrides); the Launchpad
+> **compensation fields show a persistent example** under each box (instead of a
+> placeholder that vanishes on typing); **Location uses dropdowns** for Time Zone,
+> Country, and Visa Status (existing custom values still round-trip); the **output
+> folders default to the user's Documents** (`Documents\trajecktory resumes` and
+> `Documents\trajecktory interview prep`) with an explainer of what lands there and
+> when to check; and the dashboard now writes a **rotating diagnostic log** of agent
+> runs (`logs/agent-runs.N.log`: one JSON record per Evaluate/Scan run with its
+> tool-calls, so `Subagent:` fan-out and pressure warnings are captured; rolls every
+> 100 records, keeps 3 files, oldest auto-deleted). v1.7.20 **scales the first run for new
 > users**: discovery stays broad, but Evaluate now processes a bounded **batch of 15
 > per run** (`TJK_EVAL_BATCH`, default 15) instead of every pending posting, so a fresh
 > user with hundreds of scanned roles never burns their whole Claude quota in one go;

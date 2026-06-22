@@ -44,6 +44,7 @@ bun.lock
 dashboard-web/server-out.txt
 dashboard-web/server-err.txt
 dashboard-web/server.log
+logs/
 *.bak
 *.bak-*
 *-pre-update.patch
