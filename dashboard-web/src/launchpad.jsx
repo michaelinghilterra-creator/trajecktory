@@ -54,6 +54,7 @@ const LP_SECTIONS = [
 
 const LP_OPTIONAL = [
   { id: 'apikey',    label: 'AI draft key (optional)', why: 'Paste an Anthropic API key to enable tailored resumes, cover letters, and outreach drafts. Evaluate and Scan do not need it.' },
+  { id: 'discovery', label: 'Web discovery keys (optional)', why: 'Add a Brave Search (and optional Muse) API key to let Expand Coverage web-search for brand-new companies and postings. API Scan and Agent Scan still find roles without it.' },
   { id: 'obsidian',  label: 'Obsidian vault', why: 'Push applied-role notes into your vault.' },
   { id: 'language',  label: 'Market / language modes', why: 'Target DACH, French, or Japanese postings.' },
   { id: 'intensity', label: 'Search intensity', why: 'Set a weekly goal and scan cadence.' },
@@ -171,6 +172,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const pendingBaseline = useRef({});                   // sectionId -> status when the handoff started (for empty→complete auto-clear)
   const [health, setHealth] = useState(null);           // {ok, output}
   const [apiKey, setApiKey] = useState({ has: null, input: '', saving: false, msg: '' });
+  const [discKeys, setDiscKeys] = useState({ brave: null, muse: null, braveInput: '', museInput: '', saving: false, msg: '' });
   const [forms, setForms] = useState({});               // local form drafts
   const dirty = useRef(new Set());                       // "group.key" the user has actually edited
 
@@ -212,6 +214,13 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   useEffect(() => {
     fetch('/api/setup/anthropic-key').then(r => r.json())
       .then(d => setApiKey(k => ({ ...k, has: !!d.hasKey }))).catch(() => {});
+  }, []);
+
+  // Which optional web-discovery keys (Brave / Muse) are already set, for the
+  // booster status lines. Booleans only — never the keys themselves.
+  useEffect(() => {
+    fetch('/api/setup/discovery-keys').then(r => r.json())
+      .then(d => setDiscKeys(k => ({ ...k, brave: !!d.brave, muse: !!d.muse }))).catch(() => {});
   }, []);
 
 
@@ -384,6 +393,23 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       setApiKey({ has: true, input: '', saving: false, msg: 'Saved. Draft features are enabled.' });
       toast && toast('API key saved', 'success');
     }).catch(() => { setApiKey(k => ({ ...k, saving: false, msg: 'Save failed' })); toast && toast('Save failed', 'error'); });
+  };
+
+  // Save the optional web-discovery keys (Brave / Muse). Server writes them to
+  // dashboard-web/.env; Expand Coverage (discover.mjs) picks them up next run.
+  const saveDiscoveryKeys = () => {
+    const brave = (discKeys.braveInput || '').trim();
+    const muse = (discKeys.museInput || '').trim();
+    if (!brave && !muse) { toast && toast('Paste a Brave or Muse key first', 'warn'); return; }
+    setDiscKeys(k => ({ ...k, saving: true, msg: '' }));
+    fetch('/api/setup/discovery-keys', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...(brave ? { brave } : {}), ...(muse ? { muse } : {}) }),
+    }).then(r => r.json()).then(res => {
+      if (res.error) { setDiscKeys(k => ({ ...k, saving: false, msg: res.error })); toast && toast(res.error, 'error'); return; }
+      setDiscKeys(k => ({ ...k, brave: !!res.brave, muse: !!res.muse, braveInput: '', museInput: '', saving: false, msg: 'Saved. Expand Coverage will use it on the next run.' }));
+      toast && toast('Discovery keys saved', 'success');
+    }).catch(() => { setDiscKeys(k => ({ ...k, saving: false, msg: 'Save failed' })); toast && toast('Save failed', 'error'); });
   };
 
   if (!state) {
@@ -929,6 +955,33 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                   {apiKey.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{apiKey.msg}</div>}
                   <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-mute)', lineHeight: 1.5 }}>
                     Get a key at console.anthropic.com → API keys. Stored locally in dashboard-web/.env; only ever sent to Anthropic.
+                  </div>
+                </div>
+              );
+            }
+            if (o.id === 'discovery') {
+              return (
+                <div>
+                  <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
+                  <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>{o.why}</p>
+                  <div style={{ fontSize: 12.5, color: 'var(--text)', fontWeight: 600, margin: '0 0 4px' }}>Brave Search key</div>
+                  {discKeys.brave
+                    ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved. Expand Coverage web search is on.</div>
+                    : <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 8 }}>○ Not set. Expand Coverage only registers companies already in your pipeline.</div>}
+                  <input type="password" value={discKeys.braveInput} onChange={e => setDiscKeys(k => ({ ...k, braveInput: e.target.value }))}
+                    placeholder="Brave Search API key" className="inp" style={{ width: '100%' }} autoComplete="off" />
+                  <div style={{ fontSize: 12.5, color: 'var(--text)', fontWeight: 600, margin: '14px 0 4px' }}>Muse key <span style={{ color: 'var(--text-mute)', fontWeight: 400 }}>(optional)</span></div>
+                  {discKeys.muse
+                    ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved.</div>
+                    : <div style={{ fontSize: 13, color: 'var(--text-mute)', marginBottom: 8 }}>○ Not set. Adds Director / VP roles from The Muse.</div>}
+                  <input type="password" value={discKeys.museInput} onChange={e => setDiscKeys(k => ({ ...k, museInput: e.target.value }))}
+                    placeholder="The Muse API key" className="inp" style={{ width: '100%' }} autoComplete="off" />
+                  <div style={{ marginTop: 12 }}>
+                    <button className="btn primary" disabled={discKeys.saving} onClick={saveDiscoveryKeys}>{discKeys.saving ? 'Saving…' : 'Save keys'}</button>
+                  </div>
+                  {discKeys.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{discKeys.msg}</div>}
+                  <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-mute)', lineHeight: 1.5 }}>
+                    Brave: brave.com/search/api (free tier available). Muse: themuse.com/developers/api/v2. Stored locally in dashboard-web/.env; only ever sent to those services. Neither is needed for API Scan, Agent Scan, or Evaluate.
                   </div>
                 </div>
               );

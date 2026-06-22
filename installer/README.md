@@ -4,9 +4,19 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.17.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.18.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.17 closes two gaps from the v1.7.16
+> the dashboard with healthy API endpoints. v1.7.18 makes the optional **web-discovery
+> keys GUI-configurable**: the Launchpad's Optional boosters now has a "Web discovery
+> keys" panel with fields for a Brave Search key (and optional Muse key), saved to
+> `dashboard-web/.env` via `GET`/`POST /api/setup/discovery-keys` (mirrors the existing
+> AI-draft-key field), so enabling Expand Coverage's web search no longer needs hand-
+> editing `.env`. Without a Brave key, Expand Coverage still runs (registers companies
+> already in your pipeline) but does not reach the open web, which is expected. Also adds
+> `docs/onboarding/feature-tiers.md`, a reference mapping every dashboard feature to its
+> tier: free/pure-Node, Claude sign-in (the 5-hour subscription quota), optional Anthropic
+> API key (per-token drafts: Haiku 4.5 for outreach/apply, Opus 4.8 for Insights), and
+> optional Brave/Muse (Expand Coverage web search). v1.7.17 closed two gaps from the v1.7.16
 > VM run. First, the **dashboard-evaluated jobs now produce a COMPLETE report**: the
 > Interview, Customize, and Legitimacy drawer tabs were rendering empty because the
 > headless Evaluate Pipeline wrote a v1 report that omitted the optional frontmatter
