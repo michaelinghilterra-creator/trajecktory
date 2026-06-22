@@ -32,10 +32,11 @@ a full Claude pass in the user's own Claude Desktop. Steady-state use (scan, eva
 is much lighter.
 
 **First-run scaling.** Discovery (scan) is broad and free, but Evaluate processes a
-**batch of 15 per run** (not every pending posting), so a new user with hundreds of
-scanned roles does not burn their whole quota at once. The scan ranks postings best-fit
-first, so the first batches are the strongest matches; hit Evaluate again to score the
-next 15. Override the batch size with `TJK_EVAL_BATCH` in `dashboard-web/.env`.
+**batch of 5 per run** (not every pending posting), so a new user with hundreds of
+scanned roles does not burn their whole quota at once and does not wait a long time per
+run. The scan ranks postings best-fit first, so the first batches are the strongest
+matches; hit Evaluate again to score the next 5. Override the batch size with
+`TJK_EVAL_BATCH` in `dashboard-web/.env`.
 
 **Model defaults.** The dashboard's two Claude-powered steps (Agent Scan, Evaluate
 Pipeline) default to **Sonnet** to keep the 5-hour quota in check. Override per machine
