@@ -40,15 +40,23 @@ const PRESSURE_WARNING = 'Claude usage or limit pressure detected. The run may s
 // Playwright). These constraints are appended to the slash command; the mode
 // still routes normally. Kept to a SINGLE line on purpose — the Windows cmd
 // shell mangles multi-line quoted args.
+// The per-run Evaluate batch size: a small test cap (TJK_TEST_LIMIT) wins if set,
+// else TJK_EVAL_BATCH (default 5). Shared by the eval constraint and the progress
+// meter (it is the denominator for "Evaluated X of Y").
+function evalBatchSize() {
+  const limit = parseInt(process.env.TJK_TEST_LIMIT, 10) || 0;
+  return limit > 0 ? limit : (parseInt(process.env.TJK_EVAL_BATCH, 10) || 5);
+}
+
 function dashboardConstraints(mode) {
   const common = 'Dashboard run, follow these constraints strictly. Work inline and never spawn subagents or background agents, because this run shares a single Claude subscription and parallel agents trip usage limits. Playwright is unavailable in this environment.';
   // TEST CAP (temporary): when TJK_TEST_LIMIT is set, hard-limit how many
   // postings the Claude steps touch, so testing does not burn the whole quota.
   const limit = parseInt(process.env.TJK_TEST_LIMIT, 10) || 0;
-  // First-run scaling: evaluate a bounded BATCH per run (default 15) instead of
+  // First-run scaling: evaluate a bounded BATCH per run (default 5) instead of
   // every pending URL, so a fresh user with hundreds of scanned roles never burns
   // their whole Claude quota in one go. TJK_TEST_LIMIT (if set) overrides for tests.
-  const evalCap = limit > 0 ? limit : (parseInt(process.env.TJK_EVAL_BATCH, 10) || 5);
+  const evalCap = evalBatchSize();
   if (mode === 'pipeline') {
     const capWhy = limit > 0 ? `TJK_TEST_LIMIT=${limit}` : `the per-run batch size is ${evalCap}`;
     return ' ' + common +
@@ -173,6 +181,7 @@ function runClaudeAgent(jobId, mode) {
       if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content)) {
         const toolCalls = (job.toolCalls || []).slice();
         let toolCount = job.toolCount || 0;
+        let evaluationsDone = job.evaluationsDone || 0;
         let activity = job.activity;
         for (const block of ev.message.content) {
           if (block.type === 'text' && block.text) {
@@ -182,9 +191,14 @@ function runClaudeAgent(jobId, mode) {
             toolCalls.push(s);
             toolCount += 1;
             activity = s;
+            // One TSV in batch/tracker-additions/ is written per completed
+            // evaluation — the progress meter's "done" signal.
+            if (block.name === 'Write' && /tracker-additions[\\/].+\.tsv$/i.test(String((block.input && block.input.file_path) || ''))) {
+              evaluationsDone += 1;
+            }
           }
         }
-        update({ toolCalls: toolCalls.slice(-50), toolCount, activity });
+        update({ toolCalls: toolCalls.slice(-50), toolCount, evaluationsDone, activity });
         return;
       }
       if (ev.type === 'result') {
@@ -247,7 +261,10 @@ function runClaudeAgent(jobId, mode) {
 // and isolated. Bundling hid where the pipeline broke and multiplied Claude
 // usage (the eval fanned out subagents inside a chain that also ran a gate).
 async function runAgent(jobId, mode) {
-  agentJobs.set(jobId, { mode, status: 'running', activity: 'Starting agent…', toolCalls: [], toolCount: 0, output: '', startedAt: Date.now() });
+  agentJobs.set(jobId, { mode, status: 'running', activity: 'Starting agent…', toolCalls: [], toolCount: 0, output: '', startedAt: Date.now(),
+    // Progress meter: pipeline has a known batch size (the denominator); scan is
+    // open-ended discovery, so it shows elapsed only (progressTotal stays null).
+    progressTotal: mode === 'pipeline' ? evalBatchSize() : null, evaluationsDone: 0 });
   const res = await runClaudeAgent(jobId, mode);
   // Evaluate writes tracker TSVs; folding them into applications.md is the
   // separate Merge Tracker step. Point the user at it so a written-but-not-yet-

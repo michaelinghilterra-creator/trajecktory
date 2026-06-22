@@ -4,9 +4,17 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.22.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.23.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.22 makes every **customizable Setup
+> the dashboard with healthy API endpoints. v1.7.23 adds two requested conveniences:
+> a **progress meter** on the running Evaluate step ("Evaluated 3 of 5" + a bar + a
+> rough ETA, counting the per-eval TSV writes against the batch size; Agent Scan, being
+> open-ended discovery, shows elapsed time only, no fake percentage), and **one-click
+> copy buttons** in the evaluation drawer (a "Quick copy" bar above the apply buttons
+> with Email, Phone, LinkedIn, Portfolio, GitHub, and any certifications, sourced from
+> the profile) so the user can paste reusable info into external application forms
+> without hunting. `getIdentity()` now also exposes `github` + `certifications`.
+> v1.7.22 makes every **customizable Setup
 > section show what it actually configured** plus a plain-English "how it affects your
 > search" note, so users can review and tweak with confidence instead of seeing only a
 > green checkmark. Roles, Your Edge, Location & Policy, Evaluation Tuning, and Companies

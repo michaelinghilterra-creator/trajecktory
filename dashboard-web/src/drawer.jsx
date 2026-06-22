@@ -53,6 +53,7 @@ window.Drawer = function Drawer({ app, onClose, onAction }) {
                   one touch exists so it doesn't add noise to fresh entries. */}
               <FollowupHistorySection appId={app.id} />
             </div>
+            <QuickCopyBar />
             <DrawerFoot app={app} cs={cs} onAction={onAction} />
           </>
         )}
@@ -584,6 +585,37 @@ function LegitSection({ cs }) {
           <div className="kv compact"><span className="k">Generated CV</span><span className="v mono dim">{cs.docx || cs.pdf}</span></div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// One-click copy bar for the reusable info you paste into job applications
+// (LinkedIn, portfolio, GitHub, email, phone, certs). Sourced from the profile
+// via window.myIdentity() — no personal data hardcoded. Sits above the apply
+// buttons so it's there while you fill an external form with the dashboard open.
+function QuickCopyBar() {
+  const m = (window.myIdentity && window.myIdentity()) || {};
+  const [copied, setCopied] = useStateD(null);
+  const trunc = (s, n = 22) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+  const items = [
+    ['Email', m.email], ['Phone', m.phone], ['LinkedIn', m.linkedin],
+    ['Portfolio', m.portfolioUrl], ['GitHub', m.github],
+    ...(Array.isArray(m.certifications) ? m.certifications.filter(Boolean).map(c => [trunc(c), c]) : []),
+  ].filter(([, v]) => v);
+  if (!items.length) return null;
+  const copy = (label, val) => {
+    try { navigator.clipboard.writeText(val); } catch { /* clipboard blocked */ }
+    setCopied(label);
+    setTimeout(() => setCopied(c => (c === label ? null : c)), 1200);
+  };
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '8px 14px', borderTop: '1px solid var(--border)', background: 'var(--panel-2)' }}>
+      <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginRight: 2 }}>Quick copy:</span>
+      {items.map(([label, val]) => (
+        <button key={label} className="btn sm" style={{ fontSize: 11.5 }} title={`Copy: ${val}`} onClick={() => copy(label, val)}>
+          {copied === label ? '✓ copied' : label}
+        </button>
+      ))}
     </div>
   );
 }

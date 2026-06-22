@@ -61,6 +61,26 @@ function stripUrl(url) {
   return String(url || '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
 }
 
+// Dependency-free read of credentials.certifications names (a list of {name,
+// issuer} objects, which the scalar reader can't handle). Scans the lines under
+// the `certifications:` key and pulls each `name:` until the block dedents.
+function getCertNames(text) {
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex(l => /^\s*certifications:\s*$/.test(l));
+  if (start === -1) return [];
+  const baseIndent = lines[start].match(/^\s*/)[0].length;
+  const names = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    const l = lines[i];
+    if (l.trim() === '') continue;
+    if (l.match(/^\s*/)[0].length <= baseIndent) break; // dedented out of the block
+    const m = l.match(/^\s*-?\s*name:\s*(.+?)\s*$/);
+    if (m) names.push(m[1].replace(/^["']|["']$/g, ''));
+  }
+  return names;
+}
+
 let _cache = null; // { mtimeMs, identity }
 
 // Returns the user's identity, cached and invalidated by profile.yml mtime.
@@ -94,6 +114,9 @@ export function getIdentity() {
     linkedinDisplay: stripUrl(linkedin),
     portfolioUrl,
     portfolioHost,
+    github: getScalar(text, 'candidate', 'github'),
+    // Reusable application info for the drawer's one-click "Quick copy" bar.
+    certifications: getCertNames(text),
     headline: getScalar(text, 'narrative', 'headline'),
     // Convenience: the user's documented-approach landing page used in outreach.
     trajecktoryUrl: portfolioHost ? `${portfolioHost}/trajecktory` : '',
