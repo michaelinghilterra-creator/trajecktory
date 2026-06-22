@@ -19,7 +19,7 @@
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import yaml from 'js-yaml';
-import { buildTitleFilter, normalizeUrl } from './lib/scan-core.mjs';
+import { buildTitleFilter, normalizeUrl, scoreOffer } from './lib/scan-core.mjs';
 const parseYaml = yaml.load;
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -539,7 +539,13 @@ async function main() {
 
   await parallelFetch(tasks, CONCURRENCY);
 
-  // TEST CAP: keep only the first N new offers when TJK_TEST_LIMIT is set.
+  // Rank best-fit first (no LLM) so the dashboard's batch evaluation scores the
+  // most relevant roles before the long tail — the user evaluates pipeline.md
+  // top-down, a batch at a time, so ordering decides which roles get scored first.
+  newOffers.sort((a, b) => scoreOffer(b, config.title_filter) - scoreOffer(a, config.title_filter));
+
+  // TEST CAP: keep only the first N new offers when TJK_TEST_LIMIT is set (now the
+  // best-ranked N, since the sort above ran first).
   if (TEST_LIMIT > 0 && newOffers.length > TEST_LIMIT) {
     console.log(`[TEST] TJK_TEST_LIMIT=${TEST_LIMIT}: capping ${newOffers.length} new offers to ${TEST_LIMIT}`);
     newOffers.splice(TEST_LIMIT);
