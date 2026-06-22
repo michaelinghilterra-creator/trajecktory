@@ -4,9 +4,19 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.21.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.22.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.21 is a batch of onboarding
+> the dashboard with healthy API endpoints. v1.7.22 makes every **customizable Setup
+> section show what it actually configured** plus a plain-English "how it affects your
+> search" note, so users can review and tweak with confidence instead of seeing only a
+> green checkmark. Roles, Your Edge, Location & Policy, Evaluation Tuning, and Companies
+> each render a live "How it's configured now" summary read back from the real config
+> files (e.g. Location shows your home + commute radius, the cities you will work in,
+> and the cities you will NOT work in, so you can spot one to remove). The server reads
+> the nested config via a best-effort js-yaml parse (`location_policy` is correctly read
+> from under `title_filter`) plus a small markdown extractor for the Evaluation Tuning
+> priorities/deal-breakers; long lists are capped with "+N more" in the UI. Replaces the
+> old thin "geo filter is set" / "already targeting" banners. v1.7.21 is a batch of onboarding
 > refinements from the v1.7.20 VM run: the Evaluate **batch is now 5 per run** (was 15,
 > which took too long between steps; `TJK_EVAL_BATCH` still overrides); the Launchpad
 > **compensation fields show a persistent example** under each box (instead of a

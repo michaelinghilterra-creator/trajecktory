@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import yaml from 'js-yaml';
 import { ROOT_DIR, DEMO } from '../config.mjs';
 
 const SETUP_ROOT = ROOT_DIR;
@@ -177,6 +178,34 @@ const SETUP_SCALAR_FIELDS = {
   ],
 };
 
+// Best-effort YAML parse for the read-back summaries (never throws — a malformed
+// file just falls back to the boolean/regex completion checks).
+function setupParseYaml(text) {
+  try { return text ? yaml.load(text) : null; } catch { return null; }
+}
+
+// Pull the "Evaluation Tuning" markdown section out of modes/_profile.md and split
+// it into the ranked priorities and the hard deal-breakers, so the Launchpad can
+// show the user what their score is actually tuned for. Markdown, not YAML, so it
+// gets its own tiny extractor. Returns null when the section is absent.
+function setupParseEvalTuning(md) {
+  if (!md) return null;
+  const lines = md.split('\n');
+  const start = lines.findIndex(l => /^#{1,6}\s.*evaluation tuning/i.test(l));
+  if (start === -1) return null;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) { if (/^#{1,6}\s/.test(lines[i])) { end = i; break; } }
+  const priorities = [], dealBreakers = [];
+  let bucket = null;
+  for (const l of lines.slice(start + 1, end)) {
+    if (/\*\*/.test(l) && /priorit/i.test(l)) { bucket = priorities; continue; }
+    if (/\*\*/.test(l) && /(deal.?breaker|hard no)/i.test(l)) { bucket = dealBreakers; continue; }
+    const m = l.match(/^\s*(?:\d+\.|[-*])\s+(.*\S)/);
+    if (m && bucket) bucket.push(m[1].replace(/\([^)]*\)/g, '').replace(/`/g, '').trim());
+  }
+  return (priorities.length || dealBreakers.length) ? { priorities, dealBreakers } : null;
+}
+
 // Suggested default output folder under the user's Documents (e.g.
 // C:\Users\me\Documents\trajecktory resumes). Falls back to a relative dir when
 // the home path can't be resolved (headless/odd environments).
@@ -254,16 +283,49 @@ function setupComputeState() {
       resume_dir: setupGetScalar(profile, 'outputs', 'resume_dir') || setupDefaultOutputDir('trajecktory resumes', 'output'),
       interview_prep_dir: setupGetScalar(profile, 'outputs', 'interview_prep_dir') || setupDefaultOutputDir('trajecktory interview prep', 'interview-prep'),
     },
-    // Read-backs so the Launchpad can SHOW what's configured (not just "Done").
-    configured: {
-      targetRoles: [
-        ...setupGetList(profile, 'target_roles', 'primary'),
-        ...setupGetList(profile, 'target_roles', 'secondary'),
-      ],
-      scannerTitles: setupGetList(portals, 'title_filter', 'positive').length,
-      locationPolicy: !!(portals && /^location_policy:/m.test(portals)),
-      evalTuning: !!(modeProfile && /evaluation tuning/i.test(modeProfile)),
-    },
+    // Read-backs so the Launchpad can SHOW what each customizable section
+    // actually configured (not just "Done"), so the user can review and tweak
+    // with confidence. Nested structures are read via a best-effort YAML parse;
+    // the booleans below stay as a fallback for malformed files.
+    configured: (() => {
+      const P = setupParseYaml(portals) || {};
+      const Pr = setupParseYaml(profile) || {};
+      // location_policy lives nested under title_filter in portals.yml (the scanner
+      // reads it from there); fall back to a top-level key just in case.
+      const lp = (P.title_filter && P.title_filter.location_policy) || P.location_policy || {};
+      const tr = Pr.target_roles || {};
+      const nar = Pr.narrative || {};
+      const cos = Array.isArray(P.tracked_companies) ? P.tracked_companies : [];
+      const arr = v => Array.isArray(v) ? v : [];
+      return {
+        targetRoles: [
+          ...setupGetList(profile, 'target_roles', 'primary'),
+          ...setupGetList(profile, 'target_roles', 'secondary'),
+        ],
+        scannerTitles: setupGetList(portals, 'title_filter', 'positive').length,
+        locationPolicy: !!(lp.home || (Array.isArray(lp.hard_no) && lp.hard_no.length)),
+        evalTuning: !!(modeProfile && /evaluation tuning/i.test(modeProfile)),
+        // Rich read-backs (best-effort; null when absent/unparseable):
+        archetypes: arr(tr.archetypes).map(a => a && a.name).filter(Boolean),
+        edge: (nar.headline || arr(nar.superpowers).length || arr(nar.proof_points).length) ? {
+          headline: nar.headline || null,
+          superpowers: arr(nar.superpowers).length,
+          proofPoints: arr(nar.proof_points).length,
+        } : null,
+        location: (lp.home || arr(lp.hard_no).length || arr(lp.metro_allow).length) ? {
+          home: (lp.home && lp.home.city) || null,
+          radiusMiles: (lp.home && lp.home.commute_radius_miles) != null ? lp.home.commute_radius_miles : null,
+          allow: [...arr(lp.dfw_core), ...arr(lp.metro_allow)],
+          hybridRemoteOnly: arr(lp.hybrid_remote_only),
+          hardNo: arr(lp.hard_no),
+        } : null,
+        evaluation: setupParseEvalTuning(modeProfile),
+        companies: cos.length ? {
+          count: cos.length,
+          names: cos.map(c => c && c.name).filter(Boolean).slice(0, 8),
+        } : null,
+      };
+    })(),
   };
 
   const coreReady = meta.cv.exists && meta.profile.exists && meta.portals.exists && meta.modeProfile.exists;

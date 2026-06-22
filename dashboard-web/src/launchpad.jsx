@@ -115,6 +115,56 @@ const TZ_OPTIONS = ['Eastern (ET)', 'Central (CT)', 'Mountain (MT)', 'Pacific (P
 const COUNTRY_OPTIONS = ['United States', 'Canada', 'United Kingdom', 'Ireland', 'Germany', 'France', 'Netherlands', 'Spain', 'Italy', 'Switzerland', 'Austria', 'Belgium', 'Sweden', 'Denmark', 'Norway', 'Finland', 'Portugal', 'Poland', 'Australia', 'New Zealand', 'Japan', 'Singapore', 'India', 'United Arab Emirates', 'Mexico', 'Brazil'];
 const VISA_OPTIONS = ['U.S. Citizen', 'U.S. Permanent Resident (Green Card)', 'Authorized to work, no sponsorship needed', 'Will need sponsorship now', 'Will need sponsorship in future (e.g., F-1/OPT)', 'H-1B', 'TN', 'EU Citizen', 'UK Right to Work'];
 
+// Build the "how it's configured now" read-back rows + impact note for a
+// customizable section, from state.values.configured. Returns null for sections
+// with nothing to surface (so the box simply doesn't render). This is what lets
+// the user review what each section set up (e.g. their location rules) and decide
+// what to change, instead of seeing only a green checkmark.
+function lpSectionSummary(id, cfg) {
+  if (!cfg) return null;
+  const cap = (arr, n = 12) => arr.length > n ? `${arr.slice(0, n).join(', ')}  (+${arr.length - n} more)` : arr.join(', ');
+  const row = (label, val) => (val != null && val !== '' && !(Array.isArray(val) && !val.length)) ? [label, Array.isArray(val) ? cap(val) : String(val)] : null;
+  let rows = [], impact = '';
+  if (id === 'roles') {
+    rows = [row('Targeting', cfg.targetRoles), row('Archetypes', (cfg.archetypes || []).length ? cfg.archetypes : null), cfg.scannerTitles != null ? ['Scanner searches', `${cfg.scannerTitles} title${cfg.scannerTitles === 1 ? '' : 's'}`] : null];
+    impact = 'These titles are exactly what the scanner hunts for. Add or remove titles to widen or narrow what shows up in your pipeline.';
+  } else if (id === 'edge' && cfg.edge) {
+    rows = [row('Headline', cfg.edge.headline), ['Superpowers', `${cfg.edge.superpowers || 0}`], ['Proof points', `${cfg.edge.proofPoints || 0}`]];
+    impact = 'This is the biggest lever on evaluation quality — it is how each role is scored against your strengths. Re-run to refine after a few evaluations.';
+  } else if (id === 'location' && cfg.location) {
+    const l = cfg.location;
+    rows = [row('Home', l.home ? (l.radiusMiles != null ? `${l.home} (${l.radiusMiles} mi radius)` : l.home) : null), row('Will work in', l.allow), row('Hybrid / remote only', l.hybridRemoteOnly), row('Will NOT work in', l.hardNo)];
+    impact = 'The scanner drops postings outside these rules before you ever see them. Edit to change which locations surface (for example, remove a city you no longer want).';
+  } else if (id === 'evaluation' && cfg.evaluation) {
+    const ev = cfg.evaluation;
+    rows = [(ev.priorities || []).length ? ['Priorities', ev.priorities.map((p, i) => `${i + 1}. ${p}`).join('   ')] : null, row('Deal-breakers', ev.dealBreakers)];
+    impact = 'Priorities tune the score; deal-breakers can override a high score and feed the scanner exclusions. Re-run, or edit modes/_profile.md, anytime to change how roles are judged.';
+  } else if (id === 'companies' && cfg.companies) {
+    const c = cfg.companies;
+    rows = [['Tracking', `${c.count} compan${c.count === 1 ? 'y' : 'ies'}`], row('Including', (c.names || []).length ? `${c.names.join(', ')}${c.count > c.names.length ? ', …' : ''}` : null)];
+    impact = 'The free API Scan checks these companies’ job boards every run. Add more to widen coverage.';
+  }
+  rows = rows.filter(Boolean);
+  return rows.length ? { rows, impact } : null;
+}
+
+function LpSummaryBox({ id, configured }) {
+  const s = lpSectionSummary(id, configured);
+  if (!s) return null;
+  return (
+    <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.22)', fontSize: 12.5, lineHeight: 1.5 }}>
+      <div style={{ color: 'var(--green)', fontWeight: 600, marginBottom: 6 }}>✓ How it's configured now</div>
+      {s.rows.map(([label, val], i) => (
+        <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 3 }}>
+          <span style={{ color: 'var(--text-mute)', minWidth: 124, flexShrink: 0 }}>{label}</span>
+          <span style={{ color: 'var(--text-dim)', flex: 1 }}>{val}</span>
+        </div>
+      ))}
+      <div style={{ marginTop: 7, color: 'var(--text-mute)', fontStyle: 'italic' }}>{s.impact}</div>
+    </div>
+  );
+}
+
 const LP_SUB = { fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginBottom: 7 };
 function lpPillStyle(on) {
   return { background: on ? 'var(--accent-bg)' : 'var(--panel-2)', color: on ? 'var(--accent)' : 'var(--text-dim)',
@@ -545,7 +595,6 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     const titles = (Array.isArray(r.titles) ? r.titles : []).filter(t => typeof t === 'string');
     const suggestions = (Array.isArray(r.suggestions) ? r.suggestions : []).filter(s => s && typeof s === 'object' && s.title);
     const cfg = (state && state.values && state.values.configured) || {};
-    const cfgRoles = Array.isArray(cfg.targetRoles) ? cfg.targetRoles : [];
     const scannerTitles = cfg.scannerTitles != null ? cfg.scannerTitles : titles.length;
     const toggleSen = (s) => saveStage('roles', { ...r, seniority: seniority.includes(s) ? seniority.filter(x => x !== s) : [...seniority, s] });
     const addTitle = () => {
@@ -558,17 +607,6 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <LpLegend />
-        {cfgRoles.length > 0 && (
-          <div style={{ padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
-            <div style={{ fontSize: 12.5, color: 'var(--green)', fontWeight: 500, marginBottom: 6 }}>✓ Already targeting (set from your CV)</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {cfgRoles.map((t, i) => <span key={i} style={lpChipStyle()}>{t}</span>)}
-            </div>
-            <div style={{ fontSize: 11.5, color: 'var(--text-mute)', marginTop: 8, lineHeight: 1.5 }}>
-              Your scanner already searches <b>{scannerTitles}</b> title{scannerTitles === 1 ? '' : 's'} for these. Nothing more is required here — add or change roles below only if you want to, then re-run to update the scanner.
-            </div>
-          </div>
-        )}
         <div>
           <div style={LP_SUB}>Seniority</div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -787,14 +825,8 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     }
     if (section.id === 'location') {
       const c = forms.location || {};
-      const geoSet = !!(state && state.values && state.values.configured && state.values.configured.locationPolicy);
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {geoSet && (
-            <div style={{ padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-              <span style={{ color: 'var(--green)', fontWeight: 500 }}>✓ Your geo filter is set</span> in <span className="mono">portals.yml</span> (home, commute radius, and remote/hybrid/on-site rules). Re-build it below to change those, or ask Claude Code to "show me my location rules."
-            </div>
-          )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
             <LpField label="City" value={c.city} onChange={v => setFormVal('location', 'city', v)} placeholder="City, ST" />
             <LpSelect label="Country" value={c.country} onChange={v => setFormVal('location', 'country', v)} options={COUNTRY_OPTIONS} />
@@ -1034,6 +1066,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                 {st === 'complete' && <span className="pill" style={{ background: 'var(--accent-bg)', color: 'var(--green)', marginLeft: 'auto' }}>done</span>}
               </div>
               <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>{sec.why}</p>
+              <LpSummaryBox id={sec.id} configured={state.values && state.values.configured} />
               {sec.id === 'cv' && state.sections?.cv?.warning === 'no-master-docx' && (
                 <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(234,179,8,0.12)', color: 'var(--yellow)', fontSize: 12.5, lineHeight: 1.5 }}>
                   Your <span className="mono">cv.md</span> exists, but no Word master was found. Upload a <span className="mono">.docx</span> so tailored Word resumes can be generated.
