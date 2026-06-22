@@ -61,9 +61,32 @@ router.get('/api/claude-status', (req, res) => {
   res.json({ signedIn });
 });
 
+// ── Optional .env-backed keys (drafts + web discovery) ────────────────────────
+// Shared helpers for the key endpoints below. They upsert a KEY=value line in
+// dashboard-web/.env and mirror it into the live process so it takes effect with
+// no restart (spawned scripts like discover.mjs re-read .env on their next run).
+// Reads never return the secret, only whether it is present.
+const ENV_PATH = path.join(SETUP_ROOT, 'dashboard-web', '.env');
+function readEnvKey(name) {
+  try {
+    const text = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, 'utf8') : '';
+    const m = text.match(new RegExp(`^${name}=(.+)$`, 'm'));
+    return m && m[1] ? m[1].trim() : '';
+  } catch { return ''; }
+}
+function writeEnvKey(name, value) {
+  let text = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, 'utf8') : '';
+  const re = new RegExp(`^${name}=.*$`, 'm');
+  if (re.test(text)) text = text.replace(re, `${name}=${value}`);
+  else text = text.replace(/\s*$/, '') + (text ? '\n' : '') + `${name}=${value}\n`;
+  fs.writeFileSync(ENV_PATH, text, 'utf8');
+  process.env[name] = value;   // take effect now, no restart needed
+}
+const keyPresent = (name) => !!((process.env[name] || '').trim() || readEnvKey(name));
+
 // GET /api/setup/anthropic-key — report whether a draft API key is set (never the key).
 router.get('/api/setup/anthropic-key', (req, res) => {
-  res.json({ hasKey: !!(process.env.ANTHROPIC_API_KEY || '').trim() });
+  res.json({ hasKey: keyPresent('ANTHROPIC_API_KEY') });
 });
 
 // POST /api/setup/anthropic-key { key } — save the user's Anthropic API key to
@@ -74,21 +97,39 @@ router.post('/api/setup/anthropic-key', (req, res) => {
   if (DEMO) return res.status(403).json({ error: 'Read-only in demo mode' });
   const key = ((req.body && req.body.key) || '').trim();
   if (!key) return res.status(400).json({ error: 'Paste your Anthropic API key (it starts with sk-ant-).' });
-  if (!key.startsWith('sk-ant-')) return res.status(400).json({ error: 'That does not look like an Anthropic key — they start with "sk-ant-".' });
+  if (!key.startsWith('sk-ant-')) return res.status(400).json({ error: 'That does not look like an Anthropic key. Anthropic keys start with "sk-ant-".' });
   try {
-    const envPath = path.join(SETUP_ROOT, 'dashboard-web', '.env');
-    let text = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
-    if (/^ANTHROPIC_API_KEY=.*$/m.test(text)) {
-      text = text.replace(/^ANTHROPIC_API_KEY=.*$/m, `ANTHROPIC_API_KEY=${key}`);
-    } else {
-      text = text.replace(/\s*$/, '') + (text ? '\n' : '') + `ANTHROPIC_API_KEY=${key}\n`;
-    }
-    fs.writeFileSync(envPath, text, 'utf8');
-    process.env.ANTHROPIC_API_KEY = key;   // take effect now, no restart needed
+    writeEnvKey('ANTHROPIC_API_KEY', key);
     res.json({ ok: true, hasKey: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// GET /api/setup/discovery-keys — which optional web-discovery keys are set (never
+// the keys). Brave (and optional Muse) power Expand Coverage's web search; without
+// them Expand Coverage only registers companies already in your pipeline. Neither is
+// needed for API Scan, Agent Scan, or Evaluate.
+router.get('/api/setup/discovery-keys', (req, res) => {
+  res.json({ brave: keyPresent('BRAVE_API_KEY'), muse: keyPresent('MUSE_API_KEY') });
+});
+
+// POST /api/setup/discovery-keys { brave?, muse? } — save either or both optional
+// web-discovery keys to dashboard-web/.env. discover.mjs reads them on the next
+// Expand Coverage run.
+router.post('/api/setup/discovery-keys', (req, res) => {
+  if (DEMO) return res.status(403).json({ error: 'Read-only in demo mode' });
+  const body = req.body || {};
+  const saved = [];
+  for (const [field, envName] of [['brave', 'BRAVE_API_KEY'], ['muse', 'MUSE_API_KEY']]) {
+    if (typeof body[field] === 'string' && body[field].trim()) {
+      writeEnvKey(envName, body[field].trim());
+      saved.push(field);
+    }
+  }
+  if (!saved.length) return res.status(400).json({ error: 'Paste a Brave or Muse API key first.' });
+  try { res.json({ ok: true, saved, brave: keyPresent('BRAVE_API_KEY'), muse: keyPresent('MUSE_API_KEY') }); }
+  catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // POST /api/setup/healthcheck — run the verify scripts and report pass/fail.
