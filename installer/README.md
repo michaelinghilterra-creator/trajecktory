@@ -4,10 +4,24 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.16.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.17.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.16 closes two gaps from the v1.7.14
-> VM run. First, the **Launchpad now shows profile data that was set up in Claude
+> the dashboard with healthy API endpoints. v1.7.17 closes two gaps from the v1.7.16
+> VM run. First, the **dashboard-evaluated jobs now produce a COMPLETE report**: the
+> Interview, Customize, and Legitimacy drawer tabs were rendering empty because the
+> headless Evaluate Pipeline wrote a v1 report that omitted the optional frontmatter
+> sections (`customizationCV`/`customizationLI` for the personalization plan,
+> `starStories`/`leadStory` for interview prep, and a populated `legitimacy` object).
+> The drawer reads only frontmatter, so absent sections showed the empty-state
+> placeholders (Overview/CV Match/Comp populated fine because `summary`/`cvMatch`/
+> `comp` were always generated). The `dashboardConstraints('pipeline')` prompt now
+> explicitly requires those three sections and tells the agent to assess **legitimacy
+> from WebFetch/WebSearch** (marked "unconfirmed, no live browser") since Playwright
+> is unavailable, rather than skipping Block G. No parser or drawer change was needed.
+> Second, the **CV-setup handoff no longer ends with CLI "Next Steps"**: it was telling
+> users to run `npm start` and `/trajecktory scan` even though the dashboard is already
+> open. the prompt now forbids any terminal/CLI command list and points back to the
+> running dashboard GUI. v1.7.16: First, the **Launchpad now shows profile data that was set up in Claude
 > Desktop without a manual browser reload**: when you tab back, fields the CV-setup
 > agent just wrote (name, email, location) now appear, because the focus-refresh
 > merges fresh server values into the forms instead of keeping whatever was loaded
