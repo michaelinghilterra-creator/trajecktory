@@ -80,7 +80,15 @@ function runClaudeAgent(jobId, mode) {
     // ourselves; the remaining flags have no spaces or backslashes. On posix
     // no shell is needed — the args array handles the space natively.
     const prompt = `/trajecktory ${mode}.${dashboardConstraints(mode)}`;
+    // Default the dashboard's Claude work (Agent Scan + Evaluate) to Sonnet to keep
+    // the user's 5-hour subscription quota in check, since these are the heaviest
+    // repeated spawns. Override with TJK_AGENT_MODEL in dashboard-web/.env (e.g.
+    // `opus` for max eval quality, or `inherit`/`default` to use the CLI's own
+    // default and not pass --model at all).
+    const modelPref = (process.env.TJK_AGENT_MODEL || 'sonnet').trim();
+    const modelFlag = (!modelPref || /^(inherit|default|none)$/i.test(modelPref)) ? [] : ['--model', modelPref];
     const args = ['-p', isWin ? `"${prompt}"` : prompt,
+                  ...modelFlag,
                   '--output-format', 'stream-json', '--verbose',
                   '--permission-mode', 'acceptEdits'];
 

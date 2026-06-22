@@ -4,9 +4,18 @@ A one-double-click installer for non-technical users. Bundles everything offline
 (portable Node, installed `node_modules`, Claude Code, and Chromium) and ends at
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
-> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.18.exe` compiles with
+> **Status: built and smoke-tested.** `trajecktory-setup-v1.7.19.exe` compiles with
 > Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
-> the dashboard with healthy API endpoints. v1.7.18 makes the optional **web-discovery
+> the dashboard with healthy API endpoints. v1.7.19 **defaults the dashboard's Claude
+> work (Agent Scan + Evaluate Pipeline) to Sonnet** to keep the user's 5-hour Claude
+> subscription quota in check (these were previously model-unpinned, inheriting the
+> CLI's default, usually Opus). The spawn now passes `--model sonnet`, overridable per
+> machine with `TJK_AGENT_MODEL` in `dashboard-web/.env` (`opus` for max eval quality,
+> or `inherit`/`default` to skip the flag and use the CLI default). Note: onboarding
+> runs in the user's own Claude Desktop, so its model is the Desktop picker's, not
+> something trajecktory can set. The API-key draft features stay on Haiku 4.5 (already
+> cheaper than Sonnet) and Insights stays on Opus 4.8 (a deliberate premium choice).
+> v1.7.18 makes the optional **web-discovery
 > keys GUI-configurable**: the Launchpad's Optional boosters now has a "Web discovery
 > keys" panel with fields for a Brave Search key (and optional Muse key), saved to
 > `dashboard-web/.env` via `GET`/`POST /api/setup/discovery-keys` (mirrors the existing

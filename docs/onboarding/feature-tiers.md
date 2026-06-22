@@ -19,17 +19,24 @@ Claude Pro/Max account.
 
 | Feature / section | What it does | Runs on |
 |---|---|---|
-| Onboarding / Launchpad setup | Parse CV, draft profile, roles, narrative, location, companies | Claude subscription (your session model) |
+| Onboarding / Launchpad setup | Parse CV, draft profile, roles, narrative, location, companies | Claude subscription (runs in your Claude Desktop, on whatever model it is set to) |
 | API Scan | Finds postings from Greenhouse / Ashby / Lever job boards for your tracked companies | Pure Node, no Claude, no cost |
-| Agent Scan | Web-searches the open web for new postings (Claude's WebSearch) | Claude subscription |
+| Agent Scan | Web-searches the open web for new postings (Claude's WebSearch) | Claude subscription, defaults to Sonnet |
 | Expand Coverage (Phase 1) | Registers companies already sitting in your pipeline into your tracked list | Pure Node, no cost |
-| Evaluate Pipeline | Scores each JD and writes the full report (Overview, CV Match, Comp, Interview, Customize, Legitimacy) | Claude subscription |
+| Evaluate Pipeline | Scores each JD and writes the full report (Overview, CV Match, Comp, Interview, Customize, Legitimacy) | Claude subscription, defaults to Sonnet |
 | Liveness Gate, Merge Tracker, Verify, Health Check | Pipeline hygiene (dead-link check, dedup, validation) | Pure Node, no cost |
 | All dashboard views + report drawer | Pipeline, Overview, Follow-Ups, reading reports | Pure display, no cost |
 
 Onboarding is the heaviest one-time subscription burn, because each setup paste runs
 a full Claude pass in the user's own Claude Desktop. Steady-state use (scan, evaluate)
 is much lighter.
+
+**Model defaults.** The dashboard's two Claude-powered steps (Agent Scan, Evaluate
+Pipeline) default to **Sonnet** to keep the 5-hour quota in check. Override per machine
+with `TJK_AGENT_MODEL` in `dashboard-web/.env` (`opus` for maximum evaluation quality,
+or `inherit` to use the CLI's own default). Onboarding runs in the user's own Claude
+Desktop, so trajecktory cannot set its model. for the lightest onboarding burn, set the
+Claude Desktop model picker to Sonnet before pasting the setup prompts.
 
 ## Tier 2: add an Anthropic API key (optional)
 
