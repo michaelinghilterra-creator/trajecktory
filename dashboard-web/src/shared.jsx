@@ -375,11 +375,29 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                   })}
                 </div>
               )}
-              {isAgent && isRunning && (
-                <div className="workflow-summary" title={job.output || ''}>
-                  {(job.activity || 'Working…')}{job.toolCount ? ` · ${job.toolCount} steps` : ''}
-                </div>
-              )}
+              {isAgent && isRunning && (() => {
+                const elapsedMs = job.startedAt ? Date.now() - job.startedAt : 0;
+                const fmt = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`; };
+                const total = job.progressTotal, done = job.evaluationsDone || 0;
+                // Evaluate has a known batch size → fraction + bar + rough ETA.
+                if (total > 0) {
+                  const eta = (done > 0 && done < total) ? ` · ~${fmt((elapsedMs / done) * (total - done))} left` : '';
+                  return (
+                    <div className="workflow-summary" title={job.output || ''}>
+                      <div>Evaluated {done} of {total} · {fmt(elapsedMs)}{eta}</div>
+                      <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${Math.round((done / total) * 100)}%`, background: 'var(--accent)', transition: 'width .3s' }} />
+                      </div>
+                    </div>
+                  );
+                }
+                // Scan is open-ended discovery → elapsed + activity, no fake ETA.
+                return (
+                  <div className="workflow-summary" title={job.output || ''}>
+                    {(job.activity || 'Working…')}{job.toolCount ? ` · ${job.toolCount} steps` : ''} · {fmt(elapsedMs)}
+                  </div>
+                );
+              })()}
               {job?.summary && !(isAgent && isRunning) && (
                 <div className="workflow-summary" title={job.output || ''}>{job.summary}</div>
               )}
