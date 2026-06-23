@@ -281,8 +281,16 @@ function buildLocationFilter(titleFilter) {
     const hasHybrid = loc.includes('hybrid');
     const isFlexible = hasRemote || hasHybrid;
 
-    // 2. Hard-no cities → block unconditionally
-    if (hardNo.some(city => loc.includes(city))) return false;
+    // 2. Hard-no cities block, UNLESS the posting carries a remote signal.
+    //    A remote role tagged with an HQ city (e.g. "San Francisco, CA; Remote")
+    //    should not be killed for the HQ. Onsite/hybrid in a hard-no metro still
+    //    blocks (cannot make in-office days from TX). Errs toward catching: a
+    //    geo-restricted "remote, Bay Area only" role slips through to eval, where
+    //    the full JD and the user make the call. (Widen 2026-06-23.)
+    if (hardNo.some(city => loc.includes(city))) {
+      if (hasRemote) return true;
+      return false;
+    }
 
     // 3. Pure "remote" with no city noise → pass
     if (hasRemote && loc.replace(/remote/g, '').trim().length < 5) return true;
