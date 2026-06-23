@@ -9,7 +9,9 @@
  *
  * Dedup: company normalized + role fuzzy match + report number match
  * If duplicate with higher score → update in-place, update report link
- * Validates status against states.yml (rejects non-canonical, logs warning)
+ * Validates status against templates/states.yml: canonical labels + aliases are
+ * loaded from that file at startup (not hardcoded), so they never drift from the
+ * dashboard reader / pipeline writer. Unknown values warn and default to Evaluated.
  *
  * Run: node career-ops/merge-tracker.mjs [--dry-run] [--verify]
  */
@@ -18,6 +20,7 @@ import { readFileSync, writeFileSync, readdirSync, mkdirSync, renameSync, exists
 import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
+import yaml from 'js-yaml';
 import { parseScore, shouldAutoDiscard, recommendsAgainst } from './lib/discard.mjs';
 import { parseTrackerLine } from './lib/tracker.mjs';
 import { normalizeUrl } from './lib/scan-core.mjs';
@@ -40,9 +43,54 @@ const VERIFY = process.argv.includes('--verify');
 mkdirSync(join(CAREER_OPS, 'data'), { recursive: true });
 mkdirSync(ADDITIONS_DIR, { recursive: true });
 
-// Canonical states and aliases
-const CANONICAL_STATES = ['Evaluated', 'Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Discarded', 'SKIP', 'Closed', 'Not a Fit'];
+// ── Canonical states + aliases (loaded from templates/states.yml) ─────────────
+// templates/states.yml is the documented source of truth shared with the
+// dashboard reader and the pipeline writer. CANONICAL_STATES and the alias map
+// are derived from it at startup so they can never drift again. When "Closed"
+// and "Not a Fit" were added to states.yml, the old hardcoded arrays here did
+// not know about them and silently rewrote both to "Evaluated" until they were
+// hand-patched (2026-06-23). Reading the file removes that whole class of bug.
+const STATES_FILE = join(CAREER_OPS, 'templates/states.yml');
+const statesDoc = yaml.load(readFileSync(STATES_FILE, 'utf-8'));
+const CANONICAL_STATES = statesDoc.states.map(s => s.label);
 
+// Code-only aliases that are intentionally NOT in states.yml: loose free-text
+// the writer occasionally emits, not canonical-state synonyms the dashboard
+// needs to know about. Seeded first so anything in states.yml wins on conflict.
+const STATUS_ALIASES = {
+  condicional: 'Evaluated', hold: 'Evaluated', evaluar: 'Evaluated', verificar: 'Evaluated',
+  'geo blocker': 'SKIP',
+};
+for (const state of statesDoc.states) {
+  for (const alias of state.aliases || []) {
+    STATUS_ALIASES[String(alias).toLowerCase()] = state.label;
+  }
+}
+
+// Vocabulary used only to disambiguate swapped score/status columns in
+// parseTsvContent. Derived from the same states.yml set as validateStatus so the
+// two never disagree about what counts as a status. DUPLICADO/Repost are not
+// states.yml entries, but validateStatus maps them to Discarded, so the
+// heuristic must still recognize them as status-like.
+const KNOWN_STATUS_TOKENS = new Set([
+  ...CANONICAL_STATES.map(s => s.toLowerCase()),
+  ...Object.keys(STATUS_ALIASES),
+  'duplicado', 'repost',
+]);
+function looksLikeStatus(cell) {
+  const lower = cell.trim().toLowerCase();
+  for (const token of KNOWN_STATUS_TOKENS) {
+    if (lower.startsWith(token)) return true;
+  }
+  return false;
+}
+
+/**
+ * Canonicalize a raw status string against templates/states.yml.
+ * Strips markdown bold and any trailing date, matches canonical labels
+ * (case-insensitive), then the alias map. Genuinely unknown values warn and
+ * default to "Evaluated" (warn-and-default, never a hard failure).
+ */
 function validateStatus(status) {
   const clean = status.replace(/\*\*/g, '').replace(/\s+\d{4}-\d{2}-\d{2}.*$/, '').trim();
   const lower = clean.toLowerCase();
@@ -51,21 +99,7 @@ function validateStatus(status) {
     if (valid.toLowerCase() === lower) return valid;
   }
 
-  // Aliases
-  const aliases = {
-    // Spanish → English
-    'evaluada': 'Evaluated', 'condicional': 'Evaluated', 'hold': 'Evaluated', 'evaluar': 'Evaluated', 'verificar': 'Evaluated',
-    'aplicado': 'Applied', 'enviada': 'Applied', 'aplicada': 'Applied', 'applied': 'Applied', 'sent': 'Applied',
-    'respondido': 'Responded',
-    'entrevista': 'Interview',
-    'oferta': 'Offer',
-    'rechazado': 'Rejected', 'rechazada': 'Rejected',
-    'descartado': 'Discarded', 'descartada': 'Discarded', 'cerrada': 'Discarded', 'cancelada': 'Discarded',
-    'no aplicar': 'SKIP', 'no_aplicar': 'SKIP', 'skip': 'SKIP', 'monitor': 'SKIP',
-    'geo blocker': 'SKIP',
-  };
-
-  if (aliases[lower]) return aliases[lower];
+  if (STATUS_ALIASES[lower]) return STATUS_ALIASES[lower];
 
   // DUPLICADO/Repost → Discarded
   if (/^(duplicado|dup|repost)/i.test(lower)) return 'Discarded';
@@ -185,8 +219,8 @@ function parseTsvContent(content, filename) {
     const col5 = parts[5].trim();
     const col4LooksLikeScore = /^\d+\.?\d*\/5$/.test(col4) || col4 === 'N/A' || col4 === 'DUP';
     const col5LooksLikeScore = /^\d+\.?\d*\/5$/.test(col5) || col5 === 'N/A' || col5 === 'DUP';
-    const col4LooksLikeStatus = /^(evaluated|applied|responded|interview|offer|rejected|discarded|skip|evaluada|aplicado|respondido|entrevista|oferta|rechazado|descartado|no aplicar|cerrada|duplicado|repost|condicional|hold|monitor)/i.test(col4);
-    const col5LooksLikeStatus = /^(evaluated|applied|responded|interview|offer|rejected|discarded|skip|evaluada|aplicado|respondido|entrevista|oferta|rechazado|descartado|no aplicar|cerrada|duplicado|repost|condicional|hold|monitor)/i.test(col5);
+    const col4LooksLikeStatus = looksLikeStatus(col4);
+    const col5LooksLikeStatus = looksLikeStatus(col5);
 
     let statusCol, scoreCol;
     if (col4LooksLikeStatus && !col4LooksLikeScore) {
