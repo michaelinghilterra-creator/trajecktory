@@ -13,7 +13,6 @@
 
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
-import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
 
@@ -27,7 +26,11 @@ function check(cond, msg) {
 }
 
 // ── Build sandbox ─────────────────────────────────────────────────────────────
-const sandbox = mkdtempSync(join(tmpdir(), 'merge-tracker-test-'));
+// Sandbox lives INSIDE the project (not os.tmpdir()) so bare imports in
+// merge-tracker.mjs (js-yaml) resolve against the real node_modules by walking up
+// the tree. The script still resolves all its own paths relative to its own
+// location, so it only ever reads/writes sandbox files.
+const sandbox = mkdtempSync(join(ROOT, 'merge-tracker-test-'));
 mkdirSync(join(sandbox, 'data'));
 mkdirSync(join(sandbox, 'batch/tracker-additions'), { recursive: true });
 copyFileSync(join(ROOT, 'merge-tracker.mjs'), join(sandbox, 'merge-tracker.mjs'));
@@ -36,6 +39,10 @@ mkdirSync(join(sandbox, 'lib'), { recursive: true });
 copyFileSync(join(ROOT, 'lib/discard.mjs'), join(sandbox, 'lib/discard.mjs'));
 copyFileSync(join(ROOT, 'lib/tracker.mjs'), join(sandbox, 'lib/tracker.mjs'));
 copyFileSync(join(ROOT, 'lib/scan-core.mjs'), join(sandbox, 'lib/scan-core.mjs'));
+// merge-tracker.mjs loads templates/states.yml at startup for canonical states +
+// aliases, so the sandbox copy needs that file present too.
+mkdirSync(join(sandbox, 'templates'), { recursive: true });
+copyFileSync(join(ROOT, 'templates/states.yml'), join(sandbox, 'templates/states.yml'));
 
 const HEADER = [
   '# Applications Tracker',
@@ -75,6 +82,23 @@ const cases = {
   // 6. Duplicate of seed #2 with HIGHER score — must update in place, not add
   '106-updateco.tsv': tsv(['106', '2026-06-12', 'UpdateCo', 'VP Sales Strategy',
     'Evaluated', '4.5/5', '❌', '[106](reports/106-updateco-2026-06-12.md)', 'Higher-score re-eval']),
+  // 7. Canonical "Closed" (new state in states.yml): must be preserved, not
+  //    silently rewritten to Evaluated.
+  '107-epsilonco.tsv': tsv(['107', '2026-06-12', 'EpsilonCo', 'Director of Strategy',
+    'Closed', '4.1/5', '❌', '[107](reports/107-epsilonco-2026-06-12.md)', 'Posting closed']),
+  // 8. Alias "expired": must canonicalize to "Closed".
+  '108-zetalabs.tsv': tsv(['108', '2026-06-12', 'ZetaLabs', 'Head of Operations',
+    'expired', '4.0/5', '❌', '[108](reports/108-zetalabs-2026-06-12.md)', 'Expired alias']),
+  // 9. Canonical "Not a Fit" (new state): must be preserved.
+  '109-etacorp.tsv': tsv(['109', '2026-06-12', 'EtaCorp', 'VP Marketing',
+    'Not a Fit', '3.7/5', '❌', '[109](reports/109-etacorp-2026-06-12.md)', 'Poor fit']),
+  // 10. Alias "naf": must canonicalize to "Not a Fit".
+  '110-thetaco.tsv': tsv(['110', '2026-06-12', 'ThetaCo', 'Director of Product',
+    'naf', '3.6/5', '❌', '[110](reports/110-thetaco-2026-06-12.md)', 'naf alias']),
+  // 11. SWAPPED column order with a NEW state: score in col4, "Closed" in col5.
+  //     The heuristic must recognize "Closed" (from states.yml) and un-swap.
+  '111-iotacorp.tsv': tsv(['111', '2026-06-12', 'IotaCorp', 'Chief of Staff',
+    '4.3/5', 'Closed', '❌', '[111](reports/111-iotacorp-2026-06-12.md)', 'Swapped order, new state']),
 };
 for (const [name, content] of Object.entries(cases)) {
   writeFileSync(join(sandbox, 'batch/tracker-additions', name), content);
@@ -132,10 +156,29 @@ console.log('\n3. Dedup behavior');
   check(u[NOTES].includes('Re-eval'), 'update annotated as re-eval in notes');
 }
 
-console.log('\n4. No collateral damage');
+console.log('\n4. New canonical states + aliases (states.yml drift guard)');
 {
-  check(rows.length === 6, `row count correct: 2 seeds + 4 new = ${rows.length}/6`);
-  check(/Summary: \+4 added/.test(output), 'script reported +4 added');
+  const closed = cols(rowFor('EpsilonCo'));
+  check(closed[STATUS] === 'Closed', `canonical "Closed" preserved, not rewritten (${closed[STATUS]})`);
+
+  const expired = cols(rowFor('ZetaLabs'));
+  check(expired[STATUS] === 'Closed', `alias "expired" canonicalized to Closed (${expired[STATUS]})`);
+
+  const notFit = cols(rowFor('EtaCorp'));
+  check(notFit[STATUS] === 'Not a Fit', `canonical "Not a Fit" preserved (${notFit[STATUS]})`);
+
+  const naf = cols(rowFor('ThetaCo'));
+  check(naf[STATUS] === 'Not a Fit', `alias "naf" canonicalized to Not a Fit (${naf[STATUS]})`);
+
+  const swappedNew = cols(rowFor('IotaCorp'));
+  check(swappedNew[STATUS] === 'Closed' && swappedNew[SCORE] === '4.3/5',
+    `swapped col order with new state un-swapped (${swappedNew[SCORE]} / ${swappedNew[STATUS]})`);
+}
+
+console.log('\n5. No collateral damage');
+{
+  check(rows.length === 11, `row count correct: 2 seeds + 9 new = ${rows.length}/11`);
+  check(/Summary: \+9 added/.test(output), 'script reported +9 added');
 }
 
 rmSync(sandbox, { recursive: true, force: true });
