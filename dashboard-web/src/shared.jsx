@@ -183,6 +183,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [jobs, setJobs] = useState({});            // { stepId: { status, summary, error, output } }
   const [claudeSignedIn, setClaudeSignedIn] = useState(false);
   const [claudeLoginMsg, setClaudeLoginMsg] = useState('');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const pollersRef = useRef({});
 
   // Agent Scan and Evaluate Pipeline spawn the bundled Claude CLI, which needs a
@@ -208,17 +209,22 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     }).catch(() => setClaudeLoginMsg('Could not open the sign-in window.'));
   }
 
+  // Everyday flow: API Scan (free, fast) → Triage (Haiku scores the top 15) →
+  // housekeeping. The expensive/optional/redundant steps move to Advanced below.
   const STEPS = [
-    { id: 'discover',  label: '1. Expand Coverage',  hint: 'Register new companies',  type: 'auto'   },
-    { id: 'api-scan',  label: '2. API Scan',         hint: 'Greenhouse/Ashby/Lever',  type: 'auto'   },
-    { id: 'cli-scan',  label: '3. Agent Scan',       hint: 'Discover roles (Claude)', type: 'agent', mode: 'scan',
-      command: '/trajecktory scan' },
-    { id: 'gate',      label: '4. Liveness Gate',    hint: 'Drop dead URLs',          type: 'auto'   },
-    { id: 'cli-eval',  label: '5. Evaluate Pipeline',hint: 'Score pending (Claude)',  type: 'agent', mode: 'pipeline',
-      command: '/trajecktory pipeline' },
-    { id: 'merge',     label: '6. Merge Tracker',    hint: 'TSVs → applications.md',  type: 'auto'   },
-    { id: 'verify',    label: '7. Verify Actionable',hint: 'Safety-net dead links',   type: 'auto'   },
-    { id: 'health',    label: '8. Health Check',     hint: 'Report parser drift',     type: 'auto'   },
+    { id: 'api-scan',  label: '1. API Scan',         hint: 'Greenhouse/Ashby/Lever',    type: 'auto'   },
+    { id: 'triage',    label: '2. Triage',           hint: 'Haiku scores the top 15',   type: 'agent', mode: 'triage',
+      command: '/trajecktory triage' },
+    { id: 'merge',     label: '3. Merge Tracker',    hint: 'TSVs → applications.md',     type: 'auto'   },
+    { id: 'verify',    label: '4. Verify Actionable',hint: 'Safety-net dead links',     type: 'auto'   },
+    { id: 'health',    label: '5. Health Check',     hint: 'Report parser drift',       type: 'auto'   },
+    // ── Advanced (collapsed by default) ─────────────────────────────────────────
+    { id: 'discover',  label: 'Expand Coverage',     hint: 'Register companies (keys)',  type: 'auto',  section: 'advanced' },
+    { id: 'cli-scan',  label: 'Agent Scan',          hint: 'Widen via Claude search',    type: 'agent', mode: 'scan',
+      command: '/trajecktory scan', section: 'advanced' },
+    { id: 'gate',      label: 'Liveness Gate',       hint: 'Drop dead URLs',             type: 'auto',  section: 'advanced' },
+    { id: 'cli-eval',  label: 'Evaluate (Batch)',    hint: 'Sonnet full reports, top N', type: 'agent', mode: 'pipeline',
+      command: '/trajecktory pipeline', section: 'advanced' },
   ];
 
   function runStep(step) {
@@ -333,7 +339,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
       </div>
 
       <div className="workflow-steps">
-        {STEPS.map(step => {
+        {STEPS.map((step, i) => {
           const job = jobs[step.id];
           const g = statusGlyph(job?.status);
           const isRunning = job?.status === 'running';
@@ -343,7 +349,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           const isCliP    = job?.status === 'cli-pending';
           const agentBusy = isAgent && anyAgentRunning;
           const blockedByEval = evalRunning && POST_EVAL.includes(step.id);
-          return (
+          const card = (
             <div key={step.id} className={`workflow-step ${isDone ? 'done' : ''} ${isRunning ? 'running' : ''}`}>
               <button
                 className="workflow-btn"
@@ -408,6 +414,23 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                 <div className="workflow-summary" style={{ color: 'var(--red)' }}>{job.error}</div>
               )}
             </div>
+          );
+          if (step.section !== 'advanced') return card;
+          // Advanced steps render under a collapsible toggle, inserted once before
+          // the first advanced step. Expensive (Agent Scan), key-gated (Expand
+          // Coverage), or redundant (Liveness Gate) for the everyday API-Scan flow.
+          const firstAdv = STEPS.findIndex(s => s.section === 'advanced') === i;
+          return (
+            <React.Fragment key={step.id}>
+              {firstAdv && (
+                <button onClick={() => setAdvancedOpen(o => !o)} title="Expensive, optional, or rarely-needed steps"
+                  style={{ background: 'none', border: 'none', borderTop: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer', width: '100%', textAlign: 'left', padding: '8px 12px', marginTop: 4, fontSize: 11.5, fontFamily: 'var(--mono)' }}>
+                  <span style={{ color: 'var(--text-mute)' }}>{advancedOpen ? '▾' : '▸'}</span> Advanced
+                  <span style={{ color: 'var(--text-mute)', marginLeft: 6 }}>widen · gate · batch evaluate</span>
+                </button>
+              )}
+              {advancedOpen && card}
+            </React.Fragment>
           );
         })}
       </div>
