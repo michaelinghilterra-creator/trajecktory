@@ -70,6 +70,11 @@ function dashboardConstraints(mode) {
     const cap = limit > 0 ? ` TEST MODE (TJK_TEST_LIMIT=${limit}): add at most ${limit} new postings to data/pipeline.md, then stop.` : '';
     return ' ' + common + ' Use only the ATS API tier and the WebSearch tier, and skip the Playwright tier. Pace the searches a few at a time. Add new live postings to data/pipeline.md as usual. When you find a company via WebSearch that has a Greenhouse, Ashby, or Lever job board and is not already in portals.yml tracked_companies, append it there with its careers_url and api endpoint (merge only: preserve every existing entry and comment byte for byte), so the free zero-token API Scan catches its postings next time instead of paying Claude to re-discover it.' + cap;
   }
+  if (mode === 'triage') {
+    const tcap = parseInt(process.env.TJK_TRIAGE_MAX, 10) || 15;
+    const n = limit > 0 ? Math.min(limit, tcap) : tcap;
+    return ' ' + common + ` Triage only — do NOT run a full evaluation. Score the TOP ${n} unchecked URLs from the top of data/pipeline.md (they are ordered best-fit first). For each: read the JD with WebFetch first and WebSearch as a fallback (skip any you cannot read), then give a 0.0-5.0 fit score and a one-sentence rationale using the rubric and anti-inflation calibration in the triage mode (most roles are NOT 4+; reserve 4+ for genuine strong fits on archetype AND level AND location). Append one TSV line per role to data/triage-results.tsv with columns url, company, title, score, rationale, date — create it with that header row if it is missing. Do NOT write a report, do NOT generate a PDF, do NOT write a tracker-additions TSV, and do NOT check off the pipeline.md checkboxes. Stop after ${n}.`;
+  }
   return '';
 }
 
@@ -98,12 +103,14 @@ function runClaudeAgent(jobId, mode) {
     // ourselves; the remaining flags have no spaces or backslashes. On posix
     // no shell is needed — the args array handles the space natively.
     const prompt = `/trajecktory ${mode}.${dashboardConstraints(mode)}`;
-    // Default the dashboard's Claude work (Agent Scan + Evaluate) to Sonnet to keep
-    // the user's 5-hour subscription quota in check, since these are the heaviest
-    // repeated spawns. Override with TJK_AGENT_MODEL in dashboard-web/.env (e.g.
-    // `opus` for max eval quality, or `inherit`/`default` to use the CLI's own
-    // default and not pass --model at all).
-    const modelPref = (process.env.TJK_AGENT_MODEL || 'sonnet').trim();
+    // Triage always runs on Haiku (cheap first-pass; calibrated faithful to Sonnet at
+    // this task, r≈0.89 / 100% recall of strong roles). Scan + Evaluate default to
+    // Sonnet to keep the 5-hour subscription quota in check; override with
+    // TJK_AGENT_MODEL in dashboard-web/.env (e.g. `opus` for max eval quality, or
+    // `inherit`/`default` to pass no --model). TJK_TRIAGE_MODEL overrides triage.
+    const modelPref = mode === 'triage'
+      ? (process.env.TJK_TRIAGE_MODEL || 'haiku').trim()
+      : (process.env.TJK_AGENT_MODEL || 'sonnet').trim();
     const modelFlag = (!modelPref || /^(inherit|default|none)$/i.test(modelPref)) ? [] : ['--model', modelPref];
     const args = ['-p', isWin ? `"${prompt}"` : prompt,
                   ...modelFlag,
@@ -274,12 +281,17 @@ async function runAgent(jobId, mode) {
     const note = 'Evaluations written. Run Merge Tracker (step 6) to add them to your pipeline.';
     agentJobs.set(jobId, { ...job, summary: job.summary ? `${job.summary} · ${note}` : note });
   }
+  if (mode === 'triage' && res.ok) {
+    const job = agentJobs.get(jobId) || {};
+    const note = 'Triage scored. Open the triage cards to deep-dive the ones worth a full report.';
+    agentJobs.set(jobId, { ...job, summary: job.summary ? `${job.summary} · ${note}` : note });
+  }
 }
 
 // POST /api/agent/:mode — start a headless Claude Code job (scan | pipeline)
 router.post('/api/agent/:mode', (req, res) => {
   const mode = req.params.mode;
-  if (mode !== 'scan' && mode !== 'pipeline') {
+  if (mode !== 'scan' && mode !== 'pipeline' && mode !== 'triage') {
     return res.status(400).json({ error: `Unknown agent mode: ${mode}` });
   }
   // Single-flight: agent runs share data/pipeline.md and the Pro quota
