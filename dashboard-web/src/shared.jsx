@@ -218,6 +218,8 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // mount and refresh after a triage run completes.
   const loadTriage = () => fetch('/api/triage/results').then(r => r.json()).then(d => setTriageCards(d.cards || [])).catch(() => {});
   useEffect(() => { loadTriage(); }, []);
+  // Clear any in-flight pollers (agent steps, deep dives, paste) on unmount.
+  useEffect(() => () => { Object.values(pollersRef.current).forEach(clearInterval); }, []);
 
   // Deep dive: full A-G Sonnet eval of one posting (a triage card or a pasted JD).
   function triggerDeep(card) {
@@ -226,15 +228,17 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
       .then(r => r.json().then(b => ({ ok: r.ok, b })))
       .then(({ ok, b }) => {
         if (!ok || b.error || !b.jobId) { setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: b.error || 'failed to start' } })); return; }
+        const key = 'deep-' + card.url;
         const poll = setInterval(() => {
           fetch(`/api/agent/status/${b.jobId}`).then(r => r.json()).then(job => {
             if (job.status === 'done' || job.status === 'error') {
-              clearInterval(poll);
+              clearInterval(poll); delete pollersRef.current[key];
               setDeepJobs(d => ({ ...d, [card.url]: { status: job.status, error: job.error } }));
               if (job.status === 'done') onDataChanged && onDataChanged();
             }
-          }).catch(() => clearInterval(poll));
+          }).catch(() => { clearInterval(poll); delete pollersRef.current[key]; });
         }, 2000);
+        pollersRef.current[key] = poll;
       })
       .catch(e => setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: e.message } })));
   }
@@ -253,12 +257,13 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         const poll = setInterval(() => {
           fetch(`/api/agent/status/${b.jobId}`).then(r => r.json()).then(job => {
             if (job.status === 'done' || job.status === 'error') {
-              clearInterval(poll); setPasteBusy(false);
+              clearInterval(poll); delete pollersRef.current['paste']; setPasteBusy(false);
               setPasteMsg(job.status === 'done' ? 'Done — see the Pipeline tab.' : (job.error || 'Evaluation failed.'));
               if (job.status === 'done') onDataChanged && onDataChanged();
             }
-          }).catch(() => { clearInterval(poll); setPasteBusy(false); });
+          }).catch(() => { clearInterval(poll); delete pollersRef.current['paste']; setPasteBusy(false); });
         }, 2000);
+        pollersRef.current['paste'] = poll;
       })
       .catch(e => { setPasteBusy(false); setPasteMsg(e.message); });
   }
