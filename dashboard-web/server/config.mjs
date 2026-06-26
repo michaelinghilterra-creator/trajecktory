@@ -41,6 +41,9 @@ export const SNOOZE_PATH = DEMO
 export const APPLY_DATES_PATH = DEMO
   ? path.resolve(__dirname, '../../data/demo/apply-dates.json')
   : path.resolve(__dirname, '../../data/apply-dates.json');
+export const APP_NOTES_PATH = DEMO
+  ? path.resolve(__dirname, '../../data/demo/app-notes.json')
+  : path.resolve(__dirname, '../../data/app-notes.json');
 export const STATUS_EVENTS_PATH = DEMO
   ? path.resolve(__dirname, '../../data/demo/status-events.tsv')
   : path.resolve(__dirname, '../../data/status-events.tsv');

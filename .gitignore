@@ -81,3 +81,4 @@ backups/
 # Follow-up snooze state (runtime, per-user)
 data/followup-snooze.json
 data/apply-dates.json
+data/app-notes.json

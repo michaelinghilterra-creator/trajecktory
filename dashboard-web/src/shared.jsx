@@ -87,11 +87,10 @@ window.ScoreChip = function ScoreChip({ score }) {
 // ---------- Sidebar ----------
 window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState, onDataChanged }) {
   // Numeric (1-9) keyboard hotkeys for tab switching removed per user request.
-  // The `hint` field is gone too. Overview carries the pending-decisions
-  // badge now that the standalone Actions tab is merged into it.
+  // The `hint` field is gone too. Pipeline carries the pending-decisions badge
+  // now that the standalone Overview tab is folded into Pipeline → Overview.
   const items = [
-    { key: "overview",      label: "Overview",           icon: "▦", badge: stats.pending },
-    { key: "pipeline",      label: "Pipeline",           icon: "▥" },
+    { key: "pipeline",      label: "Pipeline",           icon: "▥", badge: stats.pending },
     { key: "followups",     label: "Follow-Ups",         icon: "↻", badge: stats.followups || null },
     { key: "target-talent", label: "TA Outreach",        icon: "◎" },
     { key: "linkedin-ssi",  label: "LinkedIn SSI",       icon: "🔗" },
