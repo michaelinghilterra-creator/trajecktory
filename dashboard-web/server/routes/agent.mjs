@@ -287,7 +287,7 @@ async function runAgent(jobId, mode, target) {
   // merged result doesn't read as "nothing happened".
   if (mode === 'pipeline' && res.ok) {
     const job = agentJobs.get(jobId) || {};
-    const note = 'Evaluations written. Run Merge Tracker (step 6) to add them to your pipeline.';
+    const note = 'Evaluations written. Run Merge Tracker to add them to your pipeline.';
     agentJobs.set(jobId, { ...job, summary: job.summary ? `${job.summary} · ${note}` : note });
   }
   if (mode === 'triage' && res.ok) {
@@ -322,6 +322,12 @@ router.post('/api/agent/:mode', (req, res) => {
     const jd = String(req.body?.jd || '').trim();
     if (!url && !jd) return res.status(400).json({ error: 'Deep eval needs a "url" or a pasted "jd".' });
     if (url) {
+      // The URL is interpolated into the single-line `claude -p` prompt, so reject
+      // control characters / spaces / non-http URLs that could break out of it and
+      // inject instructions into the agent.
+      if (/[ -]/.test(url) || !/^https?:\/\/[^\s]+$/i.test(url)) {
+        return res.status(400).json({ error: 'Provide a valid http(s) URL (no spaces or control characters).' });
+      }
       target = { url };
     } else {
       try {

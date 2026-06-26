@@ -22,7 +22,7 @@ router.get('/api/triage/results', (req, res) => {
       const line = raw.trim();
       if (!line) continue;
       const c = line.split('\t');
-      if (c[0] === 'url' || c.length < 4) continue; // header or malformed
+      if (c[0] === 'url' || c.length < 6) continue; // header or malformed (need all 6 columns)
       const score = parseFloat(c[3]);
       byUrl.set(c[0], { // later lines win → most recent triage of this URL
         url: c[0],
