@@ -96,12 +96,14 @@ function StatusBreakdown({ contacts, filter, setFilter }) {
 // Consolidated Contacts + Companies into one sortable table (SSI-influencer
 // look & feel). Company is a sortable column, so grouping/coverage is reachable
 // by sorting on it — no separate Companies subtab needed.
-function ContactsTableView({ contacts, onOpen, selId, onReconcile, search }) {
+function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImported }) {
   const [showArchived, setShowArchived] = useState(false);
   const [statusFilter, setStatusFilter] = useState(null);
   const [companyFilter, setCompanyFilter] = useState("");
   const [sortKey, setSortKey] = useState("status");
   const [sortDir, setSortDir] = useState("desc");
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
   const q = search || "";
 
   const setSort = (k) => {
@@ -151,6 +153,29 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search }) {
 
   const hasFilters = statusFilter || companyFilter || q.trim();
 
+  // Bulk-import contacts from a CSV (the "Excel floor" for non-power users).
+  // Reads the file as text and posts it to /api/tt-reconcile/bulk-import.
+  function handleImport(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+    setImporting(true); setImportMsg("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      fetch("/api/tt-reconcile/bulk-import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ csv: String(reader.result || "") }) })
+        .then(r => r.json().then(b => ({ ok: r.ok, b })))
+        .then(({ ok, b }) => {
+          setImporting(false);
+          if (!ok || b.error) { setImportMsg(b.error || "Import failed."); return; }
+          setImportMsg(`Imported ${b.imported}${b.duplicates ? `, ${b.duplicates} duplicate${b.duplicates === 1 ? "" : "s"} skipped` : ""}.`);
+          onImported && onImported();
+        })
+        .catch(err => { setImporting(false); setImportMsg(err.message); });
+    };
+    reader.onerror = () => { setImporting(false); setImportMsg("Could not read the file."); };
+    reader.readAsText(file);
+  }
+
   const cols = [
     { k: "name",     label: "Contact",    w: 210 },
     { k: "title",    label: "Title",      w: 220 },
@@ -175,9 +200,15 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search }) {
             </span>
             Show archived ({archivedCount})
           </label>
+          <a className="btn" href="/api/tt-reconcile/template" download style={{ textDecoration: "none" }} title="Download the CSV template (company, first, last, title, ...)">Template</a>
+          <label className="btn" style={{ cursor: importing ? "default" : "pointer", opacity: importing ? 0.6 : 1 }} title="Bulk-import contacts from a CSV file">
+            {importing ? "Importing…" : "Import CSV"}
+            <input type="file" accept=".csv,text/csv" style={{ display: "none" }} disabled={importing} onChange={handleImport} />
+          </label>
           <button className="btn primary" onClick={onReconcile}><TIcon d={TI.refresh} size={14} /> Reconcile</button>
         </div>
       </div>
+      {importMsg && <div style={{ fontSize: 12, color: "var(--text-mute)", margin: "0 0 10px" }}>{importMsg}</div>}
 
       <div className="card padded-lg">
         <div className="card-head">
@@ -1218,7 +1249,7 @@ window.TargetTalentTab = function TargetTalentTab({ initialOpenId, onInitialOpen
       </div>
 
       {view === "overview"  && <OverviewView contacts={contacts} onOpen={setDrawerId} jumpView={setView} />}
-      {view === "contacts"  && <ContactsTableView contacts={contacts} onOpen={setDrawerId} selId={drawerId} onReconcile={() => setReconcileOpen(true)} search={search} />}
+      {view === "contacts"  && <ContactsTableView contacts={contacts} onOpen={setDrawerId} selId={drawerId} onReconcile={() => setReconcileOpen(true)} search={search} onImported={load} />}
 
       {drawerId != null && <TTDrawer id={drawerId} onClose={() => setDrawerId(null)} onUpdate={load} />}
       {reconcileOpen && <ReconcileModal onClose={() => setReconcileOpen(false)} onApplied={load} />}
