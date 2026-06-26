@@ -1298,29 +1298,25 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
       <div className={'drawer-backdrop' + (app ? ' open' : '')} onClick={onClose}></div>
       <div className={'pl-drawer' + (app ? ' open' : '')}>
         <div className="drawer-head">
-          <div className="drawer-head-top">
-            <span className="id">#{String(app.id).padStart(3, '0')}</span>
-            <StatusBadge status={app.status} size="sm" />
-            {app.legitimacy && <span className="tag accent">✓ {app.legitimacy}</span>}
-            {stale && <span className="tag" style={{ color: 'var(--red)', borderColor: 'rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.1)' }}>stale · {sit}d</span>}
-            <button className="icon-btn x" onClick={onClose} title="Close (Esc)">
-              <PIcon d={PI.x} size={15} />
-            </button>
-          </div>
-          <div className="drawer-id-block">
-            <span className="mono-av" style={{ borderColor: m.color, color: m.color }}>{monogram(app.company)}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h3>{app.company}</h3>
-              <div className="role">{app.role}</div>
-              <div className="co">{app.archetype}{app.sector ? ` · ${app.sector}` : ''}{remoteChip ? ` · ${remoteChip}` : ''}</div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="row" style={{ gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
+              <span className="mono dim" style={{ fontSize: 11 }}>#{String(app.id).padStart(3, '0')}</span>
+              <window.StatusPill status={app.status} />
+              {app.legitimacy && <span className="legit-pill mono">✓ {app.legitimacy}</span>}
+              {stale && <span className="legit-pill mono" style={{ color: 'var(--red)', borderColor: 'rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.12)' }}>stale · {sit}d</span>}
             </div>
-            <ScoreChip score={app.score} />
+            <h3>{app.company}</h3>
+            <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>{app.role}</div>
+            <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              {(cs && cs.remote) && <span className="meta-chip">{cs.remote}</span>}
+              {sectorRaw && <span className="meta-chip">{sectorRaw}</span>}
+              {(cs && cs.seniority) && <span className="meta-chip">{cs.seniority.split('(')[0].trim()}</span>}
+              {app.url && <a className="meta-chip link" href={app.url} target="_blank" rel="noreferrer">JD ↗</a>}
+            </div>
           </div>
-          <div className="dr-chips">
-            {(cs && cs.remote) && <span className="dr-chip">{cs.remote}</span>}
-            {sectorRaw && <span className="dr-chip">{sectorRaw}</span>}
-            {app.url && <a className="dr-chip link" href={app.url} target="_blank" rel="noreferrer">JD ↗</a>}
-          </div>
+          <button className="icon-btn" onClick={onClose} title="Close (Esc)">
+            <PIcon d={PI.x} size={15} />
+          </button>
         </div>
 
         <div className="drawer-body">

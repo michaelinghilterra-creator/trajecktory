@@ -1971,27 +1971,7 @@ body {
 }
 .pl-drawer.open { margin-right: 0; }
 .pl-drawer .drawer-head { padding: 16px 20px 14px; border-bottom: 1px solid var(--border); }
-.pl-drawer .drawer-head-top { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
-.pl-drawer .drawer-head-top .id { font-family: var(--mono); font-size: 11px; color: var(--text-mute); }
-.pl-drawer .drawer-head-top .icon-btn.x { margin-left: auto; }
-.pl-drawer .drawer-head-top .tag {
-  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.04em; text-transform: uppercase;
-  padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border-2); color: var(--text-dim); background: var(--panel-2);
-}
-.pl-drawer .drawer-head-top .tag.accent { color: var(--accent-2); border-color: rgba(var(--accent-rgb),0.4); background: var(--accent-bg); }
-.pl-drawer .drawer-id-block { display: grid; grid-template-columns: 44px 1fr auto; gap: 13px; align-items: center; }
-.pl-drawer .drawer-id-block .mono-av {
-  width: 44px; height: 44px; border-radius: 8px; display: grid; place-items: center;
-  font-family: var(--mono); font-weight: 700; font-size: 14px;
-  background: var(--panel-2); border: 1px solid; flex: none;
-}
-.pl-drawer .drawer-id-block h3 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
-.pl-drawer .drawer-id-block .role { font-size: 12.5px; color: var(--text-dim); margin-top: 3px; }
-.pl-drawer .drawer-id-block .co { font-family: var(--mono); font-size: 11px; color: var(--text-mute); margin-top: 4px; letter-spacing: 0.02em; }
-.pl-drawer .dr-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.pl-drawer .dr-chip { font-family: var(--mono); font-size: 10px; letter-spacing: 0.02em; padding: 3px 8px; border-radius: 6px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text-dim); }
-.pl-drawer .dr-chip.link { color: var(--accent-2); text-decoration: none; }
-.pl-drawer .dr-chip.link:hover { border-color: rgba(var(--accent-rgb),0.4); }
+.pl-drawer .drawer-head h3 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
 
 .pl-drawer .drawer-body { flex: 1; overflow: auto; padding: 18px 20px 28px; display: flex; flex-direction: column; gap: 20px; }
 
