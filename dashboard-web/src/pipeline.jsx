@@ -1764,6 +1764,9 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
           );
         })()}
 
+        {/* Quick-copy contact bar — same shared component the Overview drawer uses */}
+        <window.QuickCopyBar />
+
         {/* Sticky action footer */}
         <div className="dr-foot">
           {primary.map(b => (
