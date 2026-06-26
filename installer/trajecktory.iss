@@ -43,6 +43,9 @@ Source: "launch-trajecktory.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "stop-trajecktory.ps1";   DestDir: "{app}"; Flags: ignoreversion
 ; App icon for the shortcuts (so they show the trajecktory mark, not PowerShell's).
 Source: "assets\trajecktory.ico"; DestDir: "{app}"; Flags: ignoreversion
+; Git for Windows installer (staged next to this .iss by build-bundle.ps1). Run
+; silently at install time (see [Run]), then deleted — it does not ship in {app}.
+Source: "Git-for-Windows-installer.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "powershell.exe"; \
@@ -60,54 +63,22 @@ Name: "{autodesktop}\{#AppName}"; Filename: "powershell.exe"; \
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
 
 [Run]
+; Install Git for Windows silently so Claude Code has a shell and git lands on the
+; user's PERSISTENT PATH (so the separate Claude Desktop app can see it too).
+; /o:PathOption=Cmd adds git to PATH; PowerShell is the fallback if ever skipped.
+Filename: "{tmp}\Git-for-Windows-installer.exe"; \
+  Parameters: "/VERYSILENT /NORESTART /NOCANCEL /SP- /SUPPRESSMSGBOXES /o:PathOption=Cmd"; \
+  StatusMsg: "Installing Git for Windows (for Claude Code)..."; Flags: waituntilterminated
 Filename: "powershell.exe"; \
   Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\launch-trajecktory.ps1"""; \
   Description: "Launch {#AppName} now"; Flags: postinstall nowait skipifsilent
 
 [Code]
-var
-  ApiKeyPage: TInputQueryWizardPage;
-
-procedure InitializeWizard;
-begin
-  ApiKeyPage := CreateInputQueryPage(wpSelectDir,
-    'Anthropic API key (optional)',
-    'Used only for tailored resumes, cover letters, and outreach drafts.',
-    'Evaluate and Scan run on your own Claude sign-in and need no key.' + #13#10 +
-    'To also generate resumes / cover letters / outreach, paste your Anthropic API key' + #13#10 +
-    '(starts with sk-ant-). You can leave this blank and add it later in the dashboard.');
-  ApiKeyPage.Add('Anthropic API key:', False);
-end;
-
-function NextButtonClick(CurPageID: Integer): Boolean;
-var
-  key: String;
-begin
-  Result := True;
-  if CurPageID = ApiKeyPage.ID then
-  begin
-    key := Trim(ApiKeyPage.Values[0]);
-    // Allow blank ("add later"); only nudge if a non-key string was pasted.
-    if (key <> '') and (Pos('sk-ant-', key) <> 1) then
-      Result := (MsgBox('That does not look like an Anthropic key (they start with "sk-ant-"). Continue anyway?',
-        mbConfirmation, MB_YESNO) = IDYES);
-  end;
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-var
-  envPath, key: String;
-begin
-  if CurStep = ssPostInstall then
-  begin
-    key := Trim(ApiKeyPage.Values[0]);
-    if key <> '' then
-    begin
-      envPath := ExpandConstant('{app}\trajecktory\dashboard-web\.env');
-      SaveStringToFile(envPath, 'ANTHROPIC_API_KEY=' + key + #13#10, False);
-    end;
-  end;
-end;
+// The Anthropic API-key prompt was removed from the installer: the core flow
+// (Scan / Triage / Evaluate) runs on the user's Claude sign-in and needs no key,
+// and the prompt was a common first-run stumbling point. The key is now an
+// optional in-dashboard "unlock power features" card (resume / cover / outreach
+// drafts, Brave/Muse discovery, contact auto-discovery).
 
 // On uninstall, offer to keep the user's job-search data (created after install).
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
