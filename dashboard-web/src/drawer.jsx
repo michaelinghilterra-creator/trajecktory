@@ -619,6 +619,8 @@ function QuickCopyBar() {
     </div>
   );
 }
+// Exposed globally so the Pipeline drawer (pipeline.jsx, separate IIFE) can reuse it.
+window.QuickCopyBar = QuickCopyBar;
 
 function DrawerFoot({ app, cs, onAction }) {
   const [applyJob, setApplyJob] = useStateD(null);    // { mode, status: 'running'|'error', error? }
