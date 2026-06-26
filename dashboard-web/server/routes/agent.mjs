@@ -1,4 +1,6 @@
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
 import { spawn } from 'child_process';
 import { ROOT_DIR } from '../config.mjs';
 import { logAgentRun } from '../lib/agent-log.mjs';
@@ -48,7 +50,7 @@ function evalBatchSize() {
   return limit > 0 ? limit : (parseInt(process.env.TJK_EVAL_BATCH, 10) || 5);
 }
 
-function dashboardConstraints(mode) {
+function dashboardConstraints(mode, opts) {
   const common = 'Dashboard run, follow these constraints strictly. Work inline and never spawn subagents or background agents, because this run shares a single Claude subscription and parallel agents trip usage limits. Playwright is unavailable in this environment.';
   // TEST CAP (temporary): when TJK_TEST_LIMIT is set, hard-limit how many
   // postings the Claude steps touch, so testing does not burn the whole quota.
@@ -75,6 +77,10 @@ function dashboardConstraints(mode) {
     const n = limit > 0 ? Math.min(limit, tcap) : tcap;
     return ' ' + common + ` Triage only — do NOT run a full evaluation. Score the TOP ${n} unchecked URLs from the top of data/pipeline.md (they are ordered best-fit first). For each: read the JD with WebFetch first and WebSearch as a fallback (skip any you cannot read), then give a 0.0-5.0 fit score and a one-sentence rationale using the rubric and anti-inflation calibration in the triage mode (most roles are NOT 4+; reserve 4+ for genuine strong fits on archetype AND level AND location). Append one TSV line per role to data/triage-results.tsv with columns url, company, title, score, rationale, date — create it with that header row if it is missing. Do NOT write a report, do NOT generate a PDF, do NOT write a tracker-additions TSV, and do NOT check off the pipeline.md checkboxes. Stop after ${n}.`;
   }
+  if (mode === 'deep') {
+    const tgt = (opts && opts.url) || '';
+    return ' ' + common + ` Deep evaluation of ONE posting only: ${tgt}. Read its job description with WebFetch first and WebSearch as a fallback (for a local:jds/ path, read that file directly). Produce the FULL A-G evaluation as a report in reports/ using the trajecktory-report/v1 format (JSON frontmatter then narrative) and populate every section: summary, cvMatch, gaps, levelMatch, comp, customizationCV, customizationLI, starStories with a leadStory, and a legitimacy object with a tier and signals (Playwright is unavailable here, so assess legitimacy from the fetched page and set verification to unconfirmed). Record the evaluation as a single nine-column TSV in batch/tracker-additions/. If this posting was provided as pasted text (a local:jds/ path), set the tracker note to include [self-sourced]. Evaluate ONLY this one posting — do not scan for or evaluate any other URL. If it cannot be read, say so and stop.`;
+  }
   return '';
 }
 
@@ -92,7 +98,7 @@ function summarizeToolUse(block) {
 // Spawn `claude -p "/trajecktory <mode>"` and stream-parse progress into the
 // job record. Resolves { ok, result, error } when the child closes and sets the
 // job's final status itself.
-function runClaudeAgent(jobId, mode) {
+function runClaudeAgent(jobId, mode, target) {
   return new Promise((resolve) => {
     const projectRoot = ROOT_DIR;
     const isWin = process.platform === 'win32';
@@ -102,7 +108,10 @@ function runClaudeAgent(jobId, mode) {
     // shell:true does NOT escape args, so quote the (space-containing) prompt
     // ourselves; the remaining flags have no spaces or backslashes. On posix
     // no shell is needed — the args array handles the space natively.
-    const prompt = `/trajecktory ${mode}.${dashboardConstraints(mode)}`;
+    // 'deep' is the pipeline/oferta full eval scoped to a single posting, so it
+    // runs the `pipeline` mode file with deep, single-URL constraints.
+    const slash = mode === 'deep' ? 'pipeline' : mode;
+    const prompt = `/trajecktory ${slash}.${dashboardConstraints(mode, target)}`;
     // Triage always runs on Haiku (cheap first-pass; calibrated faithful to Sonnet at
     // this task, r≈0.89 / 100% recall of strong roles). Scan + Evaluate default to
     // Sonnet to keep the 5-hour subscription quota in check; override with
@@ -267,12 +276,12 @@ function runClaudeAgent(jobId, mode) {
 // Verify, and Health as their own sidebar steps, so a failure in one is visible
 // and isolated. Bundling hid where the pipeline broke and multiplied Claude
 // usage (the eval fanned out subagents inside a chain that also ran a gate).
-async function runAgent(jobId, mode) {
+async function runAgent(jobId, mode, target) {
   agentJobs.set(jobId, { mode, status: 'running', activity: 'Starting agent…', toolCalls: [], toolCount: 0, output: '', startedAt: Date.now(),
-    // Progress meter: pipeline has a known batch size (the denominator); scan is
-    // open-ended discovery, so it shows elapsed only (progressTotal stays null).
-    progressTotal: mode === 'pipeline' ? evalBatchSize() : null, evaluationsDone: 0 });
-  const res = await runClaudeAgent(jobId, mode);
+    // Progress meter: pipeline has a known batch size; deep is a single eval; scan
+    // and triage are open-ended, so they show elapsed only (progressTotal null).
+    progressTotal: mode === 'pipeline' ? evalBatchSize() : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
+  const res = await runClaudeAgent(jobId, mode, target);
   // Evaluate writes tracker TSVs; folding them into applications.md is the
   // separate Merge Tracker step. Point the user at it so a written-but-not-yet-
   // merged result doesn't read as "nothing happened".
@@ -286,12 +295,17 @@ async function runAgent(jobId, mode) {
     const note = 'Triage scored. Open the triage cards to deep-dive the ones worth a full report.';
     agentJobs.set(jobId, { ...job, summary: job.summary ? `${job.summary} · ${note}` : note });
   }
+  if (mode === 'deep' && res.ok) {
+    const job = agentJobs.get(jobId) || {};
+    const note = 'Deep evaluation written. Run Merge Tracker to fold it into your pipeline.';
+    agentJobs.set(jobId, { ...job, summary: job.summary ? `${job.summary} · ${note}` : note });
+  }
 }
 
 // POST /api/agent/:mode — start a headless Claude Code job (scan | pipeline)
 router.post('/api/agent/:mode', (req, res) => {
   const mode = req.params.mode;
-  if (mode !== 'scan' && mode !== 'pipeline' && mode !== 'triage') {
+  if (!['scan', 'pipeline', 'triage', 'deep'].includes(mode)) {
     return res.status(400).json({ error: `Unknown agent mode: ${mode}` });
   }
   // Single-flight: agent runs share data/pipeline.md and the Pro quota
@@ -300,8 +314,32 @@ router.post('/api/agent/:mode', (req, res) => {
       return res.status(409).json({ error: 'An agent step is already running. Wait for it to finish.' });
     }
   }
+  // Deep eval needs a target: a posting URL, or pasted JD text (persisted to
+  // jds/ so the eval reads it as a local: path and the prompt stays one line).
+  let target;
+  if (mode === 'deep') {
+    const url = String(req.body?.url || '').trim();
+    const jd = String(req.body?.jd || '').trim();
+    if (!url && !jd) return res.status(400).json({ error: 'Deep eval needs a "url" or a pasted "jd".' });
+    if (url) {
+      target = { url };
+    } else {
+      try {
+        const company = String(req.body?.company || '').trim();
+        const title = String(req.body?.title || '').trim();
+        const slug = (company || 'manual').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'manual';
+        const rel = `jds/${slug}-${Date.now()}.md`;
+        const abs = path.join(ROOT_DIR, rel);
+        fs.mkdirSync(path.dirname(abs), { recursive: true });
+        fs.writeFileSync(abs, `# ${title || 'Pasted role'}${company ? ' — ' + company : ''}\n\n${jd}\n`, 'utf8');
+        target = { url: `local:${rel}` };
+      } catch (e) {
+        return res.status(500).json({ error: 'Could not save the pasted JD: ' + e.message });
+      }
+    }
+  }
   const jobId = `agent-${mode}-${Date.now()}`;
-  const start = runAgent(jobId, mode);
+  const start = runAgent(jobId, mode, target);
   Promise.resolve(start).catch((e) => {
     agentJobs.set(jobId, { mode, status: 'error', error: (e && e.message) || 'Agent run failed', finishedAt: Date.now() });
   });
