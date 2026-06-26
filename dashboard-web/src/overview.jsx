@@ -384,7 +384,7 @@ const toggleRow = (id) => setSelected(s => {
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <window.ScoreChip score={a.score} />
                   <div className="row" style={{ gap: 4 }}>
-                    <button className="btn primary sm" onClick={(e) => { e.stopPropagation(); onAction(a, "Applied"); }}>Apply</button>
+                    <button className="btn primary sm" onClick={(e) => { e.stopPropagation(); onOpen(a); }}>Apply</button>
                     <button className="btn sm" onClick={(e) => { e.stopPropagation(); onAction(a, "SKIP"); }}>Skip</button>
                     <button className="btn ghost sm" onClick={(e) => { e.stopPropagation(); onOpen(a); }}>Review</button>
                   </div>

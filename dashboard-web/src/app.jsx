@@ -16,7 +16,7 @@ function App() {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState(null);   // ms timestamp of the last apps refetch
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState("pipeline");
   const [search, setSearch] = useState("");
   const [drawerApp, setDrawerApp] = useState(null);
   // Transient: a Follow-Ups click on a TA row pushes the contact id here and
@@ -218,7 +218,6 @@ function App() {
   // Commands for palette
   const commands = useMemo(() => {
     const navCmds = [
-      { section: "Navigate", icon: "▦", label: "Go to Overview",     run: () => setTab("overview") },
       { section: "Navigate", icon: "▥", label: "Go to Pipeline",     run: () => setTab("pipeline") },
       { section: "Navigate", icon: "↻", label: "Go to Follow-Ups",   run: () => setTab("followups") },
       { section: "Navigate", icon: "≡", label: "Go to All Entries",  run: () => { setTab("pipeline"); setPipelineView("all"); } },
@@ -254,7 +253,7 @@ function App() {
   // linkedin-ssi: influencer names; dictionary: jargon) and start fresh when
   // entered. Clearing on entry OR exit of cluster A keeps the term scoped to
   // the user's intent.
-  const SEARCH_CLUSTER_A = useMemo(() => new Set(["overview", "pipeline", "followups", "target-talent"]), []);
+  const SEARCH_CLUSTER_A = useMemo(() => new Set(["pipeline", "followups", "target-talent"]), []);
   const prevTabRef = useRef(tab);
   useEffect(() => {
     const wasInA = SEARCH_CLUSTER_A.has(prevTabRef.current);
@@ -338,8 +337,7 @@ function App() {
         />
 
         <div className="content" data-screen-label={`trajecktory · ${tab}`} data-tab={tab}>
-          {tab === "overview"  && <window.OverviewTab  apps={apps} onOpen={setDrawerApp} onAction={handleAction} setTab={setTab} search={search} />}
-          {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} search={search} compTweaks={{ walkAway: tweaks.walkAway, targetLow: tweaks.targetLow, targetHigh: tweaks.targetHigh }} />}
+          {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} onQuickAction={handleAction} search={search} compTweaks={{ walkAway: tweaks.walkAway, targetLow: tweaks.targetLow, targetHigh: tweaks.targetHigh }} />}
           {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} />}
           {tab === "followups" && <window.FollowupsTab onAction={handleAction} openTaContact={openTaContact} search={search} />}
           {tab === "recruiters"&& <window.RecruitersTab search={search} />}

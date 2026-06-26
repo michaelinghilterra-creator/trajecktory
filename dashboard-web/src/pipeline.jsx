@@ -505,29 +505,15 @@ function FunnelSnapshot({ apps }) {
   );
 }
 
-function OverviewView({ apps, onOpen, selId, onExport, totalTracker, isStale = () => false, staleDays = () => null }) {
+// Pipeline → Overview is the dashboard home: it reuses the self-contained
+// window.OverviewTab (greeting, quote, KPIs, charts, Pending Roles) but wires it
+// to the Pipeline drawer (onOpen) and the app-level status handler (onAction).
+// `apps` is the FULL tracker array — OverviewTab's funnel/score/activity span
+// every entry, not just active ones.
+function OverviewView({ apps, onOpen, onAction, search }) {
   return (
     <div className="fade-up">
-      <div className="pl-head">
-        <div>
-          <h1>Pipeline</h1>
-          <div className="sub">
-            <span className="refresh-dot" />
-            <span><b>{apps.length}</b> active roles · {totalTracker} in tracker</span>
-          </div>
-        </div>
-        <div className="act">
-          <button className="btn sm" onClick={onExport}><PIcon d={PI.download} size={13} /> Export CSV</button>
-        </div>
-      </div>
-
-      <OverviewKpis apps={apps} isStale={isStale} />
-
-      <div style={{ marginBottom: 16 }}>
-        <PipelinePulse rows={apps} onOpen={onOpen} selId={selId} isStale={isStale} />
-      </div>
-
-      <NeedsAttention apps={apps} onOpen={onOpen} selId={selId} isStale={isStale} staleDays={staleDays} />
+      <window.OverviewTab apps={apps} onOpen={onOpen} onAction={onAction} search={search} />
     </div>
   );
 }
@@ -596,7 +582,7 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
 }
 
 // ─── Table view ────────────────────────────────────────────────────────────
-function TableView({ apps, filtered, filters, setFilters, search, setSearch, onOpen, selId, isStale = () => false, staleDays = () => null }) {
+function TableView({ apps, filtered, filters, setFilters, search, setSearch, onOpen, selId, onExport, isStale = () => false, staleDays = () => null }) {
   const [sortKey, setSortKey] = useStateP('date');
   const [sortDir, setSortDir] = useStateP('desc');
   const setSort = (k) => {
@@ -609,7 +595,6 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
       let av = a[sortKey], bv = b[sortKey];
       if (sortKey === 'score') { av = av == null ? -1 : av; bv = bv == null ? -1 : bv; }
       if (sortKey === 'status') { av = STATUS_MAP[a.status]?.stage ?? 99; bv = STATUS_MAP[b.status]?.stage ?? 99; }
-      if (sortKey === 'engine')  { av = engineOf(a.resume) || ''; bv = engineOf(b.resume) || ''; }
       if (sortKey === 'salary')  { av = a.salary || 0; bv = b.salary || 0; }
       if (av < bv) return sortDir === 'asc' ? -1 : 1;
       if (av > bv) return sortDir === 'asc' ? 1 : -1;
@@ -621,21 +606,23 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
   const cols = [
     { k: 'id',        label: '#',         w: 42,  cls: 'id' },
     { k: 'date',      label: 'Date',      w: 90,  cls: 't-date' },
-    { k: 'company',   label: 'Company',   w: 156 },
-    { k: 'role',      label: 'Role',      w: 174, cls: 't-role' },
+    { k: 'company',   label: 'Company',   w: 190 },
+    { k: 'role',      label: 'Role',      w: 210, cls: 't-role' },
     { k: 'archetype', label: 'Archetype', w: 90,  cls: 't-arch' },
     { k: 'salary',    label: 'Comp',      w: 112, cls: 't-comp' },
     { k: 'status',    label: 'Status',    w: 116 },
     { k: 'score',     label: 'Score',     w: 80 },
     { k: 'source',    label: 'Source',    w: 92 },
-    { k: 'engine',    label: 'Resume',    w: 120 },
   ];
 
   return (
     <div className="fade-up card padded-lg">
       <div className="card-head">
         <span className="card-title">Active Roles</span>
-        <span className="card-meta mono">{sorted.length} of {apps.length} item{sorted.length === 1 ? '' : 's'}</span>
+        <div className="row" style={{ gap: 12, alignItems: 'center' }}>
+          <span className="card-meta mono">{sorted.length} of {apps.length} item{sorted.length === 1 ? '' : 's'}</span>
+          {onExport && <button className="btn sm" onClick={onExport}><PIcon d={PI.download} size={13} /> Export CSV</button>}
+        </div>
       </div>
       <FilterBar apps={apps} filtered={filtered} filters={filters} setFilters={setFilters} search={search} setSearch={setSearch} />
       <div className="tbl-wrap"
@@ -658,7 +645,6 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
               const sit = daysAgo(a.date);
               const stale = isStale(a);
               const gap = (a.salary || 0) - (a.target || 0);
-              const eng = engineOf(a.resume);
               return (
                 <tr key={a.id} className={(selId === a.id ? 'selected ' : '') + (stale ? 'stale' : '')} onClick={() => onOpen(a)}>
                   <td className="id">{String(a.id).padStart(3, '0')}</td>
@@ -681,7 +667,6 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
                   <td><StatusBadge status={a.status} /></td>
                   <td><ScoreChip score={a.score} /></td>
                   <td><SourcePill source={a.source} /></td>
-                  <td title={eng ? `${eng} generated this résumé` : 'No résumé generated yet'}><EnginePill engine={eng} /></td>
                 </tr>
               );
             })}
@@ -765,7 +750,7 @@ function CompPositioningCard(props) {
   );
 }
 
-function AnalyticsView({ apps, allApps, compTweaks }) {
+function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => false }) {
   const walkAway = compTweaks?.walkAway ?? 160;
   const targetLow = compTweaks?.targetLow ?? 220;
   const targetHigh = compTweaks?.targetHigh ?? 250;
@@ -856,6 +841,12 @@ function AnalyticsView({ apps, allApps, compTweaks }) {
           <h1>Pipeline Analytics</h1>
           <div className="sub"><span className="refresh-dot" /><span>what's working & where to focus across <b>{apps.length}</b> active roles</span></div>
         </div>
+      </div>
+
+      <OverviewKpis apps={apps} isStale={isStale} />
+
+      <div style={{ marginBottom: 16 }}>
+        <PipelinePulse rows={apps} onOpen={onOpen} isStale={isStale} />
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)', marginBottom: 14 }}>
@@ -1147,6 +1138,7 @@ const DRAWER_TABS = [
   { id: 'interview', label: 'Interview',  icon: PI.msg },
   { id: 'customize', label: 'Customize',  icon: PI.flag },
   { id: 'legit',     label: 'Legitimacy', icon: PI.check },
+  { id: 'notes',     label: 'Notes',      icon: PI.pen },
 ];
 
 function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () => false }) {
@@ -1160,10 +1152,15 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   const [applyJob, setApplyJob] = useStateP(null);     // { mode, status: 'running'|'error', error? }
   const [applyResult, setApplyResult] = useStateP(null); // completed job data
   const [elapsed, setElapsed] = useStateP(0);
+  // Interview/meeting notes — append-only timestamped log from /api/notes/:id
+  const [notes, setNotes] = useStateP([]);
+  const [noteDraft, setNoteDraft] = useStateP('');
+  const [savingNote, setSavingNote] = useStateP(false);
 
   useEffectP(() => {
     setTab('overview'); setStarOpen(0); setCustomWhich('cv');
     setApplyJob(null); setApplyResult(null); setElapsed(0);
+    setNotes([]); setNoteDraft('');
   }, [app && app.id]);
 
   useEffectP(() => {
@@ -1223,6 +1220,41 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
       .then(d => { setCs(d); setLoading(false); })
       .catch(() => { setCs(null); setLoading(false); });
   }, [app && app.id]);
+
+  // Load this role's note history when the drawer opens / switches roles.
+  useEffectP(() => {
+    if (!app) return;
+    fetch(`/api/notes/${app.id}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setNotes(Array.isArray(d) ? d : []))
+      .catch(() => setNotes([]));
+  }, [app && app.id]);
+
+  const saveNote = () => {
+    const text = noteDraft.trim();
+    if (!text || savingNote) return;
+    setSavingNote(true);
+    fetch(`/api/notes/${app.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => { setNotes(Array.isArray(d) ? d : []); setNoteDraft(''); })
+      .catch(() => { /* keep draft so nothing is lost */ })
+      .finally(() => setSavingNote(false));
+  };
+
+  const deleteNote = (timestamp) => {
+    fetch(`/api/notes/${app.id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timestamp }),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => setNotes(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  };
 
   useEffectP(() => {
     if (!app) return;
@@ -1723,6 +1755,53 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               )}
             </div>
           )}
+
+          {tab === 'notes' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="rp-section">
+                <div className="rp-section-head"><span>Add a note</span></div>
+                <textarea
+                  className="dr-note-input"
+                  placeholder="Paste or type interview notes, a recruiter-call recap, next steps…"
+                  value={noteDraft}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') saveNote(); }}
+                />
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                  <span className="mono dim" style={{ fontSize: 10.5 }}>⌘/Ctrl + Enter to save</span>
+                  <button className="btn primary sm" disabled={!noteDraft.trim() || savingNote} onClick={saveNote}>
+                    {savingNote ? 'Saving…' : 'Save note'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="rp-section">
+                <div className="rp-section-head">
+                  <span>History</span>
+                  <span className="card-meta mono">{notes.length} entr{notes.length === 1 ? 'y' : 'ies'}</span>
+                </div>
+                {notes.length === 0 ? (
+                  <div className="rp-callout">
+                    <div className="rp-callout-body">No notes yet. Save one above to start tracking this conversation.</div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {[...notes].reverse().map((n) => (
+                      <div key={n.timestamp} className="dr-note">
+                        <div className="dr-note-head">
+                          <span className="dr-note-ts">{new Date(n.timestamp).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                          <button className="dr-note-del" title="Delete this note" onClick={() => deleteNote(n.timestamp)}>
+                            <PIcon d={PI.x} size={12} />
+                          </button>
+                        </div>
+                        <div className="dr-note-body">{n.text}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Apply-job banner (running / error / result) */}
@@ -1788,7 +1867,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
 }
 
 // ─── Root: PipelineTab (replaces the existing) ─────────────────────────────
-window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFilters, onOpen, search, compTweaks }) {
+window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFilters, onOpen, onQuickAction, search, compTweaks }) {
   // Use the external view prop when it matches a known subtab, otherwise default to 'overview'.
   // This lets the command palette in app.jsx jump directly to the All subtab.
   const VALID_SUBVIEWS = ['overview', 'table', 'all', 'analytics'];
@@ -1884,16 +1963,16 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
       </div>
 
       {subView === 'overview' && (
-        <OverviewView apps={activeApps} onOpen={handleOpen} selId={selId} onExport={onExport} totalTracker={apps.length} isStale={isStale} staleDays={staleDays} />
+        <OverviewView apps={apps} onOpen={handleOpen} onAction={onQuickAction} search={search} />
       )}
       {subView === 'table' && (
-        <TableView apps={activeApps} filtered={filtered} filters={filters} setFilters={setFilters} search={search} setSearch={() => {}} onOpen={handleOpen} selId={selId} isStale={isStale} staleDays={staleDays} />
+        <TableView apps={activeApps} filtered={filtered} filters={filters} setFilters={setFilters} search={search} setSearch={() => {}} onOpen={handleOpen} selId={selId} onExport={onExport} isStale={isStale} staleDays={staleDays} />
       )}
       {subView === 'all' && (
         <AllEntriesView apps={apps} onOpen={handleOpen} search={search} isStale={isStale} staleDays={staleDays} />
       )}
       {subView === 'analytics' && (
-        <AnalyticsView apps={activeApps} allApps={apps} compTweaks={compTweaks} isStale={isStale} />
+        <AnalyticsView apps={activeApps} allApps={apps} compTweaks={compTweaks} onOpen={handleOpen} isStale={isStale} />
       )}
 
       {drawerApp && (
@@ -1921,15 +2000,14 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
   const cols = [
     { k: 'id',         label: '#',         w: 50 },
     { k: 'date',       label: 'Date',      w: 80 },
-    { k: 'company',    label: 'Company',   w: 180 },
-    { k: 'role',       label: 'Role',      w: 220 },
+    { k: 'company',    label: 'Company',   w: 210 },
+    { k: 'role',       label: 'Role',      w: 250 },
     { k: 'archetype',  label: 'Archetype', w: 90 },
     { k: 'compStated', label: 'Comp',      w: 110 },
     { k: 'sector',     label: 'Sector',    w: 110 },
     { k: 'status',     label: 'Status',    w: 116 },
     { k: 'score',      label: 'Score',     w: 80 },
     { k: 'source',     label: 'Source',    w: 92 },
-    { k: 'resume',     label: 'Resume',    w: 120 },
   ];
   return (
     <div className="tbl-wrap" style={{
@@ -1968,7 +2046,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
                 </div>
               </td>
               <td className="role" title={a.role}
-                style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>
+                style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 250 }}>
                 {a.role}
               </td>
               <td><span className="mono dim" style={{ fontSize: 11 }}>{a.archetype}</span></td>
@@ -1982,9 +2060,6 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
               <td><StatusBadge status={a.status} /></td>
               <td><ScoreChip score={a.score} /></td>
               <td><SourcePill source={a.source} /></td>
-              <td title={a.resume ? `${engineOf(a.resume)} generated this résumé` : 'No résumé generated yet'}>
-                <EnginePill engine={engineOf(a.resume)} />
-              </td>
             </tr>
             );
           })}

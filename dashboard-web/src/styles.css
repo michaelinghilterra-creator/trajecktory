@@ -1986,6 +1986,20 @@ body {
 .pl-drawer .dr-tab:hover { color: var(--text); }
 .pl-drawer .dr-tab.on { background: var(--panel-2); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 
+/* Interview/meeting notes tab */
+.pl-drawer .dr-note-input {
+  width: 100%; min-height: 120px; resize: vertical;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; color: var(--text); font-family: var(--sans); font-size: 13px; line-height: 1.55;
+}
+.pl-drawer .dr-note-input:focus { outline: none; border-color: rgba(var(--accent-rgb),0.5); }
+.pl-drawer .dr-note { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.pl-drawer .dr-note-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.pl-drawer .dr-note-ts { font-family: var(--mono); font-size: 10.5px; color: var(--text-mute); letter-spacing: 0.02em; }
+.pl-drawer .dr-note-del { border: 0; background: transparent; color: var(--text-mute); cursor: pointer; display: inline-flex; padding: 2px; border-radius: 4px; }
+.pl-drawer .dr-note-del:hover { color: var(--red); background: rgba(239,68,68,0.1); }
+.pl-drawer .dr-note-body { font-size: 13px; line-height: 1.55; color: var(--text-dim); white-space: pre-wrap; word-break: break-word; }
+
 .pl-drawer .rp-callout { border-radius: var(--r-card); border: 1px solid var(--border); background: var(--panel-2); padding: 12px 14px; }
 .pl-drawer .rp-callout.accent { border-color: rgba(var(--accent-rgb),0.3); background: var(--accent-bg); }
 .pl-drawer .rp-callout.warn { border-color: rgba(245,158,11,0.35); background: rgba(245,158,11,0.08); }

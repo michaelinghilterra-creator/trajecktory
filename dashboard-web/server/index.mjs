@@ -20,6 +20,7 @@ import { router as linkedinDraftsRoutes } from './routes/linkedin-drafts.mjs';
 import { router as reportsRoutes } from './routes/reports.mjs';
 import { router as insightsRoutes } from './routes/insights.mjs';
 import { router as setupRoutes } from './routes/setup.mjs';
+import { router as notesRoutes } from './routes/notes.mjs';
 import { getIdentity } from './lib/profile.mjs';
 
 const app = express();
@@ -115,6 +116,7 @@ app.use(linkedinDraftsRoutes);
 app.use(reportsRoutes);
 app.use(insightsRoutes);
 app.use(setupRoutes);
+app.use(notesRoutes);
 
 // Public identity for the frontend's signature blocks, so no name/email/phone
 // is hardcoded in the client bundle. Reads config/profile.yml via the cached
