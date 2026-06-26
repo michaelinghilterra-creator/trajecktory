@@ -114,15 +114,20 @@ function PIcon({ d, size = 16, stroke = 1.6, style, fill = false }) {
 }
 
 // ─── Primitives ────────────────────────────────────────────────────────────
-function ScoreChip({ score }) {
+// `provisional` marks a Haiku triage score: dashed border, lower opacity, and a
+// "~" prefix so a triage 4.2 never reads like a full Sonnet 4.2.
+function ScoreChip({ score, provisional = false }) {
   const b = scoreBucket(score);
   if (b === 'na') return <span className="score-chip na">N/A</span>;
   const c = scoreColor(score);
   const rgb = b === 'strong' ? '34,197,94' : b === 'border' ? '234,179,8' : '239,68,68';
   return (
-    <span className="score-chip" style={{
-      color: c, borderColor: `rgba(${rgb},0.42)`, background: `rgba(${rgb},0.12)`,
-    }}>{score.toFixed(1)}</span>
+    <span className="score-chip"
+      title={provisional ? 'Provisional Haiku triage score — run Deep Dive for the full evaluation' : undefined}
+      style={{
+        color: c, borderColor: `rgba(${rgb},${provisional ? 0.5 : 0.42})`, background: `rgba(${rgb},${provisional ? 0.06 : 0.12})`,
+        borderStyle: provisional ? 'dashed' : 'solid', opacity: provisional ? 0.9 : 1,
+      }}>{provisional ? '~' : ''}{score.toFixed(1)}</span>
   );
 }
 
@@ -581,8 +586,83 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
   );
 }
 
+// ─── Triage (Option B virtual rows) ─────────────────────────────────────────
+// Triage results live in their own scratch store (data/triage-results.tsv), not
+// applications.md. We surface them as provisional rows in the Table + All views
+// so a scanned-but-unevaluated role is visible where users look, without
+// polluting the tracker or analytics. These helpers dedup a triage card against
+// the real rows so a posting that already has an evaluation never double-shows.
+const normUrl = (u) => (u || '').toLowerCase().replace(/^https?:\/\//, '').replace(/[?#].*$/, '').replace(/\/+$/, '');
+const normCo = (c) => (c || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const normRole = (r) => (r || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+// Build provisional rows from triage cards, dropping any whose posting already
+// exists as a real row. Match by normalized URL FIRST; fall back to
+// company+exact-role ONLY for real rows that have no URL yet (pre-report). This
+// is why two genuinely different roles at one company — e.g. Diligent "Director,
+// GTM Operations" (evaluated, has a URL) vs "Director, GTM Technology" (triage,
+// different URL) — both stay visible: URL-primary dedup keeps them apart, and
+// the exact-role fallback never fires for the URL-bearing evaluated row.
+function buildTriageRows(cards, apps) {
+  const realUrls = new Set();
+  const realCoRole = new Set();
+  for (const a of (apps || [])) {
+    if (a._triage) continue;
+    if (a.url) realUrls.add(normUrl(a.url));
+    else realCoRole.add(normCo(a.company) + '|' + normRole(a.role));
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = [];
+  for (const c of (cards || [])) {
+    if (!c || !c.url) continue;
+    if (realUrls.has(normUrl(c.url))) continue;                              // already evaluated (same posting)
+    if (realCoRole.has(normCo(c.company) + '|' + normRole(c.title))) continue; // url-less real row, same role
+    rows.push({
+      id: 'tri-' + c.url, _triage: true,
+      date: c.date || today, company: c.company, role: c.title,
+      archetype: '—', score: c.score, status: 'Triage', source: null,
+      url: c.url, rationale: c.rationale,
+      report: null, resume: null, compStated: null, salary: null,
+      sector: '', sectorRaw: '', legitimacy: null, target: null, size: null,
+    });
+  }
+  return rows;
+}
+
+// Inline actions for a provisional triage row: run the full Sonnet deep dive
+// (auto-promotes to a real Evaluated row), open the JD, or dismiss ("not a
+// match"). The wrapper stops click propagation so the row's own click never fires.
+function TriageRowActions({ row, job, onDeep, onDismiss }) {
+  const s = job && job.status;
+  if (s === 'running') {
+    return <div className="row" style={{ gap: 6, marginTop: 4 }} onClick={e => e.stopPropagation()}>
+      <span className="mono dim" style={{ fontSize: 10 }}>⧖ deep dive running…</span>
+    </div>;
+  }
+  if (s === 'done') {
+    return <div className="row" style={{ gap: 6, marginTop: 4 }} onClick={e => e.stopPropagation()}>
+      <span className="mono" style={{ fontSize: 10, color: 'var(--green)' }}>✓ promoted to a full evaluation</span>
+    </div>;
+  }
+  return (
+    <div className="row" style={{ gap: 6, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+      <button className="btn sm" style={{ padding: '2px 8px', fontSize: 10.5 }}
+        title="Run the full Sonnet deep evaluation and add it to your pipeline" onClick={() => onDeep(row)}>
+        <PIcon d={PI.zap} size={11} /> Deep dive
+      </button>
+      {row.url && /^https?:\/\//i.test(row.url) && (
+        <a className="btn ghost sm" style={{ padding: '2px 8px', fontSize: 10.5 }} href={row.url} target="_blank" rel="noreferrer"
+          onClick={e => e.stopPropagation()}>open JD <PIcon d={PI.arrowR} size={10} /></a>
+      )}
+      <button className="btn ghost sm" style={{ padding: '2px 7px', fontSize: 10.5 }}
+        title="Not a match — dismiss (it won't come back on the next scan)" onClick={() => onDismiss(row)}>✕ dismiss</button>
+      {s === 'error' && <span className="mono" style={{ fontSize: 10, color: 'var(--red)' }} title={job.error}>failed, retry</span>}
+    </div>
+  );
+}
+
 // ─── Table view ────────────────────────────────────────────────────────────
-function TableView({ apps, filtered, filters, setFilters, search, setSearch, onOpen, selId, onExport, isStale = () => false, staleDays = () => null }) {
+function TableView({ apps, filtered, filters, setFilters, search, setSearch, onOpen, selId, onExport, isStale = () => false, staleDays = () => null, triage = null }) {
   const [sortKey, setSortKey] = useStateP('date');
   const [sortDir, setSortDir] = useStateP('desc');
   const setSort = (k) => {
@@ -596,6 +676,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
       if (sortKey === 'score') { av = av == null ? -1 : av; bv = bv == null ? -1 : bv; }
       if (sortKey === 'status') { av = STATUS_MAP[a.status]?.stage ?? 99; bv = STATUS_MAP[b.status]?.stage ?? 99; }
       if (sortKey === 'salary')  { av = a.salary || 0; bv = b.salary || 0; }
+      if (sortKey === 'id')      { av = a._triage ? Number.MAX_SAFE_INTEGER : a.id; bv = b._triage ? Number.MAX_SAFE_INTEGER : b.id; }
       if (av < bv) return sortDir === 'asc' ? -1 : 1;
       if (av > bv) return sortDir === 'asc' ? 1 : -1;
       return (b.score || 0) - (a.score || 0);
@@ -646,8 +727,10 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
               const stale = isStale(a);
               const gap = (a.salary || 0) - (a.target || 0);
               return (
-                <tr key={a.id} className={(selId === a.id ? 'selected ' : '') + (stale ? 'stale' : '')} onClick={() => onOpen(a)}>
-                  <td className="id">{String(a.id).padStart(3, '0')}</td>
+                <tr key={a.id} className={(selId === a.id ? 'selected ' : '') + (stale ? 'stale' : '')}
+                  style={a._triage ? { cursor: 'default', background: 'rgba(148,163,184,0.05)' } : undefined}
+                  onClick={() => onOpen(a)}>
+                  <td className="id">{a._triage ? '—' : String(a.id).padStart(3, '0')}</td>
                   <td className="t-date">{a.date?.slice(5)}<span className="age">{relAge(sit)}</span></td>
                   <td className="t-co-cell">
                     <div className="co-cell">
@@ -659,13 +742,22 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
                       )}
                     </div>
                   </td>
-                  <td className="t-role">{a.role}</td>
+                  <td className="t-role">
+                    {a.role}
+                    {a._triage && (
+                      <>
+                        <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.04em', color: 'var(--text-mute)', marginTop: 2, textTransform: 'uppercase' }}>initial pass · Haiku triage</div>
+                        {a.rationale && <div className="dim" style={{ fontSize: 10.5, marginTop: 2, whiteSpace: 'normal', lineHeight: 1.35 }}>{a.rationale}</div>}
+                        {triage && <TriageRowActions row={a} job={triage.deepJobs[a.id]} onDeep={triage.onDeep} onDismiss={triage.onDismiss} />}
+                      </>
+                    )}
+                  </td>
                   <td className="t-arch">{a.archetype}</td>
                   <td className="t-comp" title={a.compStated || 'Not Stated'}>
                     {formatCompMidpoint(a)}
                   </td>
                   <td><StatusBadge status={a.status} /></td>
-                  <td><ScoreChip score={a.score} /></td>
+                  <td><ScoreChip score={a.score} provisional={a._triage} /></td>
                   <td><SourcePill source={a.source} /></td>
                 </tr>
               );
@@ -990,7 +1082,7 @@ function exportCSV(rows) {
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const lines = [cols.join(',')];
-  rows.forEach(a => lines.push(cols.map(c => esc(a[c])).join(',')));
+  rows.filter(a => !a._triage).forEach(a => lines.push(cols.map(c => esc(a[c])).join(','))); // skip provisional triage ghosts
   const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -1016,7 +1108,7 @@ const ALL_ENTRIES_STATUSES = [
   'Evaluated', 'Applied', 'Responded', 'Interview', 'Offer',
   'Rejected', 'Discarded', 'SKIP', 'Closed', 'Not a Fit',
 ];
-function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays = () => null }) {
+function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays = () => null, triage = null }) {
   const [sortKey, setSortKey] = useStateP('date');
   const [sortDir, setSortDir] = useStateP('desc');
   const [filters, setFilters] = useStateP({ statuses: [], archetypes: [], scoreMin: 0 });
@@ -1041,7 +1133,7 @@ function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays
     arr.sort((a, b) => {
       let cmp = 0;
       if (sortKey === 'id') {
-        cmp = (a.id || 0) - (b.id || 0);
+        cmp = (a._triage ? Number.MAX_SAFE_INTEGER : (a.id || 0)) - (b._triage ? Number.MAX_SAFE_INTEGER : (b.id || 0));
       } else if (sortKey === 'score') {
         const as = a.score != null ? a.score : -1;
         const bs = b.score != null ? b.score : -1;
@@ -1125,7 +1217,7 @@ function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays
         </div>
       </div>
 
-      <window.PipelineTable rows={sorted} sortKey={sortKey} sortDir={sortDir} setSort={setSort} onOpen={onOpen} isStale={isStale} staleDays={staleDays} flat />
+      <window.PipelineTable rows={sorted} sortKey={sortKey} sortDir={sortDir} setSort={setSort} onOpen={onOpen} isStale={isStale} staleDays={staleDays} triage={triage} flat />
     </div>
   );
 }
@@ -1867,7 +1959,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
 }
 
 // ─── Root: PipelineTab (replaces the existing) ─────────────────────────────
-window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFilters, onOpen, onQuickAction, search, compTweaks }) {
+window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFilters, onOpen, onQuickAction, onDataChanged, search, compTweaks }) {
   // Use the external view prop when it matches a known subtab, otherwise default to 'overview'.
   // This lets the command palette in app.jsx jump directly to the All subtab.
   const VALID_SUBVIEWS = ['overview', 'table', 'all', 'analytics'];
@@ -1879,6 +1971,78 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
 
   const activeApps = useMemoP(() => apps.filter(a => ACTIVE_STATUSES.includes(a.status)), [apps]);
   const filtered = useMemoP(() => applyFilters(activeApps, filters, search), [activeApps, filters, search]);
+
+  // ── Triage (Option B): provisional rows from data/triage-results.tsv ───────
+  // Surfaced in the Table + All views so a scanned-but-unevaluated role is
+  // visible where users look. NEVER written to applications.md, so Overview /
+  // Analytics (which read `apps` / `activeApps`) are unaffected by construction.
+  const [triageCards, setTriageCards] = useStateP([]);
+  const [deepJobs, setDeepJobs] = useStateP({}); // keyed by row.id ('tri-'+url)
+  const deepPollers = useRefP({});
+  const loadTriage = useCallbackP(() => {
+    fetch('/api/triage/results').then(r => r.json()).then(d => setTriageCards(d.cards || [])).catch(() => {});
+  }, []);
+  useEffectP(() => { loadTriage(); }, [loadTriage]);
+  useEffectP(() => () => { Object.values(deepPollers.current).forEach(clearInterval); }, []);
+
+  const triageRows = useMemoP(() => buildTriageRows(triageCards, apps), [triageCards, apps]);
+  // Which triage rows show in the Table subtab: hidden when a status/archetype
+  // filter is active (Triage isn't a tracked status), else filtered by score + search.
+  const triageInTable = useMemoP(() => {
+    if (filters && (filters.statuses?.length || filters.archetype || filters.archetypes?.length)) return [];
+    let rows = triageRows;
+    if (filters && filters.scoreMin) rows = rows.filter(r => r.score != null && r.score >= filters.scoreMin);
+    if (search) { const ql = search.toLowerCase(); rows = rows.filter(r => `${r.company} ${r.role}`.toLowerCase().includes(ql)); }
+    return rows;
+  }, [triageRows, filters, search]);
+
+  const setDeepJob = (id, patch) => setDeepJobs(j => ({ ...j, [id]: { ...(j[id] || {}), ...patch } }));
+  // Dismiss a triage row ("not a match"): drop it locally now, persist so the
+  // next scan won't resurface it. Never touches applications.md.
+  const dismissTriage = (row) => {
+    setTriageCards(cards => cards.filter(c => c.url !== row.url));
+    fetch('/api/triage/dismiss', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: row.url }),
+    }).catch(() => loadTriage());
+  };
+  // Run the full Sonnet deep eval for one triage row. The server auto-merges it,
+  // so on success we refresh apps (the new Evaluated row appears) and retire the
+  // promoted card durably via dismiss (robust even if the report URL canonicalizes
+  // away from the triage URL). deepPollers doubles as a synchronous re-entrancy
+  // guard so a rapid double-click can't start two jobs or leak an interval.
+  const triggerDeep = (row) => {
+    if (deepPollers.current[row.id]) return;
+    deepPollers.current[row.id] = true; // placeholder until the real interval handle exists
+    setDeepJob(row.id, { status: 'running' });
+    const clear = () => { clearInterval(deepPollers.current[row.id]); delete deepPollers.current[row.id]; };
+    fetch('/api/agent/deep', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: row.url, company: row.company, title: row.role }),
+    })
+      .then(r => r.json())
+      .then(({ jobId, error }) => {
+        if (!jobId) { delete deepPollers.current[row.id]; setDeepJob(row.id, { status: 'error', error: error || 'Failed to start' }); return; }
+        deepPollers.current[row.id] = setInterval(() => {
+          fetch(`/api/agent/status/${jobId}`)
+            .then(r => r.json())
+            .then(job => {
+              if (job.status === 'done') {
+                clear();
+                setDeepJob(row.id, { status: 'done' });
+                if (onDataChanged) onDataChanged();
+                dismissTriage(row); // retire the promoted card (durable; survives URL canonicalization)
+              } else if (job.status === 'error') {
+                clear();
+                setDeepJob(row.id, { status: 'error', error: job.error || 'Deep eval failed' });
+              }
+            })
+            .catch(() => { clear(); setDeepJob(row.id, { status: 'error', error: 'Poll failed' }); });
+        }, 2500);
+      })
+      .catch(err => { delete deepPollers.current[row.id]; setDeepJob(row.id, { status: 'error', error: err.message }); });
+  };
+  const triage = { deepJobs, onDeep: triggerDeep, onDismiss: dismissTriage };
 
   // Canonical "stale by the Follow-Ups engine" data — shared across every
   // sub-view (Table / Board / Pipeline Overview / Drawer / Analytics) so they
@@ -1909,8 +2073,10 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   const staleDays = (a) => staleMeta.get(a.id)?.days ?? null;
 
   const selId = drawerApp && drawerApp.id;
-  // Local drawer: don't bubble up to the shared window.Drawer for Pipeline rows
-  const handleOpen = (a) => { setDrawerApp(a); };
+  // Local drawer: don't bubble up to the shared window.Drawer for Pipeline rows.
+  // Triage rows have no report and a synthetic id, so they never open the heavy
+  // report drawer — their Deep Dive / dismiss / open-JD actions live in the row.
+  const handleOpen = (a) => { if (a && a._triage) return; setDrawerApp(a); };
 
   const onExport = () => {
     const rows = subView === 'table' ? filtered : activeApps;
@@ -1966,10 +2132,10 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
         <OverviewView apps={apps} onOpen={handleOpen} onAction={onQuickAction} search={search} />
       )}
       {subView === 'table' && (
-        <TableView apps={activeApps} filtered={filtered} filters={filters} setFilters={setFilters} search={search} setSearch={() => {}} onOpen={handleOpen} selId={selId} onExport={onExport} isStale={isStale} staleDays={staleDays} />
+        <TableView apps={[...activeApps, ...triageRows]} filtered={[...filtered, ...triageInTable]} filters={filters} setFilters={setFilters} search={search} setSearch={() => {}} onOpen={handleOpen} selId={selId} onExport={onExport} isStale={isStale} staleDays={staleDays} triage={triage} />
       )}
       {subView === 'all' && (
-        <AllEntriesView apps={apps} onOpen={handleOpen} search={search} isStale={isStale} staleDays={staleDays} />
+        <AllEntriesView apps={[...apps, ...triageRows]} onOpen={handleOpen} search={search} isStale={isStale} staleDays={staleDays} triage={triage} />
       )}
       {subView === 'analytics' && (
         <AnalyticsView apps={activeApps} allApps={apps} compTweaks={compTweaks} onOpen={handleOpen} isStale={isStale} />
@@ -1996,7 +2162,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
 // by the parent; our internal TableView is filter/sort-controlled by
 // itself, so we render a parallel minimal table here matching the old
 // columns + behavior.
-window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, setSort, onOpen, isStale = () => false, staleDays = () => null, flat = false }) {
+window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, setSort, onOpen, isStale = () => false, staleDays = () => null, flat = false, triage = null }) {
   const cols = [
     { k: 'id',         label: '#',         w: 50 },
     { k: 'date',       label: 'Date',      w: 80 },
@@ -2032,8 +2198,10 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
           {rows.map(a => {
             const stale = isStale(a);
             return (
-            <tr key={a.id} className={stale ? 'stale' : ''} onClick={() => onOpen(a)}>
-              <td className="id">{String(a.id).padStart(3, '0')}</td>
+            <tr key={a.id} className={stale ? 'stale' : ''}
+              style={a._triage ? { cursor: 'default', background: 'rgba(148,163,184,0.05)' } : undefined}
+              onClick={() => onOpen(a)}>
+              <td className="id">{a._triage ? '—' : String(a.id).padStart(3, '0')}</td>
               <td className="date">{a.date?.slice(5)}</td>
               <td className="company t-co-cell">
                 <div className="co-cell">
@@ -2046,8 +2214,15 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
                 </div>
               </td>
               <td className="role" title={a.role}
-                style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 250 }}>
+                style={a._triage ? { whiteSpace: 'normal', maxWidth: 360 } : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 250 }}>
                 {a.role}
+                {a._triage && (
+                  <>
+                    <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.04em', color: 'var(--text-mute)', marginTop: 2, textTransform: 'uppercase' }}>initial pass · Haiku triage</div>
+                    {a.rationale && <div className="dim" style={{ fontSize: 10.5, marginTop: 2, whiteSpace: 'normal', lineHeight: 1.35 }}>{a.rationale}</div>}
+                    {triage && <TriageRowActions row={a} job={triage.deepJobs[a.id]} onDeep={triage.onDeep} onDismiss={triage.onDismiss} />}
+                  </>
+                )}
               </td>
               <td><span className="mono dim" style={{ fontSize: 11 }}>{a.archetype}</span></td>
               <td className="mono dim" style={{ fontSize: 11 }} title={a.compStated || 'Not Stated'}>
@@ -2058,7 +2233,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
                 {a.sector || '—'}
               </td>
               <td><StatusBadge status={a.status} /></td>
-              <td><ScoreChip score={a.score} /></td>
+              <td><ScoreChip score={a.score} provisional={a._triage} /></td>
               <td><SourcePill source={a.source} /></td>
             </tr>
             );
