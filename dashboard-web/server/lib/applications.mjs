@@ -171,7 +171,9 @@ function normalizeSector(raw) {
 function classifySource(notes, url) {
   if (/\[self-sourced\]/i.test(notes)) return 'Self-sourced';
   if (/\[referral:/i.test(notes))      return 'Referral';
-  if (/\[cowork\]/i.test(notes))       return 'CoWork';
+  // [cowork] is a resume-tailoring ENGINE tag, not a JD source — let those rows
+  // fall through to URL-based classification (API Scan / Agent Scan) instead of
+  // being mislabeled 'CoWork' in the Source column.
   if (!url) return 'Agent Scan';
   try {
     const host = new URL(url).hostname.toLowerCase();
