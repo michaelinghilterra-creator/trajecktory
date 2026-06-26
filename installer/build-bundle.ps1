@@ -48,6 +48,21 @@ if (-not (Test-Path $NodeExe)) { throw "node.exe not found at $NodeExe" }
 # Make the bundled Node the one used for every install step below.
 $env:Path = "$PayloadNode;$env:Path"
 
+# ── 2.5 Stage the Git for Windows installer (run silently at USER-install time) ─
+# build-bundle stages a payload the Inno installer ships; running git's installer
+# HERE would only touch this build box. Instead, download git's installer next to
+# the .iss so trajecktory.iss can run it silently during the USER's install — that
+# lands git on the user's PERSISTENT PATH. Claude Code needs a shell (Git Bash, or
+# PowerShell as the fallback), and Claude Desktop (a separate app) only sees git
+# when it is on the persistent PATH, not a process-scoped one.
+$GitVersion   = '2.47.1'
+$GitInstaller = 'Git-for-Windows-installer.exe'
+$GitUrl       = "https://github.com/git-for-windows/git/releases/download/v$GitVersion.windows.1/Git-$GitVersion-64-bit.exe"
+$GitOut       = Join-Path $InstallerDir $GitInstaller
+Write-Host "Downloading Git for Windows $GitVersion ..."
+Invoke-WebRequest -Uri $GitUrl -OutFile $GitOut
+if (-not (Test-Path $GitOut)) { throw "Git installer not downloaded to $GitOut" }
+
 # ── 3. Stage the tracked tree — exactly what the public repo ships ────────────
 # Use `git archive` so ONLY committed files reach the payload. The working tree
 # also holds gitignored local data (cv.md, config/profile.yml, the
