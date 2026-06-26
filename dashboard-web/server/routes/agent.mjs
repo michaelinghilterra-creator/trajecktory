@@ -75,7 +75,7 @@ function dashboardConstraints(mode, opts) {
   if (mode === 'triage') {
     const tcap = parseInt(process.env.TJK_TRIAGE_MAX, 10) || 15;
     const n = limit > 0 ? Math.min(limit, tcap) : tcap;
-    return ' ' + common + ` Triage only — do NOT run a full evaluation. Score the TOP ${n} unchecked URLs from the top of data/pipeline.md (they are ordered best-fit first). For each: read the JD with WebFetch first and WebSearch as a fallback (skip any you cannot read), then give a 0.0-5.0 fit score and a one-sentence rationale using the rubric and anti-inflation calibration in the triage mode (most roles are NOT 4+; reserve 4+ for genuine strong fits on archetype AND level AND location). Append one TSV line per role to data/triage-results.tsv with columns url, company, title, score, rationale, date — create it with that header row if it is missing. Do NOT write a report, do NOT generate a PDF, do NOT write a tracker-additions TSV, and do NOT check off the pipeline.md checkboxes. Stop after ${n}.`;
+    return ' ' + common + ` Triage only — do NOT run a full evaluation. Score the TOP ${n} unchecked URLs from the top of data/pipeline.md (they are ordered best-fit first). Before scoring, SKIP any URL that already appears in data/applications.md (it already has an evaluation) or in data/triage-dismissed.tsv (the user dismissed it), and take the next unchecked URLs instead, so you never re-triage a role that is already evaluated or dismissed. For each: read the JD with WebFetch first and WebSearch as a fallback (skip any you cannot read), then give a 0.0-5.0 fit score and a one-sentence rationale using the rubric and anti-inflation calibration in the triage mode (most roles are NOT 4+; reserve 4+ for genuine strong fits on archetype AND level AND location). Append one TSV line per role to data/triage-results.tsv with columns url, company, title, score, rationale, date — create it with that header row if it is missing. Do NOT write a report, do NOT generate a PDF, do NOT write a tracker-additions TSV, and do NOT check off the pipeline.md checkboxes. Stop after ${n}.`;
   }
   if (mode === 'deep') {
     const tgt = (opts && opts.url) || '';
@@ -270,6 +270,28 @@ function runClaudeAgent(jobId, mode, target) {
   });
 }
 
+// Auto-promote a deep eval into the pipeline by folding its tracker-additions
+// TSV into data/applications.md. Runs merge-tracker.mjs as a node child (uses
+// the same node binary that runs this server, so no PATH/shell concerns).
+// Best-effort: on failure the caller falls back to the manual-merge note.
+function runMergeTracker() {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(process.execPath, ['merge-tracker.mjs'], { cwd: ROOT_DIR, windowsHide: true });
+    } catch (e) {
+      return resolve({ ok: false, error: (e && e.message) || 'merge-tracker failed to start' });
+    }
+    let err = '';
+    if (child.stdin) { try { child.stdin.end(); } catch { /* already closed */ } }
+    child.stderr && child.stderr.on('data', (c) => { err += c.toString(); });
+    child.on('error', (e) => resolve({ ok: false, error: (e && e.message) || 'merge-tracker error' }));
+    child.on('close', (code) => resolve(code === 0
+      ? { ok: true }
+      : { ok: false, error: err.trim().slice(-300) || `merge-tracker exited ${code}` }));
+  });
+}
+
 // Single agent run for BOTH Agent Scan and Evaluate Pipeline. Each dashboard
 // command does exactly ONE thing now — no bundled gate -> merge -> verify ->
 // health chain around the eval. The user runs Liveness Gate, Merge Tracker,
@@ -295,10 +317,23 @@ async function runAgent(jobId, mode, target) {
     const note = 'Triage scored. Open the triage cards to deep-dive the ones worth a full report.';
     agentJobs.set(jobId, { ...job, summary: job.summary ? `${job.summary} · ${note}` : note });
   }
+  // Deep dive auto-promotes: fold the new eval into applications.md right away
+  // so the triage row flips to a real Evaluated entry in one click (no separate
+  // Merge step). Falls back to the manual-merge note if merge-tracker fails.
   if (mode === 'deep' && res.ok) {
+    // runClaudeAgent already flipped this job to 'done'. Flip it back to
+    // 'running' BEFORE the merge so the single-flight guard keeps blocking other
+    // agent runs while merge-tracker rewrites applications.md, and so the UI
+    // poller (which keys off 'done') only retires the triage row once the real
+    // Evaluated row actually exists.
+    const j0 = agentJobs.get(jobId) || {};
+    agentJobs.set(jobId, { ...j0, status: 'running', activity: 'Merging into your pipeline…' });
+    const merged = await runMergeTracker();
     const job = agentJobs.get(jobId) || {};
-    const note = 'Deep evaluation written. Run Merge Tracker to fold it into your pipeline.';
-    agentJobs.set(jobId, { ...job, summary: job.summary ? `${job.summary} · ${note}` : note });
+    const note = merged.ok
+      ? 'Deep evaluation complete and merged into your pipeline.'
+      : 'Deep evaluation written. Run Merge Tracker to fold it into your pipeline.';
+    agentJobs.set(jobId, { ...job, status: 'done', summary: job.summary ? `${job.summary} · ${note}` : note, merged: merged.ok, finishedAt: Date.now() });
   }
 }
 
@@ -324,7 +359,12 @@ router.post('/api/agent/:mode', (req, res) => {
     if (url) {
       // The URL is interpolated into the single-line `claude -p` prompt, so reject
       // control characters / spaces / non-http URLs that could break out of it and
-      // inject instructions into the agent.
+      // inject instructions into the agent. Quote/backtick can break out of the
+      // double-quoted Windows-cmd prompt wrapper specifically, so reject them too
+      // (a real URL never contains a literal " or ` — those are percent-encoded).
+      if (/["`]/.test(url)) {
+        return res.status(400).json({ error: 'Provide a valid http(s) URL (no quote or backtick characters).' });
+      }
       if (/[ -]/.test(url) || !/^https?:\/\/[^\s]+$/i.test(url)) {
         return res.status(400).json({ error: 'Provide a valid http(s) URL (no spaces or control characters).' });
       }

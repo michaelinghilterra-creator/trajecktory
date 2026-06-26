@@ -27,14 +27,14 @@ Take the **TOP N unchecked URLs** (default 15) from the top of the pending list.
 Weigh, in order of importance:
 - **North-Star archetype + level fit (BIGGEST factor):** match against the HIGH/MEDIUM archetypes and the Director/VP level in `_profile.md`. A Manager/IC/below role is a weak fit; C-suite is the wrong level.
 - **CV evidence match** (skills / experience / proof points from `cv.md`).
-- **Location policy** (`profile.yml` `location.policy`): fully remote is always fine; onsite/hybrid is acceptable only in the approved DFW-metro list; onsite/hybrid required outside it is a hard no.
+- **Location policy** (`profile.yml` `location.policy`): fully remote is always fine. Onsite/hybrid is fine inside the approved DFW-metro list. A role OUTSIDE that list is a hard no **only if it REQUIRES onsite/hybrid attendance with no remote option.** If the posting offers a remote / "Remote U.S." option, OR makes onsite conditional on living near an office (e.g. "hybrid 50% if within commuting distance"), it is NOT a hard no — the candidate takes the remote option, so score it on fit and treat the hybrid clause as ~3.0, not a deal-breaker. Read the location line carefully: a listed "Remote" option beside NYC/other offices means remote is available.
 - **Comp** vs the target band; comp not stated = neutral.
 - **Red flags / deal-breakers.**
 
 **HARD DEAL-BREAKERS (cap the score at 2.5 or below):**
 - Pure individual-contributor or quota-carrying field-sales roles.
 - Dropped tracks: Sales Development (SDR/BDR) leadership and Business Development / Corporate Development.
-- Onsite or hybrid required outside the approved DFW-metro list.
+- Onsite or hybrid **required** outside the approved DFW-metro list **with no remote option** (a stated "Remote U.S." / remote option, or onsite that is only conditional on living near an office, means this deal-breaker does NOT apply).
 - Roles that are mostly marketing, finance/FP&A-only, product management, or engineering.
 
 **Anchors:** 4.5+ strong (apply now) · 4.0-4.4 good (worth applying) · 3.5-3.9 decent-not-ideal · below 3.5 recommend against.
