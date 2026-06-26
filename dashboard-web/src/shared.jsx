@@ -184,6 +184,11 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [claudeSignedIn, setClaudeSignedIn] = useState(false);
   const [claudeLoginMsg, setClaudeLoginMsg] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [triageCards, setTriageCards] = useState([]);   // [{ url, company, title, score, rationale, date }]
+  const [deepJobs, setDeepJobs] = useState({});         // { url: { status, error } }
+  const [pasteVal, setPasteVal] = useState('');
+  const [pasteBusy, setPasteBusy] = useState(false);
+  const [pasteMsg, setPasteMsg] = useState('');
   const pollersRef = useRef({});
 
   // Agent Scan and Evaluate Pipeline spawn the bundled Claude CLI, which needs a
@@ -207,6 +212,55 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         ? 'A console window opened. Follow its prompts to sign in, then run Agent Scan or Evaluate Pipeline.'
         : 'Tried to open a sign-in console. If nothing appeared, open a terminal and run "claude login" once.');
     }).catch(() => setClaudeLoginMsg('Could not open the sign-in window.'));
+  }
+
+  // Triage cards: the Haiku triage agent writes data/triage-results.tsv. Load on
+  // mount and refresh after a triage run completes.
+  const loadTriage = () => fetch('/api/triage/results').then(r => r.json()).then(d => setTriageCards(d.cards || [])).catch(() => {});
+  useEffect(() => { loadTriage(); }, []);
+
+  // Deep dive: full A-G Sonnet eval of one posting (a triage card or a pasted JD).
+  function triggerDeep(card) {
+    setDeepJobs(d => ({ ...d, [card.url]: { status: 'running' } }));
+    fetch('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: card.url, company: card.company, title: card.title }) })
+      .then(r => r.json().then(b => ({ ok: r.ok, b })))
+      .then(({ ok, b }) => {
+        if (!ok || b.error || !b.jobId) { setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: b.error || 'failed to start' } })); return; }
+        const poll = setInterval(() => {
+          fetch(`/api/agent/status/${b.jobId}`).then(r => r.json()).then(job => {
+            if (job.status === 'done' || job.status === 'error') {
+              clearInterval(poll);
+              setDeepJobs(d => ({ ...d, [card.url]: { status: job.status, error: job.error } }));
+              if (job.status === 'done') onDataChanged && onDataChanged();
+            }
+          }).catch(() => clearInterval(poll));
+        }, 2000);
+      })
+      .catch(e => setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: e.message } })));
+  }
+
+  // Paste a JD (URL or full text) → deep eval, skipping triage (self-sourced).
+  function submitPaste() {
+    const v = pasteVal.trim();
+    if (!v) return;
+    setPasteBusy(true); setPasteMsg('');
+    const body = /^https?:\/\//i.test(v) ? { url: v } : { jd: v };
+    fetch('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(r => r.json().then(b => ({ ok: r.ok, b })))
+      .then(({ ok, b }) => {
+        if (!ok || b.error || !b.jobId) { setPasteBusy(false); setPasteMsg(b.error || 'Could not start the evaluation.'); return; }
+        setPasteVal(''); setPasteMsg('Evaluating…');
+        const poll = setInterval(() => {
+          fetch(`/api/agent/status/${b.jobId}`).then(r => r.json()).then(job => {
+            if (job.status === 'done' || job.status === 'error') {
+              clearInterval(poll); setPasteBusy(false);
+              setPasteMsg(job.status === 'done' ? 'Done — see the Pipeline tab.' : (job.error || 'Evaluation failed.'));
+              if (job.status === 'done') onDataChanged && onDataChanged();
+            }
+          }).catch(() => { clearInterval(poll); setPasteBusy(false); });
+        }, 2000);
+      })
+      .catch(e => { setPasteBusy(false); setPasteMsg(e.message); });
   }
 
   // Everyday flow: API Scan (free, fast) → Triage (Haiku scores the top 15) →
@@ -247,8 +301,9 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                 if (job.status === 'done' || job.status === 'error') {
                   clearInterval(poll);
                   delete pollersRef.current[step.id];
-                  // Evaluate Pipeline wrote reports/TSVs — re-sync the dashboard.
-                  if (job.status === 'done') onDataChanged && onDataChanged();
+                  // Evaluate/Triage wrote reports/TSVs — re-sync the dashboard,
+                  // and reload the triage cards after a triage run.
+                  if (job.status === 'done') { onDataChanged && onDataChanged(); if (step.id === 'triage') loadTriage(); }
                 }
               })
               .catch(() => { clearInterval(poll); });
@@ -307,6 +362,9 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
 
   // Agent steps share data/pipeline.md + the Claude quota — only one at a time.
   const anyAgentRunning = STEPS.some(s => s.type === 'agent' && jobs[s.id]?.status === 'running');
+  // Deep-dive + paste share the single-flight Claude agent, so disable them while
+  // any agent step or another deep eval is running.
+  const agentBusy2 = anyAgentRunning || pasteBusy || Object.values(deepJobs).some(d => d?.status === 'running');
   // Merge/Verify/Health consume Evaluate Pipeline's output. Keep them disabled
   // while Evaluate is still running so clicking ahead doesn't show "0 to review".
   const evalRunning = jobs['cli-eval']?.status === 'running';
@@ -433,6 +491,46 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
             </React.Fragment>
           );
         })}
+      </div>
+
+      {triageCards.length > 0 && (
+        <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 4 }}>TRIAGE · {triageCards.length} scored</div>
+          {triageCards.slice(0, 15).map(card => {
+            const dj = deepJobs[card.url];
+            const sc = card.score;
+            const color = sc == null ? 'var(--text-mute)' : sc >= 4 ? 'var(--green)' : sc >= 3 ? 'var(--yellow)' : 'var(--red)';
+            const isLocal = String(card.url || '').startsWith('local:');
+            return (
+              <div key={card.url} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{ color, fontWeight: 700, fontFamily: 'var(--mono)', fontSize: 12 }}>{sc == null ? '—' : sc.toFixed(1)}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${card.company} — ${card.title}`}>{card.company} · {card.title}</span>
+                </div>
+                {card.rationale && <div style={{ fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4, marginTop: 2 }}>{card.rationale}</div>}
+                <div style={{ display: 'flex', gap: 10, marginTop: 4, alignItems: 'center' }}>
+                  {dj?.status === 'running' ? <span style={{ fontSize: 10.5, color: 'var(--yellow)' }}>⧖ Evaluating…</span>
+                    : dj?.status === 'done' ? <span style={{ fontSize: 10.5, color: 'var(--green)' }}>✓ Report ready</span>
+                    : dj?.status === 'error' ? <span style={{ fontSize: 10.5, color: 'var(--red)' }} title={dj.error}>✕ failed</span>
+                    : <button onClick={() => triggerDeep(card)} disabled={agentBusy2}
+                        style={{ background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 5, padding: '2px 8px', fontSize: 10.5, cursor: agentBusy2 ? 'not-allowed' : 'pointer', opacity: agentBusy2 ? 0.5 : 1 }}>Deep dive ⧉</button>}
+                  {!isLocal && card.url && <a href={card.url} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>open JD ↗</a>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 6 }}>PASTE A JD</div>
+        <textarea value={pasteVal} onChange={e => setPasteVal(e.target.value)} placeholder="Paste a job URL or the full JD text…"
+          style={{ width: '100%', height: 52, fontSize: 11, color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 6, padding: 6, background: 'var(--panel-2)', fontFamily: 'var(--mono)', resize: 'vertical', boxSizing: 'border-box' }} />
+        <button onClick={submitPaste} disabled={pasteBusy || agentBusy2 || !pasteVal.trim()}
+          style={{ width: '100%', marginTop: 6, background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 'not-allowed' : 'pointer', opacity: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 0.5 : 1 }}>
+          {pasteBusy ? 'Evaluating…' : 'Evaluate (Sonnet) ⧉'}
+        </button>
+        <div style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.4 }}>{pasteMsg || 'Self-sourced → full deep eval, skips triage.'}</div>
       </div>
     </div>
   );
