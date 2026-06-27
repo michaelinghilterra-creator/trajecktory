@@ -1,0 +1,3 @@
+# Captured screenshots are local build artifacts. They may contain synthetic
+# demo data and should not enter git. The capture scripts regenerate them.
+captures/

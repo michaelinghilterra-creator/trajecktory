@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>trajecktory onboarding - Guide 2 - Installing trajecktory</title>
+<link rel="stylesheet" href="guide.css">
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<section class="page cover">
+  <div class="inner">
+    <div class="mark">
+      <svg class="dot" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+        <circle cx="14" cy="50" r="3.6" fill="#ffffff"/>
+        <path d="M14 50 C 27 46 41 35 50 14" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="50" cy="14" r="7" fill="#ffffff"/>
+      </svg>
+      <span>trajecktory</span>
+    </div>
+
+    <div style="margin-top:0.5in">
+      <div class="gn">Guide 2 of 2</div>
+      <div class="title">Installing<br>trajecktory, and<br>your first run</div>
+      <div class="sub">This guide installs trajecktory on your Windows PC and walks you through the
+      Launchpad, the friendly setup screen that takes you from an empty start to a working job search
+      dashboard. Pictures for every step. No computer commands to type.</div>
+      <div class="meta">
+        <span class="chip">About 20 minutes</span>
+        <span class="chip">Finish Guide 1 first</span>
+        <span class="chip">Point and click</span>
+      </div>
+      <div class="ver">Version 11 &middot; for trajecktory v1.7.23</div>
+    </div>
+
+    <div class="foot">
+      You should already have the Claude app installed and the Code tab working, from Guide 1.<br>
+      The launch steps in this version are provisional, pending a final check on a clean PC.
+    </div>
+  </div>
+</section>
+
+<!-- ============ P1 - BEFORE YOU START + WHAT IT IS ============ -->
+<section class="page">
+  <div class="kicker">Before you begin</div>
+  <h1 class="h1">A quick get ready, and what trajecktory is</h1>
+
+  <p class="lead" style="margin-top:8px"><span class="brand">trajecktory</span> is your own private job
+  search dashboard that runs on your computer. It reads job posts, scores how well they fit you, helps tailor
+  your resume, and keeps track of everything in one place. Claude does the thinking. You stay in control.</p>
+
+  <div class="row" style="margin-top:4px">
+    <div class="col card">
+      <div class="kicker" style="margin-bottom:8px">Have these ready</div>
+      <ul class="checklist">
+        <li>Guide 1 finished: the Claude app, <b>Git for Windows</b>, and the <b>Code</b> tab all working</li>
+        <li>The trajecktory installer file, named <b>trajecktory-setup-v1.7.23.exe</b></li>
+        <li>About 20 minutes</li>
+      </ul>
+      <div class="small" style="margin-top:6px">Optional: an Anthropic API key, only if you want trajecktory
+      to auto write resumes and cover letters. You can add it now or much later. More on this near the end.</div>
+    </div>
+    <div class="col card">
+      <div class="kicker" style="margin-bottom:8px">What you will do here</div>
+      <ol class="do">
+        <li>Install trajecktory from the .exe file</li>
+        <li>Start it from Claude Code (Code mode)</li>
+        <li>Watch the dashboard open in your browser</li>
+        <li>Walk the Launchpad from empty to ready</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="callout note">
+    <span class="ic">&#128161;</span>
+    <b>A note on the pictures.</b> A few installer screens here are clean illustrations rather than photos, so
+    your exact windows may look a little different. The buttons and wording to look for are the same.
+  </div>
+
+  <div class="callout ok">
+    <span class="ic">&#9829;</span>
+    <b>Two safe truths to keep in mind.</b> First, trajecktory never sends an application or email without you
+    reviewing it. Second, your own files (your tracker, reports, and saved settings) are never overwritten by
+    updates. You can always re edit anything.
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>1 / 20</span></div>
+</section>
+
+<!-- ============ P2 - STEP 1 INSTALL EXE ============ -->
+<section class="page">
+  <div class="step">
+    <div class="num">1</div>
+    <div class="stext"><h2 class="h2">Install trajecktory from the .exe file</h2>
+    <div class="sub">Double click the installer and follow its short wizard. Most screens are just a Next button.</div></div>
+  </div>
+
+  <ol class="do">
+    <li>Find <span class="click">trajecktory-setup-v1.7.23.exe</span> (usually in your Downloads folder) and <span class="click">double click</span> it.</li>
+    <li>If a blue <b>Windows protected your PC</b> box appears, click <span class="click">More info</span>, then <span class="click">Run anyway</span>. This is the same safe warning from Guide 1.</li>
+    <li>The setup wizard opens. Click <span class="click">Next</span> to accept the suggested install location. You do not need to change it.</li>
+  </ol>
+
+  <div class="grid2">
+    <div>
+      <div class="kicker" style="margin-bottom:6px">The "Windows protected your PC" box</div>
+      <div class="smartscreen">
+        <div class="ss-head">Windows protected your PC</div>
+        <div class="ss-body">Microsoft Defender SmartScreen prevented an unrecognized app from starting.
+        <br><br><span style="color:var(--brand-deep);font-weight:700">More info</span></div>
+        <div class="ss-actions"><span class="btn ghost">Don't run</span></div>
+      </div>
+      <div class="stuck" style="margin-top:8px"><b>Click More info first.</b> A <b>Run anyway</b> button then
+      appears. Click it, and the install continues normally.</div>
+    </div>
+    <div>
+      <div class="kicker" style="margin-bottom:6px">Choosing where it installs</div>
+      <div class="wizard">
+        <div class="wz-head"><div class="t">Select Destination Location</div><div class="s">Where should trajecktory be installed?</div></div>
+        <div class="wz-body">
+          The suggested folder is already filled in for you. Leave it as it is.
+          <div class="field"><label>Destination folder</label>
+            <div class="inp">C:\Users\you\trajecktory</div></div>
+        </div>
+        <div class="wz-foot"><span class="btn ghost">Back</span><span class="btn">Next</span></div>
+      </div>
+      <div class="placeholder" style="margin-top:8px;padding:11px">
+        <div class="pt" style="margin:0">Your real installer screen</div>
+        <div class="pd">Drop your own screenshot here once you run it, if you want an exact match.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout tip"><span class="ic">&#9432;</span>
+    <b>No admin password needed.</b> trajecktory installs just for you, in your own user folder, so Windows
+    should not ask for an administrator password.</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>2 / 20</span></div>
+</section>
+
+<!-- ============ P3 - STEP 1 API KEY PAGE + FINISH ============ -->
+<section class="page">
+  <div class="kicker">Step 1, continued</div>
+  <h1 class="h1">The one screen worth reading: the API key</h1>
+  <p class="lead" style="margin-top:8px">Partway through, the installer shows a screen asking for an
+  "Anthropic API key". This sounds technical, but the screen itself tells you exactly what to do, and you are
+  allowed to skip it.</p>
+
+  <figure>
+    <div class="wizard">
+      <div class="wz-head"><div class="t">Anthropic API key (optional)</div>
+        <div class="s">Used only for tailored resumes, cover letters, and outreach drafts.</div></div>
+      <div class="wz-body">
+        Evaluate and Scan run on your own Claude sign-in and need no key.<br>
+        To also generate resumes / cover letters / outreach, paste your Anthropic API key<br>
+        (starts with sk-ant-). You can leave this blank and add it later in the dashboard.
+        <div class="field"><label>Anthropic API key:</label><div class="inp">&nbsp;</div></div>
+      </div>
+      <div class="wz-foot"><span class="btn ghost">Back</span><span class="btn">Next</span></div>
+    </div>
+    <figcaption>The wording above is the exact text from the installer. In plain terms: leave the box empty
+    and click <b>Next</b> to skip it for now.</figcaption>
+  </figure>
+
+  <div class="row">
+    <div class="col"><div class="callout note"><span class="ic">&#128161;</span>
+      <b>What is an API key?</b> It is a private code that lets trajecktory ask Claude to write things like
+      resumes and cover letters, billed in tiny amounts to your own Anthropic account. It is <b>optional</b>.
+      The scoring and scanning features do not need it. You can add it any time later. We show you how near
+      the end of this guide.</div></div>
+    <div class="col"><div class="callout ok"><span class="ic">&#9829;</span>
+      <b>When in doubt, leave it blank.</b> Skipping the key now changes nothing about installing trajecktory
+      or scoring jobs. Click <b>Next</b>, then finish the wizard.</div></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <ol class="do">
+    <li>On the API key screen, <span class="click">leave the box empty</span> (unless you already have a key) and click <span class="click">Next</span>.</li>
+    <li>Click <span class="click">Install</span>, wait a moment, then on the last screen make sure
+        <span class="click">Launch trajecktory now</span> is checked and click <span class="click">Finish</span>.</li>
+  </ol>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>3 / 20</span></div>
+</section>
+
+<!-- ============ P4 - STEP 2 START THE DASHBOARD ============ -->
+<section class="page">
+  <div class="step">
+    <div class="num">2</div>
+    <div class="stext"><h2 class="h2">Start the live dashboard from Claude Code</h2>
+    <div class="sub">You launch trajecktory from the Code tab you set up in Guide 1. One short phrase does it.</div></div>
+  </div>
+
+  <div class="callout tip">
+    <span class="ic">&#9432;</span>
+    <b>First, set Chrome as your default browser.</b> trajecktory opens in whatever browser Windows treats as
+    default. To make it open in Chrome (not Microsoft Edge): open Windows <b>Settings</b>, search
+    <b>default apps</b>, scroll to <b>Web browser</b>, and choose <b>Chrome</b>. You only do this once.
+  </div>
+
+  <ol class="do">
+    <li>Open the <span class="click">Claude app</span> and click the <span class="click">Code</span> tab (from Guide 1).</li>
+    <li>Choose <span class="click">Local</span>, click <span class="click">Select folder</span>, and pick your installed trajecktory folder. Paste this path into the folder window:
+        <span class="kbd">C:\Users\you\trajecktory\trajecktory</span> (replace "you" with your Windows name; yes, "trajecktory" appears twice, the inner folder is the app).</li>
+    <li>In the message box at the bottom, type <span class="click">Start the live dashboard</span> and press <span class="kbd">Enter</span>.</li>
+    <li>trajecktory builds itself and opens the dashboard in <b>your browser</b>. That is it.</li>
+  </ol>
+
+  <figure>
+    <div class="win" style="max-width:5.6in">
+      <div class="titlebar"><span>Select folder</span><span class="wbtns">&times;</span></div>
+      <div style="padding:9px 11px">
+        <div style="position:relative">
+          <div class="tag" style="left:40%; top:-22%">Paste this path, then press Enter</div>
+          <div style="display:flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:6px; padding:7px 9px; font-family:Consolas,monospace; font-size:10px; color:var(--ink); background:#fff; white-space:nowrap; overflow:hidden">
+            <span style="color:var(--muted)">&#128193;</span> C:\Users\you\trajecktory\trajecktory
+          </div>
+          <div class="ring" style="left:-1.2%; top:-13%; width:102.4%; height:146%"></div>
+        </div>
+        <div style="display:flex; gap:14px; margin-top:9px">
+          <div style="font-size:10px; color:var(--muted); width:84px; border-right:1px solid var(--line); padding-right:8px">
+            &#128193; This PC<br>&#128193; Documents<br>&#128193; Downloads
+          </div>
+          <div style="flex:1; font-size:10.5px; color:var(--ink-soft)">
+            &#128193; dashboard-web<br>&#128193; data<br>&#128193; reports
+            <div style="margin-top:8px; text-align:right"><span class="btn">Select Folder</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Picking the trajecktory folder (Step 2). It sits in your user folder, in a trajecktory folder
+    inside another trajecktory folder, so the easy way is to paste
+    <b>C:\Users\you\trajecktory\trajecktory</b> into the bar at the top (swap "you" for your Windows name),
+    press <span class="kbd">Enter</span>, then click <b>Select Folder</b>.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="win">
+      <div class="titlebar"><span>Claude &middot; Code</span><span class="wbtns">&minus; &#9633; &times;</span></div>
+      <div class="mockbody" style="padding:24px 18px 16px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:7px">Your message to Claude</div>
+        <div style="position:relative; max-width:4.4in">
+          <div class="tag" style="left:34%; top:-22%">Type this, then press Enter</div>
+          <div style="border:1px solid var(--brand-soft); border-radius:8px; padding:10px 12px; font-family:Consolas,monospace; font-size:12px; color:var(--ink); background:#fff">Start the live dashboard</div>
+          <div class="ring" style="left:-1.5%; top:-14%; width:103%; height:132%"></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>An illustration of the Code tab. With your trajecktory folder open, type <b>Start the live
+    dashboard</b>. Claude runs it and the dashboard opens in your default browser. ("start the dashboard" or
+    "launch trajecktory" work too.)</figcaption>
+  </figure>
+
+  <div class="row">
+    <div class="col"><div class="callout ok"><span class="ic">&#9829;</span>
+      <b>No sign-in needed to start.</b> The dashboard opens clean, with no Claude sign-in at launch, and all
+      your setup and data views work right away. <i>(To use the one-click Evaluate and Scan buttons later,
+      there is a one-time sign-in in the sidebar; we cover it under "Using trajecktory.")</i></div></div>
+    <div class="col"><div class="callout note"><span class="ic">&#8635;</span>
+      <b>Prefer a shortcut?</b> As a fallback, you can also start trajecktory from the <b>trajecktory</b>
+      shortcut the installer placed on your desktop. The Code mode method above is the recommended one.</div></div>
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>4 / 20</span></div>
+</section>
+
+<!-- ============ P5 - STEP 3 DASHBOARD OPENS ============ -->
+<section class="page">
+  <div class="step">
+    <div class="num">3</div>
+    <div class="stext"><h2 class="h2">Your dashboard opens</h2>
+    <div class="sub">The dashboard opens in your web browser. This is your home base from now on.</div></div>
+  </div>
+
+  <p class="lead">trajecktory opens in your <b>default web browser</b> (Chrome, if you set it as your default
+  in the last step; otherwise Windows may use Edge). It runs privately on your own computer, so you may see an
+  address like <span class="kbd">localhost:3333</span>, which just means "this computer", not the public
+  internet. Down the left side is the menu you will use to move around.</p>
+
+  <figure>
+    <div class="frame">
+      <div class="bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="url">localhost:3333</span></div>
+      <div class="shot">
+        <img src="captures/dash-overview-full.png" alt="The trajecktory dashboard Overview">
+        <div class="ring" style="left:0.5%; top:11%; width:14.5%; height:74%"></div>
+        <div class="tag" style="left:8%; top:8%">Your menu</div>
+      </div>
+    </div>
+    <figcaption>The dashboard, shown here with friendly sample data so you can see what a busy search looks
+    like. Yours starts empty and fills in as you go. The menu on the left jumps between Overview, Pipeline,
+    Insights, and your setup screen, called the Launchpad.</figcaption>
+  </figure>
+
+  <div class="row">
+    <div class="col card" style="padding:9px 11px">
+      <div class="kicker" style="margin-bottom:4px">Overview</div>
+      <div class="small">Your daily summary: what needs a decision, how things are trending.</div>
+    </div>
+    <div class="col card" style="padding:9px 11px">
+      <div class="kicker" style="margin-bottom:4px">Pipeline</div>
+      <div class="small">Every role you are tracking, from first look to offer.</div>
+    </div>
+    <div class="col card" style="padding:9px 11px">
+      <div class="kicker" style="margin-bottom:4px">Launchpad</div>
+      <div class="small">The guided setup you will use next to get ready.</div>
+    </div>
+  </div>
+
+  <div class="callout tip"><span class="ic">&#9432;</span>
+    <b>If you closed the tab,</b> start it again from Claude Code by typing <b>Start the live dashboard</b>,
+    or use the <b>trajecktory</b> shortcut. It opens the dashboard in your browser again.</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>5 / 20</span></div>
+</section>
+
+<!-- ============ P6 - STEP 4 MEET THE LAUNCHPAD ============ -->
+<section class="page">
+  <div class="step">
+    <div class="num">4</div>
+    <div class="stext"><h2 class="h2">Meet the Launchpad</h2>
+    <div class="sub">A guided checklist that takes you from empty to ready. It does the fiddly parts for you.</div></div>
+  </div>
+
+  <p class="lead">When you first open trajecktory, it brings you straight to the <b>Launchpad</b>. A bar at the
+  top, the readiness meter, shows how far along you are. Every setup step is available right away, in any
+  order, and each one you finish turns into a green check.</p>
+
+  <figure>
+    <div class="frame">
+      <div class="shot">
+        <img src="captures/lp-preflight.png" alt="The Launchpad with the readiness meter and step list">
+        <div class="ring" style="left:84%; top:2%; width:14%; height:7%"></div>
+        <div class="tag" style="left:73%; top:13%">How ready you are</div>
+        <div class="ring" style="left:1%; top:13%; width:20%; height:73%"></div>
+        <div class="tag" style="left:11%; top:90%">Work down this list</div>
+      </div>
+    </div>
+    <figcaption>The Launchpad. The meter top right reads <b>0 / 9 required</b> when you start. The first item,
+    <b>Preflight check</b>, runs on its own: green ticks mean the engine is ready, and amber dots are friendly
+    reminders to add things like your CV further down. Nothing is locked.</figcaption>
+  </figure>
+
+  <div class="callout ok"><span class="ic">&#128737;</span>
+    <b>You cannot break anything here.</b> The Launchpad only updates your settings. Your applications,
+    reports, and history are never touched, and you can re edit any section later. So click around freely.</div>
+
+  <div class="callout note"><span class="ic">&#9989;</span>
+    <b>About that first item.</b> <b>Preflight check</b> turns green on its own once the engine is ready, which
+    it is on a fresh install. Missing things like your CV or profile are not blockers: they show as friendly
+    "add this below" reminders, and you can start any step right away.</div>
+
+  <div class="callout note"><span class="ic">&#8635;</span>
+    <b>It refreshes on its own.</b> When you switch to Claude Code and come back to the dashboard tab, it
+    re-syncs your data automatically, and a Workflow step's results appear the moment it finishes. You do not
+    need to reload the browser. The <b>"synced ... ago"</b> note in the top bar shows when it last updated.</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>6 / 20</span></div>
+</section>
+
+<!-- ============ P7 - THE HANDOFF PATTERN ============ -->
+<section class="page">
+  <div class="kicker">The one idea that makes everything click</div>
+  <h1 class="h1">The handoff: when the Launchpad asks for Claude's help</h1>
+  <p class="lead" style="margin-top:8px">Some Launchpad steps you fill in yourself (like your name). Others
+  need Claude to do the thinking (like drafting your strengths from your resume). For those, the Launchpad
+  hands you a ready made instruction to paste into the <b>Code</b> tab you opened in Guide 1. Learn this once
+  and every step that follows is easy.</p>
+
+  <div class="loop">
+    <div class="node">
+      <div class="ni">1</div><div class="nt">Click the button</div>
+      <div class="nd">A Launchpad step says "Hand off to my Claude Code". Click it. The instruction is copied for you.</div>
+    </div>
+    <div class="arrowx">&#8594;</div>
+    <div class="node">
+      <div class="ni">2</div><div class="nt">Paste into Code</div>
+      <div class="nd">Open the Claude app, click the Code tab, and paste. Claude does the work and shows you the result.</div>
+    </div>
+    <div class="arrowx">&#8594;</div>
+    <div class="node">
+      <div class="ni">3</div><div class="nt">Switch back, done</div>
+      <div class="nd">Return to the dashboard. The section updates itself within a few seconds. An "I ran it, refresh status" button is there too, but it is optional.</div>
+    </div>
+  </div>
+
+  <figure class="lpfig">
+    <div class="shot" style="width:6.4in">
+      <img src="captures/lp-edge-handoff.png" alt="A Launchpad step showing the copied instruction and the refresh button" style="width:6.4in">
+      <div class="ring" style="left:1.5%; top:69%; width:30%; height:20%"></div>
+      <div class="tag" style="left:16%; top:62%">After you run it, click here</div>
+    </div>
+    <figcaption>What a handoff looks like. The grey box holds the instruction (already copied to your
+    clipboard). Paste it into the Code tab and let Claude finish. Switch back and the step updates on its own;
+    the <b>I ran it, refresh status</b> button is just an optional nudge.</figcaption>
+  </figure>
+
+  <div class="callout note"><span class="ic">&#128433;</span>
+    <b>Some prompts pop up clickable choices.</b> The Location, Evaluation, and talk-through-CV prompts may show
+    a card in Claude Desktop with the question and clickable answers (like Remote / Hybrid / On-site), plus an
+    <b>Other</b> box to type your own. Click your choice and continue. Now and then Claude just asks in plain
+    text instead; if so, type your answer normally.</div>
+
+  <div class="callout tip"><span class="ic">&#128193;</span>
+    <b>Which folder to open in the Code tab.</b> In Claude's Code tab, choose <b>Local</b> and
+    <b>Select folder</b>, then pick your trajecktory folder. You can paste this exact path into the folder
+    window: <span class="kbd">C:\Users\you\trajecktory\trajecktory</span> (replace "you" with
+    your Windows name). Do this once; Claude remembers it.</div>
+
+  <div class="callout tip"><span class="ic">&#9432;</span>
+    <b>Optional, to save Claude usage:</b> set Claude Desktop's model to <b>Sonnet</b> before pasting the setup
+    prompts. Opus works too, it just uses more of your limit.</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>7 / 20</span></div>
+</section>
+
+<!-- ============ P8 - LAUNCHPAD CV + EDGE ============ -->
+<section class="page">
+  <div class="kicker">Launchpad, working down the list</div>
+  <h1 class="h1">Your CV, and your edge</h1>
+
+  <div class="lpstep">
+    <div class="lphead"><span class="lpn">A</span><div class="t">Your CV <small>&middot; the source of truth for everything</small></div></div>
+    <ol class="do compact">
+      <li>Drag your resume file onto the box, or click <span class="click">browse your desktop</span> to pick it. A Word or PDF file is perfect.</li>
+      <li>trajecktory gives you a short prompt. <span class="click">Paste it into Claude Code</span> and let it run. This one paste fills your CV plus your <b>identity, target roles, your edge, and location</b> as editable drafts, then ends with a friendly summary pointing you back to the dashboard. No commands to type.</li>
+      <li>Switch back to the dashboard. The step checks itself off within a few seconds, or click <span class="click">Check now</span>.</li>
+    </ol>
+    <figure class="lpfig"><div class="shot" style="width:6.5in">
+      <img src="captures/lp-cv.png" alt="The Your CV step" style="width:6.5in">
+      <div class="ring" style="left:2%; top:30%; width:96%; height:34%"></div>
+      <div class="tag" style="left:50%; top:24%">Drop your resume here</div>
+    </div></figure>
+  </div>
+
+  <div class="lpstep">
+    <div class="lphead"><span class="lpn">B</span><div class="t">Your edge <small>&middot; what makes you the obvious hire</small></div></div>
+    <ol class="do compact">
+      <li>The CV step already drafted your edge (your strengths and proof points). This section shows <b>&#10003; How it's configured now</b> with a plain-English note on how it shapes your scoring.</li>
+      <li>Read it over. To redraft it, click <span class="click">Re-run</span> (or <span class="click">Hand off to my Claude Code</span> if it is still empty), then switch back. Your edge has the biggest effect on how well jobs are scored.</li>
+    </ol>
+    <div class="callout note" style="margin:6px 0"><span class="ic">&#128161;</span>
+      <b>Fill any blanks in the dashboard, not in files.</b> Anything still blank (compensation, visa status,
+      links, company picks) you set right here in the <b>Setup</b> tab. You never hand-edit config files. Each
+      section also shows a <b>How it's configured now</b> summary so you can review and tweak with confidence.</div>
+    <figure class="lpfig"><div class="shot" style="width:6.5in">
+      <img src="captures/lp-edge.png" alt="The Your edge step" style="width:6.5in">
+      <div class="ring" style="left:2%; top:25%; width:38%; height:17%"></div>
+      <div class="tag" style="left:21%; top:18%">Start the handoff</div>
+    </div></figure>
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>8 / 20</span></div>
+</section>
+
+<!-- ============ P9 - LAUNCHPAD IDENTITY ============ -->
+<section class="page">
+  <div class="kicker">Launchpad, working down the list</div>
+  <h1 class="h1">Identity and links</h1>
+  <p class="lead" style="margin-top:6px">Your contact details, stamped onto every report and resume. This one
+  you fill in yourself, no handoff needed.</p>
+
+  <ol class="do compact">
+    <li>Type your <span class="click">Full name</span> and <span class="click">Email</span> (required), and your <span class="click">Home base</span> as City, ST.</li>
+    <li>Add any links you want (Portfolio, LinkedIn, GitHub, X). These are optional but help.</li>
+    <li>Click the purple <span class="click">Save</span> button. To pull certifications from your CV, use <span class="click">Detect certifications from CV</span> (a handoff).</li>
+  </ol>
+
+  <figure class="lpfig"><div class="shot" style="width:5.5in">
+    <img src="captures/lp-identity.png" alt="The Identity and links step" style="width:5.5in">
+    <div class="ring" style="left:2.5%; top:11%; width:64%; height:11%"></div>
+    <div class="tag" style="left:34%; top:7%">Name and email first</div>
+    <div class="ring oval" style="left:2.5%; top:51%; width:11%; height:6%"></div>
+    <div class="tag" style="left:30%; top:54%">Then Save</div>
+  </div></figure>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>9 / 20</span></div>
+</section>
+
+<!-- ============ P10 - LAUNCHPAD ROLES ============ -->
+<section class="page">
+  <div class="kicker">Launchpad, working down the list</div>
+  <h1 class="h1">Roles and seniority</h1>
+  <p class="lead" style="margin-top:6px">What job titles and level you are aiming for. This is what the
+  scanner hunts for, so it is worth a minute.</p>
+
+  <ol class="do compact">
+    <li>Tap one or more <span class="click">seniority</span> pills (Manager, Director, VP, and so on).</li>
+    <li>Type a job title in the box and click <span class="click">Add title</span>. Repeat for each title you want.</li>
+    <li>Click <span class="click">Generate roles + scanner config</span> to hand off to Claude, which suggests nearby roles and sets up the scanner. The green suggestions appear here to tap and keep.</li>
+  </ol>
+
+  <figure class="lpfig"><div class="shot" style="width:6.4in">
+    <img src="captures/lp-roles.png" alt="The Roles and seniority step" style="width:6.4in">
+    <div class="ring" style="left:2%; top:84%; width:38%; height:10%"></div>
+    <div class="tag" style="left:21%; top:79%">Generate, then tap suggestions</div>
+  </div></figure>
+
+  <div class="callout note" style="margin-top:6px"><span class="ic">&#128161;</span>
+    <b>The two colors.</b> Purple dots are things <b>you pick</b>. Green dots are things <b>Claude generates</b>
+    for you. You will see this pattern on the steps that team up with the Code tab.</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>10 / 20</span></div>
+</section>
+
+<!-- ============ P11 - LAUNCHPAD COMP + LOCATION ============ -->
+<section class="page">
+  <div class="kicker">Launchpad, working down the list</div>
+  <h1 class="h1">Compensation, and where you will work</h1>
+
+  <div class="lpstep">
+    <div class="lphead"><span class="lpn">C</span><div class="t">Compensation <small>&middot; your numbers</small></div></div>
+    <ol class="do compact">
+      <li>Fill in your <span class="click">Target range</span>, your <span class="click">Minimum</span> walk away number, and <span class="click">Currency</span>. A faded example stays under each box to show the format.</li>
+      <li>Click <span class="click">Save</span>. trajecktory uses these to score offers and flag low pay.</li>
+    </ol>
+    <figure class="lpfig"><div class="shot" style="width:6.5in">
+      <img src="captures/lp-comp.png" alt="The Compensation step" style="width:6.5in">
+      <div class="ring oval" style="left:2.5%; top:52%; width:10%; height:20%"></div>
+      <div class="tag" style="left:30%; top:54%">Save when done</div>
+    </div></figure>
+  </div>
+
+  <div class="lpstep">
+    <div class="lphead"><span class="lpn">D</span><div class="t">Location and policy <small>&middot; where you will and will not work</small></div></div>
+    <ol class="do compact">
+      <li>Type your <span class="click">City</span>, and choose <span class="click">Country</span>, <span class="click">Time Zone</span>, and <span class="click">Visa status</span> from the dropdowns. Then click <span class="click">Save</span>.</li>
+      <li>Click <span class="click">Build geo filter (remote/onsite rules)</span> to set your remote, hybrid, and on-site rules. The section then shows <b>&#10003; How it's configured now</b>: your home, the cities you will work in, and the cities you will not, plus a note on how it shapes your search. (Your commute radius lives in the Companies step.)</li>
+    </ol>
+    <figure class="lpfig"><div class="shot" style="width:6.5in">
+      <img src="captures/lp-location.png" alt="The Location and policy step" style="width:6.5in">
+      <div class="ring oval" style="left:2.5%; top:52%; width:10%; height:20%"></div>
+      <div class="tag" style="left:29%; top:54%">Save</div>
+    </div></figure>
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>11 / 20</span></div>
+</section>
+
+<!-- ============ P12 - LAUNCHPAD EVALUATION + OUTPUTS ============ -->
+<section class="page">
+  <div class="kicker">Launchpad, working down the list</div>
+  <h1 class="h1">Your priorities, and where files go</h1>
+
+  <div class="lpstep">
+    <div class="lphead"><span class="lpn">E</span><div class="t">Evaluation tuning <small>&middot; priorities and deal breakers</small></div></div>
+    <ol class="do compact">
+      <li>Click <span class="click">Hand off to my Claude Code</span> and paste into the Code tab.</li>
+      <li>Tell Claude what you care about and your hard nos (for example: no companies under 20 people). Then refresh here. This sharpens every score.</li>
+    </ol>
+    <figure class="lpfig"><div class="shot" style="width:6.5in">
+      <img src="captures/lp-evaluation.png" alt="The Evaluation tuning step" style="width:6.5in">
+      <div class="ring" style="left:2%; top:25%; width:38%; height:17%"></div>
+      <div class="tag" style="left:21%; top:18%">Start the handoff</div>
+    </div></figure>
+  </div>
+
+  <div class="lpstep">
+    <div class="lphead"><span class="lpn">F</span><div class="t">Output locations <small>&middot; where files land</small></div></div>
+    <ol class="do compact">
+      <li>You can safely <b>leave these as the defaults</b>: <span class="kbd">Documents\trajecktory resumes</span> and <span class="kbd">Documents\trajecktory interview prep</span>. Your tailored resumes and interview-prep notes land there.</li>
+      <li>If you want different folders, type them and click <span class="click">Save</span>. Company reports always stay inside trajecktory so the dashboard can read them.</li>
+    </ol>
+    <figure class="lpfig"><div class="shot" style="width:6.5in">
+      <img src="captures/lp-outputs.png" alt="The Output locations step" style="width:6.5in">
+      <div class="ring oval" style="left:2.5%; top:55%; width:10%; height:20%"></div>
+      <div class="tag" style="left:30%; top:57%">Save</div>
+    </div></figure>
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>12 / 20</span></div>
+</section>
+
+<!-- ============ P13 - LAUNCHPAD COMPANIES ============ -->
+<section class="page">
+  <div class="kicker">Launchpad, working down the list</div>
+  <h1 class="h1">Companies to track</h1>
+  <p class="lead" style="margin-top:6px">Where trajecktory looks for jobs. A neutral starter set is already
+  included, and Claude can suggest more, both nearby and in your industry.</p>
+
+  <ol class="do compact">
+    <li>Set your <span class="click">commute radius</span> (how far from home you would go for local roles).</li>
+    <li>Type any company you already want to track and click <span class="click">Add</span>.</li>
+    <li>Click <span class="click">Suggest + merge companies</span> to hand off to Claude. It proposes companies, finds their careers pages, and adds them. Tap the green ones to keep them.</li>
+  </ol>
+
+  <figure class="lpfig"><div class="shot" style="width:6.0in">
+    <img src="captures/lp-companies.png" alt="The Companies to track step" style="width:6.0in">
+    <div class="ring" style="left:2%; top:88%; width:33%; height:8%"></div>
+    <div class="tag" style="left:19%; top:83%">Suggest and merge</div>
+  </div></figure>
+
+  <div class="callout note" style="margin-top:4px"><span class="ic">&#9889;</span>
+    <b>The small tags.</b> A <b>free</b> tag means that company can be scanned at no token cost. A <b>web</b>
+    tag means it is searched on its website, which uses a little of your Claude usage. Both are fine.</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>13 / 20</span></div>
+</section>
+
+<!-- ============ P14 - LAUNCHPAD HEALTH CHECK ============ -->
+<section class="page">
+  <div class="kicker">Launchpad, the last step</div>
+  <h1 class="h1">Health check, and Setup is done</h1>
+  <p class="lead" style="margin-top:6px">The final Launchpad step confirms everything is wired up. There used
+  to be a "First evaluation" step here; it has moved out of Setup. Setup is now <b>config only</b>. Finding and
+  scoring real jobs happens in the <b>Workflow</b>, which we cover in the next two pages.</p>
+
+  <div class="lpstep">
+    <div class="lphead"><span class="lpn">&#10003;</span><div class="t">Health check <small>&middot; start on a clean, green pipeline</small></div></div>
+    <ol class="do compact">
+      <li>Click <span class="click">Run health check</span>. trajecktory checks itself and reports back.</li>
+      <li>Look for <span class="click">All verify scripts passed</span> in green. That means you are good to go.</li>
+    </ol>
+    <figure class="lpfig"><div class="shot" style="width:6.5in">
+      <img src="captures/lp-health.png" alt="The Health check step" style="width:6.5in">
+      <div class="ring" style="left:2%; top:28%; width:26%; height:16%"></div>
+      <div class="tag" style="left:15%; top:21%">Run it</div>
+    </div></figure>
+  </div>
+
+  <div class="callout ok"><span class="ic">&#9829;</span>
+    <b>That is the whole Setup.</b> The Launchpad only fills in your config. To actually search and score jobs,
+    you use the <b>Workflow</b> in the left sidebar, coming up next.</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>14 / 20</span></div>
+</section>
+
+<!-- ============ P15 - YOU ARE READY ============ -->
+<section class="page">
+  <div class="kicker">The finish line</div>
+  <h1 class="h1">You are ready</h1>
+  <p class="lead" style="margin-top:8px">When the required steps are done, the meter fills and shows a green
+  <b>ready</b> badge. That is the whole setup. From here, trajecktory works for you.</p>
+
+  <figure>
+    <div class="frame">
+      <div class="shot">
+        <img src="captures/lp-ready.png" alt="The Launchpad showing setup complete and ready">
+        <div class="ring" style="left:84%; top:2%; width:13%; height:8%"></div>
+        <div class="tag" style="left:74%; top:14%">All green: ready</div>
+      </div>
+    </div>
+    <figcaption>Setup complete. Every required step shows a green check, and the meter reads 100 percent. You
+    can revisit and edit any step here any time.</figcaption>
+  </figure>
+
+  <div class="row">
+    <div class="col card">
+      <div class="kicker" style="margin-bottom:6px">What to do next</div>
+      <ul class="plain">
+        <li><b>Sign in to Claude</b> in the sidebar (next page), for the AI steps</li>
+        <li>Run the <b>Workflow</b> steps to find and score jobs</li>
+        <li>Watch results land in the <b>Pipeline</b> tab</li>
+      </ul>
+    </div>
+    <div class="col card" style="background:var(--brand-tint); border-color:var(--brand-soft)">
+      <div class="kicker" style="margin-bottom:6px">Remember the rhythm</div>
+      <div class="small">When a step asks, copy the instruction, paste it into the Claude <b>Code</b> tab, and
+      let it run. The dashboard picks up the results on its own.</div>
+    </div>
+  </div>
+
+  <div class="callout note"><span class="ic">&#128196;</span>
+    <b>Reading a result, and applying.</b> Once a job is evaluated and merged, click it in the <b>Pipeline</b>
+    to open its full report in the right-hand drawer (seven tabs: Overview, CV Match, Comp, Interview,
+    Customize, Legitimacy, Full Report). A <b>"Quick copy:"</b> bar just above the apply buttons one-click
+    copies your email, phone, LinkedIn, portfolio, GitHub, and any certifications (a chip appears only for
+    fields you filled), ready to paste into application forms.</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>15 / 20</span></div>
+</section>
+
+<!-- ============ WORKFLOW 1 - SIGN IN TO CLAUDE ============ -->
+<section class="page">
+  <div class="kicker">Using trajecktory: the AI steps</div>
+  <h1 class="h1">Sign in to Claude (one time)</h1>
+  <p class="lead" style="margin-top:8px">Two of the Workflow steps, <b>Agent Scan</b> and <b>Evaluate
+  Pipeline</b>, use Claude, so they need a one-time sign-in. The free steps do not. The sign-in control lives in
+  the left sidebar, at the top of the <b>Workflow</b> section.</p>
+
+  <div class="row" style="align-items:flex-start">
+    <div class="col" style="flex:0 0 2.3in; text-align:center">
+      <div class="shot" style="display:inline-block; border:1px solid var(--line); border-radius:8px; overflow:hidden; box-shadow:0 4px 14px rgba(40,30,70,.1)">
+        <img src="captures/sidebar-workflow.png" alt="The sidebar Workflow section with the Sign in to Claude button" style="width:2.3in; display:block">
+        <div class="ring" style="left:4%; top:9.5%; width:92%; height:7%"></div>
+      </div>
+      <div class="small" style="margin-top:4px">The <b>Workflow</b> section in the sidebar. The sign-in button sits right at the top.</div>
+    </div>
+    <div class="col">
+      <ol class="do compact">
+        <li>In the sidebar Workflow section, click <span class="click">Sign in to Claude</span>.</li>
+        <li>A small <b>console window</b> opens and your <b>browser</b> opens a Claude page. If the console asks how to sign in, choose <span class="click">Claude account with subscription</span>.</li>
+        <li>In the browser, click <span class="click">Authorize</span>.</li>
+        <li><b>Important:</b> go <b>back to the console window</b> and answer its last question or two (for example, "Allow external CLAUDE.md imports?" then <span class="click">Yes</span>). You are not signed in from the browser alone.</li>
+      </ol>
+      <div class="callout ok"><span class="ic">&#9829;</span>
+        <b>How you know it worked.</b> The sidebar button changes to <b>"&#10003; Signed in to Claude"</b>. Now
+        Agent Scan and Evaluate Pipeline can run.</div>
+    </div>
+  </div>
+
+  <div class="callout warn"><span class="ic">&#9888;</span>
+    <b>If a step later shows "401 authentication_error: Invalid authentication credentials":</b> that just means
+    the Claude sign-in expired. It is not a bug. Click <b>Sign in to Claude</b> again to refresh it, then retry
+    the step.</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>16 / 20</span></div>
+</section>
+
+<!-- ============ WORKFLOW 2 - SIGN IN FLOW, SCREEN BY SCREEN ============ -->
+<section class="page">
+  <div class="kicker">Using trajecktory: the AI steps</div>
+  <h1 class="h1">The sign-in flow, screen by screen</h1>
+  <p class="lead" style="margin-top:6px">Here is what those steps look like. The one people miss is the last
+  one: after you click Authorize in the browser, you must return to the console window.</p>
+
+  <figure class="lpfig" style="margin-top:6px">
+    <div class="shot" style="display:inline-block; border:1px solid var(--line); border-radius:8px; overflow:hidden">
+      <img src="captures/signin-2.png" alt="The console asking how to sign in" style="width:5.1in; display:block">
+    </div>
+    <figcaption><b>1. The console window.</b> If it asks, choose <b>Claude account with subscription</b> (your Pro or Max plan), then press Enter.</figcaption>
+  </figure>
+
+  <div class="row" style="align-items:flex-start; margin-top:6px">
+    <div class="col" style="flex:0 0 2.4in; text-align:center">
+      <div class="shot" style="display:inline-block; border:1px solid var(--line); border-radius:8px; overflow:hidden">
+        <img src="captures/signin-3.png" alt="The browser Authorize page" style="width:2.4in; display:block">
+      </div>
+      <div class="small" style="margin-top:3px"><b>2. The browser.</b> Click the black <b>Authorize</b> button.</div>
+    </div>
+    <div class="col">
+      <div class="shot" style="display:block; border:1px solid var(--line); border-radius:8px; overflow:hidden">
+        <img src="captures/signin-6.png" alt="Back in the console, answer Yes" style="width:100%; display:block">
+      </div>
+      <div class="small" style="margin-top:3px"><b>3. Back to the console.</b> Answer the last question (for example, <b>Yes, allow external imports</b>). That finishes the sign-in.</div>
+      <div class="callout warn" style="margin-top:8px"><span class="ic">&#9888;</span>
+        <b>Do not stop at the browser.</b> The browser page is done, but the console still has a question or
+        two. Skip them and the sign-in will not complete.</div>
+    </div>
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>17 / 20</span></div>
+</section>
+
+<!-- ============ WORKFLOW 3 - THE STEPS ============ -->
+<section class="page">
+  <div class="kicker">Using trajecktory: find and score jobs</div>
+  <h1 class="h1">The Workflow, one step at a time</h1>
+  <p class="lead" style="margin-top:6px">In the sidebar, the <b>Workflow</b> section has eight steps. You run
+  them <b>one at a time</b>: click a step, let it finish, then click the next. There is no "run everything"
+  button, on purpose, so you can see each result or error on its own.</p>
+
+  <div class="row" style="align-items:flex-start">
+    <div class="col" style="flex:0 0 2.3in; text-align:center">
+      <div class="shot" style="display:inline-block; border:1px solid var(--line); border-radius:8px; overflow:hidden; box-shadow:0 4px 14px rgba(40,30,70,.1)">
+        <img src="captures/sidebar-workflow.png" alt="The eight Workflow steps" style="width:2.3in; display:block">
+      </div>
+      <div class="small" style="margin-top:4px">The eight steps, in order.</div>
+    </div>
+    <div class="col">
+      <ol class="do compact">
+        <li><b>Expand Coverage</b> (optional, free): finds new companies.</li>
+        <li><b>API Scan</b> (free): checks the Greenhouse, Ashby, and Lever job boards.</li>
+        <li><b>Agent Scan</b> (optional, needs sign-in): Claude searches the web for roles (it shows elapsed time as it runs), and any company it finds with a free job board joins your tracked list, so the free API Scan catches it next time.</li>
+        <li><b>Liveness Gate</b> (free): drops dead links.</li>
+        <li><b>Evaluate Pipeline</b> (needs sign-in): Claude scores your <b>5 best-fit postings</b> per run and writes a full report for each. A meter shows "Evaluated 3 of 5 &middot; 1m 20s &middot; ~2m 0s left" with a thin bar. Click Evaluate again for the next 5.</li>
+        <li><b>Merge Tracker</b> (free): folds the scored rows into your Pipeline.</li>
+        <li><b>Verify Actionable</b> (free): a safety check for dead links.</li>
+        <li><b>Health Check</b> (free): a final all-clear.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="callout warn"><span class="ic">&#9888;</span>
+    <b>After Evaluate Pipeline, click Merge Tracker.</b> While Evaluate runs, the steps below it are disabled
+    and show "waiting on Evaluate Pipeline", then light up when it finishes. Evaluate writes the scored rows;
+    <b>Merge Tracker</b> folds them into the <b>Pipeline</b> tab, so do not skip it. Results appear on their
+    own when a step finishes.</div>
+
+  <div class="callout note"><span class="ic">&#9432;</span>
+    <b>"0 new" is normal, not a failure.</b> A scan may say "0 new (of 14,338 found: 14,264 off-title, 28
+    duplicates, 43 geo-blocked, 3 stale)." Those buckets mean wrong title, the same posting on more than one
+    board, too far away, and expired. To surface more, broaden your target roles or title keywords in Setup.
+    The <b>first</b> full run takes a few minutes; later runs are much faster.</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>18 / 20</span></div>
+</section>
+
+<!-- ============ P16 - OPTIONAL + API KEY LATER ============ -->
+<section class="page">
+  <div class="kicker">Optional extras</div>
+  <h1 class="h1">Boosters, and adding your API key later</h1>
+
+  <p class="lead" style="margin-top:8px">At the bottom of the Launchpad list are <b>optional boosters</b>. You
+  can ignore these and come back any time. They each run through the Code tab, just like the handoff steps.</p>
+
+  <div class="grid2">
+    <div class="card" style="padding:10px 12px; grid-column:1 / -1; background:var(--brand-tint); border-color:var(--brand-soft)"><div class="kicker" style="margin-bottom:3px; color:var(--brand-deep)">AI draft key (optional)</div><div class="small">Paste your Anthropic API key right in the dashboard to turn on tailored resumes, cover letters, and outreach. Takes effect immediately. Steps are below.</div></div>
+    <div class="card" style="padding:10px 12px; grid-column:1 / -1"><div class="kicker" style="margin-bottom:3px">Web discovery keys (optional)</div><div class="small">A Brave Search key (and optional Muse key) lets Expand Coverage web-search for brand-new companies. Not required: API Scan (free) and Agent Scan (your Claude sign-in) still find roles without it.</div></div>
+    <div class="card" style="padding:10px 12px"><div class="kicker" style="margin-bottom:3px">Obsidian vault</div><div class="small">Save applied role notes into a personal notes app.</div></div>
+    <div class="card" style="padding:10px 12px"><div class="kicker" style="margin-bottom:3px">Market / language</div><div class="small">Target German, French, or Japanese job posts.</div></div>
+    <div class="card" style="padding:10px 12px"><div class="kicker" style="margin-bottom:3px">Search intensity</div><div class="small">Set a weekly goal and how often to scan.</div></div>
+    <div class="card" style="padding:10px 12px"><div class="kicker" style="margin-bottom:3px">Import / demo tour</div><div class="small">Bring in past applications, or explore with sample data.</div></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <h2 class="h2">Adding your Anthropic API key later</h2>
+  <p class="lead" style="margin-top:6px">If you skipped the key during install and later want trajecktory to
+  write tailored resumes, cover letters, or outreach, you can add it any time, right in the dashboard.</p>
+  <ol class="do">
+    <li>Get a key from your Anthropic account at <span class="click">console.anthropic.com</span> (it starts with <b>sk-ant-</b>). Treat it like a password.</li>
+    <li>In the dashboard, open <span class="click">Setup</span> (the Launchpad), scroll to <span class="click">Optional boosters</span>, and choose <span class="click">AI draft key (optional)</span>.</li>
+    <li>Paste your <b>sk-ant-</b> key and click <span class="click">Save</span>. It takes effect immediately, with no restart.</li>
+  </ol>
+
+  <div class="callout note"><span class="ic">&#128161;</span>
+    <b>Prefer to do it during install?</b> You can also paste the key at the installer's optional
+    <b>Anthropic API key</b> step (Step 1). Either route works; the dashboard one is the easiest to do later.</div>
+
+  <div class="callout tip"><span class="ic">&#9432;</span>
+    <b>Two separate billing buckets.</b> Your <b>Claude sign-in</b> (your Pro or Max plan, with its rolling
+    5-hour limit) powers onboarding, Agent Scan, and Evaluate, which default to the <b>Sonnet</b> model to go
+    easy on that limit. Your optional <b>API key</b> (pay as you go) powers only the written drafts. They never
+    draw from each other.</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>19 / 20</span></div>
+</section>
+
+<!-- ============ P17 - TROUBLESHOOTING ============ -->
+<section class="page">
+  <div class="kicker">If something is not right</div>
+  <h1 class="h1">Troubleshooting, and where did it go</h1>
+  <p class="lead" style="margin-top:8px">The most common little snags, and the calm fix for each.</p>
+
+  <div class="row">
+    <div class="col">
+      <div class="stuck"><b>The dashboard did not open.</b> In the Claude <b>Code</b> tab, with your trajecktory
+      folder open, type <b>Start the live dashboard</b> again. The <b>trajecktory</b> shortcut works as a fallback.</div>
+      <div class="stuck"><b>"401 authentication_error" on Agent Scan or Evaluate?</b> Your Claude sign-in
+      expired. Click <b>Sign in to Claude</b> in the sidebar again, then retry the step. Not a bug.</div>
+      <div class="stuck"><b>The Pipeline looks empty after evaluating.</b> Click <b>Merge Tracker</b> in the
+      sidebar Workflow. Evaluate writes the rows; Merge folds them into the Pipeline tab.</div>
+      <div class="stuck"><b>A draft says "add your key".</b> That is the optional API key. See the previous
+      page to add one, or skip it. Scoring still works without it.</div>
+      <div class="stuck"><b>"Windows protected your PC".</b> Click <b>More info</b>, then <b>Run anyway</b>.
+      A normal warning for new apps.</div>
+    </div>
+    <div class="col">
+      <div class="stuck"><b>The tab disappeared.</b> Look in your browser for the <b>trajecktory</b> tab
+      (localhost), or restart it from Claude Code with <b>Start the live dashboard</b>.</div>
+      <div class="stuck"><b>A handoff step will not turn green.</b> Make sure you pasted the instruction into
+      the Claude <b>Code</b> tab (with your trajecktory folder open), let it finish, then click
+      <b>I ran it, refresh status</b> back in the Launchpad.</div>
+      <div class="stuck"><b>I see "demo mode" or sample names.</b> That is the practice data. Your real,
+      private setup runs normally; the samples are only there to show how things look.</div>
+      <div class="stuck"><b>A "Claude usage or limit pressure" notice.</b> You hit your Claude plan's rolling
+      5-hour usage limit, usually from heavy use. Not a trajecktory error: wait a bit, then try again.</div>
+      <div class="stuck"><b>Want to share what went wrong?</b> Logs live in the app folder's <span class="kbd">logs\</span> (<span class="kbd">agent-runs.1.log</span> to <span class="kbd">.3.log</span>), plus <span class="kbd">launch-log.txt</span> and <span class="kbd">server-out.log</span> in the install folder.</div>
+      <div class="stuck"><b>I want to stop trajecktory.</b> Use the <b>Stop trajecktory</b> shortcut. Nothing
+      is lost. Open it again whenever you like.</div>
+    </div>
+  </div>
+
+  <div class="callout ok" style="margin-top:6px"><span class="ic">&#9829;</span>
+    <b>That is the whole picture.</b> Claude is installed (Guide 1), trajecktory is installed and set up
+    (Guide 2), and you know how it runs: paste prompts into Claude Code for Setup, then run the <b>Workflow</b>
+    steps in the sidebar to find and score jobs. Welcome to a calmer, smarter job search with
+    <span class="brand">trajecktory</span>.</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>20 / 20</span></div>
+</section>
+
+</body>
+</html>
