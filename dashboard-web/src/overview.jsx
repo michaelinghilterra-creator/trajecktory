@@ -82,7 +82,7 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
       if (stage === "Evaluated") {
         stageApps = apps;
       } else if (stage === "Applied") {
-        stageApps = apps.filter(a => window.appReached(a, "Applied") || a.status === "Rejected");
+        stageApps = apps.filter(a => window.appReached(a, "Applied") || a.status === "Rejected" || a.status === "No Response");
       } else {
         stageApps = apps.filter(a => window.appReached(a, stage));
       }
@@ -107,7 +107,7 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
   // Recent activity (last 14d, active apps only)
   const recent = useMemoO(() => activeApps.filter(a => window.daysAgo(a.date) <= 14).length, [activeApps]);
   const responseRate = useMemoO(() => {
-    const applied = activeApps.filter(a => ["Applied", "Responded", "Interview", "Offer", "Rejected"].includes(a.status)).length;
+    const applied = activeApps.filter(a => ["Applied", "Responded", "Interview", "Offer", "Rejected", "No Response"].includes(a.status)).length;
     const responded = activeApps.filter(a => ["Responded", "Interview", "Offer"].includes(a.status)).length;
     return applied ? Math.round((responded / applied) * 100) : 0;
   }, [activeApps]);
@@ -120,7 +120,7 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
 
   // Score distribution insights
   const scoreInsights = useMemoO(() => {
-    const appliedStatuses = ["Applied", "Responded", "Interview", "Offer", "Rejected"];
+    const appliedStatuses = ["Applied", "Responded", "Interview", "Offer", "Rejected", "No Response"];
     const bands = [
       { label: "Strong",  min: 4.0, max: Infinity, color: "var(--green)"  },
       { label: "Border",  min: 3.0, max: 4.0,      color: "var(--yellow)" },

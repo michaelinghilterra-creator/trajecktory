@@ -2,12 +2,12 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { ROOT_DIR } from '../config.mjs';
-import { parseApplicationsMd } from '../lib/applications.mjs';
+import { parseApplicationsMd, patchRowInMd } from '../lib/applications.mjs';
 import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
-import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS } from '../lib/sidecars.mjs';
+import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute, logStatusEvent } from '../lib/sidecars.mjs';
 import { anthropic, hasAnthropicKey, NO_KEY_ERROR, readProjectFile } from '../lib/anthropic.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeGhostedCandidates, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
@@ -49,19 +49,30 @@ router.get('/api/followups/stale', (req, res) => {
     if (pruneSnooze(snooze)) writeSnooze(snooze);
     const today = snoozeToday();
     const snoozedUntil = (it) => snooze[it.source]?.[String(it.id)];
-    const active = [];
+
+    // Split the non-snoozed items into WARM (the urgent queue + nav badge) and
+    // COLD ("Applications out": cold portal apps with no usable channel, or
+    // muted). klass is computed in the lib; muted items are forced cold.
+    const warm = [];
+    const cold = [];
     const snoozed = [];
     for (const it of merged) {
       const until = snoozedUntil(it);
-      if (until && until > today) snoozed.push({ ...it, snoozeUntil: until });
-      else active.push(it);
+      if (until && until > today) { snoozed.push({ ...it, snoozeUntil: until }); continue; }
+      if (it.klass === 'cold') cold.push(it);
+      else warm.push(it);
     }
 
     res.json({
       thresholds: STALE_THRESHOLD_BY_STATUS,
       taThreshold: TA_STALE_THRESHOLD_DAYS,
-      items: active,
+      ghostDays: GHOST_DAYS,
+      warm,
+      cold,
       snoozed,
+      ghostedCandidates: computeGhostedCandidates(),
+      // Deprecated alias: legacy readers expect `items` to be the badge list.
+      items: warm,
     });
   }
   catch (err) { res.status(500).json({ error: err.message }); }
@@ -98,6 +109,55 @@ router.post('/api/followups/unsnooze', (req, res) => {
     delete snooze[source][String(id)];
     writeSnooze(snooze);
     res.json({ ok: true, existed });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/followups/mute — "Done for now / Awaiting reply". Indefinitely
+// removes an Applied app from the warm queue without changing its status or
+// logging a touch. body: { id }
+router.post('/api/followups/mute', (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (id == null || `${id}`.trim() === '') return res.status(400).json({ error: 'id required' });
+    setMute(id, true);
+    res.json({ ok: true, id: String(id), muted: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/followups/unmute — bring a muted app back into the queue. body: { id }
+router.post('/api/followups/unmute', (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (id == null || `${id}`.trim() === '') return res.status(400).json({ error: 'id required' });
+    setMute(id, false);
+    res.json({ ok: true, id: String(id), muted: false });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/followups/archive-ghosted — bulk-set ghosted apps to "No Response".
+// Honest terminal state for "applied, company never replied"; counts in the
+// analytics denominator as a non-response (unlike Discarded). body: { ids: number[] }
+router.post('/api/followups/archive-ghosted', (req, res) => {
+  try {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids[] required' });
+    const apps = parseApplicationsMd();
+    let archived = 0;
+    for (const raw of ids) {
+      const id = parseInt(raw, 10);
+      if (isNaN(id)) continue;
+      const app = apps.find(a => a.id === id);
+      // Only archive apps still in Applied — never override a real signal that
+      // arrived since the candidate list was computed.
+      if (!app || app.status !== 'Applied') continue;
+      if (patchRowInMd(id, { status: 'No Response' })) {
+        logStatusEvent(id, 'No Response', { company: app.company });
+        // Muting is moot once terminal; clear any lingering mute.
+        setMute(id, false);
+        archived++;
+      }
+    }
+    res.json({ ok: true, archived });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

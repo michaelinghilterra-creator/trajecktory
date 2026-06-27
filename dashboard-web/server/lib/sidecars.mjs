@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { SNOOZE_PATH, APPLY_DATES_PATH, STATUS_EVENTS_PATH } from '../config.mjs';
+import { SNOOZE_PATH, APPLY_DATES_PATH, STATUS_EVENTS_PATH, MUTE_PATH } from '../config.mjs';
 
 // ─── Follow-up snooze store ───────────────────────────────────────────────────
 // Defers a stale follow-up alert without logging a touch. Shape:
@@ -33,6 +33,31 @@ function pruneSnooze(snooze) {
   return changed;
 }
 const SNOOZE_KINDS = new Set(['app', 'ta']);
+
+// ─── Follow-up mute store ─────────────────────────────────────────────────────
+// "Done for now / Awaiting reply": indefinitely removes an application from the
+// WARM follow-up queue WITHOUT changing its status or logging a touch. Unlike
+// snooze (time-based, expires, app+ta), mute is app-only and has no expiry — it
+// clears only when the user un-mutes (or the app leaves the tracked statuses).
+// This is the honest alternative to closing an opportunity early just to silence
+// an alert: the app stays Applied and accurate in analytics, it just stops
+// nagging. Shape: { "<appNum>": true }.
+function readMute() {
+  try { return JSON.parse(fs.readFileSync(MUTE_PATH, 'utf8')) || {}; }
+  catch { return {}; }
+}
+function writeMute(map) {
+  fs.writeFileSync(MUTE_PATH, JSON.stringify(map || {}, null, 2) + '\n');
+}
+function setMute(appNum, on) {
+  const map = readMute();
+  const key = String(appNum);
+  if (on) map[key] = true; else delete map[key];
+  writeMute(map);
+  return !!map[key];
+}
+function isMuted(appNum) { return !!readMute()[String(appNum)]; }
+
 // ─── Apply-date store ─────────────────────────────────────────────────────────
 // The applications.md Date column is the EVALUATION/scrape date (when the row
 // was logged), not the date the user actually applied — those can differ by
@@ -96,6 +121,7 @@ function parseStatusEvents() {
 export {
   snoozeToday, snoozeDateIn,
   readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS,
+  readMute, writeMute, setMute, isMuted,
   readApplyDates, writeApplyDates, recordApplyDate,
   logStatusEvent, parseStatusEvents,
 };

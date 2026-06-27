@@ -1,7 +1,7 @@
 // Tracker Tab — All entries, all statuses, no pipeline filtering
 const { useState: useStateT, useMemo: useMemoT } = React;
 
-const ALL_STATUSES = ["Evaluated", "Applied", "Responded", "Interview", "Offer", "Rejected", "Discarded", "SKIP", "Closed"];
+const ALL_STATUSES = ["Evaluated", "Applied", "Responded", "Interview", "Offer", "Rejected", "Discarded", "SKIP", "Closed", "Not a Fit", "No Response"];
 
 window.TrackerTab = function TrackerTab({ apps, onOpen, search }) {
   const [sortKey, setSortKey] = useStateT("date");

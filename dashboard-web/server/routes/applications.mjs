@@ -45,7 +45,7 @@ router.patch('/api/applications/:id', (req, res) => {
     const id = parseInt(req.params.id, 10);
     const { status, notes, company } = req.body;
 
-    const validStatuses = ['Evaluated','Applied','Responded','Interview','Offer','Rejected','Discarded','SKIP','Closed','Not a Fit'];
+    const validStatuses = ['Evaluated','Applied','Responded','Interview','Offer','Rejected','Discarded','SKIP','Closed','Not a Fit','No Response'];
     if (status && !validStatuses.includes(status)) {
       return res.status(400).json({ error: `Invalid status: ${status}` });
     }
