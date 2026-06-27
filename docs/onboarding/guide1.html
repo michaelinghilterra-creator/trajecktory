@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>trajecktory onboarding - Guide 1 - Setting up Claude</title>
+<link rel="stylesheet" href="guide.css">
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<section class="page cover">
+  <div class="inner">
+    <div class="mark">
+      <svg class="dot" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+        <circle cx="14" cy="50" r="3.6" fill="#ffffff"/>
+        <path d="M14 50 C 27 46 41 35 50 14" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="50" cy="14" r="7" fill="#ffffff"/>
+      </svg>
+      <span>trajecktory</span>
+    </div>
+
+    <div style="margin-top:0.5in">
+      <div class="gn">Guide 1 of 2</div>
+      <div class="title">Setting up Claude,<br>so trajecktory<br>can think</div>
+      <div class="sub">trajecktory uses Claude, a helpful AI assistant, to read your resume and do the
+      thinking behind your job search. This first guide gets Claude installed and ready on your
+      Windows PC. Everything is point and click. There is no typing of computer commands.</div>
+      <div class="meta">
+        <span class="chip">About 15 to 20 minutes</span>
+        <span class="chip">No technical experience needed</span>
+        <span class="chip">Windows PC</span>
+      </div>
+      <div class="ver">Version 11 &middot; 19 June 2026</div>
+    </div>
+
+    <div class="foot">
+      Work through this guide first, then open Guide 2 to install trajecktory itself.<br>
+      Take your time. You can stop after any step and pick up later exactly where you left off.
+    </div>
+  </div>
+</section>
+
+<!-- ============ PAGE 2 - WHAT THIS IS / WHAT YOU NEED ============ -->
+<section class="page">
+  <div class="kicker">Before you begin</div>
+  <h1 class="h1">What you are about to do, and what you will need</h1>
+  <p class="lead" style="margin-top:8px">Here is the whole journey in plain language. You will create a
+  Claude account, turn on the paid plan that trajecktory needs, install the Claude app on your computer,
+  add a small free helper called Git, and open the part of Claude called <span class="click">Code</span>. That is it.</p>
+
+  <div class="row" style="margin-top:6px">
+    <div class="col card">
+      <div class="kicker" style="margin-bottom:8px">The six steps in this guide</div>
+      <ol class="do">
+        <li>Create your Claude account</li>
+        <li>Turn on Claude Pro (the paid plan)</li>
+        <li>Install the Claude app on your PC</li>
+        <li>Install Git for Windows (Claude needs it)</li>
+        <li>Open Claude Code (the Code tab)</li>
+        <li>Point Claude at your work</li>
+      </ol>
+    </div>
+    <div class="col card">
+      <div class="kicker" style="margin-bottom:8px">What to have ready</div>
+      <ul class="checklist">
+        <li>A Windows PC (the one you will use for your job search)</li>
+        <li>An email address you can check</li>
+        <li>A credit or debit card for the Claude Pro plan</li>
+        <li>About 15 to 20 minutes of quiet time</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <span class="ic">&#9888;</span>
+    <b>One thing to know up front about cost.</b> trajecktory's smartest features (reading job posts and
+    scoring them) run on a paid Claude plan called <b>Claude Pro</b>. It costs <b>$20 per month</b>, or
+    <b>$17 per month</b> if you pay for a year at once. The free version of Claude will not work for this.
+    You can cancel any time. We will turn this on together in Step 2.
+  </div>
+
+  <div class="callout ok">
+    <span class="ic">&#9829;</span>
+    <b>You do not need to understand any of the technical words.</b> When a word is unavoidable, this guide
+    explains it in everyday language right where it appears. If a screen on your computer looks a little
+    different from a picture here, that is normal. Software changes its look often. The buttons you need
+    will still be there, usually with the same words.
+  </div>
+
+  <div class="loop" style="margin-top:14px">
+    <div class="node"><div class="ni">1</div><div class="nt">Account</div><div class="nd">Sign up at claude.com</div></div>
+    <div class="arrowx">&#8594;</div>
+    <div class="node"><div class="ni">2</div><div class="nt">Pro plan</div><div class="nd">Turn on Claude Pro</div></div>
+    <div class="arrowx">&#8594;</div>
+    <div class="node"><div class="ni">3</div><div class="nt">Install app</div><div class="nd">The Claude app + Git</div></div>
+    <div class="arrowx">&#8594;</div>
+    <div class="node"><div class="ni">4</div><div class="nt">Open Code</div><div class="nd">Click the Code tab</div></div>
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 1, Setting up Claude</span><span>1 / 9</span></div>
+</section>
+
+<!-- ============ PAGE 3 - STEP 1 ACCOUNT ============ -->
+<section class="page">
+  <div class="step">
+    <div class="num">1</div>
+    <div class="stext"><h2 class="h2">Create your Claude account</h2>
+    <div class="sub">An account is just your personal sign in, like setting up a new email or shopping account.</div></div>
+  </div>
+
+  <ol class="do">
+    <li>Open your web browser (Edge or Chrome), click the address bar at the very top, type
+        <span class="click">claude.com</span> and press <span class="kbd">Enter</span>.</li>
+    <li>On the page that appears, find the sign up card on the left. You can choose
+        <span class="click">Continue with Google</span> (use your Gmail) or
+        <span class="click">Continue with email</span> (use any email address).</li>
+    <li>If you picked email, Claude sends you a message with a button or code to confirm it is really you.
+        Open your email, click that button, and you are back in.</li>
+  </ol>
+
+  <figure>
+    <div class="frame">
+      <div class="bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="url">https://claude.com</span></div>
+      <div class="shot">
+        <img src="captures/web-claude-home.png" alt="The claude.com home page with sign in options">
+        <div class="ring" style="left:8.5%; top:50%; width:35%; height:30%"></div>
+        <div class="badge" style="left:8.5%; top:50%">2</div>
+        <div class="tag" style="left:26%; top:46.5%">Sign up here</div>
+        <div class="ring oval" style="left:72%; top:2%; width:8%; height:7.5%"></div>
+        <div class="tag" style="left:76%; top:14%">Already have one? Login</div>
+      </div>
+    </div>
+    <figcaption>The claude.com home page. The sign up card is on the left. The <b>Login</b> link in the top
+    right corner is for later, once your account exists.</figcaption>
+  </figure>
+
+  <div class="grid2" style="margin-top:4px">
+    <div>
+      <div class="kicker" style="margin-bottom:6px">If a step asks to verify your email</div>
+      <div class="placeholder">
+        <div class="pi">&#9993;</div>
+        <div class="pt">Email confirmation screen</div>
+        <div class="pd">This screen lives inside your own email inbox, so we cannot show your version here.
+        Look for a new message from Claude or Anthropic and click the confirm button inside it. You can
+        paste your own screenshot into this box if you like.</div>
+      </div>
+    </div>
+    <div>
+      <div class="stuck"><b>Anthropic?</b> You may see the name "Anthropic" during sign up. Anthropic is
+      the company that makes Claude, so it is the same thing. Nothing is wrong.</div>
+      <div class="stuck"><b>No password to remember.</b> Claude usually signs you in with a Google account
+      or by emailing you a link, so there is often no separate password to invent or forget.</div>
+    </div>
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 1, Setting up Claude</span><span>2 / 9</span></div>
+</section>
+
+<!-- ============ PAGE 4 - STEP 2 PRO ============ -->
+<section class="page">
+  <div class="step">
+    <div class="num">2</div>
+    <div class="stext"><h2 class="h2">Turn on Claude Pro (the paid plan)</h2>
+    <div class="sub">This unlocks the Claude features trajecktory relies on. It is the one paid part of all of this.</div></div>
+  </div>
+
+  <ol class="do">
+    <li>While signed in, go to the address bar, type <span class="click">claude.com/pricing</span> and press <span class="kbd">Enter</span>.</li>
+    <li>You will see three plans side by side: Free, Pro, and Max. Look at the middle one, <span class="click">Pro</span>.</li>
+    <li>Under Pro, click the dark <span class="click">Try Claude</span> (or <span class="click">Get Claude</span>) button and follow the screens to enter your card and confirm.</li>
+  </ol>
+
+  <figure>
+    <div class="frame">
+      <div class="bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="url">https://claude.com/pricing</span></div>
+      <div class="shot">
+        <img src="captures/web-claude-pricing.png" alt="The Claude pricing page showing Free, Pro and Max plans">
+        <div class="ring" style="left:33.5%; top:53%; width:31%; height:43%"></div>
+        <div class="tag" style="left:49%; top:50%">Choose Pro</div>
+      </div>
+    </div>
+    <figcaption>The pricing page. <b>Pro</b> is the middle plan. It shows <b>$17 per month</b> when paid
+    yearly, or <b>$20 per month</b> billed monthly, and it plainly says it includes Claude Code, which is
+    exactly what trajecktory uses.</figcaption>
+  </figure>
+
+  <div class="callout tip">
+    <span class="ic">&#9432;</span>
+    <b>Why Pro and not Free.</b> trajecktory's one click "Evaluate" and "Scan" buttons, and the Code tool
+    you will open in Step 5, all require a paid plan. Pro is the least expensive one that includes them.
+    The bigger "Max" plan is only for very heavy daily use, so most people start with Pro.
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="placeholder">
+        <div class="pi">&#128179;</div>
+        <div class="pt">The payment screen</div>
+        <div class="pd">The checkout page is tied to your own account and card, so it is not shown here.
+        Enter your details and confirm. Drop your own screenshot into this box if you want a record of it.</div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="stuck"><b>You can cancel any time.</b> Pro is month to month. If you stop your search,
+      you can turn it off from your account settings and you will not be charged again.</div>
+      <div class="stuck"><b>Keep the same account.</b> Use the very same Claude account you made in Step 1
+      for the payment. Everything in both guides uses this one account.</div>
+    </div>
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 1, Setting up Claude</span><span>3 / 9</span></div>
+</section>
+
+<!-- ============ PAGE 5 - STEP 3 INSTALL APP ============ -->
+<section class="page">
+  <div class="step">
+    <div class="num">3</div>
+    <div class="stext"><h2 class="h2">Install the Claude app on your PC</h2>
+    <div class="sub">Until now you have used Claude in a web browser. The app is a proper program on your computer, and it is where the Code tool lives.</div></div>
+  </div>
+
+  <ol class="do">
+    <li>In the address bar, type <span class="click">claude.com/download</span> and press <span class="kbd">Enter</span>.</li>
+    <li>Click the dark <span class="click">Download for Windows</span> button. A file will save to your computer (usually to your Downloads folder).</li>
+    <li>Open that downloaded file by double clicking it. The installer runs on its own. When it finishes, the Claude app opens.</li>
+    <li>In the app, <span class="click">sign in</span> with the same Claude account from Step 1.</li>
+  </ol>
+
+  <figure>
+    <div class="frame">
+      <div class="bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="url">https://claude.com/download</span></div>
+      <div class="shot">
+        <img src="captures/web-claude-download.png" alt="The Claude download page with a Download for Windows button">
+        <div class="ring" style="left:20.5%; top:39%; width:19.5%; height:10%"></div>
+        <div class="badge" style="left:21%; top:39%">2</div>
+      </div>
+    </div>
+    <figcaption>The download page. Use the big <b>Download for Windows</b> button (not the "arm64" one
+    unless you know your PC needs it). The page mentions "Chat, Claude Cowork, and Claude Code" because
+    the one app includes all three. trajecktory uses Code.</figcaption>
+  </figure>
+
+  <div class="row">
+    <div class="col">
+      <div class="kicker" style="margin-bottom:6px">If a blue "Windows protected your PC" box appears</div>
+      <div class="smartscreen">
+        <div class="ss-head">Windows protected your PC</div>
+        <div class="ss-body">Microsoft Defender SmartScreen prevented an unrecognized app from starting.
+        <br><br><span style="color:var(--brand-deep);font-weight:700">More info</span></div>
+        <div class="ss-actions"><span class="btn ghost">Don't run</span></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="callout note" style="margin-top:24px">
+        <span class="ic">&#128274;</span>
+        <b>This warning is normal and safe to pass.</b> Windows shows it for many new programs. Click the
+        small <b>More info</b> link, and then the <b>Run anyway</b> button that appears. The Claude app
+        will then install as usual.
+      </div>
+      <div class="stuck"><b>Where did the file go?</b> Downloads usually land in your <b>Downloads</b>
+      folder. Open the folder icon on your taskbar, click <b>Downloads</b> on the left, and look for the
+      file named like <b>Claude</b> at the top.</div>
+    </div>
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 1, Setting up Claude</span><span>4 / 9</span></div>
+</section>
+
+<!-- ============ STEP 4 - INSTALL GIT ============ -->
+<section class="page">
+  <div class="step">
+    <div class="num">4</div>
+    <div class="stext"><h2 class="h2">Install Git for Windows (Claude asks for this)</h2>
+    <div class="sub">A small, free helper Claude Code needs to work with files on your PC. Do this before you open Code.</div></div>
+  </div>
+
+  <p class="lead">The first time you use the <b>Code</b> tab, Claude pops up a small <b>Install Git</b> box.
+  trajecktory works with the files on your own computer (called "local sessions"), and Claude needs Git for
+  that. So we set it up now, once. It is a normal point and click installer, with nothing to type.</p>
+
+  <div class="row">
+    <div class="col">
+      <div class="kicker" style="margin-bottom:6px">The exact box Claude shows</div>
+      <div style="max-width:3.7in; border:1px solid var(--line); border-radius:12px; overflow:hidden; box-shadow:0 10px 26px rgba(40,30,70,.16); background:#fff">
+        <div style="padding:13px 16px 3px; font-size:14px; font-weight:700; color:var(--ink)">Install Git</div>
+        <div style="padding:0 16px 12px; font-size:11.5px; color:var(--ink-soft)">Git for Windows is required to run local sessions.</div>
+        <div style="padding:9px 16px; background:#fdeaea; border-top:1px solid #f6caca; color:#c0392b; font-size:10.5px; font-weight:600">&#9888; Git is required for local sessions.</div>
+        <div style="padding:11px 16px; display:flex; gap:9px; justify-content:flex-end; position:relative; background:#faf9fc; border-top:1px solid var(--line)">
+          <span class="btn ghost">Not now</span>
+          <span class="btn">Download Git</span>
+          <div class="ring" style="left:45%; top:4%; width:52%; height:84%"></div>
+          <div class="tag" style="left:72%; top:-34%">Click this</div>
+        </div>
+      </div>
+      <div class="callout warn" style="margin-top:10px"><span class="ic">&#9888;</span>
+        <b>Do not click "Not now".</b> That leaves Code stuck with the red "Git is required" message. Always
+        click <b>Download Git</b>.</div>
+    </div>
+    <div class="col">
+      <ol class="do">
+        <li>In that box, click <span class="click">Download Git</span> (or open <span class="click">gitforwindows.org</span> in your browser and click Download).</li>
+        <li>Run the downloaded file. Click <span class="click">Next</span> through the installer, then <span class="click">Install</span>, accepting every default choice.</li>
+        <li>When it finishes, <span class="click">fully quit and reopen the Claude app</span> so it notices Git is there.</li>
+      </ol>
+      <div class="callout note"><span class="ic">&#128161;</span>
+        <b>Why not "remote"?</b> Claude may offer a remote option to skip Git. trajecktory needs your files on
+        this computer, so remote is not an option here. Git is required.</div>
+    </div>
+  </div>
+
+  <figure>
+    <div class="frame" style="max-width:4.9in; margin:0 auto">
+      <div class="bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="url">https://gitforwindows.org</span></div>
+      <div class="shot">
+        <img src="captures/web-gitforwindows.png" alt="The Git for Windows website with a Download button" style="width:100%; display:block">
+        <div class="ring" style="left:51%; top:38%; width:14%; height:9%"></div>
+        <div class="tag" style="left:58%; top:31%">Download</div>
+      </div>
+    </div>
+    <figcaption>If you use the website instead of the box, this is it. Click the blue <b>Download</b> button,
+    then run the file. Git is a one time Windows helper for Claude; it is not part of trajecktory.</figcaption>
+  </figure>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 1, Setting up Claude</span><span>5 / 9</span></div>
+</section>
+
+<!-- ============ STEP 5 - OPEN CODE TAB ============ -->
+<section class="page">
+  <div class="step">
+    <div class="num">5</div>
+    <div class="stext"><h2 class="h2">Open Claude Code (the Code tab)</h2>
+    <div class="sub">This is the part people call "Claude Code mode". It is simply a tab inside the Claude app.</div></div>
+  </div>
+
+  <p class="lead">When the Claude app is open and you are signed in, look along the <b>top center</b> of the
+  window. There are three tabs: <b>Chat</b>, <b>Cowork</b>, and <b>Code</b>. Click <span class="click">Code</span>.
+  That is the whole "switch to Claude Code" action. There is no separate mode to flip on.</p>
+
+  <figure>
+    <div class="win">
+      <div class="titlebar"><span>Claude</span><span class="wbtns">&minus; &#9633; &times;</span></div>
+      <div class="tabbar" style="justify-content:center; position:relative">
+        <div class="tab">Chat</div>
+        <div class="tab">Cowork</div>
+        <div class="tab on">Code</div>
+        <div class="ring" style="left:62.5%; top:14%; width:13%; height:62%"></div>
+        <div class="tag" style="left:69%; top:96%">Click Code</div>
+      </div>
+      <div class="mockbody" style="color:var(--muted); text-align:center; padding:26px 16px">
+        Once you click Code, this area becomes your coding workspace. The next step shows what to do here.
+      </div>
+    </div>
+    <figcaption>An illustration of the three tabs at the top of the Claude app. Your real app may show
+    small icons or colors slightly differently, but the three words will be there. Click <b>Code</b>.</figcaption>
+  </figure>
+
+  <div class="row">
+    <div class="col"><div class="callout tip">
+      <span class="ic">&#9432;</span>
+      <b>If clicking Code asks you to upgrade,</b> it means the paid plan from Step 2 is not active yet.
+      Finish turning on Claude Pro, then come back and click Code again.</div></div>
+    <div class="col"><div class="callout note">
+      <span class="ic">&#8635;</span>
+      <b>If it asks you to sign in,</b> complete the sign in it shows, then fully close and reopen the
+      Claude app. The Code tab will be ready.</div></div>
+  </div>
+
+  <div class="placeholder">
+    <div class="pi">&#128247;</div>
+    <div class="pt">Optional: your own Code tab</div>
+    <div class="pd">Once you have clicked Code on your computer, you can take your own screenshot and drop
+    it into this box, so your guide matches your exact screen.</div>
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 1, Setting up Claude</span><span>6 / 9</span></div>
+</section>
+
+<!-- ============ PAGE 8 - STEP 6 POINT CLAUDE AT WORK ============ -->
+<section class="page">
+  <div class="step">
+    <div class="num">6</div>
+    <div class="stext"><h2 class="h2">Point Claude at your work</h2>
+    <div class="sub">Telling Code which folder to work in. You will use this in Guide 2; here we just learn the moves.</div></div>
+  </div>
+
+  <ol class="do">
+    <li>Inside the Code tab, choose <span class="click">Local</span>. This simply means "use the files on this computer".</li>
+    <li>Click <span class="click">Select folder</span> and pick a folder. In Guide 2 you will pick your
+        trajecktory folder; for now, just notice where this button is.</li>
+    <li>From then on, you type what you want in plain English and Claude does it, showing you each change
+        to approve first.</li>
+  </ol>
+
+  <figure>
+    <div class="win">
+      <div class="titlebar"><span>Claude &middot; Code</span><span class="wbtns">&minus; &#9633; &times;</span></div>
+      <div class="mockbody">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Choose where Claude should work</div>
+        <div style="position:relative; display:inline-block">
+          <span class="seg"><span class="on">Local</span><span>Remote</span><span>SSH</span></span>
+          <div class="ring oval" style="left:-2%; top:-12%; width:30%; height:130%"></div>
+        </div>
+        <div style="margin-top:16px; position:relative; display:inline-block">
+          <span class="btn ghost">&#128193; Select folder</span>
+          <div class="ring" style="left:-3%; top:-16%; width:46%; height:135%"></div>
+          <div class="tag" style="left:50%; top:155%">Pick your folder here</div>
+        </div>
+        <div style="height:14px"></div>
+      </div>
+    </div>
+    <figcaption>An illustration of the Code tab's start screen. Pick <b>Local</b>, then <b>Select folder</b>.</figcaption>
+  </figure>
+
+  <div class="callout ok">
+    <span class="ic">&#9829;</span>
+    <b>You are always in control.</b> By default, Claude Code asks before it changes anything. It shows you
+    exactly what it wants to do with clear <b>Accept</b> and <b>Reject</b> buttons. Nothing on your computer
+    changes until you click Accept. If you are ever unsure, you can just reject and ask Claude to explain.
+  </div>
+
+  <div class="row">
+    <div class="col" style="flex:1.3">
+      <div class="win">
+        <div class="titlebar"><span>Review change</span><span class="wbtns">&minus; &#9633; &times;</span></div>
+        <div class="mockbody" style="padding:12px 14px">
+          <div style="font-family:Consolas,monospace; font-size:10px; background:#f6f4fb; border:1px solid var(--line); border-radius:6px; padding:8px 10px; color:var(--ink-soft)">
+            <span style="color:#15803d">+ added a new line</span><br>
+            <span style="color:#b91c1c">- removed an old line</span>
+          </div>
+          <div style="margin-top:10px"><span class="btn" style="background:#15803d">Accept</span>
+            <span class="btn ghost" style="margin-left:6px">Reject</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col"><div class="stuck"><b>"Ask permissions" is the safe default.</b> You do not need to
+    change any settings. Just accept changes you are happy with. That is all there is to it.</div></div>
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 1, Setting up Claude</span><span>7 / 9</span></div>
+</section>
+
+<!-- ============ PAGE 9 - TWO SIGN-INS + CHECKLIST ============ -->
+<section class="page">
+  <div class="kicker">Good to understand</div>
+  <h1 class="h1">Signing in to Claude (always the same account)</h1>
+  <p class="lead" style="margin-top:8px">A lot of people worry about signing in over and over, so let us
+  settle it now. You sign in to Claude here in the Claude app, which powers the <b>Code</b> tab. Later, when
+  you first use trajecktory's one-click <b>Evaluate</b> and <b>Scan</b> buttons, it asks you to sign in to
+  Claude one more time, with the <b>same account</b>. That is the only second sign-in, and you do it once.</p>
+
+  <div class="callout note">
+    <span class="ic">&#128279;</span>
+    <b>The second sign-in is simple.</b> When you first use trajecktory's Evaluate or Scan, you click
+    <b>Sign in to Claude</b> in the sidebar and follow a few short prompts (Guide 2 walks it through, screen by
+    screen). Same account, done once.
+  </div>
+
+  <div class="loop" style="margin-top:8px">
+    <div class="node" style="text-align:left">
+      <div class="ni">1</div>
+      <div class="nt">Sign in here, in the Claude app</div>
+      <div class="nd">This powers the Code tab you will work in. You do it now, in Guide 1.</div>
+    </div>
+    <div class="arrowx">&#8594;</div>
+    <div class="node" style="text-align:left">
+      <div class="ni">2</div>
+      <div class="nt">Sign in once more, later</div>
+      <div class="nd">When you first use trajecktory's Evaluate or Scan, sign in again with the same account. No new account, ever.</div>
+    </div>
+  </div>
+
+  <div class="callout note">
+    <span class="ic">&#128279;</span>
+    <b>One account for everything.</b> The same Claude account covers the Code tool and trajecktory. There is
+    nothing else to create. If a sign-in screen ever appears, choose the same account and carry on.
+  </div>
+
+  <div class="divider"></div>
+
+  <h2 class="h2">Did it work? A quick checklist</h2>
+  <div class="row">
+    <div class="col">
+      <ul class="checklist">
+        <li>The Claude app opens on your PC and you are signed in</li>
+        <li>You can see three tabs at the top: Chat, Cowork, Code</li>
+        <li>Clicking <b>Code</b> does not ask you to upgrade (your Pro plan is on)</li>
+        <li>You can see <b>Local</b> and a <b>Select folder</b> button in Code</li>
+      </ul>
+    </div>
+    <div class="col">
+      <div class="kicker" style="margin-bottom:6px">Common snags, solved</div>
+      <div class="stuck"><b>"Windows protected your PC".</b> Click <b>More info</b>, then <b>Run anyway</b>.</div>
+      <div class="stuck"><b>Code asks me to upgrade.</b> Your Pro plan is not active yet. Revisit Step 2.</div>
+      <div class="stuck"><b>An "Install Git" box appears.</b> Click <b>Download Git</b> (not "Not now"), install it, then reopen Claude. See Step 4.</div>
+      <div class="stuck"><b>Asked to sign in again?</b> Harmless. Choose the same Claude account from this guide.</div>
+      <div class="stuck"><b>The window disappeared.</b> Look on the taskbar at the bottom for the Claude icon and click it.</div>
+    </div>
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 1, Setting up Claude</span><span>8 / 9</span></div>
+</section>
+
+<!-- ============ PAGE 10 - VERIFIED STEPS + WHAT NEXT ============ -->
+<section class="page">
+  <div class="kicker">Keep this handy</div>
+  <h1 class="h1">The Claude Code steps, on one card</h1>
+  <p class="lead" style="margin-top:8px">If you ever need to get back into Claude Code from scratch, here is
+  the whole path. These steps are confirmed against Claude's official help pages.</p>
+
+  <div class="card" style="margin-top:6px">
+    <ol class="do" style="margin:0">
+      <li>Open the <b>Claude app</b> and sign in with your account.</li>
+      <li>At the <b>top center</b>, click the <b>Code</b> tab (it sits next to Chat and Cowork).</li>
+      <li>If it offers to upgrade, turn on <b>Claude Pro</b> first. If it asks you to sign in, do so and reopen the app.</li>
+      <li>Choose <b>Local</b>, then click <b>Select folder</b> and choose your folder.</li>
+      <li>On Windows, <b>Git</b> must be installed first (Step 4), or Code cannot open your local files.</li>
+      <li>Claude works in <b>Ask permissions</b> mode: it proposes each change and you click <b>Accept</b> or <b>Reject</b>.</li>
+    </ol>
+  </div>
+
+  <div class="callout ok" style="margin-top:14px">
+    <span class="ic">&#9829;</span>
+    <b>No computer commands, anywhere.</b> Across this entire guide you never had to type a single technical
+    command. Everything was clicking buttons and links. That stays true in Guide 2 as well.
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="row" style="align-items:center">
+    <div class="col" style="flex:1.4">
+      <h2 class="h2">What is next</h2>
+      <p class="lead" style="margin-top:6px">Claude is now installed, paid for, and ready, and you know how
+      to open the Code tab and pick a folder. That is the foundation for everything trajecktory does.</p>
+      <p class="lead">Open <b>Guide 2, Installing trajecktory and your first run</b>. It walks you through
+      installing trajecktory and setting up your job search dashboard, step by step, with pictures, just
+      like this one.</p>
+    </div>
+    <div class="col">
+      <div class="card" style="text-align:center; background:var(--brand-tint); border-color:var(--brand-soft)">
+        <div style="font-size:26px">&#128640;</div>
+        <div style="font-weight:800; color:var(--brand-deep); margin-top:4px">Continue to Guide 2</div>
+        <div class="small" style="margin-top:3px">Installing trajecktory and your first run</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 1, Setting up Claude</span><span>9 / 9</span></div>
+</section>
+
+</body>
+</html>
