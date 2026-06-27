@@ -66,3 +66,9 @@ states:
     aliases: [not a fit, naf, no fit, poor fit]
     description: Role evaluated and determined to be a poor fit — signal noise, wrong level, wrong domain
     dashboard_group: not_a_fit
+
+  - id: no_response
+    label: No Response
+    aliases: [no response, ghosted, no reply, ghost]
+    description: Applied but the company never responded (ghosted). Counts as a sent application with no response in analytics.
+    dashboard_group: no_response

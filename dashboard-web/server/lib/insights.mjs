@@ -58,7 +58,10 @@ function buildInsightsContext() {
   const taContacts = parseTargetTalentMd();
 
   const activeStatuses = ['Evaluated','Applied','Responded','Interview','Offer'];
-  const appliedSet     = ['Applied','Responded','Interview','Offer','Rejected'];
+  // 'No Response' (ghosted) counts as a real sent application that got no reply,
+  // like 'Rejected' — it stays in the denominator but never in respondedSet, so
+  // ghosting honestly drags the response rate down instead of vanishing.
+  const appliedSet     = ['Applied','Responded','Interview','Offer','Rejected','No Response'];
   const respondedSet   = ['Responded','Interview','Offer'];
 
   const applied = apps.filter(a => appliedSet.includes(a.status));

@@ -1106,7 +1106,7 @@ const PL_SUBTABS = [
 // local drawer so users can Reopen a row back to Evaluated in one click.
 const ALL_ENTRIES_STATUSES = [
   'Evaluated', 'Applied', 'Responded', 'Interview', 'Offer',
-  'Rejected', 'Discarded', 'SKIP', 'Closed', 'Not a Fit',
+  'Rejected', 'Discarded', 'SKIP', 'Closed', 'Not a Fit', 'No Response',
 ];
 function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays = () => null, triage = null }) {
   const [sortKey, setSortKey] = useStateP('date');
@@ -1404,12 +1404,12 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     primary = [{ id: 'offer', label: 'Mark Offer', cls: 'primary', check: true }];
   } else if (st === 'Offer') {
     primary = [{ id: 'accept', label: 'Accept Offer', cls: 'success', check: true }];
-  } else if (['SKIP', 'Rejected', 'Closed', 'Discarded', 'Not a Fit'].includes(st)) {
+  } else if (['SKIP', 'Rejected', 'Closed', 'Discarded', 'Not a Fit', 'No Response'].includes(st)) {
     primary = [{ id: 'reopen', label: 'Reopen → Evaluated', cls: 'primary', check: true }];
   }
   const closers = st === 'Evaluated'
     ? [{ id: 'SKIP', label: 'Skip' }, { id: 'Not a Fit', label: 'Not a Fit' }, { id: 'Closed', label: 'Closed' }]
-    : [{ id: 'Rejected', label: 'Rejected', danger: true }, { id: 'Not a Fit', label: 'Not a Fit' }, { id: 'Closed', label: 'Closed' }];
+    : [{ id: 'Rejected', label: 'Rejected', danger: true }, { id: 'No Response', label: 'No Response' }, { id: 'Not a Fit', label: 'Not a Fit' }, { id: 'Closed', label: 'Closed' }];
 
   const gap = (app.salary || 0) - (app.target || 0);
   const remoteChip = (cs && cs.remote) || (app.size ? `${app.size}-stage` : null);
@@ -2178,7 +2178,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
       responded: 'Responded', interview: 'Interview', offer: 'Offer', accept: 'Offer',
       reopen: 'Evaluated',
       // closer ids map to themselves
-      SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded',
+      SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
     };
     const next = MAP[actionId];
     if (!next) return;

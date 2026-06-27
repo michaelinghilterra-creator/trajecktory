@@ -2,17 +2,49 @@ import fs from 'fs';
 import path from 'path';
 import { FOLLOWUPS_MD } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
-import { parseTargetTalentMd, readTTCorrespondence } from './target-talent.mjs';
-import { readApplyDates } from './sidecars.mjs';
+import { parseTargetTalentMd, readTTCorrespondence, matchByCompany } from './target-talent.mjs';
+import { readApplyDates, readMute } from './sidecars.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
 // quickly each stage cools: warm Responded threads cool fastest, post-
 // interview windows tighter still, cold Applied gets the longest leash.
+// Applied is intentionally generous (7 business days, ~10 calendar): chasing a
+// cold portal application 2 days after applying just manufactures noise.
 const STALE_THRESHOLD_BY_STATUS = {
-  Applied:   2,
+  Applied:   7,
   Responded: 5,
   Interview: 3,
 };
+
+// An Applied application with no reply this many CALENDAR days after applying is
+// treated as ghosted — a candidate to archive to the "No Response" outcome.
+const GHOST_DAYS = 45;
+
+// Is this TA contact's email actually usable for outreach? Auto-synthesized /
+// unverified / bounced addresses don't count (they read authoritative but fail
+// in practice), so a company whose only contact has such an email is treated as
+// having no usable email channel. Mirrors the bounce/unverified badge logic in
+// the contact drawer.
+function _isUsableEmail(row) {
+  const email = (row.email || '').trim();
+  if (!email || !email.includes('@')) return false;
+  const notes = row.notes || '';
+  if (/EMAIL BOUNCED|bounced/i.test(notes)) return false;
+  if (/unverified|auto-synthesized|pattern-med|pattern-low/i.test(notes)) return false;
+  return true;
+}
+
+// Best available outreach channel for a company across its non-archived TA
+// contacts: a usable email beats a LinkedIn-only contact (LinkedIn messaging is
+// rate-limited ~15/mo, so it's not a reliable follow-up channel), which beats
+// nothing. Drives the warm/cold split and the per-row channel badge.
+function channelFor(company, taRows) {
+  const matches = matchByCompany(taRows || [], company, r => r.company)
+    .filter(r => r.status !== 'Archived');
+  if (matches.some(_isUsableEmail)) return 'email';
+  if (matches.some(r => (r.linkedin || '').trim())) return 'linkedin';
+  return 'none';
+}
 
 function parseFollowupsMd() {
   if (!fs.existsSync(FOLLOWUPS_MD)) return [];
@@ -88,6 +120,8 @@ function computeStaleApps() {
   const apps = parseApplicationsMd();
   const followups = parseFollowupsMd();
   const applyDates = readApplyDates();
+  const muted = readMute();
+  const taRows = (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
   const followupsByApp = new Map();
   for (const f of followups) {
     if (!followupsByApp.has(f.appNum)) followupsByApp.set(f.appNum, []);
@@ -128,6 +162,18 @@ function computeStaleApps() {
       coachLevel = 'overdue';
     }
 
+    // Warm vs cold. Responded/Interview always count as warm (a human engaged,
+    // nudging pays off). An Applied app is warm only when there's a usable EMAIL
+    // channel (LinkedIn-only is rate-limited, so it's not reliably actionable);
+    // otherwise it's a cold "application out" that should sit in a calm ledger
+    // rather than nag. A muted app is always cold (the user said "done for now").
+    const channel = channelFor(a.company, taRows);
+    const isMutedApp = !!muted[String(a.id)];
+    let klass;
+    if (isMutedApp) klass = 'cold';
+    else if (a.status === 'Responded' || a.status === 'Interview') klass = 'warm';
+    else klass = (channel === 'email') ? 'warm' : 'cold';
+
     stale.push({
       id: a.id,
       company: a.company,
@@ -143,6 +189,9 @@ function computeStaleApps() {
       cap,
       coachVerdict,
       coachLevel,
+      channel,
+      muted: isMutedApp,
+      klass,
       sector: a.sector,
       report: a.report,
       url: a.url,
@@ -213,6 +262,11 @@ function computeStaleTA() {
       cap: TA_FU_CAP,
       coachVerdict,
       coachLevel,
+      // TA stale items are engaged relationships → always warm. Channel reflects
+      // whether we hold a direct email vs only a LinkedIn handle.
+      klass: 'warm',
+      muted: false,
+      channel: (c.email || '').includes('@') ? 'email' : 'linkedin',
       sector: null,
       notes: c.notes,
       followups: [],            // surfaced via TA drawer when opened
@@ -224,9 +278,37 @@ function computeStaleTA() {
   return stale;
 }
 
+// Ghosted applications: status still Applied, applied > GHOST_DAYS calendar days
+// ago, no advancement to Responded/Interview (implied by status === 'Applied').
+// These are candidates for the one-click "archive to No Response" bulk action so
+// the user clears the backlog honestly instead of closing things prematurely.
+function computeGhostedCandidates() {
+  const apps = parseApplicationsMd();
+  const applyDates = readApplyDates();
+  const out = [];
+  for (const a of apps) {
+    if (a.status !== 'Applied') continue;
+    const appliedOn = applyDates[String(a.id)] || a.date;
+    const days = _daysAgo(appliedOn);
+    if (days == null || days < GHOST_DAYS) continue;
+    out.push({
+      id: a.id,
+      company: a.company,
+      role: a.role,
+      status: a.status,
+      score: a.score,
+      applyDate: appliedOn,
+      daysSinceApply: days,
+    });
+  }
+  out.sort((x, y) => y.daysSinceApply - x.daysSinceApply);
+  return out;
+}
+
 
 export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA,
+  computeGhostedCandidates, channelFor, GHOST_DAYS,
   STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 

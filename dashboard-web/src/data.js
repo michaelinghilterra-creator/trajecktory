@@ -63,7 +63,7 @@ window.APPS = (() => {
   }));
 })();
 
-window.STATUSES = ["Evaluated","Applied","Responded","Interview","Offer","Rejected","Discarded","SKIP","Closed","Not a Fit"];
+window.STATUSES = ["Evaluated","Applied","Responded","Interview","Offer","Rejected","Discarded","SKIP","Closed","Not a Fit","No Response"];
 window.ARCHETYPES = ["RevOps","SalesOps","Analytics","BizDev","SalesDev","Strategy"];
 
 window.STATUS_META = {
@@ -77,6 +77,7 @@ window.STATUS_META = {
   SKIP:       { color: "#52525b", bg: "rgba(82,82,91,0.14)",    icon: "/" },
   Closed:     { color: "#78716c", bg: "rgba(120,113,108,0.14)", icon: "⊘" },
   "Not a Fit":{ color: "#b45309", bg: "rgba(180,83,9,0.12)",   icon: "≠" },
+  "No Response":{ color: "#6b7280", bg: "rgba(107,114,128,0.14)", icon: "∅" },
 };
 
 window.scoreColor = (s) => s == null ? "#71717a" : s >= 4.0 ? "#22c55e" : s >= 3.0 ? "#eab308" : "#ef4444";

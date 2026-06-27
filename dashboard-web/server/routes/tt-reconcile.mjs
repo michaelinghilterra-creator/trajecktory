@@ -19,7 +19,7 @@ export const router = express.Router();
 //   Rejected, Discarded, SKIP
 
 const TT_ACTIVE_APP_STATUSES = ['Evaluated','Applied','Responded','Interview','Offer'];
-const TT_CLOSED_APP_STATUSES = ['Rejected','Discarded','SKIP'];
+const TT_CLOSED_APP_STATUSES = ['Rejected','Discarded','SKIP','No Response'];
 
 function _normCompany(s) {
   return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');

@@ -47,6 +47,26 @@ function FUStatusPill({ status }) {
   );
 }
 
+// Whether there's a usable way to actually follow up: a verified email, only a
+// (rate-limited) LinkedIn handle, or no contact at all. Drives the warm/cold
+// split server-side; shown here so the user knows why something is or isn't
+// in the urgent queue.
+const CHANNEL_META = {
+  email:    { label: '✓ email',      bg: 'rgba(34,197,94,0.14)',   color: '#22c55e' },
+  linkedin: { label: 'LinkedIn only', bg: 'rgba(245,158,11,0.14)',  color: '#f59e0b' },
+  none:     { label: 'no contact',    bg: 'rgba(113,113,122,0.14)', color: '#a1a1aa' },
+};
+function ChannelBadge({ channel }) {
+  const m = CHANNEL_META[channel] || CHANNEL_META.none;
+  return (
+    <span className="mono" style={{
+      background: m.bg, color: m.color,
+      padding: '2px 7px', borderRadius: 4,
+      fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
+    }}>{m.label}</span>
+  );
+}
+
 // Bucket by days since last touch. Tiered thresholds (Applied 10d, Responded
 // 5d, Interview 3d) mean items can arrive on this list well under 14d, so the
 // buckets start at 0d and step up from there.
@@ -268,15 +288,17 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
 }
 
 window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search }) {
-  const [data, setData]       = useStateF({ thresholds: { Applied: 10, Responded: 5, Interview: 3 }, taThreshold: 14, items: [], snoozed: [] });
+  const [data, setData]       = useStateF({ thresholds: { Applied: 7, Responded: 5, Interview: 3 }, taThreshold: 14, ghostDays: 45, warm: [], cold: [], snoozed: [], ghostedCandidates: [] });
   const [loading, setLoading] = useStateF(true);
   const [selected, setSelected] = useStateF(null); // app id (only for 'app' source rows)
   const [statusFilter, setStatusFilter] = useStateF([]);
   const [bucketFilter, setBucketFilter] = useStateF([]);
   const [sourceFilter, setSourceFilter] = useStateF([]); // 'app' | 'ta'
-  // Subview: 'overview' = KPI/insight dashboard (default), 'combined' interleaves
-  // both sources, 'apps' / 'ta' filter the queue to one source.
-  const [subView, setSubView] = useStateF('overview');
+  const [coldFilter, setColdFilter] = useStateF('all');  // 'all' | 'none' | 'awaiting'
+  const [findFor, setFindFor] = useStateF(null);         // { company, role } for the Find-contacts modal
+  // Subview: 'overview' (KPIs), 'warm' (the urgent queue + nav badge), 'cold'
+  // ("Applications out": cold portal apps that should not nag daily).
+  const [subView, setSubView] = useStateF('warm');
 
   const load = () => {
     setLoading(true);
@@ -287,8 +309,13 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search })
   };
   useEffectF(() => { load(); }, []);
 
-  // Snooze defers a stale alert by N days (default 14) without logging a touch —
-  // the cadence clock keeps running, the alert just hides until the date passes.
+  const warm = data.warm || [];
+  const cold = data.cold || [];
+  const ghosted = data.ghostedCandidates || [];
+
+  // Snooze defers a stale alert by N days without logging a touch (the clock
+  // keeps running). Mute is the indefinite "done for now / awaiting reply": it
+  // keeps the app Applied and drops it from the warm queue with no expiry.
   const snooze = (it, days = 14) => {
     fetch('/api/followups/snooze', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -301,61 +328,83 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search })
       body: JSON.stringify({ source: it.source || 'app', id: it.id }),
     }).then(() => load()).catch(() => {});
   };
+  const mute = (it) => {
+    fetch('/api/followups/mute', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: it.id }),
+    }).then(() => load()).catch(() => {});
+  };
+  const unmute = (it) => {
+    fetch('/api/followups/unmute', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: it.id }),
+    }).then(() => load()).catch(() => {});
+  };
+  const archiveGhosted = (ids) => {
+    if (!ids.length) return;
+    if (!window.confirm(`Archive ${ids.length} ghosted application${ids.length === 1 ? '' : 's'} to "No Response"?\n\nThey'll leave the active pipeline but still count as applications-with-no-reply in your analytics.`)) return;
+    fetch('/api/followups/archive-ghosted', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    }).then(() => load()).catch(() => {});
+  };
 
-  // Subview takes precedence over the chip-level source filter: 'apps' shows
-  // only application rows, 'ta' shows only TA-Outreach rows, 'combined' falls
-  // back to whatever chips are set (default: no filter — both sources).
-  const effectiveSource = subView === 'apps' ? ['app'] : subView === 'ta' ? ['ta'] : sourceFilter;
+  // The current base list depends on the subview: cold for "Applications out",
+  // warm otherwise (overview KPIs describe the urgent queue).
+  const baseItems = subView === 'cold' ? cold : warm;
 
+  // Source/status/age filters apply to the WARM queue. Source defaults to chips.
   const filtered = useMemoF(() => {
     const q = (search || '').trim().toLowerCase();
-    return data.items.filter(it => {
+    return warm.filter(it => {
       if (statusFilter.length && !statusFilter.includes(it.status)) return false;
       if (bucketFilter.length && !bucketFilter.includes(ageBucket(it.daysSinceLastTouch).key)) return false;
-      if (effectiveSource.length && !effectiveSource.includes(it.source || 'app')) return false;
+      if (sourceFilter.length && !sourceFilter.includes(it.source || 'app')) return false;
       if (q) {
-        const hay = `${it.company || ''} ${it.role || ''} ${it.firstName || ''} ${it.lastName || ''}`.toLowerCase();
+        const hay = `${it.company || ''} ${it.role || ''} ${it.taFirst || ''} ${it.taLast || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [data.items, statusFilter, bucketFilter, effectiveSource, search]);
+  }, [warm, statusFilter, bucketFilter, sourceFilter, search]);
 
-  // Source counts (App / TA) — only render the filter row when both exist.
+  // Cold list with its own simple lens: all / no-contact / awaiting (muted).
+  const coldFiltered = useMemoF(() => {
+    const q = (search || '').trim().toLowerCase();
+    return cold.filter(it => {
+      if (coldFilter === 'none' && it.channel !== 'none') return false;
+      if (coldFilter === 'awaiting' && !it.muted) return false;
+      if (q && !`${it.company || ''} ${it.role || ''}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [cold, coldFilter, search]);
+
   const sourceCounts = useMemoF(() => {
     const c = { app: 0, ta: 0 };
-    for (const it of data.items) c[it.source || 'app']++;
+    for (const it of warm) c[it.source || 'app']++;
     return c;
-  }, [data.items]);
+  }, [warm]);
   const toggleSource = (s) => setSourceFilter(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
 
-  // Bucket counts (for header)
   const bucketCounts = useMemoF(() => {
     const buckets = {};
-    for (const it of data.items) {
+    for (const it of warm) {
       const k = ageBucket(it.daysSinceLastTouch).key;
       buckets[k] = (buckets[k] || 0) + 1;
     }
     return buckets;
-  }, [data.items]);
+  }, [warm]);
 
-  // Status counts
   const statusCounts = useMemoF(() => {
     const counts = {};
-    for (const it of data.items) counts[it.status] = (counts[it.status] || 0) + 1;
+    for (const it of warm) counts[it.status] = (counts[it.status] || 0) + 1;
     return counts;
-  }, [data.items]);
+  }, [warm]);
 
-  // Coach-level counts
-  const giveUpCount = useMemoF(() => data.items.filter(it => it.coachLevel === 'give-up').length, [data.items]);
+  const giveUpCount = useMemoF(() => warm.filter(it => it.coachLevel === 'give-up').length, [warm]);
+  const coldNoContact = useMemoF(() => cold.filter(it => it.channel === 'none').length, [cold]);
+  const coldMuted = useMemoF(() => cold.filter(it => it.muted).length, [cold]);
 
-  // Group filtered items into bucket sections (oldest → freshest so the
-  // give-up zone reads first and the just-due items sit at the bottom of the
-  // page, matching the give-up-first server sort).
-  //
-  // Within each bucket, sort by score DESC then daysSinceLastTouch ASC so the
-  // highest-leverage applications (best fit, freshest signal) rise to the top
-  // of every section — picks "where to hit next" out of a mixed list.
   const grouped = useMemoF(() => {
     const order = ['45d+', '21-45d', '10-21d', '0-10d'];
     const parseScore = s => {
@@ -373,7 +422,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search })
       groups[k].sort((a, b) => {
         const sd = parseScore(b.score) - parseScore(a.score);   // score DESC
         if (sd !== 0) return sd;
-        return (a.daysSinceLastTouch ?? 0) - (b.daysSinceLastTouch ?? 0); // newer (smaller days) first
+        return (a.daysSinceLastTouch ?? 0) - (b.daysSinceLastTouch ?? 0); // newer first
       });
     }
     const sampleDays = { '45d+': 45, '21-45d': 21, '10-21d': 10, '0-10d': 0 };
@@ -384,25 +433,25 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search })
   const toggleBucket = (b) => setBucketFilter(prev => prev.includes(b) ? prev.filter(x => x !== b) : [...prev, b]);
 
   const SUBTABS = [
-    { id: 'overview', label: 'Overview',       n: null,                 icon: window.ICON.pulse },
-    { id: 'combined', label: 'Combined queue', n: data.items.length,    icon: window.ICON.layers },
-    { id: 'apps',     label: 'Apps',           n: sourceCounts.app,     icon: window.ICON.briefcase },
-    { id: 'ta',       label: 'TA Outreach',    n: sourceCounts.ta,      icon: window.ICON.send },
+    { id: 'overview', label: 'Overview',         n: null,        icon: window.ICON.pulse },
+    { id: 'warm',     label: 'Warm threads',     n: warm.length, icon: window.ICON.send },
+    { id: 'cold',     label: 'Applications out',  n: cold.length, icon: window.ICON.briefcase },
   ];
 
-  // Helper to open an item from the Overview action list — apps open inline
-  // drawer, TA contacts push to the TA Outreach tab via openTaContact.
   const openFromOverview = (it) => {
-    if (it.source === 'ta') {
-      openTaContact && openTaContact(it.id);
-    } else {
-      setSelected(it.id);
-    }
+    if (it.source === 'ta') { openTaContact && openTaContact(it.id); }
+    else { setSelected(it.id); }
   };
+  const openItem = (it) => {
+    if (it.source === 'ta') { openTaContact && openTaContact(it.id); }
+    else { setSelected(it.id); }
+  };
+
+  const FindContactsPanel = window.FindContactsPanel;
 
   return (
     <div className="col" style={{ gap: 0 }}>
-      {/* Subtabs: lens by source */}
+      {/* Subtabs */}
       <div className="subtabs">
         {SUBTABS.map(s => (
           <div key={s.id} className={'subtab' + (subView === s.id ? ' active' : '')} onClick={() => setSubView(s.id)}>
@@ -419,36 +468,29 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search })
 
       {subView === 'overview' && (
         <FUOverview
-          items={data.items}
+          items={warm}
           thresholds={data.thresholds}
           taThreshold={data.taThreshold}
           sourceCounts={sourceCounts}
           statusCounts={statusCounts}
           bucketCounts={bucketCounts}
           giveUpCount={giveUpCount}
+          coldCount={cold.length}
           onOpen={openFromOverview}
           onJumpSubview={setSubView}
         />
       )}
 
-      {subView !== 'overview' && (
+      {/* ── Warm threads: the actionable queue ─────────────────────────────── */}
+      {subView === 'warm' && (
         <>
-      {/* Header */}
       <div className="ta-head">
         <div>
-          <h1>Follow-Ups</h1>
+          <h1>Warm threads</h1>
           <div className="sub">
-            {data.items.length === 0 ? (
-              <>Nothing stale — all touchpoints are inside their window.</>
-            ) : (
-              <>
-                {data.items.length} stale touchpoints
-                {sourceCounts.app > 0 && <> · {sourceCounts.app} app{sourceCounts.app === 1 ? '' : 's'}</>}
-                {sourceCounts.ta > 0 && <> · {sourceCounts.ta} TA</>}
-                {giveUpCount > 0 && <> · {giveUpCount} ready to write off</>}
-                {' '} · thresholds App {data.thresholds?.Applied || 10}/{data.thresholds?.Responded || 5}/{data.thresholds?.Interview || 3}d · TA {data.taThreshold || 14}d
-              </>
-            )}
+            {warm.length === 0
+              ? <>No warm threads right now. A reply, an interview, or a contact who engaged shows up here.</>
+              : <>{warm.length} warm {warm.length === 1 ? 'thread' : 'threads'} worth a nudge · thresholds App {data.thresholds?.Applied || 7}/{data.thresholds?.Responded || 5}/{data.thresholds?.Interview || 3}d · TA {data.taThreshold || 14}d</>}
           </div>
         </div>
         <div className="act">
@@ -456,22 +498,17 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search })
         </div>
       </div>
 
-      {data.items.length === 0 && !loading && (
+      {warm.length === 0 && !loading && (
         <div className="card" style={{ padding: 18 }}>
           <div className="dim" style={{ fontSize: 12 }}>
-            All Applied / Responded / Interview entries are inside their touch window —
-            <b> Applied within {data.thresholds?.Applied || 10}d</b>,
-            <b> Responded within {data.thresholds?.Responded || 5}d</b>,
-            <b> Interview within {data.thresholds?.Interview || 3}d</b>.
-            Target-talent contacts (Sent / Replied / Meeting Scheduled) appear here once {data.taThreshold || 14}d cool.
-            When a touchpoint goes stale, it will surface here with cadence guidance and one-click follow-up drafting.
+            Nothing warm is going cold. Warm threads are replies, interviews, contacts who engaged, and Applied roles where
+            you have a usable email. Cold portal applications live under <b>Applications out</b> ({cold.length}) so they don't nag.
           </div>
         </div>
       )}
 
-      {data.items.length > 0 && (
+      {warm.length > 0 && (
         <>
-          {/* Status filter pills */}
           <div className="card" style={{ padding: '10px 14px' }}>
             <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               {sourceCounts.app > 0 && sourceCounts.ta > 0 && (
@@ -525,7 +562,6 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search })
             </div>
           </div>
 
-          {/* Grouped list */}
           {grouped.map(group => (
             <div key={group.key} className="card padded-lg">
               <div className="card-head" style={{ marginBottom: 10 }}>
@@ -534,24 +570,106 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search })
               </div>
               <div className="col" style={{ gap: 6 }}>
                 {group.items.map(it => (
-                  <FollowupRow key={`${it.source || 'app'}-${it.id}`} item={it} onSnooze={() => snooze(it, 14)} onOpen={() => {
-                    if (it.source === 'ta') {
-                      openTaContact && openTaContact(it.id);
-                    } else {
-                      setSelected(it.id);
-                    }
-                  }} />
+                  <FollowupRow key={`${it.source || 'app'}-${it.id}`} item={it}
+                    onSnooze={() => snooze(it, 14)}
+                    onMute={it.source !== 'ta' ? () => mute(it) : null}
+                    onOpen={() => openItem(it)} />
                 ))}
               </div>
             </div>
           ))}
 
-          {filtered.length === 0 && (statusFilter.length > 0 || bucketFilter.length > 0) && (
+          {filtered.length === 0 && (statusFilter.length > 0 || bucketFilter.length > 0 || sourceFilter.length > 0) && (
             <div className="no-data">No matches. <button className="btn ghost sm" onClick={() => { setStatusFilter([]); setBucketFilter([]); setSourceFilter([]); }}>Clear filters</button></div>
           )}
         </>
       )}
         </>
+      )}
+
+      {/* ── Applications out: cold ledger, no daily nag ────────────────────── */}
+      {subView === 'cold' && (
+        <>
+      <div className="ta-head">
+        <div>
+          <h1>Applications out</h1>
+          <div className="sub">
+            {cold.length === 0
+              ? <>No cold applications waiting. Nice.</>
+              : <>{cold.length} application{cold.length === 1 ? '' : 's'} out with no usable contact or muted · {coldNoContact} no contact · {coldMuted} awaiting</>}
+          </div>
+        </div>
+        <div className="act">
+          <button className="btn sm" onClick={load} title="Reload">⟳ Refresh</button>
+        </div>
+      </div>
+
+      {/* Ghosted auto-age suggestion */}
+      {ghosted.length > 0 && (
+        <div className="card" style={{ padding: '12px 14px', borderLeft: '3px solid #ef4444' }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{ghosted.length} application{ghosted.length === 1 ? '' : 's'} have had no response in {data.ghostDays || 45}+ days</div>
+              <div className="dim mono" style={{ fontSize: 11, marginTop: 3 }}>Archive to "No Response" to clear the backlog honestly. They still count as applications-with-no-reply in analytics.</div>
+            </div>
+            <button className="btn primary sm" onClick={() => archiveGhosted(ghosted.map(g => g.id))}>
+              Archive {ghosted.length} → No Response
+            </button>
+          </div>
+        </div>
+      )}
+
+      {cold.length > 0 && (
+        <>
+          <div className="card" style={{ padding: '10px 14px' }}>
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span className="dim mono" style={{ fontSize: 10.5, marginRight: 4 }}>SHOW</span>
+              {[['all', 'All', cold.length], ['none', 'No contact', coldNoContact], ['awaiting', 'Awaiting', coldMuted]].map(([id, label, n]) => {
+                const active = coldFilter === id;
+                return (
+                  <span key={id} onClick={() => setColdFilter(id)} style={{
+                    cursor: 'pointer', padding: '4px 10px', borderRadius: 4,
+                    background: active ? '#a78bfa' : 'rgba(167,139,250,0.14)',
+                    color: active ? '#0a0a0c' : '#a78bfa',
+                    fontSize: 11, fontWeight: 600, fontFamily: 'JetBrains Mono, monospace',
+                    border: `1px solid ${active ? '#a78bfa' : 'transparent'}`,
+                  }}>{label} <span style={{ opacity: 0.7, marginLeft: 4 }}>{n}</span></span>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card padded-lg">
+            <div className="card-head" style={{ marginBottom: 10 }}>
+              <span className="card-title">Applications out</span>
+              <span className="card-meta mono">{coldFiltered.length} shown</span>
+            </div>
+            <div className="col" style={{ gap: 6 }}>
+              {coldFiltered.map(it => (
+                <FollowupRow key={`cold-${it.id}`} item={it}
+                  onOpen={() => openItem(it)}
+                  onMute={it.muted ? null : () => mute(it)}
+                  onUnmute={it.muted ? () => unmute(it) : null}
+                  onFind={it.channel === 'none' ? () => setFindFor({ company: it.company, role: it.role }) : null} />
+              ))}
+              {coldFiltered.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>Nothing here.</div>}
+            </div>
+          </div>
+        </>
+      )}
+        </>
+      )}
+
+      {/* Find-contacts modal (reuses the per-company finder from TA Outreach) */}
+      {findFor && FindContactsPanel && (
+        <div className="modal-back" onClick={() => setFindFor(null)}>
+          <div className="modal" style={{ width: 560 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-body" style={{ padding: 16 }}>
+              <FindContactsPanel company={findFor.company} exampleRole={findFor.role}
+                onAdded={load} onCancel={() => setFindFor(null)} />
+            </div>
+          </div>
+        </div>
       )}
 
       {data.snoozed && data.snoozed.length > 0 && (
@@ -609,8 +727,8 @@ function SourcePill({ source }) {
   );
 }
 
-function FollowupRow({ item, onOpen, onSnooze }) {
-  const coachStyle = COACH_COLOR[item.coachLevel];
+function FollowupRow({ item, onOpen, onSnooze, onMute, onUnmute, onFind }) {
+  const coachStyle = COACH_COLOR[item.coachLevel] || COACH_COLOR.overdue;
   const isTA = item.source === 'ta';
   const subtitle = isTA
     ? `${item.taFirst || ''} ${item.taLast || ''}${item.role ? ` · ${item.role}` : ''}`.trim()
@@ -624,6 +742,8 @@ function FollowupRow({ item, onOpen, onSnooze }) {
             <span className="mono dim" style={{ fontSize: 10 }}>#{String(item.id).padStart(3, '0')}</span>
             <span className="action-card-co">{item.company}</span>
             <FUStatusPill status={item.status} />
+            {!isTA && item.channel && <ChannelBadge channel={item.channel} />}
+            {item.muted && <span className="mono" style={{ background: 'rgba(113,113,122,0.18)', color: '#a1a1aa', padding: '2px 7px', borderRadius: 4, fontSize: 10, fontWeight: 700 }}>AWAITING</span>}
             <CoachPill level={item.coachLevel} />
             {item.fuCount > 0 && (
               <span className="mono dim" style={{ fontSize: 10 }}>· {item.fuCount} prior touch{item.fuCount === 1 ? '' : 'es'}</span>
@@ -637,12 +757,21 @@ function FollowupRow({ item, onOpen, onSnooze }) {
         <div className="row" style={{ gap: 8, alignItems: 'center' }}>
           {!isTA && <window.ScoreChip score={item.score} />}
           <span className="sit-badge" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', minWidth: 42, textAlign: 'center' }}>{item.daysSinceLastTouch}d</span>
+          {onFind && (
+            <button className="btn ghost sm" title="Find a TA contact at this company (one lookup, low usage)"
+              onClick={(e) => { e.stopPropagation(); onFind(); }}>Find contacts</button>
+          )}
           {onSnooze && (
-            <button
-              className="btn ghost sm"
-              title="Snooze this alert for 14 days (doesn't reset your follow-up clock)"
-              onClick={(e) => { e.stopPropagation(); onSnooze(); }}
-            >💤 14d</button>
+            <button className="btn ghost sm" title="Snooze this alert for 14 days (doesn't reset your follow-up clock)"
+              onClick={(e) => { e.stopPropagation(); onSnooze(); }}>💤 14d</button>
+          )}
+          {onMute && (
+            <button className="btn ghost sm" title="Done for now / awaiting reply. Keeps the app Applied, stops the nag (no expiry)."
+              onClick={(e) => { e.stopPropagation(); onMute(); }}>Done for now</button>
+          )}
+          {onUnmute && (
+            <button className="btn ghost sm" title="Bring this back into the queue"
+              onClick={(e) => { e.stopPropagation(); onUnmute(); }}>↩ Un-mute</button>
           )}
         </div>
       </div>
@@ -665,7 +794,8 @@ window.FollowupDrawer = function FollowupDrawer({ appId, onClose, onUpdate, onAc
     fetch('/api/followups/stale')
       .then(r => r.json())
       .then(d => {
-        const found = (d.items || []).find(x => x.id === appId);
+        const pool = [...(d.warm || []), ...(d.cold || []), ...(d.items || [])];
+        const found = pool.find(x => x.id === appId && (x.source || 'app') === 'app');
         setItem(found || null);
         if (found?.company) {
           fetch(`/api/target-talent/by-company/${encodeURIComponent(found.company)}`)

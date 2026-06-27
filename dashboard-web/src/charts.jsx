@@ -604,19 +604,24 @@ window.Sankey = function Sankey({ apps }) {
     const eff = (a) => {
       const r = window.reachedStage(a); // 'Interview' etc. for Rejected with [reached:X]
       if (r) return r;
-      if (a.status === "Rejected") return "Applied"; // no tag = dropped at Applied
+      // Rejected (no tag) and No Response (ghosted) both mean an application was
+      // sent that then closed at Applied.
+      if (a.status === "Rejected" || a.status === "No Response") return "Applied";
       return a.status;
     };
     const effIdx = (a) => FO_IDX[eff(a)] ?? -1;
 
-    const inEval = a => ["Evaluated","Applied","Responded","Interview","Offer","Rejected"].includes(a.status);
+    const inEval = a => ["Evaluated","Applied","Responded","Interview","Offer","Rejected","No Response"].includes(a.status);
     const dropped = a => ["Discarded","SKIP","Not a Fit"].includes(a.status);
     const aged = a => a.status === "Closed";
     const applied = a => effIdx(a) >= FO_IDX.Applied;
     const responded = a => effIdx(a) >= FO_IDX.Responded;
     const interviewed = a => effIdx(a) >= FO_IDX.Interview;
     const offered = a => a.status === "Offer";
-    const isRej = a => a.status === "Rejected";
+    // "Lost" terminal statuses for the per-stage drop counts. No Response can
+    // only land at the Applied stage (eff caps it there), so it shows as a loss
+    // at Applied, never at Responded/Interview.
+    const isRej = a => a.status === "Rejected" || a.status === "No Response";
 
     const evaluated = all.filter(inEval);
     const discarded = all.filter(dropped);
