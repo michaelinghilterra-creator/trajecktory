@@ -185,6 +185,14 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [triageCards, setTriageCards] = useState([]);   // [{ url, company, title, score, rationale, date }]
   const [deepJobs, setDeepJobs] = useState({});         // { url: { status, error } }
+  // URLs the user dismissed (× control) or that auto-cleared after a completed
+  // deep dive. Persisted so a reload doesn't resurrect a spent card.
+  const [dismissed, setDismissed] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('trj.triageDismissed') || '[]')); }
+    catch { return new Set(); }
+  });
+  const persistDismissed = (set) => { try { localStorage.setItem('trj.triageDismissed', JSON.stringify([...set])); } catch {} };
+  const dismissCard = (url) => setDismissed(prev => { const next = new Set(prev); next.add(url); persistDismissed(next); return next; });
   const [pasteVal, setPasteVal] = useState('');
   const [pasteBusy, setPasteBusy] = useState(false);
   const [pasteMsg, setPasteMsg] = useState('');
@@ -215,7 +223,18 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
 
   // Triage cards: the Haiku triage agent writes data/triage-results.tsv. Load on
   // mount and refresh after a triage run completes.
-  const loadTriage = () => fetch('/api/triage/results').then(r => r.json()).then(d => setTriageCards(d.cards || [])).catch(() => {});
+  const loadTriage = () => fetch('/api/triage/results').then(r => r.json()).then(d => {
+    const cards = d.cards || [];
+    setTriageCards(cards);
+    // Prune dismissed URLs no longer present in the latest results so storage
+    // stays tidy and a posting that cycled out then returns can reappear.
+    setDismissed(prev => {
+      const urls = new Set(cards.map(c => c.url));
+      const next = new Set([...prev].filter(u => urls.has(u)));
+      if (next.size !== prev.size) persistDismissed(next);
+      return next;
+    });
+  }).catch(() => {});
   useEffect(() => { loadTriage(); }, []);
   // Clear any in-flight pollers (agent steps, deep dives, paste) on unmount.
   useEffect(() => () => { Object.values(pollersRef.current).forEach(clearInterval); }, []);
@@ -233,7 +252,13 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
             if (job.status === 'done' || job.status === 'error') {
               clearInterval(poll); delete pollersRef.current[key];
               setDeepJobs(d => ({ ...d, [card.url]: { status: job.status, error: job.error } }));
-              if (job.status === 'done') onDataChanged && onDataChanged();
+              if (job.status === 'done') {
+                onDataChanged && onDataChanged();
+                // The report now exists; the triage card is spent. Show
+                // "✓ Report ready" briefly, then auto-remove so the user
+                // doesn't try to re-trigger the same deep dive.
+                setTimeout(() => dismissCard(card.url), 1500);
+              }
             }
           }).catch(() => { clearInterval(poll); delete pollersRef.current[key]; });
         }, 2000);
@@ -373,6 +398,8 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // while Evaluate is still running so clicking ahead doesn't show "0 to review".
   const evalRunning = jobs['cli-eval']?.status === 'running';
   const POST_EVAL = ['merge', 'verify', 'health'];
+  // Cards the user hasn't dismissed (and that haven't auto-cleared post-deep-dive).
+  const visibleTriage = triageCards.filter(c => !dismissed.has(c.url));
 
   return (
     <div className="workflow-panel">
@@ -497,10 +524,10 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         })}
       </div>
 
-      {triageCards.length > 0 && (
+      {visibleTriage.length > 0 && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 4 }}>TRIAGE · {triageCards.length} scored</div>
-          {triageCards.slice(0, 15).map(card => {
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 4 }}>TRIAGE · {visibleTriage.length} scored</div>
+          {visibleTriage.slice(0, 15).map(card => {
             const dj = deepJobs[card.url];
             const sc = card.score;
             const color = sc == null ? 'var(--text-mute)' : sc >= 4 ? 'var(--green)' : sc >= 3 ? 'var(--yellow)' : 'var(--red)';
@@ -519,6 +546,8 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                     : <button onClick={() => triggerDeep(card)} disabled={agentBusy2}
                         style={{ background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 5, padding: '2px 8px', fontSize: 10.5, cursor: agentBusy2 ? 'not-allowed' : 'pointer', opacity: agentBusy2 ? 0.5 : 1 }}>Deep dive ⧉</button>}
                   {!isLocal && card.url && <a href={card.url} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>open JD ↗</a>}
+                  <button onClick={() => dismissCard(card.url)} title="Dismiss this card"
+                    style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-mute)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>×</button>
                 </div>
               </div>
             );

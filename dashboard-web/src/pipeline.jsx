@@ -1094,7 +1094,7 @@ function exportCSV(rows) {
 // ─── Sub-tabs ──────────────────────────────────────────────────────────────
 const PL_SUBTABS = [
   { id: 'overview',  label: 'Overview',  icon: PI.pulse },
-  { id: 'table',     label: 'Table',     icon: PI.list },
+  { id: 'table',     label: 'Active',    icon: PI.list },
   { id: 'all',       label: 'All',       icon: PI.list },
   { id: 'analytics', label: 'Analytics', icon: PI.chart },
 ];
@@ -1231,6 +1231,7 @@ const DRAWER_TABS = [
   { id: 'customize', label: 'Customize',  icon: PI.flag },
   { id: 'legit',     label: 'Legitimacy', icon: PI.check },
   { id: 'notes',     label: 'Notes',      icon: PI.pen },
+  { id: 'contacts',  label: 'Contacts',   icon: PI.users },
 ];
 
 function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () => false }) {
@@ -1248,12 +1249,28 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   const [notes, setNotes] = useStateP([]);
   const [noteDraft, setNoteDraft] = useStateP('');
   const [savingNote, setSavingNote] = useStateP(false);
+  // This company's TA contacts (from /api/target-talent/by-company/:company),
+  // managed inline via the shared window.ContactPanel.
+  const [contacts, setContacts] = useStateP([]);
+  const [selContact, setSelContact] = useStateP(null);  // contact id open in the inline panel
+  const [findOpen, setFindOpen] = useStateP(false);     // per-company finder open
 
   useEffectP(() => {
     setTab('overview'); setStarOpen(0); setCustomWhich('cv');
     setApplyJob(null); setApplyResult(null); setElapsed(0);
     setNotes([]); setNoteDraft('');
+    setContacts([]); setSelContact(null); setFindOpen(false);
   }, [app && app.id]);
+
+  // Load this company's TA contacts when the drawer opens / switches roles.
+  const loadContacts = () => {
+    if (!app || !app.company) return;
+    fetch(`/api/target-talent/by-company/${encodeURIComponent(app.company)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setContacts(Array.isArray(d) ? d : []))
+      .catch(() => setContacts([]));
+  };
+  useEffectP(() => { loadContacts(); }, [app && app.id]);
 
   useEffectP(() => {
     if (!applyJob || applyJob.status !== 'running') { setElapsed(0); return; }
@@ -1894,6 +1911,64 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               </div>
             </div>
           )}
+
+          {tab === 'contacts' && (() => {
+            const ContactPanel = window.ContactPanel;
+            const FindContactsPanel = window.FindContactsPanel;
+            if (selContact != null && ContactPanel) {
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <ContactPanel id={selContact} embedded onClose={() => setSelContact(null)} onUpdate={loadContacts} />
+                </div>
+              );
+            }
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div className="rp-section">
+                  <div className="rp-section-head">
+                    <span>TA contacts at {app.company}</span>
+                    <span className="card-meta mono">{contacts.length}</span>
+                  </div>
+                  {contacts.length === 0 ? (
+                    <div className="rp-callout">
+                      <div className="rp-callout-body">No TA contacts yet for {app.company}. Find a few below to start outreach.</div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {contacts.map(c => (
+                        <button key={c.id} onClick={() => setSelContact(c.id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', cursor: 'pointer', color: 'inherit' }}>
+                          <span className="mono-av sm" style={{ borderRadius: 7 }}>{((c.first || '')[0] || '') + ((c.last || '')[0] || '')}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.first} {c.last}</div>
+                            <div className="dim" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</div>
+                          </div>
+                          <span className="dim mono" style={{ fontSize: 10.5 }}>{c.status || 'New'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rp-section">
+                  {findOpen && FindContactsPanel ? (
+                    <FindContactsPanel company={app.company} exampleRole={app.role}
+                      onAdded={loadContacts} onCancel={() => setFindOpen(false)} />
+                  ) : (
+                    <button className="btn sm" onClick={() => setFindOpen(true)}>
+                      <PIcon d={PI.users} size={13} /> Find contacts at {app.company}
+                    </button>
+                  )}
+                </div>
+
+                {!ContactPanel && (
+                  <div className="rp-callout">
+                    <div className="rp-callout-body">Contact panel failed to load. Reload the page and try again.</div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Apply-job banner (running / error / result) */}

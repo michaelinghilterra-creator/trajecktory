@@ -171,6 +171,18 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
     const isFirstTouch = prior.length === 0;
     const messageType = req.body?.messageType || (isFirstTouch ? 'first-touch' : 'follow-up');
 
+    // Interview-stage tuning: the drawer passes where the user is in the loop so
+    // the draft's framing matches. 'general' (or unset) keeps the default
+    // first-touch / follow-up behavior unchanged.
+    const STAGE_GUIDANCE = {
+      'TA Screen': 'TA SCREEN STAGE. This contact is (or could be) the recruiter screen. Goal is to surface yourself and confirm fit for the screen. Keep it light and logistics-friendly; reinforce the one proof point most relevant to the role and express readiness to talk.',
+      '1st Interview': 'FIRST INTERVIEW STAGE. You are early in the interview loop. Reference momentum ("enjoyed the conversation", "following the process") without naming details you may not have. Reinforce one differentiated strength and signal continued interest.',
+      '2nd Interview': 'SECOND INTERVIEW STAGE. You are progressing through the loop. Acknowledge the process is advancing, add a specific new value point or artifact relevant to the team, and keep the ask low-friction (e.g. logistics or a brief sync).',
+      '3rd Interview': 'THIRD / LATE INTERVIEW STAGE. You are late in the process, likely near a decision. Tone is confident and concise: reaffirm strong fit, address any likely open question proactively, and make it easy to move to next steps. Do not sound impatient.',
+    };
+    const interviewStage = req.body?.interviewStage || 'general';
+    const stageGuidance = STAGE_GUIDANCE[interviewStage] || '';
+
     // Pull related applications to ground the outreach in a real role
     const relatedApps = findRelatedApps(r.company);
     const topApp = relatedApps.find(a => ['Applied', 'Responded', 'Interview', 'Evaluated'].includes(a.status))
@@ -235,6 +247,7 @@ ${profileMd}
 - Close with a clear, low-friction next step.
 - Do NOT ask them to forward your resume or do recruiting work for you. Frame as peer-to-peer candidate introduction.
 - TIMING: Use the exact phrasing from the TIMING LANGUAGE line in the RELATED APPLICATION block above. Do NOT invent your own gap — the server has computed days-since-application against today's date. If TIMING LANGUAGE says "31 days ago (use 'last month')", say "last month" — never "yesterday" or "this morning". Misreporting the timing reads as careless to the recipient.
+${stageGuidance ? `- ${stageGuidance}` : ''}
 ${isFirstTouch ? `
 - FOR FIRST-TOUCH TA OUTREACH: Consider naturally referencing ${me.firstName}'s strategic approach (${me.trajecktoryUrl}) when it makes sense — shows he thinks systemically about process and understands RevOps methodology. This works especially well if the role is RevOps/Analytics/Strategy-focused. Example: "I've documented my approach to strategic hiring at ${me.trajecktoryUrl}, and I think the [specific role/team] aligns well with that framework."
 ` : ''}
