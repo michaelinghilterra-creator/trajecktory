@@ -1232,9 +1232,12 @@ const DRAWER_TABS = [
   { id: 'legit',     label: 'Legitimacy', icon: PI.check },
   { id: 'notes',     label: 'Notes',      icon: PI.pen },
   { id: 'contacts',  label: 'Contacts',   icon: PI.users },
+  { id: 'followup',  label: 'Follow-up',  icon: PI.send },
 ];
+// The Follow-up tab only makes sense once an application is out the door.
+const FOLLOWUP_TAB_STATUSES = ['Applied', 'Responded', 'Interview'];
 
-function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () => false }) {
+function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () => false, onFollowupChange = () => {} }) {
   const [tab, setTab] = useStateP('overview');
   // Structured cheat-sheet object from /api/cheatsheets/:id — exactly the
   // shape Claude Design's prototype consumed (PIPE_CHEATS).
@@ -1501,7 +1504,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
 
           {/* Report tab strip */}
           <div className="dr-tabs">
-            {DRAWER_TABS.map(t => (
+            {DRAWER_TABS.filter(t => t.id !== 'followup' || FOLLOWUP_TAB_STATUSES.includes(app.status)).map(t => (
               <button key={t.id} className={'dr-tab' + (tab === t.id ? ' on' : '')} onClick={() => setTab(t.id)}>
                 <PIcon d={t.icon} size={13} />{t.label}
               </button>
@@ -1969,6 +1972,10 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               </div>
             );
           })()}
+
+          {tab === 'followup' && window.FollowupPanel && (
+            <window.FollowupPanel app={app} onUpdate={onFollowupChange} />
+          )}
         </div>
 
         {/* Apply-job banner (running / error / result) */}
@@ -2032,6 +2039,9 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     </div>
   );
 }
+// Shared so the Follow-Ups section can open the full Pipeline drawer instead of
+// its own thinner one.
+window.PipelineDrawer = PipelineDrawer;
 
 // ─── Root: PipelineTab (replaces the existing) ─────────────────────────────
 window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFilters, onOpen, onQuickAction, onDataChanged, search, compTweaks }) {
