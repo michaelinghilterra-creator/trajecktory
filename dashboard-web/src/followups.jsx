@@ -287,7 +287,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
   );
 }
 
-window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search }) {
+window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, apps = [] }) {
   const [data, setData]       = useStateF({ thresholds: { Applied: 7, Responded: 5, Interview: 3 }, taThreshold: 14, ghostDays: 45, warm: [], cold: [], snoozed: [], ghostedCandidates: [] });
   const [loading, setLoading] = useStateF(true);
   const [selected, setSelected] = useStateF(null); // app id (only for 'app' source rows)
@@ -446,6 +446,27 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search })
     if (it.source === 'ta') { openTaContact && openTaContact(it.id); }
     else { setSelected(it.id); }
   };
+
+  // App rows open the full Pipeline drawer (JD, notes, contacts, comms, plus the
+  // Follow-up tab). Bridge its action contract: the footer emits action *ids*,
+  // the stage track emits statuses; both funnel through the app-level onAction
+  // (handleAction) and then refresh the queue.
+  const FU_ACTION_MAP = {
+    apply_manual: 'Applied', apply_claude: 'Applied', already_applied: 'Applied',
+    responded: 'Responded', interview: 'Interview', offer: 'Offer', accept: 'Offer',
+    reopen: 'Evaluated',
+    SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
+  };
+  const ACTIVE = ['Evaluated', 'Applied', 'Responded', 'Interview', 'Offer'];
+  const fuOnAction = (a, actionId) => {
+    const next = FU_ACTION_MAP[actionId];
+    if (!next) return;
+    onAction && onAction(a, next);
+    load();
+    if (!ACTIVE.includes(next)) setSelected(null);
+  };
+  const fuOnStatusChange = (a, newStatus) => { onAction && onAction(a, newStatus); load(); };
+  const selectedApp = selected != null ? (apps.find(a => a.id === selected) || null) : null;
 
   const FindContactsPanel = window.FindContactsPanel;
 
@@ -701,12 +722,14 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search })
         </div>
       )}
 
-      {selected != null && (
-        <window.FollowupDrawer
-          appId={selected}
+      {selected != null && selectedApp && window.PipelineDrawer && (
+        <window.PipelineDrawer
+          app={selectedApp}
           onClose={() => setSelected(null)}
-          onUpdate={load}
-          onAction={onAction}
+          onAction={fuOnAction}
+          onStatusChange={fuOnStatusChange}
+          isStale={() => true}
+          onFollowupChange={() => { load(); setSelected(null); }}
         />
       )}
       </div>
@@ -781,49 +804,46 @@ function FollowupRow({ item, onOpen, onSnooze, onMute, onUnmute, onFind }) {
 
 // Drawer for an individual follow-up — shows full context, the touch log,
 // the Claude-draft button, and the action buttons.
-window.FollowupDrawer = function FollowupDrawer({ appId, onClose, onUpdate, onAction }) {
-  const [item, setItem] = useStateF(null);
+// Reusable follow-up action panel — the coach verdict, related-TA cross-log
+// selector, Draft follow-up, Log touch (+ modal), and the touch history. Used
+// as the Pipeline drawer's "Follow-up" tab (window.FollowupPanel) so Follow-Ups
+// and Pipeline share one implementation. Resilient when the app isn't stale:
+// coach is hidden, but logging a touch and the history still work.
+window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
+  const appId = app.id;
+  const [item, setItem] = useStateF(null);        // stale coach data (may be null)
+  const [touches, setTouches] = useStateF([]);    // this app's follow-up rows
   const [drafting, setDrafting] = useStateF(false);
   const [draft, setDraft] = useStateF(null);
   const [logModal, setLogModal] = useStateF(null);
-  // Related TA Outreach contacts at the same company (cross-log targets)
   const [relatedTalent, setRelatedTalent] = useStateF([]);
-  const [crossLogIds, setCrossLogIds] = useStateF(new Set()); // selected TA ids to cross-log
+  const [crossLogIds, setCrossLogIds] = useStateF(new Set());
 
-  const loadItem = () => {
+  const load = () => {
     fetch('/api/followups/stale')
       .then(r => r.json())
       .then(d => {
         const pool = [...(d.warm || []), ...(d.cold || []), ...(d.items || [])];
-        const found = pool.find(x => x.id === appId && (x.source || 'app') === 'app');
-        setItem(found || null);
-        if (found?.company) {
-          fetch(`/api/target-talent/by-company/${encodeURIComponent(found.company)}`)
-            .then(r => r.ok ? r.json() : [])
-            .then(ta => {
-              setRelatedTalent(ta || []);
-              // Default: pre-select all related TA contacts for cross-log
-              setCrossLogIds(new Set((ta || []).map(t => t.id)));
-            })
-            .catch(() => setRelatedTalent([]));
-        }
-      });
+        setItem(pool.find(x => x.id === appId && (x.source || 'app') === 'app') || null);
+      })
+      .catch(() => {});
+    // Touch history works even when the app isn't stale.
+    fetch('/api/followups')
+      .then(r => r.ok ? r.json() : [])
+      .then(rows => setTouches((rows || []).filter(f => f.appNum === appId).sort((a, b) => (b.date || '').localeCompare(a.date || ''))))
+      .catch(() => setTouches([]));
+    if (app.company) {
+      fetch(`/api/target-talent/by-company/${encodeURIComponent(app.company)}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(ta => { setRelatedTalent(ta || []); setCrossLogIds(new Set((ta || []).map(t => t.id))); })
+        .catch(() => setRelatedTalent([]));
+    }
   };
-  useEffectF(() => { loadItem(); }, [appId]);
+  useEffectF(() => { load(); }, [appId]);
 
   const toggleCrossLog = (id) => {
-    setCrossLogIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
+    setCrossLogIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
-
-  useEffectF(() => {
-    const onKey = e => { if (e.key === 'Escape' && !logModal) onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, logModal]);
 
   const generateDraft = () => {
     setDrafting(true);
@@ -835,8 +855,6 @@ window.FollowupDrawer = function FollowupDrawer({ appId, onClose, onUpdate, onAc
   };
 
   const logTouch = (payload) => {
-    // Always include the currently-selected cross-log TA IDs in the request.
-    // The server only writes to TA contacts whose IDs are in this array.
     const taIds = Array.from(crossLogIds);
     fetch('/api/followups', {
       method: 'POST',
@@ -851,247 +869,195 @@ window.FollowupDrawer = function FollowupDrawer({ appId, onClose, onUpdate, onAc
     })
       .then(r => r.json())
       .then((resp) => {
-        if (resp && resp.error) {
-          alert(`Save failed: ${resp.error}`);
-          return;
-        }
-        // Touch logged successfully. The entry will no longer be stale
-        // (daysSinceLastTouch=0 < threshold), so it will drop off the list.
-        // Close the drawer; the parent's onUpdate refresh removes it from view.
+        if (resp && resp.error) { alert(`Save failed: ${resp.error}`); return; }
+        // Touch logged → no longer stale. Refresh locally, then let the host
+        // react (Follow-Ups reloads the queue and closes the drawer).
         setLogModal(null);
         setDraft(null);
+        load();
         onUpdate?.();
-        onClose();
       })
       .catch(err => alert(`Save failed: ${err.message}`));
   };
 
-  const markLost = () => {
-    if (!item) return;
-    if (window.confirm(`Mark ${item.company} as Closed (Lost)?\n\nStatus will change to Rejected. Analytics will preserve that this entry reached the ${item.status} stage.`)) {
-      onAction?.({ id: item.id, company: item.company, status: item.status, notes: item.notes }, 'Rejected', false, item.status);
-      onClose();
-    }
-  };
-
   const copyToClipboard = (text) => navigator.clipboard?.writeText(text);
-
-  if (!item) {
-    return (
-      <>
-        <div className="drawer-backdrop open" onClick={onClose}></div>
-        <div className="drawer wide open">
-          <div style={{ padding: 24, color: 'var(--text-mute)' }}>Loading…</div>
-        </div>
-      </>
-    );
-  }
+  const applyDate = item?.applyDate || app.date;
+  const fuCount = touches.length;
 
   return (
-    <>
-      <div className="drawer-backdrop open" onClick={onClose}></div>
-      <div className="drawer wide open">
-        <div className="drawer-head">
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div className="row" style={{ gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
-              <span className="mono dim" style={{ fontSize: 11 }}>#{String(item.id).padStart(3, '0')}</span>
-              <FUStatusPill status={item.status} />
-              <CoachPill level={item.coachLevel} />
-            </div>
-            <h3>{item.company}</h3>
-            <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>{item.role}</div>
-            <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-              <span className="meta-chip mono">Applied {item.applyDate}</span>
-              <span className="meta-chip mono">Last touch {item.lastTouchDate}</span>
-              <span className="meta-chip mono">{item.daysSinceLastTouch}d stale</span>
-              {item.url && <a className="meta-chip link" href={item.url} target="_blank" rel="noreferrer">JD ↗</a>}
-              {item.report && <a className="meta-chip link" href={`/api/report-view/${item.id}`} target="_blank" rel="noreferrer">Report ↗</a>}
-            </div>
-          </div>
-          <button className="icon-btn" onClick={onClose} title="Close (Esc)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-
-        <div className="drawer-body">
-          {/* Coach verdict */}
-          <div className="cs-section">
-            <div className="cs-section-head"><span>Coach</span></div>
-            <div className="coach" style={{ margin: 0 }}>
-              <span style={{ color: COACH_COLOR[item.coachLevel].color, fontWeight: 700 }}>{item.coachVerdict}</span>
-              {item.fuCount > 0 && (
-                <div className="dim mono" style={{ marginTop: 4, fontSize: 11 }}>
-                  Cap for {item.status}: {item.cap} follow-up{item.cap === 1 ? '' : 's'}. You've used {item.fuCount}.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Related TA Outreach contacts (cross-log targets) */}
-          {relatedTalent.length > 0 && (
-            <div className="cs-section">
-              <div className="cs-section-head">
-                <span>Related TA Outreach Contacts at {item.company}</span>
-                <span className="mono dim">{crossLogIds.size}/{relatedTalent.length} selected</span>
-              </div>
-              <div className="dim mono" style={{ fontSize: 10.5, marginBottom: 8 }}>
-                Selected contacts will also have this touch logged on their TA Outreach correspondence (prevents double-entry).
-              </div>
-              <div className="col" style={{ gap: 6 }}>
-                {relatedTalent.map(ta => {
-                  const checked = crossLogIds.has(ta.id);
-                  return (
-                    <label key={ta.id}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '8px 10px', background: 'var(--panel)',
-                        borderRadius: 4, cursor: 'pointer',
-                        borderLeft: `3px solid ${checked ? 'var(--green)' : 'var(--text-mute)'}`,
-                      }}>
-                      <input type="checkbox" checked={checked} onChange={() => toggleCrossLog(ta.id)} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600 }}>{ta.first} {ta.last}</div>
-                        <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>{ta.title}</div>
-                        {ta.linkedin && (
-                          <a href={ta.linkedin} target="_blank" rel="noreferrer"
-                            onClick={e => e.stopPropagation()}
-                            className="mono"
-                            style={{ fontSize: 10, color: 'var(--accent)' }}>LinkedIn ↗</a>
-                        )}
-                      </div>
-                      <span className="mono dim" style={{ fontSize: 10 }}>
-                        {ta.status || 'Not Contacted'}{ta.lastTouch ? ` · ${ta.lastTouch}` : ''}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="cs-section">
-            <div className="cs-section-head"><span>Take Action</span></div>
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn primary" onClick={generateDraft} disabled={drafting}>
-                {drafting ? '✦ Drafting…' : '✦ Draft follow-up'}
-              </button>
-              <button className="btn" onClick={() => setLogModal({ channel: 'Email', contact: '', notes: '' })}>
-                Log touch (manual)
-              </button>
-              <button className="btn danger" onClick={markLost} title="Status → Rejected, tag notes [reached: current stage]">
-                Mark Lost
-              </button>
-            </div>
-
-            {draft && (
-              <div style={{ marginTop: 14, padding: 12, background: 'var(--panel)', border: '1px solid var(--accent)', borderRadius: 6 }}>
-                <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span className="mono" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>✦ DRAFT</span>
-                  <div className="row" style={{ gap: 6 }}>
-                    <button className="btn ghost sm" onClick={() => copyToClipboard(`Subject: ${draft.subject}\n\n${draft.body}\n\n${window.mySignoff()}`)}>Copy</button>
-                    <button className="btn ghost sm" onClick={() => setDraft(null)}>Dismiss</button>
-                  </div>
-                </div>
-                <div style={{ fontSize: 12, marginBottom: 4 }}><b>Subject:</b> {draft.subject}</div>
-                <div style={{ fontSize: 12, marginTop: 8, padding: 8, background: 'var(--bg)', borderRadius: 4, whiteSpace: 'pre-wrap' }}>
-                  {draft.body}{'\n\n'}{window.mySignoff()}
-                </div>
-                <div className="row" style={{ gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-                  <button className="btn primary sm" onClick={() => logTouch({
-                    channel: 'Email',
-                    notes: `Sent follow-up. Subject: ${draft.subject}`,
-                    // Cross-log payload uses real email content so the TA
-                    // correspondence entry carries the full message body
-                    subject: draft.subject,
-                    body: draft.body,
-                  })}>
-                    I sent this — log touch{crossLogIds.size > 0 && ` + ${crossLogIds.size} TA`}
-                  </button>
-                </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Coach verdict — only when this app is currently stale */}
+      {item && (
+        <div className="cs-section">
+          <div className="cs-section-head"><span>Coach</span><CoachPill level={item.coachLevel} /></div>
+          <div className="coach" style={{ margin: 0 }}>
+            <span style={{ color: (COACH_COLOR[item.coachLevel] || COACH_COLOR.overdue).color, fontWeight: 700 }}>{item.coachVerdict}</span>
+            {item.fuCount > 0 && (
+              <div className="dim mono" style={{ marginTop: 4, fontSize: 11 }}>
+                Cap for {item.status}: {item.cap} follow-up{item.cap === 1 ? '' : 's'}. You've used {item.fuCount}.
               </div>
             )}
           </div>
+        </div>
+      )}
 
-          {/* Touch history */}
-          <div className="cs-section">
-            <div className="cs-section-head"><span>Touch History</span>
-              <span className="mono dim">{item.followups.length} touch{item.followups.length === 1 ? '' : 'es'} + 1 initial application</span>
-            </div>
-            <div className="col" style={{ gap: 8 }}>
-              {/* Initial application */}
-              <div style={{ padding: 10, background: 'var(--panel)', borderRadius: 4, borderLeft: '3px solid var(--accent)' }}>
-                <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span className="mono" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>APPLIED</span>
-                  <span className="mono dim" style={{ fontSize: 10 }}>{item.applyDate}</span>
-                </div>
-                <div className="dim" style={{ fontSize: 11 }}>{item.notes || '(no notes)'}</div>
-              </div>
-              {item.followups.length === 0 ? (
-                <div className="dim mono" style={{ fontSize: 10.5, fontStyle: 'italic', padding: '4px 0' }}>No follow-ups logged yet.</div>
-              ) : (
-                item.followups.map((f, i) => (
-                  <div key={i} style={{ padding: 10, background: 'var(--panel)', borderRadius: 4, borderLeft: '3px solid #22d3ee' }}>
-                    <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
-                      <span className="mono" style={{ fontSize: 11, color: '#22d3ee', fontWeight: 700 }}>{(f.channel || 'TOUCH').toUpperCase()}</span>
-                      <span className="mono dim" style={{ fontSize: 10 }}>{f.date}</span>
-                    </div>
-                    <div style={{ fontSize: 11.5 }}>{f.notes || <span className="dim">(no notes)</span>}</div>
-                    {f.contact && <div className="dim mono" style={{ fontSize: 10, marginTop: 3 }}>Contact: {f.contact}</div>}
+      {/* Related TA Outreach contacts (cross-log targets) */}
+      {relatedTalent.length > 0 && (
+        <div className="cs-section">
+          <div className="cs-section-head">
+            <span>Related TA contacts at {app.company}</span>
+            <span className="mono dim">{crossLogIds.size}/{relatedTalent.length} selected</span>
+          </div>
+          <div className="dim mono" style={{ fontSize: 10.5, marginBottom: 8 }}>
+            Selected contacts also get this touch logged on their TA Outreach correspondence (prevents double-entry).
+          </div>
+          <div className="col" style={{ gap: 6 }}>
+            {relatedTalent.map(ta => {
+              const checked = crossLogIds.has(ta.id);
+              return (
+                <label key={ta.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 10px', background: 'var(--panel)',
+                    borderRadius: 4, cursor: 'pointer',
+                    borderLeft: `3px solid ${checked ? 'var(--green)' : 'var(--text-mute)'}`,
+                  }}>
+                  <input type="checkbox" checked={checked} onChange={() => toggleCrossLog(ta.id)} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>{ta.first} {ta.last}</div>
+                    <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>{ta.title}</div>
+                    {ta.linkedin && (
+                      <a href={ta.linkedin} target="_blank" rel="noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="mono"
+                        style={{ fontSize: 10, color: 'var(--accent)' }}>LinkedIn ↗</a>
+                    )}
                   </div>
-                ))
-              )}
-            </div>
+                  <span className="mono dim" style={{ fontSize: 10 }}>
+                    {ta.status || 'Not Contacted'}{ta.lastTouch ? ` · ${ta.lastTouch}` : ''}
+                  </span>
+                </label>
+              );
+            })}
           </div>
         </div>
+      )}
 
-        {/* Log touch modal */}
-        {logModal && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setLogModal(null)}>
-            <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 20, maxWidth: 520, width: '100%' }} onClick={e => e.stopPropagation()}>
-              <h3 style={{ margin: '0 0 14px', fontSize: 15 }}>Log a touch for {item.company}</h3>
-              <div className="col" style={{ gap: 10 }}>
-                <div>
-                  <label className="dim mono" style={{ fontSize: 10.5 }}>CHANNEL</label>
-                  <select value={logModal.channel} onChange={e => setLogModal({ ...logModal, channel: e.target.value })}
-                    style={{ width: '100%', padding: 8, marginTop: 4, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 12 }}>
-                    {FU_CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="dim mono" style={{ fontSize: 10.5 }}>CONTACT (optional)</label>
-                  <input type="text" placeholder="Name or email"
-                    value={logModal.contact} onChange={e => setLogModal({ ...logModal, contact: e.target.value })}
-                    style={{ width: '100%', padding: 8, marginTop: 4, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 12 }} />
-                </div>
-                <div>
-                  <label className="dim mono" style={{ fontSize: 10.5 }}>NOTES</label>
-                  <textarea placeholder="What did you send / what's the context?"
-                    value={logModal.notes} onChange={e => setLogModal({ ...logModal, notes: e.target.value })}
-                    rows={4}
-                    style={{ width: '100%', padding: 8, marginTop: 4, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 12, fontFamily: 'inherit', resize: 'vertical' }} />
-                </div>
+      {/* Actions */}
+      <div className="cs-section">
+        <div className="cs-section-head"><span>Take Action</span></div>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn primary" onClick={generateDraft} disabled={drafting}>
+            {drafting ? '✦ Drafting…' : '✦ Draft follow-up'}
+          </button>
+          <button className="btn" onClick={() => setLogModal({ channel: 'Email', contact: '', notes: '' })}>
+            Log touch (manual)
+          </button>
+        </div>
+
+        {draft && (
+          <div style={{ marginTop: 14, padding: 12, background: 'var(--panel)', border: '1px solid var(--accent)', borderRadius: 6 }}>
+            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>✦ DRAFT</span>
+              <div className="row" style={{ gap: 6 }}>
+                <button className="btn ghost sm" onClick={() => copyToClipboard(`Subject: ${draft.subject}\n\n${draft.body}\n\n${window.mySignoff()}`)}>Copy</button>
+                <button className="btn ghost sm" onClick={() => setDraft(null)}>Dismiss</button>
               </div>
-              {relatedTalent.length > 0 && (
-                <div style={{ marginTop: 12, padding: 8, background: 'var(--panel)', borderRadius: 4, fontSize: 11 }}>
-                  <span className="dim mono" style={{ fontSize: 10.5 }}>CROSS-LOG</span>
-                  <div style={{ marginTop: 4 }}>
-                    {crossLogIds.size === 0
-                      ? <>No related TA contacts selected. This touch will only log to Follow-Ups.</>
-                      : <>Also logging to <span className="mono" style={{ color: 'var(--green)' }}>{crossLogIds.size}</span> TA contact{crossLogIds.size === 1 ? '' : 's'}: {relatedTalent.filter(t => crossLogIds.has(t.id)).map(t => `${t.first} ${t.last}`).join(', ')}. (Edit selection above before saving.)</>}
-                  </div>
-                </div>
-              )}
-              <div className="row" style={{ gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
-                <button className="btn" onClick={() => setLogModal(null)}>Cancel</button>
-                <button className="btn primary" onClick={() => logTouch(logModal)}>
-                  Save touch{crossLogIds.size > 0 && ` + ${crossLogIds.size} TA`}
-                </button>
-              </div>
+            </div>
+            <div style={{ fontSize: 12, marginBottom: 4 }}><b>Subject:</b> {draft.subject}</div>
+            <div style={{ fontSize: 12, marginTop: 8, padding: 8, background: 'var(--bg)', borderRadius: 4, whiteSpace: 'pre-wrap' }}>
+              {draft.body}{'\n\n'}{window.mySignoff()}
+            </div>
+            <div className="row" style={{ gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+              <button className="btn primary sm" onClick={() => logTouch({
+                channel: 'Email',
+                notes: `Sent follow-up. Subject: ${draft.subject}`,
+                subject: draft.subject,
+                body: draft.body,
+              })}>
+                I sent this — log touch{crossLogIds.size > 0 && ` + ${crossLogIds.size} TA`}
+              </button>
             </div>
           </div>
         )}
       </div>
-    </>
+
+      {/* Touch history */}
+      <div className="cs-section">
+        <div className="cs-section-head"><span>Touch History</span>
+          <span className="mono dim">{fuCount} touch{fuCount === 1 ? '' : 'es'} + 1 initial application</span>
+        </div>
+        <div className="col" style={{ gap: 8 }}>
+          <div style={{ padding: 10, background: 'var(--panel)', borderRadius: 4, borderLeft: '3px solid var(--accent)' }}>
+            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>APPLIED</span>
+              <span className="mono dim" style={{ fontSize: 10 }}>{applyDate}</span>
+            </div>
+            <div className="dim" style={{ fontSize: 11 }}>{app.notes || '(no notes)'}</div>
+          </div>
+          {fuCount === 0 ? (
+            <div className="dim mono" style={{ fontSize: 10.5, fontStyle: 'italic', padding: '4px 0' }}>No follow-ups logged yet.</div>
+          ) : (
+            touches.map((f, i) => (
+              <div key={i} style={{ padding: 10, background: 'var(--panel)', borderRadius: 4, borderLeft: '3px solid #22d3ee' }}>
+                <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span className="mono" style={{ fontSize: 11, color: '#22d3ee', fontWeight: 700 }}>{(f.channel || 'TOUCH').toUpperCase()}</span>
+                  <span className="mono dim" style={{ fontSize: 10 }}>{f.date}</span>
+                </div>
+                <div style={{ fontSize: 11.5 }}>{f.notes || <span className="dim">(no notes)</span>}</div>
+                {f.contact && <div className="dim mono" style={{ fontSize: 10, marginTop: 3 }}>Contact: {f.contact}</div>}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Log touch modal */}
+      {logModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setLogModal(null)}>
+          <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 20, maxWidth: 520, width: '100%' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 14px', fontSize: 15 }}>Log a touch for {app.company}</h3>
+            <div className="col" style={{ gap: 10 }}>
+              <div>
+                <label className="dim mono" style={{ fontSize: 10.5 }}>CHANNEL</label>
+                <select value={logModal.channel} onChange={e => setLogModal({ ...logModal, channel: e.target.value })}
+                  style={{ width: '100%', padding: 8, marginTop: 4, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 12 }}>
+                  {FU_CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="dim mono" style={{ fontSize: 10.5 }}>CONTACT (optional)</label>
+                <input type="text" placeholder="Name or email"
+                  value={logModal.contact} onChange={e => setLogModal({ ...logModal, contact: e.target.value })}
+                  style={{ width: '100%', padding: 8, marginTop: 4, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 12 }} />
+              </div>
+              <div>
+                <label className="dim mono" style={{ fontSize: 10.5 }}>NOTES</label>
+                <textarea placeholder="What did you send / what's the context?"
+                  value={logModal.notes} onChange={e => setLogModal({ ...logModal, notes: e.target.value })}
+                  rows={4}
+                  style={{ width: '100%', padding: 8, marginTop: 4, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 12, fontFamily: 'inherit', resize: 'vertical' }} />
+              </div>
+            </div>
+            {relatedTalent.length > 0 && (
+              <div style={{ marginTop: 12, padding: 8, background: 'var(--panel)', borderRadius: 4, fontSize: 11 }}>
+                <span className="dim mono" style={{ fontSize: 10.5 }}>CROSS-LOG</span>
+                <div style={{ marginTop: 4 }}>
+                  {crossLogIds.size === 0
+                    ? <>No related TA contacts selected. This touch will only log to Follow-Ups.</>
+                    : <>Also logging to <span className="mono" style={{ color: 'var(--green)' }}>{crossLogIds.size}</span> TA contact{crossLogIds.size === 1 ? '' : 's'}: {relatedTalent.filter(t => crossLogIds.has(t.id)).map(t => `${t.first} ${t.last}`).join(', ')}. (Edit selection above before saving.)</>}
+                </div>
+              </div>
+            )}
+            <div className="row" style={{ gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setLogModal(null)}>Cancel</button>
+              <button className="btn primary" onClick={() => logTouch(logModal)}>
+                Save touch{crossLogIds.size > 0 && ` + ${crossLogIds.size} TA`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
