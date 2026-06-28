@@ -42,6 +42,23 @@ $env:PORT  = "$Port"   # the server honors this (config.mjs: process.env.PORT ||
 #    from the bundle, never from the user's system.
 $env:Path = "$NodeDir;$env:Path"
 
+# 1b. Ensure git is on PATH for this process. The setup installs Git for Windows
+#     and adds it to the PERSISTENT PATH, but on the very first launch (right
+#     after install) that change hasn't propagated to this process tree yet — so
+#     the server, and update-system.mjs's `git fetch` update check, can't find
+#     git and the self-update check silently reports "offline". Resolve git's
+#     known install locations explicitly when it isn't already visible.
+if (-not (Get-Command git.exe -ErrorAction SilentlyContinue)) {
+  $gitDirs = @(
+    (Join-Path $env:LOCALAPPDATA 'Programs\Git\cmd'),
+    (Join-Path $env:ProgramFiles 'Git\cmd'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Git\cmd')
+  )
+  foreach ($g in $gitDirs) {
+    if ($g -and (Test-Path (Join-Path $g 'git.exe'))) { $env:Path = "$g;$env:Path"; break }
+  }
+}
+
 # 2. Point Playwright at the bundled Chromium (offline, no global cache).
 $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $AppRoot 'ms-playwright'
 
