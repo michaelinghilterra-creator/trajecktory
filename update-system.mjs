@@ -72,6 +72,8 @@ const SYSTEM_PATHS = [
   'analyze-patterns.mjs',
   'followup-cadence.mjs',
   'test-all.mjs',
+  'lib/',
+  'dashboard-web/',
   'batch/batch-prompt.md',
   'batch/batch-runner.sh',
   'templates/',
@@ -93,6 +95,7 @@ const SYSTEM_PATHS = [
 const USER_PATHS = [
   'cv.md',
   'config/profile.yml',
+  'dashboard-web/.env',
   'modes/_profile.md',
   'portals.yml',
   'article-digest.md',

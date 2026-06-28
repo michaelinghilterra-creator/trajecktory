@@ -199,13 +199,18 @@ $scanFiles = Get-ChildItem $Payload -Recurse -File |
   }
 $hits = @()
 # Identity match is literal (-SimpleMatch): the phone begins with "+", which is
-# not a valid regex quantifier and would otherwise crash Select-String.
+# not a valid regex quantifier and would otherwise crash Select-String. Safe over
+# binaries — the owner's name/email/phone won't appear inside a compiled file.
 if ($piiPatterns.Count -gt 0) {
   $hits += $scanFiles | Select-String -Pattern $piiPatterns -SimpleMatch -List -ErrorAction SilentlyContinue
 }
-# Secret match is regex (entropy-aware), so a real key trips the gate even if the
-# provider isn't Anthropic.
-$hits += $scanFiles | Select-String -Pattern $secretPatterns -List -ErrorAction SilentlyContinue
+# Secret match is regex, restricted to TEXT files. Running entropy-ish patterns
+# over binaries yields false positives (e.g. node.exe embeds OpenSSL PEM header
+# strings that match the private-key pattern). A real leaked credential lives in
+# a text source/config file, which these extensions cover.
+$textExt = @('.mjs','.cjs','.js','.jsx','.ts','.tsx','.json','.md','.markdown','.yml','.yaml','.html','.htm','.css','.txt','.ps1','.psm1','.sh','.bash','.toml','.ini','.cfg','.conf','.xml','.svg','.csv','.tsv','.env','.example','.sample','.gitignore','.gitattributes','.editorconfig','.npmrc','.nvmrc')
+$secretFiles = $scanFiles | Where-Object { $textExt -contains $_.Extension.ToLower() }
+$hits += $secretFiles | Select-String -Pattern $secretPatterns -List -ErrorAction SilentlyContinue
 if ($hits) {
   $hits | ForEach-Object { Write-Warning "PII/secret in payload: $($_.Path)" }
   throw "Refusing to build: personal data or secrets found in payload (see warnings above)."
