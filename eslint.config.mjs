@@ -55,6 +55,7 @@ export default [
       'check-liveness.mjs',
       'gate-pipeline.mjs',
       'generate-pdf.mjs',
+      'docs/onboarding/**/*.mjs',
     ],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
