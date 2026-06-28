@@ -1,5 +1,7 @@
 import express from 'express';
 import { execFile } from 'child_process';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { ROOT_DIR } from '../config.mjs';
 
 export const router = express.Router();
@@ -58,6 +60,16 @@ router.get('/api/system/update-apply/:jobId', (req, res) => {
   const job = updateJobs.get(req.params.jobId);
   if (!job) return res.status(404).json({ error: 'Job not found' });
   res.json({ ...job, output: (job.output || '').slice(-4000) });
+});
+
+// GET /api/system/version — the currently installed version (from the VERSION
+// file). Used by the sidebar to show the real version number.
+router.get('/api/system/version', (req, res) => {
+  try {
+    res.json({ version: readFileSync(join(ROOT_DIR, 'VERSION'), 'utf-8').trim() });
+  } catch {
+    res.json({ version: null });
+  }
 });
 
 // POST /api/system/update-dismiss — silence the checker (writes .update-dismissed).

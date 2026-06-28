@@ -44,6 +44,7 @@ function App() {
   const [followupCount, setFollowupCount] = useState(0);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateHidden, setUpdateHidden] = useState(false);
+  const [version, setVersion] = useState(null);
 
   // Enrich each app with parsed comp: cleaned display string + midpoint $K salary
   // derived from compStated. Existing callers reading `a.salary` get a real number
@@ -125,6 +126,14 @@ function App() {
       .then(r => r.json())
       .then(d => { if (d && d.status === 'update-available') setUpdateInfo(d); })
       .catch(() => {}); // non-critical — no banner if the check can't run
+  }, []);
+
+  // Current installed version, shown in the sidebar brand.
+  useEffect(() => {
+    fetch('/api/system/version')
+      .then(r => r.json())
+      .then(d => { if (d && d.version) setVersion(d.version); })
+      .catch(() => {});
   }, []);
 
   // Strip styling when copying from .ai-out so Gmail (and other rich-text
@@ -337,7 +346,7 @@ function App() {
 
   return (
     <div className="app" data-density={tweaks.density}>
-      <window.Sidebar tab={tab} setTab={setTab} stats={stats} streak={streak} setupState={setupState} onDataChanged={refreshApps} />
+      <window.Sidebar tab={tab} setTab={setTab} stats={stats} streak={streak} setupState={setupState} onDataChanged={refreshApps} version={version} />
 
       <div className="main">
         <window.Topbar
