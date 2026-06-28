@@ -1,7 +1,7 @@
 import express from 'express';
-import { execFile } from 'child_process';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { execFile, spawn } from 'child_process';
+import { readFileSync, existsSync } from 'fs';
+import { join, resolve } from 'path';
 import { ROOT_DIR } from '../config.mjs';
 
 export const router = express.Router();
@@ -77,6 +77,34 @@ router.post('/api/system/update-dismiss', (req, res) => {
   execFile(NODE, ['update-system.mjs', 'dismiss'],
     { cwd: ROOT_DIR, timeout: 15000 },
     (err) => res.json({ ok: !err }));
+});
+
+// POST /api/system/restart — relaunch the dashboard so a just-applied update
+// takes effect (Node reloads the new server code + the UI is rebuilt). Bundle-
+// only: it runs the installed launcher one level up from the app tree. A dev
+// checkout has no launcher, so it returns 400 and the UI falls back to a manual
+// "reopen / reload" message.
+router.post('/api/system/restart', (req, res) => {
+  const installDir = resolve(ROOT_DIR, '..');               // {app}; app tree is {app}\trajecktory
+  const launcher = join(installDir, 'launch-trajecktory.ps1');
+  const stopper = join(installDir, 'stop-trajecktory.ps1');
+  if (!existsSync(launcher)) {
+    return res.status(400).json({ error: 'Restart is only available in the installed app.' });
+  }
+  // Detached so it outlives this server when the stopper kills it: wait a beat
+  // (so this response is delivered), stop the current server, then relaunch —
+  // which rebuilds the UI and starts a fresh server that reclaims the same port.
+  // TJK_NO_OPEN keeps it from popping a second browser window; the user's current
+  // tab reloads itself once the new server answers.
+  const cmd = `Start-Sleep -Seconds 1; try { & "${stopper}" } catch {}; $env:TJK_NO_OPEN='1'; & "${launcher}"`;
+  try {
+    spawn('powershell.exe',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-Command', cmd],
+      { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to launch restart: ' + e.message });
+  }
+  res.json({ ok: true });
 });
 
 export { updateJobs };

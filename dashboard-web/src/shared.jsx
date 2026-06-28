@@ -828,7 +828,7 @@ window.ToastStack = function ToastStack({ toasts }) {
 // progress. "Later" hides it for this session (returns on next launch).
 window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
   const [busy, setBusy] = useStateS(false);
-  const [done, setDone] = useStateS(false);
+  const [stage, setStage] = useStateS(''); // '' | 'restarting' | 'manual'
   const [showNotes, setShowNotes] = useStateS(false);
   if (!info || info.status !== 'update-available') return null;
 
@@ -862,10 +862,13 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
             .then(job => {
               if (!job || job.status === 'running') return;
               clearInterval(poll);
-              setBusy(false);
-              if (job.status === 'done') { setDone(true); toast(`Updated to v${info.remote}. Restart to finish.`, 'success'); }
-              else if (job.status === 'reinstall-required') { toast('This update needs a fresh installer — download the latest setup.', 'warn'); }
-              else { toast('Update failed. Your install is unchanged.', 'error'); }
+              if (job.status === 'done') { restartNow(); }       // auto-restart to finish (one click total)
+              else {
+                setBusy(false);
+                toast(job.status === 'reinstall-required'
+                  ? 'This update needs a fresh installer — download the latest setup.'
+                  : 'Update failed. Your install is unchanged.', 'warn');
+              }
             })
             .catch(() => { clearInterval(poll); setBusy(false); toast('Update failed', 'error'); });
         }, 1500);
@@ -873,14 +876,45 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
       .catch(() => { setBusy(false); toast('Update failed to start', 'error'); });
   }
 
-  if (done) {
+  function restartNow() {
+    setStage('restarting');
+    fetch('/api/system/restart', { method: 'POST' })
+      .then(r => r.json().then(b => ({ ok: r.ok, b })))
+      .then(({ ok }) => {
+        if (!ok) { setStage('manual'); return; }   // dev / no launcher → user reloads
+        // Wait for the server to drop, then come back, then reload the new build.
+        let sawDown = false, tries = 0;
+        const poll = setInterval(() => {
+          tries++;
+          fetch('/?_=' + tries, { cache: 'no-store' })
+            .then(r => { if (r && r.ok && sawDown) { clearInterval(poll); window.location.reload(); } })
+            .catch(() => { sawDown = true; });
+          if (tries > 30) { clearInterval(poll); setStage('manual'); }
+        }, 1500);
+      })
+      .catch(() => setStage('manual'));
+  }
+
+  if (stage === 'restarting') {
+    return (
+      <div style={{ ...wrap, borderColor: 'var(--green)' }}>
+        <div style={row}>
+          <span className="mono" style={{ color: 'var(--green)' }}>↻</span>
+          <span>Updating to <strong>v{info.remote}</strong> and restarting trajecktory…</span>
+        </div>
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>This page reloads automatically when it is ready. If nothing happens in ~30s, reopen trajecktory from the Start Menu.</div>
+      </div>
+    );
+  }
+
+  if (stage === 'manual') {
     return (
       <div style={{ ...wrap, borderColor: 'var(--green)' }}>
         <div style={row}>
           <span className="mono" style={{ color: 'var(--green)' }}>✓</span>
-          <span>Updated to <strong>v{info.remote}</strong>. Restart trajecktory to finish applying it.</span>
+          <span>Update to <strong>v{info.remote}</strong> downloaded. Reopen trajecktory to finish (or reload this page).</span>
           <span style={{ flex: 1 }} />
-          <button style={primary} onClick={() => window.location.reload()}>Reload now</button>
+          <button style={primary} onClick={() => window.location.reload()}>Reload</button>
         </div>
       </div>
     );
