@@ -85,7 +85,7 @@ window.ScoreChip = function ScoreChip({ score }) {
 };
 
 // ---------- Sidebar ----------
-window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState, onDataChanged }) {
+window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState, onDataChanged, version }) {
   // Numeric (1-9) keyboard hotkeys for tab switching removed per user request.
   // The `hint` field is gone too. Pipeline carries the pending-decisions badge
   // now that the standalone Overview tab is folded into Pipeline → Overview.
@@ -121,7 +121,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState, onDa
         </div>
         <div className="brand-text">
           <strong className="mono">traje<span style={{ color: "var(--accent)" }}>ck</span>tory</strong>
-          <span>Career Pipeline v3.0</span>
+          <span>{version ? `v${version}` : "Career Pipeline"}</span>
         </div>
       </div>
 

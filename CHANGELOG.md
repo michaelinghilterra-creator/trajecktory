@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.25] - 2026-06-28
+
+### Added
+- The sidebar now shows the running version number (e.g. v1.7.25) instead of a static label, so you can confirm at a glance which version you are on after an update.
+
 ## [1.7.24] - 2026-06-28
 
 ### Added
