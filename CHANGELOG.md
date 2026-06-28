@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.24] - 2026-06-28
+
+### Added
+- One-click in-app updates. The dashboard now checks for a newer version on launch and shows an "Update available" banner with the changelog and an "Update now" button. Updates pull system files only, so your CV, profile, tracker, and reports are never touched, and rollback stays available.
+
 ## [Unreleased]
 
 Hardening pass from the repo audit (see `AUDIT.md`). Not yet versioned.
