@@ -25,13 +25,18 @@ $WebDir     = Join-Path $AppRoot 'dashboard-web'
 # already taken, so a double-click never collides with another local service.
 function Get-FreePort([int]$Preferred) {
   $loopback = [System.Net.IPAddress]::Loopback
-  try {
-    $l = [System.Net.Sockets.TcpListener]::new($loopback, $Preferred)
-    $l.Start(); $l.Stop(); return $Preferred
-  } catch {
-    $l = [System.Net.Sockets.TcpListener]::new($loopback, 0)
-    $l.Start(); $p = ([System.Net.IPEndPoint]$l.LocalEndpoint).Port; $l.Stop(); return $p
+  # Prefer 3333, retrying briefly: on a self-update restart the previous server
+  # was just killed and the port can linger for a moment, so a couple of retries
+  # let the new server reclaim the SAME port the user's browser tab is on (so it
+  # auto-reloads cleanly) instead of jumping to a random one.
+  for ($i = 0; $i -lt 10; $i++) {
+    try {
+      $l = [System.Net.Sockets.TcpListener]::new($loopback, $Preferred)
+      $l.Start(); $l.Stop(); return $Preferred
+    } catch { Start-Sleep -Milliseconds 300 }
   }
+  $l = [System.Net.Sockets.TcpListener]::new($loopback, 0)
+  $l.Start(); $p = ([System.Net.IPEndPoint]$l.LocalEndpoint).Port; $l.Stop(); return $p
 }
 $Port      = Get-FreePort 3333
 $Url       = "http://localhost:$Port"
