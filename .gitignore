@@ -37,6 +37,9 @@ templates/cv-master.docx
 
 # Secrets (never commit — use .env.example as template)
 .env
+# Read-only updater token (injected into the bundle's .git/config at build time)
+installer/.update-token
+*.update-token
 
 # Generated
 .resolved-prompt-*
@@ -66,6 +69,12 @@ dashboard-web/src/dist/
 installer/payload/
 installer/Output/
 installer/*.log
+
+# Self-update runtime files (per-install, never committed)
+.bundle-version
+.trajecktory-custom.patch
+# Bundled Playwright Chromium (created by build-bundle.ps1, ~680MB; never tracked)
+ms-playwright/
 
 # Local-only scratch / tooling (never ship)
 dashboard-web/.claude/

@@ -42,6 +42,8 @@ function App() {
 
   const [tweaks, setTweak] = window.useTweaks ? window.useTweaks(TWEAK_DEFAULTS) : [TWEAK_DEFAULTS, () => {}];
   const [followupCount, setFollowupCount] = useState(0);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [updateHidden, setUpdateHidden] = useState(false);
 
   // Enrich each app with parsed comp: cleaned display string + midpoint $K salary
   // derived from compStated. Existing callers reading `a.salary` get a real number
@@ -112,6 +114,17 @@ function App() {
       .then(r => r.json())
       .then(d => { window.__TJK_IDENTITY = d; })
       .catch(() => {}); // non-critical — signature helpers fall back to empty
+  }, []);
+
+  // Check for a newer trajecktory version on load. POST because the check shells
+  // out to the updater (a shallow git fetch against the repo). Only an
+  // installed bundle (with a git remote + token) returns 'update-available'; a
+  // dev checkout that's current returns 'up-to-date' and shows no banner.
+  useEffect(() => {
+    fetch('/api/system/update-check', { method: 'POST' })
+      .then(r => r.json())
+      .then(d => { if (d && d.status === 'update-available') setUpdateInfo(d); })
+      .catch(() => {}); // non-critical — no banner if the check can't run
   }, []);
 
   // Strip styling when copying from .ai-out so Gmail (and other rich-text
@@ -338,6 +351,7 @@ function App() {
         />
 
         <div className="content" data-screen-label={`trajecktory · ${tab}`} data-tab={tab}>
+          {!updateHidden && window.UpdateBanner ? <window.UpdateBanner info={updateInfo} toast={toast} onDismiss={() => setUpdateHidden(true)} /> : null}
           {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} onQuickAction={handleAction} onDataChanged={refreshApps} search={search} compTweaks={{ walkAway: tweaks.walkAway, targetLow: tweaks.targetLow, targetHigh: tweaks.targetHigh }} />}
           {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} />}
           {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} />}

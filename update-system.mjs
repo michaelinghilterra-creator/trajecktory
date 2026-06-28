@@ -23,9 +23,13 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
 
-const CANONICAL_REPO = 'https://github.com/michaelinghilterra-creator/trajecktory.git';
-const RAW_VERSION_URL = 'https://raw.githubusercontent.com/michaelinghilterra-creator/trajecktory/main/VERSION';
-const RELEASES_API = 'https://api.github.com/repos/michaelinghilterra-creator/trajecktory/releases/latest';
+// The updater pulls from the local repo's configured `origin` remote. In an
+// installed bundle that remote carries an embedded read-only token (injected at
+// build time by installer/build-bundle.ps1), so a PRIVATE repo self-updates with
+// no prompt. In a dev checkout `origin` is the developer's own authenticated
+// remote. Either way no URL or token is hardcoded here.
+const REMOTE = 'origin';
+const REMOTE_BRANCH = 'main';
 
 // System layer paths — ONLY these files get updated
 const SYSTEM_PATHS = [
@@ -141,6 +145,42 @@ function addPaths(paths) {
   git('add', '--', ...paths);
 }
 
+function gitQuiet(...args) {
+  try {
+    return execFileSync('git', args, { cwd: ROOT, encoding: 'utf-8', timeout: 30000 }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function hasGitRepo() {
+  return existsSync(join(ROOT, '.git'));
+}
+
+// Read a path's contents from the just-fetched remote tip (FETCH_HEAD) without
+// modifying the working tree. Returns null if the path doesn't exist upstream.
+function showFetchHead(path) {
+  return gitQuiet('show', `FETCH_HEAD:${path}`);
+}
+
+// The installer writes .bundle-version (the heavy-runtime "generation") into the
+// install. A dev checkout has no such file → returns null and the bundle gate is
+// skipped entirely (developers update via git, not the bundle path).
+function localBundleVersion() {
+  const p = join(ROOT, '.bundle-version');
+  if (!existsSync(p)) return null;
+  const n = parseInt(readFileSync(p, 'utf-8').trim(), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+// The minimum bundle generation the latest code requires, read from the fetched
+// remote (defaults to 0 when the marker file is absent upstream).
+function remoteMinBundleVersion() {
+  const raw = showFetchHead('MIN_BUNDLE_VERSION');
+  const n = raw != null ? parseInt(raw.trim(), 10) : NaN;
+  return Number.isFinite(n) ? n : 0;
+}
+
 // ── CHECK ───────────────────────────────────────────────────────
 
 async function check() {
@@ -151,73 +191,32 @@ async function check() {
   }
 
   const local = localVersion();
-  let remote = '';
-  let releaseVersion = '';
-  let changelog = '';
 
-  // Fetch both sources in parallel — only fail offline if BOTH are unreachable.
-  // Use AbortSignal so a hung TCP connection can't stall the session-start check.
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
-  let versionResult, releaseResult;
-  try {
-    [versionResult, releaseResult] = await Promise.allSettled([
-      fetch(RAW_VERSION_URL, { signal: controller.signal }),
-      fetch(RELEASES_API, {
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'trajecktory-update-checker',
-        },
-        signal: controller.signal,
-      }),
-    ]);
-  } finally {
-    clearTimeout(timeoutId);
-  }
-
-  const SEMVER_RE = /^v?(\d+\.\d+\.\d+)$/i;
-
-  if (versionResult.status === 'fulfilled' && versionResult.value.ok) {
-    try {
-      const raw = (await versionResult.value.text()).trim();
-      const match = raw.match(SEMVER_RE);
-      remote = match ? match[1] : '';
-    } catch {
-      // Body read failed; treat as no VERSION source
-    }
-  }
-
-  if (releaseResult.status === 'fulfilled' && releaseResult.value.ok) {
-    try {
-      const release = await releaseResult.value.json();
-      changelog = release.body || '';
-      const rawTag = String(release.tag_name || '').trim();
-      const match = rawTag.match(SEMVER_RE);
-      releaseVersion = match ? match[1] : '';
-    } catch {
-      // Body parse failed; treat as no release source
-    }
-  }
-
-  if (!remote && !releaseVersion) {
-    // Distinguish true network failures from "fetched OK but response was
-    // unparseable" — the latter shouldn't be silenced as offline since the
-    // network is actually fine.
-    const bothNetworkFailed =
-      versionResult.status !== 'fulfilled' &&
-      releaseResult.status !== 'fulfilled';
-    const status = bothNetworkFailed ? 'offline' : 'no-remote-version';
-    console.log(JSON.stringify({ status, local }));
+  // Self-update needs a real git repo with a remote to pull from. A bare
+  // file-drop install (no .git) can't update in place — report offline so
+  // session-start / dashboard callers stay quiet.
+  if (!hasGitRepo()) {
+    console.log(JSON.stringify({ status: 'offline', local, reason: 'no-git' }));
     return;
   }
 
-  // Use the higher version between VERSION file and GitHub Release
-  // (handles cases where VERSION file is not bumped after a release,
-  // or the raw host is unreachable but the API is).
+  // Shallow-fetch the remote tip so we can read its VERSION / changelog without
+  // touching the working tree. Uses origin's configured auth: the embedded
+  // read-only token in an installed bundle, or the developer's credentials in a
+  // checkout. Network/auth failure is treated as offline (a silent non-event).
+  const fetched = gitQuiet('fetch', '--depth', '1', REMOTE, REMOTE_BRANCH);
+  if (fetched === null) {
+    console.log(JSON.stringify({ status: 'offline', local }));
+    return;
+  }
+
+  const SEMVER_RE = /^v?(\d+\.\d+\.\d+)$/i;
+  const rawRemote = showFetchHead('VERSION');
+  const match = rawRemote ? rawRemote.trim().match(SEMVER_RE) : null;
+  const remote = match ? match[1] : '';
   if (!remote) {
-    remote = releaseVersion;
-  } else if (releaseVersion && compareVersions(releaseVersion, remote) > 0) {
-    remote = releaseVersion;
+    console.log(JSON.stringify({ status: 'no-remote-version', local }));
+    return;
   }
 
   if (compareVersions(local, remote) >= 0) {
@@ -225,11 +224,23 @@ async function check() {
     return;
   }
 
+  // Best-effort changelog: the top of the upstream CHANGELOG.
+  let changelog = '';
+  const cl = showFetchHead('CHANGELOG.md');
+  if (cl) changelog = cl.split('\n').slice(0, 40).join('\n').slice(0, 1200);
+
+  // Flag the case where the new code needs a newer heavy bundle than this
+  // install ships, so the UI can say "download the installer" instead of
+  // offering an in-place update that would only half-apply.
+  const localBundle = localBundleVersion();
+  const requiresReinstall = localBundle != null && remoteMinBundleVersion() > localBundle;
+
   console.log(JSON.stringify({
     status: 'update-available',
     local,
     remote,
-    changelog: changelog.slice(0, 500),
+    changelog,
+    requiresReinstall,
   }));
 }
 
@@ -282,9 +293,26 @@ async function apply() {
       // No previous auto-update commit found (first update) — skip
     }
 
-    // 3. Fetch from canonical repo
+    // 3. Fetch from the configured remote (authed `origin`)
     console.log('Fetching latest from upstream...');
-    git('fetch', CANONICAL_REPO, 'main');
+    if (!hasGitRepo()) {
+      console.error('No git repo found — this install cannot self-update. Reinstall from the latest installer.');
+      if (existsSync(lockFile)) unlinkSync(lockFile);
+      process.exit(1);
+    }
+    git('fetch', REMOTE, REMOTE_BRANCH);
+
+    // 3b. Minimum-bundle gate: refuse a code-only update that needs a newer heavy
+    //     runtime (Node/Chromium) than this installed bundle ships, rather than
+    //     half-updating into a broken state. Dev checkouts have no .bundle-version
+    //     and are never gated.
+    const localBundle = localBundleVersion();
+    const remoteMin = remoteMinBundleVersion();
+    if (localBundle != null && remoteMin > localBundle) {
+      console.log(`BUNDLE_UPDATE_REQUIRED: this update needs a newer trajecktory bundle (have generation ${localBundle}, need ${remoteMin}). Download and run the latest installer — your data (CV, profile, tracker, reports) will be preserved.`);
+      if (existsSync(lockFile)) unlinkSync(lockFile);
+      process.exit(2);
+    }
 
     // 4. Checkout system files only
     console.log('Updating system files...');

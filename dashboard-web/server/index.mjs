@@ -21,6 +21,7 @@ import { router as reportsRoutes } from './routes/reports.mjs';
 import { router as insightsRoutes } from './routes/insights.mjs';
 import { router as setupRoutes } from './routes/setup.mjs';
 import { router as notesRoutes } from './routes/notes.mjs';
+import { router as systemRoutes, updateJobs } from './routes/system.mjs';
 import { getIdentity } from './lib/profile.mjs';
 
 const app = express();
@@ -117,6 +118,7 @@ app.use(reportsRoutes);
 app.use(insightsRoutes);
 app.use(setupRoutes);
 app.use(notesRoutes);
+app.use(systemRoutes);
 
 // Public identity for the frontend's signature blocks, so no name/email/phone
 // is hardcoded in the client bundle. Reads config/profile.yml via the cached
@@ -145,6 +147,7 @@ const _jobSweep = setInterval(() => {
   pruneJobMap(applyJobs);
   pruneJobMap(workflowJobs);
   pruneJobMap(agentJobs);
+  pruneJobMap(updateJobs);
 }, 5 * 60 * 1000);
 if (_jobSweep.unref) _jobSweep.unref();
 
