@@ -115,10 +115,10 @@ Remove-Item Env:\PLAYWRIGHT_BROWSERS_PATH
 # ── 7. PII backstop: fail the build if any personal data slipped into payload ─
 # Mirrors the repo PII scrub. Add patterns if the candidate identity changes.
 Write-Host "Scanning payload for residual PII ..."
-# Generic secret prefix + the owner's identity read from the SOURCE profile.yml
+# Two scans: (1) the owner's identity (literal) read from the SOURCE profile.yml
 # (the payload excludes profile.yml). Never hardcoded, so this script ships clean
 # and the scan adapts to whoever is building.
-$piiPatterns = @('sk-ant-api')
+$piiPatterns = @()
 $srcProfile = Join-Path $RepoRoot 'config\profile.yml'
 if (Test-Path $srcProfile) {
   $prof = Get-Content $srcProfile -Raw
@@ -127,24 +127,42 @@ if (Test-Path $srcProfile) {
     if ($prof -match $rx) { $piiPatterns += $Matches[1].Trim() }
   }
 }
+# (2) Secret/credential patterns (regex). Catches real API keys/tokens by prefix
+# + entropy across providers, not just Anthropic. Add new providers here.
+$secretPatterns = @(
+  'sk-ant-api[0-9]{2}-[A-Za-z0-9_-]{20,}',   # Anthropic API key
+  'sk-proj-[A-Za-z0-9_-]{20,}',              # OpenAI project key
+  'GOCSPX-[A-Za-z0-9_-]{10,}',               # Google OAuth client secret
+  'ya29\.[A-Za-z0-9_-]{20,}',                # Google OAuth access token
+  'gh[pousr]_[A-Za-z0-9]{36,}',              # GitHub token (classic)
+  'github_pat_[A-Za-z0-9_]{50,}',            # GitHub fine-grained PAT
+  'AKIA[0-9A-Z]{16}',                        # AWS access key id
+  '-----BEGIN [A-Z ]*PRIVATE KEY-----'       # PEM private key
+)
 # Files where the maintainer's name/email legitimately appear (attribution +
 # contact). Mirrors the allowlist in test-all.mjs; matched by file name.
 $piiAllow = @(
   'README.md', 'LICENSE', 'CITATION.cff', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md',
   'SECURITY.md', 'SUPPORT.md', 'NOTICE.md', 'AGENTS.md', 'CLAUDE.md', 'package.json'
 )
-# -SimpleMatch: treat patterns as literals. The phone begins with "+", which is
-# not a valid regex quantifier and would otherwise crash Select-String.
-$hits = Get-ChildItem $Payload -Recurse -File |
+$scanFiles = Get-ChildItem $Payload -Recurse -File |
   Where-Object {
     $_.FullName -notmatch '\\node_modules\\' -and
     $_.FullName -notmatch '\\ms-playwright\\' -and
     ($piiAllow -notcontains $_.Name)
-  } |
-  Select-String -Pattern $piiPatterns -SimpleMatch -List -ErrorAction SilentlyContinue
+  }
+$hits = @()
+# Identity match is literal (-SimpleMatch): the phone begins with "+", which is
+# not a valid regex quantifier and would otherwise crash Select-String.
+if ($piiPatterns.Count -gt 0) {
+  $hits += $scanFiles | Select-String -Pattern $piiPatterns -SimpleMatch -List -ErrorAction SilentlyContinue
+}
+# Secret match is regex (entropy-aware), so a real key trips the gate even if the
+# provider isn't Anthropic.
+$hits += $scanFiles | Select-String -Pattern $secretPatterns -List -ErrorAction SilentlyContinue
 if ($hits) {
-  $hits | ForEach-Object { Write-Warning "PII in payload: $($_.Path)" }
-  throw "Refusing to build: personal data found in payload (see warnings above)."
+  $hits | ForEach-Object { Write-Warning "PII/secret in payload: $($_.Path)" }
+  throw "Refusing to build: personal data or secrets found in payload (see warnings above)."
 }
 
 # ── 8. Report ─────────────────────────────────────────────────────────────────
