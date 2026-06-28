@@ -821,6 +821,95 @@ window.ToastStack = function ToastStack({ toasts }) {
   );
 };
 
+// ---------- Update banner ----------
+// Shows when the on-mount /api/system/update-check reports a newer version.
+// One click applies the update (SYSTEM files only — CV/profile/tracker/reports
+// are never touched) via update-system.mjs, polling the job and toasting
+// progress. "Later" hides it for this session (returns on next launch).
+window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
+  const [busy, setBusy] = useStateS(false);
+  const [done, setDone] = useStateS(false);
+  const [showNotes, setShowNotes] = useStateS(false);
+  if (!info || info.status !== 'update-available') return null;
+
+  const wrap = {
+    margin: '0 0 14px', padding: '10px 14px', borderRadius: 8,
+    border: '1px solid var(--accent)', background: 'var(--accent-bg)',
+    fontSize: 13, color: 'var(--text, inherit)',
+  };
+  const row = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' };
+  const btn = {
+    fontFamily: 'var(--font-mono)', fontSize: 12, padding: '5px 12px',
+    borderRadius: 6, border: '1px solid var(--border, rgba(127,127,127,0.3))',
+    cursor: 'pointer', background: 'transparent', color: 'inherit',
+  };
+  const primary = { ...btn, background: 'var(--accent)', color: '#0a0a0c', borderColor: 'var(--accent)', fontWeight: 700 };
+
+  function applyUpdate() {
+    if (info.requiresReinstall) {
+      toast('This update needs a fresh installer — download the latest trajecktory setup.', 'warn');
+      return;
+    }
+    setBusy(true);
+    toast(`Updating to v${info.remote}…`, null);
+    fetch('/api/system/update-apply', { method: 'POST' })
+      .then(r => r.json())
+      .then(({ jobId, error }) => {
+        if (error || !jobId) { setBusy(false); toast('Update failed to start', 'error'); return; }
+        const poll = setInterval(() => {
+          fetch(`/api/system/update-apply/${jobId}`)
+            .then(r => r.json())
+            .then(job => {
+              if (!job || job.status === 'running') return;
+              clearInterval(poll);
+              setBusy(false);
+              if (job.status === 'done') { setDone(true); toast(`Updated to v${info.remote}. Restart to finish.`, 'success'); }
+              else if (job.status === 'reinstall-required') { toast('This update needs a fresh installer — download the latest setup.', 'warn'); }
+              else { toast('Update failed. Your install is unchanged.', 'error'); }
+            })
+            .catch(() => { clearInterval(poll); setBusy(false); toast('Update failed', 'error'); });
+        }, 1500);
+      })
+      .catch(() => { setBusy(false); toast('Update failed to start', 'error'); });
+  }
+
+  if (done) {
+    return (
+      <div style={{ ...wrap, borderColor: 'var(--green)' }}>
+        <div style={row}>
+          <span className="mono" style={{ color: 'var(--green)' }}>✓</span>
+          <span>Updated to <strong>v{info.remote}</strong>. Restart trajecktory to finish applying it.</span>
+          <span style={{ flex: 1 }} />
+          <button style={primary} onClick={() => window.location.reload()}>Reload now</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={wrap}>
+      <div style={row}>
+        <span className="mono" aria-hidden="true" style={{ color: 'var(--accent)' }}>⬆</span>
+        <span>
+          Update available: <strong>v{info.local} → v{info.remote}</strong>
+          {info.requiresReinstall ? <span style={{ color: 'var(--orange)' }}> (needs a fresh installer)</span> : null}
+        </span>
+        {info.changelog ? (
+          <button style={{ ...btn, border: 'none', padding: '2px 6px', color: 'var(--accent)' }} onClick={() => setShowNotes(s => !s)}>
+            {showNotes ? 'Hide notes' : "What's new"}
+          </button>
+        ) : null}
+        <span style={{ flex: 1 }} />
+        <button style={primary} disabled={busy} onClick={applyUpdate}>{busy ? 'Updating…' : 'Update now'}</button>
+        <button style={btn} disabled={busy} onClick={onDismiss}>Later</button>
+      </div>
+      {showNotes && info.changelog ? (
+        <pre style={{ marginTop: 10, marginBottom: 0, maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{info.changelog}</pre>
+      ) : null}
+    </div>
+  );
+};
+
 // ---------- Tab strip ----------
 window.TabStrip = function TabStrip({ tab, setTab, counts }) {
   const tabs = [

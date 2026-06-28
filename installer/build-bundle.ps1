@@ -112,6 +112,51 @@ $env:PLAYWRIGHT_BROWSERS_PATH = $BrowsersPath
 & $NodeExe (Join-Path $PayloadApp 'node_modules\playwright\cli.js') install chromium
 Remove-Item Env:\PLAYWRIGHT_BROWSERS_PATH
 
+# ── 6.5 Make the payload a self-updating git working copy ─────────────────────
+# The shipped app updates itself by pulling system-layer files from the private
+# repo (see update-system.mjs). That needs a real repo with an authenticated
+# remote, so we bake in a fine-grained READ-ONLY token (contents:read, this repo
+# only) — a non-technical user never sees an auth prompt. The token is read from
+# the build environment, NEVER from a tracked file, and lands only in the
+# bundle's .git/config (which the PII scan below skips).
+$UpdateToken = $env:TJK_UPDATE_TOKEN
+if (-not $UpdateToken) {
+  $tokenFile = Join-Path $InstallerDir '.update-token'
+  if (Test-Path $tokenFile) { $UpdateToken = (Get-Content $tokenFile -Raw).Trim() }
+}
+if (-not $UpdateToken) {
+  Write-Warning "No update token (set TJK_UPDATE_TOKEN env var or create installer\.update-token). Bundle will NOT self-update."
+} else {
+  Write-Host "Initializing self-update git repo in the payload ..."
+  $bundleVer = (Get-Content (Join-Path $PayloadApp 'VERSION') -Raw).Trim()
+  $RepoUrl   = "https://x-access-token:$UpdateToken@github.com/michaelinghilterra-creator/trajecktory.git"
+  & git -C $PayloadApp init -q
+  if ($LASTEXITCODE -ne 0) { throw "git init failed in payload" }
+  # Persist a commit identity + disable signing IN THE BUNDLE'S REPO so the
+  # updater's own commits (apply / rollback in update-system.mjs) succeed on an
+  # end-user machine that has no global git user.name/email configured.
+  & git -C $PayloadApp config user.email 'bundle@trajecktory.local'
+  & git -C $PayloadApp config user.name  'trajecktory bundle'
+  & git -C $PayloadApp config commit.gpgsign false
+  # Belt-and-suspenders: keep the huge runtime dirs out of the baseline commit even
+  # if the tracked .gitignore on this build box predates the ms-playwright rule.
+  $excludeFile = Join-Path $PayloadApp '.git\info\exclude'
+  @('node_modules/', 'ms-playwright/', '.bundle-version', '.env', 'dashboard-web/node_modules/') |
+    Add-Content -Path $excludeFile
+  & git -C $PayloadApp add -A
+  & git -C $PayloadApp commit -q -m "trajecktory v$bundleVer bundled baseline"
+  if ($LASTEXITCODE -ne 0) { throw "git baseline commit failed in payload" }
+  & git -C $PayloadApp remote add origin $RepoUrl
+  # Git for Windows hides the .git dir (Hidden attribute, via core.hideDotFiles).
+  # Clear it so Inno Setup's recursesubdirs definitely ships .git into the install
+  # — the self-update repo (and its authenticated remote) lives there.
+  & attrib -h (Join-Path $PayloadApp '.git')
+  # Heavy-runtime generation marker; update-system.mjs refuses code updates that
+  # need a newer bundle than this. Bump when you ship a new .exe with new Node/Chromium.
+  Set-Content -Path (Join-Path $PayloadApp '.bundle-version') -Value '1' -NoNewline
+  Write-Host "Self-update repo ready (origin set, baseline committed at v$bundleVer)."
+}
+
 # ── 7. PII backstop: fail the build if any personal data slipped into payload ─
 # Mirrors the repo PII scrub. Add patterns if the candidate identity changes.
 Write-Host "Scanning payload for residual PII ..."
@@ -149,6 +194,7 @@ $scanFiles = Get-ChildItem $Payload -Recurse -File |
   Where-Object {
     $_.FullName -notmatch '\\node_modules\\' -and
     $_.FullName -notmatch '\\ms-playwright\\' -and
+    $_.FullName -notmatch '\\\.git\\' -and
     ($piiAllow -notcontains $_.Name)
   }
 $hits = @()
