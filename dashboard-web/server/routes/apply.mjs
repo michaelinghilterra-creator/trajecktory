@@ -1,7 +1,6 @@
 import express from 'express';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { applyJobs, runApplyJob } from '../lib/apply.mjs';
-import { hasAnthropicKey, NO_KEY_ERROR } from '../lib/anthropic.mjs';
 
 export const router = express.Router();
 
@@ -15,13 +14,8 @@ router.post('/api/apply/:id', (req, res) => {
       return res.status(400).json({ error: `Invalid mode: ${mode}` });
     }
 
-    // 'manual' and 'claude' generate the CV + cover letter via the Anthropic SDK
-    // (the API key); only 'byo' (already-applied) skips generation. Fail clearly up
-    // front so the UI can prompt for the key, instead of erroring mid-job.
-    if (mode !== 'byo' && !hasAnthropicKey()) {
-      return res.status(400).json({ error: NO_KEY_ERROR });
-    }
-
+    // 'manual' and 'claude' generate the CV + cover letter (on the Claude plan, or
+    // the API key if one is set); 'byo' (already-applied) skips generation.
     const rows = parseApplicationsMd();
     const row = (company && rows.find(r => r.id === id && r.company === company))
       || rows.find(r => r.id === id);

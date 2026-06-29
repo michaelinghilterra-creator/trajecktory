@@ -5,6 +5,7 @@ import path from 'path';
 // reads ANTHROPIC_API_KEY.
 import '../config.mjs';
 import { getIdentity } from './profile.mjs';
+import { runClaudePrompt } from './claude-cli.mjs';
 
 export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -17,7 +18,37 @@ export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }
 export function hasAnthropicKey() {
   return !!(process.env.ANTHROPIC_API_KEY || '').trim();
 }
-export const NO_KEY_ERROR = 'No Anthropic API key configured. Add ANTHROPIC_API_KEY to dashboard-web/.env (or via the Launchpad) to use the AI draft features. Evaluate and Scan use your Claude Pro login and need no key.';
+export const NO_KEY_ERROR = 'AI drafts need either an Anthropic API key (ANTHROPIC_API_KEY in dashboard-web/.env, the faster path) or a signed-in Claude (run `claude login`, the same login used by Scan and Evaluate).';
+
+// Unified text generation. When an ANTHROPIC_API_KEY is present we use the API
+// directly (fast, model-pinned, supports tools/thinking). Otherwise we run the
+// prompt on the user's Claude PLAN via the bundled `claude` CLI — no key needed.
+// Returns the model's text; callers do their own JSON.parse / stripping on it.
+// Pass `tools` (a web_search tool def) to enable web search on either path.
+export async function generateText(prompt, opts = {}) {
+  const { system, model, maxTokens = 1024, tools, ...rest } = opts;
+  if (hasAnthropicKey()) {
+    const msg = await anthropic.messages.create({
+      model: model || 'claude-haiku-4-5',
+      max_tokens: maxTokens,
+      ...(system ? { system } : {}),
+      ...(tools ? { tools } : {}),
+      ...rest, // e.g. thinking / output_config for insights
+      messages: [{ role: 'user', content: prompt }],
+    });
+    return (msg.content || [])
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text)
+      .join('\n')
+      .trim();
+  }
+  // Keyless: run on the Claude plan. `tools` maps to the CLI's WebSearch tool.
+  return runClaudePrompt(prompt, {
+    model,
+    system,
+    allowedTools: tools ? 'WebSearch' : undefined,
+  });
+}
 
 // Strip a leading salutation line ("Hi Emmi,", "Hello Emmi,", "Dear Emmi,",
 // or bare "Emmi,") that the model sometimes prepends even when told not to.

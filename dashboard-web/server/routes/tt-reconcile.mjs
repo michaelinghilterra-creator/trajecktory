@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { parseTargetTalentMd, appendTTRows, updateTTLine } from '../lib/target-talent.mjs';
-import { anthropic } from '../lib/anthropic.mjs';
+import { generateText } from '../lib/anthropic.mjs';
 import { TARGET_TALENT_MD } from '../config.mjs';
 
 export const router = express.Router();
@@ -175,31 +175,24 @@ If the search returns no reliable matches, return an empty array []. Never fabri
         // 90-second hard cap per company — a stalled web_search must NOT hang
         // the whole batch. Promise.race rejects, the catch below logs + returns
         // an empty suggestion list, and the rest of the batch keeps going.
-        const apiCall = anthropic.messages.create({
+        // Hybrid: web search via the API key (hosted web_search tool) when a key
+        // is set, else via the Claude plan's WebSearch tool. generateText returns
+        // the concatenated text; we extract the JSON array from it.
+        const apiCall = generateText(prompt, {
           model: 'claude-haiku-4-5',
-          max_tokens: 3000,
+          maxTokens: 3000,
           tools: [{
             type: 'web_search_20260209',
             name: 'web_search',
-            max_uses: 2,  // reduced from 4 — each search pulls a lot of input tokens
-            // Haiku 4.5 doesn't support programmatic tool calling; the API
-            // requires `allowed_callers: ['direct']` on web_search for this
-            // model. Without it the request 400s with an invalid_request_error.
+            max_uses: 2,
             allowed_callers: ['direct'],
           }],
-          messages: [{ role: 'user', content: prompt }],
         });
         const timeout = new Promise((_, reject) =>
           setTimeout(() => reject(new Error(`discover timeout after 90s for ${companyName}`)), 90000)
         );
-        const msg = await Promise.race([apiCall, timeout]);
+        const fullText = await Promise.race([apiCall, timeout]);
         console.log(`[discover] done:  ${companyName}`);
-        // Response can contain multiple content blocks: text, server_tool_use,
-        // web_search_tool_result. Concatenate all text blocks then extract JSON.
-        const fullText = (msg.content || [])
-          .filter(b => b.type === 'text')
-          .map(b => b.text || '')
-          .join('\n');
         const jsonMatch = fullText.match(/\[[\s\S]*\]/);
         const suggestions = jsonMatch ? (() => { try { return JSON.parse(jsonMatch[0]); } catch { return []; } })() : [];
         return { company: companyName, exampleRole, suggestions };

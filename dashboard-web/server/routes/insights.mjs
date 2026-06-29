@@ -1,7 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { anthropic } from '../lib/anthropic.mjs';
+import { generateText } from '../lib/anthropic.mjs';
 import { INSIGHTS_DIR, INSIGHTS_LATEST, INSIGHTS_HISTORY_MAX, loadProfileContext, loadPriorInsight, pruneInsightsHistory, buildInsightsContext } from '../lib/insights.mjs';
 
 export const router = express.Router();
@@ -73,17 +73,15 @@ Aim for 2-4 items per insight array. Be ruthless about cuts: the user values pre
     promptParts.push(`## Current dashboard snapshot\n\n${JSON.stringify(ctx, null, 2)}`);
     promptParts.push(`Produce the insights JSON.`);
 
-    const msg = await anthropic.messages.create({
+    // API path keeps adaptive thinking + high effort; the keyless plan path
+    // ignores those knobs (best-effort) but still returns the JSON the prompt asks for.
+    const raw = await generateText(promptParts.join('\n\n'), {
       model: 'claude-opus-4-8',
-      max_tokens: 16000,
+      maxTokens: 16000,
+      system: sys,
       thinking: { type: 'adaptive' },
       output_config: { effort: 'high' },
-      system: sys,
-      messages: [{ role: 'user', content: promptParts.join('\n\n') }],
     });
-    // Adaptive thinking is on, so content[0] can be a (text-empty) thinking
-    // block. Grab the first real text block instead of a fixed index.
-    const raw = msg.content.find(b => b.type === 'text')?.text || '';
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: 'Could not parse insights JSON', raw });
     const insights = JSON.parse(jsonMatch[0]);
@@ -100,8 +98,6 @@ Aim for 2-4 items per insight array. Be ruthless about cuts: the user values pre
         headline: prior.headline,
         summary: prior.summary,
       } : null,
-      input_tokens: msg.usage?.input_tokens,
-      output_tokens: msg.usage?.output_tokens,
       ...insights,
     };
 

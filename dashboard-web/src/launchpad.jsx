@@ -53,7 +53,7 @@ const LP_SECTIONS = [
 ];
 
 const LP_OPTIONAL = [
-  { id: 'apikey',    label: 'AI draft key (optional)', why: 'Paste an Anthropic API key to enable tailored resumes, cover letters, and outreach drafts. Evaluate and Scan do not need it.' },
+  { id: 'apikey',    label: 'AI draft key (optional)', why: 'Optional speed-up. Tailored resumes, cover letters, and outreach drafts run on your Claude plan with no key. Add an Anthropic API key only if you want the faster path. Evaluate and Scan never need it.' },
   { id: 'discovery', label: 'Web discovery keys (optional)', why: 'Add a Brave Search (and optional Muse) API key to let Expand Coverage web-search for brand-new companies and postings. API Scan and Agent Scan still find roles without it.' },
   { id: 'obsidian',  label: 'Obsidian vault', why: 'Push applied-role notes into your vault.' },
   { id: 'language',  label: 'Market / language modes', why: 'Target DACH, French, or Japanese postings.' },
@@ -466,7 +466,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }),
     }).then(r => r.json()).then(res => {
       if (res.error) { setApiKey(k => ({ ...k, saving: false, msg: res.error })); toast && toast(res.error, 'error'); return; }
-      setApiKey({ has: true, input: '', saving: false, msg: 'Saved. Draft features are enabled.' });
+      setApiKey({ has: true, input: '', saving: false, msg: 'Saved. Drafts will use the faster API path.' });
       toast && toast('API key saved', 'success');
     }).catch(() => { setApiKey(k => ({ ...k, saving: false, msg: 'Save failed' })); toast && toast('Save failed', 'error'); });
   };
@@ -1003,8 +1003,8 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                   <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
                   <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>{o.why}</p>
                   {apiKey.has
-                    ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 10 }}>✓ A key is saved. Draft features are enabled. Paste a new key to replace it.</div>
-                    : <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 10 }}>○ No key yet. Evaluate and Scan still work without one.</div>}
+                    ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 10 }}>✓ A key is saved. Drafts use the faster API path. Paste a new key to replace it.</div>
+                    : <div style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 10 }}>○ No key set. Drafts run on your Claude plan (the same login as Evaluate and Scan); a key just makes them faster.</div>}
                   <div style={{ display: 'flex', gap: 8 }}>
                     <input type="password" value={apiKey.input} onChange={e => setApiKey(k => ({ ...k, input: e.target.value }))}
                       placeholder="sk-ant-…" className="inp" style={{ flex: 1 }} autoComplete="off" />
