@@ -69,6 +69,7 @@ dashboard-web/src/dist/
 installer/payload/
 installer/Output/
 installer/*.log
+installer/Git-for-Windows-installer.exe
 
 # Self-update runtime files (per-install, never committed)
 .bundle-version
