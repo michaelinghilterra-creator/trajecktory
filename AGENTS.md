@@ -315,7 +315,7 @@ When spawning headless workers for batch processing, use the appropriate command
 - Output in `output/` (gitignored), Reports in `reports/`
 - JDs in `jds/` (referenced as `local:jds/{file}` in pipeline.md)
 - Batch in `batch/` (gitignored except scripts and prompt)
-- Report numbering: sequential 3-digit zero-padded, max existing + 1
+- Report numbering: obtain the number from the persistent counter — run `node next-jd.mjs` (prints the next number; `--pad` for 3-digit zero-padded). NEVER compute "max existing + 1" by hand: report files get pruned, so a hand-computed max reuses numbers across different companies and drifts away from the tracker id. The counter is monotonic, never reused, and keeps the report number == the tracker id.
 - **RULE: BEFORE every batch run, run `node gate-pipeline.mjs`** to liveness-check every pending URL in `data/pipeline.md`. Dead URLs get flipped from `- [ ]` to `- [!]` with a closure reason, so the batch agent skips them entirely. This is the most important step — without it, you spend Claude tokens evaluating dead postings (a 60-URL batch can be 80%+ dead from WebSearch index staleness). The gate runs Playwright in the parent process where it works correctly (sub-agents cannot use Playwright).
 - **RULE: After each batch of evaluations, run `node merge-tracker.mjs`** to merge tracker additions and avoid duplications.
 - **RULE: After every batch merge, run `node verify-actionable.mjs --apply`** as a safety net to catch any dead URLs that slipped past the pre-batch gate (e.g., postings that closed between gate-time and apply-time). Auto-flips Evaluated→Discarded for any URL that no longer accepts applications.

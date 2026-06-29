@@ -280,14 +280,14 @@ batch/tracker-additions/{{ID}}.tsv
 
 Formato TSV (una sola línea, sin header, 9 columnas tab-separated):
 ```
-{next_num}\t{{DATE}}\t{empresa}\t{rol}\t{status}\t{score}/5\t{pdf_emoji}\t[{{REPORT_NUM}}](reports/{{REPORT_NUM}}-{company-slug}-{{DATE}}.md)\t{nota_1_frase}
+{{REPORT_NUM}}\t{{DATE}}\t{empresa}\t{rol}\t{status}\t{score}/5\t{pdf_emoji}\t[{{REPORT_NUM}}](reports/{{REPORT_NUM}}-{company-slug}-{{DATE}}.md)\t{nota_1_frase}
 ```
 
 **Columnas TSV (orden exacto):**
 
 | # | Campo | Tipo | Ejemplo | Validación |
 |---|-------|------|---------|------------|
-| 1 | num | int | `647` | Secuencial, max existente + 1 |
+| 1 | num | int | `647` | SIEMPRE igual a `{{REPORT_NUM}}` (el número del contador persistente que te fue inyectado). NO recalcular "max + 1": el id del tracker debe coincidir con el número del report. |
 | 2 | date | YYYY-MM-DD | `2026-03-14` | Fecha de evaluación |
 | 3 | company | string | `Datadog` | Nombre corto de empresa |
 | 4 | role | string | `Staff AI Engineer` | Título del rol |

@@ -248,7 +248,7 @@ Analyze the job posting for signals that indicate whether this is a real, active
 
 Save the complete evaluation to `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 
-- `{###}` = next sequential number (3 digits, zero-padded)
+- `{###}` = the JD number from the persistent counter: run `node next-jd.mjs --pad` (prints the next 3-digit number). Do NOT hand-compute "max existing + 1" — that reuses numbers and drifts from the tracker id. Use this SAME number for the tracker row below, so the report number and the tracker id always match.
 - `{company-slug}` = company name in lowercase, no spaces (use hyphens)
 - `{YYYY-MM-DD}` = current date
 
@@ -276,7 +276,7 @@ The narrative body below the closing `---` is freeform markdown. Use it for: why
 ### 2. Register in tracker
 
 **ALWAYS** register in `data/applications.md`:
-- Next sequential number
+- The SAME JD number used for the report above (from `node next-jd.mjs`) — the tracker id must equal the report number
 - Current date
 - Company
 - Role

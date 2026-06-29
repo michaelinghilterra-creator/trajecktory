@@ -41,7 +41,7 @@ batch/
 4. **For each pending URL**:
    a. Chrome: click on the job → read JD text from the DOM
    b. Save JD to `/tmp/batch-jd-{id}.txt`
-   c. Calculate next sequential REPORT_NUM
+   c. Get the next REPORT_NUM from the persistent counter: `node next-jd.mjs --pad` (never hand-compute "max + 1" — it reuses numbers and drifts from the tracker id)
    d. Execute via Bash:
 
       ```bash
