@@ -2,7 +2,6 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { exec, spawn } from 'child_process';
-import { DEMO } from '../config.mjs';
 import { SETUP_ROOT, SETUP_FILES, setupSetScalar, SETUP_SCALAR_FIELDS, setupComputeState, SETUP_GUARDRAIL, SETUP_CV_FULL, setupHandoffPrompt } from '../lib/setup.mjs';
 
 export const router = express.Router();
@@ -16,7 +15,7 @@ export const router = express.Router();
 //
 // DATA CONTRACT: setup writes touch config only (config/profile.yml,
 // modes/_profile.md, data/pipeline.md). They NEVER write applications.md,
-// reports/, or scan history. Writes are blocked entirely in DEMO mode.
+// reports/, or scan history.
 router.get('/api/setup/state', (req, res) => {
   try { res.json(setupComputeState()); }
   catch (err) { res.status(500).json({ error: err.message }); }
@@ -99,7 +98,6 @@ router.get('/api/setup/anthropic-key', (req, res) => {
 // Powers the AI draft features (cover letters, resume tailoring, outreach). NOT
 // needed for Evaluate / Scan, which run on the Claude sign-in.
 router.post('/api/setup/anthropic-key', (req, res) => {
-  if (DEMO) return res.status(403).json({ error: 'Read-only in demo mode' });
   const key = ((req.body && req.body.key) || '').trim();
   if (!key) return res.status(400).json({ error: 'Paste your Anthropic API key (it starts with sk-ant-).' });
   if (!key.startsWith('sk-ant-')) return res.status(400).json({ error: 'That does not look like an Anthropic key. Anthropic keys start with "sk-ant-".' });
@@ -123,7 +121,6 @@ router.get('/api/setup/discovery-keys', (req, res) => {
 // web-discovery keys to dashboard-web/.env. discover.mjs reads them on the next
 // Expand Coverage run.
 router.post('/api/setup/discovery-keys', (req, res) => {
-  if (DEMO) return res.status(403).json({ error: 'Read-only in demo mode' });
   const body = req.body || {};
   const saved = [];
   for (const [field, envName] of [['brave', 'BRAVE_API_KEY'], ['muse', 'MUSE_API_KEY']]) {
@@ -153,7 +150,6 @@ router.post('/api/setup/handoff/:section', (req, res) => {
 
 // POST /api/setup/save/:section — write structured scalar fields into profile.yml.
 router.post('/api/setup/save/:section', (req, res) => {
-  if (DEMO) return res.status(403).json({ error: 'Setup is read-only in demo mode' });
   const fields = SETUP_SCALAR_FIELDS[req.params.section];
   if (!fields) return res.status(400).json({ error: `No scalar fields for section: ${req.params.section}` });
   const body = req.body || {};
@@ -179,7 +175,6 @@ router.post('/api/setup/save/:section', (req, res) => {
 
 // POST /api/setup/reset/:section — blank a section's scalar fields (config only).
 router.post('/api/setup/reset/:section', (req, res) => {
-  if (DEMO) return res.status(403).json({ error: 'Setup is read-only in demo mode' });
   const fields = SETUP_SCALAR_FIELDS[req.params.section];
   if (!fields) return res.status(400).json({ error: `Cannot reset section: ${req.params.section}` });
   try {
@@ -208,7 +203,6 @@ router.get('/api/setup/stage/:key', (req, res) => {
   catch { res.json({}); }
 });
 router.post('/api/setup/stage/:key', (req, res) => {
-  if (DEMO) return res.status(403).json({ error: 'Setup is read-only in demo mode' });
   if (!SETUP_STAGE_KEYS.has(req.params.key)) return res.status(400).json({ error: 'unknown staging key' });
   try {
     const dir = path.join(SETUP_ROOT, 'data', 'setup');
@@ -222,7 +216,6 @@ router.post('/api/setup/stage/:key', (req, res) => {
 // Claude Code to convert into cv.md. A .docx also seeds templates/cv-master.docx
 // (the resume master) when one does not already exist. Conversion is agent work.
 router.post('/api/setup/cv-upload', (req, res) => {
-  if (DEMO) return res.status(403).json({ error: 'Setup is read-only in demo mode' });
   const { filename, dataBase64 } = req.body || {};
   if (!filename || !dataBase64) return res.status(400).json({ error: 'filename and dataBase64 are required' });
   const safe = path.basename(String(filename));

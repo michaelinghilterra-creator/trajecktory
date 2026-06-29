@@ -7,13 +7,6 @@
       "runtimeArgs": ["run", "dev"],
       "cwd": "dashboard-web",
       "port": 3333
-    },
-    {
-      "name": "trajecktory-dashboard-demo",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:demo"],
-      "cwd": "dashboard-web",
-      "port": 3333
     }
   ]
 }

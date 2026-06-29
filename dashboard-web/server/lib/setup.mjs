@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
-import { ROOT_DIR, DEMO } from '../config.mjs';
+import { ROOT_DIR } from '../config.mjs';
 
 const SETUP_ROOT = ROOT_DIR;
 const SETUP_FILES = {
@@ -329,7 +329,7 @@ function setupComputeState() {
   };
 
   const coreReady = meta.cv.exists && meta.profile.exists && meta.portals.exists && meta.modeProfile.exists;
-  return { firstRun: !coreReady, demo: DEMO, files: meta, sections, values };
+  return { firstRun: !coreReady, demo: false, files: meta, sections, values };
 }
 
 // Handoff prompt templates. Each returns a self-contained instruction the user
