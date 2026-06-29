@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.27] - 2026-06-28
+
+### Changed
+- Version bump to validate the one-click self-update end to end (no functional changes from 1.7.26).
+
 ## [1.7.26] - 2026-06-28
 
 ### Fixed
