@@ -6,7 +6,7 @@ import { parseApplicationsMd, patchRowInMd } from '../lib/applications.mjs';
 import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute, logStatusEvent } from '../lib/sidecars.mjs';
-import { anthropic, hasAnthropicKey, NO_KEY_ERROR, readProjectFile } from '../lib/anthropic.mjs';
+import { generateText, readProjectFile } from '../lib/anthropic.mjs';
 import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeGhostedCandidates, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
@@ -224,7 +224,6 @@ router.post('/api/followups', (req, res) => {
 // POST /api/followups/:appNum/draft — Claude-drafted follow-up email
 router.post('/api/followups/:appNum/draft', async (req, res) => {
   try {
-    if (!hasAnthropicKey()) return res.status(400).json({ error: NO_KEY_ERROR });
     const appNum = parseInt(req.params.appNum, 10);
     const apps = parseApplicationsMd();
     const app = apps.find(a => a.id === appNum);
@@ -277,12 +276,7 @@ ${profileMd}
 Output ONLY a JSON object — no markdown, no code fences, no explanation:
 {"subject": "<email subject — keep tight, reference role>", "body": "<email body — plain text, no signature block, no greeting like 'Hi Name' (UI prefills salutation)>"}`;
 
-    const msg = await anthropic.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 800,
-      messages: [{ role: 'user', content: prompt }],
-    });
-    const raw = msg.content[0]?.text || '';
+    const raw = await generateText(prompt, { model: 'claude-haiku-4-5', maxTokens: 800 });
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: 'Could not parse draft', raw });
     const draft = JSON.parse(jsonMatch[0]);

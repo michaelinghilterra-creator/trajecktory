@@ -2,7 +2,7 @@
 // keep each module focused and under the size budget.
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
-import { anthropic, hasAnthropicKey, NO_KEY_ERROR, readProjectFile } from '../lib/anthropic.mjs';
+import { generateText, readProjectFile } from '../lib/anthropic.mjs';
 import { loadInfluencer, toneInstruction } from '../lib/linkedin-ssi.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
@@ -10,7 +10,6 @@ export const router = express.Router();
 
 router.post('/api/linkedin-ssi/generate-response', async (req, res) => {
   try {
-    if (!hasAnthropicKey()) return res.status(400).json({ error: NO_KEY_ERROR });
     const { postText, influencerId, influencerName, tone = 'Insightful' } = req.body;
     if (!postText || !postText.trim()) {
       return res.status(400).json({ error: 'Paste the LinkedIn post you want to respond to.' });
@@ -56,13 +55,7 @@ HARD RULES:
 
 Return ONLY the comment text, ready to paste. No quotes, no preface, no explanation.`;
 
-    const message = await anthropic.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 300,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const response = message.content[0].type === 'text' ? message.content[0].text : '';
+    const response = await generateText(prompt, { model: 'claude-haiku-4-5', maxTokens: 300 });
     res.json({ response: response.trim() });
   } catch (err) {
     console.error('Error generating response:', err);
@@ -73,7 +66,6 @@ Return ONLY the comment text, ready to paste. No quotes, no preface, no explanat
 // POST /api/linkedin-ssi/generate-connect-request — Claude-generated LinkedIn connection note (max 300 chars)
 router.post('/api/linkedin-ssi/generate-connect-request', async (req, res) => {
   try {
-    if (!hasAnthropicKey()) return res.status(400).json({ error: NO_KEY_ERROR });
     const { influencerId, influencerName, theirRole = '', priorEngagement = '', angle = 'Reference Post', tone = 'Warm' } = req.body;
     const influencer = loadInfluencer({ influencerId, influencerName });
     if (!influencer) {
@@ -122,12 +114,8 @@ HARD RULES:
 Return ONLY the body of the connection note, ready to paste into LinkedIn. No quotes, no preface, no character count, no explanation.`;
 
     const callClaude = async (targetMax) => {
-      const msg = await anthropic.messages.create({
-        model: 'claude-haiku-4-5',
-        max_tokens: 220,
-        messages: [{ role: 'user', content: buildPrompt(targetMax) }],
-      });
-      return msg.content[0].type === 'text' ? msg.content[0].text.trim() : '';
+      const text = await generateText(buildPrompt(targetMax), { model: 'claude-haiku-4-5', maxTokens: 220 });
+      return text.trim();
     };
 
     // First pass: aim for 280 to leave margin
