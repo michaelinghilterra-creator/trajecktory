@@ -18,13 +18,15 @@ If the input is a **URL** (not pasted JD text), follow this extraction strategy:
 
 **If the input is JD text** (not a URL): use it directly, no fetch needed.
 
-**Source detection — set this flag before continuing:**
-- Input is raw JD text (no URL) → `source = "self-sourced"` — the candidate found this role independently
-- Input is a URL → `source = "sourced"` — came through scanner or pipeline
+**Source detection (by ORIGIN, not by URL-vs-text). Set this flag before continuing:**
+- The user pasted this role directly to you just now (a URL OR raw JD text) → `source = "self-sourced"`. the candidate brought this role themselves.
+- You are processing the queue from a scan or `data/pipeline.md` (the user did not just hand it to you) → `source = "sourced"`.
+
+Backstop: `merge-tracker.mjs` enforces this deterministically. any URL that appears in `data/pipeline.md` is treated as scanned and has its `[self-sourced]` tag stripped at merge time. So if you are unsure, tag a user paste `[self-sourced]`; a scanned URL that slips through is corrected at the merge step.
 
 ## Step 0.5 — Clarifying Questions (self-sourced only)
 
-**Run this step ONLY if `source = "self-sourced"` (raw JD text was pasted).**
+**Run this step ONLY if the user pasted raw JD text (no URL).** For a pasted URL, skip these questions and evaluate directly, but still set `source = "self-sourced"` so the tracker note gets the `[self-sourced]` tag.
 
 Before running the evaluation, ask these three questions in a single message. Ask all three at once — do not ask one at a time. Wait for answers before proceeding.
 
