@@ -19,12 +19,22 @@
 </p>
 
 <p align="center">
-  <img src="docs/dashboard-overview.png" alt="trajecktory dashboard — Overview" width="820">
+  <img src="docs/dashboard-overview.png" alt="Dashboard Overview — pipeline funnel, response rate, and score distribution" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/dashboard-pipeline.png" alt="Pipeline view" width="405">
-  <img src="docs/dashboard-recruiters.png" alt="Recruiters CRM" width="405">
+  <img src="docs/dashboard-analytics.png" alt="Pipeline Analytics — conversion, comp positioning, and archetype fit" width="405">
+  <img src="docs/dashboard-insights.png" alt="AI Insights — what's working, what's not, and this week's focus" width="405">
+</p>
+
+<p align="center">
+  <img src="docs/dashboard-drawer.png" alt="Per-role evaluation drawer — score breakdown, recommendation, and cheat sheet" width="405">
+  <img src="docs/dashboard-followups.png" alt="Follow-Up cadence — warm threads worth a nudge" width="405">
+</p>
+
+<p align="center">
+  <img src="docs/dashboard-pipeline.png" alt="Pipeline tracker — every role, scored and tracked" width="405">
+  <img src="docs/dashboard-recruiters.png" alt="Recruiters CRM — a synthetic outreach funnel" width="405">
 </p>
 
 ---
