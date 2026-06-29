@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.29] - 2026-06-28
+
+### Changed
+- Version bump to validate the first-launch self-update (no functional changes from 1.7.28).
+
 ## [1.7.28] - 2026-06-28
 
 ### Fixed
