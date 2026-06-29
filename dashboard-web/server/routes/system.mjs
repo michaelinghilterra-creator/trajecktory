@@ -2,6 +2,7 @@ import express from 'express';
 import { execFile, spawn } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { join, resolve } from 'path';
+import { randomBytes } from 'crypto';
 import { ROOT_DIR } from '../config.mjs';
 
 export const router = express.Router();
@@ -17,6 +18,9 @@ export const router = express.Router();
 // Node being on PATH.
 const NODE = process.execPath;
 const updateJobs = new Map();
+// Unique per server process. The updater UI watches this change to confirm the
+// server has actually restarted (rather than reloading into the old process).
+const BOOT_ID = randomBytes(8).toString('hex');
 
 // POST /api/system/update-check — run the checker, return its JSON verdict.
 // Quick (a shallow git fetch), so it responds inline rather than as a job.
@@ -65,11 +69,9 @@ router.get('/api/system/update-apply/:jobId', (req, res) => {
 // GET /api/system/version — the currently installed version (from the VERSION
 // file). Used by the sidebar to show the real version number.
 router.get('/api/system/version', (req, res) => {
-  try {
-    res.json({ version: readFileSync(join(ROOT_DIR, 'VERSION'), 'utf-8').trim() });
-  } catch {
-    res.json({ version: null });
-  }
+  let version = null;
+  try { version = readFileSync(join(ROOT_DIR, 'VERSION'), 'utf-8').trim(); } catch {}
+  res.json({ version, bootId: BOOT_ID });
 });
 
 // POST /api/system/update-dismiss — silence the checker (writes .update-dismissed).
@@ -91,16 +93,21 @@ router.post('/api/system/restart', (req, res) => {
   if (!existsSync(launcher)) {
     return res.status(400).json({ error: 'Restart is only available in the installed app.' });
   }
+  const port = String(process.env.PORT || '3333');
   // Detached so it outlives this server when the stopper kills it: wait a beat
-  // (so this response is delivered), stop the current server, then relaunch —
-  // which rebuilds the UI and starts a fresh server that reclaims the same port.
-  // TJK_NO_OPEN keeps it from popping a second browser window; the user's current
-  // tab reloads itself once the new server answers.
-  const cmd = `Start-Sleep -Seconds 1; try { & "${stopper}" } catch {}; $env:TJK_NO_OPEN='1'; & "${launcher}"`;
+  // (so this response is delivered), stop the current server, then relaunch.
+  // Paths + flags are passed via the ENVIRONMENT (not interpolated into the
+  // command) so an install path with PowerShell-special chars ($, `, ') can't
+  // break or inject. TJK_FORCE_PORT pins the relaunch to the SAME port this tab
+  // is on so the auto-reload reconnects; TJK_NO_OPEN suppresses a second window.
+  const psCmd = 'Start-Sleep -Seconds 1; try { & $env:TJK_STOP } catch {}; & $env:TJK_LAUNCH';
   try {
     spawn('powershell.exe',
-      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-Command', cmd],
-      { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-Command', psCmd],
+      {
+        detached: true, stdio: 'ignore', windowsHide: true,
+        env: { ...process.env, TJK_STOP: stopper, TJK_LAUNCH: launcher, TJK_FORCE_PORT: port, TJK_NO_OPEN: '1' },
+      }).unref();
   } catch (e) {
     return res.status(500).json({ error: 'Failed to launch restart: ' + e.message });
   }

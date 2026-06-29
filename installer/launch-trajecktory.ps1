@@ -38,7 +38,18 @@ function Get-FreePort([int]$Preferred) {
   $l = [System.Net.Sockets.TcpListener]::new($loopback, 0)
   $l.Start(); $p = ([System.Net.IPEndPoint]$l.LocalEndpoint).Port; $l.Stop(); return $p
 }
-$Port      = Get-FreePort 3333
+if ($env:TJK_FORCE_PORT) {
+  # A self-update restart pins the port (TJK_FORCE_PORT) so the user's browser tab
+  # — already on that port — reconnects after the relaunch. Wait briefly for the
+  # previous server to release it before binding.
+  $Port = [int]$env:TJK_FORCE_PORT
+  for ($i = 0; $i -lt 20; $i++) {
+    try { $t = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port); $t.Start(); $t.Stop(); break }
+    catch { Start-Sleep -Milliseconds 300 }
+  }
+} else {
+  $Port = Get-FreePort 3333
+}
 $Url       = "http://localhost:$Port"
 $env:PORT  = "$Port"   # the server honors this (config.mjs: process.env.PORT || 3333)
 
@@ -76,6 +87,7 @@ $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $AppRoot 'ms-playwright'
 # 4. Build the front-end bundle, then start the server (single Express process).
 Push-Location $WebDir
 & (Join-Path $NodeDir 'node.exe') 'build.mjs'
+if ($LASTEXITCODE -ne 0) { Write-Warning "UI build failed (exit $LASTEXITCODE); starting with the existing bundle." }
 $server = Start-Process -FilePath (Join-Path $NodeDir 'node.exe') `
   -ArgumentList 'server\index.mjs' -PassThru -WindowStyle Hidden `
   -RedirectStandardOutput (Join-Path $InstallDir 'server-out.log') `

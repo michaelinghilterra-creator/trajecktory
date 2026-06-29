@@ -878,21 +878,34 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
 
   function restartNow() {
     setStage('restarting');
-    fetch('/api/system/restart', { method: 'POST' })
-      .then(r => r.json().then(b => ({ ok: r.ok, b })))
-      .then(({ ok }) => {
-        if (!ok) { setStage('manual'); return; }   // dev / no launcher → user reloads
-        // Wait for the server to drop, then come back, then reload the new build.
-        let sawDown = false, tries = 0;
-        const poll = setInterval(() => {
-          tries++;
-          fetch('/?_=' + tries, { cache: 'no-store' })
-            .then(r => { if (r && r.ok && sawDown) { clearInterval(poll); window.location.reload(); } })
-            .catch(() => { sawDown = true; });
-          if (tries > 30) { clearInterval(poll); setStage('manual'); }
-        }, 1500);
-      })
-      .catch(() => setStage('manual'));
+    // Capture this (old) server's bootId, fire the restart, then poll until a
+    // DIFFERENT bootId answers — that's the new process on the same port, so we
+    // never reload into the still-running old server. Falls back to a
+    // down-then-up check if the bootId couldn't be read.
+    fetch('/api/system/version', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : {}).catch(() => ({}))
+      .then(d => {
+        const oldBoot = (d && d.bootId) || null;
+        fetch('/api/system/restart', { method: 'POST' })
+          .then(r => r.json().then(b => ({ ok: r.ok, b })))
+          .then(({ ok }) => {
+            if (!ok) { setStage('manual'); return; }   // dev / no launcher → user reloads
+            let tries = 0, sawDown = false;
+            const poll = setInterval(() => {
+              tries++;
+              fetch('/api/system/version', { cache: 'no-store' })
+                .then(r => r.ok ? r.json() : null)
+                .then(v => {
+                  if (!v) return;
+                  const isNew = oldBoot ? (v.bootId && v.bootId !== oldBoot) : sawDown;
+                  if (isNew) { clearInterval(poll); window.location.reload(); }
+                })
+                .catch(() => { sawDown = true; });   // server down mid-restart — keep polling
+              if (tries > 40) { clearInterval(poll); setStage('manual'); }   // ~60s
+            }, 1500);
+          })
+          .catch(() => setStage('manual'));
+      });
   }
 
   if (stage === 'restarting') {
@@ -902,7 +915,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
           <span className="mono" style={{ color: 'var(--green)' }}>↻</span>
           <span>Updating to <strong>v{info.remote}</strong> and restarting trajecktory…</span>
         </div>
-        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>This page reloads automatically when it is ready. If nothing happens in ~30s, reopen trajecktory from the Start Menu.</div>
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>This page reloads automatically when it is ready. If nothing happens after a minute or so, reopen trajecktory from the Start Menu.</div>
       </div>
     );
   }
