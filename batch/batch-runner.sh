@@ -227,7 +227,20 @@ get_retries() {
 
 # Calculate next report number.
 # Caller must hold STATE_LOCK_DIR while this runs.
+#
+# Primary path: the persistent, monotonic counter (next-jd.mjs) — numbers are
+# never reused, even after reports/ is pruned, and the report number matches the
+# tracker id. Falls back to the legacy "max existing + 1" scan only if node or
+# the counter script is unavailable, so a batch never hard-fails on numbering.
 next_report_num_unlocked() {
+  if command -v node >/dev/null 2>&1 && [[ -f "$PROJECT_DIR/next-jd.mjs" ]]; then
+    local issued
+    if issued=$(node "$PROJECT_DIR/next-jd.mjs" --pad 2>/dev/null) && [[ "$issued" =~ ^[0-9]+$ ]]; then
+      printf '%s' "$issued"
+      return 0
+    fi
+  fi
+  # ── Fallback: legacy scan (max of existing report files + state file) ──
   local max_num=0
   if [[ -d "$REPORTS_DIR" ]]; then
     for f in "$REPORTS_DIR"/*.md; do

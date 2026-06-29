@@ -24,6 +24,7 @@ import yaml from 'js-yaml';
 import { parseScore, shouldAutoDiscard, recommendsAgainst } from './lib/discard.mjs';
 import { parseTrackerLine } from './lib/tracker.mjs';
 import { normalizeUrl } from './lib/scan-core.mjs';
+import { issueJd } from './next-jd.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate, default) and the
@@ -289,6 +290,13 @@ for (const line of appLines) {
 
 console.log(`📊 Existing: ${existingApps.length} entries, max #${maxNum}`);
 
+// Every JD number ever used by a row (plus the ones we add this run). New
+// entries normally keep the canonical number that next-jd.mjs already stamped
+// onto the report (so tracker id == report number, no drift). usedNums only
+// guards against a number that somehow collides with a different company
+// (e.g. a stale pre-counter batch) — those draw a fresh number instead.
+const usedNums = new Set(existingApps.map(a => a.num));
+
 // ── Mark evaluated rows done in pipeline.md ───────────────────────────────────
 // Deterministic safety net for the batch-evaluate flow: nothing else flips an
 // evaluated URL's pipeline.md row from "- [ ]" to "- [x]", so without this a
@@ -436,9 +444,18 @@ for (const file of tsvFiles) {
       skipped++;
     }
   } else {
-    // New entry — use the number from the TSV
-    const entryNum = addition.num > maxNum ? addition.num : ++maxNum;
-    if (addition.num > maxNum) maxNum = addition.num;
+    // New entry. With the persistent counter (next-jd.mjs) the report number IS
+    // the canonical, never-reused JD#, so the tracker id should match it exactly
+    // (this is what kills the old id<->report drift). Only if that number is
+    // already taken by a DIFFERENT company — a leftover from the pre-counter
+    // "max existing + 1" era — do we draw a fresh, monotonic number.
+    let entryNum = addition.num;
+    if (usedNums.has(entryNum)) {
+      entryNum = issueJd();
+      console.warn(`⚠️  #${addition.num} already in use — assigned fresh JD #${entryNum} to ${addition.company}`);
+    }
+    usedNums.add(entryNum);
+    if (entryNum > maxNum) maxNum = entryNum;
 
     // Auto-discard entries that aren't worth pursuing:
     //   (a) numerical score <= 2.5  OR
