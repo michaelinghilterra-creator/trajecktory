@@ -122,8 +122,44 @@ function compareVersions(a, b) {
   return 0;
 }
 
+let _gitExe;
+function gitFromRegistry() {
+  for (const hive of ['HKCU', 'HKLM']) {
+    try {
+      const out = execFileSync('reg', ['query', `${hive}\\SOFTWARE\\GitForWindows`, '/v', 'InstallPath'],
+        { encoding: 'utf-8', timeout: 8000 });
+      const m = out.match(/InstallPath\s+REG_SZ\s+(.+)/i);
+      if (m) {
+        const exe = join(m[1].trim(), 'cmd', 'git.exe');
+        if (existsSync(exe)) return exe;
+      }
+    } catch { /* key absent on this hive */ }
+  }
+  return null;
+}
+
+// Resolve a usable git. The installed bundle launches its dashboard server
+// before the freshly-installed Git for Windows has propagated onto PATH, so a
+// bare `git` may not resolve on the first run. Find it explicitly: PATH, then
+// the registry (Git for Windows records its InstallPath), then common dirs.
+function resolveGit() {
+  if (_gitExe) return _gitExe;
+  try { execFileSync('git', ['--version'], { stdio: 'ignore', timeout: 8000 }); return (_gitExe = 'git'); } catch {}
+  const reg = gitFromRegistry();
+  if (reg) return (_gitExe = reg);
+  const p = process.env;
+  const candidates = [
+    p.LOCALAPPDATA && join(p.LOCALAPPDATA, 'Programs', 'Git', 'cmd', 'git.exe'),
+    p.ProgramFiles && join(p.ProgramFiles, 'Git', 'cmd', 'git.exe'),
+    p['ProgramFiles(x86)'] && join(p['ProgramFiles(x86)'], 'Git', 'cmd', 'git.exe'),
+    p.ProgramW6432 && join(p.ProgramW6432, 'Git', 'cmd', 'git.exe'),
+  ].filter(Boolean);
+  for (const c of candidates) { if (existsSync(c)) return (_gitExe = c); }
+  return (_gitExe = 'git'); // last resort — failures are handled as "offline"
+}
+
 function git(...args) {
-  return execFileSync('git', args, { cwd: ROOT, encoding: 'utf-8', timeout: 30000 }).trim();
+  return execFileSync(resolveGit(), args, { cwd: ROOT, encoding: 'utf-8', timeout: 30000 }).trim();
 }
 
 function gitStatusEntries() {
@@ -150,7 +186,7 @@ function addPaths(paths) {
 
 function gitQuiet(...args) {
   try {
-    return execFileSync('git', args, { cwd: ROOT, encoding: 'utf-8', timeout: 30000 }).trim();
+    return execFileSync(resolveGit(), args, { cwd: ROOT, encoding: 'utf-8', timeout: 30000 }).trim();
   } catch {
     return null;
   }
@@ -200,6 +236,14 @@ async function check() {
   // session-start / dashboard callers stay quiet.
   if (!hasGitRepo()) {
     console.log(JSON.stringify({ status: 'offline', local, reason: 'no-git' }));
+    return;
+  }
+
+  // Make sure git itself is reachable. On the first post-install launch the
+  // bundled Git for Windows may not be on PATH yet; resolveGit() also checks the
+  // registry + known install dirs, so this only fails if git is truly absent.
+  if (gitQuiet('--version') === null) {
+    console.log(JSON.stringify({ status: 'offline', local, reason: 'git-not-found' }));
     return;
   }
 
@@ -282,7 +326,7 @@ async function apply() {
       const lastUpdateHash = git('log', '--format=%H', '--grep=auto-update system files to v', '-1').trim();
       if (lastUpdateHash) {
         const patch = execFileSync(
-          'git', ['diff', lastUpdateHash, 'HEAD', '--', ...SYSTEM_PATHS],
+          resolveGit(), ['diff', lastUpdateHash, 'HEAD', '--', ...SYSTEM_PATHS],
           { cwd: ROOT, encoding: 'utf-8', timeout: 15000 }
         );
         if (patch.trim()) {
@@ -380,7 +424,7 @@ async function apply() {
     let customConflicted = false;
     if (customPatchSaved && existsSync(customPatchPath)) {
       try {
-        execFileSync('git', ['apply', '--3way', customPatchPath], { cwd: ROOT, encoding: 'utf-8' });
+        execFileSync(resolveGit(), ['apply', '--3way', customPatchPath], { cwd: ROOT, encoding: 'utf-8' });
         customRestored = true;
         unlinkSync(customPatchPath);
         // Stage and commit restored files as a separate commit for clarity

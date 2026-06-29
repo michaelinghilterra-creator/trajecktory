@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.28] - 2026-06-28
+
+### Fixed
+- The update banner now appears on the very first launch after install. The updater locates Git for Windows via the registry (and common install paths), so it no longer depends on git having propagated onto the PATH yet.
+
 ## [1.7.27] - 2026-06-28
 
 ### Changed
