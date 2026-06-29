@@ -39,8 +39,13 @@ router.post('/api/claude-login', (req, res) => {
   try {
     const bundled = path.resolve(SETUP_ROOT, '..', 'node', 'claude.cmd');
     const claudeCmd = fs.existsSync(bundled) ? bundled : 'claude.cmd';
-    spawn('cmd', ['/c', 'start', 'Sign in to Claude', 'cmd', '/k', claudeCmd, 'login'],
-      { detached: true, stdio: 'ignore' }).unref();
+    const child = spawn('cmd', ['/c', 'start', 'Sign in to Claude', 'cmd', '/k', claudeCmd, 'login'],
+      { detached: true, stdio: 'ignore' });
+    // Fire-and-forget console window: if it fails to launch, the async 'error'
+    // event has no listener and would surface as an uncaughtException (res has
+    // already been sent). Log it instead.
+    child.on('error', (e) => console.error('claude-login spawn failed:', e.message));
+    child.unref();
     res.json({ ok: true, bundled: fs.existsSync(bundled) });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -24,6 +24,21 @@ import { router as notesRoutes } from './routes/notes.mjs';
 import { router as systemRoutes, updateJobs } from './routes/system.mjs';
 import { getIdentity } from './lib/profile.mjs';
 
+// ── Process-level safety net ─────────────────────────────────────────────────
+// This dashboard is a long-lived local server for a non-technical user. A single
+// bad request must never take the whole thing down. The most common trigger is a
+// file read that lands while another process is renaming or rewriting data
+// underneath it (a scan, a tracker merge, an in-app update, or a dev editing
+// files). Express does not catch rejections thrown from async route handlers, so
+// without these a transient error would exit the process and the dashboard would
+// vanish mid-use. We log loudly (root causes stay findable) and keep serving.
+process.on('unhandledRejection', (reason) => {
+  console.error(`[${new Date().toISOString()}] UNHANDLED REJECTION (server kept alive):`, reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error(`[${new Date().toISOString()}] UNCAUGHT EXCEPTION (server kept alive):`, err);
+});
+
 const app = express();
 
 // The dashboard has no user accounts; it is a local single-user tool. These
@@ -127,6 +142,17 @@ app.get('/api/identity', (req, res) => res.json(getIdentity()));
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(STATIC, 'index.html'));
+});
+
+// ── Final error handler ──────────────────────────────────────────────────────
+// Any error passed to next(err) — a synchronous throw in a handler, a sendFile
+// failure, a CORS rejection — lands here and returns a clean 500 instead of a
+// hung request. Async-handler rejections are caught by the process net above;
+// the per-route try/catch blocks turn those into 500s too. Must stay last.
+app.use((err, req, res, next) => {
+  console.error(`[${new Date().toISOString()}] Request error on ${req.method} ${req.path}:`, err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: err && err.message ? err.message : 'Internal server error' });
 });
 
 // Bound the in-memory job maps so a long-running server does not accumulate
