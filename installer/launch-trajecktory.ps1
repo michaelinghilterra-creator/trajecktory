@@ -65,14 +65,21 @@ $env:Path = "$NodeDir;$env:Path"
 #     git and the self-update check silently reports "offline". Resolve git's
 #     known install locations explicitly when it isn't already visible.
 if (-not (Get-Command git.exe -ErrorAction SilentlyContinue)) {
-  $gitDirs = @(
-    (Join-Path $env:LOCALAPPDATA 'Programs\Git\cmd'),
-    (Join-Path $env:ProgramFiles 'Git\cmd'),
-    (Join-Path ${env:ProgramFiles(x86)} 'Git\cmd')
-  )
-  foreach ($g in $gitDirs) {
-    if ($g -and (Test-Path (Join-Path $g 'git.exe'))) { $env:Path = "$g;$env:Path"; break }
+  $gitCmd = $null
+  # Most reliable: Git for Windows records its install path in the registry, so we
+  # find it even before its PATH entry has propagated to this process.
+  foreach ($hive in 'HKCU:\SOFTWARE\GitForWindows', 'HKLM:\SOFTWARE\GitForWindows') {
+    try {
+      $ip = (Get-ItemProperty -Path $hive -Name InstallPath -ErrorAction Stop).InstallPath
+      if ($ip -and (Test-Path (Join-Path $ip 'cmd\git.exe'))) { $gitCmd = (Join-Path $ip 'cmd'); break }
+    } catch {}
   }
+  if (-not $gitCmd) {
+    foreach ($g in @((Join-Path $env:LOCALAPPDATA 'Programs\Git\cmd'), (Join-Path $env:ProgramFiles 'Git\cmd'), (Join-Path ${env:ProgramFiles(x86)} 'Git\cmd'))) {
+      if ($g -and (Test-Path (Join-Path $g 'git.exe'))) { $gitCmd = $g; break }
+    }
+  }
+  if ($gitCmd) { $env:Path = "$gitCmd;$env:Path" }
 }
 
 # 2. Point Playwright at the bundled Chromium (offline, no global cache).
