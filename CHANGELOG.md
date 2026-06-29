@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.32] - 2026-06-29
+
+### Fixed
+- Job postings are now labeled correctly by how they were found. A role discovered by a scan can no longer be mislabeled as "self-sourced," and anything you paste yourself (in the dashboard or in Claude) stays marked self-sourced. The label is now set deterministically at merge time instead of being guessed during evaluation.
+
 ## [1.7.31] - 2026-06-29
 
 ### Fixed
