@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.26] - 2026-06-28
+
+### Fixed
+- Updates are now genuinely one-click: after "Update now" the dashboard restarts itself and reloads, with no manual server restarts. A fresh install also shows the update banner on first launch (the bundled git is found immediately, instead of only after a restart).
+
 ## [1.7.25] - 2026-06-28
 
 ### Added
