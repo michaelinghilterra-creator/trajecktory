@@ -24,7 +24,11 @@ import yaml from 'js-yaml';
 import { parseScore, shouldAutoDiscard, recommendsAgainst } from './lib/discard.mjs';
 import { parseTrackerLine } from './lib/tracker.mjs';
 import { normalizeUrl } from './lib/scan-core.mjs';
-import { issueJd } from './next-jd.mjs';
+// next-jd.mjs (persistent JD counter) can be one update cycle behind on installs
+// updating from a pre-counter version. Load it defensively so a missing file
+// degrades to max+1 numbering instead of crashing merge-tracker at module load.
+let issueJd = null;
+try { ({ issueJd } = await import('./next-jd.mjs')); } catch { issueJd = null; }
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate, default) and the
@@ -475,7 +479,7 @@ for (const file of tsvFiles) {
     // "max existing + 1" era — do we draw a fresh, monotonic number.
     let entryNum = addition.num;
     if (usedNums.has(entryNum)) {
-      entryNum = issueJd();
+      entryNum = issueJd ? issueJd() : ++maxNum;
       console.warn(`⚠️  #${addition.num} already in use — assigned fresh JD #${entryNum} to ${addition.company}`);
     }
     usedNums.add(entryNum);
