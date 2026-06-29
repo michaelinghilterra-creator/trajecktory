@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.30] - 2026-06-29
+
+### Changed
+- AI writing features (outreach and follow-up emails, cover letters, CV tailoring, the Insights summary, and TA contact discovery) now run on your Claude plan by default and no longer require an Anthropic API key. If a key is set, it is used as a faster path.
+
 ## [1.7.29] - 2026-06-28
 
 ### Changed
