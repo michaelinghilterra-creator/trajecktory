@@ -360,6 +360,28 @@ tsvFiles.sort((a, b) => {
 
 console.log(`📥 Found ${tsvFiles.length} pending additions`);
 
+// ── Source enforcement (deterministic — does not trust the eval agent's label) ─
+// Every URL in pipeline.md was put there by a scanner (scan.mjs / discover.mjs /
+// the dashboard Agent Scan). A user-pasted JD never enters pipeline.md — it
+// deep-evals directly. So if an addition's posting URL is in pipeline.md, it was
+// SCANNED and must not carry a [self-sourced] tag the agent may have added by
+// mistake. Strip it from the data here. User pastes keep their tag because their
+// URL is not in the pipeline. See modes/auto-pipeline.md for the source rule.
+const scannedUrls = new Set();
+if (existsSync(PIPELINE_FILE)) {
+  for (const line of readFileSync(PIPELINE_FILE, 'utf-8').split('\n')) {
+    for (const u of (line.match(/https?:\/\/[^\s|)]+/g) || [])) scannedUrls.add(normalizeUrl(u));
+  }
+}
+function deTagScannedSource(reportLink, notes, label) {
+  if (!notes || !scannedUrls.size) return notes;
+  const u = reportUrl(reportLink);
+  if (!u || !scannedUrls.has(normalizeUrl(u))) return notes;
+  const cleaned = notes.replace(/\s*\[self-sourced\]\s*/i, ' ').replace(/\s{2,}/g, ' ').trim();
+  if (cleaned !== notes) console.log(`   ↳ source: stripped [self-sourced] from scanned URL (${label || ''})`);
+  return cleaned;
+}
+
 let added = 0;
 let updated = 0;
 let skipped = 0;
@@ -370,6 +392,8 @@ for (const file of tsvFiles) {
   const content = readFileSync(join(ADDITIONS_DIR, file), 'utf-8').trim();
   const addition = parseTsvContent(content, file);
   if (!addition) { skipped++; continue; }
+  // Enforce source from pipeline.md before any status/dedup logic reads the notes.
+  addition.notes = deTagScannedSource(addition.report, addition.notes, addition.company);
   processedReports.push(addition.report);
 
   // Check for duplicate by:
