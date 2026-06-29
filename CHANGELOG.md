@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.31] - 2026-06-29
+
+### Fixed
+- The dashboard is now crash-resistant. A transient error in a single request (for example, a file read that lands while a scan, merge, or update is rewriting data underneath it) can no longer take the whole dashboard down. it logs the problem and keeps running.
+
+### Changed
+- JD numbers are never reused. Report files and tracker entries now draw from a single persistent counter, so a number always points to one posting and the report number matches the tracker id. Previously, numbers could repeat after old reports were cleaned up, which made the pipeline confusing.
+
 ## [1.7.30] - 2026-06-29
 
 ### Changed
