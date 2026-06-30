@@ -30,7 +30,7 @@ window.FunnelChart = function FunnelChart({ data, height = 220 }) {
             <g key={d.label}>
               <rect x={x} y={y} width={w} height={h} rx="3" fill={d.color || "url(#funnelGrad)"} className={`hover-target ${isHover ? "on bar-hl" : ""}`} />
               <text x={x + w / 2} y={y - 8} textAnchor="middle" fill="var(--text)" fontSize="14" fontWeight="600" fontFamily="JetBrains Mono, monospace">{d.value}</text>
-              <text x={x + w / 2} y={H - 12} textAnchor="middle" fill="var(--text-dim)" fontSize="10" fontFamily="JetBrains Mono, monospace" letterSpacing="0.08em">{d.label.toUpperCase()}</text>
+              <text x={x + w / 2} y={H - 12} textAnchor="middle" fill="var(--text-dim)" fontSize="10" fontFamily="JetBrains Mono, monospace" letterSpacing="0.08em">{(d.short || d.label).toUpperCase()}</text>
               {/* invisible hover region */}
               <rect x={i * stepW} y={0} width={stepW} height={H - 28} className="hover-region"
                 onMouseMove={(e) => {
@@ -585,25 +585,25 @@ window.Sankey = function Sankey({ apps }) {
   const [hover, setHover] = useState(null);
   const wrapRef = React.useRef(null);
 
-  // Stage columns left → right
-  // Col 0: Archetypes (everyone)
-  // Col 1: Evaluated vs Dismissed
-  // Col 2: Applied vs Still Evaluating
-  // Col 3: Advanced past Applied / Lost @ Applied / Awaiting Reply
-  // Col 4: Advanced past Responded / Lost @ Respond / In Respond (live)
-  // Col 5: Offer / Lost @ Interview / In Interview (live)
+  // Per-rung flow, fully derived from window.FUNNEL_ORDER so the interview ladder
+  // is never re-hardcoded. Columns left → right:
+  //   Col 0: Archetypes (source)
+  //   Col 1: Evaluated (entered funnel) + Dismissed + Backfill Closed (triage)
+  //   Col i+1 (i = 1..N-1): "reached rung i" main node (Applied … Offer)
+  //   Col i+2 (i = 0..N-2): Lost @ rung i + Live-in rung i — share the next main col
   //
   // Closed entries honor the [reached: X] notes tag — see data.js helpers.
   // `eff()` returns the furthest funnel stage reached:
-  //   - status=Rejected with [reached:Interview] → "Interview"
-  //   - status=Rejected with no tag              → "Applied" (advanced to Applied, then closed)
-  //   - status=Interview (live)                  → "Interview"
+  //   - status=Rejected with [reached:2nd Interview] → "2nd Interview"
+  //   - status=Rejected with no tag                  → "Applied" (sent, then closed)
+  //   - status=2nd Interview (live)                  → "2nd Interview"
   const flow = useMemo(() => {
     const all = apps.slice();
-    // This flow has one combined Interview column, so every interview round maps
-    // to the same index 3. The per-round breakdown lives in the Stage Funnel card.
-    const FO_IDX = { Evaluated: 0, Applied: 1, Responded: 2, Offer: 4, Interview: 3 };
-    window.INTERVIEW_STAGES.forEach(s => { FO_IDX[s] = 3; });
+    const STAGES = window.FUNNEL_ORDER;          // Evaluated … Offer (9 rungs)
+    const N = STAGES.length;
+    const idxOf = {};
+    STAGES.forEach((s, i) => { idxOf[s] = i; });
+
     const eff = (a) => {
       const r = window.reachedStage(a); // e.g. '2nd Interview' for Rejected with [reached:X]
       if (r) return r;
@@ -612,42 +612,27 @@ window.Sankey = function Sankey({ apps }) {
       if (a.status === "Rejected" || a.status === "No Response") return "Applied";
       return a.status;
     };
-    const effIdx = (a) => FO_IDX[eff(a)] ?? -1;
+    const effIdx = (a) => idxOf[eff(a)] ?? -1;
 
     const inEval = a => ["Evaluated","Applied","Responded","Offer","Rejected","No Response"].includes(a.status) || window.isInterviewStage(a.status);
     const dropped = a => ["Discarded","SKIP","Not a Fit"].includes(a.status);
     const aged = a => a.status === "Closed";
-    const applied = a => effIdx(a) >= FO_IDX.Applied;
-    const responded = a => effIdx(a) >= FO_IDX.Responded;
-    const interviewed = a => effIdx(a) >= FO_IDX.Interview;
-    const offered = a => a.status === "Offer";
-    // "Lost" terminal statuses for the per-stage drop counts. No Response can
-    // only land at the Applied stage (eff caps it there), so it shows as a loss
-    // at Applied, never at Responded/Interview.
+    // "Lost" terminal statuses. No Response can only land at Applied (eff caps it
+    // there), so it shows as a loss at Applied, never deeper.
     const isRej = a => a.status === "Rejected" || a.status === "No Response";
 
     const evaluated = all.filter(inEval);
     const discarded = all.filter(dropped);
     const agedOut = all.filter(aged);
-    const stillEvaluating = evaluated.filter(a => a.status === "Evaluated");
-    const appliedSet = evaluated.filter(applied);
 
-    // After Applied
-    const respondedSet = appliedSet.filter(responded);
-    const lostAtApplied = appliedSet.filter(a => isRej(a) && !responded(a)); // closed after Applied
-    const ghosted = appliedSet.filter(a => a.status === "Applied"); // active, awaiting reply
+    // For each rung i: reachedAt[i] = funnel apps with effIdx >= i (the main node).
+    // Apps that STOP at rung i split into lostAt[i] (terminal reject) and
+    // liveAt[i] (currently sitting at that rung). reachedAt[i+1] = advanced.
+    const reachedAt = STAGES.map((_, i) => evaluated.filter(a => effIdx(a) >= i));
+    const lostAt = STAGES.map((s, i) => evaluated.filter(a => effIdx(a) === i && isRej(a)));
+    const liveAt = STAGES.map((s, i) => evaluated.filter(a => effIdx(a) === i && a.status === s));
 
-    // After Responded
-    const interviewSet = respondedSet.filter(interviewed);
-    const lostAtRespond = respondedSet.filter(a => isRej(a) && !interviewed(a)); // closed after Responded
-    const liveAtRespond = respondedSet.filter(a => a.status === "Responded"); // live, waiting for interview
-
-    // After Interview
-    const offerSet = interviewSet.filter(offered);
-    const lostAtInterview = interviewSet.filter(a => isRej(a)); // closed after Interview (Ping #782 lands here)
-    const liveAtInterview = interviewSet.filter(a => window.isInterviewStage(a.status)); // live, in any interview round
-
-    // Archetype palette
+    // Archetype palette + source column
     const archColors = {
       RevOps: "#5b8def", SalesOps: "#22d3ee", Analytics: "#a78bfa",
       BizDev: "#f59e0b", SalesDev: "#22c55e", Strategy: "#ec4899",
@@ -656,7 +641,6 @@ window.Sankey = function Sankey({ apps }) {
       const items = all.filter(x => x.archetype === a);
       return { id: `arch-${a}`, col: 0, label: a, count: items.length, items, accent: archColors[a] || "var(--accent)" };
     });
-    // Each archetype links to evaluated and discarded based on its own apps
     const archLinks = [];
     archNodes.forEach(an => {
       const ev = an.items.filter(inEval);
@@ -664,49 +648,56 @@ window.Sankey = function Sankey({ apps }) {
       const ag = an.items.filter(aged);
       if (ev.length) archLinks.push({ from: an.id, to: "evaluated", count: ev.length, items: ev, color: an.accent });
       if (dr.length) archLinks.push({ from: an.id, to: "discarded", count: dr.length, items: dr, color: an.accent });
-      if (ag.length) archLinks.push({ from: an.id, to: "agedOut", count: ag.length, items: ag, color: an.accent });
+      if (ag.length) archLinks.push({ from: an.id, to: "agedOut",  count: ag.length, items: ag, color: an.accent });
     });
 
-    // Only render nodes/links with count > 0 so empty buckets don't take space
+    const meta = window.STATUS_META || {};
+    const stageColor = (s) => (meta[s] && meta[s].color) || "var(--accent)";
+    // Concise node labels so 10 columns stay legible (column headers carry the
+    // full stage name). Lost = "✕ <short>", live = a friendly "still here" line.
+    const SHORT = { "Phone Screen": "Screen", "1st Interview": "1st", "2nd Interview": "2nd", "3rd Interview": "3rd", "4th Interview": "4th" };
+    const shortOf = (s) => SHORT[s] || s;
+    const liveLabel = (s, i) => i === 0 ? "Still Evaluating" : i === 1 ? "Awaiting Reply" : i === 2 ? "In Reply" : `In ${shortOf(s)}`;
+    const mainId = (i) => i === 0 ? "evaluated" : `reached-${i}`;
+
     const nz = (n) => n.count > 0;
-    const allNodes = [
-      ...archNodes, // col 0 — archetypes
-      { id: "evaluated",  col: 1, label: "Evaluated",  count: evaluated.length, items: evaluated, accent: "#a78bfa" },
-      { id: "discarded",  col: 1, label: "Dismissed", count: discarded.length, items: discarded, accent: "#71717a" },
-      { id: "agedOut",    col: 1, label: "Backfill Closed",  count: agedOut.length, items: agedOut, accent: "#52525b" },
-      { id: "applied",    col: 2, label: "Applied",    count: appliedSet.length, items: appliedSet, accent: "#60a5fa" },
-      { id: "stillEval",  col: 2, label: "Still Evaluating", count: stillEvaluating.length, items: stillEvaluating, accent: "#a78bfa" },
-      { id: "responded",  col: 3, label: "Responded",  count: respondedSet.length, items: respondedSet, accent: "#22d3ee" },
-      { id: "lostAtApplied", col: 3, label: "Lost @ Applied", count: lostAtApplied.length, items: lostAtApplied, accent: "#ef4444" },
-      { id: "ghosted",    col: 3, label: "Awaiting Reply", count: ghosted.length, items: ghosted, accent: "#52525b" },
-      { id: "interview",  col: 4, label: "Interview",  count: interviewSet.length, items: interviewSet, accent: "#f59e0b" },
-      { id: "lostAtRespond", col: 4, label: "Lost @ Respond", count: lostAtRespond.length, items: lostAtRespond, accent: "#ef4444" },
-      { id: "liveAtRespond", col: 4, label: "In Respond", count: liveAtRespond.length, items: liveAtRespond, accent: "#22d3ee" },
-      { id: "offer",      col: 5, label: "Offer",      count: offerSet.length, items: offerSet, accent: "#22c55e" },
-      { id: "lostAtInterview", col: 5, label: "Lost @ Interview", count: lostAtInterview.length, items: lostAtInterview, accent: "#ef4444" },
-      { id: "liveAtInterview", col: 5, label: "In Interview", count: liveAtInterview.length, items: liveAtInterview, accent: "#f59e0b" },
-    ].filter(nz);
-    const allLinks = [
-      ...archLinks,
-      { from: "evaluated",  to: "applied",         count: appliedSet.length, items: appliedSet },
-      { from: "evaluated",  to: "stillEval",       count: stillEvaluating.length, items: stillEvaluating },
-      { from: "applied",    to: "responded",       count: respondedSet.length, items: respondedSet },
-      { from: "applied",    to: "lostAtApplied",   count: lostAtApplied.length, items: lostAtApplied },
-      { from: "applied",    to: "ghosted",         count: ghosted.length, items: ghosted },
-      { from: "responded",  to: "interview",       count: interviewSet.length, items: interviewSet },
-      { from: "responded",  to: "lostAtRespond",   count: lostAtRespond.length, items: lostAtRespond },
-      { from: "responded",  to: "liveAtRespond",   count: liveAtRespond.length, items: liveAtRespond },
-      { from: "interview",  to: "offer",           count: offerSet.length, items: offerSet },
-      { from: "interview",  to: "lostAtInterview", count: lostAtInterview.length, items: lostAtInterview },
-      { from: "interview",  to: "liveAtInterview", count: liveAtInterview.length, items: liveAtInterview },
-    ].filter(nz);
+
+    const nodes = [
+      ...archNodes,                                                                                                  // col 0
+      { id: "discarded", col: 1, label: "Dismissed",       count: discarded.length, items: discarded, accent: "#71717a" },
+      { id: "agedOut",   col: 1, label: "Backfill Closed", count: agedOut.length,   items: agedOut,   accent: "#52525b" },
+    ];
+    // Main "reached" node per rung.
+    STAGES.forEach((s, i) => {
+      nodes.push({ id: mainId(i), col: i + 1, label: s, count: reachedAt[i].length, items: reachedAt[i], accent: stageColor(s) });
+    });
+    // Lost + live branch nodes share the column of the next main node (i + 2).
+    for (let i = 0; i < N - 1; i++) {
+      nodes.push({ id: `lost-${i}`, col: i + 2, label: `✕ ${shortOf(STAGES[i])}`, count: lostAt[i].length, items: lostAt[i], accent: "#ef4444" });
+      nodes.push({ id: `live-${i}`, col: i + 2, label: liveLabel(STAGES[i], i), count: liveAt[i].length, items: liveAt[i], accent: i <= 2 ? stageColor(STAGES[i]) : "#52525b" });
+    }
+    const allNodes = nodes.filter(nz);
+
+    const links = [...archLinks];
+    for (let i = 0; i < N - 1; i++) {
+      const from = mainId(i);
+      links.push({ from, to: mainId(i + 1), count: reachedAt[i + 1].length, items: reachedAt[i + 1] });
+      links.push({ from, to: `lost-${i}`,   count: lostAt[i].length,        items: lostAt[i] });
+      links.push({ from, to: `live-${i}`,   count: liveAt[i].length,        items: liveAt[i] });
+    }
+    const allLinks = links.filter(nz);
     return { nodes: allNodes, links: allLinks, total: all.length };
   }, [apps]);
 
-  const W = 1200, H = 480;
+  // Columns derived from the funnel ladder: archetype source + one per rung.
+  const SANKEY_STAGES = window.FUNNEL_ORDER;
+  const COL_SHORT = { "Evaluated": "TRIAGED", "Applied": "APPLIED", "Responded": "REPLIED", "Phone Screen": "SCREEN", "1st Interview": "1ST", "2nd Interview": "2ND", "3rd Interview": "3RD", "4th Interview": "4TH", "Offer": "OFFER" };
+  const colHeaders = ["ARCHETYPE", ...SANKEY_STAGES.map(s => COL_SHORT[s] || s.toUpperCase())];
+
+  const W = 1280, H = 480;
   const padL = 16, padR = 16, padT = 20, padB = 30;
   const innerW = W - padL - padR, innerH = H - padT - padB;
-  const cols = 6;
+  const cols = colHeaders.length;
   const colX = c => padL + (c / (cols - 1)) * innerW;
   const nodeW = 12;
 
@@ -773,8 +764,8 @@ window.Sankey = function Sankey({ apps }) {
           ))}
         </defs>
         {/* Column headers */}
-        {["ARCHETYPE","TRIAGED","SUBMITTED","REPLIED","INTERVIEWED","CLOSED"].map((label, i) => (
-          <text key={label} x={colX(i)} y={12} textAnchor="middle" fill="var(--text-mute)" fontSize="9.5" fontFamily="JetBrains Mono, monospace" letterSpacing="0.1em">{label}</text>
+        {colHeaders.map((label, i) => (
+          <text key={label + i} x={colX(i)} y={12} textAnchor="middle" fill="var(--text-mute)" fontSize="9.5" fontFamily="JetBrains Mono, monospace" letterSpacing="0.1em">{label}</text>
         ))}
         {/* Links */}
         {layout.linkPaths.map((l, i) => {
@@ -808,14 +799,15 @@ window.Sankey = function Sankey({ apps }) {
           const pct = flow.total ? Math.round((n.count / flow.total) * 100) : 0;
           const top = n.items.slice().sort((a,b)=>b.score-a.score).slice(0,3);
           const avgS = n.items.length ? (n.items.reduce((s,a)=>s+a.score,0)/n.items.length).toFixed(2) : "—";
+          const lastReached = "reached-" + (window.FUNNEL_ORDER.length - 1);
           const insight = n.id.startsWith("arch-") ? `Source archetype — ${pct}% of total roles tracked.`
-            : n.id === "discarded" ? "Dismissed: SKIP, Not a Fit, Closed, or Discarded — filtered before applying."
-            : n.id === "stillEval" ? "Sitting in queue. Pick or skip; don't park indefinitely."
-            : n.id === "ghosted" ? "Applied with no reply. Consider warmer paths."
-            : n.id === "rejected" ? "Pipeline dropped here — track for pattern (sectors, archetypes)."
-            : n.id === "respondClosed" ? "Replied but didn't advance — interview screen failed or you declined."
-            : n.id === "noOffer" ? "Made it to the table but no offer. High-signal data — reflect."
-            : n.id === "offer" ? "Bottom of the funnel. Negotiate confidently."
+            : n.id === "discarded" ? "Dismissed: SKIP, Not a Fit, or Discarded — filtered before applying."
+            : n.id === "agedOut" ? "Posting closed before you could act — aged out of the pipeline."
+            : n.id === "live-0" ? "Sitting in queue. Pick or skip; don't park indefinitely."
+            : n.id === "live-1" ? "Applied with no reply. Consider warmer paths."
+            : n.id === lastReached ? "Bottom of the funnel. Negotiate confidently."
+            : n.id.startsWith("lost-") ? "Pipeline dropped at this rung — track for pattern (sector, archetype, round)."
+            : n.id.startsWith("live-") ? "Live in this round — keep momentum and prep the next step."
             : `${pct}% of total roles reach this stage.`;
           return (
             <div className="tip" style={{ left: hover.px, top: hover.py }}>
