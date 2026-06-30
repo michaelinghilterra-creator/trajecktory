@@ -1,0 +1,115 @@
+// Setup sub-tab modules that need server work beyond the deterministic Launchpad
+// endpoints in setup.mjs:
+//   - Tell Me About Yourself: a Claude-written 90-second elevator pitch, tweakable
+//     by seniority / industry / interview stage / length. Runs on the Claude plan
+//     (generateText, keyless by default), the same path Insights uses.
+//   - Change Log: serves the Release-Please CHANGELOG.md as structured entries.
+import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import { ROOT_DIR } from '../config.mjs';
+import { generateText } from '../lib/anthropic.mjs';
+import { getIdentity } from '../lib/profile.mjs';
+import { loadProfileContext } from '../lib/insights.mjs';
+
+export const router = express.Router();
+
+const PITCH_FILE = path.resolve(ROOT_DIR, 'data', 'elevator-pitch.json');
+const CHANGELOG_MD = path.resolve(ROOT_DIR, 'CHANGELOG.md');
+const VERSION_FILE = path.resolve(ROOT_DIR, 'VERSION');
+
+// Approx spoken words at ~150 wpm, so the model targets a real speaking length.
+const LENGTH_WORDS = { '60s': 150, '90s': 220, '120s': 300 };
+
+function readPitchFile() {
+  try { return JSON.parse(fs.readFileSync(PITCH_FILE, 'utf8')); } catch { return null; }
+}
+
+// GET /api/setup/pitch — the user's last saved/edited pitch (if any).
+router.get('/api/setup/pitch', (req, res) => {
+  res.json(readPitchFile() || { pitch: '', tweaks: null, generated_at: null });
+});
+
+// POST /api/setup/pitch/save — persist the user's edited pitch + tweaks.
+router.post('/api/setup/pitch/save', (req, res) => {
+  try {
+    const { pitch, tweaks } = req.body || {};
+    const out = { pitch: String(pitch || ''), tweaks: tweaks || null, generated_at: readPitchFile()?.generated_at || null, saved: true };
+    fs.mkdirSync(path.dirname(PITCH_FILE), { recursive: true });
+    fs.writeFileSync(PITCH_FILE, JSON.stringify(out, null, 2));
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/setup/pitch/generate — body { seniority, industry, interviewStage, length }
+router.post('/api/setup/pitch/generate', async (req, res) => {
+  try {
+    const { seniority = 'Director', industry = '', interviewStage = 'Recruiter screen', length = '90s' } = req.body || {};
+    const id = getIdentity();
+    const profile = loadProfileContext();           // modes/_profile.md, trimmed
+    let cv = '';
+    try { cv = fs.readFileSync(path.resolve(ROOT_DIR, 'cv.md'), 'utf8').slice(0, 3500); } catch { /* pre-onboarding */ }
+    const words = LENGTH_WORDS[length] || 220;
+
+    if (!profile && !cv) {
+      return res.status(422).json({ error: 'Finish your Launchpad profile (CV + edge) first so the pitch has something to work from.' });
+    }
+
+    const sys = `You are an interview coach. Write a spoken "Tell me about yourself" answer the candidate can deliver out loud — natural, confident, first person. Not a bio, not a cover letter.
+
+RULES:
+- About ${words} words (a ${length} spoken answer). Stay close to that length.
+- First person, conversational, no corporate filler, no em dashes.
+- Open with a one-line identity hook, give 2-3 proof points anchored in real experience from the profile/CV, then close on why this kind of role now.
+- Frame for a ${seniority}-level candidate.${industry ? ` Tailor the language and examples to the ${industry} industry.` : ''}
+- Audience is the ${interviewStage}: ${interviewStage === 'Hiring manager' ? 'go deeper on scope, impact, and how you operate.' : interviewStage === 'Final loop' ? 'emphasize leadership, judgment, and fit for the specific team.' : 'keep it crisp and high-level, focused on fit and trajectory.'}
+- Use only facts supported by the profile/CV. Do not invent employers, titles, or metrics.
+- Output ONLY the pitch text. No preamble, no headings, no quotes around it.`;
+
+    const parts = [];
+    if (id.fullName) parts.push(`## Candidate\n${id.fullName}${id.headline ? ` — ${id.headline}` : ''}`);
+    if (profile) parts.push(`## Profile (modes/_profile.md)\n\n${profile}`);
+    if (cv) parts.push(`## CV (cv.md, trimmed)\n\n${cv}`);
+    parts.push(`Write the ${length} "Tell me about yourself" answer now.`);
+
+    const pitch = (await generateText(parts.join('\n\n'), {
+      model: 'claude-sonnet-4-6',
+      maxTokens: 1200,
+      system: sys,
+    })).trim();
+
+    const tweaks = { seniority, industry, interviewStage, length };
+    const out = { pitch, tweaks, generated_at: new Date().toISOString() };
+    try {
+      fs.mkdirSync(path.dirname(PITCH_FILE), { recursive: true });
+      fs.writeFileSync(PITCH_FILE, JSON.stringify(out, null, 2));
+    } catch { /* non-fatal: still return the pitch */ }
+    res.json(out);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Parse the Release-Please CHANGELOG.md into structured, skimmable entries.
+function parseChangelog(md) {
+  const entries = [];
+  let cur = null, sec = null;
+  for (const ln of (md || '').split(/\r?\n/)) {
+    const h = ln.match(/^##\s+\[?([^\]\s]+)\]?\s*[-–]\s*(.+)$/);
+    if (h) { cur = { version: h[1], date: h[2].trim(), sections: [] }; entries.push(cur); sec = null; continue; }
+    const sh = ln.match(/^###\s+(.+)$/);
+    if (sh && cur) { sec = { heading: sh[1].trim(), items: [] }; cur.sections.push(sec); continue; }
+    const it = ln.match(/^[-*]\s+(.+)$/);
+    if (it && cur) { if (!sec) { sec = { heading: '', items: [] }; cur.sections.push(sec); } sec.items.push(it[1].trim()); }
+  }
+  return entries;
+}
+
+// GET /api/setup/changelog — current version + parsed release notes (newest first).
+router.get('/api/setup/changelog', (req, res) => {
+  try {
+    let version = '';
+    try { version = fs.readFileSync(VERSION_FILE, 'utf8').trim(); } catch { /* dev checkout */ }
+    let md = '';
+    try { md = fs.readFileSync(CHANGELOG_MD, 'utf8'); } catch { /* no changelog yet */ }
+    res.json({ version, entries: parseChangelog(md) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
