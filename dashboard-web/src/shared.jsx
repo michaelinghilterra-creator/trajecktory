@@ -725,8 +725,14 @@ window.Drawer = function Drawer({ app, onClose, onAction }) {
                   <button className="btn danger" onClick={() => onAction(app, "Rejected")}>Mark Rejected</button>
                 </>
               )}
-              {app.status === "Responded" && <button className="btn success" onClick={() => onAction(app, "Interview")}>Move to Interview</button>}
-              {app.status === "Interview" && <button className="btn success" onClick={() => onAction(app, "Offer")}>Mark Offer</button>}
+              {(() => {
+                const idx = window.FUNNEL_ORDER.indexOf(app.status);
+                if (idx >= window.FUNNEL_ORDER.indexOf("Responded") && idx < window.FUNNEL_ORDER.length - 1) {
+                  const next = window.FUNNEL_ORDER[idx + 1];
+                  return <button className="btn success" onClick={() => onAction(app, next)}>{next === "Offer" ? "Mark Offer" : `Move to ${next}`}</button>;
+                }
+                return null;
+              })()}
               <button className="btn">Open Report ↗</button>
               <button className="btn">Generate CV ⌘G</button>
             </div>

@@ -90,7 +90,7 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
         label: stage,
         value: stageApps.length,
         apps: stageApps,
-        color: stage === "Offer" ? "var(--green)" : stage === "Interview" ? "var(--orange)" : "var(--accent)",
+        color: window.STATUS_META[stage]?.color || "var(--accent)",
       };
     });
   }, [apps]);
@@ -107,8 +107,8 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
   // Recent activity (last 14d, active apps only)
   const recent = useMemoO(() => activeApps.filter(a => window.daysAgo(a.date) <= 14).length, [activeApps]);
   const responseRate = useMemoO(() => {
-    const applied = activeApps.filter(a => ["Applied", "Responded", "Interview", "Offer", "Rejected", "No Response"].includes(a.status)).length;
-    const responded = activeApps.filter(a => ["Responded", "Interview", "Offer"].includes(a.status)).length;
+    const applied = activeApps.filter(a => ["Applied", "Responded", "Offer", "Rejected", "No Response"].includes(a.status) || window.isInterviewStage(a.status)).length;
+    const responded = activeApps.filter(a => ["Responded", "Offer"].includes(a.status) || window.isInterviewStage(a.status)).length;
     return applied ? Math.round((responded / applied) * 100) : 0;
   }, [activeApps]);
   const avgScore = useMemoO(() => {
@@ -120,7 +120,7 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
 
   // Score distribution insights
   const scoreInsights = useMemoO(() => {
-    const appliedStatuses = ["Applied", "Responded", "Interview", "Offer", "Rejected", "No Response"];
+    const appliedStatuses = ["Applied", "Responded", "Offer", "Rejected", "No Response", ...window.INTERVIEW_STAGES];
     const bands = [
       { label: "Strong",  min: 4.0, max: Infinity, color: "var(--green)"  },
       { label: "Border",  min: 3.0, max: 4.0,      color: "var(--yellow)" },

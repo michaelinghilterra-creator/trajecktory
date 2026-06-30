@@ -47,7 +47,15 @@ const ALIASES = {
   'aplicado': 'applied', 'enviada': 'applied', 'aplicada': 'applied',
   'applied': 'applied', 'sent': 'applied',
   'respondido': 'responded',
-  'entrevista': 'interview',
+  // Interview ladder. Legacy 'interview'/'entrevista' fold into the 1st round.
+  'entrevista': '1st interview', 'interview': '1st interview',
+  'ta screen': 'phone screen', 'ta phone screen': 'phone screen',
+  'recruiter screen': 'phone screen', 'hr screen': 'phone screen',
+  'first interview': '1st interview', 'round 1': '1st interview',
+  'second interview': '2nd interview', 'round 2': '2nd interview',
+  'third interview': '3rd interview', 'round 3': '3rd interview',
+  'fourth interview': '4th interview', 'round 4': '4th interview',
+  'final round': '4th interview', 'final loop': '4th interview',
   'oferta': 'offer',
   'rechazado': 'rejected', 'rechazada': 'rejected',
   'descartado': 'discarded', 'descartada': 'discarded',
@@ -55,7 +63,9 @@ const ALIASES = {
   'no aplicar': 'skip', 'no_aplicar': 'skip', 'monitor': 'skip', 'geo blocker': 'skip',
 };
 
-const ACTIONABLE_STATUSES = ['applied', 'responded', 'interview'];
+// Interview-family rungs (normalized lowercase), in order.
+const INTERVIEW_STAGES = ['phone screen', '1st interview', '2nd interview', '3rd interview', '4th interview'];
+const ACTIONABLE_STATUSES = ['applied', 'responded', ...INTERVIEW_STAGES];
 
 function normalizeStatus(raw) {
   const clean = raw.replace(/\*\*/g, '').trim().toLowerCase()
@@ -152,7 +162,7 @@ function computeUrgency(status, daysSinceApp, daysSinceLastFollowup, followupCou
     if (daysSinceApp >= CADENCE.responded_subsequent) return 'overdue';
     return 'waiting';
   }
-  if (status === 'interview') {
+  if (INTERVIEW_STAGES.includes(status)) {
     if (daysSinceApp >= CADENCE.interview_thankyou) return 'overdue';
     return 'waiting';
   }
@@ -171,7 +181,7 @@ function computeNextFollowupDate(status, appDate, lastFollowupDate, followupCoun
     if (lastFollowupDate) return addDays(parseDate(lastFollowupDate), CADENCE.responded_subsequent);
     return addDays(parseDate(appDate), CADENCE.responded_subsequent);
   }
-  if (status === 'interview') {
+  if (INTERVIEW_STAGES.includes(status)) {
     return addDays(parseDate(appDate), CADENCE.interview_thankyou);
   }
   return null;

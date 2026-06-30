@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { generateText } from '../lib/anthropic.mjs';
-import { INSIGHTS_DIR, INSIGHTS_LATEST, INSIGHTS_HISTORY_MAX, loadProfileContext, loadPriorInsight, pruneInsightsHistory, buildInsightsContext } from '../lib/insights.mjs';
+import { INSIGHTS_DIR, INSIGHTS_LATEST, INSIGHTS_HISTORY_MAX, loadProfileContext, loadPriorInsight, pruneInsightsHistory, buildInsightsContext, stageFunnelStats } from '../lib/insights.mjs';
 
 export const router = express.Router();
 
@@ -134,6 +134,17 @@ router.get('/api/insights/latest', (req, res) => {
   try {
     if (!fs.existsSync(INSIGHTS_LATEST)) return res.json({ generated_at: null });
     res.json(JSON.parse(fs.readFileSync(INSIGHTS_LATEST, 'utf8')));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Stage funnel + rejection-by-stage ("where do we lose them"). Reached counts,
+// stage-to-stage conversion, and rejections attributed to the interview round
+// they exited at — derived from the dated status-event log.
+router.get('/api/insights/stage-funnel', (req, res) => {
+  try {
+    res.json(stageFunnelStats());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

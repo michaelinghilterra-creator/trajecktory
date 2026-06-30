@@ -4,6 +4,7 @@ import path from 'path';
 import { OUTPUT_DIR } from '../config.mjs';
 import { parseApplicationsMd, patchRowInMd, rejectionTimingStats } from '../lib/applications.mjs';
 import { recordApplyDate } from '../lib/sidecars.mjs';
+import { ALL_STATUSES } from '../lib/statuses.mjs';
 import { mdToHtml, escapeHtml } from '../lib/html.mjs';
 
 export const router = express.Router();
@@ -45,8 +46,7 @@ router.patch('/api/applications/:id', (req, res) => {
     const id = parseInt(req.params.id, 10);
     const { status, notes, company } = req.body;
 
-    const validStatuses = ['Evaluated','Applied','Responded','Interview','Offer','Rejected','Discarded','SKIP','Closed','Not a Fit','No Response'];
-    if (status && !validStatuses.includes(status)) {
+    if (status && !ALL_STATUSES.includes(status)) {
       return res.status(400).json({ error: `Invalid status: ${status}` });
     }
 

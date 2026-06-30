@@ -18,7 +18,12 @@ const STATUS_COLOR = {
   // Application statuses
   Applied:   { bg: 'rgba(96,165,250,0.16)', color: '#60a5fa' },
   Responded: { bg: 'rgba(34,211,238,0.16)', color: '#22d3ee' },
-  Interview: { bg: 'rgba(245,158,11,0.16)', color: '#f59e0b' },
+  // Interview ladder (amber -> deep-orange ramp)
+  'Phone Screen':  { bg: 'rgba(252,211,77,0.16)', color: '#fcd34d' },
+  '1st Interview': { bg: 'rgba(251,191,36,0.16)', color: '#fbbf24' },
+  '2nd Interview': { bg: 'rgba(245,158,11,0.16)', color: '#f59e0b' },
+  '3rd Interview': { bg: 'rgba(249,115,22,0.16)', color: '#f97316' },
+  '4th Interview': { bg: 'rgba(234,88,12,0.16)',  color: '#ea580c' },
   // Target-talent statuses (shared color tokens — different meaning but same palette)
   Sent:                { bg: 'rgba(96,165,250,0.16)', color: '#60a5fa' },
   Replied:             { bg: 'rgba(34,211,238,0.16)', color: '#22d3ee' },
@@ -125,7 +130,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
   const appItems = items.filter(it => (it.source || 'app') === 'app');
   const taItems  = items.filter(it => it.source === 'ta');
 
-  const interviewStale = items.filter(it => it.status === 'Interview').length;
+  const interviewStale = items.filter(it => window.isInterviewStage(it.status)).length;
   const highLeverage   = appItems.filter(it => (parseScore(it.score) ?? 0) >= 4.0).length;
   const avgSilence     = total > 0 ? Math.round(items.reduce((s, it) => s + (it.daysSinceLastTouch || 0), 0) / total) : 0;
 
@@ -133,7 +138,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
   const orderedActions = useMemoF(() => {
     const score = (it) => {
       let s = parseScore(it.score) ?? 0;
-      if (it.status === 'Interview') s += 10;                // interview silence is critical
+      if (window.isInterviewStage(it.status)) s += 10;       // interview silence is critical
       if (it.coachLevel === 'give-up') s -= 5;               // these are write-offs, not nudge targets
       if (s >= 4.0) s += 2;                                  // bias high-fit
       return s;
@@ -149,8 +154,8 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
       <div className="card" style={{ padding: 20 }}>
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>You're all caught up.</div>
         <div className="dim" style={{ fontSize: 12 }}>
-          Nothing inside the touch window has gone stale. New rows surface here when an Applied/Responded/Interview entry
-          crosses {thresholds?.Applied || 10}/{thresholds?.Responded || 5}/{thresholds?.Interview || 3}d, or a TA contact crosses {taThreshold || 14}d.
+          Nothing inside the touch window has gone stale. New rows surface here when an Applied/Responded/interview-round entry
+          crosses {thresholds?.Applied || 10}/{thresholds?.Responded || 5}/{thresholds?.['1st Interview'] || 3}d, or a TA contact crosses {taThreshold || 14}d.
         </div>
       </div>
     );
@@ -168,7 +173,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
   // Visual data
   const ageOrder = ['0-10d', '10-21d', '21-45d', '45d+'];
   const ageColor = { '0-10d': '#60a5fa', '10-21d': '#a78bfa', '21-45d': '#f59e0b', '45d+': '#ef4444' };
-  const statusOrder = ['Interview', 'Responded', 'Applied', 'Sent', 'Replied', 'Meeting Scheduled'];
+  const statusOrder = [...window.INTERVIEW_STAGES, 'Responded', 'Applied', 'Sent', 'Replied', 'Meeting Scheduled'];
 
   return (
     <div className="col" style={{ gap: 16 }}>
@@ -234,7 +239,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
             ))}
           </div>
           <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-            {(statusCounts['Interview'] || 0) > 0
+            {window.INTERVIEW_STAGES.reduce((n, s) => n + (statusCounts[s] || 0), 0) > 0
               ? 'Interview rows first — they convert at the highest rate.'
               : (statusCounts['Responded'] || 0) > 0
                 ? 'Responded rows next — momentum is fragile, keep it.'
@@ -254,7 +259,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
           {orderedActions.map(it => {
             const isTA = it.source === 'ta';
             const sc = parseScore(it.score);
-            const isInt = it.status === 'Interview';
+            const isInt = window.isInterviewStage(it.status);
             const iconPath = isInt ? window.ICON.briefcase : isTA ? window.ICON.users : window.ICON.send;
             const color = isInt ? 'var(--orange)' : (sc != null && sc >= 4.0) ? 'var(--accent)' : 'var(--red)';
             const label = `Follow up · ${it.daysSinceLastTouch}d silent`;
@@ -288,7 +293,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
 }
 
 window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, apps = [] }) {
-  const [data, setData]       = useStateF({ thresholds: { Applied: 7, Responded: 5, Interview: 3 }, taThreshold: 14, ghostDays: 45, warm: [], cold: [], snoozed: [], ghostedCandidates: [] });
+  const [data, setData]       = useStateF({ thresholds: { Applied: 7, Responded: 5, 'Phone Screen': 3, '1st Interview': 3, '2nd Interview': 3, '3rd Interview': 3, '4th Interview': 3 }, taThreshold: 14, ghostDays: 45, warm: [], cold: [], snoozed: [], ghostedCandidates: [] });
   const [loading, setLoading] = useStateF(true);
   const [selected, setSelected] = useStateF(null); // app id (only for 'app' source rows)
   const [statusFilter, setStatusFilter] = useStateF([]);
@@ -453,11 +458,14 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   // (handleAction) and then refresh the queue.
   const FU_ACTION_MAP = {
     apply_manual: 'Applied', apply_claude: 'Applied', already_applied: 'Applied',
-    responded: 'Responded', interview: 'Interview', offer: 'Offer', accept: 'Offer',
+    responded: 'Responded', offer: 'Offer', accept: 'Offer',
     reopen: 'Evaluated',
+    // funnel statuses (advance CTA / stage track emit the canonical status) map to themselves
+    Applied: 'Applied', Responded: 'Responded', Offer: 'Offer',
+    'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview', '4th Interview': '4th Interview',
     SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
   };
-  const ACTIVE = ['Evaluated', 'Applied', 'Responded', 'Interview', 'Offer'];
+  const ACTIVE = ['Evaluated', 'Applied', 'Responded', ...window.INTERVIEW_STAGES, 'Offer'];
   const fuOnAction = (a, actionId) => {
     const next = FU_ACTION_MAP[actionId];
     if (!next) return;
@@ -511,7 +519,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
           <div className="sub">
             {warm.length === 0
               ? <>No warm threads right now. A reply, an interview, or a contact who engaged shows up here.</>
-              : <>{warm.length} warm {warm.length === 1 ? 'thread' : 'threads'} worth a nudge · thresholds App {data.thresholds?.Applied || 7}/{data.thresholds?.Responded || 5}/{data.thresholds?.Interview || 3}d · TA {data.taThreshold || 14}d</>}
+              : <>{warm.length} warm {warm.length === 1 ? 'thread' : 'threads'} worth a nudge · thresholds App {data.thresholds?.Applied || 7}/{data.thresholds?.Responded || 5}/{data.thresholds?.['1st Interview'] || 3}d · TA {data.taThreshold || 14}d</>}
           </div>
         </div>
         <div className="act">

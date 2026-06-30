@@ -7,10 +7,10 @@ window.APPS = (() => {
     [3,  "2026-04-29", "Cribl",             "VP, Sales Operations",           "SalesOps",      4.4, "Evaluated", 260, 240, "Infra",       "Late",    "Hot comp, observability"],
     [4,  "2026-04-29", "Armada",            "Director, Business Development", "BizDev",        4.0, "Evaluated", 210, 220, "Defense",     "Mid",     "Edge compute, gov-heavy"],
     [5,  "2026-04-28", "Lattice",           "VP, Revenue Operations",         "RevOps",        4.2, "Applied",   235, 240, "HR-Tech",     "Late",    "Recruiter reached out"],
-    [6,  "2026-04-28", "Ramp",              "Head of Sales Operations",       "SalesOps",      4.6, "Interview", 270, 250, "Fintech",     "Late",    "Round 2 with CRO Wed"],
+    [6,  "2026-04-28", "Ramp",              "Head of Sales Operations",       "SalesOps",      4.6, "2nd Interview", 270, 250, "Fintech",     "Late",    "Round 2 with CRO Wed"],
     [7,  "2026-04-27", "Notion",            "Director, RevOps",               "RevOps",        4.1, "Responded", 225, 230, "Productivity","Late",    "Recruiter screen scheduled"],
     [8,  "2026-04-27", "Vanta",             "VP, Revenue Strategy",           "Strategy",      4.3, "Applied",   245, 240, "Security",    "Late",    "Solid comp, fast growth"],
-    [9,  "2026-04-26", "Linear",            "Head of GTM Analytics",          "Analytics",     4.4, "Interview", 240, 235, "Productivity","Mid",     "Loop on Friday"],
+    [9,  "2026-04-26", "Linear",            "Head of GTM Analytics",          "Analytics",     4.4, "1st Interview", 240, 235, "Productivity","Mid",     "Loop on Friday"],
     [10, "2026-04-26", "Modal Labs",        "Director, Sales Development",    "SalesDev",      3.6, "Evaluated", 195, 220, "AI Infra",    "Early",   "Early stage, scrappy"],
     [11, "2026-04-25", "Anthropic",         "VP, Revenue Operations",         "RevOps",        4.7, "Applied",   285, 260, "AI",          "Late",    "Dream comp"],
     [12, "2026-04-25", "Replicate",         "Director, BizDev",               "BizDev",        3.8, "Evaluated", 200, 220, "AI Infra",    "Early",   "Borderline, weigh equity"],
@@ -19,13 +19,13 @@ window.APPS = (() => {
     [15, "2026-04-23", "Hex",               "VP, GTM Strategy",               "Strategy",      4.1, "Applied",   230, 230, "Analytics",   "Mid",     "Notebook-native"],
     [16, "2026-04-23", "Census",            "Director, RevOps",               "RevOps",        3.9, "Rejected",  210, 225, "Data",        "Mid",     "Comp gap, declined"],
     [17, "2026-04-22", "Airbyte",           "Head of Sales Development",      "SalesDev",      3.5, "Discarded", 180, 220, "Data",        "Mid",     "Below band"],
-    [18, "2026-04-22", "WorkOS",            "VP, Revenue",                    "Strategy",      4.5, "Interview", 265, 250, "Auth",        "Mid",     "Final loop next week"],
+    [18, "2026-04-22", "WorkOS",            "VP, Revenue",                    "Strategy",      4.5, "3rd Interview", 265, 250, "Auth",        "Mid",     "Final loop next week"],
     [19, "2026-04-21", "Clay",              "Director, RevOps",               "RevOps",        4.3, "Applied",   240, 235, "GTM Tools",   "Early",   "Hot, very hot"],
     [20, "2026-04-21", "Apollo.io",         "VP, Sales Operations",           "SalesOps",      3.7, "Evaluated", 205, 225, "GTM Tools",   "Mid",     "Mature, slowing"],
     [21, "2026-04-20", "Pinecone",          "Director, BizDev",               "BizDev",        3.9, "Applied",   215, 225, "AI Infra",    "Mid",     "Sent referral"],
     [22, "2026-04-20", "Decagon",           "Head of GTM",                    "Strategy",      4.4, "Responded", 250, 245, "AI",          "Early",   "AI agents, fast"],
     [23, "2026-04-19", "Sierra",            "VP, Revenue Operations",         "RevOps",        4.6, "Applied",   270, 255, "AI",          "Early",   "Bret Taylor, premium"],
-    [24, "2026-04-19", "Glean",             "Director, Analytics",            "Analytics",     4.2, "Interview", 235, 235, "AI",          "Late",    "Onsite scheduled"],
+    [24, "2026-04-19", "Glean",             "Director, Analytics",            "Analytics",     4.2, "2nd Interview", 235, 235, "AI",          "Late",    "Onsite scheduled"],
     [25, "2026-04-18", "Writer",            "Head of RevOps",                 "RevOps",        3.8, "Rejected",  210, 230, "AI",          "Mid",     "Already filled"],
     [26, "2026-04-18", "Harvey",            "VP, Revenue",                    "Strategy",      4.7, "Applied",   290, 260, "Legal AI",    "Mid",     "Very strong fit"],
     [27, "2026-04-17", "Cohere",            "Director, Sales Operations",     "SalesOps",      3.6, "Discarded", 200, 230, "AI",          "Late",    "Restructuring"],
@@ -34,18 +34,18 @@ window.APPS = (() => {
     [30, "2026-04-16", "Tavus",             "Director, RevOps",               "RevOps",        3.4, "Discarded", 175, 220, "AI Video",   "Early",   "Too early stage"],
     [31, "2026-04-15", "Runway",            "Head of Sales Operations",       "SalesOps",      3.9, "Applied",   215, 225, "AI Video",   "Mid",     "Creative space"],
     [32, "2026-04-15", "Suno",              "Director, BizDev",               "BizDev",        3.7, "SKIP",      195, 230, "AI Audio",    "Early",   "Legal overhang"],
-    [33, "2026-04-14", "Perplexity",        "VP, Revenue Strategy",           "Strategy",      4.5, "Interview", 265, 250, "AI Search",   "Late",    "CRO loop"],
+    [33, "2026-04-14", "Perplexity",        "VP, Revenue Strategy",           "Strategy",      4.5, "3rd Interview", 265, 250, "AI Search",   "Late",    "CRO loop"],
     [34, "2026-04-14", "Browserbase",       "Director, Analytics",            "Analytics",     3.8, "Evaluated", 205, 225, "AI Infra",    "Early",   "Borderline"],
     [35, "2026-04-13", "Crusoe",            "Head of Revenue Ops",            "RevOps",        4.1, "Applied",   230, 230, "AI Infra",    "Mid",     "Energy + AI angle"],
     [36, "2026-04-13", "Lambda Labs",       "VP, Sales Operations",           "SalesOps",      3.9, "Rejected",  210, 230, "AI Infra",    "Mid",     "Pulled the role"],
     [37, "2026-04-12", "Nuro",              "Director, BizDev",               "BizDev",        3.5, "Discarded", 185, 225, "Robotics",    "Late",    "Layoffs"],
     [38, "2026-04-12", "Saronic",           "Head of Revenue",                "Strategy",      4.2, "Applied",   240, 240, "Defense",     "Mid",     "Maritime defense"],
-    [39, "2026-04-11", "Anduril",           "VP, Revenue Operations",         "RevOps",        4.6, "Interview", 280, 255, "Defense",     "Late",    "Onsite Fri"],
+    [39, "2026-04-11", "Anduril",           "VP, Revenue Operations",         "RevOps",        4.6, "Phone Screen", 280, 255, "Defense",     "Late",    "Onsite Fri"],
     [40, "2026-04-11", "Helsing",           "Director, Sales Operations",     "SalesOps",      4.0, "Applied",   220, 230, "Defense",     "Mid",     "European AI defense"],
     [41, "2026-04-10", "Shield AI",         "Head of BizDev",                 "BizDev",        3.8, "Evaluated", 210, 225, "Defense",     "Mid",     "Sit > 7 days"],
     [42, "2026-04-10", "Skydio",            "VP, Revenue",                    "Strategy",      3.6, "Rejected",  200, 230, "Robotics",    "Late",    "Not a fit"],
     [43, "2026-04-09", "Fabric",            "Director, RevOps",               "RevOps",        3.9, "Applied",   215, 225, "Healthtech",  "Mid",     "Charts + RevOps"],
-    [44, "2026-04-09", "Abridge",           "Head of Analytics",              "Analytics",     4.3, "Interview", 245, 240, "Healthtech",  "Mid",     "Clinical AI"],
+    [44, "2026-04-09", "Abridge",           "Head of Analytics",              "Analytics",     4.3, "1st Interview", 245, 240, "Healthtech",  "Mid",     "Clinical AI"],
     [45, "2026-04-08", "Hippocratic AI",    "VP, Revenue Operations",         "RevOps",        4.1, "Applied",   230, 230, "Healthtech",  "Mid",     "Patient care AI"],
     [46, "2026-04-08", "Tennr",             "Director, BizDev",               "BizDev",        3.7, "Discarded", 195, 225, "Healthtech",  "Early",   "Too early"],
     [47, "2026-04-07", "Persona",           "Head of Sales Operations",       "SalesOps",      4.0, "Offer",     230, 230, "Identity",    "Late",    "Verbal offer"],
@@ -63,14 +63,27 @@ window.APPS = (() => {
   }));
 })();
 
-window.STATUSES = ["Evaluated","Applied","Responded","Interview","Offer","Rejected","Discarded","SKIP","Closed","Not a Fit","No Response"];
+// Interview-family rungs, in funnel order. The single place the ladder is
+// defined; the rest of the UI derives STATUSES / FUNNEL_ORDER / colors from it
+// so we never re-hardcode the rounds per view. Mirrors templates/states.yml.
+window.INTERVIEW_STAGES = ["Phone Screen","1st Interview","2nd Interview","3rd Interview","4th Interview"];
+window.isInterviewStage = (s) => window.INTERVIEW_STAGES.includes(s);
+
+window.STATUSES = ["Evaluated","Applied","Responded",...window.INTERVIEW_STAGES,"Offer","Rejected","Discarded","SKIP","Closed","Not a Fit","No Response"];
 window.ARCHETYPES = ["RevOps","SalesOps","Analytics","BizDev","SalesDev","Strategy"];
 
 window.STATUS_META = {
   Evaluated:  { color: "#a78bfa", bg: "rgba(167,139,250,0.12)", icon: "◆" },
   Applied:    { color: "#60a5fa", bg: "rgba(96,165,250,0.12)",  icon: "↗" },
   Responded:  { color: "#22d3ee", bg: "rgba(34,211,238,0.12)",  icon: "↩" },
-  Interview:  { color: "#f59e0b", bg: "rgba(245,158,11,0.14)",  icon: "●" },
+  // Interview ladder: amber -> deep-orange ramp (heats up toward Offer green).
+  "Phone Screen":   { color: "#fcd34d", bg: "rgba(252,211,77,0.14)",  icon: "☎" },
+  "1st Interview":  { color: "#fbbf24", bg: "rgba(251,191,36,0.14)",  icon: "①" },
+  "2nd Interview":  { color: "#f59e0b", bg: "rgba(245,158,11,0.14)",  icon: "②" },
+  "3rd Interview":  { color: "#f97316", bg: "rgba(249,115,22,0.14)",  icon: "③" },
+  "4th Interview":  { color: "#ea580c", bg: "rgba(234,88,12,0.14)",   icon: "④" },
+  // Defensive fallback for any legacy "Interview" rows (colored as 1st round).
+  Interview:  { color: "#fbbf24", bg: "rgba(251,191,36,0.14)",  icon: "●" },
   Offer:      { color: "#22c55e", bg: "rgba(34,197,94,0.14)",   icon: "★" },
   Rejected:   { color: "#ef4444", bg: "rgba(239,68,68,0.12)",   icon: "✕" },
   Discarded:  { color: "#71717a", bg: "rgba(113,113,122,0.14)", icon: "−" },
@@ -84,8 +97,9 @@ window.scoreColor = (s) => s == null ? "#71717a" : s >= 4.0 ? "#22c55e" : s >= 3
 window.scoreBucket = (s) => s == null ? "n/a" : s >= 4.0 ? "strong" : s >= 3.0 ? "borderline" : "weak";
 window.fmtScore = (s) => s != null ? s.toFixed(1) : "N/A";
 
-// Funnel order — left to right
-window.FUNNEL_ORDER = ["Evaluated","Applied","Responded","Interview","Offer"];
+// Funnel order — left to right. Derived from the interview ladder so the rungs
+// live in exactly one place.
+window.FUNNEL_ORDER = ["Evaluated","Applied","Responded",...window.INTERVIEW_STAGES,"Offer"];
 
 // Parse a JD-stated comp string into a clean display + midpoint $K number.
 // Handles ranges ("$165,000 – $185,000 USD/year" → mid 175), single numbers
@@ -114,14 +128,15 @@ window.parseComp = function parseComp(s) {
 };
 
 // `[reached: <stage>]` convention: when a role closes after we advance past
-// Applied (company picked another candidate, etc.), we set status=Rejected
-// and prefix notes with `[reached: Interview]` (or Responded / Offer).
-// This preserves the furthest-stage signal for analytics without inventing
-// new canonical statuses. Returns the reached stage string or null.
+// Applied (Rejected / No Response after a screen or interview round), we prefix
+// notes with the furthest stage reached, e.g. `[reached: 2nd Interview]`.
+// This preserves the furthest-stage signal for analytics. The label can contain
+// spaces ("2nd Interview"), so the capture runs to the closing bracket. Returns
+// the reached stage string or null. For live funnel statuses appReached uses the
+// status's own funnel position; the tag only matters for closed/terminal rows.
 window.reachedStage = (app) => {
-  if (!app || app.status !== "Rejected") return null;
-  const m = (app.notes || "").match(/\[reached:\s*(\w+)\]/i);
-  return m ? m[1] : null;
+  const m = ((app && app.notes) || "").match(/\[reached:\s*([^\]]+)\]/i);
+  return m ? m[1].trim() : null;
 };
 
 // Did this app reach `stage` (either currently at it, advanced past it,

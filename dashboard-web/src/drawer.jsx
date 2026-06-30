@@ -739,12 +739,20 @@ function DrawerFoot({ app, cs, onAction }) {
           <button className="btn danger" onClick={() => onAction(app, "Rejected")}>Mark Rejected</button>
         </>
       )}
-      {app.status === "Responded" && <button className="btn success" onClick={() => onAction(app, "Interview")}>Move to Interview</button>}
-      {app.status === "Interview" && <button className="btn success" onClick={() => onAction(app, "Offer")}>Mark Offer</button>}
+      {(() => {
+        // Advance one rung along the funnel: Responded → Phone Screen → 1st → 2nd
+        // → 3rd → 4th → Offer. onAction (app.jsx handleAction) stamps [reached:].
+        const idx = window.FUNNEL_ORDER.indexOf(app.status);
+        if (idx >= window.FUNNEL_ORDER.indexOf("Responded") && idx < window.FUNNEL_ORDER.length - 1) {
+          const next = window.FUNNEL_ORDER[idx + 1];
+          return <button className="btn success" onClick={() => onAction(app, next)}>{next === "Offer" ? "Mark Offer" : `Move to ${next}`}</button>;
+        }
+        return null;
+      })()}
       {/* "Mark Lost" — close a role after advancing past Applied (e.g. another candidate accepted).
           Sets status=Rejected and tags notes with [reached: <current stage>] so the analytics
           funnel still credits the furthest stage reached. */}
-      {(app.status === "Responded" || app.status === "Interview" || app.status === "Offer") && (
+      {(app.status === "Responded" || window.isInterviewStage(app.status) || app.status === "Offer") && (
         <button
           className="btn danger"
           title={`Close as lost — analytics will keep crediting this entry to the ${app.status} stage`}
