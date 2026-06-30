@@ -385,8 +385,12 @@ Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slu
 |-------|-------------|
 | `Evaluated` | Report completed, pending decision |
 | `Applied` | Application sent |
-| `Responded` | Company responded |
-| `Interview` | In interview process |
+| `Responded` | Company replied / recruiter reached out, no screen booked yet |
+| `Phone Screen` | TA / recruiter phone screen |
+| `1st Interview` | First interview round |
+| `2nd Interview` | Second interview round |
+| `3rd Interview` | Third interview round |
+| `4th Interview` | Fourth interview round (final loop) |
 | `Offer` | Offer received |
 | `Rejected` | Rejected by company |
 | `Discarded` | Discarded by candidate or offer closed |

@@ -600,9 +600,12 @@ window.Sankey = function Sankey({ apps }) {
   //   - status=Interview (live)                  → "Interview"
   const flow = useMemo(() => {
     const all = apps.slice();
-    const FO_IDX = { Evaluated: 0, Applied: 1, Responded: 2, Interview: 3, Offer: 4 };
+    // This flow has one combined Interview column, so every interview round maps
+    // to the same index 3. The per-round breakdown lives in the Stage Funnel card.
+    const FO_IDX = { Evaluated: 0, Applied: 1, Responded: 2, Offer: 4, Interview: 3 };
+    window.INTERVIEW_STAGES.forEach(s => { FO_IDX[s] = 3; });
     const eff = (a) => {
-      const r = window.reachedStage(a); // 'Interview' etc. for Rejected with [reached:X]
+      const r = window.reachedStage(a); // e.g. '2nd Interview' for Rejected with [reached:X]
       if (r) return r;
       // Rejected (no tag) and No Response (ghosted) both mean an application was
       // sent that then closed at Applied.
@@ -611,7 +614,7 @@ window.Sankey = function Sankey({ apps }) {
     };
     const effIdx = (a) => FO_IDX[eff(a)] ?? -1;
 
-    const inEval = a => ["Evaluated","Applied","Responded","Interview","Offer","Rejected","No Response"].includes(a.status);
+    const inEval = a => ["Evaluated","Applied","Responded","Offer","Rejected","No Response"].includes(a.status) || window.isInterviewStage(a.status);
     const dropped = a => ["Discarded","SKIP","Not a Fit"].includes(a.status);
     const aged = a => a.status === "Closed";
     const applied = a => effIdx(a) >= FO_IDX.Applied;
@@ -642,7 +645,7 @@ window.Sankey = function Sankey({ apps }) {
     // After Interview
     const offerSet = interviewSet.filter(offered);
     const lostAtInterview = interviewSet.filter(a => isRej(a)); // closed after Interview (Ping #782 lands here)
-    const liveAtInterview = interviewSet.filter(a => a.status === "Interview"); // live, in interview rounds
+    const liveAtInterview = interviewSet.filter(a => window.isInterviewStage(a.status)); // live, in any interview round
 
     // Archetype palette
     const archColors = {
@@ -843,6 +846,87 @@ window.Sankey = function Sankey({ apps }) {
           );
         }
       })()}
+    </div>
+  );
+};
+
+// Interview stage funnel + rejection-by-stage. Fetches /api/insights/stage-funnel
+// (derived from the dated status-event log): how many apps reached each rung, and
+// for every closed row (Rejected / No Response) which interview round it exited at.
+window.StageFunnel = function StageFunnel() {
+  const [data, setData] = React.useState(null);
+  const [err, setErr] = React.useState(false);
+  React.useEffect(() => {
+    let alive = true;
+    fetch('/api/insights/stage-funnel')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => { if (alive) setData(d); })
+      .catch(() => { if (alive) setErr(true); });
+    return () => { alive = false; };
+  }, []);
+
+  if (err) return <div className="dim" style={{ fontSize: 12, padding: 12 }}>Stage funnel unavailable.</div>;
+  if (!data) return <div className="dim" style={{ fontSize: 12, padding: 12 }}>Loading stage funnel…</div>;
+
+  const order = data.funnelOrder || [];
+  const reached = data.reached || {};
+  const meta = window.STATUS_META || {};
+  const maxReached = Math.max(1, ...order.map(s => reached[s] || 0));
+  const convByTo = {};
+  (data.conversion || []).forEach(c => { convByTo[c.to] = c.rate; });
+
+  const rej = data.rejections || { byStage: {}, preInterview: 0, unknownStage: 0, total: 0 };
+  const ivStages = data.interviewStages || [];
+  const rejRows = [
+    ...ivStages.map(s => ({ label: s, n: (rej.byStage || {})[s] || 0, color: (meta[s] && meta[s].color) || '#f59e0b' })),
+    { label: 'Pre-interview', n: rej.preInterview || 0, color: '#60a5fa' },
+    { label: 'Stage unknown', n: rej.unknownStage || 0, color: '#71717a' },
+  ];
+  const maxRej = Math.max(1, ...rejRows.map(r => r.n));
+
+  const Bar = ({ n, max, color }) => (
+    <div style={{ height: 6, borderRadius: 4, background: 'var(--border)' }}>
+      <div style={{ height: '100%', borderRadius: 4, width: `${Math.max(2, Math.round((n / max) * 100))}%`, background: color }} />
+    </div>
+  );
+
+  return (
+    <div className="row" style={{ gap: 18, flexWrap: 'wrap' }}>
+      <div style={{ flex: 1, minWidth: 280 }}>
+        <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>Reached each stage</div>
+        <div className="col" style={{ gap: 7 }}>
+          {order.map(s => {
+            const n = reached[s] || 0;
+            const conv = convByTo[s];
+            return (
+              <div key={s}>
+                <div className="row" style={{ justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                  <span>{s}</span>
+                  <span className="mono dim">{n}{conv != null ? ` · ${conv}%` : ''}</span>
+                </div>
+                <Bar n={n} max={maxReached} color={(meta[s] && meta[s].color) || 'var(--accent)'} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ flex: 1, minWidth: 280 }}>
+        <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>Where we lose them · {rej.total} closed</div>
+        <div className="col" style={{ gap: 7 }}>
+          {rejRows.map(r => (
+            <div key={r.label}>
+              <div className="row" style={{ justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+                <span>{r.label}</span>
+                <span className="mono dim">{r.n}</span>
+              </div>
+              <Bar n={r.n} max={maxRej} color={r.color} />
+            </div>
+          ))}
+        </div>
+        <div className="mono dim" style={{ fontSize: 10.5, marginTop: 10, lineHeight: 1.5 }}>
+          Attributed from {data.eventsTracked || 0} logged status changes. Losses recorded before this view existed, with no tracked progression, show as "Stage unknown" and fill in over time.
+        </div>
+      </div>
     </div>
   );
 };

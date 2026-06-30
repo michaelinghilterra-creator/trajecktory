@@ -3,6 +3,7 @@ import fs from 'fs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { parseTargetTalentMd, appendTTRows, updateTTLine } from '../lib/target-talent.mjs';
 import { generateText } from '../lib/anthropic.mjs';
+import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
 import { TARGET_TALENT_MD } from '../config.mjs';
 
 export const router = express.Router();
@@ -14,11 +15,11 @@ export const router = express.Router();
 //   3) Apply — write archive flips and/or new contact rows
 //
 // ACTIVE app statuses (keep TA contacts engaged):
-//   Evaluated, Applied, Responded, Interview, Offer
+//   Evaluated, Applied, Responded, interview rounds, Offer (from states.yml funnel)
 // CLOSED app statuses (archive related TA contacts when ALL related apps closed):
-//   Rejected, Discarded, SKIP
+//   Rejected, Discarded, SKIP, No Response
 
-const TT_ACTIVE_APP_STATUSES = ['Evaluated','Applied','Responded','Interview','Offer'];
+const TT_ACTIVE_APP_STATUSES = ACTIVE_STATUSES;
 const TT_CLOSED_APP_STATUSES = ['Rejected','Discarded','SKIP','No Response'];
 
 function _normCompany(s) {

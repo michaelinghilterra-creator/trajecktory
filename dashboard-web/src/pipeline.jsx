@@ -11,14 +11,19 @@ const { useState: useStateP, useMemo: useMemoP, useEffect: useEffectP, useRef: u
 
 // ─── Status / Source / Engine metadata ─────────────────────────────────────
 const STATUS = [
-  { id: 'Evaluated', short: 'Eval',    color: 'var(--accent)', hex: '#a78bfa', rgb: '167,139,250', stage: 0, icon: '◆' },
-  { id: 'Applied',   short: 'Applied', color: 'var(--blue)',   hex: '#60a5fa', rgb: '96,165,250',  stage: 1, icon: '↗' },
-  { id: 'Responded', short: 'Replied', color: 'var(--cyan)',   hex: '#22d3ee', rgb: '34,211,238',  stage: 2, icon: '↩' },
-  { id: 'Interview', short: 'Intvw',   color: 'var(--orange)', hex: '#f59e0b', rgb: '245,158,11',  stage: 3, icon: '●' },
-  { id: 'Offer',     short: 'Offer',   color: 'var(--green)',  hex: '#22c55e', rgb: '34,197,94',   stage: 4, icon: '★' },
+  { id: 'Evaluated',     short: 'Eval',    color: 'var(--accent)', hex: '#a78bfa', rgb: '167,139,250', stage: 0, icon: '◆' },
+  { id: 'Applied',       short: 'Applied', color: 'var(--blue)',   hex: '#60a5fa', rgb: '96,165,250',  stage: 1, icon: '↗' },
+  { id: 'Responded',     short: 'Replied', color: 'var(--cyan)',   hex: '#22d3ee', rgb: '34,211,238',  stage: 2, icon: '↩' },
+  { id: 'Phone Screen',  short: 'Screen',  color: '#fcd34d',       hex: '#fcd34d', rgb: '252,211,77',  stage: 3, icon: '☎' },
+  { id: '1st Interview', short: '1st',     color: '#fbbf24',       hex: '#fbbf24', rgb: '251,191,36',  stage: 4, icon: '①' },
+  { id: '2nd Interview', short: '2nd',     color: 'var(--orange)', hex: '#f59e0b', rgb: '245,158,11',  stage: 5, icon: '②' },
+  { id: '3rd Interview', short: '3rd',     color: '#f97316',       hex: '#f97316', rgb: '249,115,22',  stage: 6, icon: '③' },
+  { id: '4th Interview', short: '4th',     color: '#ea580c',       hex: '#ea580c', rgb: '234,88,12',   stage: 7, icon: '④' },
+  { id: 'Offer',         short: 'Offer',   color: 'var(--green)',  hex: '#22c55e', rgb: '34,197,94',   stage: 8, icon: '★' },
 ];
 const STATUS_MAP = Object.fromEntries(STATUS.map(s => [s.id, s]));
 const ACTIVE_STATUSES = STATUS.map(s => s.id);
+const LAST_STAGE = STATUS.length - 1; // Offer
 
 const SOURCE = {
   'Self-sourced': { short: 'Self',   color: 'var(--accent)', hex: '#a78bfa', rgb: '167,139,250' },
@@ -198,7 +203,7 @@ function PipelinePulse({ rows, onOpen, selId, isStale = () => false }) {
     const items = rows.filter(r => r.status === s.id);
     return { ...s, n: items.length, items };
   });
-  const inFlight = rows.filter(r => ['Responded', 'Interview', 'Offer'].includes(r.status)).length;
+  const inFlight = rows.filter(r => ['Responded', 'Offer'].includes(r.status) || window.isInterviewStage(r.status)).length;
 
   const scored = rows.filter(r => r.score != null);
   const strong = scored.filter(r => r.score >= 4.0);
@@ -261,7 +266,7 @@ function PipelinePulse({ rows, onOpen, selId, isStale = () => false }) {
       const insight = sc.n === 0 ? 'Empty stage — nothing here yet.'
         : sc.id === 'Evaluated' && sc.items.filter(a => a.score != null && a.score >= 4.0).length ? `${sc.items.filter(a => a.score != null && a.score >= 4.0).length} hot lead(s) — apply now.`
         : sc.id === 'Applied' && oldest > STALE_DAYS ? `Oldest sat ${oldest}d — send follow-ups.`
-        : sc.id === 'Interview' ? 'Prep cycles in progress.'
+        : window.isInterviewStage(sc.id) ? 'Prep cycles in progress.'
         : sc.id === 'Offer' ? 'Negotiate with leverage.' : `${pct}% of pipeline lives here.`;
       return (
         <>
@@ -412,12 +417,12 @@ function PipelinePulse({ rows, onOpen, selId, isStale = () => false }) {
 
 // ─── Overview sub-tab ──────────────────────────────────────────────────────
 function OverviewKpis({ apps, isStale = () => false }) {
-  const inFlight = apps.filter(a => ['Responded', 'Interview', 'Offer'].includes(a.status)).length;
+  const inFlight = apps.filter(a => ['Responded', 'Offer'].includes(a.status) || window.isInterviewStage(a.status)).length;
   const scored = apps.filter(a => a.score != null);
   const avg = scored.length ? (scored.reduce((s, a) => s + a.score, 0) / scored.length).toFixed(2) : '—';
   const strong = scored.filter(a => a.score >= 4.0).length;
   const stale = apps.filter(a => isStale(a)).length;
-  const interviews = apps.filter(a => a.status === 'Interview').length;
+  const interviews = apps.filter(a => window.isInterviewStage(a.status)).length;
   return (
     <div className="grid cols-4" style={{ marginBottom: 16 }}>
       <Kpi k="Active Roles" v={apps.length} sub={`${inFlight} in flight · ${interviews} interviewing`} icon={PI.layers} color="var(--accent-2)" />
@@ -436,7 +441,7 @@ function NeedsAttention({ apps, onOpen, selId, isStale = () => false, staleDays 
   const stale = apps.filter(a => isStale(a))
     .sort((x, y) => (staleDays(y) || 0) - (staleDays(x) || 0))
     .map(a => ({ a, label: `Follow up · ${staleDays(a) ?? daysAgo(a.date)}d silent`, icon: PI.send, color: 'var(--red)' }));
-  const intv = apps.filter(a => a.status === 'Interview')
+  const intv = apps.filter(a => window.isInterviewStage(a.status))
     .map(a => ({ a, label: 'Interview prep due', icon: PI.briefcase, color: 'var(--orange)' }));
   // Dedupe by app id — a row that's both Interview status AND stale by the
   // Follow-Ups engine would otherwise produce a duplicate-key React warning.
@@ -918,7 +923,7 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
     return { s, avgAge, n: items.length };
   });
   const maxAge = Math.max(...vel.map(v => v.avgAge), 1);
-  const bottleneck = [...vel].filter(v => v.n > 0 && v.s.stage < 4).sort((a, b) => b.avgAge - a.avgAge)[0];
+  const bottleneck = [...vel].filter(v => v.n > 0 && v.s.stage < LAST_STAGE).sort((a, b) => b.avgAge - a.avgAge)[0];
 
   const appliedAll = apps.filter(a => reached(a, 1)).length;
   const respAll = apps.filter(a => reached(a, 2)).length;
@@ -1070,6 +1075,15 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
         </div>
         {window.Sankey ? <window.Sankey apps={allApps || apps} /> : <div className="dim" style={{ fontSize: 12, padding: 12 }}>Sankey unavailable.</div>}
       </div>
+
+      {/* Interview stage funnel — per-round reach + rejection-by-stage attribution */}
+      <div className="card padded-lg" style={{ marginTop: 14 }}>
+        <div className="card-head">
+          <span className="card-title">Interview Stage Funnel · where we lose them</span>
+          <span className="card-meta mono">reached per round + which round each rejection exited at</span>
+        </div>
+        {window.StageFunnel ? <window.StageFunnel /> : <div className="dim" style={{ fontSize: 12, padding: 12 }}>Stage funnel unavailable.</div>}
+      </div>
     </div>
   );
 }
@@ -1105,7 +1119,7 @@ const PL_SUBTABS = [
 // /tracker tab's filter UI and table, but routes opens through Pipeline's
 // local drawer so users can Reopen a row back to Evaluated in one click.
 const ALL_ENTRIES_STATUSES = [
-  'Evaluated', 'Applied', 'Responded', 'Interview', 'Offer',
+  'Evaluated', 'Applied', 'Responded', ...window.INTERVIEW_STAGES, 'Offer',
   'Rejected', 'Discarded', 'SKIP', 'Closed', 'Not a Fit', 'No Response',
 ];
 function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays = () => null, triage = null }) {
@@ -1235,7 +1249,7 @@ const DRAWER_TABS = [
   { id: 'followup',  label: 'Follow-up',  icon: PI.send },
 ];
 // The Follow-up tab only makes sense once an application is out the door.
-const FOLLOWUP_TAB_STATUSES = ['Applied', 'Responded', 'Interview'];
+const FOLLOWUP_TAB_STATUSES = ['Applied', 'Responded', ...window.INTERVIEW_STAGES];
 
 function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () => false, onFollowupChange = () => {} }) {
   const [tab, setTab] = useStateP('overview');
@@ -1390,8 +1404,11 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   const engine = engineOf(app.resume);
   const engMeta = engine ? ENGINE_META[engine] : { hex: '#8b8b94', rgb: '139,139,148' };
 
-  // status-aware footer
+  // status-aware footer. The primary CTA advances one rung along the funnel
+  // (Applied → Responded → Phone Screen → 1st → 2nd → 3rd → 4th → Offer); the
+  // button id IS the next canonical status, dispatched via onAction's MAP.
   const st = app.status;
+  const stIdx = window.FUNNEL_ORDER.indexOf(st);
   let primary = [];
   if (st === 'Evaluated') {
     primary = [
@@ -1399,14 +1416,11 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
       { id: 'apply_claude', label: 'Claude Apply', cls: 'claude', spark: true },
       { id: 'already_applied', label: 'Already Applied', check: true },
     ];
-  } else if (st === 'Applied') {
-    primary = [{ id: 'responded', label: 'Mark Responded', cls: 'primary', check: true }];
-  } else if (st === 'Responded') {
-    primary = [{ id: 'interview', label: 'Move to Interview', cls: 'primary', check: true }];
-  } else if (st === 'Interview') {
-    primary = [{ id: 'offer', label: 'Mark Offer', cls: 'primary', check: true }];
   } else if (st === 'Offer') {
     primary = [{ id: 'accept', label: 'Accept Offer', cls: 'success', check: true }];
+  } else if (stIdx >= 1 && stIdx < window.FUNNEL_ORDER.length - 1) {
+    const next = window.FUNNEL_ORDER[stIdx + 1];
+    primary = [{ id: next, label: next === 'Responded' ? 'Mark Responded' : `Move to ${next}`, cls: 'primary', check: true }];
   } else if (['SKIP', 'Rejected', 'Closed', 'Discarded', 'Not a Fit', 'No Response'].includes(st)) {
     primary = [{ id: 'reopen', label: 'Reopen → Evaluated', cls: 'primary', check: true }];
   }
@@ -1464,14 +1478,36 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
         </div>
 
         <div className="drawer-body">
-          {/* Stage track */}
+          {/* Stage track. The 4th-round rung stays hidden until something reaches
+              it (variable loop length) — Advance still reveals it when needed. */}
+          {(() => {
+            // For a CLOSED row (Rejected / No Response / Discarded / etc.) the live
+            // status isn't on the funnel, so reflect the FURTHEST stage reached
+            // instead of defaulting to Eval: read the [reached: <round>] tag, else
+            // Rejected / No Response imply at least Applied. The drop-off rung is
+            // marked red so a glance reads "got to here, then lost", not "Evaluated".
+            const isClosed = window.FUNNEL_ORDER.indexOf(app.status) < 0;
+            const reachedLabel = window.reachedStage(app);
+            let dropStage = -1;
+            if (isClosed) {
+              if (reachedLabel && STATUS_MAP[reachedLabel]) dropStage = STATUS_MAP[reachedLabel].stage;
+              else if (app.status === 'Rejected' || app.status === 'No Response') dropStage = STATUS_MAP['Applied'].stage;
+            }
+            const fillStage = isClosed ? dropStage : m.stage;
+            const dropLabel = (dropStage >= 0 && STATUS[dropStage]) ? STATUS[dropStage].id : null;
+            const statusColor = window.STATUS_META[app.status]?.color || m.color;
+            const FOURTH = STATUS_MAP['4th Interview'].stage;
+            const track = STATUS.filter(s => s.stage !== FOURTH || fillStage >= FOURTH);
+            return (
           <div className="ds-section">
-            <div className="ds-label"><PIcon d={PI.trend} size={12} /> Pipeline stage <span className="r">stage {m.stage + 1}/5</span></div>
+            <div className="ds-label"><PIcon d={PI.trend} size={12} /> Pipeline stage <span className="r">{isClosed ? (dropLabel ? `lost at ${dropLabel}` : app.status.toLowerCase()) : `stage ${m.stage + 1}/${STATUS.length}`}</span></div>
             <div className="pipe-track">
-              {STATUS.map(s => {
-                const cls = m.stage > s.stage ? 'done' : m.stage === s.stage ? 'cur' : '';
+              {track.map(s => {
+                let cls = '';
+                if (s.stage < fillStage) cls = 'done';
+                else if (s.stage === fillStage) cls = isClosed ? 'lost' : 'cur';
                 return (
-                  <button key={s.id} className={'pipe-step ' + cls} onClick={() => onStatusChange && onStatusChange(app, s.id)}>
+                  <button key={s.id} className={'pipe-step ' + cls} style={isClosed ? { cursor: 'default', pointerEvents: 'none' } : null} onClick={() => { if (!isClosed && onStatusChange) onStatusChange(app, s.id); }}>
                     <span className="pipe-bar" />
                     <span className="pipe-lbl">{s.short}</span>
                   </button>
@@ -1479,13 +1515,19 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               })}
             </div>
             <div className="pipe-foot">
-              <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Stage {m.stage + 1} of 5 · <span style={{ color: m.color }}>{app.status}</span></span>
+              <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                {isClosed
+                  ? <>{dropLabel ? <>Reached {dropLabel} · stage {dropStage + 1} of {STATUS.length} · </> : null}<span style={{ color: statusColor }}>{app.status}</span></>
+                  : <>Stage {m.stage + 1} of {STATUS.length} · <span style={{ color: m.color }}>{app.status}</span></>}
+              </span>
               <div style={{ display: 'flex', gap: 6 }}>
-                {m.stage > 0 && <button className="btn ghost sm" onClick={() => onStatusChange && onStatusChange(app, STATUS[m.stage - 1].id)}>← Back</button>}
-                {m.stage < 4 && <button className="btn ghost sm" style={{ color: 'var(--accent-2)' }} onClick={() => onStatusChange && onStatusChange(app, STATUS[m.stage + 1].id)}>Advance →</button>}
+                {!isClosed && m.stage > 0 && <button className="btn ghost sm" onClick={() => onStatusChange && onStatusChange(app, STATUS[m.stage - 1].id)}>← Back</button>}
+                {!isClosed && m.stage < LAST_STAGE && <button className="btn ghost sm" style={{ color: 'var(--accent-2)' }} onClick={() => onStatusChange && onStatusChange(app, STATUS[m.stage + 1].id)}>Advance →</button>}
               </div>
             </div>
           </div>
+            );
+          })()}
 
           {/* Engine attribution banner */}
           <div className="rp-engine">
@@ -2171,23 +2213,44 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   // Drawer action handlers — primary actions advance status via API PATCH
   const advance = async (a, newStatus) => {
     try {
+      const body = { status: newStatus };
+      // Auto-attribute the exit stage: closing from an interview round (or
+      // Responded/Offer) stamps [reached: <stage>] so the funnel + rejections-
+      // by-stage analytics credit the right rung. Mirrors app.jsx handleAction.
+      if (newStatus === 'Rejected' || newStatus === 'No Response') {
+        const fi = window.FUNNEL_ORDER.indexOf(a.status);
+        if (fi >= window.FUNNEL_ORDER.indexOf('Responded')) {
+          const tag = `[reached: ${a.status}]`;
+          const stripped = (a.notes || '').trim().replace(/^\[reached:\s*[^\]]+\]\s*/i, '').trim();
+          body.notes = stripped ? `${tag} ${stripped}` : tag;
+          a.notes = body.notes;
+        }
+      }
       await fetch(`/api/applications/${a.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify(body),
       });
       // Update local app object for instant visual feedback
       a.status = newStatus;
       setDrawerApp({ ...a });
+      // Lift the change to the parent so every list view (All / Table / Overview)
+      // re-reads the server, not just the drawer. Without this the in-place
+      // mutation gets stranded the moment refreshApps() (e.g. on window focus)
+      // swaps in fresh app objects, leaving the list showing a stale status
+      // (e.g. a Rejected row still rendering as Evaluated after a multi-step move).
+      if (onDataChanged) onDataChanged();
     } catch (err) { /* swallow — toast comes from parent */ }
   };
 
   const onAction = (a, actionId) => {
     const MAP = {
       apply_manual: 'Applied', apply_claude: 'Applied', already_applied: 'Applied',
-      responded: 'Responded', interview: 'Interview', offer: 'Offer', accept: 'Offer',
+      responded: 'Responded', offer: 'Offer', accept: 'Offer',
       reopen: 'Evaluated',
-      // closer ids map to themselves
+      // funnel statuses (the advance CTA sets id = next canonical status) + closers map to themselves
+      Applied: 'Applied', Responded: 'Responded', Offer: 'Offer',
+      'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview', '4th Interview': '4th Interview',
       SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
     };
     const next = MAP[actionId];

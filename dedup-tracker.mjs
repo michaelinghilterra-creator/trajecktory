@@ -27,15 +27,22 @@ mkdirSync(join(CAREER_OPS, 'data'), { recursive: true });
 // Status advancement order (higher = more advanced in pipeline)
 // Aplicado > Rechazado because active application > terminal state
 const STATUS_RANK = {
-  // English canonicals (states.yml labels)
+  // English canonicals (states.yml labels). Interview rounds rank in order so
+  // dedup keeps the most-advanced round when merging duplicates.
   'skip': 0,
   'discarded': 0,
   'rejected': 1,
   'evaluated': 2,
   'applied': 3,
   'responded': 4,
-  'interview': 5,
-  'offer': 6,
+  'phone screen': 5,
+  '1st interview': 6,
+  '2nd interview': 7,
+  '3rd interview': 8,
+  '4th interview': 9,
+  'offer': 10,
+  // Defensive: legacy generic interview folds into the 1st round.
+  'interview': 6,
   // Spanish aliases — kept for backwards compat with existing tracker data
   'no_aplicar': 0,
   'no aplicar': 0,
@@ -46,8 +53,8 @@ const STATUS_RANK = {
   'evaluada': 2,
   'aplicado': 3,
   'respondido': 4,
-  'entrevista': 5,
-  'oferta': 6,
+  'entrevista': 6,
+  'oferta': 10,
 };
 
 function normalizeCompany(name) {

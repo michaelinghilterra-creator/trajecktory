@@ -28,6 +28,17 @@ console.log('outcome.test.mjs');
 check(classifyOutcome('Applied') === 'positive', 'Applied is positive');
 check(classifyOutcome('Interview') === 'positive', 'Interview is positive');
 check(classifyOutcome('Offer') === 'positive', 'Offer is positive');
+
+// ── Interview ladder: every round classifies as a positive outcome ──────────────
+check(classifyOutcome('Phone Screen') === 'positive', 'Phone Screen is positive');
+check(classifyOutcome('1st Interview') === 'positive', '1st Interview is positive');
+check(classifyOutcome('2nd Interview') === 'positive', '2nd Interview is positive');
+check(classifyOutcome('3rd Interview') === 'positive', '3rd Interview is positive');
+check(classifyOutcome('4th Interview') === 'positive', '4th Interview is positive');
+check(normalizeStatus('Interview') === '1st interview', 'legacy Interview folds into 1st interview');
+check(normalizeStatus('Round 2') === '2nd interview', 'Round 2 alias maps to 2nd interview');
+check(normalizeStatus('TA Screen') === 'phone screen', 'TA Screen alias maps to phone screen');
+
 check(classifyOutcome('Rejected') === 'negative', 'Rejected is negative');
 check(classifyOutcome('Discarded') === 'negative', 'Discarded is negative');
 check(classifyOutcome('Evaluated') === 'pending', 'Evaluated is pending');

@@ -178,7 +178,7 @@ function App() {
 
   // Action handler — updates local state + persists to applications.md via API.
   // `reachedStage` (optional): when closing a role that advanced past Applied,
-  //   pass the furthest stage reached (e.g. "Interview"). We prefix the notes
+  //   pass the furthest stage reached (e.g. "2nd Interview"). We prefix the notes
   //   with `[reached: <stage>]` so analytics keep crediting this entry to that
   //   stage in the funnel. See window.appReached in data.js.
   const handleAction = useCallback((app, newStatus, silent, reachedStage) => {
@@ -186,13 +186,23 @@ function App() {
     const STATUS_ALIASES = { "Not a Fit": "Discarded" };
     const canonicalStatus = STATUS_ALIASES[newStatus] || newStatus;
 
-    // Build notes update (prefix-tag) only if reachedStage was passed
+    // Auto-attribute the exit stage: when a row goes Rejected / No Response from an
+    // interview round (or Responded / Offer), stamp the furthest stage reached so
+    // the funnel + rejections-by-stage analytics credit the right rung even though
+    // the live status is now terminal. An explicit reachedStage (the drawer's
+    // "Mark as Lost") still wins.
+    if (!reachedStage && (canonicalStatus === "Rejected" || canonicalStatus === "No Response")) {
+      const fi = window.FUNNEL_ORDER.indexOf(app.status);
+      if (fi >= window.FUNNEL_ORDER.indexOf("Responded")) reachedStage = app.status;
+    }
+
+    // Build notes update (prefix-tag) only if reachedStage was set
     let nextNotes;
     if (reachedStage) {
       const tag = `[reached: ${reachedStage}]`;
       const existing = (app.notes || "").trim();
-      // Strip any prior [reached: X] tag, then prepend the fresh one
-      const stripped = existing.replace(/^\[reached:\s*\w+\]\s*/i, "").trim();
+      // Strip any prior [reached: X] tag (label may contain spaces), then prepend.
+      const stripped = existing.replace(/^\[reached:\s*[^\]]+\]\s*/i, "").trim();
       nextNotes = stripped ? `${tag} ${stripped}` : tag;
     }
 
@@ -209,7 +219,7 @@ function App() {
       if (!r.ok) toast(`Save failed for ${app.company} (${r.status})`, 'error');
     }).catch(() => toast(`Save failed for ${app.company}`, 'error'));
     if (!silent) {
-      const verb = { Applied: "Applied to", SKIP: "Skipped", Discarded: "Discarded", Closed: "Marked closed:", "Not a Fit": "Not a fit:", Rejected: "Marked rejected:", Responded: "Marked responded:", Interview: "Moved to interview:", Offer: "Marked offer:" }[newStatus] || "Updated";
+      const verb = { Applied: "Applied to", SKIP: "Skipped", Discarded: "Discarded", Closed: "Marked closed:", "Not a Fit": "Not a fit:", Rejected: "Marked rejected:", Responded: "Marked responded:", Offer: "Marked offer:" }[newStatus] || (window.isInterviewStage(newStatus) ? `Moved to ${newStatus}:` : "Updated");
       const suffix = reachedStage ? ` (reached ${reachedStage})` : "";
       toast(`${verb} ${app.company}${suffix}`, newStatus === "Applied" || newStatus === "Offer" ? "success" : newStatus === "SKIP" || newStatus === "Discarded" || newStatus === "Closed" || newStatus === "Not a Fit" || newStatus === "Rejected" ? "warn" : null);
     }
@@ -218,17 +228,17 @@ function App() {
   // Stats for sidebar
   const stats = useMemo(() => {
     const total = apps.length;
-    const applied = apps.filter(a => ["Applied","Responded","Interview","Offer"].includes(a.status)).length;
-    const inFlight = apps.filter(a => ["Responded","Interview"].includes(a.status)).length;
+    const applied = apps.filter(a => ["Applied","Responded","Offer"].includes(a.status) || window.isInterviewStage(a.status)).length;
+    const inFlight = apps.filter(a => a.status === "Responded" || window.isInterviewStage(a.status)).length;
     const offers = apps.filter(a => a.status === "Offer").length;
     const pending = apps.filter(a => a.status === "Evaluated").length;
-    const active = apps.filter(a => ["Evaluated","Applied","Responded","Interview","Offer"].includes(a.status)).length;
+    const active = apps.filter(a => window.FUNNEL_ORDER.includes(a.status)).length;
     return { total, applied, inFlight, offers, pending, active, followups: followupCount };
   }, [apps, followupCount]);
 
   // Streak — count consecutive days with at least 1 application sent (≠ Evaluated)
   const streak = useMemo(() => {
-    const sent = new Set(apps.filter(a => ["Applied","Responded","Interview","Offer","Rejected"].includes(a.status)).map(a => a.date));
+    const sent = new Set(apps.filter(a => ["Applied","Responded","Offer","Rejected"].includes(a.status) || window.isInterviewStage(a.status)).map(a => a.date));
     let s = 0;
     for (let i = 0; i < 60; i++) {
       const d = new Date(window.TODAY); d.setUTCDate(d.getUTCDate() - i);
@@ -256,7 +266,7 @@ function App() {
       { section: "View", icon: "▦", label: "Pipeline as Table",  run: () => { setTab("pipeline"); setPipelineView("table"); } },
     ];
     const actionCmds = [
-      { section: "Actions", icon: "↗", label: "Filter Pipeline: Interview only", run: () => { setTab("pipeline"); setFilters(f => ({ ...f, statuses: ["Interview"] })); } },
+      { section: "Actions", icon: "↗", label: "Filter Pipeline: Interviews only", run: () => { setTab("pipeline"); setFilters(f => ({ ...f, statuses: [...window.INTERVIEW_STAGES] })); } },
       { section: "Actions", icon: "↗", label: "Export current view as CSV", run: () => toast("CSV exported (mock)", "success") },
     ];
     const jumpCmds = apps.slice(0, 30).map(a => ({

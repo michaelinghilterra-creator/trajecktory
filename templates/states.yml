@@ -5,6 +5,10 @@
 # Rule: The status field in applications.md must contain EXACTLY
 # one of these values (case-insensitive). No markdown bold (**),
 # no dates, no extra text. Dates go in the date column.
+#
+# funnel_order: left-to-right position in the pipeline funnel (omitted for
+#   terminal/off-funnel states). group: interview marks the interview-family
+#   rungs so consumers can derive the family without hardcoding it.
 
 states:
   - id: evaluated
@@ -12,30 +16,68 @@ states:
     aliases: [evaluada]
     description: Offer evaluated with report, pending decision
     dashboard_group: evaluated
+    funnel_order: 0
 
   - id: applied
     label: Applied
     aliases: [aplicado, enviada, aplicada, sent]
     description: Application submitted
     dashboard_group: applied
+    funnel_order: 1
 
   - id: responded
     label: Responded
     aliases: [respondido]
     description: Company has responded (not yet interview)
     dashboard_group: responded
+    funnel_order: 2
 
-  - id: interview
-    label: Interview
-    aliases: [entrevista]
-    description: Active interview process
+  - id: phone_screen
+    label: Phone Screen
+    aliases: [ta screen, ta phone screen, recruiter screen, hr screen, phone_screen, phonescreen]
+    description: Recruiter / TA phone screen
     dashboard_group: interview
+    group: interview
+    funnel_order: 3
+
+  - id: interview_1
+    label: 1st Interview
+    aliases: [interview, entrevista, first interview, round 1, 1st interview, interview 1]
+    description: First interview round (hiring manager or first panel)
+    dashboard_group: interview
+    group: interview
+    funnel_order: 4
+
+  - id: interview_2
+    label: 2nd Interview
+    aliases: [second interview, round 2, 2nd interview, interview 2]
+    description: Second interview round
+    dashboard_group: interview
+    group: interview
+    funnel_order: 5
+
+  - id: interview_3
+    label: 3rd Interview
+    aliases: [third interview, round 3, 3rd interview, interview 3]
+    description: Third interview round
+    dashboard_group: interview
+    group: interview
+    funnel_order: 6
+
+  - id: interview_4
+    label: 4th Interview
+    aliases: [fourth interview, round 4, 4th interview, interview 4, final round, final loop]
+    description: Fourth interview round (final loop)
+    dashboard_group: interview
+    group: interview
+    funnel_order: 7
 
   - id: offer
     label: Offer
     aliases: [oferta]
     description: Offer received
     dashboard_group: offer
+    funnel_order: 8
 
   - id: rejected
     label: Rejected
@@ -64,7 +106,7 @@ states:
   - id: not_a_fit
     label: Not a Fit
     aliases: [not a fit, naf, no fit, poor fit]
-    description: Role evaluated and determined to be a poor fit — signal noise, wrong level, wrong domain
+    description: "Role evaluated and determined to be a poor fit: signal noise, wrong level, wrong domain"
     dashboard_group: not_a_fit
 
   - id: no_response

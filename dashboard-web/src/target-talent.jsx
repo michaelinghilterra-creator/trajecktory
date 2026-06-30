@@ -374,22 +374,23 @@ function MsgNode({ m }) {
   );
 }
 
-// Map an application status to a sensible default outreach stage. applications.md
-// has a single "Interview" status (no round number), so we can only infer the
-// loop has started; the user can refine the stage in the dropdown.
+// Map an application status to a sensible default outreach stage. The status now
+// carries the exact interview round, so we default the stage precisely; the user
+// can still refine it in the dropdown.
 function stageFromApps(apps) {
-  const top = (apps || []).find(a => ["Interview", "Responded", "Applied", "Evaluated"].includes(a.status)) || (apps || [])[0];
+  const top = (apps || []).find(a => window.isInterviewStage(a.status) || ["Responded", "Applied", "Evaluated"].includes(a.status)) || (apps || [])[0];
   if (!top) return "general";
-  if (top.status === "Interview") return "1st Interview";
+  if (window.isInterviewStage(top.status)) return top.status;
   return "general";
 }
 
 const TT_STAGE_OPTS = [
   { v: "general",       l: "General" },
-  { v: "TA Screen",     l: "TA Screen" },
+  { v: "Phone Screen",  l: "Phone Screen" },
   { v: "1st Interview", l: "1st Interview" },
   { v: "2nd Interview", l: "2nd Interview" },
   { v: "3rd Interview", l: "3rd Interview" },
+  { v: "4th Interview", l: "4th Interview" },
 ];
 
 // ── Contact panel (shared body) ───────────────────────────────────────────────
@@ -423,9 +424,9 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
       .then(d => {
         setData(d);
         setNotes(d.notes || "");
-        // Pre-check every ACTIVE related application (Evaluated/Applied/Responded/Interview).
+        // Pre-check every ACTIVE related application (Evaluated/Applied/Responded/interview rounds).
         // Closed-state apps (Rejected/Discarded/Closed/SKIP/Not a Fit) start unchecked.
-        const ACTIVE = new Set(["Evaluated", "Applied", "Responded", "Interview"]);
+        const ACTIVE = new Set(["Evaluated", "Applied", "Responded", ...window.INTERVIEW_STAGES]);
         const preChecked = new Set(
           (d.relatedApps || []).filter(a => ACTIVE.has(a.status)).map(a => a.id)
         );

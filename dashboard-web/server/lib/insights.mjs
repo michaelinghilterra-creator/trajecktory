@@ -5,6 +5,8 @@ import { parseApplicationsMd } from './applications.mjs';
 import { computeStaleApps, computeStaleTA } from './followups.mjs';
 import { parseRecruitersMd } from './recruiters.mjs';
 import { parseTargetTalentMd } from './target-talent.mjs';
+import { parseStatusEvents } from './sidecars.mjs';
+import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, isInterviewStage, reachedStage } from './statuses.mjs';
 
 const INSIGHTS_DIR = path.resolve(ROOT_DIR, 'data', 'insights');
 const INSIGHTS_LATEST = path.join(INSIGHTS_DIR, 'latest.json');
@@ -57,16 +59,16 @@ function buildInsightsContext() {
   const recruiters = parseRecruitersMd().map(({ raw, ...r }) => r);
   const taContacts = parseTargetTalentMd();
 
-  const activeStatuses = ['Evaluated','Applied','Responded','Interview','Offer'];
+  const activeStatuses = ACTIVE_STATUSES;
   // 'No Response' (ghosted) counts as a real sent application that got no reply,
   // like 'Rejected' — it stays in the denominator but never in respondedSet, so
   // ghosting honestly drags the response rate down instead of vanishing.
-  const appliedSet     = ['Applied','Responded','Interview','Offer','Rejected','No Response'];
-  const respondedSet   = ['Responded','Interview','Offer'];
+  const appliedSet     = ['Applied','Responded',...INTERVIEW_STAGES,'Offer','Rejected','No Response'];
+  const respondedSet   = ['Responded',...INTERVIEW_STAGES,'Offer'];
 
   const applied = apps.filter(a => appliedSet.includes(a.status));
   const responded = apps.filter(a => respondedSet.includes(a.status));
-  const interview = apps.filter(a => ['Interview','Offer'].includes(a.status));
+  const interview = apps.filter(a => isInterviewStage(a.status) || a.status === 'Offer');
 
   // Archetype performance — apply + reply rates by role family
   const archetypes = {};
@@ -157,6 +159,87 @@ function buildInsightsContext() {
     staleTotal: staleApps.length + staleTA.length,
     topStale,
     pendingHot,
+  };
+}
+
+// Stage funnel + rejection-by-stage. Powers the "where do we lose them" view:
+// how many apps reached each rung, stage-to-stage conversion, and — for every
+// terminal row (Rejected / No Response) — which interview round it exited at.
+// Rejection attribution prefers the dated status-event log (the real
+// progression), falls back to the [reached:] notes tag, and is otherwise
+// "unknown" (hand-edited or pre-rollout, before the event log captured it).
+export function stageFunnelStats() {
+  const apps = parseApplicationsMd();
+  const events = parseStatusEvents();
+
+  const eventsByApp = new Map();
+  for (const e of events) {
+    if (!eventsByApp.has(e.app)) eventsByApp.set(e.app, []);
+    eventsByApp.get(e.app).push(e);
+  }
+
+  const idxOf = s => FUNNEL_ORDER.indexOf(s);
+  const APPLIED_IDX = idxOf('Applied');
+
+  // Furthest funnel rung an app EVER reached: the max of its live status, any
+  // dated status-event, and the [reached:] notes tag. Terminal rows (Rejected /
+  // No Response) imply they at least Applied. Makes the funnel monotonic and
+  // historically honest instead of only crediting the live status.
+  const furthestIdx = (a) => {
+    let idx = idxOf(a.status);
+    if (a.status === 'Rejected' || a.status === 'No Response') idx = Math.max(idx, APPLIED_IDX);
+    for (const e of (eventsByApp.get(String(a.id)) || [])) idx = Math.max(idx, idxOf(e.status));
+    const r = reachedStage(a.notes);
+    if (r) idx = Math.max(idx, idxOf(r));
+    return idx;
+  };
+
+  const reached = {};
+  for (const stage of FUNNEL_ORDER) {
+    const si = idxOf(stage);
+    reached[stage] = apps.filter(a => furthestIdx(a) >= si).length;
+  }
+
+  const conversion = [];
+  for (let k = 0; k < FUNNEL_ORDER.length - 1; k++) {
+    const from = FUNNEL_ORDER[k], to = FUNNEL_ORDER[k + 1];
+    conversion.push({ from, to, fromN: reached[from], toN: reached[to], rate: reached[from] ? Math.round(reached[to] / reached[from] * 100) : 0 });
+  }
+
+  const ivIndex = s => INTERVIEW_STAGES.indexOf(s);
+
+  const rejectedAtStage = {};
+  for (const s of INTERVIEW_STAGES) rejectedAtStage[s] = 0;
+  let rejectedPreInterview = 0;  // lost before reaching any interview round
+  let rejectedUnknownStage = 0;  // terminal but no signal to attribute a stage
+
+  const terminal = apps.filter(a => a.status === 'Rejected' || a.status === 'No Response');
+  for (const a of terminal) {
+    let furthest = null;
+    for (const e of (eventsByApp.get(String(a.id)) || [])) {
+      if (isInterviewStage(e.status) && (!furthest || ivIndex(e.status) > ivIndex(furthest))) furthest = e.status;
+    }
+    if (!furthest) {
+      const r = reachedStage(a.notes);
+      if (r && isInterviewStage(r)) furthest = r;
+    }
+    if (furthest) rejectedAtStage[furthest]++;
+    else if ((eventsByApp.get(String(a.id)) || []).length || reachedStage(a.notes)) rejectedPreInterview++;
+    else rejectedUnknownStage++;
+  }
+
+  return {
+    funnelOrder: FUNNEL_ORDER,
+    interviewStages: INTERVIEW_STAGES,
+    reached,
+    conversion,
+    rejections: {
+      byStage: rejectedAtStage,
+      preInterview: rejectedPreInterview,
+      unknownStage: rejectedUnknownStage,
+      total: terminal.length,
+    },
+    eventsTracked: events.length,
   };
 }
 

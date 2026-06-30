@@ -3,7 +3,8 @@ import path from 'path';
 import { FOLLOWUPS_MD } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, matchByCompany } from './target-talent.mjs';
-import { readApplyDates, readMute } from './sidecars.mjs';
+import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
+import { INTERVIEW_STAGES, isInterviewStage } from './statuses.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
 // quickly each stage cools: warm Responded threads cool fastest, post-
@@ -13,7 +14,12 @@ import { readApplyDates, readMute } from './sidecars.mjs';
 const STALE_THRESHOLD_BY_STATUS = {
   Applied:   7,
   Responded: 5,
-  Interview: 3,
+  // Interview rounds cool fast — chase within a few business days of going quiet.
+  'Phone Screen':  3,
+  '1st Interview': 3,
+  '2nd Interview': 3,
+  '3rd Interview': 3,
+  '4th Interview': 3,
 };
 
 // An Applied application with no reply this many CALENDAR days after applying is
@@ -130,18 +136,42 @@ function computeStaleApps() {
   // sort each app's follow-ups by date desc
   for (const list of followupsByApp.values()) list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-  const TRACKED_STATUSES = ['Applied', 'Responded', 'Interview'];
-  const CAP_BY_STATUS = { Applied: 2, Responded: 1, Interview: 1 };
+  const TRACKED_STATUSES = ['Applied', 'Responded', ...INTERVIEW_STAGES];
+  const CAP_BY_STATUS = {
+    Applied: 2, Responded: 1,
+    'Phone Screen': 1, '1st Interview': 1, '2nd Interview': 1, '3rd Interview': 1, '4th Interview': 1,
+  };
+
+  // Cadence resets each interview round: the date an app ENTERED its current
+  // status (from the dashboard-driven status-event log) re-anchors the stale
+  // clock and the follow-up cap, so a long loop doesn't go quiet after one nudge.
+  // Falls back to the apply date when the row predates the event log (hand-edited
+  // or pre-rollout), so older rows keep their prior behavior.
+  const events = (() => { try { return parseStatusEvents(); } catch { return []; } })();
+  const stageEnteredOn = (app) => {
+    let best = null;
+    for (const e of events) {
+      if (e.app !== String(app.id) || e.status !== app.status) continue;
+      if (!best || e.date > best) best = e.date;
+    }
+    return best;
+  };
 
   const stale = [];
   for (const a of apps) {
     if (!TRACKED_STATUSES.includes(a.status)) continue;
-    const fus = followupsByApp.get(a.id) || [];
-    const fuCount = fus.length;
+    const allFus = followupsByApp.get(a.id) || [];
     // Apply-date baseline: a recorded apply date beats the Date column (which is
     // the eval/scrape date). Follow-ups, when present, still win as the latest touch.
     const appliedOn = applyDates[String(a.id)] || a.date;
-    const lastTouchDate = fus[0]?.date || appliedOn;
+    // For interview rounds, reset the window to when the app entered THIS round:
+    // only follow-ups since then count toward the cap, and the clock anchors on
+    // the round-entry date (or a later follow-up).
+    const enteredOn = isInterviewStage(a.status) ? stageEnteredOn(a) : null;
+    const fus = enteredOn ? allFus.filter(f => (f.date || '') >= enteredOn) : allFus;
+    const fuCount = fus.length;
+    const baseAnchor = enteredOn || appliedOn;
+    const lastTouchDate = fus[0]?.date || baseAnchor;
     // Cadence is measured in BUSINESS days (weekends excluded).
     const daysSinceLastTouch = _businessDaysAgo(lastTouchDate);
     const daysSinceApply = _businessDaysAgo(appliedOn);
@@ -162,16 +192,16 @@ function computeStaleApps() {
       coachLevel = 'overdue';
     }
 
-    // Warm vs cold. Responded/Interview always count as warm (a human engaged,
-    // nudging pays off). An Applied app is warm only when there's a usable EMAIL
-    // channel (LinkedIn-only is rate-limited, so it's not reliably actionable);
-    // otherwise it's a cold "application out" that should sit in a calm ledger
-    // rather than nag. A muted app is always cold (the user said "done for now").
+    // Warm vs cold. Responded / any interview round always count as warm (a human
+    // engaged, nudging pays off). An Applied app is warm only when there's a
+    // usable EMAIL channel (LinkedIn-only is rate-limited, so it's not reliably
+    // actionable); otherwise it's a cold "application out" that should sit in a
+    // calm ledger rather than nag. A muted app is always cold ("done for now").
     const channel = channelFor(a.company, taRows);
     const isMutedApp = !!muted[String(a.id)];
     let klass;
     if (isMutedApp) klass = 'cold';
-    else if (a.status === 'Responded' || a.status === 'Interview') klass = 'warm';
+    else if (a.status === 'Responded' || isInterviewStage(a.status)) klass = 'warm';
     else klass = (channel === 'email') ? 'warm' : 'cold';
 
     stale.push({
@@ -279,7 +309,7 @@ function computeStaleTA() {
 }
 
 // Ghosted applications: status still Applied, applied > GHOST_DAYS calendar days
-// ago, no advancement to Responded/Interview (implied by status === 'Applied').
+// ago, no advancement to Responded / an interview round (implied by status === 'Applied').
 // These are candidates for the one-click "archive to No Response" bulk action so
 // the user clears the backlog honestly instead of closing things prematurely.
 function computeGhostedCandidates() {

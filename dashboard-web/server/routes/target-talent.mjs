@@ -5,6 +5,7 @@ import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replac
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, TT_STATUSES } from '../lib/target-talent.mjs';
 import { appendFollowupRow } from '../lib/followups.mjs';
 import { getIdentity } from '../lib/profile.mjs';
+import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
 
 export const router = express.Router();
 
@@ -173,19 +174,27 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
     // Interview-stage tuning: the drawer passes where the user is in the loop so
     // the draft's framing matches. 'general' (or unset) keeps the default
     // first-touch / follow-up behavior unchanged.
+    // Keyed by application status (which now carries the interview round) plus a
+    // legacy 'TA Screen' alias. 'general' (or unset) keeps default behavior.
     const STAGE_GUIDANCE = {
-      'TA Screen': 'TA SCREEN STAGE. This contact is (or could be) the recruiter screen. Goal is to surface yourself and confirm fit for the screen. Keep it light and logistics-friendly; reinforce the one proof point most relevant to the role and express readiness to talk.',
+      'Phone Screen': 'PHONE / TA SCREEN STAGE. This contact is (or could be) the recruiter screen. Goal is to surface yourself and confirm fit for the screen. Keep it light and logistics-friendly; reinforce the one proof point most relevant to the role and express readiness to talk.',
+      'TA Screen': 'PHONE / TA SCREEN STAGE. This contact is (or could be) the recruiter screen. Goal is to surface yourself and confirm fit for the screen. Keep it light and logistics-friendly; reinforce the one proof point most relevant to the role and express readiness to talk.',
       '1st Interview': 'FIRST INTERVIEW STAGE. You are early in the interview loop. Reference momentum ("enjoyed the conversation", "following the process") without naming details you may not have. Reinforce one differentiated strength and signal continued interest.',
       '2nd Interview': 'SECOND INTERVIEW STAGE. You are progressing through the loop. Acknowledge the process is advancing, add a specific new value point or artifact relevant to the team, and keep the ask low-friction (e.g. logistics or a brief sync).',
       '3rd Interview': 'THIRD / LATE INTERVIEW STAGE. You are late in the process, likely near a decision. Tone is confident and concise: reaffirm strong fit, address any likely open question proactively, and make it easy to move to next steps. Do not sound impatient.',
+      '4th Interview': 'FINAL-LOOP STAGE. You are at the last round, decision imminent. Be confident and concise: reaffirm fit in one line, proactively close any lingering question, and make the next step effortless. Do not sound anxious or over-eager.',
     };
-    const interviewStage = req.body?.interviewStage || 'general';
-    const stageGuidance = STAGE_GUIDANCE[interviewStage] || '';
 
     // Pull related applications to ground the outreach in a real role
     const relatedApps = findRelatedApps(r.company);
-    const topApp = relatedApps.find(a => ['Applied', 'Responded', 'Interview', 'Evaluated'].includes(a.status))
+    const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status))
                 || relatedApps[0];
+
+    // Default the interview-stage framing from the app's own status (it now
+    // carries the round), unless the drawer explicitly overrides it.
+    const interviewStage = req.body?.interviewStage
+      || (topApp && isInterviewStage(topApp.status) ? topApp.status : 'general');
+    const stageGuidance = STAGE_GUIDANCE[interviewStage] || '';
 
     // Compute days since application so the model uses correct timing
     // language. Without this, the model defaults to "yesterday/this morning"
