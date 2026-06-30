@@ -1,8 +1,10 @@
 import express from 'express';
-import { ROOT_DIR } from '../config.mjs';
+import fs from 'fs';
+import { ROOT_DIR, RECRUITERS_MD } from '../config.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile } from '../lib/anthropic.mjs';
-import { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine, RECRUITER_STATUSES } from '../lib/recruiters.mjs';
+import { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine, appendRecruiterRows, REC_HEADER, RECRUITER_STATUSES } from '../lib/recruiters.mjs';
 import { getIdentity } from '../lib/profile.mjs';
+import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
 
 export const router = express.Router();
 
@@ -13,6 +15,36 @@ export const router = express.Router();
 // Storage:
 //   data/recruiters.md                — master tracker (markdown table)
 //   data/recruiter-correspondence/{id}.md — per-contact correspondence log
+
+// GET /api/recruiters/template — downloadable CSV template (shared with TA Outreach).
+// Registered before /:id so "template" isn't captured as an id.
+router.get('/api/recruiters/template', (req, res) => {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="recruiters-template.csv"');
+  res.send(CONTACTS_TEMPLATE_CSV);
+});
+
+// POST /api/recruiters/bulk-import  { csv } — same shared template as TA Outreach;
+// the CSV `company` column maps to the recruiter's firm. Dedup by firm+last+first.
+router.post('/api/recruiters/bulk-import', (req, res) => {
+  try {
+    const csv = String(req.body?.csv || '');
+    if (!csv.trim()) return res.status(400).json({ error: 'A "csv" body is required.' });
+    let rows;
+    try { rows = parseCsvContacts(csv); } catch (e) { return res.status(400).json({ error: e.message }); }
+    if (!rows.length) return res.status(400).json({ error: 'No valid rows found (need a header row plus rows with company, first, last, title).' });
+    const mapped = rows.map(r => ({ firm: r.company, first: r.first, last: r.last, title: r.title, phone: r.phone, linkedin: r.linkedin, website: r.website, city: r.city, state: r.state, notes: r.notes }));
+    if (!fs.existsSync(RECRUITERS_MD)) fs.writeFileSync(RECRUITERS_MD, REC_HEADER, 'utf8');
+    const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const key = r => `${norm(r.firm)}|${(r.last || '').toLowerCase()}|${(r.first || '').toLowerCase()}`;
+    const existingKeys = new Set(parseRecruitersMd().map(r => key(r)));
+    const toWrite = mapped.filter(r => !existingKeys.has(key(r)));
+    const written = appendRecruiterRows(toWrite);
+    res.json({ ok: true, parsed: rows.length, imported: written.length, duplicates: rows.length - written.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.get('/api/recruiters', (req, res) => {
   try {
@@ -42,11 +74,11 @@ router.get('/api/recruiters/:id', (req, res) => {
 router.patch('/api/recruiters/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { status, notes, lastTouch } = req.body || {};
+    const { status, notes, lastTouch, website, linkedin, phone } = req.body || {};
     if (status && !RECRUITER_STATUSES.includes(status)) {
       return res.status(400).json({ error: `Invalid status. Must be one of: ${RECRUITER_STATUSES.join(', ')}` });
     }
-    const ok = updateRecruiterLine(id, { status, notes, lastTouch });
+    const ok = updateRecruiterLine(id, { status, notes, lastTouch, website, linkedin, phone });
     if (!ok) return res.status(404).json({ error: 'Recruiter not found' });
     res.json({ ok: true });
   } catch (err) {

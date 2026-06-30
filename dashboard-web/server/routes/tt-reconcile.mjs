@@ -5,6 +5,7 @@ import { parseTargetTalentMd, appendTTRows, updateTTLine } from '../lib/target-t
 import { generateText } from '../lib/anthropic.mjs';
 import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
 import { TARGET_TALENT_MD } from '../config.mjs';
+import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
 
 export const router = express.Router();
 
@@ -246,36 +247,8 @@ router.post('/api/tt-reconcile/bulk-add', (req, res) => {
 });
 
 // ── Bulk CSV import ───────────────────────────────────────────────────────────
-// The "Excel floor" for non-power users: hand-enter TA/recruiter contacts in a
-// spreadsheet, save as CSV, upload. Dependency-free parse, map by header name,
-// dedup vs existing, then reuse appendTTRows. Required columns: company, first,
-// last, title. Optional: phone, linkedin, website, city, state, notes.
-function parseCsvLine(line) {
-  const out = []; let cur = '', q = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
-    else if (ch === ',' && !q) { out.push(cur); cur = ''; }
-    else cur += ch;
-  }
-  out.push(cur);
-  return out.map(s => s.trim());
-}
-function parseCsvContacts(csv) {
-  const lines = csv.split(/\r?\n/).filter(l => l.trim());
-  if (lines.length < 2) return [];
-  const header = parseCsvLine(lines[0]).map(h => h.toLowerCase());
-  const ci = { company: header.indexOf('company'), first: header.indexOf('first'), last: header.indexOf('last'), title: header.indexOf('title'), phone: header.indexOf('phone'), linkedin: header.indexOf('linkedin'), website: header.indexOf('website'), city: header.indexOf('city'), state: header.indexOf('state'), notes: header.indexOf('notes') };
-  if (ci.company < 0 || ci.first < 0 || ci.last < 0 || ci.title < 0) throw new Error('CSV must have columns: company, first, last, title.');
-  const get = (v, i) => (i >= 0 && i < v.length ? v[i] : '');
-  const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    const v = parseCsvLine(lines[i]);
-    const c = { company: get(v, ci.company), first: get(v, ci.first), last: get(v, ci.last), title: get(v, ci.title), phone: get(v, ci.phone), linkedin: get(v, ci.linkedin), website: get(v, ci.website), city: get(v, ci.city), state: get(v, ci.state), notes: get(v, ci.notes) };
-    if (c.company && c.first && c.last && c.title) rows.push(c);
-  }
-  return rows;
-}
+// Dependency-free parse, map by header name, dedup vs existing, then reuse
+// appendTTRows. The parser + template are shared with Recruiters (lib/csv.mjs).
 const TT_HEADER = '# Target Talent\n\n| # | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |\n|---|---------|------|-------|--------|-------|------|-------|-----|-------|-------|----------|--------|------------|-------|---------|\n';
 
 // POST /api/tt-reconcile/bulk-import  { csv }
@@ -299,11 +272,9 @@ router.post('/api/tt-reconcile/bulk-import', (req, res) => {
 
 // GET /api/tt-reconcile/template — downloadable CSV template with the right headers
 router.get('/api/tt-reconcile/template', (req, res) => {
-  const csv = 'company,first,last,title,phone,linkedin,website,city,state,notes\n'
-    + 'Acme Corp,Sarah,Johnson,Senior Talent Acquisition Partner,415-555-0182,https://www.linkedin.com/in/example,https://acme.com,San Francisco,CA,Found via LinkedIn\n';
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="contacts-template.csv"');
-  res.send(csv);
+  res.send(CONTACTS_TEMPLATE_CSV);
 });
 
 // Synthesize a readable HTML summary from v1 JSON data when no markdown body exists.

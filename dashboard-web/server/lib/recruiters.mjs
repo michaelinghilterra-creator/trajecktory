@@ -19,6 +19,8 @@ function parseRecruitersMd() {
   for (const line of text.split('\n')) {
     if (!line.startsWith('| ')) continue;
     const parts = line.split('|').map(p => p.trim());
+    // LinkedIn + Website are later-added trailing columns; rows written before
+    // them have empty parts[15]/[16], so they read as '' — backward-compatible.
     if (parts.length < 15) continue; // 14 fields + 2 sentinel empties
     const id = parseInt(parts[1], 10);
     if (isNaN(id)) continue;
@@ -39,6 +41,8 @@ function parseRecruitersMd() {
       status: parts[12],
       lastTouch: parts[13],
       notes: parts[14],
+      linkedin: (parts[15] || '').trim(),
+      website: (parts[16] || '').trim(),
       raw: line,
     });
   }
@@ -82,10 +86,20 @@ function updateRecruiterLine(id, updates) {
     if (parts.length < 16) return line;
     const lineId = parseInt(parts[1].trim(), 10);
     if (lineId !== id) return line;
-    // parts: ['', id, firm, last, first, salute, title, city, state, zip, phone, email, status, last_touch, notes, '']
+    // parts: ['', id, firm, last, first, salute, title, city, state, zip, phone,
+    //         email, status, last_touch, notes, (linkedin), (website), '']
+    const cell = v => ` ${(v || '').toString().replace(/\|/g, '\\|').replace(/\n/g, ' ')} `;
     if (updates.status     !== undefined) parts[12] = ` ${updates.status} `;
     if (updates.lastTouch  !== undefined) parts[13] = ` ${updates.lastTouch} `;
-    if (updates.notes      !== undefined) parts[14] = ` ${updates.notes.replace(/\|/g, '\\|').replace(/\n/g, ' ')} `;
+    if (updates.notes      !== undefined) parts[14] = cell(updates.notes);
+    if (updates.phone      !== undefined) parts[10] = cell(updates.phone);
+    if (updates.linkedin !== undefined || updates.website !== undefined) {
+      // Older rows lack the LinkedIn + Website cells; pad with empties before the
+      // trailing '' so columns line up, then set whichever was provided.
+      while (parts.length < 18) parts.splice(parts.length - 1, 0, '  ');
+      if (updates.linkedin !== undefined) parts[15] = cell(updates.linkedin);
+      if (updates.website  !== undefined) parts[16] = cell(updates.website);
+    }
     touched = true;
     return parts.join('|');
   });
@@ -93,7 +107,31 @@ function updateRecruiterLine(id, updates) {
   return touched;
 }
 
+const REC_HEADER = '# Recruiters\n\n| # | Firm | Last | First | Salute | Title | City | State | Zip | Phone | Email | Status | Last Touch | Notes | LinkedIn | Website |\n|---|------|------|-------|--------|-------|------|-------|-----|-------|-------|--------|------------|-------|----------|---------|\n';
+
+// Append one or more recruiter rows to recruiters.md. Mirrors appendTTRows.
+// Accepts rows with `firm` (or `company`, mapped from the shared CSV template).
+// Auto-assigns the next sequential id; creates the file with a header if missing.
+function appendRecruiterRows(rows) {
+  if (!rows || !rows.length) return [];
+  if (!fs.existsSync(RECRUITERS_MD)) fs.writeFileSync(RECRUITERS_MD, REC_HEADER, 'utf8');
+  const text = fs.readFileSync(RECRUITERS_MD, 'utf8');
+  const existing = parseRecruitersMd();
+  let nextId = existing.length ? Math.max(...existing.map(r => r.id)) + 1 : 1;
+  const esc = s => (s || '').toString().replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+  const newRows = [];
+  for (const r of rows) {
+    const id = nextId++;
+    const firm = r.firm || r.company || '';
+    const row = `| ${id} | ${esc(firm)} | ${esc(r.last)} | ${esc(r.first)} | ${esc(r.salute)} | ${esc(r.title)} | ${esc(r.city)} | ${esc(r.state)} | ${esc(r.zip)} | ${esc(r.phone)} | ${esc(r.email)} | Not Contacted |  | ${esc(r.notes)} | ${esc(r.linkedin)} | ${esc(r.website)} |`;
+    newRows.push({ id, row });
+  }
+  const out = text.replace(/\s*$/, '') + '\n' + newRows.map(r => r.row).join('\n') + '\n';
+  fs.writeFileSync(RECRUITERS_MD, out, 'utf8');
+  return newRows.map(r => ({ id: r.id }));
+}
+
 // GET /api/recruiters — list all (search/filter handled client-side)
 
-export { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine, RECRUITER_STATUSES };
+export { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine, appendRecruiterRows, REC_HEADER, RECRUITER_STATUSES };
 
