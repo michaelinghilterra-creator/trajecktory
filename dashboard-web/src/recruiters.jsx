@@ -895,12 +895,36 @@ function RecAnalyticsView({ recruiters, firms }) {
 // ─── Directory (unified sortable table — replaces Contacts + Firms) ─────────
 // One sortable contact table; firm is a sortable/filterable column so it covers
 // the old Firms view too. Look and feel modeled on Pipeline → Table.
-function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, starred, toggleStar, selId, search }) {
+function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, starred, toggleStar, selId, search, onImported }) {
   const q = search || '';
   const [firmFilter, setFirmFilter] = useStateR('');
   const [statusFilter, setStatusFilter] = useStateR('');
   const [sortKey, setSortKey] = useStateR('firm');
   const [sortDir, setSortDir] = useStateR('asc');
+  const [importing, setImporting] = useStateR(false);
+  const [importMsg, setImportMsg] = useStateR('');
+
+  // Bulk-import recruiter contacts from a CSV (shared template with TA Outreach).
+  function handleImport(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+    setImporting(true); setImportMsg('');
+    const reader = new FileReader();
+    reader.onload = () => {
+      fetch('/api/recruiters/bulk-import', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ csv: String(reader.result || '') }) })
+        .then(r => r.json().then(b => ({ ok: r.ok, b })))
+        .then(({ ok, b }) => {
+          setImporting(false);
+          if (!ok || b.error) { setImportMsg(b.error || 'Import failed.'); return; }
+          setImportMsg(`Imported ${b.imported}${b.duplicates ? `, ${b.duplicates} duplicate${b.duplicates === 1 ? '' : 's'} skipped` : ''}.`);
+          onImported && onImported();
+        })
+        .catch(err => { setImporting(false); setImportMsg(err.message); });
+    };
+    reader.onerror = () => { setImporting(false); setImportMsg('Could not read the file.'); };
+    reader.readAsText(file);
+  }
 
   const setSort = (k) => {
     if (sortKey === k) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
@@ -951,6 +975,14 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
         <div>
           <h1>Directory</h1>
           <div className="sub">{rows.length} of {contacts.length} contacts · {firmsShown} firms</div>
+        </div>
+        <div className="act">
+          {importMsg && <span className="dim" style={{ fontSize: 11.5 }}>{importMsg}</span>}
+          <a className="btn" href="/api/recruiters/template" download style={{ textDecoration: 'none' }} title="Download the CSV template (company, first, last, title, phone, linkedin, website, ...)">Template</a>
+          <label className="btn" style={{ cursor: importing ? 'default' : 'pointer', opacity: importing ? 0.6 : 1 }} title="Bulk-import recruiter contacts from a CSV file">
+            {importing ? 'Importing…' : 'Import CSV'}
+            <input type="file" accept=".csv,text/csv" style={{ display: 'none' }} disabled={importing} onChange={handleImport} />
+          </label>
         </div>
       </div>
 
@@ -1120,6 +1152,7 @@ window.RecruitersTab = function RecruitersTab({ search } = {}) {
           contacts={recruiters} firms={firms}
           onOpen={onOpen} onCompose={onCompose} onQuickSent={onQuickSent}
           starred={starred} toggleStar={toggleStar} selId={selected} search={search}
+          onImported={load}
         />
       )}
       {view === 'activity' && <RecActivityView recruiters={recruiters} onBatch={onBatch} onOpen={onOpen} />}
@@ -1354,6 +1387,10 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
   const [data, setData] = useStateR(null);
   const [loading, setLoading] = useStateR(true);
   const [notesDraft, setNotesDraft] = useStateR('');
+  const [website, setWebsite] = useStateR('');
+  const [editingWeb, setEditingWeb] = useStateR(false);
+  const [linkedin, setLinkedin] = useStateR('');
+  const [editingLi, setEditingLi] = useStateR(false);
   const [composing, setComposing] = useStateR(false);
   const [log, setLog] = useStateR(null);
   const [toast, setToastMsg] = useStateR(null);
@@ -1371,6 +1408,10 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
       .then(d => {
         setData({ ...d, firmId: firmIdFromName(d.firm) });
         setNotesDraft(d.notes || '');
+        setWebsite(d.website || '');
+        setLinkedin(d.linkedin || '');
+        setEditingWeb(false);
+        setEditingLi(false);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -1398,6 +1439,20 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notes: notesDraft }),
     }).then(() => { load(); onUpdate?.(); showToast('Notes saved', 'success'); });
+  };
+  const saveWebsite = () => {
+    fetch(`/api/recruiters/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ website: website.trim() }),
+    }).then(() => { setEditingWeb(false); load(); onUpdate?.(); showToast('Firm site saved', 'success'); });
+  };
+  const saveLinkedin = () => {
+    fetch(`/api/recruiters/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ linkedin: linkedin.trim() }),
+    }).then(() => { setEditingLi(false); load(); onUpdate?.(); showToast('LinkedIn saved', 'success'); });
   };
   const saveCorrespondence = (direction, subject, body) => {
     fetch(`/api/recruiters/${id}/correspondence`, {
@@ -1462,13 +1517,27 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
           <div className="ds-section">
             <div className="ds-label"><RecIcon d={REC_I.building} size={12} /> Contact</div>
             <div className="info-card">
-              {domain && (
-                <div className="info-row">
-                  <span className="ik">Firm site</span>
-                  <a className="iv link" href={`https://${domain}`} target="_blank" rel="noreferrer">{domain}</a>
-                  <RecCopyField value={`https://${domain}`} />
-                </div>
-              )}
+              <div className="info-row">
+                <span className="ik">Firm site</span>
+                {editingWeb ? (
+                  <>
+                    <input className="iv" value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://firm.com"
+                      style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px', color: 'var(--text)', fontSize: 12, minWidth: 0 }} />
+                    <button className="btn primary sm" onClick={saveWebsite}>Save</button>
+                  </>
+                ) : (() => {
+                  const stored = (data.website || '').trim();
+                  const href = stored ? (stored.startsWith('http') ? stored : 'https://' + stored) : (domain ? `https://${domain}` : '');
+                  return (
+                    <>
+                      {href
+                        ? <a className="iv link" href={href} target="_blank" rel="noreferrer">{stored || domain}{!stored && domain ? <span style={{ color: 'var(--text-mute)', marginLeft: 5, fontSize: 10 }}>(from email)</span> : null}</a>
+                        : <span className="iv" style={{ color: 'var(--text-mute)' }}>—</span>}
+                      <button className="copy-btn" onClick={() => { setWebsite(stored); setEditingWeb(true); }}><RecIcon d={REC_I.pen} size={11} /> Edit</button>
+                    </>
+                  );
+                })()}
+              </div>
               <div className="info-row">
                 <span className="ik">Email</span>
                 <span className="iv">{data.email}</span>
@@ -1488,10 +1557,23 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
               </div>
               <div className="info-row">
                 <span className="ik">LinkedIn</span>
-                <a className="iv link" href={liQuery} target="_blank" rel="noreferrer">Find on LinkedIn</a>
-                <a className="copy-btn" href={liQuery} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>
-                  <RecIcon d={REC_I.search} size={11} /> Search
-                </a>
+                {editingLi ? (
+                  <>
+                    <input className="iv" value={linkedin} onChange={e => setLinkedin(e.target.value)} placeholder="https://linkedin.com/in/…"
+                      style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 6px', color: 'var(--text)', fontSize: 12, minWidth: 0 }} />
+                    <button className="btn primary sm" onClick={saveLinkedin}>Save</button>
+                  </>
+                ) : data.linkedin ? (
+                  <>
+                    <a className="iv link" href={data.linkedin} target="_blank" rel="noreferrer">View profile</a>
+                    <button className="copy-btn" onClick={() => { setLinkedin(data.linkedin || ''); setEditingLi(true); }}><RecIcon d={REC_I.pen} size={11} /> Edit</button>
+                  </>
+                ) : (
+                  <>
+                    <a className="iv link" href={liQuery} target="_blank" rel="noreferrer">Find on LinkedIn</a>
+                    <button className="copy-btn" onClick={() => { setLinkedin(''); setEditingLi(true); }}><RecIcon d={REC_I.pen} size={11} /> Add</button>
+                  </>
+                )}
               </div>
               <div className="info-row">
                 <span className="ik">Last touch</span>
