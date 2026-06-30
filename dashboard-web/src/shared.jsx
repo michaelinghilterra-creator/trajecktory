@@ -424,7 +424,9 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // pipeline with the formerly-Advanced steps promoted inline (scan → evaluate →
   // merge order). No collapsible Advanced section in either case.
   const BASE_ORDER  = ['api-scan', 'triage', 'merge', 'verify', 'health'];
-  const POWER_ORDER = ['api-scan', 'triage', 'cli-scan', 'gate', 'cli-eval', 'merge', 'verify', 'health', 'discover'];
+  // API-key users skip Triage (a cheap Haiku pre-filter): their evals are cheap and
+  // the batch already takes best-fit-first, so they go straight scan -> evaluate.
+  const POWER_ORDER = ['api-scan', 'cli-scan', 'gate', 'cli-eval', 'merge', 'verify', 'health', 'discover'];
   const stepById = Object.fromEntries(STEPS.map(s => [s.id, s]));
   const visibleSteps = (hasKey ? POWER_ORDER : BASE_ORDER).map(id => stepById[id]).filter(Boolean);
 
