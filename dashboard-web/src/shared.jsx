@@ -555,7 +555,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         })}
       </div>
 
-      {visibleTriage.length > 0 && (
+      {!hasKey && visibleTriage.length > 0 && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 4 }}>TRIAGE · {visibleTriage.length} scored</div>
           {visibleTriage.slice(0, 15).map(card => {
