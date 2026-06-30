@@ -2,13 +2,63 @@
 // Replaces the old Analytics tab (charts moved into Overview subtabs). Hits
 // /api/insights/generate on click; result is cached server-side so reloads
 // are instant.
+//
+// The synthesis is broken into sub-tabs so it reads one idea-cluster at a time
+// instead of one overwhelming scroll:
+//   Overview         — coach summary + interactive "this week's focus" + jump-to
+//   What's working   — wins, stat strip, a "double down" action per item
+//   What's not       — guardrail framing, stat strip, a "fix" action per item
+//   Recommended moves— numbered, one-at-a-time action cards
+// The header (title, metadata, Regenerate) is persistent above the sub-tab bar.
 
 const { useState: useStateI, useEffect: useEffectI } = React;
+
+// Self-contained icon renderer (analytics.jsx has no access to pipeline's PIcon).
+const INS_ICONS = {
+  overview: 'M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z',
+  working:  'M3 17l6-6 4 4 7-7 M17 7h4v4',
+  not:      'M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z M12 9v4 M12 17h.01',
+  moves:    'M5 12h14 M12 5l7 7-7 7',
+  check:    'M20 6 9 17l-5-5',
+  trend:    'M7 17 17 7 M9 7h8v8',
+  fix:      'M9 18l6-6-6-6',
+  shield:   'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+};
+function InsIcon({ name, size = 14 }) {
+  const d = INS_ICONS[name];
+  if (!d) return null;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d={d} />
+    </svg>
+  );
+}
+
+function insAgeLabel(iso) {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+const INS_SUBTABS = [
+  { id: 'overview', label: 'Overview',          icon: 'overview' },
+  { id: 'working',  label: "What's working",    icon: 'working' },
+  { id: 'not',      label: "What's not",        icon: 'not' },
+  { id: 'moves',    label: 'Recommended moves', icon: 'moves' },
+];
 
 window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
   const [insights, setInsights] = useStateI(null);
   const [loading, setLoading]   = useStateI(false);
   const [error, setError]       = useStateI(null);
+  const [view, setView]         = useStateI('overview');
 
   useEffectI(() => {
     fetch('/api/insights/latest')
@@ -32,17 +82,6 @@ window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
   };
 
   const apps = (rawApps || []).filter(a => a.status !== 'Closed');
-  const ageLabel = (iso) => {
-    if (!iso) return null;
-    const ms = Date.now() - new Date(iso).getTime();
-    const m = Math.floor(ms / 60000);
-    if (m < 1) return 'just now';
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    const d = Math.floor(h / 24);
-    return `${d}d ago`;
-  };
 
   return (
     <div className="col" style={{ gap: 16 }}>
@@ -51,7 +90,7 @@ window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
           <h1>Insights</h1>
           <div className="sub">
             {insights?.generated_at
-              ? <>Last analysis {ageLabel(insights.generated_at)} · across {insights.pipeline_size} entries · {insights.model}</>
+              ? <>Last analysis {insAgeLabel(insights.generated_at)} · across {insights.pipeline_size} entries · {insights.model}</>
               : <>Run a Claude-powered synthesis across every tab — pipeline, follow-ups, TA, recruiters, LinkedIn.</>}
           </div>
         </div>
@@ -91,96 +130,249 @@ window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
 
       {insights && (
         <>
-          {(insights.coach || insights.headline || insights.summary) && (
-            <div style={{
-              padding: '14px 16px',
-              borderLeft: '3px solid var(--accent)',
-              borderRadius: '0 6px 6px 0',
-              background: 'var(--accent-bg)',
-            }}>
-              {insights.coach ? (
-                <div className="col" style={{ gap: 10 }}>
-                  {insights.coach.win && (
-                    <CoachLine kind="win" text={insights.coach.win} apps={apps} onOpen={onOpen} />
-                  )}
-                  {insights.coach.improve && (
-                    <CoachLine kind="improve" text={insights.coach.improve} apps={apps} onOpen={onOpen} />
-                  )}
-                </div>
-              ) : (
-                <>
-                  {insights.headline && (
-                    <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.3, color: 'var(--text)' }}>{insights.headline}</div>
-                  )}
-                  {insights.summary && (
-                    <div style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--text-dim)', marginTop: insights.headline ? 6 : 0 }}>
-                      <Linkify text={insights.summary} apps={apps} onOpen={onOpen} />
-                    </div>
-                  )}
-                </>
-              )}
-              {insights.prior_summary && (insights.prior_summary.coach?.improve || insights.prior_summary.headline || insights.prior_summary.summary) && (
-                <div className="mono dim" style={{ fontSize: 10.5, marginTop: 12, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.06)', lineHeight: 1.5 }}>
-                  Previous ({ageLabel(insights.prior_summary.generated_at)}): {insights.prior_summary.coach?.improve || insights.prior_summary.headline || insights.prior_summary.summary}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="grid cols-2">
-            <InsightCard
-              title="What's working"
-              accent="var(--green)"
-              items={insights.whats_working}
-              renderItem={(it) => (
-                <>
-                  <div style={{ fontSize: 13, lineHeight: 1.5 }}><Linkify text={it.insight} apps={apps} onOpen={onOpen} /></div>
-                  <Citations items={it.citations} apps={apps} onOpen={onOpen} />
-                </>
-              )}
-            />
-            <InsightCard
-              title="What's not"
-              accent="var(--red)"
-              items={insights.whats_not}
-              renderItem={(it) => (
-                <>
-                  <div style={{ fontSize: 13, lineHeight: 1.5 }}><Linkify text={it.insight} apps={apps} onOpen={onOpen} /></div>
-                  <Citations items={it.citations} apps={apps} onOpen={onOpen} />
-                </>
-              )}
-            />
+          <div className="subtabs">
+            {INS_SUBTABS.map(s => (
+              <div key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
+                <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
+                  <InsIcon name={s.icon} size={14} />
+                </span>
+                {s.label}
+              </div>
+            ))}
           </div>
 
-          <InsightCard
-            title="Recommended moves"
-            accent="var(--accent)"
-            items={insights.recommended_moves}
-            renderItem={(it) => (
-              <>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}><Linkify text={it.move} apps={apps} onOpen={onOpen} /></div>
-                <div className="dim" style={{ fontSize: 12, lineHeight: 1.5 }}><Linkify text={it.why} apps={apps} onOpen={onOpen} /></div>
-                <Citations items={it.citations} apps={apps} onOpen={onOpen} />
-              </>
-            )}
-          />
-
-          <InsightCard
-            title="This week's focus"
-            accent="var(--yellow)"
-            items={insights.this_week_focus}
-            renderItem={(it) => (
-              <div className="row" style={{ gap: 10, alignItems: 'baseline' }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}><Linkify text={it.action} apps={apps} onOpen={onOpen} /></span>
-                {it.target && <span className="mono dim" style={{ fontSize: 11 }}>→ <Linkify text={it.target} apps={apps} onOpen={onOpen} /></span>}
-              </div>
-            )}
-          />
+          {view === 'overview' && <OverviewPanel insights={insights} apps={apps} onOpen={onOpen} setView={setView} />}
+          {view === 'working'  && <WorkingPanel  insights={insights} apps={apps} onOpen={onOpen} />}
+          {view === 'not'      && <NotPanel      insights={insights} apps={apps} onOpen={onOpen} />}
+          {view === 'moves'    && <MovesPanel    insights={insights} apps={apps} onOpen={onOpen} />}
         </>
       )}
     </div>
   );
 };
+
+// ─── Overview ──────────────────────────────────────────────────────────────
+function OverviewPanel({ insights, apps, onOpen, setView }) {
+  const hasCoach = insights.coach || insights.headline || insights.summary;
+  const prior = insights.prior_summary;
+  const priorText = prior && (prior.coach?.improve || prior.headline || prior.summary);
+  return (
+    <div className="col" style={{ gap: 18 }}>
+      {hasCoach && (
+        <div style={{
+          padding: '14px 16px',
+          borderLeft: '3px solid var(--accent)',
+          borderRadius: '0 6px 6px 0',
+          background: 'var(--accent-bg)',
+        }}>
+          {insights.coach ? (
+            <div className="col" style={{ gap: 10 }}>
+              {insights.coach.win && <CoachLine kind="win" text={insights.coach.win} apps={apps} onOpen={onOpen} />}
+              {insights.coach.improve && <CoachLine kind="improve" text={insights.coach.improve} apps={apps} onOpen={onOpen} />}
+            </div>
+          ) : (
+            <>
+              {insights.headline && <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.3, color: 'var(--text)' }}>{insights.headline}</div>}
+              {insights.summary && <div style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--text-dim)', marginTop: insights.headline ? 6 : 0 }}><Linkify text={insights.summary} apps={apps} onOpen={onOpen} /></div>}
+            </>
+          )}
+          {priorText && (
+            <div className="mono dim" style={{ fontSize: 10.5, marginTop: 12, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.06)', lineHeight: 1.5 }}>
+              Previous ({insAgeLabel(prior.generated_at)}): {priorText}
+            </div>
+          )}
+        </div>
+      )}
+
+      <FocusChecklist items={insights.this_week_focus} keyId={insights.generated_at} apps={apps} onOpen={onOpen} />
+
+      <JumpTo insights={insights} setView={setView} />
+    </div>
+  );
+}
+
+function JumpTo({ insights, setView }) {
+  const cards = [
+    { go: 'working', label: "What's working",    color: 'var(--green)',  n: (insights.whats_working || []).length },
+    { go: 'not',     label: "What's not",        color: 'var(--red)',    n: (insights.whats_not || []).length },
+    { go: 'moves',   label: 'Recommended moves', color: 'var(--accent)', n: (insights.recommended_moves || []).length },
+  ];
+  return (
+    <div>
+      <div className="mono dim" style={{ fontSize: 11, letterSpacing: '0.08em', marginBottom: 10 }}>JUMP TO</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+        {cards.map(c => (
+          <div key={c.go} className="ins-teaser" onClick={() => setView(c.go)}>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <span className="row" style={{ gap: 8, fontSize: 13 }}><span className="dot" style={{ background: c.color }} />{c.label}</span>
+              <span className="mono dim" style={{ fontSize: 12 }}>{c.n}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Interactive "this week's focus" checklist. Checked indices persist in
+// localStorage keyed by generated_at, so a new analysis (new timestamp) starts
+// fresh automatically. Toggles persist eagerly to avoid clobbering on key change.
+function FocusChecklist({ items, keyId, apps, onOpen }) {
+  const list = items || [];
+  const storageKey = 'insights-focus-' + (keyId || 'none');
+  const [done, setDone] = useStateI([]);
+  useEffectI(() => {
+    let v = [];
+    try { const raw = localStorage.getItem(storageKey); if (raw) v = JSON.parse(raw); } catch (_) {}
+    setDone(Array.isArray(v) ? v : []);
+  }, [storageKey]);
+  const persist = (next) => {
+    setDone(next);
+    try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch (_) {}
+  };
+  const toggle = (i) => persist(done.includes(i) ? done.filter(x => x !== i) : [...done, i]);
+  const doneCount = done.filter(i => i >= 0 && i < list.length).length;
+
+  return (
+    <div>
+      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
+        <span className="card-title"><span className="dot" style={{ background: 'var(--yellow)' }} />This week's focus</span>
+        <span className="mono dim" style={{ fontSize: 11 }}>{doneCount} of {list.length} done</span>
+      </div>
+      {list.length === 0 && <div className="dim" style={{ fontSize: 12 }}>Nothing surfaced.</div>}
+      <div className="col" style={{ gap: 8 }}>
+        {list.map((it, i) => {
+          const isDone = done.includes(i);
+          return (
+            <div key={i} className={'ins-focus-row' + (isDone ? ' done' : '')} onClick={() => toggle(i)}>
+              <span className="ins-check">{isDone ? <InsIcon name="check" size={12} /> : null}</span>
+              <span style={{ flex: 1 }}>
+                <span className="ins-focus-lbl" style={{ fontSize: 13, fontWeight: 600 }}><Linkify text={it.action} apps={apps} onOpen={onOpen} /></span>
+                {it.target && <span className="mono dim" style={{ fontSize: 11 }}> → <Linkify text={it.target} apps={apps} onOpen={onOpen} /></span>}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── What's working ──────────────────────────────────────────────────────────
+function WorkingPanel({ insights, apps, onOpen }) {
+  const items = insights.whats_working || [];
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+        This is your signal. The move is to do more of what's already earning replies, not to celebrate and stop.
+      </div>
+      <StatStrip metrics={insights.metrics} which="working" />
+      <div className="col" style={{ gap: 12 }}>
+        {items.length === 0 && <div className="dim" style={{ fontSize: 12 }}>Nothing surfaced.</div>}
+        {items.map((it, i) => (
+          <div key={i} className="ins-item" style={{ borderLeft: '3px solid var(--green)' }}>
+            <div style={{ fontSize: 13, lineHeight: 1.55 }}><Linkify text={it.insight} apps={apps} onOpen={onOpen} /></div>
+            <Citations items={it.citations} apps={apps} onOpen={onOpen} />
+            {it.double_down && (
+              <div className="ins-action" style={{ color: 'var(--green)' }}>
+                <InsIcon name="trend" size={13} />
+                <span><Linkify text={it.double_down} apps={apps} onOpen={onOpen} /></span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── What's not ──────────────────────────────────────────────────────────────
+function NotPanel({ insights, apps, onOpen }) {
+  const items = insights.whats_not || [];
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="ins-guardrail">
+        <InsIcon name="shield" size={15} />
+        <div style={{ fontSize: 12.5, lineHeight: 1.55, color: 'var(--text-dim)' }}>
+          This is signal, not a scorecard. Every item below has a concrete fix. You're not behind, you're being shown exactly where to steer.
+        </div>
+      </div>
+      <StatStrip metrics={insights.metrics} which="not" />
+      <div className="col" style={{ gap: 12 }}>
+        {items.length === 0 && <div className="dim" style={{ fontSize: 12 }}>Nothing surfaced.</div>}
+        {items.map((it, i) => (
+          <div key={i} className="ins-item" style={{ borderLeft: '3px solid var(--red)' }}>
+            <div style={{ fontSize: 13, lineHeight: 1.55 }}><Linkify text={it.insight} apps={apps} onOpen={onOpen} /></div>
+            <Citations items={it.citations} apps={apps} onOpen={onOpen} />
+            {it.fix && (
+              <div className="ins-action" style={{ color: 'var(--yellow)' }}>
+                <InsIcon name="fix" size={13} />
+                <span><Linkify text={it.fix} apps={apps} onOpen={onOpen} /></span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Recommended moves ───────────────────────────────────────────────────────
+function MovesPanel({ insights, apps, onOpen }) {
+  const items = insights.recommended_moves || [];
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+        In priority order. Each one is small enough to finish today.
+      </div>
+      <div className="col" style={{ gap: 12 }}>
+        {items.length === 0 && <div className="dim" style={{ fontSize: 12 }}>Nothing surfaced.</div>}
+        {items.map((it, i) => (
+          <div key={i} className="ins-item" style={{ borderLeft: '3px solid var(--accent)' }}>
+            <div className="row" style={{ gap: 11, alignItems: 'flex-start' }}>
+              <span className="mono" style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700, flexShrink: 0 }}>{String(i + 1).padStart(2, '0')}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}><Linkify text={it.move} apps={apps} onOpen={onOpen} /></div>
+                {it.why && <div className="dim" style={{ fontSize: 12, lineHeight: 1.5 }}><Linkify text={it.why} apps={apps} onOpen={onOpen} /></div>}
+                <Citations items={it.citations} apps={apps} onOpen={onOpen} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Stat strip — small metric cards built from the deterministic `metrics` block
+// the server persists alongside the analysis. Returns null on older payloads.
+function StatStrip({ metrics, which }) {
+  if (!metrics) return null;
+  const cards = [];
+  if (which === 'working') {
+    const ta = (metrics.topArchetypes || [])[0];
+    const ts = (metrics.topSectors || [])[0];
+    if (ta) cards.push({ label: ta.archetype + ' response', value: ta.responseRate + '%', sub: ta.appliedN + ' applied', color: 'var(--green)' });
+    if (metrics.recruiter && metrics.recruiter.sent) cards.push({ label: 'Recruiter channel', value: metrics.recruiter.responseRate + '%', sub: metrics.recruiter.replied + ' of ' + metrics.recruiter.sent, color: 'var(--green)' });
+    if (ts) cards.push({ label: ts.sector + ' sector', value: ts.responseRate + '%', sub: ts.appliedN + ' applied', color: 'var(--green)' });
+  } else if (which === 'not') {
+    if (metrics.staleTotal != null) cards.push({ label: 'Stale touchpoints', value: String(metrics.staleTotal), sub: 'awaiting follow-up', color: 'var(--yellow)' });
+    if (metrics.worstArchetype) cards.push({ label: metrics.worstArchetype.archetype + ' (overweight)', value: metrics.worstArchetype.responseRate + '%', sub: metrics.worstArchetype.appliedN + ' applied', color: 'var(--red)' });
+    if (metrics.talent && metrics.talent.sent) cards.push({ label: 'TA outreach', value: metrics.talent.responseRate + '%', sub: metrics.talent.replied + ' of ' + metrics.talent.sent, color: 'var(--red)' });
+  }
+  if (!cards.length) return null;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+      {cards.map((c, i) => (
+        <div key={i} className="ins-stat">
+          <div className="dim" style={{ fontSize: 11, marginBottom: 5 }}>{c.label}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: c.color || 'var(--text)' }}>{c.value}</div>
+          {c.sub && <div className="mono dim" style={{ fontSize: 10.5, marginTop: 2 }}>{c.sub}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function InsightCard({ title, accent, items, renderItem }) {
   return (

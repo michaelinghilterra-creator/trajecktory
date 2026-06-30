@@ -1194,6 +1194,71 @@ body {
   border-bottom-color: var(--accent);
 }
 
+/* Insights sub-tabs — item cards, stat strip, guardrail, jump-to, checklist */
+.ins-item {
+  background: var(--panel-2);
+  border-radius: 0 8px 8px 0;
+  padding: 13px 15px;
+}
+.ins-action {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 9px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ins-action svg { flex-shrink: 0; margin-top: 2px; }
+.ins-stat {
+  background: var(--panel-2);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.ins-guardrail {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: var(--panel-2);
+  border-left: 3px solid var(--text-mute);
+  border-radius: 0 6px 6px 0;
+  padding: 12px 14px;
+}
+.ins-guardrail svg { color: var(--text-dim); flex-shrink: 0; margin-top: 2px; }
+.ins-teaser {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+.ins-teaser:hover { border-color: var(--accent); }
+.ins-focus-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px 13px;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+.ins-focus-row:hover { border-color: var(--text-mute); }
+.ins-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid var(--text-mute);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bg, #0b0b0e);
+}
+.ins-focus-row.done .ins-check { background: var(--green); border-color: var(--green); }
+.ins-focus-row.done .ins-focus-lbl { color: var(--text-mute); text-decoration: line-through; }
+
 .mono-av {
   width: 36px;
   height: 36px;
