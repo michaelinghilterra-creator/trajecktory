@@ -30,11 +30,11 @@
         <span class="chip">Finish Guide 1 first</span>
         <span class="chip">Point and click</span>
       </div>
-      <div class="ver">Version 11 &middot; for trajecktory v1.7.23</div>
+      <div class="ver">Version 13 &middot; for trajecktory v1.7.28</div>
     </div>
 
     <div class="foot">
-      You should already have the Claude app installed and the Code tab working, from Guide 1.<br>
+      You should already have the Claude app installed and signed in, from Guide 1. The Code tab starts working in this guide, once trajecktory installs Git and you restart once.<br>
       The launch steps in this version are provisional, pending a final check on a clean PC.
     </div>
   </div>
@@ -53,8 +53,8 @@
     <div class="col card">
       <div class="kicker" style="margin-bottom:8px">Have these ready</div>
       <ul class="checklist">
-        <li>Guide 1 finished: the Claude app, <b>Git for Windows</b>, and the <b>Code</b> tab all working</li>
-        <li>The trajecktory installer file, named <b>trajecktory-setup-v1.7.23.exe</b></li>
+        <li>Guide 1 finished: the Claude app installed and signed in (this guide installs Git for you and gets the <b>Code</b> tab working after a restart)</li>
+        <li>The trajecktory installer file, named <b>trajecktory-setup-v1.7.28.exe</b> (a one-time download, about 400 MB)</li>
         <li>About 20 minutes</li>
       </ul>
       <div class="small" style="margin-top:6px">Optional: an Anthropic API key, only if you want trajecktory
@@ -63,8 +63,9 @@
     <div class="col card">
       <div class="kicker" style="margin-bottom:8px">What you will do here</div>
       <ol class="do">
-        <li>Install trajecktory from the .exe file</li>
-        <li>Start it from Claude Code (Code mode)</li>
+        <li>Install trajecktory from the .exe file (it also installs Git for Windows)</li>
+        <li>Restart your computer once, so the Code tab can see Git</li>
+        <li>Start trajecktory from Claude Code (Code mode)</li>
         <li>Watch the dashboard open in your browser</li>
         <li>Walk the Launchpad from empty to ready</li>
       </ol>
@@ -84,7 +85,7 @@
     updates. You can always re edit anything.
   </div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>1 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>1 / 21</span></div>
 </section>
 
 <!-- ============ P2 - STEP 1 INSTALL EXE ============ -->
@@ -96,8 +97,8 @@
   </div>
 
   <ol class="do">
-    <li>Find <span class="click">trajecktory-setup-v1.7.23.exe</span> (usually in your Downloads folder) and <span class="click">double click</span> it.</li>
-    <li>If a blue <b>Windows protected your PC</b> box appears, click <span class="click">More info</span>, then <span class="click">Run anyway</span>. This is the same safe warning from Guide 1.</li>
+    <li>Find <span class="click">trajecktory-setup-v1.7.28.exe</span> (usually in your Downloads folder) and <span class="click">double click</span> it. This is a one-time <b>400 MB</b> download (it bundles the app, its engine, a browser, and Claude Code). From then on, trajecktory updates itself, so you should not need the big installer again.</li>
+    <li>If a blue <b>Windows protected your PC</b> box appears, click <span class="click">More info</span>, then <span class="click">Run anyway</span>. This is the same safe warning you saw when installing the Claude app in Guide 1, and it shows only on this first install, never on the automatic updates later.</li>
     <li>The setup wizard opens. Click <span class="click">Next</span> to accept the suggested install location. You do not need to change it.</li>
   </ol>
 
@@ -135,7 +136,7 @@
     <b>No admin password needed.</b> trajecktory installs just for you, in your own user folder, so Windows
     should not ask for an administrator password.</div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>2 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>2 / 21</span></div>
 </section>
 
 <!-- ============ P3 - STEP 1 API KEY PAGE + FINISH ============ -->
@@ -177,11 +178,18 @@
 
   <ol class="do">
     <li>On the API key screen, <span class="click">leave the box empty</span> (unless you already have a key) and click <span class="click">Next</span>.</li>
-    <li>Click <span class="click">Install</span>, wait a moment, then on the last screen make sure
-        <span class="click">Launch trajecktory now</span> is checked and click <span class="click">Finish</span>.</li>
+    <li>Click <span class="click">Install</span>, wait a moment, then on the last screen click <span class="click">Finish</span>.</li>
   </ol>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>3 / 20</span></div>
+  <div class="callout warn"><span class="ic">&#128260;</span>
+    <b>Now restart your computer. This step is required, not optional.</b> The installer just installed
+    <b>Git for Windows</b>, which trajecktory and Claude Code both need. Until you restart, the Claude app
+    cannot see Git, so the <b>Code</b> tab will not let you type a prompt, and you cannot start trajecktory.
+    Save any open work and <b>restart your computer once now</b>. When it comes back up, the Code tab is ready
+    and you continue with Step 2 below. (A full restart is the reliable fix. Just quitting and reopening the
+    Claude app is not always enough.)</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>3 / 21</span></div>
 </section>
 
 <!-- ============ P4 - STEP 2 START THE DASHBOARD ============ -->
@@ -189,7 +197,7 @@
   <div class="step">
     <div class="num">2</div>
     <div class="stext"><h2 class="h2">Start the live dashboard from Claude Code</h2>
-    <div class="sub">You launch trajecktory from the Code tab you set up in Guide 1. One short phrase does it.</div></div>
+    <div class="sub">Now that you have restarted, the Code tab can see Git and is ready. You launch trajecktory from it with one short phrase.</div></div>
   </div>
 
   <div class="callout tip">
@@ -200,7 +208,7 @@
   </div>
 
   <ol class="do">
-    <li>Open the <span class="click">Claude app</span> and click the <span class="click">Code</span> tab (from Guide 1).</li>
+    <li>After restarting, open the <span class="click">Claude app</span> and click the <span class="click">Code</span> tab. It will now let you type a prompt (before the restart it could not, because Git was not yet visible).</li>
     <li>Choose <span class="click">Local</span>, click <span class="click">Select folder</span>, and pick your installed trajecktory folder. Paste this path into the folder window:
         <span class="kbd">C:\Users\you\trajecktory\trajecktory</span> (replace "you" with your Windows name; yes, "trajecktory" appears twice, the inner folder is the app).</li>
     <li>In the message box at the bottom, type <span class="click">Start the live dashboard</span> and press <span class="kbd">Enter</span>.</li>
@@ -262,7 +270,7 @@
       shortcut the installer placed on your desktop. The Code mode method above is the recommended one.</div></div>
   </div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>4 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>4 / 21</span></div>
 </section>
 
 <!-- ============ P5 - STEP 3 DASHBOARD OPENS ============ -->
@@ -311,7 +319,7 @@
     <b>If you closed the tab,</b> start it again from Claude Code by typing <b>Start the live dashboard</b>,
     or use the <b>trajecktory</b> shortcut. It opens the dashboard in your browser again.</div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>5 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>5 / 21</span></div>
 </section>
 
 <!-- ============ P6 - STEP 4 MEET THE LAUNCHPAD ============ -->
@@ -355,7 +363,7 @@
     re-syncs your data automatically, and a Workflow step's results appear the moment it finishes. You do not
     need to reload the browser. The <b>"synced ... ago"</b> note in the top bar shows when it last updated.</div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>6 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>6 / 21</span></div>
 </section>
 
 <!-- ============ P7 - THE HANDOFF PATTERN ============ -->
@@ -364,8 +372,9 @@
   <h1 class="h1">The handoff: when the Launchpad asks for Claude's help</h1>
   <p class="lead" style="margin-top:8px">Some Launchpad steps you fill in yourself (like your name). Others
   need Claude to do the thinking (like drafting your strengths from your resume). For those, the Launchpad
-  hands you a ready made instruction to paste into the <b>Code</b> tab you opened in Guide 1. Learn this once
-  and every step that follows is easy.</p>
+  hands you a ready made instruction to paste into the <b>Code</b> tab (the same one you used in Step 2 to start
+  the dashboard, now that Git is installed and your PC has restarted). Learn this once and every step that
+  follows is easy.</p>
 
   <div class="loop">
     <div class="node">
@@ -411,7 +420,7 @@
     <b>Optional, to save Claude usage:</b> set Claude Desktop's model to <b>Sonnet</b> before pasting the setup
     prompts. Opus works too, it just uses more of your limit.</div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>7 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>7 / 21</span></div>
 </section>
 
 <!-- ============ P8 - LAUNCHPAD CV + EDGE ============ -->
@@ -450,7 +459,7 @@
     </div></figure>
   </div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>8 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>8 / 21</span></div>
 </section>
 
 <!-- ============ P9 - LAUNCHPAD IDENTITY ============ -->
@@ -474,7 +483,7 @@
     <div class="tag" style="left:30%; top:54%">Then Save</div>
   </div></figure>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>9 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>9 / 21</span></div>
 </section>
 
 <!-- ============ P10 - LAUNCHPAD ROLES ============ -->
@@ -500,7 +509,7 @@
     <b>The two colors.</b> Purple dots are things <b>you pick</b>. Green dots are things <b>Claude generates</b>
     for you. You will see this pattern on the steps that team up with the Code tab.</div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>10 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>10 / 21</span></div>
 </section>
 
 <!-- ============ P11 - LAUNCHPAD COMP + LOCATION ============ -->
@@ -534,7 +543,7 @@
     </div></figure>
   </div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>11 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>11 / 21</span></div>
 </section>
 
 <!-- ============ P12 - LAUNCHPAD EVALUATION + OUTPUTS ============ -->
@@ -568,7 +577,7 @@
     </div></figure>
   </div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>12 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>12 / 21</span></div>
 </section>
 
 <!-- ============ P13 - LAUNCHPAD COMPANIES ============ -->
@@ -594,7 +603,7 @@
     <b>The small tags.</b> A <b>free</b> tag means that company can be scanned at no token cost. A <b>web</b>
     tag means it is searched on its website, which uses a little of your Claude usage. Both are fine.</div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>13 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>13 / 21</span></div>
 </section>
 
 <!-- ============ P14 - LAUNCHPAD HEALTH CHECK ============ -->
@@ -622,7 +631,7 @@
     <b>That is the whole Setup.</b> The Launchpad only fills in your config. To actually search and score jobs,
     you use the <b>Workflow</b> in the left sidebar, coming up next.</div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>14 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>14 / 21</span></div>
 </section>
 
 <!-- ============ P15 - YOU ARE READY ============ -->
@@ -667,7 +676,7 @@
     copies your email, phone, LinkedIn, portfolio, GitHub, and any certifications (a chip appears only for
     fields you filled), ready to paste into application forms.</div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>15 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>15 / 21</span></div>
 </section>
 
 <!-- ============ WORKFLOW 1 - SIGN IN TO CLAUDE ============ -->
@@ -704,7 +713,7 @@
     the Claude sign-in expired. It is not a bug. Click <b>Sign in to Claude</b> again to refresh it, then retry
     the step.</div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>16 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>16 / 21</span></div>
 </section>
 
 <!-- ============ WORKFLOW 2 - SIGN IN FLOW, SCREEN BY SCREEN ============ -->
@@ -739,7 +748,7 @@
     </div>
   </div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>17 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>17 / 21</span></div>
 </section>
 
 <!-- ============ WORKFLOW 3 - THE STEPS ============ -->
@@ -783,7 +792,7 @@
     board, too far away, and expired. To surface more, broaden your target roles or title keywords in Setup.
     The <b>first</b> full run takes a few minutes; later runs are much faster.</div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>18 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>18 / 21</span></div>
 </section>
 
 <!-- ============ P16 - OPTIONAL + API KEY LATER ============ -->
@@ -824,7 +833,56 @@
     easy on that limit. Your optional <b>API key</b> (pay as you go) powers only the written drafts. They never
     draw from each other.</div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>19 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>19 / 21</span></div>
+</section>
+
+<!-- ============ KEEPING UP TO DATE ============ -->
+<section class="page">
+  <div class="kicker">Keeping it current</div>
+  <h1 class="h1">Keeping trajecktory up to date</h1>
+  <p class="lead" style="margin-top:8px">After that first install, trajecktory updates itself from inside the
+  dashboard. There is nothing to download by hand, and nothing to do in Claude Desktop.</p>
+
+  <ol class="do">
+    <li>When you open the dashboard, trajecktory checks for a newer version (this needs an internet connection).</li>
+    <li>If one is ready, a banner appears across the top: <b>Update available: v1.7.28 to v1.7.29</b>, with a <span class="click">What's new</span> link (the changelog) and an <span class="click">Update now</span> button.</li>
+    <li>Click <span class="click">Update now</span>. trajecktory downloads the update, restarts itself, and reloads the page on its own. That is the whole process.</li>
+  </ol>
+
+  <figure>
+    <div style="border:1px solid var(--line); border-radius:10px; overflow:hidden; box-shadow:0 4px 14px rgba(40,30,70,.08)">
+      <div style="display:flex; align-items:center; gap:12px; padding:11px 15px; background:var(--brand-tint); border-bottom:1px solid var(--brand-soft); position:relative">
+        <span style="font-size:14px">&#11014;</span>
+        <span style="flex:1; font-size:12.5px; color:var(--ink)"><b>Update available: v1.7.28 to v1.7.29</b></span>
+        <span style="font-size:11px; color:var(--brand-deep); text-decoration:underline">What's new</span>
+        <span class="btn">Update now</span>
+        <div class="ring" style="left:79%; top:14%; width:19%; height:62%"></div>
+      </div>
+      <div style="padding:16px; background:#fff; color:var(--muted); font-size:11px">Your dashboard sits below the banner, as usual.</div>
+    </div>
+    <figcaption>The update banner at the top of the dashboard. Click <b>Update now</b>; the rest is automatic.</figcaption>
+  </figure>
+
+  <div class="callout ok"><span class="ic">&#9829;</span>
+    <b>Your data is never touched.</b> Updates only replace the program files. Your CV, profile, application
+    tracker, reports, and settings stay exactly as they are, and trajecktory keeps a rollback in case anything
+    ever goes wrong.</div>
+
+  <div class="row">
+    <div class="col"><div class="callout tip"><span class="ic">&#9432;</span>
+      <b>Check which version you are on.</b> The dashboard sidebar shows the running version, for example
+      <b>v1.7.28</b>, so you can confirm an update applied.</div></div>
+    <div class="col"><div class="callout note"><span class="ic">&#128229;</span>
+      <b>Already on an older build (1.7.23 or earlier)?</b> Those cannot update themselves, so install this
+      version once from the installer. After that single manual install, every future update is one click.</div></div>
+  </div>
+
+  <div class="callout warn"><span class="ic">&#9888;</span>
+    <b>One rare exception.</b> Now and then an update needs a brand-new installer (when the underlying engine
+    changes). When that happens, the banner tells you to download the latest setup file instead of updating in
+    place. That is the only time you would need the big installer again.</div>
+
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>20 / 21</span></div>
 </section>
 
 <!-- ============ P17 - TROUBLESHOOTING ============ -->
@@ -836,7 +894,8 @@
   <div class="row">
     <div class="col">
       <div class="stuck"><b>The dashboard did not open.</b> In the Claude <b>Code</b> tab, with your trajecktory
-      folder open, type <b>Start the live dashboard</b> again. The <b>trajecktory</b> shortcut works as a fallback.</div>
+      folder open, type <b>Start the live dashboard</b> again. The <b>trajecktory</b> shortcut works as a fallback.
+      (If the Code tab will not let you type, you have not restarted since installing trajecktory. Restart once, then try again.)</div>
       <div class="stuck"><b>"401 authentication_error" on Agent Scan or Evaluate?</b> Your Claude sign-in
       expired. Click <b>Sign in to Claude</b> in the sidebar again, then retry the step. Not a bug.</div>
       <div class="stuck"><b>The Pipeline looks empty after evaluating.</b> Click <b>Merge Tracker</b> in the
@@ -845,6 +904,9 @@
       page to add one, or skip it. Scoring still works without it.</div>
       <div class="stuck"><b>"Windows protected your PC".</b> Click <b>More info</b>, then <b>Run anyway</b>.
       A normal warning for new apps.</div>
+      <div class="stuck"><b>Setup says "Git for Windows is not installed," or the Code tab will not let me type.</b>
+      trajecktory installs Git for you, but the Claude app only sees it after a restart. Restart your computer
+      once, then reopen the Code tab and continue. This is normal on a fresh install.</div>
     </div>
     <div class="col">
       <div class="stuck"><b>The tab disappeared.</b> Look in your browser for the <b>trajecktory</b> tab
@@ -863,12 +925,13 @@
   </div>
 
   <div class="callout ok" style="margin-top:6px"><span class="ic">&#9829;</span>
-    <b>That is the whole picture.</b> Claude is installed (Guide 1), trajecktory is installed and set up
-    (Guide 2), and you know how it runs: paste prompts into Claude Code for Setup, then run the <b>Workflow</b>
-    steps in the sidebar to find and score jobs. Welcome to a calmer, smarter job search with
+    <b>That is the whole picture.</b> Claude is installed (Guide 1); trajecktory is installed, it set up Git for
+    Windows, and your one restart made the Code tab work (Guide 2). You know how it runs: paste prompts into
+    Claude Code for Setup, then run the <b>Workflow</b> steps in the sidebar to find and score jobs. Welcome to a
+    calmer, smarter job search with
     <span class="brand">trajecktory</span>.</div>
 
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>20 / 20</span></div>
+  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 2, Installing trajecktory</span><span>21 / 21</span></div>
 </section>
 
 </body>
