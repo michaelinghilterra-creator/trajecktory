@@ -225,6 +225,27 @@ function App() {
     }
   }, [toast]);
 
+  // The app-level drawer now renders PipelineDrawer (same as Pipeline/Follow-Ups),
+  // used by Insights citations and the command-palette deep dive. PipelineDrawer
+  // fires onAction(app, actionId) with a button/action id — not a canonical status
+  // — so map it the same way Pipeline does (pipeline.jsx MAP) before persisting via
+  // handleAction. onStatusChange already passes a canonical status straight through.
+  const handleDrawerAction = (app, actionId) => {
+    const MAP = {
+      apply_manual: 'Applied', apply_claude: 'Applied', already_applied: 'Applied',
+      responded: 'Responded', offer: 'Offer', accept: 'Offer', reopen: 'Evaluated',
+      Applied: 'Applied', Responded: 'Responded', Offer: 'Offer',
+      'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview', '4th Interview': '4th Interview',
+      SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
+    };
+    const next = MAP[actionId];
+    if (!next) return;
+    handleAction(app, next);
+    // Leaving the active pipeline closes the drawer (parity with Pipeline).
+    const TERMINAL = ['SKIP', 'Not a Fit', 'Closed', 'Rejected', 'Discarded', 'No Response'];
+    if (TERMINAL.includes(next)) setDrawerApp(null);
+  };
+
   // Stats for sidebar
   const stats = useMemo(() => {
     const total = apps.length;
@@ -381,7 +402,16 @@ function App() {
         </div>
       </div>
 
-      <window.Drawer app={drawerApp} onClose={() => setDrawerApp(null)} onAction={handleAction} />
+      {drawerApp && window.PipelineDrawer && (
+        <window.PipelineDrawer
+          app={drawerApp}
+          onClose={() => setDrawerApp(null)}
+          onAction={handleDrawerAction}
+          onStatusChange={(a, s) => handleAction(a, s)}
+          isStale={() => false}
+          onFollowupChange={refreshApps}
+        />
+      )}
       <window.CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={commands} />
       <window.ToastStack toasts={toasts} />
       {tweaksUI}
