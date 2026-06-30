@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.8.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.7.32...v1.8.0) (2026-06-30)
+
+
+### Features
+
+* 60-day activity sparkline and slimmer analytics layout ([2c7bb60](https://github.com/michaelinghilterra-creator/trajecktory/commit/2c7bb60d768fa03bb6b5aae0fa51ba1634bf564e))
+* add CSV Template and Import to Recruiters with a shared importer ([eaba6fb](https://github.com/michaelinghilterra-creator/trajecktory/commit/eaba6fbdb50d80bd9cc2e06e9d5af03a8bd3889b))
+* add phone and company URL to TA Outreach import and drawer ([8f7e1f6](https://github.com/michaelinghilterra-creator/trajecktory/commit/8f7e1f6e50aa9d762bdc69d39fb49d0f9c41bd79))
+* drop Triage from the API-key workflow ([d37fd3c](https://github.com/michaelinghilterra-creator/trajecktory/commit/d37fd3cce3373910419ea44e0ba021994a2eb4e6))
+* hide the Triage results panel on the API-key workflow ([3484d99](https://github.com/michaelinghilterra-creator/trajecktory/commit/3484d990c14c67555bcc7e1d42f79b0e9383fd49))
+* restructure Setup into sub-tabs with a Tell Me About Yourself pitch builder ([626c5b1](https://github.com/michaelinghilterra-creator/trajecktory/commit/626c5b194eb47a9bf4839e21dcd9243ffdba02b3))
+* split Insights into Overview / What's working / What's not / Recommended moves sub-tabs ([d2ada79](https://github.com/michaelinghilterra-creator/trajecktory/commit/d2ada79e8540757ad5d49a2567574e6d49b3aabe))
+* split the workflow sidebar into Claude-plan and API-key variants ([711c145](https://github.com/michaelinghilterra-creator/trajecktory/commit/711c1454c26049bb3c5c73b3d2814f7cd53e531a))
+
+
+### Bug Fixes
+
+* open the Pipeline drawer from Insights citations and command palette ([4bcc27d](https://github.com/michaelinghilterra-creator/trajecktory/commit/4bcc27dc1b213bb0dc59bce987a9265d1dd5e102))
+* remove hardcoded absolute path from onboarding resize-shots script ([26f7f8b](https://github.com/michaelinghilterra-creator/trajecktory/commit/26f7f8b33064257ba8a31259f216bd35727883de))
+* ship next-jd.mjs via auto-update + make merge-tracker crash-proof without it ([973b873](https://github.com/michaelinghilterra-creator/trajecktory/commit/973b8736763ae86e46a017dfd5b67f039d78cd67))
+
 ## [1.7.32] - 2026-06-29
 
 ### Fixed
