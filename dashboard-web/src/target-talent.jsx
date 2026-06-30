@@ -409,6 +409,8 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
   const [draftResult, setDraftResult] = useState(null);
   const [draftStage, setDraftStage] = useState("general");
   const [notes, setNotes] = useState("");
+  const [website, setWebsite] = useState("");
+  const [editingWeb, setEditingWeb] = useState(false);
   const [logModal, setLogModal] = useState(null);
   // Multi-app cross-log: every related application at the company is checked
   // by default so a TA touch propagates to all of them in one step. User can
@@ -424,6 +426,8 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
       .then(d => {
         setData(d);
         setNotes(d.notes || "");
+        setWebsite(d.website || "");
+        setEditingWeb(false);
         // Pre-check every ACTIVE related application (Evaluated/Applied/Responded/interview rounds).
         // Closed-state apps (Rejected/Discarded/Closed/SKIP/Not a Fit) start unchecked.
         const ACTIVE = new Set(["Evaluated", "Applied", "Responded", ...window.INTERVIEW_STAGES]);
@@ -462,6 +466,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
   const saveNotes = () => {
     fetch(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }) })
       .then(() => { load(); onUpdate?.(); });
+  };
+  const saveWebsite = () => {
+    fetch(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ website: website.trim() }) })
+      .then(() => { setEditingWeb(false); load(); onUpdate?.(); });
   };
   const generateDraft = () => {
     setDrafting(true); setDraftResult(null);
@@ -525,13 +533,28 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
         <div className="ds-section">
           <div className="ds-label"><TIcon d={TI.building} size={12} /> Contact</div>
           <div className="info-card">
-            {ttDomain(data.email) && (
-              <div className="info-row">
-                <span className="ik">Website</span>
-                <a className="iv link" href={"https://" + ttDomain(data.email)} target="_blank" rel="noreferrer">{ttDomain(data.email)}</a>
-                <a className="copy-btn" href={"https://" + ttDomain(data.email)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}><TIcon d={TI.ext} size={11} /> Open</a>
-              </div>
-            )}
+            <div className="info-row">
+              <span className="ik">Website</span>
+              {editingWeb ? (
+                <>
+                  <input className="iv" value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://company.com"
+                    style={{ background: "var(--panel-2)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 6px", color: "var(--text)", fontSize: 12, minWidth: 0 }} />
+                  <button className="btn primary sm" onClick={saveWebsite}>Save</button>
+                </>
+              ) : (() => {
+                const stored = (data.website || "").trim();
+                const guess = ttDomain(data.email);
+                const href = stored ? (stored.startsWith("http") ? stored : "https://" + stored) : (guess ? "https://" + guess : "");
+                return (
+                  <>
+                    {href
+                      ? <a className="iv link" href={href} target="_blank" rel="noreferrer">{stored || guess}{!stored && guess ? <span style={{ color: "var(--text-mute)", marginLeft: 5, fontSize: 10 }}>(from email)</span> : null}</a>
+                      : <span className="iv" style={{ color: "var(--text-mute)" }}>—</span>}
+                    <button className="copy-btn" onClick={() => { setWebsite(stored); setEditingWeb(true); }}><TIcon d={TI.pen} size={11} /> Edit</button>
+                  </>
+                );
+              })()}
+            </div>
             <div className="info-row">
               <span className="ik">Email</span>
               <span className="iv">
