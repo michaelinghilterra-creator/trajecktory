@@ -27,6 +27,17 @@
   --r-card:    10px;
   --r-ctl:     7px;
   --gap:       14px;
+  /* Right-hand drawer width, sized so the (right-anchored) drawer's left edge
+     lands just past the list's Company column. The Company/Role boundary lives
+     in two regimes because the table is `table-layout:fixed; width:100%`:
+       - wide viewports: the table stretches, so the boundary scales (~0.41vw).
+         58vw puts the left edge at ~42vw, just past it.
+       - narrow viewports (< ~1500px): the table hits its natural width and stops
+         stretching, so the boundary pins near 615px. calc(100vw - 630px) pins the
+         left edge at 630px, just past it.
+     min() picks whichever keeps the drawer off Company; max(520px, ...) floors it
+     so it never shrinks below the old width on small screens. */
+  --drawer-w: max(520px, min(58vw, calc(100vw - 630px)));
 }
 [data-theme="light"] {
   --bg:        #f5f5f4;
@@ -639,7 +650,7 @@ body {
 .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
 .drawer {
   position: fixed; top: 0; right: 0; bottom: 0;
-  width: 520px; max-width: 92vw;
+  width: var(--drawer-w); max-width: 96vw;
   background: var(--bg-2);
   border-left: 1px solid var(--border);
   z-index: 41;
@@ -647,7 +658,7 @@ body {
   transition: transform 0.18s cubic-bezier(0.2,0.8,0.2,1);
   display: flex; flex-direction: column;
 }
-.drawer.wide { width: 50vw; max-width: 50vw; }
+.drawer.wide { width: var(--drawer-w); max-width: 96vw; }
 .drawer.open { transform: translateX(0); }
 .drawer-head {
   padding: 16px 20px;
@@ -1962,11 +1973,12 @@ body {
 .pl-drawer {
   position: fixed; top: 0; bottom: 0; right: 0;
   /* Match the All Entries / shared .drawer.wide width. */
-  width: 50vw; max-width: 50vw;
+  width: var(--drawer-w); max-width: 96vw;
   background: var(--panel); border-left: 1px solid var(--border);
   box-shadow: -16px 0 40px -12px rgba(0,0,0,0.6);
   display: flex; flex-direction: column;
-  margin-right: -55vw; transition: margin-right .2s cubic-bezier(.2,.7,.3,1);
+  /* Closed offset must clear the full (now wider) panel + its shadow. */
+  margin-right: calc((var(--drawer-w) + 60px) * -1); transition: margin-right .2s cubic-bezier(.2,.7,.3,1);
   pointer-events: auto;
   z-index: 2;
 }
