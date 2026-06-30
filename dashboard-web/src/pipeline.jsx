@@ -589,7 +589,7 @@ function CompPositioningCard(props) {
         </div>
       ) : (
         <div>
-          <div style={{ display: 'flex', height: 28, borderRadius: 6, overflow: 'hidden', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', height: 24, borderRadius: 6, overflow: 'hidden', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
             {bands.filter(b => b.n > 0).map((b, i) => (
               <div key={i} title={b.label + ': ' + b.n}
                    style={{ flex: b.n, background: b.color, opacity: 0.85, display: 'grid', placeItems: 'center',
@@ -643,26 +643,6 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
       .catch(() => {});
     return () => { alive = false; };
   }, []);
-
-  const engineKeys = Object.keys(ENGINE_META);
-  const byEngine = engineKeys.map(k => {
-    const items = apps.filter(a => engineOf(a.resume) === k);
-    const applied = items.filter(a => reached(a, 1));
-    const responded = items.filter(a => reached(a, 2));
-    const interviewed = items.filter(a => reached(a, 3));
-    const scored = items.filter(a => a.score != null);
-    const avg = scored.length ? scored.reduce((s, a) => s + a.score, 0) / scored.length : 0;
-    const respRate = applied.length ? Math.round((responded.length / applied.length) * 100) : 0;
-    const intvRate = applied.length ? Math.round((interviewed.length / applied.length) * 100) : 0;
-    return { k, meta: ENGINE_META[k], n: items.length, applied: applied.length, respRate, intvRate, avg };
-  }).filter(e => e.n > 0).sort((a, b) => b.respRate - a.respRate || b.avg - a.avg);
-  const eligible = byEngine.filter(e => e.applied >= 3);
-  const best = eligible[0] || byEngine[0];
-  const fieldAvgResp = (() => {
-    const ap = apps.filter(a => engineOf(a.resume) && reached(a, 1));
-    const re = apps.filter(a => engineOf(a.resume) && reached(a, 2));
-    return ap.length ? Math.round((re.length / ap.length) * 100) : 0;
-  })();
 
   const srcKeys = Object.keys(SOURCE);
   const bySource = srcKeys.map(k => {
@@ -732,36 +712,7 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
         <Kpi k="On / Above Target" v={inOrAbovePct + '%'} sub={`avg posted comp $${avgComp}K`} color={inOrAbovePct < 40 ? 'var(--red)' : 'var(--text)'} icon={PI.trend} />
       </div>
 
-      <div className="grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, alignItems: 'start', marginBottom: 14 }}>
-        <div className="card padded-lg">
-          <div className="card-head"><span className="card-title"><span className="dot" />Engine Performance</span><span className="card-meta mono">response rate · ranked</span></div>
-          {byEngine.length === 0 ? (
-            <div className="no-data" style={{ padding: 14 }}>No résumés generated yet — apply with an engine to see comparisons.</div>
-          ) : (
-            <div className="lol" style={{ marginTop: 2 }}>
-              {byEngine.map((e, i) => (
-                <div className="lol-row" key={e.k}>
-                  <span className="lol-rank">{i + 1}</span>
-                  <span className="lol-name"><span className="d" style={{ background: e.meta.color }} />{e.k}{best && e.k === best.k && <span className="best">BEST</span>}</span>
-                  <div className="lol-track">
-                    <div className="lol-base" />
-                    <div className="lol-fill" style={{ width: `${e.respRate}%`, background: e.meta.color, opacity: 0.45 }} />
-                    <div className="lol-bench" style={{ left: `${fieldAvgResp}%` }} />
-                    <div className="lol-dot" style={{ left: `${e.respRate}%`, background: e.meta.color, boxShadow: `0 0 8px ${e.meta.color}` }} />
-                  </div>
-                  <span className="lol-val">{e.respRate}%<span className="s"> · {e.avg.toFixed(1)}★</span></span>
-                </div>
-              ))}
-              <div className="lol-benchcap"><span className="ln" /> dashed = {fieldAvgResp}% field average · ★ avg score</div>
-            </div>
-          )}
-          {best && (
-            <Insight kind="good">
-              <b>{best.k}</b> is your strongest engine — {best.respRate}% of its résumés draw a response vs {fieldAvgResp}% across all engines. Route more roles through {best.k}.
-            </Insight>
-          )}
-        </div>
-
+      <div className="grid cols-2" style={{ marginBottom: 14 }}>
         <div className="card padded-lg">
           <div className="card-head"><span className="card-title"><span className="dot" />Source Effectiveness</span><span className="card-meta mono">quality by channel</span></div>
           <table className="atbl" style={{ marginTop: 2 }}>
@@ -784,9 +735,7 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
             </Insight>
           )}
         </div>
-      </div>
 
-      <div className="grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, alignItems: 'start', marginBottom: 14 }}>
         <div className="card padded-lg">
           <div className="card-head"><span className="card-title"><span className="dot" />Archetype Conversion</span><span className="card-meta mono">apply → interview</span></div>
           <div className="afun" style={{ marginTop: 2 }}>
@@ -807,7 +756,9 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
             </Insight>
           )}
         </div>
+      </div>
 
+      <div style={{ marginBottom: 14 }}>
         <CompPositioningCard
           apps={apps}
           withComp={withComp}
