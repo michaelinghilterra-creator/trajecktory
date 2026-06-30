@@ -6,6 +6,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 jobs:
   release-please:
@@ -13,5 +14,10 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         with:
+          # Prefer a PAT / GitHub App token so the release PR triggers required
+          # status checks (the default GITHUB_TOKEN does not trigger downstream
+          # workflows, so branch-protection checks would never run on it). Falls
+          # back to GITHUB_TOKEN until the RELEASE_PLEASE_TOKEN secret is added.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json

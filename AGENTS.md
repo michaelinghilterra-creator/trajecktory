@@ -289,6 +289,35 @@ Default modes are in `modes/` (English). Additional language-specific modes are 
 - **Dependabot** monitors npm, Go modules, and GitHub Actions for security updates
 - **Contributing process**: issue first → discussion → PR with linked issue → CI passes → maintainer review → merge
 
+## Versioning & Releases
+
+Versioning is automated with **Release Please** (`.github/workflows/release.yml`,
+config in `release-please-config.json` + `.release-please-manifest.json`). It uses the
+`simple` strategy and writes the canonical **`VERSION`** file in place; it also keeps
+`package.json`, `package-lock.json`, and the installer's `#define AppVersion`
+(`installer/trajecktory.iss`, marked with `x-release-please-start/end` annotations) in
+sync. The `VERSION` file is the single source of truth the app, updater, and installer read.
+
+**The version is NOT bumped per commit.** Release Please reads every commit landed on
+`main`, accumulates them into a standing "release PR", and only bumps + tags + writes the
+changelog when that PR is **merged**. The bump size comes from
+[Conventional Commit](https://www.conventionalcommits.org/) prefixes:
+
+- `fix:` → patch (1.7.32 → 1.7.33)
+- `feat:` → minor (1.7.32 → 1.8.0)
+- `feat!:` / `fix!:` / a `BREAKING CHANGE:` footer → major
+- `chore:` / `ci:` / `docs:` / `refactor:` / `test:` → no release on their own (but ride along in the next release's changelog)
+
+**RULE: write Conventional Commit messages.** A commit without a recognized type prefix is
+ignored by Release Please — it will neither bump the version nor appear in the changelog.
+Tags are clean `vMAJOR.MINOR.PATCH` (e.g. `v1.7.33`); the baseline `v1.7.32` tag anchors history.
+
+> **One-time setup the repo owner must finish:** add a `RELEASE_PLEASE_TOKEN` repo secret
+> (fine-grained PAT or GitHub App token with Contents + Pull-requests write) and enable
+> Settings → Actions → "Allow GitHub Actions to create and approve pull requests". Until then
+> the workflow falls back to `GITHUB_TOKEN`, which opens the release PR but cannot trigger the
+> branch-protection status checks needed to merge it.
+
 ## Community and Governance
 
 - **Code of Conduct**: Contributor Covenant 2.1 with enforcement actions (see `CODE_OF_CONDUCT.md`)
