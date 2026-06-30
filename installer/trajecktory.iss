@@ -10,7 +10,9 @@
 ; "unknown publisher" warning). App icon is wired below (assets\trajecktory.ico).
 
 #define AppName "trajecktory"
+; x-release-please-start-version
 #define AppVersion "1.7.32"
+; x-release-please-end
 #define AppPublisher "trajecktory"
 
 [Setup]
