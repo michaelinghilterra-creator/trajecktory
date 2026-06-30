@@ -112,6 +112,22 @@ function summarizeToolUse(block) {
   return name;
 }
 
+// A completed evaluation produces two artifacts that share a leading number
+// (the report number equals the tracker id): a markdown report in reports/ and
+// a one-line TSV in batch/tracker-additions/. The agent writes them in either
+// order and sometimes defers the TSV, so the progress meter counts an eval as
+// done when EITHER artifact is written, deduped by that shared number so the
+// report and its TSV count once. Returns the number string, or null.
+function completedEvalId(block) {
+  if (!block || block.name !== 'Write') return null;
+  const fp = String((block.input && block.input.file_path) || '').replace(/\\/g, '/');
+  let m = fp.match(/(?:^|\/)reports\/(\d+)-[^/]*\.md$/i);
+  if (m) return m[1];
+  m = fp.match(/(?:^|\/)tracker-additions\/(\d+)-[^/]*\.tsv$/i);
+  if (m) return m[1];
+  return null;
+}
+
 // Spawn `claude -p "/trajecktory <mode>"` and stream-parse progress into the
 // job record. Resolves { ok, result, error } when the child closes and sets the
 // job's final status itself.
@@ -188,6 +204,9 @@ function runClaudeAgent(jobId, mode, target) {
     let resultText = '';
     let isError = false;
     let settled = false;
+    // Unique ids of evaluations completed this run (report or TSV write, deduped
+    // by their shared leading number). Its size drives the "X of N" meter.
+    const doneEvalIds = new Set();
 
     child.on('error', (e) => { if (!settled) { settled = true; fail(claudeErrorMessage(e)); } });
 
@@ -222,7 +241,6 @@ function runClaudeAgent(jobId, mode, target) {
       if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content)) {
         const toolCalls = (job.toolCalls || []).slice();
         let toolCount = job.toolCount || 0;
-        let evaluationsDone = job.evaluationsDone || 0;
         let activity = job.activity;
         for (const block of ev.message.content) {
           if (block.type === 'text' && block.text) {
@@ -232,13 +250,22 @@ function runClaudeAgent(jobId, mode, target) {
             toolCalls.push(s);
             toolCount += 1;
             activity = s;
-            // One TSV in batch/tracker-additions/ is written per completed
-            // evaluation — the progress meter's "done" signal.
-            if (block.name === 'Write' && /tracker-additions[\\/].+\.tsv$/i.test(String((block.input && block.input.file_path) || ''))) {
-              evaluationsDone += 1;
-            }
+            // Progress signal: a completed evaluation writes a report AND a
+            // tracker-additions TSV that share a leading number. The agent
+            // often writes the report first and defers the TSV, so count
+            // either artifact and dedupe by that number. Counting only the
+            // TSV (the old behavior) left the meter at 0 until the very end.
+            const evalId = completedEvalId(block);
+            if (evalId) doneEvalIds.add(evalId);
           }
         }
+        // Clamp to the batch denominator for capped modes (pipeline/deep): the
+        // cap is a soft prompt instruction the model can overshoot, and the UI
+        // renders "X of N" verbatim, so an unclamped count would read "11 of 10".
+        const total = job.progressTotal;
+        const evaluationsDone = (typeof total === 'number' && total > 0)
+          ? Math.min(doneEvalIds.size, total)
+          : doneEvalIds.size;
         update({ toolCalls: toolCalls.slice(-50), toolCount, evaluationsDone, activity });
         return;
       }
