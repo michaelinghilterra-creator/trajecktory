@@ -20,6 +20,7 @@ import { router as linkedinDraftsRoutes } from './routes/linkedin-drafts.mjs';
 import { router as reportsRoutes } from './routes/reports.mjs';
 import { router as insightsRoutes } from './routes/insights.mjs';
 import { router as setupRoutes } from './routes/setup.mjs';
+import { router as setupModulesRoutes } from './routes/setup-modules.mjs';
 import { router as notesRoutes } from './routes/notes.mjs';
 import { router as systemRoutes, updateJobs } from './routes/system.mjs';
 import { getIdentity } from './lib/profile.mjs';
@@ -132,6 +133,7 @@ app.use(linkedinDraftsRoutes);
 app.use(reportsRoutes);
 app.use(insightsRoutes);
 app.use(setupRoutes);
+app.use(setupModulesRoutes);
 app.use(notesRoutes);
 app.use(systemRoutes);
 

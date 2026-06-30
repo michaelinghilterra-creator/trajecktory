@@ -1088,3 +1088,268 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     </div>
   );
 };
+
+// ─── Setup shell — wraps Launchpad as sub-tab #1 plus added modules ──────────
+const SETUP_ICONS = {
+  launchpad: 'M5 3l14 9-14 9V3z',
+  pitch:     'M21 11.5a8.38 8.38 0 0 1-9 8.5 8.38 8.38 0 0 1-4-1L3 21l1.5-5a8.38 8.38 0 0 1-1-4 8.5 8.5 0 0 1 17 0z',
+  twc:       'M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22z M12 6v6l4 2',
+  changelog: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h6',
+  about:     'M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22z M12 16v-4 M12 8h.01',
+};
+function SetupIcon({ name, size = 14 }) {
+  const d = SETUP_ICONS[name];
+  if (!d) return null;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d={d} />
+    </svg>
+  );
+}
+
+const SETUP_SUBTABS = [
+  { id: 'launchpad', label: 'Launchpad',              icon: 'launchpad' },
+  { id: 'pitch',     label: 'Tell Me About Yourself', icon: 'pitch' },
+  { id: 'twc',       label: 'TWC',                    icon: 'twc' },
+  { id: 'changelog', label: 'Change Log',             icon: 'changelog' },
+  { id: 'about',     label: 'About',                  icon: 'about' },
+];
+
+window.SetupTab = function SetupTab({ toast, setTab }) {
+  const [view, setView] = useState('launchpad');
+  return (
+    <div className="col" style={{ gap: 0 }}>
+      <div className="subtabs">
+        {SETUP_SUBTABS.map(s => (
+          <div key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
+            <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
+              <SetupIcon name={s.icon} size={14} />
+            </span>
+            {s.label}
+          </div>
+        ))}
+      </div>
+
+      {view === 'launchpad' && window.LaunchpadTab && <window.LaunchpadTab toast={toast} setTab={setTab} />}
+      {view === 'pitch'     && <TellMeAboutYouPanel />}
+      {view === 'twc'       && <TwcPanel />}
+      {view === 'changelog' && <ChangelogPanel />}
+      {view === 'about'     && <AboutPanel />}
+    </div>
+  );
+};
+
+// ─── Tell Me About Yourself — AI elevator-pitch builder ──────────────────────
+const PITCH_SENIORITY = ['IC', 'Manager', 'Director', 'VP'];
+const PITCH_STAGES    = ['Recruiter screen', 'Hiring manager', 'Final loop'];
+const PITCH_LENGTHS   = ['60s', '90s', '120s'];
+
+function SetupSegmented({ label, options, value, onChange }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <span className="mono dim" style={{ fontSize: 11, minWidth: 100 }}>{label}</span>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {options.map(o => (
+          <button key={o} className={'btn sm' + (value === o ? ' primary' : '')} onClick={() => onChange(o)} style={{ fontSize: 12 }}>{o}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TellMeAboutYouPanel() {
+  const [seniority, setSeniority] = useState('Director');
+  const [stage, setStage] = useState('Recruiter screen');
+  const [length, setLength] = useState('90s');
+  const [industry, setIndustry] = useState('');
+  const [pitch, setPitch] = useState('');
+  const [genAt, setGenAt] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [dirty, setDirty] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/setup/pitch').then(r => r.json()).then(d => {
+      if (!d) return;
+      if (d.pitch) setPitch(d.pitch);
+      if (d.generated_at) setGenAt(d.generated_at);
+      if (d.tweaks) {
+        setSeniority(d.tweaks.seniority || 'Director');
+        setStage(d.tweaks.interviewStage || 'Recruiter screen');
+        setLength(d.tweaks.length || '90s');
+        setIndustry(d.tweaks.industry || '');
+      }
+    }).catch(() => {});
+  }, []);
+
+  const generate = () => {
+    setLoading(true); setError(null); setSaved(false);
+    fetch('/api/setup/pitch/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seniority, industry, interviewStage: stage, length }) })
+      .then(r => r.json().then(b => ({ ok: r.ok, b })))
+      .then(({ ok, b }) => {
+        setLoading(false);
+        if (!ok || b.error) { setError(b.error || 'Generation failed.'); return; }
+        setPitch(b.pitch); setGenAt(b.generated_at); setDirty(false);
+      })
+      .catch(e => { setLoading(false); setError(e.message); });
+  };
+  const save = () => {
+    fetch('/api/setup/pitch/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pitch, tweaks: { seniority, industry, interviewStage: stage, length } }) })
+      .then(() => { setSaved(true); setDirty(false); })
+      .catch(() => {});
+  };
+  const wordCount = pitch.trim() ? pitch.trim().split(/\s+/).length : 0;
+
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="ta-head">
+        <div>
+          <h1>Tell me about yourself</h1>
+          <div className="sub">A spoken answer to the most common interview opener, built from your Launchpad profile. Tweak the framing, then make it yours.</div>
+        </div>
+      </div>
+
+      <div className="card padded-lg col" style={{ gap: 12 }}>
+        <SetupSegmented label="Seniority" options={PITCH_SENIORITY} value={seniority} onChange={setSeniority} />
+        <SetupSegmented label="Interview stage" options={PITCH_STAGES} value={stage} onChange={setStage} />
+        <SetupSegmented label="Length" options={PITCH_LENGTHS} value={length} onChange={setLength} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span className="mono dim" style={{ fontSize: 11, minWidth: 100 }}>Industry</span>
+          <input value={industry} onChange={e => setIndustry(e.target.value)} placeholder="blank = from your profile"
+            style={{ flex: 1, minWidth: 160, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '5px 8px', color: 'var(--text)', fontSize: 12.5 }} />
+        </div>
+        <div className="row" style={{ gap: 10 }}>
+          <button className="btn primary" onClick={generate} disabled={loading}>{loading ? 'Writing…' : (pitch ? '↻ Regenerate' : 'Generate pitch')}</button>
+          {genAt && <span className="mono dim" style={{ fontSize: 11 }}>Last generated {new Date(genAt).toLocaleString()}</span>}
+        </div>
+      </div>
+
+      {error && (
+        <div className="card padded-lg" style={{ borderColor: 'rgba(239,68,68,0.4)' }}>
+          <div className="mono" style={{ color: 'var(--red)', fontSize: 12 }}>{error}</div>
+        </div>
+      )}
+
+      <div className="card padded-lg col" style={{ gap: 10 }}>
+        <div className="card-head">
+          <span className="card-title"><span className="dot" style={{ background: 'var(--accent)' }} />Your pitch</span>
+          <span className="card-meta mono">{wordCount ? wordCount + ' words' : ''}</span>
+        </div>
+        <textarea className="notes-ta" value={pitch} onChange={e => { setPitch(e.target.value); setDirty(true); setSaved(false); }}
+          placeholder="Click Generate pitch to draft from your profile, then edit freely…"
+          style={{ minHeight: 200, lineHeight: 1.6, fontSize: 13.5 }} />
+        <div className="row" style={{ gap: 10 }}>
+          <button className="btn primary sm" onClick={save} disabled={!pitch.trim()}>Save</button>
+          {saved && !dirty && <span className="mono" style={{ fontSize: 11, color: 'var(--green)' }}>Saved</span>}
+          {dirty && <span className="mono dim" style={{ fontSize: 11 }}>Unsaved edits</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── TWC placeholder ─────────────────────────────────────────────────────────
+function TwcPanel() {
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="ta-head"><div><h1>TWC</h1><div className="sub">Biweekly unemployment activity log.</div></div></div>
+      <div className="card padded-lg">
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Coming soon.</div>
+        <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.55 }}>
+          This module will help you assemble the biweekly work-search activity you report when you file
+          for unemployment, pulled straight from your applications and outreach. Still collecting the data
+          points — details land soon.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Change Log — Release-Please CHANGELOG.md, skimmable ─────────────────────
+function ChangelogPanel() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    fetch('/api/setup/changelog').then(r => r.json()).then(setData).catch(e => setError(e.message));
+  }, []);
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="ta-head">
+        <div>
+          <h1>Change log</h1>
+          <div className="sub">{data?.version ? `You're on v${data.version}. What's changed, newest first.` : "What's changed, newest first."}</div>
+        </div>
+      </div>
+      {error && <div className="card padded-lg"><div className="mono" style={{ color: 'var(--red)', fontSize: 12 }}>{error}</div></div>}
+      {!data && !error && <div className="card padded-lg dim" style={{ fontSize: 12 }}>Loading…</div>}
+      {data && (data.entries || []).length === 0 && <div className="card padded-lg dim" style={{ fontSize: 12 }}>No changelog yet.</div>}
+      {data && (data.entries || []).map((e, i) => (
+        <div key={i} className="card padded-lg col" style={{ gap: 10 }}>
+          <div className="row" style={{ gap: 10, alignItems: 'baseline' }}>
+            <span style={{ fontSize: 15, fontWeight: 700 }}>v{e.version}</span>
+            {data.version === e.version && <span className="tag accent" style={{ fontSize: 10 }}>current</span>}
+            <span className="mono dim" style={{ fontSize: 11, marginLeft: 'auto' }}>{e.date}</span>
+          </div>
+          {e.sections.map((sec, j) => (
+            <div key={j} className="col" style={{ gap: 5 }}>
+              {sec.heading && <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.08em', color: 'var(--text-dim)' }}>{sec.heading.toUpperCase()}</div>}
+              {sec.items.map((it, k) => (
+                <div key={k} className="row" style={{ gap: 8, alignItems: 'flex-start', fontSize: 12.5, lineHeight: 1.5 }}>
+                  <span style={{ color: 'var(--accent)', flexShrink: 0 }}>•</span>
+                  <span>{it}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── About trajecktory ───────────────────────────────────────────────────────
+function AboutPanel() {
+  const [version, setVersion] = useState('');
+  useEffect(() => {
+    fetch('/api/system/version').then(r => r.json()).then(d => setVersion(d.version || '')).catch(() => {});
+  }, []);
+  const GH = 'https://github.com/michaelinghilterra-creator/trajecktory';
+  const faqs = [
+    { q: 'What is trajecktory?', a: 'An AI-assisted job-search command center: it tracks your pipeline, scores roles against your profile, drafts tailored resumes and outreach, and surfaces what to do next.' },
+    { q: 'Does it apply to jobs for me?', a: 'No. It prepares everything — evaluation, resume, cover letter, form answers — but always stops before submit. You make the final call on every application.' },
+    { q: 'Where does the AI run?', a: 'On your Claude plan by default (no API key needed) for writing features and Insights. An Anthropic API key is an optional faster path.' },
+    { q: 'Where is my data?', a: 'Local. Your applications, reports, and contacts live in plain markdown files on your machine. Nothing is uploaded to a trajecktory server.' },
+    { q: 'How do updates work?', a: 'A banner appears when a new version is available; one click updates and restarts. The Change Log tab shows what shipped.' },
+  ];
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="ta-head">
+        <div>
+          <h1>About trajecktory</h1>
+          <div className="sub">{version ? `v${version} · ` : ''}AI-assisted job search, on your terms.</div>
+        </div>
+      </div>
+      <div className="card padded-lg col" style={{ gap: 12 }}>
+        <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+          <b>trajecktory</b> turns a messy job hunt into a tracked, scored, AI-assisted pipeline. It reads your CV
+          and goals once, then helps you evaluate roles, tailor materials, time your follow-ups, and see what's
+          actually working — without ever sending anything on your behalf.
+        </div>
+        <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+          <a className="btn" href={GH} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>GitHub ↗</a>
+        </div>
+      </div>
+      <div className="card padded-lg col" style={{ gap: 12 }}>
+        <div className="card-head"><span className="card-title"><span className="dot" style={{ background: 'var(--accent)' }} />FAQ</span></div>
+        {faqs.map((f, i) => (
+          <div key={i} style={{ paddingBottom: 10, borderBottom: i < faqs.length - 1 ? '1px solid var(--border)' : 'none' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>{f.q}</div>
+            <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.55 }}>{f.a}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
