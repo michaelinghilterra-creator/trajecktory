@@ -520,7 +520,12 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               {isAgent && isRunning && (() => {
                 const elapsedMs = job.startedAt ? Date.now() - job.startedAt : 0;
                 const fmt = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`; };
-                const total = job.progressTotal, done = job.evaluationsDone || 0;
+                const total = job.progressTotal;
+                // Clamp: the batch cap is a soft prompt instruction the agent can
+                // overshoot, so guard the rendered "X of N" (and bar width) from
+                // showing e.g. "11 of 10".
+                const rawDone = job.evaluationsDone || 0;
+                const done = total > 0 ? Math.min(rawDone, total) : rawDone;
                 // Evaluate has a known batch size → fraction + bar + rough ETA.
                 if (total > 0) {
                   const eta = (done > 0 && done < total) ? ` · ~${fmt((elapsedMs / done) * (total - done))} left` : '';
