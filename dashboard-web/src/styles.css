@@ -874,6 +874,7 @@ body {
 @media (max-width: 1100px) {
   .grid.cols-4 { grid-template-columns: repeat(2,1fr); }
   .grid.cols-3 { grid-template-columns: 1fr 1fr; }
+  .grid.cols-2 { grid-template-columns: 1fr; }
   .grid.overview, .grid.overview-2 { grid-template-columns: 1fr; }
   .kanban { grid-template-columns: repeat(3, minmax(220px,1fr)); }
 }

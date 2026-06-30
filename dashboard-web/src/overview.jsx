@@ -72,6 +72,13 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
   // Actually the brief says Evaluated → Applied → Responded → Interview → Offer
   // Treat as a count of items that have at least reached that stage.
   const funnel = useMemoO(() => {
+    // Short axis labels so the 9-rung ladder doesn't overlap on the x-axis.
+    // `label` keeps the full name for tooltips + the conversion rows below.
+    const SHORT = {
+      "Evaluated": "Eval", "Applied": "Applied", "Responded": "Replied",
+      "Phone Screen": "Screen", "1st Interview": "1st", "2nd Interview": "2nd",
+      "3rd Interview": "3rd", "4th Interview": "4th", "Offer": "Offer",
+    };
     // Evaluated stage = entry point, includes everything (even SKIP/Discarded)
     // Applied stage   = anything that reached Applied or beyond, OR was Rejected
     //                   (Rejected implies an application was sent)
@@ -88,6 +95,7 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
       }
       return {
         label: stage,
+        short: SHORT[stage] || stage,
         value: stageApps.length,
         apps: stageApps,
         color: window.STATUS_META[stage]?.color || "var(--accent)",
@@ -258,8 +266,31 @@ const toggleRow = (id) => setSelected(s => {
         </div>
       </div>
 
-      {/* Row of three visuals: Funnel · Score Distribution · Activity 28d */}
-      <div className="grid cols-3" style={{ alignItems: "stretch" }}>
+      {/* Activity · last 28 days — full-width band on top */}
+      <div className="card padded-lg" style={{ display: "flex", flexDirection: "column" }}>
+        <div className="card-head">
+          <span className="card-title">Activity · last 28 days</span>
+          <span className="card-meta mono">
+            {apps.filter(a => window.daysAgo(a.date) <= 28).length} entries &nbsp;·&nbsp;
+            Last 7d <span style={{ color: "var(--accent)" }}>{activityInsights.last7}</span>&nbsp;·&nbsp;
+            Prior 7d <span style={{ color: "var(--text-dim)" }}>{activityInsights.prior7}</span>
+            <span style={{ color: activityInsights.trend > 0 ? "var(--green)" : activityInsights.trend < 0 ? "var(--red)" : "var(--text-dim)", marginLeft: 6 }}>
+              {activityInsights.trend > 0 ? `▲ +${activityInsights.trend}` : activityInsights.trend < 0 ? `▼ ${activityInsights.trend}` : "— flat"}
+            </span>
+          </span>
+        </div>
+        <window.Timeline apps={apps} days={28} height={72} />
+        <div className="row mono" style={{ marginTop: 10, fontSize: 10.5, color: "var(--text-mute)", gap: 4 }}>
+          Avg/wk
+          <span className="mono" style={{ color: "var(--text-dim)", marginLeft: 2 }}>{activityInsights.avgPerWeek}</span>
+          <span style={{ color: "var(--text-dim)" }}>·</span>
+          Peak
+          <span className="mono" style={{ color: "var(--text-dim)" }}>{activityInsights.peakCount} on {activityInsights.peakLabel}</span>
+        </div>
+      </div>
+
+      {/* Pipeline Funnel · Score Distribution — 50/50 below the activity band */}
+      <div className="grid cols-2" style={{ alignItems: "stretch" }}>
         <div className="card padded-lg" style={{ display: "flex", flexDirection: "column" }}>
           <div className="card-head">
             <span className="card-title">Pipeline Funnel</span>
@@ -308,33 +339,6 @@ const toggleRow = (id) => setSelected(s => {
               <span style={{ color: "var(--text-dim)" }}>·</span>
               Portfolio avg
               <span className="mono" style={{ color: "var(--text-dim)" }}>{scoreInsights.portfolioAvg}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="card padded-lg" style={{ display: "flex", flexDirection: "column" }}>
-          <div className="card-head">
-            <span className="card-title">Activity · last 28 days</span>
-            <span className="card-meta mono">{apps.filter(a => window.daysAgo(a.date) <= 28).length} entries</span>
-          </div>
-          <window.Timeline apps={apps} days={28} height={160} />
-          <div className="col" style={{ marginTop: "auto", paddingTop: 14, gap: 6 }}>
-            <div className="row mono" style={{ fontSize: 10.5, color: "var(--text-mute)", gap: 4 }}>
-              Last 7d
-              <span className="mono" style={{ color: "var(--accent)", marginLeft: 2 }}>{activityInsights.last7}</span>
-              <span style={{ color: "var(--text-dim)" }}>·</span>
-              Prior 7d
-              <span className="mono" style={{ color: "var(--text-dim)" }}>{activityInsights.prior7}</span>
-              <span className="mono" style={{ color: activityInsights.trend > 0 ? "var(--green)" : activityInsights.trend < 0 ? "var(--red)" : "var(--text-dim)", marginLeft: 4 }}>
-                {activityInsights.trend > 0 ? `▲ +${activityInsights.trend}` : activityInsights.trend < 0 ? `▼ ${activityInsights.trend}` : "— flat"}
-              </span>
-            </div>
-            <div className="row mono" style={{ fontSize: 10.5, color: "var(--text-mute)", gap: 4 }}>
-              Avg/wk
-              <span className="mono" style={{ color: "var(--text-dim)", marginLeft: 2 }}>{activityInsights.avgPerWeek}</span>
-              <span style={{ color: "var(--text-dim)" }}>·</span>
-              Peak
-              <span className="mono" style={{ color: "var(--text-dim)" }}>{activityInsights.peakCount} on {activityInsights.peakLabel}</span>
             </div>
           </div>
         </div>
