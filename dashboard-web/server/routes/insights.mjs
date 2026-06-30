@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { generateText } from '../lib/anthropic.mjs';
-import { INSIGHTS_DIR, INSIGHTS_LATEST, INSIGHTS_HISTORY_MAX, loadProfileContext, loadPriorInsight, pruneInsightsHistory, buildInsightsContext, stageFunnelStats } from '../lib/insights.mjs';
+import { INSIGHTS_DIR, INSIGHTS_LATEST, INSIGHTS_HISTORY_MAX, loadProfileContext, loadPriorInsight, pruneInsightsHistory, buildInsightsContext, buildInsightsMetrics, stageFunnelStats } from '../lib/insights.mjs';
 
 export const router = express.Router();
 
@@ -40,16 +40,22 @@ Output ONLY a JSON object (no markdown, no code fences):
     "win":     "<ONE specific thing the user is doing well right now. Warm, encouraging, anchored in real numbers from the data. 1-2 short sentences, max 30 words. Include at least one #NNN citation inline when applicable.>",
     "improve": "<ONE specific thing to fix next. Constructive, not blaming. Concrete action language. 1-2 short sentences, max 30 words. Include at least one #NNN citation inline when applicable.>"
   },
-  "whats_working": [{"insight": "...", "citations": ["..."]}],
-  "whats_not": [{"insight": "...", "citations": ["..."]}],
+  "whats_working": [{"insight": "...", "double_down": "...", "citations": ["..."]}],
+  "whats_not": [{"insight": "...", "fix": "...", "citations": ["..."]}],
   "recommended_moves": [{"move": "...", "why": "...", "citations": ["..."]}],
   "this_week_focus": [{"action": "...", "target": "..."}]
 }
+
+ACTION LINES (double_down / fix) — these render as a single highlighted next-step under each item:
+- "double_down" (whats_working): ONE concrete "do more of this" action, max ~18 words, imperative ("Frame your next 8 apps as Analytics roles."). It should amplify the win, not restate it.
+- "fix" (whats_not): ONE concrete corrective action, max ~18 words, imperative and constructive, never blaming ("Batch-send all 5 second follow-ups today."). It is the steer, not a scold.
+- Both are optional but strongly preferred whenever a clear action exists. Keep each to a single imperative clause. Omit (leave the key out) only if there is genuinely no actionable step.
 
 Coach tone — this is the user's first read every session, set the temperature:
 - Lead the WIN with a verb of recognition ("You're", "Your", "Smart move on", "Holding steady on…").
 - Lead the IMPROVE with the next move, not a problem ("Push more volume into…", "Send second follow-ups on…", "Trim time spent on…"). NEVER lead with "Your X is broken/dead/rotting/failing" — that reads cold.
 - Cite specific rows with #NNN format inline in the coach sentences when relevant — the frontend will make them clickable.
+- Carry this temperature into the items: frame each whats_working item as earned recognition, and each whats_not item as a steer toward the fix, not a verdict. These now render in separate calm tabs, so every item should stand on its own and land on the action.
 
 CITATIONS in every section (important — frontend turns "#NNN" into clickable drawer links anywhere in text, not just in citation arrays):
 - Inline ANY #NNN row id you reference, in the body text of insights / moves / why / actions / focus targets. Don't only list ids in the citation arrays; embed them in the prose too so the user can drill in from the sentence.
@@ -92,6 +98,7 @@ Aim for 2-4 items per insight array. Be ruthless about cuts: the user values pre
       model: 'claude-opus-4-8',
       pipeline_size: ctx.pipeline.total,
       stale_count: ctx.staleTotal,
+      metrics: buildInsightsMetrics(ctx),
       prior_summary: prior ? {
         generated_at: prior.generated_at,
         coach: prior.coach,

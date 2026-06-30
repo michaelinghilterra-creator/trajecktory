@@ -162,6 +162,44 @@ function buildInsightsContext() {
   };
 }
 
+// Deterministic metrics block for the Insights sub-tabs' stat strips. Pure
+// shaping over buildInsightsContext() output — no LLM, no token cost. Persisted
+// alongside the generated insights so the strip numbers stay consistent with the
+// snapshot Claude reasoned over. All fields optional/defensive for old payloads.
+function buildInsightsMetrics(ctx) {
+  if (!ctx) return null;
+  const arch = ctx.archetypes || [];
+  const sectors = ctx.sectors || [];
+  const overall = ctx.pipeline?.responseRate ?? 0;
+  // "Overweight and underperforming": the cohort soaking up the most volume while
+  // converting below the overall response rate. That's where to pull spend from.
+  const worstArchetype = arch
+    .filter(a => a.appliedN >= 5 && a.responseRate < overall)
+    .sort((a, b) => b.appliedN - a.appliedN)[0] || null;
+  return {
+    pipeline: {
+      applied: ctx.pipeline?.applied ?? 0,
+      responseRate: ctx.pipeline?.responseRate ?? 0,
+      interviewRate: ctx.pipeline?.interviewRate ?? 0,
+    },
+    recruiter: {
+      sent: ctx.recruiters?.sent ?? 0,
+      replied: ctx.recruiters?.replied ?? 0,
+      responseRate: ctx.recruiters?.responseRate ?? 0,
+    },
+    talent: {
+      sent: ctx.talent?.sent ?? 0,
+      replied: ctx.talent?.replied ?? 0,
+      responseRate: ctx.talent?.responseRate ?? 0,
+    },
+    staleTotal: ctx.staleTotal ?? 0,
+    // archetypes/sectors arrive pre-sorted by responseRate desc.
+    topArchetypes: arch.filter(a => a.appliedN >= 3).slice(0, 3),
+    topSectors: sectors.slice(0, 3),
+    worstArchetype,
+  };
+}
+
 // Stage funnel + rejection-by-stage. Powers the "where do we lose them" view:
 // how many apps reached each rung, stage-to-stage conversion, and — for every
 // terminal row (Rejected / No Response) — which interview round it exited at.
@@ -247,5 +285,6 @@ export function stageFunnelStats() {
 export {
   INSIGHTS_DIR, INSIGHTS_LATEST, INSIGHTS_HISTORY_MAX, PROFILE_PATH,
   loadProfileContext, loadPriorInsight, pruneInsightsHistory, buildInsightsContext,
+  buildInsightsMetrics,
 };
 
