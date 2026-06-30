@@ -182,7 +182,6 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [jobs, setJobs] = useState({});            // { stepId: { status, summary, error, output } }
   const [claudeSignedIn, setClaudeSignedIn] = useState(false);
   const [claudeLoginMsg, setClaudeLoginMsg] = useState('');
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [triageCards, setTriageCards] = useState([]);   // [{ url, company, title, score, rationale, date }]
   const [deepJobs, setDeepJobs] = useState({});         // { url: { status, error } }
   // URLs the user dismissed (× control) or that auto-cleared after a completed
@@ -196,6 +195,8 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [pasteVal, setPasteVal] = useState('');
   const [pasteBusy, setPasteBusy] = useState(false);
   const [pasteMsg, setPasteMsg] = useState('');
+  const [hasKey, setHasKey] = useState(false);       // Anthropic API key present?
+  const [deepMode, setDeepMode] = useState(false);   // Opus on the power path
   const pollersRef = useRef({});
 
   // Agent Scan and Evaluate Pipeline spawn the bundled Claude CLI, which needs a
@@ -207,6 +208,18 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     check();
     // After the user signs in via the popped console and tabs back, re-check so
     // the button flips to "✓ Signed in to Claude" without a manual reload.
+    window.addEventListener('focus', check);
+    return () => window.removeEventListener('focus', check);
+  }, []);
+
+  // Whether an Anthropic API key is set decides which workflow shows: keyless users
+  // get the lean plan-only steps; key users get the promoted "power" pipeline whose
+  // evals bill the key (off the plan quota). Re-check on focus so saving a key in
+  // Launchpad flips this without a reload.
+  useEffect(() => {
+    const check = () => fetch('/api/setup/anthropic-key').then(r => r.json())
+      .then(d => setHasKey(!!d.hasKey)).catch(() => {});
+    check();
     window.addEventListener('focus', check);
     return () => window.removeEventListener('focus', check);
   }, []);
@@ -242,7 +255,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // Deep dive: full A-G Sonnet eval of one posting (a triage card or a pasted JD).
   function triggerDeep(card) {
     setDeepJobs(d => ({ ...d, [card.url]: { status: 'running' } }));
-    fetch('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: card.url, company: card.company, title: card.title }) })
+    fetch('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: card.url, company: card.company, title: card.title, power: hasKey || undefined, model: (hasKey && deepMode) ? 'opus' : undefined }) })
       .then(r => r.json().then(b => ({ ok: r.ok, b })))
       .then(({ ok, b }) => {
         if (!ok || b.error || !b.jobId) { setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: b.error || 'failed to start' } })); return; }
@@ -273,6 +286,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     if (!v) return;
     setPasteBusy(true); setPasteMsg('');
     const body = /^https?:\/\//i.test(v) ? { url: v } : { jd: v };
+    if (hasKey) { body.power = true; if (deepMode) body.model = 'opus'; }
     fetch('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       .then(r => r.json().then(b => ({ ok: r.ok, b })))
       .then(({ ok, b }) => {
@@ -314,7 +328,12 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     if (step.type === 'agent') {
       // Drives the user's local Claude Code in the background via /api/agent.
       setJobs(j => ({ ...j, [step.id]: { status: 'running', activity: 'Starting agent…' } }));
-      fetch(`/api/agent/${step.mode}`, { method: 'POST' })
+      // The batch Evaluate step routes through the API key (power) when one is set,
+      // with the Opus deep-mode override. Other agent steps post no body.
+      const agentBody = step.mode === 'pipeline' ? { power: hasKey, model: (hasKey && deepMode) ? 'opus' : undefined } : null;
+      fetch(`/api/agent/${step.mode}`, agentBody
+        ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(agentBody) }
+        : { method: 'POST' })
         .then(r => r.json().then(body => ({ ok: r.ok, body })))
         .then(({ ok, body }) => {
           if (!ok || body.error || !body.jobId) {
@@ -401,6 +420,14 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // Cards the user hasn't dismissed (and that haven't auto-cleared post-deep-dive).
   const visibleTriage = triageCards.filter(c => !dismissed.has(c.url));
 
+  // Two layouts: keyless users get the lean plan steps; key users get the full
+  // pipeline with the formerly-Advanced steps promoted inline (scan → evaluate →
+  // merge order). No collapsible Advanced section in either case.
+  const BASE_ORDER  = ['api-scan', 'triage', 'merge', 'verify', 'health'];
+  const POWER_ORDER = ['api-scan', 'triage', 'cli-scan', 'gate', 'cli-eval', 'merge', 'verify', 'health', 'discover'];
+  const stepById = Object.fromEntries(STEPS.map(s => [s.id, s]));
+  const visibleSteps = (hasKey ? POWER_ORDER : BASE_ORDER).map(id => stepById[id]).filter(Boolean);
+
   return (
     <div className="workflow-panel">
       <div className="workflow-head">
@@ -427,8 +454,26 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         {claudeLoginMsg && <div style={{ marginTop: 6, color: 'var(--text-mute)', lineHeight: 1.4 }}>{claudeLoginMsg}</div>}
       </div>
 
+      {/* Which engine the workflow runs on, plus the Opus deep-mode toggle on the key path. */}
+      <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4 }}>
+        {hasKey ? (
+          <>
+            <div style={{ color: 'var(--accent)' }}>API key active — evaluations run on your key (bigger, faster batch; off your plan quota).</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, cursor: 'pointer' }}>
+              <input type="checkbox" checked={deepMode} onChange={e => setDeepMode(e.target.checked)} />
+              Deep mode (Opus) — deepest reasoning, higher cost per eval
+            </label>
+          </>
+        ) : (
+          <span>Runs on your Claude plan. Add an API key in Setup → Launchpad to unlock the bigger, faster evaluation workflow.</span>
+        )}
+      </div>
+
       <div className="workflow-steps">
-        {STEPS.map((step, i) => {
+        {visibleSteps.map((step, idx) => {
+          // Number by position so both layouts read 1..N (the labels carry a baked-in
+          // number for the base flow that would otherwise skip in the promoted order).
+          const stepLabel = `${idx + 1}. ${step.label.replace(/^\d+\.\s*/, '')}`;
           const job = jobs[step.id];
           const g = statusGlyph(job?.status);
           const isRunning = job?.status === 'running';
@@ -448,7 +493,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               >
                 <span className="workflow-status-glyph" style={{ color: g.color }}>{g.ch}</span>
                 <span className="workflow-label">
-                  <span className="workflow-name">{step.label}</span>
+                  <span className="workflow-name">{stepLabel}</span>
                   <span className="workflow-hint">{step.hint}</span>
                 </span>
               </button>
@@ -504,23 +549,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               )}
             </div>
           );
-          if (step.section !== 'advanced') return card;
-          // Advanced steps render under a collapsible toggle, inserted once before
-          // the first advanced step. Expensive (Agent Scan), key-gated (Expand
-          // Coverage), or redundant (Liveness Gate) for the everyday API-Scan flow.
-          const firstAdv = STEPS.findIndex(s => s.section === 'advanced') === i;
-          return (
-            <React.Fragment key={step.id}>
-              {firstAdv && (
-                <button onClick={() => setAdvancedOpen(o => !o)} title="Expensive, optional, or rarely-needed steps"
-                  style={{ background: 'none', border: 'none', borderTop: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer', width: '100%', textAlign: 'left', padding: '8px 12px', marginTop: 4, fontSize: 11.5, fontFamily: 'var(--mono)' }}>
-                  <span style={{ color: 'var(--text-mute)' }}>{advancedOpen ? '▾' : '▸'}</span> Advanced
-                  <span style={{ color: 'var(--text-mute)', marginLeft: 6 }}>widen · gate · batch evaluate</span>
-                </button>
-              )}
-              {advancedOpen && card}
-            </React.Fragment>
-          );
+          return card;
         })}
       </div>
 

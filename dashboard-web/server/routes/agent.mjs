@@ -4,6 +4,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { ROOT_DIR } from '../config.mjs';
 import { logAgentRun } from '../lib/agent-log.mjs';
+import { hasAnthropicKey } from '../lib/anthropic.mjs';
 
 export const router = express.Router();
 
@@ -45,20 +46,36 @@ const PRESSURE_WARNING = 'Claude usage or limit pressure detected. The run may s
 // The per-run Evaluate batch size: a small test cap (TJK_TEST_LIMIT) wins if set,
 // else TJK_EVAL_BATCH (default 5). Shared by the eval constraint and the progress
 // meter (it is the denominator for "Evaluated X of Y").
-function evalBatchSize() {
+// A "power" run routes the eval through the user's Anthropic API key (off the flat
+// Claude-plan quota), which lets us evaluate a bigger batch and lift the
+// no-subagents throttle. Only honored when a key actually exists, so a stray power
+// flag from the UI never bills against nothing — it falls back to the plan path.
+function effectivePower(opts) {
+  return !!(opts && opts.power) && hasAnthropicKey();
+}
+function evalBatchSize(power) {
   const limit = parseInt(process.env.TJK_TEST_LIMIT, 10) || 0;
-  return limit > 0 ? limit : (parseInt(process.env.TJK_EVAL_BATCH, 10) || 5);
+  if (limit > 0) return limit;
+  if (power) return parseInt(process.env.TJK_EVAL_BATCH_KEY, 10) || 10;
+  return parseInt(process.env.TJK_EVAL_BATCH, 10) || 5;
 }
 
 function dashboardConstraints(mode, opts) {
-  const common = 'Dashboard run, follow these constraints strictly. Work inline and never spawn subagents or background agents, because this run shares a single Claude subscription and parallel agents trip usage limits. Playwright is unavailable in this environment.';
+  const power = effectivePower(opts);
+  // Power pipeline runs bill the user's API key (separate from the flat plan
+  // quota), so the "shares one subscription" reason for forbidding subagents is
+  // gone: allow bounded parallelism across the batch. Other modes stay inline.
+  const relax = power && mode === 'pipeline';
+  const common = relax
+    ? "Dashboard run, follow these constraints strictly. This run uses the user's Anthropic API key, so you may parallelize work across the batch to go faster, but stay strictly bounded by the batch cap below and never exceed it. Playwright is unavailable in this environment."
+    : 'Dashboard run, follow these constraints strictly. Work inline and never spawn subagents or background agents, because this run shares a single Claude subscription and parallel agents trip usage limits. Playwright is unavailable in this environment.';
   // TEST CAP (temporary): when TJK_TEST_LIMIT is set, hard-limit how many
   // postings the Claude steps touch, so testing does not burn the whole quota.
   const limit = parseInt(process.env.TJK_TEST_LIMIT, 10) || 0;
-  // First-run scaling: evaluate a bounded BATCH per run (default 5) instead of
-  // every pending URL, so a fresh user with hundreds of scanned roles never burns
-  // their whole Claude quota in one go. TJK_TEST_LIMIT (if set) overrides for tests.
-  const evalCap = evalBatchSize();
+  // First-run scaling: evaluate a bounded BATCH per run (default 5, or 10 on the
+  // API-key power path) instead of every pending URL, so a fresh user with hundreds
+  // of scanned roles never burns their whole quota. TJK_TEST_LIMIT overrides.
+  const evalCap = evalBatchSize(power);
   if (mode === 'pipeline') {
     const capWhy = limit > 0 ? `TJK_TEST_LIMIT=${limit}` : `the per-run batch size is ${evalCap}`;
     return ' ' + common +
@@ -117,9 +134,13 @@ function runClaudeAgent(jobId, mode, target) {
     // Sonnet to keep the 5-hour subscription quota in check; override with
     // TJK_AGENT_MODEL in dashboard-web/.env (e.g. `opus` for max eval quality, or
     // `inherit`/`default` to pass no --model). TJK_TRIAGE_MODEL overrides triage.
+    const power = effectivePower(target);
+    // A per-request model override drives the Opus "deep mode" toggle (pipeline /
+    // deep only). Triage stays on its calibrated Haiku regardless.
+    const reqModel = ((target && target.model) || '').trim();
     const modelPref = mode === 'triage'
       ? (process.env.TJK_TRIAGE_MODEL || 'haiku').trim()
-      : (process.env.TJK_AGENT_MODEL || 'sonnet').trim();
+      : (reqModel || process.env.TJK_AGENT_MODEL || 'sonnet').trim();
     const modelFlag = (!modelPref || /^(inherit|default|none)$/i.test(modelPref)) ? [] : ['--model', modelPref];
     const args = ['-p', isWin ? `"${prompt}"` : prompt,
                   ...modelFlag,
@@ -136,14 +157,18 @@ function runClaudeAgent(jobId, mode, target) {
       resolve({ ok: false, error: msg });
     };
 
+    // Surface which quota this run bills + the batch/model, for the UI and tests.
+    update({ billedTo: power ? 'api' : 'plan', evalModel: modelFlag.length ? modelPref : 'default', batch: mode === 'pipeline' ? evalBatchSize(power) : undefined });
+
     let child;
-    // Run eval/scan on the user's Claude Pro/Max subscription (their `claude
-    // login`), NOT on any API key. Claude Code bills ANTHROPIC_API_KEY whenever
-    // it sees it in the environment, so strip it from the child's env; that key
-    // is reserved for the SDK-based draft features in the server process. This
-    // keeps the expensive, repeated agent work on the flat subscription.
+    // Plan path (default): strip ANTHROPIC_API_KEY so `claude -p` bills the user's
+    // flat Claude subscription, not the key — the key is reserved for the SDK-based
+    // draft features. Power path (eval launched with a key present): KEEP the key so
+    // the run bills the API (off the 5-hour plan quota); Claude Code bills the key
+    // whenever it sees it. That separate quota is what lets the eval batch grow and
+    // parallelize.
     const claudeEnv = { ...process.env };
-    delete claudeEnv.ANTHROPIC_API_KEY;
+    if (!power) delete claudeEnv.ANTHROPIC_API_KEY;
     try {
       child = spawn('claude', args, {
         cwd: projectRoot,
@@ -302,7 +327,7 @@ async function runAgent(jobId, mode, target) {
   agentJobs.set(jobId, { mode, status: 'running', activity: 'Starting agent…', toolCalls: [], toolCount: 0, output: '', startedAt: Date.now(),
     // Progress meter: pipeline has a known batch size; deep is a single eval; scan
     // and triage are open-ended, so they show elapsed only (progressTotal null).
-    progressTotal: mode === 'pipeline' ? evalBatchSize() : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
+    progressTotal: mode === 'pipeline' ? evalBatchSize(effectivePower(target)) : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
   const res = await runClaudeAgent(jobId, mode, target);
   // Evaluate writes tracker TSVs; folding them into applications.md is the
   // separate Merge Tracker step. Point the user at it so a written-but-not-yet-
@@ -383,6 +408,14 @@ router.post('/api/agent/:mode', (req, res) => {
         return res.status(500).json({ error: 'Could not save the pasted JD: ' + e.message });
       }
     }
+  }
+  // Power runs (pipeline + deep) route the eval through the user's API key when one
+  // is present: bigger/parallel batch off the flat plan quota. An optional model
+  // override drives the Opus "deep mode" toggle. Scan/triage stay plan-side (cheap).
+  if (mode === 'pipeline' || mode === 'deep') {
+    const power = !!(req.body && req.body.power);
+    const model = String((req.body && req.body.model) || '').trim();
+    target = { ...(target || {}), power, model: model || undefined };
   }
   const jobId = `agent-${mode}-${Date.now()}`;
   const start = runAgent(jobId, mode, target);
