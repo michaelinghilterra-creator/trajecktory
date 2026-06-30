@@ -21,7 +21,9 @@ function parseTargetTalentMd() {
   for (const line of text.split('\n')) {
     if (!line.startsWith('| ')) continue;
     const parts = line.split('|').map(p => p.trim());
-    // Layout: ['', id, company, last, first, salute, title, city, state, zip, phone, email, linkedin, status, lastTouch, notes, '']
+    // Layout: ['', id, company, last, first, salute, title, city, state, zip, phone, email, linkedin, status, lastTouch, notes, (website), '']
+    // Website is a later-added trailing column; rows written before it have an
+    // empty parts[16] (the trailing cell), so it reads as '' — backward-compatible.
     if (parts.length < 17) continue;
     const id = parseInt(parts[1], 10);
     if (isNaN(id)) continue;
@@ -46,6 +48,7 @@ function parseTargetTalentMd() {
       status:    parts[13],
       lastTouch: parts[14],
       notes:     parts[15],
+      website:   (parts[16] || '').trim(),
       raw: line,
     });
   }
@@ -88,9 +91,17 @@ function updateTTLine(id, updates) {
     if (parts.length < 17) return line;
     const lineId = parseInt(parts[1].trim(), 10);
     if (lineId !== id) return line;
+    const cell = v => ` ${(v || '').toString().replace(/\|/g, '\\|').replace(/\n/g, ' ')} `;
     if (updates.status     !== undefined) parts[13] = ` ${updates.status} `;
     if (updates.lastTouch  !== undefined) parts[14] = ` ${updates.lastTouch} `;
-    if (updates.notes      !== undefined) parts[15] = ` ${updates.notes.replace(/\|/g, '\\|').replace(/\n/g, ' ')} `;
+    if (updates.notes      !== undefined) parts[15] = cell(updates.notes);
+    if (updates.phone      !== undefined) parts[10] = cell(updates.phone);
+    if (updates.website    !== undefined) {
+      // Older rows have no Website cell; insert one before the trailing '' so the
+      // row stays well-formed. Newer rows (length >= 18) just overwrite parts[16].
+      if (parts.length >= 18) parts[16] = cell(updates.website);
+      else parts.splice(parts.length - 1, 0, cell(updates.website));
+    }
     touched = true;
     return parts.join('|');
   });
@@ -125,7 +136,7 @@ function appendTTRows(rows) {
     if (emailGiven && !r.emailVerified && !alreadyFlagged) {
       notes = '⚠ Email unverified (auto-synthesized — confirm before sending). ' + notes;
     }
-    const row = `| ${id} | ${esc(r.company)} | ${esc(r.last)} | ${esc(r.first)} | ${esc(r.salute)} | ${esc(r.title)} | ${esc(r.city)} | ${esc(r.state)} | ${esc(r.zip)} | ${esc(r.phone)} | ${esc(r.email)} | ${esc(r.linkedin)} | Not Contacted |  | ${esc(notes)} |`;
+    const row = `| ${id} | ${esc(r.company)} | ${esc(r.last)} | ${esc(r.first)} | ${esc(r.salute)} | ${esc(r.title)} | ${esc(r.city)} | ${esc(r.state)} | ${esc(r.zip)} | ${esc(r.phone)} | ${esc(r.email)} | ${esc(r.linkedin)} | Not Contacted |  | ${esc(notes)} | ${esc(r.website)} |`;
     newRows.push({ id, row, ...r });
   }
   // Append before any trailing blank line

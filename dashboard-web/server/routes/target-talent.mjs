@@ -63,11 +63,11 @@ router.get('/api/target-talent/:id', (req, res) => {
 router.patch('/api/target-talent/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { status, notes, lastTouch } = req.body || {};
+    const { status, notes, lastTouch, website, phone } = req.body || {};
     if (status && !TT_STATUSES.includes(status)) {
       return res.status(400).json({ error: `Invalid status. Must be one of: ${TT_STATUSES.join(', ')}` });
     }
-    const ok = updateTTLine(id, { status, notes, lastTouch });
+    const ok = updateTTLine(id, { status, notes, lastTouch, website, phone });
     if (!ok) return res.status(404).json({ error: 'Contact not found' });
     res.json({ ok: true });
   } catch (err) {
