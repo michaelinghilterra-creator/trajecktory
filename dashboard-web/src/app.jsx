@@ -246,28 +246,11 @@ function App() {
     if (TERMINAL.includes(next)) setDrawerApp(null);
   };
 
-  // Stats for sidebar
+  // Stats for sidebar nav badges (Pipeline pending-decisions + Follow-Ups count)
   const stats = useMemo(() => {
-    const total = apps.length;
-    const applied = apps.filter(a => ["Applied","Responded","Offer"].includes(a.status) || window.isInterviewStage(a.status)).length;
-    const inFlight = apps.filter(a => a.status === "Responded" || window.isInterviewStage(a.status)).length;
-    const offers = apps.filter(a => a.status === "Offer").length;
     const pending = apps.filter(a => a.status === "Evaluated").length;
-    const active = apps.filter(a => window.FUNNEL_ORDER.includes(a.status)).length;
-    return { total, applied, inFlight, offers, pending, active, followups: followupCount };
+    return { pending, followups: followupCount };
   }, [apps, followupCount]);
-
-  // Streak — count consecutive days with at least 1 application sent (≠ Evaluated)
-  const streak = useMemo(() => {
-    const sent = new Set(apps.filter(a => ["Applied","Responded","Offer","Rejected"].includes(a.status) || window.isInterviewStage(a.status)).map(a => a.date));
-    let s = 0;
-    for (let i = 0; i < 60; i++) {
-      const d = new Date(window.TODAY); d.setUTCDate(d.getUTCDate() - i);
-      const k = d.toISOString().slice(0, 10);
-      if (sent.has(k)) s++; else if (i > 0) break;
-    }
-    return s;
-  }, [apps]);
 
   // Commands for palette
   const commands = useMemo(() => {
@@ -377,7 +360,7 @@ function App() {
 
   return (
     <div className="app" data-density={tweaks.density}>
-      <window.Sidebar tab={tab} setTab={setTab} stats={stats} streak={streak} setupState={setupState} onDataChanged={refreshApps} version={version} />
+      <window.Sidebar tab={tab} setTab={setTab} stats={stats} setupState={setupState} onDataChanged={refreshApps} version={version} />
 
       <div className="main">
         <window.Topbar
