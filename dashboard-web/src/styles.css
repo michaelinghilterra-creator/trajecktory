@@ -167,48 +167,6 @@ body {
 .nav-item .kbd { margin-left: auto; }
 .nav-icon { width: 14px; height: 14px; opacity: 0.85; flex-shrink: 0; }
 
-.sidebar-stats {
-  border-top: 1px solid var(--border);
-  padding: 14px 14px 18px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px 14px;
-  /* Sits directly below the workflow panel; the streak's auto top-margin
-     pushes this whole lower block to the foot of the rail on tall monitors. */
-}
-.stat {
-  display: flex; flex-direction: column;
-}
-.stat-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-mute); font-family: "JetBrains Mono", monospace; }
-.stat-value { font-size: 18px; font-weight: 600; font-family: "JetBrains Mono", monospace; letter-spacing: -0.02em; }
-.stat-value.accent { color: var(--accent); }
-.stat-value.green { color: var(--green); }
-.stat-value.yellow { color: var(--yellow); }
-.stat-sub { font-size: 10.5px; color: var(--text-mute); font-family: "JetBrains Mono", monospace; }
-
-.streak {
-  /* Flexible top margin (auto) pushes the streak + workflow + stats block to
-     the bottom of the rail on tall monitors, and COLLAPSES to 0 on shorter ones
-     (1080p) so the sidebar fits without a scrollbar. Replaces the old fixed 72px
-     spacer that overflowed at 1080p. overflow-y:auto on .sidebar is the safety
-     net if a viewport is genuinely too short. */
-  margin: auto 14px 14px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  display: flex; align-items: center; gap: 10px;
-}
-.streak-flame {
-  width: 30px; height: 30px; border-radius: 8px;
-  background: linear-gradient(160deg, #f59e0b, #ef4444);
-  display: grid; place-items: center;
-  font-size: 14px;
-  box-shadow: 0 0 16px -4px rgba(245,158,11,0.5);
-}
-.streak-num { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 17px; line-height: 1; }
-.streak-label { font-size: 10.5px; color: var(--text-mute); font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 0.08em; }
-
 /* ---- Workflow Panel (sidebar) ---- */
 .workflow-panel {
   margin: 0 14px 12px;
@@ -299,7 +257,6 @@ body {
 @media (max-height: 1000px) {
   .workflow-steps { gap: 2px; }
   .workflow-btn { padding: 4px 8px; }
-  .streak { margin: auto 14px 10px; padding: 8px 12px; }
   .nav-item { padding: 6px 10px; }
   .nav-group { padding: 10px 10px 4px; }
 }

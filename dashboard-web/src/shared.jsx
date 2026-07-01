@@ -85,7 +85,7 @@ window.ScoreChip = function ScoreChip({ score }) {
 };
 
 // ---------- Sidebar ----------
-window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState, onDataChanged, version }) {
+window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChanged, version }) {
   // Numeric (1-9) keyboard hotkeys for tab switching removed per user request.
   // The `hint` field is gone too. Pipeline carries the pending-decisions badge
   // now that the standalone Overview tab is folded into Pipeline → Overview.
@@ -139,34 +139,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, streak, setupState, onDa
         ))}
       </div>
 
-      <div className="streak">
-        <div className="streak-flame">🔥</div>
-        <div>
-          <div className="streak-num">{streak}</div>
-          <div className="streak-label">day streak</div>
-        </div>
-      </div>
-
       <window.WorkflowPanel onDataChanged={onDataChanged} />
-      </div>
-
-      <div className="sidebar-stats">
-        <div className="stat">
-          <span className="stat-label">Total</span>
-          <span className="stat-value">{stats.total}</span>
-        </div>
-        <div className="stat">
-          <span className="stat-label">Applied</span>
-          <span className="stat-value">{stats.applied}</span>
-        </div>
-        <div className="stat">
-          <span className="stat-label">In Flight</span>
-          <span className="stat-value yellow">{stats.inFlight}</span>
-        </div>
-        <div className="stat">
-          <span className="stat-label">Offers</span>
-          <span className="stat-value green">{stats.offers}</span>
-        </div>
       </div>
     </aside>
   );
