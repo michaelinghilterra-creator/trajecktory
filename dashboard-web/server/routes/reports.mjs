@@ -45,6 +45,11 @@ router.get('/api/report-view/:id', (req, res) => {
     if (!fs.existsSync(reportPath)) return res.status(404).send(`<p style="font-family:sans-serif;padding:24px">Report file not found: ${escapeHtml(row.report)}</p>`);
     const raw = fs.readFileSync(reportPath, 'utf8');
     const body = reportMdToHtml(raw);
+    // Defense-in-depth against any XSS that slips past the report sanitizer: this
+    // standalone report document runs no scripts, so lock it down. default-src
+    // 'none' blocks script execution (incl. javascript: URLs and injected event
+    // handlers); the inline <style> below needs style-src 'unsafe-inline'.
+    res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data: http: https:");
     res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>${escapeHtml(row.company)} — ${escapeHtml(row.role)}</title>
 <style>
   *{box-sizing:border-box}

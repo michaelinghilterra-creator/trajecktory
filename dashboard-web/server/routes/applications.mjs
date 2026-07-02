@@ -18,6 +18,8 @@ router.get('/output-preview/:file', (req, res) => {
   if (!fs.existsSync(filePath)) return res.status(404).send('File not found');
   const raw = fs.readFileSync(filePath, 'utf8');
   const body = mdToHtml(raw);
+  // No scripts in a rendered output document; lock it down (defense-in-depth).
+  res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data: http: https:");
   res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(file)}</title>
 <style>
   body{font-family:'Georgia',serif;max-width:720px;margin:60px auto;padding:0 24px;color:#1a1a1a;line-height:1.7;font-size:15px}

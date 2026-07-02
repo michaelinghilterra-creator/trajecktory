@@ -154,10 +154,17 @@ function runClaudeAgent(jobId, mode, target) {
     // A per-request model override drives the Opus "deep mode" toggle (pipeline /
     // deep only). Triage stays on its calibrated Haiku regardless.
     const reqModel = ((target && target.model) || '').trim();
-    const modelPref = mode === 'triage'
+    const rawModelPref = mode === 'triage'
       ? (process.env.TJK_TRIAGE_MODEL || 'haiku').trim()
       : (reqModel || process.env.TJK_AGENT_MODEL || 'sonnet').trim();
-    const modelFlag = (!modelPref || /^(inherit|default|none)$/i.test(modelPref)) ? [] : ['--model', modelPref];
+    // SECURITY: modelPref becomes a bare argv element and, under shell:true on
+    // Windows (below), args are concatenated UNESCAPED — an attacker-supplied
+    // value like `sonnet& <command>` would break out and run arbitrary commands.
+    // Allow-list the model id to the known aliases or a claude-* id; anything
+    // else (including inherit/default/none, which mean "no override") falls back
+    // to the CLI default with NO --model flag.
+    const modelPref = /^(?:opus|sonnet|haiku|claude-[a-z0-9.-]+)$/i.test(rawModelPref) ? rawModelPref : '';
+    const modelFlag = modelPref ? ['--model', modelPref] : [];
     const args = ['-p', isWin ? `"${prompt}"` : prompt,
                   ...modelFlag,
                   '--output-format', 'stream-json', '--verbose',
@@ -417,7 +424,7 @@ router.post('/api/agent/:mode', (req, res) => {
       if (/["`]/.test(url)) {
         return res.status(400).json({ error: 'Provide a valid http(s) URL (no quote or backtick characters).' });
       }
-      if (/[ -]/.test(url) || !/^https?:\/\/[^\s]+$/i.test(url)) {
+      if (/[\x00-\x1f]/.test(url) || !/^https?:\/\/[^\s]+$/i.test(url)) {
         return res.status(400).json({ error: 'Provide a valid http(s) URL (no spaces or control characters).' });
       }
       target = { url };

@@ -14,7 +14,10 @@ function modelAlias(model) {
   if (m.includes('opus')) return 'opus';
   if (m.includes('sonnet')) return 'sonnet';
   if (m.includes('haiku')) return 'haiku';
-  return model; // already an alias or a full name the CLI accepts
+  // Allow-list any passthrough id so an unexpected value can never become a
+  // shell-injectable argv element (spawn uses shell:true on Windows). A value
+  // that is not opus/sonnet/haiku or a claude-* id yields no --model flag.
+  return /^claude-[a-z0-9.-]+$/i.test(m) ? model : null;
 }
 
 function startErr(e) {
