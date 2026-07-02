@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.10.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.10.0...v1.10.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* **dashboard:** migrate to Express 5 (named SPA wildcard route) ([51b9150](https://github.com/michaelinghilterra-creator/trajecktory/commit/51b9150c974c19a5aa06be3b4bef8652b7be19f0))
+* **dashboard:** upgrade to React 19 (bundle vendored React via esbuild, drop UMD) ([6ebf4a9](https://github.com/michaelinghilterra-creator/trajecktory/commit/6ebf4a9f2e0420db271aae6a0ab43ffa2b3a29b3))
+* resolve CodeQL correctness findings (incomplete sanitization + double escaping) ([8fe9dd9](https://github.com/michaelinghilterra-creator/trajecktory/commit/8fe9dd9a2f8b595edc30bb62dd5a09262990c59b))
+
 ## [1.10.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.9.0...v1.10.0) (2026-07-02)
 
 
