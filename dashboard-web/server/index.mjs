@@ -142,7 +142,10 @@ app.use(systemRoutes);
 // loader. Open GET (reads stay unauthenticated like the rest of the UI data).
 app.get('/api/identity', (req, res) => res.json(getIdentity()));
 
-app.get('*', (req, res) => {
+// SPA deep-link fallback. Express 5 (path-to-regexp v8) requires named
+// wildcards, so the Express 4 bare '*' becomes '/*splat' (the match is unused;
+// we always serve index.html).
+app.get('/*splat', (req, res) => {
   res.sendFile(path.join(STATIC, 'index.html'));
 });
 
