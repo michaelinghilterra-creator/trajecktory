@@ -11,6 +11,22 @@ function mdToHtml(md) {
     .replace(/^(?!<[h1-6bq])/, '<p>') + '</p>';
 }
 
+// Sanitize a URL for safe use inside a double-quoted HTML href attribute.
+// Enforces a scheme allow-list (only http/https/mailto survive; javascript:,
+// data:, vbscript:, and any other scheme collapse to '#') and escapes the
+// characters that could break out of the attribute. Idempotent on & < > so it is
+// safe whether the caller passes a raw URL or one whose entities were already
+// escaped upstream (reportMdToHtml escapes the whole line before this runs).
+function safeHref(url) {
+  const raw = String(url ?? '').trim();
+  if (!/^(?:https?:\/\/|mailto:)/i.test(raw)) return '#';
+  return raw
+    .replace(/&(?!(?:amp|lt|gt|quot|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 // Full markdown-to-HTML converter for evaluation reports (supports tables, lists, hr)
 function reportMdToHtml(md) {
   const inline = t => t
@@ -18,7 +34,7 @@ function reportMdToHtml(md) {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/`(.+?)`/g, '<code>$1</code>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text, url) => `<a href="${safeHref(url)}" target="_blank" rel="noreferrer">${text}</a>`);
 
   const lines = md.split('\n');
   const out = [];
@@ -97,7 +113,7 @@ function escapeHtml(s) {
     .replace(/'/g, '&#39;');
 }
 function v1ToFallbackHtml(data) {
-  const e = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const e = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   const s = data.summary || {};
   const c = data.comp || {};
   const lg = data.legitimacy || {};
@@ -118,7 +134,7 @@ function v1ToFallbackHtml(data) {
   if (s.remote)            out.push(`<tr><td><strong>Remote</strong></td><td>${e(s.remote)}</td></tr>`);
   if (s.teamSize)          out.push(`<tr><td><strong>Team size</strong></td><td>${e(s.teamSize)}</td></tr>`);
   if (s.compStated || c.stated) out.push(`<tr><td><strong>Comp</strong></td><td>${e(s.compStated || c.stated)}</td></tr>`);
-  if (data.url)            out.push(`<tr><td><strong>JD</strong></td><td><a href="${e(data.url)}" target="_blank" rel="noreferrer">${e(data.url)}</a></td></tr>`);
+  if (data.url)            out.push(`<tr><td><strong>JD</strong></td><td><a href="${safeHref(data.url)}" target="_blank" rel="noreferrer">${e(data.url)}</a></td></tr>`);
   out.push('</tbody></table>');
 
   // Company brief
