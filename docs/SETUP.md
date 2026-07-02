@@ -1,9 +1,14 @@
 # Setup Guide
 
+> **Non-technical?** You don't need any of this. Download the Windows installer
+> from the [latest release](https://github.com/michaelinghilterra-creator/trajecktory/releases/latest)
+> instead; it bundles everything. This guide is the from-source path for developers.
+
 ## Prerequisites
 
-- [Claude Code](https://claude.ai/code) installed and configured
-- Node.js 18+ (for CV generation, the dashboard, and utility scripts)
+- A [Claude](https://claude.ai) subscription (a paid plan) and [Claude Code](https://claude.ai/code) installed and signed in (`claude login`)
+- Node.js 18+ (20 recommended, matches CI) for CV generation, the dashboard, and utility scripts
+- Git (to clone the repo and for the in-app self-updater)
 
 ## Quick Start (5 steps)
 
