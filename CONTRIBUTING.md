@@ -53,6 +53,30 @@ PRs without a corresponding issue may be closed if they don't align with the pro
 - **PRs that add external API dependencies** without prior discussion in an issue.
 - **PRs containing personal data** (real CVs, emails, phone numbers). Use `examples/` with fictional data instead.
 
+## Contributor License and Sign-Off (DCO)
+
+Every contribution needs a Developer Certificate of Origin sign-off plus an
+inbound license grant.
+
+**Sign-off (DCO).** Sign off each commit to certify you wrote the change, or have
+the right to submit it, under the terms below:
+
+```bash
+git commit -s -m "your message"
+```
+
+This adds a `Signed-off-by: Your Name <you@example.com>` line, certifying the
+[Developer Certificate of Origin 1.1](https://developercertificate.org/).
+
+**License grant.** By contributing, you agree your contribution is licensed under
+the project's [MIT LICENSE](LICENSE), and you grant the project maintainer a
+perpetual, worldwide, non-exclusive, royalty-free, irrevocable license to use,
+reproduce, modify, and relicense your contribution as part of trajecktory,
+including under different license terms in future releases. You keep the
+copyright to your own contribution. This keeps the project's future licensing
+flexible; it is not legal advice, so for large or commercial contributions,
+consult your own counsel.
+
 ## Development
 
 ```bash

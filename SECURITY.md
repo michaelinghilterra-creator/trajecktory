@@ -4,14 +4,19 @@
 
 **Do NOT open a public issue for security vulnerabilities.**
 
-Instead, please email **michaelinghilterra@gmail.com** with:
+Report privately through GitHub's **Private Vulnerability Reporting**: open the
+repository's **Security** tab and click **"Report a vulnerability"**
+([direct link](https://github.com/michaelinghilterra-creator/trajecktory/security/advisories/new)).
+Include:
 
 1. Description of the vulnerability
 2. Steps to reproduce
 3. Potential impact
 4. Suggested fix (if any)
 
-You will receive a response within 72 hours. We will work with you to understand and address the issue before any public disclosure.
+You will receive a response within 72 hours, and we will coordinate a fix before
+public disclosure. (Private vulnerability reporting is available once the
+repository is public.)
 
 ## Scope
 
