@@ -25,6 +25,9 @@
     "automation"
   ],
   "author": "michaelinghilterra-creator",
+  "contributors": [
+    "Santiago Fernández de Valderrama (https://santifer.io)"
+  ],
   "homepage": "https://github.com/michaelinghilterra-creator/trajecktory",
   "repository": {
     "type": "git",

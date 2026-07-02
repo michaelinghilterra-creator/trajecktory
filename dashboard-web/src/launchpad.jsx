@@ -1322,6 +1322,7 @@ function AboutPanel() {
     { q: 'Where does the AI run?', a: 'On your Claude plan by default (no API key needed) for writing features and Insights. An Anthropic API key is an optional faster path.' },
     { q: 'Where is my data?', a: 'Local. Your applications, reports, and contacts live in plain markdown files on your machine. Nothing is uploaded to a trajecktory server.' },
     { q: 'How do updates work?', a: 'A banner appears when a new version is available; one click updates and restarts. The Change Log tab shows what shipped.' },
+    { q: 'Where did trajecktory come from?', a: 'trajecktory is built on career-ops by Santiago Fernández de Valderrama (santifer), an open-source, CLI-first job-search system released under the MIT License. trajecktory reshapes that foundation into a dashboard-driven product. Original project: github.com/santifer/career-ops.' },
   ];
   return (
     <div className="col" style={{ gap: 16 }}>

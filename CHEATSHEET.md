@@ -57,7 +57,7 @@
 
 ## PowerShell Commands (run in terminal, no Claude needed)
 
-All commands run from: `C:\Users\micha\Documents\ClaudeCode\career-ops`
+All commands run from your trajecktory project folder (the directory that contains `scan.mjs`).
 
 ### The Scanner (run this first, it's free)
 
@@ -125,7 +125,7 @@ Always run `node scan.mjs` before `/trajecktory scan` — free before paid.
 A browser-based dashboard showing your tracker, pipeline, and stats.
 
 ```powershell
-cd C:\Users\micha\Documents\ClaudeCode\career-ops\dashboard-web
+cd <your-trajecktory-folder>\dashboard-web
 npm start
 ```
 Then open your browser and go to the URL shown in the terminal (typically `http://localhost:3333`).
