@@ -91,7 +91,7 @@ function updateTTLine(id, updates) {
     if (parts.length < 17) return line;
     const lineId = parseInt(parts[1].trim(), 10);
     if (lineId !== id) return line;
-    const cell = v => ` ${(v || '').toString().replace(/\|/g, '\\|').replace(/\n/g, ' ')} `;
+    const cell = v => ` ${(v || '').toString().replace(/[|\r\n]+/g, ' ')} `;
     if (updates.status     !== undefined) parts[13] = ` ${updates.status} `;
     if (updates.lastTouch  !== undefined) parts[14] = ` ${updates.lastTouch} `;
     if (updates.notes      !== undefined) parts[15] = cell(updates.notes);
@@ -122,7 +122,7 @@ function appendTTRows(rows) {
   // Determine next id
   const existing = parseTargetTalentMd();
   let nextId = existing.length ? Math.max(...existing.map(r => r.id)) + 1 : 1;
-  const esc = s => (s || '').toString().replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+  const esc = s => (s || '').toString().replace(/[|\r\n]+/g, ' ').trim();
   const newRows = [];
   for (const r of rows) {
     const id = nextId++;

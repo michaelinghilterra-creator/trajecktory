@@ -88,7 +88,7 @@ function updateRecruiterLine(id, updates) {
     if (lineId !== id) return line;
     // parts: ['', id, firm, last, first, salute, title, city, state, zip, phone,
     //         email, status, last_touch, notes, (linkedin), (website), '']
-    const cell = v => ` ${(v || '').toString().replace(/\|/g, '\\|').replace(/\n/g, ' ')} `;
+    const cell = v => ` ${(v || '').toString().replace(/[|\r\n]+/g, ' ')} `;
     if (updates.status     !== undefined) parts[12] = ` ${updates.status} `;
     if (updates.lastTouch  !== undefined) parts[13] = ` ${updates.lastTouch} `;
     if (updates.notes      !== undefined) parts[14] = cell(updates.notes);
@@ -118,7 +118,7 @@ function appendRecruiterRows(rows) {
   const text = fs.readFileSync(RECRUITERS_MD, 'utf8');
   const existing = parseRecruitersMd();
   let nextId = existing.length ? Math.max(...existing.map(r => r.id)) + 1 : 1;
-  const esc = s => (s || '').toString().replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+  const esc = s => (s || '').toString().replace(/[|\r\n]+/g, ' ').trim();
   const newRows = [];
   for (const r of rows) {
     const id = nextId++;

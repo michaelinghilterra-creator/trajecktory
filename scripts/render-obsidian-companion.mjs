@@ -88,7 +88,7 @@ function mdTable(headers, rows) {
   const align = headers.map(() => '---').join('|');
   const head = `| ${headers.join(' | ')} |`;
   const sep = `|${align.split('|').map(() => '---').join('|')}|`;
-  const body = rows.map(r => `| ${r.map(c => safeStr(c).replace(/\|/g, '\\|').replace(/\n/g, ' ')).join(' | ')} |`).join('\n');
+  const body = rows.map(r => `| ${r.map(c => safeStr(c).replace(/[|\r\n]+/g, ' ')).join(' | ')} |`).join('\n');
   return `${head}\n${sep}\n${body}`;
 }
 
