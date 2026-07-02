@@ -11,13 +11,13 @@
     "dev": "node build.mjs && node server/index.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.95.1",
+    "@anthropic-ai/sdk": "^0.109.1",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "esbuild": "^0.28.0"
+    "esbuild": "^0.28.1"
   }
 }
