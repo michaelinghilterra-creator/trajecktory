@@ -25,16 +25,31 @@ await build({
   logLevel: 'warning',
 });
 
-// Vendor React from node_modules into dist (replaces the unpkg CDN <script>s).
-// package.json pins the version; copying the prebuilt UMD bundles keeps the
-// global `React`/`ReactDOM` the per-file IIFEs expect, with no bundler. dist is
-// gitignored, so these are regenerated on every build like the transpiled app.
-const NM = path.resolve(__dirname, 'node_modules');
-const vendor = [
-  ['react/umd/react.production.min.js', 'react.production.min.js'],
-  ['react-dom/umd/react-dom.production.min.js', 'react-dom.production.min.js'],
-];
-for (const [from, to] of vendor) {
-  fs.copyFileSync(path.join(NM, from), path.join(DIST, to));
-}
-console.log(`[build] ${entries.length} JSX files + ${vendor.length} vendored libs → src/dist/ in ${Date.now() - t0}ms`);
+// Vendor React locally by BUNDLING it with esbuild. React 19 dropped the UMD
+// builds we used to copy, so instead produce one self-contained IIFE that sets
+// the global `React`/`ReactDOM` the per-file app bundles expect. react and
+// react-dom go in a SINGLE bundle so there is exactly one React instance — a
+// separate react-dom bundle would embed its own copy of react and break the
+// hooks dispatcher. Stays local/offline (no CDN); dist is gitignored, so this
+// is regenerated on every build like the transpiled app.
+await build({
+  stdin: {
+    contents: [
+      "import React from 'react';",
+      "import ReactDOMMain from 'react-dom';",
+      "import { createRoot, hydrateRoot } from 'react-dom/client';",
+      "window.React = React;",
+      "window.ReactDOM = Object.assign({}, ReactDOMMain, { createRoot, hydrateRoot });",
+    ].join('\n'),
+    resolveDir: __dirname, // resolve react/react-dom from ./node_modules
+    loader: 'js',
+  },
+  outfile: path.join(DIST, 'react-vendor.min.js'),
+  bundle: true,
+  format: 'iife',
+  minify: true,
+  target: 'es2019',
+  define: { 'process.env.NODE_ENV': '"production"' },
+  logLevel: 'warning',
+});
+console.log(`[build] ${entries.length} JSX files + vendored React (bundled) → src/dist/ in ${Date.now() - t0}ms`);
