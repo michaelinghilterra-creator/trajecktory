@@ -247,6 +247,60 @@ function remoteMinBundleVersion() {
   return Number.isFinite(n) ? n : 0;
 }
 
+// ── Signed-update verification (opt-in trust anchor) ────────────
+// When a non-empty `trusted-signers` file ships in the install (baked into the
+// bundle and deliberately NOT in SYSTEM_PATHS, so self-update can never replace
+// it — it is a fixed trust anchor per installed .exe), updates are pinned to
+// SSH-SIGNED release tags: fetch tags, verify each candidate against
+// trusted-signers with `git verify-tag`, and only ever check out from a verified
+// tag. Absent the file (the default today), the updater tracks `main` as before.
+// See docs/RELEASING.md for how to generate a key, sign tags, and activate this.
+const TRUSTED_SIGNERS = join(ROOT, 'trusted-signers');
+
+function signedUpdatesEnabled() {
+  if (!existsSync(TRUSTED_SIGNERS)) return false;
+  return readFileSync(TRUSTED_SIGNERS, 'utf-8')
+    .split('\n').some(l => l.trim() && !l.trim().startsWith('#'));
+}
+
+// True iff annotated tag `tag` carries a valid signature from a key in
+// trusted-signers. gitQuiet returns null on non-zero exit (bad/missing sig or
+// untrusted signer), so a non-null result means the signature verified.
+function verifyTag(tag) {
+  // Forward slashes: git config VALUES treat backslashes as escapes, so a Windows
+  // path (C:\...\trusted-signers) must be normalized or the file is not found.
+  const signers = TRUSTED_SIGNERS.replace(/\\/g, '/');
+  return gitQuiet('-c', `gpg.ssh.allowedSignersFile=${signers}`, 'verify-tag', tag) !== null;
+}
+
+// Fetch tags (anonymous, with the tokenless self-heal), then return the highest
+// version tag greater than localVer whose signature verifies. Result is one of:
+//   { status: 'update', tag, ver } | { status: 'up-to-date' }
+//   { status: 'unverified' }  (a newer tag exists but no valid signature)
+//   { status: 'offline' }
+function findSignedUpdate(localVer) {
+  let ft = gitQuiet('fetch', '--force', '--tags', REMOTE);
+  if (ft === null && ensureTokenlessOrigin()) ft = gitQuiet('fetch', '--force', '--tags', REMOTE);
+  if (ft === null) return { status: 'offline' };
+  const raw = gitQuiet('tag', '-l', 'v*') || '';
+  const candidates = raw.split('\n')
+    .map(t => t.trim())
+    .map(t => ({ tag: t, ver: (t.match(/^v?(\d+\.\d+\.\d+)$/i) || [])[1] }))
+    .filter(x => x.ver && compareVersions(x.ver, localVer) > 0)
+    .sort((a, b) => compareVersions(b.ver, a.ver));
+  for (const c of candidates) {
+    if (verifyTag(c.tag)) return { status: 'update', tag: c.tag, ver: c.ver };
+  }
+  return { status: candidates.length ? 'unverified' : 'up-to-date' };
+}
+
+// Read the bundle-generation floor from a specific ref (a tag or FETCH_HEAD).
+function minBundleFromRef(ref) {
+  const raw = gitQuiet('show', `${ref}:MIN_BUNDLE_VERSION`);
+  const n = raw != null ? parseInt(raw.trim(), 10) : NaN;
+  return Number.isFinite(n) ? n : 0;
+}
+
 // ── CHECK ───────────────────────────────────────────────────────
 
 async function check() {
@@ -271,6 +325,27 @@ async function check() {
   // registry + known install dirs, so this only fails if git is truly absent.
   if (gitQuiet('--version') === null) {
     console.log(JSON.stringify({ status: 'offline', local, reason: 'git-not-found' }));
+    return;
+  }
+
+  // SIGNED-UPDATE PATH (opt-in): pin to a signature-verified release tag. Taken
+  // only when a trusted-signers trust anchor ships in this install; otherwise
+  // fall through to the `main`-tracking path below.
+  if (signedUpdatesEnabled()) {
+    const r = findSignedUpdate(local);
+    if (r.status === 'offline') { console.log(JSON.stringify({ status: 'offline', local })); return; }
+    if (r.status === 'unverified') {
+      console.error('A newer release tag exists but its signature did not verify against trusted-signers; not offering it.');
+      console.log(JSON.stringify({ status: 'up-to-date', local, remote: local, reason: 'unverified-newer' }));
+      return;
+    }
+    if (r.status !== 'update') { console.log(JSON.stringify({ status: 'up-to-date', local, remote: local })); return; }
+    let changelog = '';
+    const cl = gitQuiet('show', `${r.tag}:CHANGELOG.md`);
+    if (cl) changelog = cl.split('\n').slice(0, 40).join('\n').slice(0, 1200);
+    const localBundle = localBundleVersion();
+    const requiresReinstall = localBundle != null && minBundleFromRef(r.tag) > localBundle;
+    console.log(JSON.stringify({ status: 'update-available', local, remote: r.ver, changelog, requiresReinstall, verified: true }));
     return;
   }
 
@@ -373,19 +448,41 @@ async function apply() {
       // No previous auto-update commit found (first update) — skip
     }
 
-    // 3. Fetch from the configured remote (authed `origin`)
-    console.log('Fetching latest from upstream...');
+    // 3. Resolve the update SOURCE ref. Signed mode pins to a signature-verified
+    //    release tag; otherwise track `main` (FETCH_HEAD) as before.
     if (!hasGitRepo()) {
       console.error('No git repo found — this install cannot self-update. Reinstall from the latest installer.');
       if (existsSync(lockFile)) unlinkSync(lockFile);
       process.exit(1);
     }
-    try {
-      git('fetch', REMOTE, REMOTE_BRANCH);
-    } catch (e) {
-      // Self-heal a revoked-token origin to the tokenless public URL, then retry.
-      if (ensureTokenlessOrigin()) git('fetch', REMOTE, REMOTE_BRANCH);
-      else throw e;
+    let srcRef;
+    if (signedUpdatesEnabled()) {
+      const r = findSignedUpdate(local);
+      if (r.status !== 'update') {
+        console.log(r.status === 'unverified'
+          ? 'No VERIFIED update available: a newer tag exists but its signature did not verify. Nothing applied.'
+          : (r.status === 'offline' ? 'Offline — could not fetch tags.' : 'Already up to date.'));
+        if (existsSync(lockFile)) unlinkSync(lockFile);
+        return;
+      }
+      // Re-verify defensively right before we trust the ref.
+      if (!verifyTag(r.tag)) {
+        console.error(`Refusing to apply: ${r.tag} signature did not verify against trusted-signers.`);
+        if (existsSync(lockFile)) unlinkSync(lockFile);
+        process.exit(1);
+      }
+      srcRef = r.tag;
+      console.log(`Applying verified release ${r.tag} ...`);
+    } else {
+      console.log('Fetching latest from upstream...');
+      try {
+        git('fetch', REMOTE, REMOTE_BRANCH);
+      } catch (e) {
+        // Self-heal a revoked-token origin to the tokenless public URL, then retry.
+        if (ensureTokenlessOrigin()) git('fetch', REMOTE, REMOTE_BRANCH);
+        else throw e;
+      }
+      srcRef = 'FETCH_HEAD';
     }
 
     // 3b. Minimum-bundle gate: refuse a code-only update that needs a newer heavy
@@ -393,7 +490,7 @@ async function apply() {
     //     half-updating into a broken state. Dev checkouts have no .bundle-version
     //     and are never gated.
     const localBundle = localBundleVersion();
-    const remoteMin = remoteMinBundleVersion();
+    const remoteMin = minBundleFromRef(srcRef);
     if (localBundle != null && remoteMin > localBundle) {
       console.log(`BUNDLE_UPDATE_REQUIRED: this update needs a newer trajecktory bundle (have generation ${localBundle}, need ${remoteMin}). Download and run the latest installer — your data (CV, profile, tracker, reports) will be preserved.`);
       if (existsSync(lockFile)) unlinkSync(lockFile);
@@ -405,7 +502,7 @@ async function apply() {
     const updated = [];
     for (const path of SYSTEM_PATHS) {
       try {
-        git('checkout', 'FETCH_HEAD', '--', path);
+        git('checkout', srcRef, '--', path);
         updated.push(path);
       } catch {
         // File may not exist in remote (new additions), skip

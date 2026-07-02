@@ -1,0 +1,22 @@
+# trusted-signers.example — template for the signed-update trust anchor
+#
+# Copy this file to `trusted-signers` (same name, no .example) and put your real
+# SSH PUBLIC signing key on one line to ACTIVATE verified self-updates. When
+# `trusted-signers` is present, the updater (update-system.mjs) only applies
+# release tags whose signature verifies against a key listed here; it ignores any
+# tag (even a higher version) that is unsigned or signed by a different key.
+#
+# This file ships INSIDE the installer bundle and is deliberately NOT self-updated,
+# so it is a fixed trust anchor: it can only change when you build and ship a new
+# .exe. An SSH PUBLIC key is safe to commit publicly.
+#
+# Format (OpenSSH allowed-signers), one signer per line:
+#   <tagger-email> namespaces="git" <key-type> <base64-key>
+#
+# <tagger-email> MUST match the identity git records when you sign a tag
+# (git config user.email; for a GitHub noreply email, use that exact address).
+# Example (replace with your real key):
+#
+# you@example.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA...yourkey...
+#
+# See docs/RELEASING.md for the full activation + signing runbook.
