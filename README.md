@@ -39,6 +39,19 @@
 
 ---
 
+## Download (Windows, no setup)
+
+**Just want to run it?** Download the Windows installer from the
+**[latest release](https://github.com/michaelinghilterra-creator/trajecktory/releases/latest)**
+and run it. It bundles everything (Node, Chromium, Claude Code, and Git) and installs in a
+few clicks. The only thing you provide is a [Claude](https://claude.ai) subscription (a paid
+plan) and a one-time sign-in.
+
+> The installer is not code-signed yet, so Windows SmartScreen may warn "unknown publisher"
+> on first run. Click **More info -> Run anyway**.
+
+Prefer to run from source (Node + Claude Code)? See **[docs/SETUP.md](docs/SETUP.md)**.
+
 ## What Is This
 
 trajecktory is a local, AI-driven command center for the entire job search, run from a web dashboard. Instead of juggling spreadsheets, browser tabs, and one-off prompts, you get a single pipeline that:
