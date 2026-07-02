@@ -1,5 +1,5 @@
 name: "I Got Hired!"
-description: Share your success story — you landed a job using career-ops
+description: Share your success story — you landed a job using trajecktory
 labels: ["hired"]
 body:
   - type: markdown
@@ -22,7 +22,7 @@ body:
     id: story
     attributes:
       label: Your story
-      description: How did career-ops help? What features made the difference?
+      description: How did trajecktory help? What features made the difference?
       placeholder: "e.g., I evaluated 50+ listings, the scoring helped me focus on 3 real matches, generated tailored CVs for each..."
     validations:
       required: true
@@ -55,7 +55,7 @@ body:
     id: advice
     attributes:
       label: One tip for others
-      description: What would you tell someone just starting their job search with career-ops?
+      description: What would you tell someone just starting their job search with trajecktory?
   - type: checkboxes
     id: permission
     attributes:
