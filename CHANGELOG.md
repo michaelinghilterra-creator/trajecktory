@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.9.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.8.0...v1.9.0) (2026-07-02)
+
+
+### Features
+
+* **dashboard:** widen activity sparkline to 90 days, drop sidebar streak and stats ([c4036ec](https://github.com/michaelinghilterra-creator/trajecktory/commit/c4036ecc14e80f0cf096501984cb668f478949bd))
+* **update:** tokenless self-healing self-update for the public repo ([d63cdda](https://github.com/michaelinghilterra-creator/trajecktory/commit/d63cdda87538177cb730c95c606a57eea96948ef))
+
+
+### Bug Fixes
+
+* **dashboard:** advance Evaluate meter as reports land, clamped to batch size ([df17611](https://github.com/michaelinghilterra-creator/trajecktory/commit/df176119a8694cfd5626416f919d2283ccdb9227))
+* **merge-tracker:** make self-sourced source enforcement symmetric ([d4fb37b](https://github.com/michaelinghilterra-creator/trajecktory/commit/d4fb37b7ec8ce2689aea22f78db5f8f24227dfcb))
+* **security:** allow-list agent model and sanitize report link hrefs ([cca0970](https://github.com/michaelinghilterra-creator/trajecktory/commit/cca09704553cea9d8577922c7093a0e0875162ba))
+
 ## [1.8.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.7.32...v1.8.0) (2026-06-30)
 
 
