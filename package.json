@@ -39,7 +39,7 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.18",
-    "dotenv": "^16.4.5",
+    "dotenv": "^17.4.2",
     "js-yaml": "^4.3.0",
     "playwright": "^1.61.1"
   },
