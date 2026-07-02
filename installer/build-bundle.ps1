@@ -113,23 +113,14 @@ $env:PLAYWRIGHT_BROWSERS_PATH = $BrowsersPath
 Remove-Item Env:\PLAYWRIGHT_BROWSERS_PATH
 
 # ── 6.5 Make the payload a self-updating git working copy ─────────────────────
-# The shipped app updates itself by pulling system-layer files from the private
-# repo (see update-system.mjs). That needs a real repo with an authenticated
-# remote, so we bake in a fine-grained READ-ONLY token (contents:read, this repo
-# only) — a non-technical user never sees an auth prompt. The token is read from
-# the build environment, NEVER from a tracked file, and lands only in the
-# bundle's .git/config (which the PII scan below skips).
-$UpdateToken = $env:TJK_UPDATE_TOKEN
-if (-not $UpdateToken) {
-  $tokenFile = Join-Path $InstallerDir '.update-token'
-  if (Test-Path $tokenFile) { $UpdateToken = (Get-Content $tokenFile -Raw).Trim() }
-}
-if (-not $UpdateToken) {
-  Write-Warning "No update token (set TJK_UPDATE_TOKEN env var or create installer\.update-token). Bundle will NOT self-update."
-} else {
-  Write-Host "Initializing self-update git repo in the payload ..."
-  $bundleVer = (Get-Content (Join-Path $PayloadApp 'VERSION') -Raw).Trim()
-  $RepoUrl   = "https://x-access-token:$UpdateToken@github.com/michaelinghilterra-creator/trajecktory.git"
+# The shipped app updates itself by pulling system-layer files from the PUBLIC
+# repo (see update-system.mjs). That needs a real repo with a remote. Since the
+# repo is public, the origin is a plain tokenless HTTPS URL: no credential ships
+# in the bundle and anonymous fetch just works. Rebuild and ship this bundle only
+# AFTER the repo is public (see the go-public rollout in the plan).
+Write-Host "Initializing self-update git repo in the payload ..."
+$bundleVer = (Get-Content (Join-Path $PayloadApp 'VERSION') -Raw).Trim()
+$RepoUrl   = "https://github.com/michaelinghilterra-creator/trajecktory.git"
   & git -C $PayloadApp init -q
   if ($LASTEXITCODE -ne 0) { throw "git init failed in payload" }
   # Persist a commit identity + disable signing IN THE BUNDLE'S REPO so the
@@ -147,6 +138,9 @@ if (-not $UpdateToken) {
   & git -C $PayloadApp commit -q -m "trajecktory v$bundleVer bundled baseline"
   if ($LASTEXITCODE -ne 0) { throw "git baseline commit failed in payload" }
   & git -C $PayloadApp remote add origin $RepoUrl
+  # Never prompt for or reuse machine credentials on fetch: the public repo needs
+  # none, and this keeps a headless self-update from hanging on a credential prompt.
+  & git -C $PayloadApp config credential.helper ''
   # Git for Windows hides the .git dir (Hidden attribute, via core.hideDotFiles).
   # Clear it so Inno Setup's recursesubdirs definitely ships .git into the install
   # — the self-update repo (and its authenticated remote) lives there.
@@ -154,8 +148,7 @@ if (-not $UpdateToken) {
   # Heavy-runtime generation marker; update-system.mjs refuses code updates that
   # need a newer bundle than this. Bump when you ship a new .exe with new Node/Chromium.
   Set-Content -Path (Join-Path $PayloadApp '.bundle-version') -Value '1' -NoNewline
-  Write-Host "Self-update repo ready (origin set, baseline committed at v$bundleVer)."
-}
+  Write-Host "Self-update repo ready (tokenless public origin, baseline committed at v$bundleVer)."
 
 # ── 7. PII backstop: fail the build if any personal data slipped into payload ─
 # Mirrors the repo PII scrub. Add patterns if the candidate identity changes.
@@ -211,6 +204,13 @@ if ($piiPatterns.Count -gt 0) {
 $textExt = @('.mjs','.cjs','.js','.jsx','.ts','.tsx','.json','.md','.markdown','.yml','.yaml','.html','.htm','.css','.txt','.ps1','.psm1','.sh','.bash','.toml','.ini','.cfg','.conf','.xml','.svg','.csv','.tsv','.env','.example','.sample','.gitignore','.gitattributes','.editorconfig','.npmrc','.nvmrc')
 $secretFiles = $scanFiles | Where-Object { $textExt -contains $_.Extension.ToLower() }
 $hits += $secretFiles | Select-String -Pattern $secretPatterns -List -ErrorAction SilentlyContinue
+# Also scan the bundle's .git/config specifically (it has no file extension, so it
+# is not in $textExt above): the tokenless origin means it must contain NO
+# credential, so this fails the build if a token is ever reintroduced into the URL.
+$gitConfig = Join-Path $PayloadApp '.git\config'
+if (Test-Path $gitConfig) {
+  $hits += Select-String -Path $gitConfig -Pattern $secretPatterns -List -ErrorAction SilentlyContinue
+}
 if ($hits) {
   $hits | ForEach-Object { Write-Warning "PII/secret in payload: $($_.Path)" }
   throw "Refusing to build: personal data or secrets found in payload (see warnings above)."

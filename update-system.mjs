@@ -30,6 +30,13 @@ const ROOT = __dirname;
 // remote. Either way no URL or token is hardcoded here.
 const REMOTE = 'origin';
 const REMOTE_BRANCH = 'main';
+// The public HTTPS clone URL. Installed bundles historically shipped an origin
+// with an embedded read-only token for the then-private repo. Now that the repo
+// is public, ensureTokenlessOrigin() rewrites any such tokened origin to this
+// tokenless URL the first time a tokened fetch fails (e.g. after the token is
+// revoked), so anonymous fetch just works. Dev checkouts (SSH or plain-HTTPS
+// origins with no embedded token) are left untouched.
+const PUBLIC_ORIGIN = 'https://github.com/michaelinghilterra-creator/trajecktory.git';
 
 // System layer paths — ONLY these files get updated
 const SYSTEM_PATHS = [
@@ -159,8 +166,13 @@ function resolveGit() {
   return (_gitExe = 'git'); // last resort — failures are handled as "offline"
 }
 
+// All git calls disable the credential helper and interactive prompts: the
+// public repo needs no auth, and this stops a headless updater from hanging on a
+// credential prompt or reusing a stale cached credential once the old bundle
+// token is revoked.
+const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
 function git(...args) {
-  return execFileSync(resolveGit(), args, { cwd: ROOT, encoding: 'utf-8', timeout: 30000 }).trim();
+  return execFileSync(resolveGit(), ['-c', 'credential.helper=', ...args], { cwd: ROOT, encoding: 'utf-8', timeout: 30000, env: GIT_ENV }).trim();
 }
 
 function gitStatusEntries() {
@@ -187,7 +199,7 @@ function addPaths(paths) {
 
 function gitQuiet(...args) {
   try {
-    return execFileSync(resolveGit(), args, { cwd: ROOT, encoding: 'utf-8', timeout: 30000 }).trim();
+    return execFileSync(resolveGit(), ['-c', 'credential.helper=', ...args], { cwd: ROOT, encoding: 'utf-8', timeout: 30000, env: GIT_ENV }).trim();
   } catch {
     return null;
   }
@@ -195,6 +207,20 @@ function gitQuiet(...args) {
 
 function hasGitRepo() {
   return existsSync(join(ROOT, '.git'));
+}
+
+// Rewrite a bundle origin that still carries the old embedded token to the
+// tokenless public URL. Returns true only if it actually rewrote, so a caller
+// can retry a failed fetch once. Matched precisely on `x-access-token` so a
+// developer's SSH (git@github.com:...) or plain-HTTPS origin is never touched.
+function ensureTokenlessOrigin() {
+  if (!hasGitRepo()) return false;
+  const url = gitQuiet('remote', 'get-url', REMOTE);
+  if (url && /x-access-token/i.test(url)) {
+    gitQuiet('remote', 'set-url', REMOTE, PUBLIC_ORIGIN);
+    return true;
+  }
+  return false;
 }
 
 // Read a path's contents from the just-fetched remote tip (FETCH_HEAD) without
@@ -252,7 +278,13 @@ async function check() {
   // touching the working tree. Uses origin's configured auth: the embedded
   // read-only token in an installed bundle, or the developer's credentials in a
   // checkout. Network/auth failure is treated as offline (a silent non-event).
-  const fetched = gitQuiet('fetch', '--depth', '1', REMOTE, REMOTE_BRANCH);
+  let fetched = gitQuiet('fetch', '--depth', '1', REMOTE, REMOTE_BRANCH);
+  // If the tokened bundle origin can no longer authenticate (the read-only token
+  // was revoked after the repo went public), self-heal to the tokenless public
+  // URL and retry once so the install keeps updating anonymously.
+  if (fetched === null && ensureTokenlessOrigin()) {
+    fetched = gitQuiet('fetch', '--depth', '1', REMOTE, REMOTE_BRANCH);
+  }
   if (fetched === null) {
     console.log(JSON.stringify({ status: 'offline', local }));
     return;
@@ -348,7 +380,13 @@ async function apply() {
       if (existsSync(lockFile)) unlinkSync(lockFile);
       process.exit(1);
     }
-    git('fetch', REMOTE, REMOTE_BRANCH);
+    try {
+      git('fetch', REMOTE, REMOTE_BRANCH);
+    } catch (e) {
+      // Self-heal a revoked-token origin to the tokenless public URL, then retry.
+      if (ensureTokenlessOrigin()) git('fetch', REMOTE, REMOTE_BRANCH);
+      else throw e;
+    }
 
     // 3b. Minimum-bundle gate: refuse a code-only update that needs a newer heavy
     //     runtime (Node/Chromium) than this installed bundle ships, rather than
@@ -399,7 +437,9 @@ async function apply() {
 
     // 6. Install any new dependencies
     try {
-      execSync('npm install --silent', { cwd: ROOT, timeout: 60000 });
+      // --ignore-scripts closes the postinstall lifecycle-script vector (a
+      // compromised or typosquatted transitive dep cannot run code on update).
+      execSync('npm install --ignore-scripts --silent', { cwd: ROOT, timeout: 60000 });
     } catch {
       console.log('npm install skipped (may need manual run)');
     }
