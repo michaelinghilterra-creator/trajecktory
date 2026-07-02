@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.10.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.9.0...v1.10.0) (2026-07-02)
+
+
+### Features
+
+* **update:** verify SSH-signed release tags before self-updating (opt-in) ([9b4a4b4](https://github.com/michaelinghilterra-creator/trajecktory/commit/9b4a4b44404bcad5d176102aa2efb7a6d0820439))
+
+
+### Bug Fixes
+
+* **deps:** bump js-yaml to 4.3.0 to resolve quadratic-DoS advisory ([f63306b](https://github.com/michaelinghilterra-creator/trajecktory/commit/f63306b85ea11fab26a12950589b9569f1b7e246))
+
 ## [1.9.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.8.0...v1.9.0) (2026-07-02)
 
 
