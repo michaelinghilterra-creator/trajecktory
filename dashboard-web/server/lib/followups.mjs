@@ -82,7 +82,7 @@ function appendFollowupRow({ appNum, date, company, role, channel, contact, note
   if (fs.existsSync(FOLLOWUPS_MD)) existingText = fs.readFileSync(FOLLOWUPS_MD, 'utf8');
   const existing = parseFollowupsMd();
   const nextN = existing.length ? Math.max(...existing.map(r => r.n)) + 1 : 1;
-  const esc = s => (s || '').toString().replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+  const esc = s => (s || '').toString().replace(/[|\r\n]+/g, ' ').trim();
   const row = `| ${nextN} | ${appNum} | ${date} | ${esc(company)} | ${esc(role)} | ${esc(channel)} | ${esc(contact)} | ${esc(notes)} |`;
   // If file is empty or missing header, write the full header + row
   if (!/^\|.*\|$/m.test(existingText) || !existingText.includes('|-')) {

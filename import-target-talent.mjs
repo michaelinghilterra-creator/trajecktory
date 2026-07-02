@@ -89,7 +89,7 @@ function parseCSV(text, delim = ',') {
 }
 
 function escapeMdCell(s) {
-  return (s || '').toString().replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+  return (s || '').toString().replace(/[|\r\n]+/g, ' ').trim();
 }
 
 function main() {

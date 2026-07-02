@@ -50,7 +50,7 @@ function parseCSV(text) {
 }
 
 function escapeMd(s) {
-  return (s || '').replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+  return (s || '').replace(/[|\r\n]+/g, ' ').trim();
 }
 
 const raw = fs.readFileSync(csvPath, 'utf8');
