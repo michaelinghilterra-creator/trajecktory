@@ -12,6 +12,10 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "walkAway": 160
 }/*EDITMODE-END*/;
 
+// Theme cycle order by luminance: dark -> dim -> light -> dark
+const THEME_ORDER = ["dark", "dim", "light"];
+const nextThemeAfter = (t) => THEME_ORDER[(THEME_ORDER.indexOf(t) + 1) % THEME_ORDER.length];
+
 function App() {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -265,7 +269,7 @@ function App() {
       { section: "Navigate", icon: "🚀", label: "Go to Launchpad (setup)", run: () => setTab("launchpad") },
     ];
     const viewCmds = [
-      { section: "View", icon: "◐", label: `Switch to ${tweaks.theme === "dark" ? "light" : "dark"} mode`, run: () => setTweak("theme", tweaks.theme === "dark" ? "light" : "dark") },
+      { section: "View", icon: "◐", label: `Theme: ${tweaks.theme} → ${nextThemeAfter(tweaks.theme)}`, run: () => setTweak("theme", nextThemeAfter(tweaks.theme)) },
       { section: "View", icon: "≡", label: `Density: ${tweaks.density === "compact" ? "comfortable" : "compact"}`, run: () => setTweak("density", tweaks.density === "compact" ? "comfortable" : "compact") },
       { section: "View", icon: "▦", label: "Pipeline as Table",  run: () => { setTab("pipeline"); setPipelineView("table"); } },
     ];
@@ -332,7 +336,7 @@ function App() {
   const tweaksUI = window.TweaksPanel && tweaksOpen ? (
     <window.TweaksPanel onClose={() => setTweaksOpen(false)} title="Tweaks">
       <window.TweakSection title="Appearance">
-        <window.TweakRadio label="Theme" value={tweaks.theme} options={["dark", "light"]} onChange={v => setTweak("theme", v)} />
+        <window.TweakRadio label="Theme" value={tweaks.theme} options={["dark", "dim", "light"]} onChange={v => setTweak("theme", v)} />
         <window.TweakRadio label="Density" value={tweaks.density} options={["comfortable", "compact"]} onChange={v => setTweak("density", v)} />
         <window.TweakColor
           label="Accent color"
