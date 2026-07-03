@@ -19,6 +19,51 @@ export const router = express.Router();
 
 const agentJobs = new Map();
 
+// ── Restart resilience ────────────────────────────────────────────────────────
+// agentJobs lives only in memory, and each run's `claude -p` worker is a child of
+// THIS server process. A server restart kills the workers and drops the job
+// records, which used to leave the UI spinning forever at its last count. We now
+// persist a bounded snapshot to logs/agent-jobs.json and, on boot, reload it and
+// flip any still-"running" job to "interrupted" so the client can surface a
+// "run interrupted, retry" instead of a frozen spinner. Best-effort throughout:
+// persistence must NEVER throw into a run.
+const JOBS_FILE = path.join(ROOT_DIR, 'logs', 'agent-jobs.json');
+const MAX_PERSIST = 30;
+
+function persistJobs() {
+  try {
+    fs.mkdirSync(path.dirname(JOBS_FILE), { recursive: true });
+    const entries = [...agentJobs.entries()]
+      .sort((a, b) => (b[1].startedAt || 0) - (a[1].startedAt || 0))
+      .slice(0, MAX_PERSIST)
+      .map(([id, job]) => [id, { ...job, output: (job.output || '').slice(-1000), toolCalls: (job.toolCalls || []).slice(-20) }]);
+    fs.writeFileSync(JOBS_FILE, JSON.stringify(entries), 'utf8');
+  } catch { /* best-effort */ }
+}
+
+let persistTimer = null;
+function schedulePersist() {
+  if (persistTimer) return;
+  persistTimer = setTimeout(() => { persistTimer = null; persistJobs(); }, 800);
+  if (persistTimer && persistTimer.unref) persistTimer.unref();
+}
+
+function loadPersistedJobs() {
+  try {
+    if (!fs.existsSync(JOBS_FILE)) return;
+    const entries = JSON.parse(fs.readFileSync(JOBS_FILE, 'utf8'));
+    if (!Array.isArray(entries)) return;
+    const cutoff = Date.now() - 6 * 60 * 60 * 1000;   // drop anything older than 6h
+    for (const [id, job] of entries) {
+      if (!job || (job.startedAt && job.startedAt < cutoff)) continue;
+      agentJobs.set(id, job.status === 'running'
+        ? { ...job, status: 'interrupted', error: 'Interrupted by a dashboard restart. Click Run to retry.', interruptedAt: Date.now() }
+        : job);
+    }
+  } catch { /* ignore a corrupt/partial snapshot */ }
+}
+loadPersistedJobs();
+
 function agentTail(output) {
   return (output || '').trim().split('\n').slice(-3).join('\n');
 }
@@ -173,10 +218,12 @@ function runClaudeAgent(jobId, mode, target) {
     const update = (patch) => {
       const job = agentJobs.get(jobId) || {};
       agentJobs.set(jobId, { ...job, ...patch });
+      schedulePersist();
     };
     const fail = (msg) => {
       const job = agentJobs.get(jobId) || {};
       agentJobs.set(jobId, { ...job, status: 'error', error: msg, finishedAt: Date.now() });
+      schedulePersist();
       resolve({ ok: false, error: msg });
     };
 
@@ -310,6 +357,7 @@ function runClaudeAgent(jobId, mode, target) {
         error: ok ? undefined : err,
         finishedAt: Date.now(),
       });
+      persistJobs();
       // Rotating diagnostic log: one record per run, captures tool-calls (incl.
       // any `Subagent:` fan-out) + pressure warning. Best-effort, never throws.
       logAgentRun({
@@ -362,6 +410,7 @@ async function runAgent(jobId, mode, target) {
     // Progress meter: pipeline has a known batch size; deep is a single eval; scan
     // and triage are open-ended, so they show elapsed only (progressTotal null).
     progressTotal: mode === 'pipeline' ? evalBatchSize(effectivePower(target)) : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
+  persistJobs();   // capture the running record immediately so a restart can mark it interrupted
   const res = await runClaudeAgent(jobId, mode, target);
   // Evaluate writes tracker TSVs; folding them into applications.md is the
   // separate Merge Tracker step. Point the user at it so a written-but-not-yet-
@@ -464,6 +513,26 @@ router.get('/api/agent/status/:jobId', (req, res) => {
   const job = agentJobs.get(req.params.jobId);
   if (!job) return res.status(404).json({ error: 'Job not found' });
   res.json({ ...job, output: (job.output || '').slice(-4000) });
+});
+
+// GET /api/agent/active — running or interrupted jobs, newest first. A freshly
+// loaded client uses this to re-attach to a run still in flight (resume polling)
+// or surface one the server marked interrupted after a restart, instead of
+// showing an idle step with no memory of the run.
+router.get('/api/agent/active', (req, res) => {
+  const out = [];
+  for (const [jobId, job] of agentJobs.entries()) {
+    if (job.status !== 'running' && job.status !== 'interrupted') continue;
+    out.push({
+      jobId, mode: job.mode, status: job.status,
+      evaluationsDone: job.evaluationsDone, progressTotal: job.progressTotal,
+      error: job.error, summary: job.summary, activity: job.activity,
+      toolCount: job.toolCount, startedAt: job.startedAt,
+      billedTo: job.billedTo, batch: job.batch,
+    });
+  }
+  out.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+  res.json(out);
 });
 
 

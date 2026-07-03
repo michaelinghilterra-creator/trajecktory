@@ -234,10 +234,12 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         if (!ok || b.error || !b.jobId) { setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: b.error || 'failed to start' } })); return; }
         const key = 'deep-' + card.url;
         const poll = setInterval(() => {
-          fetch(`/api/agent/status/${b.jobId}`).then(r => r.json()).then(job => {
-            if (job.status === 'done' || job.status === 'error') {
+          fetch(`/api/agent/status/${b.jobId}`).then(r => r.status === 404 ? { status: 'interrupted' } : r.json()).then(job => {
+            if (job.status === 'done' || job.status === 'error' || job.status === 'interrupted') {
               clearInterval(poll); delete pollersRef.current[key];
-              setDeepJobs(d => ({ ...d, [card.url]: { status: job.status, error: job.error } }));
+              setDeepJobs(d => ({ ...d, [card.url]: job.status === 'interrupted'
+                ? { status: 'error', error: 'Interrupted — the dashboard restarted. Retry.' }
+                : { status: job.status, error: job.error } }));
               if (job.status === 'done') {
                 onDataChanged && onDataChanged();
                 // The report now exists; the triage card is spent. Show
@@ -246,7 +248,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                 setTimeout(() => dismissCard(card.url), 1500);
               }
             }
-          }).catch(() => { clearInterval(poll); delete pollersRef.current[key]; });
+          }).catch(() => { clearInterval(poll); delete pollersRef.current[key]; setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: 'Interrupted — the dashboard restarted. Retry.' } })); });
         }, 2000);
         pollersRef.current[key] = poll;
       })
@@ -266,13 +268,15 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         if (!ok || b.error || !b.jobId) { setPasteBusy(false); setPasteMsg(b.error || 'Could not start the evaluation.'); return; }
         setPasteVal(''); setPasteMsg('Evaluating…');
         const poll = setInterval(() => {
-          fetch(`/api/agent/status/${b.jobId}`).then(r => r.json()).then(job => {
-            if (job.status === 'done' || job.status === 'error') {
+          fetch(`/api/agent/status/${b.jobId}`).then(r => r.status === 404 ? { status: 'interrupted' } : r.json()).then(job => {
+            if (job.status === 'done' || job.status === 'error' || job.status === 'interrupted') {
               clearInterval(poll); delete pollersRef.current['paste']; setPasteBusy(false);
-              setPasteMsg(job.status === 'done' ? 'Done — see the Pipeline tab.' : (job.error || 'Evaluation failed.'));
+              setPasteMsg(job.status === 'done' ? 'Done — see the Pipeline tab.'
+                : job.status === 'interrupted' ? 'Interrupted — the dashboard restarted. Try again.'
+                : (job.error || 'Evaluation failed.'));
               if (job.status === 'done') onDataChanged && onDataChanged();
             }
-          }).catch(() => { clearInterval(poll); delete pollersRef.current['paste']; setPasteBusy(false); });
+          }).catch(() => { clearInterval(poll); delete pollersRef.current['paste']; setPasteBusy(false); setPasteMsg('Interrupted — the dashboard restarted. Try again.'); });
         }, 2000);
         pollersRef.current['paste'] = poll;
       })
@@ -297,6 +301,44 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
       command: '/trajecktory pipeline', section: 'advanced' },
   ];
 
+  // Poll an agent job to completion, resilient to the server vanishing mid-run.
+  // A 404 (job gone with no snapshot), a server-marked 'interrupted' status, or
+  // two consecutive fetch failures all settle the job as 'interrupted' — so the
+  // UI shows "run interrupted, retry" instead of spinning forever at its last
+  // count. onUpdate fires each live tick; onSettled gets the terminal job.
+  function pollAgentJob(jobId, key, { onUpdate, onSettled }) {
+    let fails = 0;
+    const stop = (job) => { clearInterval(poll); delete pollersRef.current[key]; onSettled && onSettled(job); };
+    const poll = setInterval(() => {
+      fetch(`/api/agent/status/${jobId}`)
+        .then(r => (r.status === 404 ? { status: 'interrupted' } : r.json()))
+        .then(job => {
+          if (job && job.status === 'interrupted') return stop({ status: 'interrupted' });
+          fails = 0;
+          onUpdate && onUpdate(job);
+          if (job && (job.status === 'done' || job.status === 'error')) stop(job);
+        })
+        .catch(() => { fails += 1; if (fails >= 2) stop({ status: 'interrupted' }); });
+    }, 2000);
+    pollersRef.current[key] = poll;
+  }
+
+  // Wire an Evaluate/Scan/Triage step's poller into the jobs state. Also used to
+  // re-attach to a run still in flight after a page reload (see the mount effect).
+  function attachAgentPoll(step, jobId) {
+    pollAgentJob(jobId, step.id, {
+      onUpdate: (job) => setJobs(j => ({ ...j, [step.id]: job })),
+      onSettled: (job) => {
+        if (job.status === 'interrupted') {
+          setJobs(j => ({ ...j, [step.id]: { ...(j[step.id] || {}), status: 'interrupted' } }));
+        } else {
+          setJobs(j => ({ ...j, [step.id]: job }));
+          if (job.status === 'done') { onDataChanged && onDataChanged(); if (step.id === 'triage') loadTriage(); }
+        }
+      },
+    });
+  }
+
   function runStep(step) {
     if (step.type === 'agent') {
       // Drives the user's local Claude Code in the background via /api/agent.
@@ -313,23 +355,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
             setJobs(j => ({ ...j, [step.id]: { status: 'error', error: body.error || 'failed to start' } }));
             return;
           }
-          const poll = setInterval(() => {
-            fetch(`/api/agent/status/${body.jobId}`)
-              .then(r => r.json())
-              .then(job => {
-                // Live update every tick (activity, toolCount, subSteps)
-                setJobs(j => ({ ...j, [step.id]: job }));
-                if (job.status === 'done' || job.status === 'error') {
-                  clearInterval(poll);
-                  delete pollersRef.current[step.id];
-                  // Evaluate/Triage wrote reports/TSVs — re-sync the dashboard,
-                  // and reload the triage cards after a triage run.
-                  if (job.status === 'done') { onDataChanged && onDataChanged(); if (step.id === 'triage') loadTriage(); }
-                }
-              })
-              .catch(() => { clearInterval(poll); });
-          }, 2000);
-          pollersRef.current[step.id] = poll;
+          attachAgentPoll(step, body.jobId);
         })
         .catch(err => setJobs(j => ({ ...j, [step.id]: { status: 'error', error: err.message } })));
       return;
@@ -377,6 +403,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     if (s === 'cli-pending') return { ch: '⧖', color: 'var(--accent)' };
     if (s === 'done')        return { ch: '✓', color: 'var(--green)' };
     if (s === 'warn')        return { ch: '⚠', color: 'var(--yellow)' };
+    if (s === 'interrupted') return { ch: '↻', color: 'var(--orange)' };
     if (s === 'error')       return { ch: '✕', color: 'var(--red)' };
     return { ch: '○', color: 'var(--text-mute)' };
   }
@@ -402,6 +429,25 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const POWER_ORDER = ['api-scan', 'cli-scan', 'gate', 'cli-eval', 'merge', 'verify', 'health', 'discover'];
   const stepById = Object.fromEntries(STEPS.map(s => [s.id, s]));
   const visibleSteps = (hasKey ? POWER_ORDER : BASE_ORDER).map(id => stepById[id]).filter(Boolean);
+
+  // Re-attach on mount: after a reload (or a server restart) the sidebar starts
+  // blank, so ask the server for any running/interrupted agent job and either
+  // resume its poller (still live) or surface it as interrupted (needs a retry),
+  // instead of silently forgetting a run that was in flight.
+  useEffect(() => {
+    fetch('/api/agent/active').then(r => r.json()).then(list => {
+      if (!Array.isArray(list)) return;
+      const MODE_STEP = { pipeline: 'cli-eval', scan: 'cli-scan', triage: 'triage' };
+      const seen = new Set();
+      for (const job of list) {                 // list is newest-first
+        const stepId = MODE_STEP[job.mode];
+        if (!stepId || seen.has(stepId)) continue;
+        seen.add(stepId);
+        setJobs(j => ({ ...j, [stepId]: job }));
+        if (job.status === 'running' && stepById[stepId]) attachAgentPoll(stepById[stepId], job.jobId);
+      }
+    }).catch(() => {});
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="workflow-panel">
@@ -524,7 +570,12 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               {job?.warning && (
                 <div className="workflow-summary" style={{ color: 'var(--yellow)' }}>{job.warning}</div>
               )}
-              {job?.error && (
+              {job?.status === 'interrupted' && (
+                <div className="workflow-summary" style={{ color: 'var(--orange)' }}>
+                  Run interrupted{typeof job.progressTotal === 'number' && job.progressTotal > 0 && (job.evaluationsDone || 0) > 0 ? ` at ${Math.min(job.evaluationsDone, job.progressTotal)} of ${job.progressTotal}` : ''} — click Run to retry.
+                </div>
+              )}
+              {job?.error && job.status !== 'interrupted' && (
                 <div className="workflow-summary" style={{ color: 'var(--red)' }}>{job.error}</div>
               )}
             </div>
