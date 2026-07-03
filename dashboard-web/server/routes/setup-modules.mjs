@@ -17,6 +17,8 @@ export const router = express.Router();
 const PITCH_FILE = path.resolve(ROOT_DIR, 'data', 'elevator-pitch.json');
 const CHANGELOG_MD = path.resolve(ROOT_DIR, 'CHANGELOG.md');
 const VERSION_FILE = path.resolve(ROOT_DIR, 'VERSION');
+// Dashboard changelog view starts here; older upstream releases are hidden.
+const CHANGELOG_SINCE = '2026-05-08';
 
 // Approx spoken words at ~150 wpm, so the model targets a real speaking length.
 const LENGTH_WORDS = { '60s': 150, '90s': 220, '120s': 300 };
@@ -88,17 +90,52 @@ RULES:
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Parse the Release-Please CHANGELOG.md into structured, skimmable entries.
+// Turn a raw changelog bullet or paragraph into clean, hand-written-looking prose:
+// strip commit/issue reference links, any leftover [label](url) markdown, and
+// **bold** markers, then sentence-case the first letter.
+function cleanNote(text) {
+  return String(text)
+    .replace(/\s*\([^()]*\[[^\]]+\]\([^)]*\)\)/g, '') // drop ([hash](url)) and (closes [#12](url)) refs
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')          // any remaining [label](url) -> label
+    .replace(/\*\*/g, '')                             // bold markers
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .replace(/^([a-z])/, (_, c) => c.toUpperCase());  // sentence-case
+}
+
+// Parse the CHANGELOG.md into structured, skimmable entries. Handles both the
+// hand-written keepachangelog format and the Release Please generated format,
+// and folds free-text paragraphs (e.g. the upstream-sync note) into a note so
+// every entry reads like a hand-written one.
 function parseChangelog(md) {
   const entries = [];
-  let cur = null, sec = null;
+  let cur = null, sec = null, inProse = false;
+  const ensureSec = () => { if (!sec) { sec = { heading: '', items: [] }; cur.sections.push(sec); } };
   for (const ln of (md || '').split(/\r?\n/)) {
-    const h = ln.match(/^##\s+\[?([^\]\s]+)\]?\s*[-–]\s*(.+)$/);
-    if (h) { cur = { version: h[1], date: h[2].trim(), sections: [] }; entries.push(cur); sec = null; continue; }
+    // Version heading, either format:
+    //   ## [1.7.32] - 2026-06-29
+    //   ## [1.10.1](https://.../compare/...) (2026-07-02)
+    const h = ln.match(/^##\s+\[?([^\]()\s]+)\]?/);
+    if (h && /^\d|unreleased/i.test(h[1])) {
+      const dm = ln.match(/(\d{4}-\d{2}-\d{2})/);
+      cur = { version: h[1], date: dm ? dm[1] : '', sections: [] };
+      entries.push(cur); sec = null; inProse = false; continue;
+    }
+    if (!cur) continue;
     const sh = ln.match(/^###\s+(.+)$/);
-    if (sh && cur) { sec = { heading: sh[1].trim(), items: [] }; cur.sections.push(sec); continue; }
+    if (sh) { sec = { heading: sh[1].trim(), items: [] }; cur.sections.push(sec); inProse = false; continue; }
     const it = ln.match(/^[-*]\s+(.+)$/);
-    if (it && cur) { if (!sec) { sec = { heading: '', items: [] }; cur.sections.push(sec); } sec.items.push(it[1].trim()); }
+    if (it) { ensureSec(); sec.items.push(cleanNote(it[1])); inProse = false; continue; }
+    // Free-text paragraph: fold consecutive lines into a single clean note.
+    const prose = ln.trim();
+    if (prose) {
+      ensureSec();
+      if (inProse && sec.items.length) {
+        sec.items[sec.items.length - 1] = cleanNote(sec.items[sec.items.length - 1] + ' ' + prose);
+      } else {
+        sec.items.push(cleanNote(prose)); inProse = true;
+      }
+    }
   }
   return entries;
 }
@@ -110,6 +147,7 @@ router.get('/api/setup/changelog', (req, res) => {
     try { version = fs.readFileSync(VERSION_FILE, 'utf8').trim(); } catch { /* dev checkout */ }
     let md = '';
     try { md = fs.readFileSync(CHANGELOG_MD, 'utf8'); } catch { /* no changelog yet */ }
-    res.json({ version, entries: parseChangelog(md) });
+    const entries = parseChangelog(md).filter(e => e.date && e.date >= CHANGELOG_SINCE);
+    res.json({ version, entries });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
