@@ -63,6 +63,31 @@
   --panel-3:   #f0f0ec;
   --accent-rgb: 124,58,237;
 }
+/* Dim — mid-tone slate, easy on the eyes, sits between dark and light */
+[data-theme="dim"] {
+  --bg:        #22262e;
+  --bg-2:      #262b34;
+  --panel:     #2b313b;
+  --panel-2:   #313843;
+  --border:    #3a4250;
+  --border-2:  #48515f;
+  --text:      #dfe4ec;
+  --text-dim:  #a4adbb;
+  --text-mute: #737d8c;
+  --accent:    #a78bfa;
+  --accent-2:  #c4b5fd;
+  --accent-bg: rgba(167,139,250,0.16);
+  --green:     #4ade80;
+  --yellow:    #eab308;
+  --red:       #f87171;
+  --blue:      #60a5fa;
+  --cyan:      #38bdf8;
+  --orange:    #fb923c;
+  --grid:      rgba(255,255,255,0.05);
+  --shadow:    0 1px 0 rgba(255,255,255,0.03) inset, 0 10px 30px -14px rgba(0,0,0,0.5);
+  --panel-3:   #363d49;
+  --accent-rgb: 167,139,250;
+}
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; }
