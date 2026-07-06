@@ -1,6 +1,11 @@
 // Overview Tab — landing + worklist (Actions module merged in 2026-06-07).
 const { useMemo: useMemoO, useState: useStateO } = React;
 
+// Days shown in the Overview "Activity" band. Trimmed from 90 to 75 so the
+// sparkline stays dense (older history left long empty stretches). Drives the
+// window filters, the Avg/wk divisor, the card title, and the Timeline prop.
+const ACTIVITY_WINDOW = 75;
+
 const DAILY_QUOTES = [
   { text: "The impediment to action advances action. What stands in the way becomes the way.", author: "Marcus Aurelius" },
   { text: "We suffer more in imagination than in reality.", author: "Seneca" },
@@ -154,16 +159,16 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
     };
   }, [apps]);
 
-  // Activity insights (90-day window)
+  // Activity insights (ACTIVITY_WINDOW-day window)
   const activityInsights = useMemoO(() => {
     const last7  = apps.filter(a => window.daysAgo(a.date) <= 6).length;
     const prior7 = apps.filter(a => window.daysAgo(a.date) >= 7 && window.daysAgo(a.date) <= 13).length;
-    const last90 = apps.filter(a => window.daysAgo(a.date) <= 89).length;
-    const avgPerWeek = (last90 * 7 / 90).toFixed(1);
+    const windowCount = apps.filter(a => window.daysAgo(a.date) <= ACTIVITY_WINDOW - 1).length;
+    const avgPerWeek = (windowCount * 7 / ACTIVITY_WINDOW).toFixed(1);
     const trend = last7 - prior7;
     // Peak day in window
     const dayCounts = {};
-    apps.forEach(a => { if (window.daysAgo(a.date) <= 89) dayCounts[a.date] = (dayCounts[a.date] || 0) + 1; });
+    apps.forEach(a => { if (window.daysAgo(a.date) <= ACTIVITY_WINDOW - 1) dayCounts[a.date] = (dayCounts[a.date] || 0) + 1; });
     const peakDate = Object.keys(dayCounts).reduce((m, k) => (dayCounts[k] > (dayCounts[m] || 0) ? k : m), Object.keys(dayCounts)[0] || null);
     const peakCount = peakDate ? dayCounts[peakDate] : 0;
     const peakLabel = peakDate
@@ -266,12 +271,12 @@ const toggleRow = (id) => setSelected(s => {
         </div>
       </div>
 
-      {/* Activity · last 90 days — full-width band on top */}
+      {/* Activity · last N days — full-width band on top */}
       <div className="card padded-lg" style={{ display: "flex", flexDirection: "column" }}>
         <div className="card-head">
-          <span className="card-title">Activity · last 90 days</span>
+          <span className="card-title">Activity · last {ACTIVITY_WINDOW} days</span>
           <span className="card-meta mono">
-            {apps.filter(a => window.daysAgo(a.date) <= 89).length} entries &nbsp;·&nbsp;
+            {apps.filter(a => window.daysAgo(a.date) <= ACTIVITY_WINDOW - 1).length} entries &nbsp;·&nbsp;
             Last 7d <span style={{ color: "var(--accent)" }}>{activityInsights.last7}</span>&nbsp;·&nbsp;
             Prior 7d <span style={{ color: "var(--text-dim)" }}>{activityInsights.prior7}</span>
             <span style={{ color: activityInsights.trend > 0 ? "var(--green)" : activityInsights.trend < 0 ? "var(--red)" : "var(--text-dim)", marginLeft: 6 }}>
@@ -279,7 +284,7 @@ const toggleRow = (id) => setSelected(s => {
             </span>
           </span>
         </div>
-        <window.Timeline apps={apps} days={90} height={72} />
+        <window.Timeline apps={apps} days={ACTIVITY_WINDOW} height={72} />
         <div className="row mono" style={{ marginTop: 10, fontSize: 10.5, color: "var(--text-mute)", gap: 4 }}>
           Avg/wk
           <span className="mono" style={{ color: "var(--text-dim)", marginLeft: 2 }}>{activityInsights.avgPerWeek}</span>
