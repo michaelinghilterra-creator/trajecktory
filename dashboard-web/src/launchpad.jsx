@@ -195,6 +195,8 @@ function ModelsCostPanel() {
       .then(({ ok, body }) => {
         if (!ok || body.error) { setMsg(body.error || 'Save failed.'); return; }
         setState(body); setMsg('Saved. Takes effect on your next run.');
+        // Nudge the workflow sidebar (shared.jsx) to re-read billing/key state now.
+        try { window.dispatchEvent(new Event('trj:models-changed')); } catch {}
       })
       .catch(() => setMsg('Save failed.'))
       .finally(() => setBusy(false));
@@ -212,9 +214,28 @@ function ModelsCostPanel() {
       <div style={{ fontSize: 12.5, marginBottom: 14, padding: '9px 12px', borderRadius: 'var(--r-ctl)',
         background: showCost ? 'rgba(34,197,94,0.07)' : 'var(--panel-2)', border: `1px solid ${showCost ? 'rgba(34,197,94,0.22)' : 'var(--border)'}`,
         color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        {showCost ? '● API key active — $ figures are estimates for the API-key path. ' : '○ No API key — steps run on your Claude subscription (no per-token cost). '}
+        {showCost ? '● API key active — $ figures are estimates for the API-key path. '
+          : state.keyPresent ? '○ Billing: Claude plan — your saved key is not charged. '
+          : '○ No API key — steps run on your Claude subscription (no per-token cost). '}
         {state.note}
       </div>
+
+      {/* Billing toggle — route everything to the flat plan without deleting the key */}
+      {state.keyPresent && (
+        <div className="field" style={{ marginBottom: 14 }}>
+          <label>Bill workflow &amp; drafts to</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[['key', 'API key'], ['plan', 'Claude plan']].map(([val, lbl]) => (
+              <button key={val} disabled={busy} onClick={() => save('billing', val)} style={lpPillStyle(state.billingMode === val)}>{lbl}</button>
+            ))}
+          </div>
+          {state.billingMode === 'plan' && (
+            <div style={{ fontSize: 11.5, color: 'var(--text-mute)', marginTop: 5, lineHeight: 1.4 }}>
+              Key stays saved. Runs use your Claude subscription (no per-token cost); flip back to API key anytime. The workflow uses the leaner plan flow while this is on.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Per-section model dropdowns */}
       {state.sections.map(s => {

@@ -4,7 +4,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { ROOT_DIR } from '../config.mjs';
 import { logAgentRun } from '../lib/agent-log.mjs';
-import { hasAnthropicKey } from '../lib/anthropic.mjs';
+import { apiKeyActive } from '../lib/anthropic.mjs';
 
 export const router = express.Router();
 
@@ -96,7 +96,7 @@ const PRESSURE_WARNING = 'Claude usage or limit pressure detected. The run may s
 // no-subagents throttle. Only honored when a key actually exists, so a stray power
 // flag from the UI never bills against nothing — it falls back to the plan path.
 function effectivePower(opts) {
-  return !!(opts && opts.power) && hasAnthropicKey();
+  return !!(opts && opts.power) && apiKeyActive();
 }
 function evalBatchSize(power) {
   const limit = parseInt(process.env.TJK_TEST_LIMIT, 10) || 0;

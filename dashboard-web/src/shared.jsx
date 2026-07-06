@@ -168,8 +168,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [pasteVal, setPasteVal] = useState('');
   const [pasteBusy, setPasteBusy] = useState(false);
   const [pasteMsg, setPasteMsg] = useState('');
-  const [hasKey, setHasKey] = useState(false);       // Anthropic API key present?
-  const [deepMode, setDeepMode] = useState(false);   // Opus on the power path
+  const [hasKey, setHasKey] = useState(false);       // API key present AND billed to it (effective)
   const pollersRef = useRef({});
 
   // Agent Scan and Evaluate Pipeline spawn the bundled Claude CLI, which needs a
@@ -185,16 +184,19 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     return () => window.removeEventListener('focus', check);
   }, []);
 
-  // Whether an Anthropic API key is set decides which workflow shows: keyless users
-  // get the lean plan-only steps; key users get the promoted "power" pipeline whose
-  // evals bill the key (off the plan quota). Re-check on focus so saving a key in
-  // Launchpad flips this without a reload.
+  // The EFFECTIVE key state (a key is saved AND billing is set to key) decides which
+  // workflow shows: plan-mode / keyless users get the lean plan-only steps; key users
+  // get the promoted "power" pipeline whose evals bill the key (off the plan quota).
+  // /api/setup/models returns the effective hasKey (it accounts for the Models & Cost
+  // billing toggle). Re-check on focus and on 'trj:models-changed' so saving a key or
+  // flipping billing flips this without a reload.
   useEffect(() => {
-    const check = () => fetch('/api/setup/anthropic-key').then(r => r.json())
+    const check = () => fetch('/api/setup/models').then(r => r.json())
       .then(d => setHasKey(!!d.hasKey)).catch(() => {});
     check();
     window.addEventListener('focus', check);
-    return () => window.removeEventListener('focus', check);
+    window.addEventListener('trj:models-changed', check);
+    return () => { window.removeEventListener('focus', check); window.removeEventListener('trj:models-changed', check); };
   }, []);
 
   function signInClaude() {
@@ -228,7 +230,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // Deep dive: full A-G Sonnet eval of one posting (a triage card or a pasted JD).
   function triggerDeep(card) {
     setDeepJobs(d => ({ ...d, [card.url]: { status: 'running' } }));
-    fetch('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: card.url, company: card.company, title: card.title, power: hasKey || undefined, model: (hasKey && deepMode) ? 'opus' : undefined }) })
+    fetch('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: card.url, company: card.company, title: card.title, power: hasKey || undefined }) })
       .then(r => r.json().then(b => ({ ok: r.ok, b })))
       .then(({ ok, b }) => {
         if (!ok || b.error || !b.jobId) { setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: b.error || 'failed to start' } })); return; }
@@ -261,7 +263,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     if (!v) return;
     setPasteBusy(true); setPasteMsg('');
     const body = /^https?:\/\//i.test(v) ? { url: v } : { jd: v };
-    if (hasKey) { body.power = true; if (deepMode) body.model = 'opus'; }
+    if (hasKey) body.power = true;
     fetch('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       .then(r => r.json().then(b => ({ ok: r.ok, b })))
       .then(({ ok, b }) => {
@@ -345,7 +347,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
       setJobs(j => ({ ...j, [step.id]: { status: 'running', activity: 'Starting agent…' } }));
       // The batch Evaluate step routes through the API key (power) when one is set,
       // with the Opus deep-mode override. Other agent steps post no body.
-      const agentBody = step.mode === 'pipeline' ? { power: hasKey, model: (hasKey && deepMode) ? 'opus' : undefined } : null;
+      const agentBody = step.mode === 'pipeline' ? { power: hasKey } : null;
       fetch(`/api/agent/${step.mode}`, agentBody
         ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(agentBody) }
         : { method: 'POST' })
@@ -475,18 +477,16 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         {claudeLoginMsg && <div style={{ marginTop: 6, color: 'var(--text-mute)', lineHeight: 1.4 }}>{claudeLoginMsg}</div>}
       </div>
 
-      {/* Which engine the workflow runs on, plus the Opus deep-mode toggle on the key path. */}
+      {/* Which engine the workflow runs on. The evaluate model (incl. Opus deep
+          mode) and billing are configured in Setup → Models & cost. */}
       <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4 }}>
         {hasKey ? (
           <>
             <div style={{ color: 'var(--accent)' }}>API key active — evaluations run on your key (bigger, faster batch; off your plan quota).</div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, cursor: 'pointer' }}>
-              <input type="checkbox" checked={deepMode} onChange={e => setDeepMode(e.target.checked)} />
-              Deep mode (Opus) — deepest reasoning, higher cost per eval
-            </label>
+            <div style={{ marginTop: 4 }}>Evaluate model &amp; billing: Setup → Models &amp; cost.</div>
           </>
         ) : (
-          <span>Runs on your Claude plan. Add an API key in Setup → Launchpad to unlock the bigger, faster evaluation workflow.</span>
+          <span>Runs on your Claude plan. Set models &amp; billing in Setup → Models &amp; cost.</span>
         )}
       </div>
 

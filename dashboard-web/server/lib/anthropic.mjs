@@ -6,7 +6,7 @@ import path from 'path';
 import '../config.mjs';
 import { getIdentity } from './profile.mjs';
 import { runClaudePrompt } from './claude-cli.mjs';
-import { resolveModelId, currentModel } from './pricing.mjs';
+import { resolveModelId, currentModel, currentBilling } from './pricing.mjs';
 
 export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -28,6 +28,16 @@ export function hasAnthropicKey() {
 }
 export const NO_KEY_ERROR = 'AI drafts need either an Anthropic API key (ANTHROPIC_API_KEY in dashboard-web/.env, the faster path) or a signed-in Claude (run `claude login`, the same login used by Scan and Evaluate).';
 
+// Billing mode gate: 'plan' forces everything onto the flat Claude subscription
+// even when a key is saved (the Models & Cost billing toggle), so the user can
+// cap API spend without deleting their key.
+export function planForced() { return currentBilling() === 'plan'; }
+
+// Whether the API key should actually be used right now: a key is present AND
+// billing isn't forced to the plan. This is the switch both AI paths honor —
+// generateText (below) and effectivePower in routes/agent.mjs.
+export function apiKeyActive() { return hasAnthropicKey() && !planForced(); }
+
 // Unified text generation. When an ANTHROPIC_API_KEY is present we use the API
 // directly (fast, model-pinned, supports tools/thinking). Otherwise we run the
 // prompt on the user's Claude PLAN via the bundled `claude` CLI — no key needed.
@@ -35,7 +45,7 @@ export const NO_KEY_ERROR = 'AI drafts need either an Anthropic API key (ANTHROP
 // Pass `tools` (a web_search tool def) to enable web search on either path.
 export async function generateText(prompt, opts = {}) {
   const { system, model, maxTokens = 1024, tools, ...rest } = opts;
-  if (hasAnthropicKey()) {
+  if (apiKeyActive()) {
     const msg = await anthropic.messages.create({
       // Callers may pass a bare alias (haiku/sonnet/opus) or a full id; the SDK
       // needs a full id, so resolve. Falls back to Haiku when unset.

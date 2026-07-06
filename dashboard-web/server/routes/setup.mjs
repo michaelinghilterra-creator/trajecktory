@@ -122,7 +122,7 @@ router.post('/api/setup/anthropic-key', (req, res) => {
 // estimates, batch knobs, and a full-run total. hasKey gates whether $ figures
 // apply (API-key path) or the plan path (no per-token cost) is in effect.
 router.get('/api/setup/models', (req, res) => {
-  try { res.json(modelsState({ hasKey: keyPresent('ANTHROPIC_API_KEY') })); }
+  try { res.json(modelsState({ keyPresent: keyPresent('ANTHROPIC_API_KEY') })); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -135,7 +135,7 @@ router.post('/api/setup/models', (req, res) => {
   if (!v.ok) return res.status(400).json({ error: v.error });
   try {
     writeEnvKey(v.envKey, v.value);
-    res.json(modelsState({ hasKey: keyPresent('ANTHROPIC_API_KEY') }));
+    res.json(modelsState({ keyPresent: keyPresent('ANTHROPIC_API_KEY') }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
