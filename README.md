@@ -52,6 +52,20 @@ plan) and a one-time sign-in.
 
 Prefer to run from source (Node + Claude Code)? See **[docs/SETUP.md](docs/SETUP.md)**.
 
+## First run: what to expect
+
+From download to your first evaluated role. The installer and the in-app Launchpad do the heavy lifting; you mostly review and confirm.
+
+1. **Install.** Run the installer (a few clicks; it bundles Node, Chromium, Claude Code, and Git). If Windows SmartScreen warns "unknown publisher," click **More info -> Run anyway**. Restart if it asks (that puts Git on your PATH).
+2. **Launch.** Open trajecktory from the desktop/Start Menu shortcut, or tell Claude Desktop in Code mode "Start the live dashboard." It starts a local server and opens the dashboard at http://localhost:3333.
+3. **Take any update.** If an "Update available" banner appears, click **Update now**. It is one-click and updates system files only, so your CV, profile, tracker, and reports are never touched.
+4. **Work the Launchpad.** The Setup tab guides you with a readiness meter: paste your CV (or a LinkedIn URL, or upload a file), then confirm your identity, target roles, your edge, compensation, location rules, evaluation tuning, and companies to track. The generative steps hand you a copy-paste prompt to run in your own Claude Code; the rest you fill in and save.
+5. **Sign in to Claude.** Click "Sign in to Claude" in the left sidebar once (the bundled `claude login` on your own Claude plan). This is what lets Evaluate and Scan run. No Anthropic API key is required; everything runs on your Claude subscription. An optional key is only a faster path for the writing features.
+6. **(Optional) Models and cost.** Under Setup -> Models & cost you can pick which model runs each step, see the approximate cost per run, and flip billing between your Claude plan and an API key. Sensible, cheaper defaults are already applied, so you can skip this.
+7. **Run your first search.** From the left sidebar: API Scan (free, no AI) pulls fresh roles, then Triage scores the best fits (the API-key workflow uses Agent Scan and Evaluate instead). Review the scored roles, deep-dive the strongest, let trajecktory tailor a resume and cover letter, and track it. It schedules the follow-ups.
+
+More detail and screenshots: **[docs/onboarding](docs/onboarding)**.
+
 ## What Is This
 
 trajecktory is a local, AI-driven command center for the entire job search, run from a web dashboard. Instead of juggling spreadsheets, browser tabs, and one-off prompts, you get a single pipeline that:
