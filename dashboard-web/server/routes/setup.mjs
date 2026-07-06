@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { exec, spawn } from 'child_process';
 import { SETUP_ROOT, SETUP_FILES, setupSetScalar, SETUP_SCALAR_FIELDS, setupComputeState, SETUP_GUARDRAIL, SETUP_CV_FULL, setupHandoffPrompt } from '../lib/setup.mjs';
+import { modelsState, validateSetting } from '../lib/pricing.mjs';
 
 export const router = express.Router();
 
@@ -104,6 +105,37 @@ router.post('/api/setup/anthropic-key', (req, res) => {
   try {
     writeEnvKey('ANTHROPIC_API_KEY', key);
     res.json({ ok: true, hasKey: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Per-section model selection + cost ────────────────────────────────────────
+// The Models & Cost settings let the user pick which model runs each workflow
+// section (Triage / Agent Scan / Evaluate / Insights / Drafts) and tune the
+// Evaluate batch size, with approximate per-run costs. Selections persist as
+// TJK_* keys in dashboard-web/.env via the same writeEnvKey mechanism as the API
+// key (so a change takes effect on the next run with no restart). pricing.mjs is
+// the single source of truth for options, defaults, validation, and estimates.
+
+// GET /api/setup/models — current selections, allowed options, per-choice cost
+// estimates, batch knobs, and a full-run total. hasKey gates whether $ figures
+// apply (API-key path) or the plan path (no per-token cost) is in effect.
+router.get('/api/setup/models', (req, res) => {
+  try { res.json(modelsState({ hasKey: keyPresent('ANTHROPIC_API_KEY') })); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/setup/models { section, value } — set one section's model (alias) or
+// a batch knob. Validated against the pricing.mjs allow-list (security: the value
+// becomes a --model argv element in agent.mjs), then written to .env + live env.
+router.post('/api/setup/models', (req, res) => {
+  const { section, value } = req.body || {};
+  const v = validateSetting(section, value);
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  try {
+    writeEnvKey(v.envKey, v.value);
+    res.json(modelsState({ hasKey: keyPresent('ANTHROPIC_API_KEY') }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

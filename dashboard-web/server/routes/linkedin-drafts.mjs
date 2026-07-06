@@ -2,7 +2,7 @@
 // keep each module focused and under the size budget.
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
-import { generateText, readProjectFile } from '../lib/anthropic.mjs';
+import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { loadInfluencer, toneInstruction } from '../lib/linkedin-ssi.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
@@ -55,7 +55,7 @@ HARD RULES:
 
 Return ONLY the comment text, ready to paste. No quotes, no preface, no explanation.`;
 
-    const response = await generateText(prompt, { model: 'claude-haiku-4-5', maxTokens: 300 });
+    const response = await generateText(prompt, { model: draftModel(), maxTokens: 300 });
     res.json({ response: response.trim() });
   } catch (err) {
     console.error('Error generating response:', err);
@@ -114,7 +114,7 @@ HARD RULES:
 Return ONLY the body of the connection note, ready to paste into LinkedIn. No quotes, no preface, no character count, no explanation.`;
 
     const callClaude = async (targetMax) => {
-      const text = await generateText(buildPrompt(targetMax), { model: 'claude-haiku-4-5', maxTokens: 220 });
+      const text = await generateText(buildPrompt(targetMax), { model: draftModel(), maxTokens: 220 });
       return text.trim();
     };
 

@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { parseTargetTalentMd, appendTTRows, updateTTLine } from '../lib/target-talent.mjs';
-import { generateText } from '../lib/anthropic.mjs';
+import { generateText, draftModel } from '../lib/anthropic.mjs';
 import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
 import { TARGET_TALENT_MD } from '../config.mjs';
 import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
@@ -181,7 +181,7 @@ If the search returns no reliable matches, return an empty array []. Never fabri
         // is set, else via the Claude plan's WebSearch tool. generateText returns
         // the concatenated text; we extract the JSON array from it.
         const apiCall = generateText(prompt, {
-          model: 'claude-haiku-4-5',
+          model: draftModel(),
           maxTokens: 3000,
           tools: [{
             type: 'web_search_20260209',
