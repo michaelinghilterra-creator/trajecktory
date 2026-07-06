@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+        id: release
         with:
           # Prefer a PAT / GitHub App token so the release PR triggers required
           # status checks (the default GITHUB_TOKEN does not trigger downstream
@@ -21,3 +22,61 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # ── Sign the release tag (SSH) ──────────────────────────────────────────
+      # Release Please creates the vX.Y.Z tag via the API, and that tag is
+      # UNSIGNED. Anchored installs (a bundle that ships `trusted-signers`) refuse
+      # any release tag whose SSH signature does not verify, so an unsigned release
+      # never reaches them. That is exactly what stranded v1.11.0. These steps
+      # replace the API tag with an SSH-signed tag on the SAME commit. See
+      # docs/RELEASING.md.
+      #
+      # SAFE BY DEFAULT: with no TAG_SIGNING_SSH_KEY secret set, the signing step
+      # logs a loud warning and exits 0 — the release still succeeds, it just is
+      # not signed until you opt in. To enable automatic signing, add a repo secret
+      # TAG_SIGNING_SSH_KEY = the PRIVATE half of the key whose public line is in
+      # `trusted-signers` (locally ~/.ssh/trajecktory_sign). NOTE the trade-off:
+      # putting the signing key in CI means a CI/repo compromise could sign a
+      # malicious tag, which is the very threat signed self-update exists to close.
+      # If you would rather keep the key off CI, leave the secret unset and sign
+      # manually per docs/RELEASING.md — this step's warning is the reminder.
+      - name: Checkout for tag signing
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.release.outputs.tag_name }}
+
+      - name: Sign the release tag
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          TAG: ${{ steps.release.outputs.tag_name }}
+          SIGNING_KEY: ${{ secrets.TAG_SIGNING_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SIGNING_KEY:-}" ]; then
+            echo "::warning title=Release tag not signed::TAG_SIGNING_SSH_KEY is not set, so ${TAG} was left UNSIGNED and anchored installs will refuse it. Sign it manually per docs/RELEASING.md: git fetch --tags && git tag -s -f \"${TAG}\" \"${TAG}^{commit}\" -m \"trajecktory ${TAG}\" && git push origin \"${TAG}\" -f"
+            exit 0
+          fi
+          key="${RUNNER_TEMP}/trajecktory_sign"
+          printf '%s\n' "${SIGNING_KEY}" > "${key}"
+          chmod 600 "${key}"
+          ssh-keygen -y -f "${key}" > "${key}.pub"
+          # Refuse to sign unless the loaded key is the one pinned in trusted-signers.
+          pub="$(cut -d' ' -f1-2 "${key}.pub")"
+          if ! grep -qF "${pub}" trusted-signers; then
+            echo "::error title=Signing key mismatch::TAG_SIGNING_SSH_KEY does not match any key in trusted-signers; refusing to sign ${TAG}."
+            exit 1
+          fi
+          # The tagger email must match the principal in trusted-signers, or
+          # verify-tag (which the updater runs) will not accept the signature.
+          signer_email="$(awk 'NF && $1 !~ /^#/ { print $1; exit }' trusted-signers)"
+          git config gpg.format ssh
+          git config user.signingkey "${key}.pub"
+          git config user.email "${signer_email}"
+          git config user.name "trajecktory release signer"
+          git tag -s -f "${TAG}" "${TAG}^{commit}" -m "trajecktory ${TAG}"
+          git push origin "${TAG}" -f
+          # Verify with the exact allowed-signers file the updater uses.
+          git -c gpg.ssh.allowedSignersFile=trusted-signers verify-tag "${TAG}"
+          echo "Signed, pushed, and verified ${TAG}."
