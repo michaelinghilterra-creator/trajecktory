@@ -640,7 +640,7 @@ function DrawerFoot({ app, cs, onAction }) {
     // Open JD immediately — must happen synchronously during the click gesture
     // (browser blocks window.open inside async callbacks as a popup).
     // Skip for BYO: user has already applied, no need to surface the portal.
-    if (cs?.url && mode !== 'byo') window.open(cs.url, '_blank');
+    if (cs?.url && mode !== 'byo' && mode !== 'cover') window.open(cs.url, '_blank');
     setApplyJob({ mode, status: 'running' });
     fetch(`/api/apply/${app.id}`, {
       method: 'POST',
@@ -658,7 +658,8 @@ function DrawerFoot({ app, cs, onAction }) {
                 clearInterval(poll);
                 setApplyJob(null);
                 setApplyResult({ ...job, mode });
-                onAction(app, 'Applied', true);
+                // Cover-letter runs are not an apply action — don't flip status.
+                if (mode !== 'cover') onAction(app, 'Applied', true);
               } else if (job.status === 'error') {
                 clearInterval(poll);
                 setApplyJob({ mode, status: 'error', error: job.error || 'Generation failed' });
@@ -681,10 +682,13 @@ function DrawerFoot({ app, cs, onAction }) {
     // BYO mode: no trajecktory-generated assets to link to. Show a logged-only
     // confirmation with just the JD link.
     const isByo = r.byo === true;
+    const isCover = r.coverOnly === true;
     return (
       <div className="drawer-foot" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
         <span style={{ color: 'var(--green)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
-          {isByo ? `✓ Logged as applied to ${app.company} (no assets generated)` : `✓ Applied to ${app.company}`}
+          {isCover ? `✓ Cover letter ready for ${app.company}`
+            : isByo ? `✓ Logged as applied to ${app.company} (no assets generated)`
+            : `✓ Applied to ${app.company}`}
         </span>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {(r.docx || r.pdf) && <a className="btn sm" href={hrefFor(r.docx || r.pdf)} target="_blank" rel="noreferrer">{r.docx ? 'CV DOCX ↗' : 'CV PDF ↗'}</a>}
@@ -704,6 +708,7 @@ function DrawerFoot({ app, cs, onAction }) {
           <span className="mono dim" style={{ fontSize: 11 }}>
             ⟳ {applyJob.mode === 'claude' ? 'Generating CV + form responses…'
               : applyJob.mode === 'byo'    ? 'Logging application…'
+              : applyJob.mode === 'cover'  ? 'Drafting cover letter…'
               :                              'Generating tailored CV…'} {elapsed > 0 && `(${elapsed}s)`}
           </span>
         )}
@@ -721,13 +726,18 @@ function DrawerFoot({ app, cs, onAction }) {
     <div className="drawer-foot">
       {app.status === "Evaluated" && (
         <>
-          <button className="btn primary" onClick={() => startApply('manual')}>Manual Apply</button>
+          <button className="btn primary" onClick={() => startApply('manual')}>Tailor CV</button>
           <button className="btn accent" onClick={() => startApply('claude')}>Claude Apply ✦</button>
           <button
             className="btn"
-            title="Skip CV + cover letter generation: just mark as Applied. Use when you've prepared your own assets."
+            title="Just mark as Applied without generating anything. Use when you applied with your own resume."
             onClick={() => startApply('byo')}
           >Already Applied ✓</button>
+          <button
+            className="btn ghost"
+            title="Draft a tailored cover letter on demand. Does not open the JD or mark this as applied."
+            onClick={() => startApply('cover')}
+          >Cover Letter</button>
           <button className="btn" onClick={() => onAction(app, "SKIP")}>Skip</button>
           <button className="btn" onClick={() => onAction(app, "Not a Fit")}>Not a Fit</button>
           <button className="btn" onClick={() => onAction(app, "Closed")}>Closed</button>
@@ -737,6 +747,11 @@ function DrawerFoot({ app, cs, onAction }) {
         <>
           <button className="btn success" onClick={() => onAction(app, "Responded")}>Mark Responded</button>
           <button className="btn danger" onClick={() => onAction(app, "Rejected")}>Mark Rejected</button>
+          <button
+            className="btn ghost"
+            title="Draft a tailored cover letter on demand."
+            onClick={() => startApply('cover')}
+          >Cover Letter</button>
         </>
       )}
       {(() => {

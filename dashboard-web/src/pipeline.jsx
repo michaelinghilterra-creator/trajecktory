@@ -1023,7 +1023,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   function startApply(mode) {
     // window.open must fire synchronously inside the click gesture or browsers
     // block it as a popup. Skip for BYO — user has already applied elsewhere.
-    if (app && app.url && mode !== 'byo') window.open(app.url, '_blank');
+    if (app && app.url && mode !== 'byo' && mode !== 'cover') window.open(app.url, '_blank');
     setApplyJob({ mode, status: 'running' });
     setApplyResult(null);
     fetch(`/api/apply/${app.id}`, {
@@ -1042,8 +1042,9 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                 clearInterval(poll);
                 setApplyJob(null);
                 setApplyResult({ ...job, mode });
-                // Advance status to Applied (parent handles tracker + drawerApp update)
-                if (onAction) onAction(app, 'already_applied');
+                // Advance status to Applied (parent handles tracker + drawerApp update).
+                // Cover-letter runs are not an apply action — leave status untouched.
+                if (mode !== 'cover' && onAction) onAction(app, 'already_applied');
               } else if (job.status === 'error') {
                 clearInterval(poll);
                 setApplyJob({ mode, status: 'error', error: job.error || 'Generation failed' });
@@ -1055,7 +1056,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
       .catch(err => setApplyJob({ mode, status: 'error', error: err.message }));
   }
 
-  const APPLY_MODES = { apply_manual: 'manual', apply_claude: 'claude', already_applied: 'byo' };
+  const APPLY_MODES = { apply_manual: 'manual', apply_claude: 'claude', already_applied: 'byo', apply_cover: 'cover' };
   const handleFooterClick = (b) => {
     const mode = APPLY_MODES[b.id];
     if (mode) { startApply(mode); return; }
@@ -1136,7 +1137,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   let primary = [];
   if (st === 'Evaluated') {
     primary = [
-      { id: 'apply_manual', label: 'Manual Apply', cls: 'primary' },
+      { id: 'apply_manual', label: 'Tailor CV', cls: 'primary' },
       { id: 'apply_claude', label: 'Claude Apply', cls: 'claude', spark: true },
       { id: 'already_applied', label: 'Already Applied', check: true },
     ];
@@ -1147,6 +1148,11 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     primary = [{ id: next, label: next === 'Responded' ? 'Mark Responded' : `Move to ${next}`, cls: 'primary', check: true }];
   } else if (['SKIP', 'Rejected', 'Closed', 'Discarded', 'Not a Fit', 'No Response'].includes(st)) {
     primary = [{ id: 'reopen', label: 'Reopen → Evaluated', cls: 'primary', check: true }];
+  }
+  // Cover letter is an on-demand, decoupled action available while deciding
+  // (Evaluated) and right after applying (Applied). It never changes status.
+  if (st === 'Evaluated' || st === 'Applied') {
+    primary.push({ id: 'apply_cover', label: 'Cover Letter', cls: 'ghost' });
   }
   const closers = st === 'Evaluated'
     ? [{ id: 'SKIP', label: 'Skip' }, { id: 'Not a Fit', label: 'Not a Fit' }, { id: 'Closed', label: 'Closed' }]
@@ -1750,6 +1756,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
             <span className="mono dim" style={{ fontSize: 11 }}>
               ⟳ {applyJob.mode === 'claude' ? 'Generating CV + form responses…'
                 : applyJob.mode === 'byo'    ? 'Logging application…'
+                : applyJob.mode === 'cover'  ? 'Drafting cover letter…'
                 :                              'Generating tailored CV…'} {elapsed > 0 && `(${elapsed}s)`}
             </span>
           </div>
@@ -1769,10 +1776,13 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
             return f.endsWith('.md') ? `/output-preview/${f}` : `/output/${f}`;
           };
           const isByo = r.byo === true;
+          const isCover = r.coverOnly === true;
           return (
             <div className="dr-foot" style={{ borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
               <span style={{ color: 'var(--green)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
-                {isByo ? `✓ Logged as applied to ${app.company} (no assets generated)` : `✓ Applied to ${app.company}`}
+                {isCover ? `✓ Cover letter ready for ${app.company}`
+                  : isByo ? `✓ Logged as applied to ${app.company} (no assets generated)`
+                  : `✓ Applied to ${app.company}`}
               </span>
               {(r.docx || r.pdf) && <a className="btn sm" href={hrefFor(r.docx || r.pdf)} target="_blank" rel="noreferrer">{r.docx ? 'CV DOCX ↗' : 'CV PDF ↗'}</a>}
               {r.cover && <a className="btn sm" href={hrefFor(r.cover)} target="_blank" rel="noreferrer">Cover Letter ↗</a>}

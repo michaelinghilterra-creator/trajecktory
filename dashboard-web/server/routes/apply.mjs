@@ -9,13 +9,14 @@ router.post('/api/apply/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const { mode = 'manual', company } = req.body;
-    const VALID_MODES = ['manual', 'claude', 'byo'];
+    const VALID_MODES = ['manual', 'claude', 'byo', 'cover'];
     if (!VALID_MODES.includes(mode)) {
       return res.status(400).json({ error: `Invalid mode: ${mode}` });
     }
 
-    // 'manual' and 'claude' generate the CV + cover letter (on the Claude plan, or
-    // the API key if one is set); 'byo' (already-applied) skips generation.
+    // 'manual' generates the tailored CV, 'claude' adds form responses (both on the
+    // Claude plan, or the API key if one is set); 'cover' drafts a standalone cover
+    // letter without applying; 'byo' (already-applied) skips generation.
     const rows = parseApplicationsMd();
     const row = (company && rows.find(r => r.id === id && r.company === company))
       || rows.find(r => r.id === id);
