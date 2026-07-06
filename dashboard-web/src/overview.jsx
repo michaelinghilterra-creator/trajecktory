@@ -1,10 +1,10 @@
 // Overview Tab — landing + worklist (Actions module merged in 2026-06-07).
 const { useMemo: useMemoO, useState: useStateO } = React;
 
-// Days shown in the Overview "Activity" band. Trimmed from 90 to 75 so the
-// sparkline stays dense (older history left long empty stretches). Drives the
-// window filters, the Avg/wk divisor, the card title, and the Timeline prop.
-const ACTIVITY_WINDOW = 75;
+// Days shown in the Overview "Activity" band. Trimmed to 60 so the sparkline
+// stays dense (older history left long empty stretches). Drives the window
+// filters, the Avg/wk divisor, the card title, and the Timeline prop.
+const ACTIVITY_WINDOW = 60;
 
 const DAILY_QUOTES = [
   { text: "The impediment to action advances action. What stands in the way becomes the way.", author: "Marcus Aurelius" },
