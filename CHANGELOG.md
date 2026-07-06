@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.11.0...v1.12.0) (2026-07-06)
+
+
+### Features
+
+* **dashboard:** decouple cover letter into its own button; rename Manual Apply to Tailor CV ([c1114aa](https://github.com/michaelinghilterra-creator/trajecktory/commit/c1114aad158b29cef3d3aba5e24048a541d3d68b))
+
 ## [1.11.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.10.1...v1.11.0) (2026-07-06)
 
 
