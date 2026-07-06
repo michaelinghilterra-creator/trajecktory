@@ -136,6 +136,14 @@ export function currentModel(sectionKey, env = process.env) {
   return s.default;
 }
 
+// Billing mode: which quota the workflow + drafts bill to. 'key' = the Anthropic
+// API key (per-token cost); 'plan' = the flat Claude subscription (no per-token
+// cost) even when a key is saved. Lets the user cap API spend for a few days
+// without deleting their key. Default 'key' so existing key users are unaffected.
+export function currentBilling(env = process.env) {
+  return (env.TJK_BILLING_MODE || '').trim().toLowerCase() === 'plan' ? 'plan' : 'key';
+}
+
 // Read a batch knob's current value (clamped to its range), env-overridable.
 export function currentBatch(batchKey, env = process.env) {
   const b = batchByKey[batchKey];
@@ -167,6 +175,11 @@ export function validateSetting(section, value) {
     }
     return { ok: true, envKey: b.envKey, value: String(n) };
   }
+  if (section === 'billing') {
+    const v = String(value || '').trim().toLowerCase();
+    if (v !== 'key' && v !== 'plan') return { ok: false, error: 'Billing must be "key" or "plan".' };
+    return { ok: true, envKey: 'TJK_BILLING_MODE', value: v };
+  }
   return { ok: false, error: `Unknown setting: ${section}` };
 }
 
@@ -174,7 +187,12 @@ export function validateSetting(section, value) {
 // options, per-option run-cost estimates, batch knobs, pricing, and a full-run
 // total (Triage + Evaluate batch). `evalBatch` is the effective batch size to
 // price Evaluate at (the key-path size when a key is present, else the plan size).
-export function modelsState({ hasKey, evalBatch } = {}) {
+export function modelsState({ keyPresent, evalBatch } = {}) {
+  // Effective "is the API key being used" = a key is saved AND billing is set to
+  // key. In plan mode the key stays saved but isn't charged, so hasKey is false
+  // and the UI + estimates behave as keyless (plan flow, no per-token cost).
+  const billingMode = currentBilling();
+  const hasKey = !!keyPresent && billingMode === 'key';
   const batchPlan = currentBatch('batch_plan');
   const batchKey = currentBatch('batch_key');
   const effEvalBatch = evalBatch != null ? evalBatch : (hasKey ? batchKey : batchPlan);
@@ -197,13 +215,17 @@ export function modelsState({ hasKey, evalBatch } = {}) {
   const totalPerRun = triage.costs[triage.current] + evalS.costs[evalS.current];
 
   return {
-    hasKey: !!hasKey,
+    hasKey,
+    keyPresent: !!keyPresent,
+    billingMode,
     sections,
     batch: BATCH.map((b) => ({ key: b.key, label: b.label, min: b.min, max: b.max, current: currentBatch(b.key) })),
     pricing: PRICING,
     totalPerRun,
     note: hasKey
       ? 'Estimates are for the API-key path. Real per-run costs are shown below from your recent runs.'
-      : 'No API key set: workflow steps run on your Claude subscription (no per-token cost). $ figures are what the API-key path would cost.',
+      : (keyPresent
+          ? 'Billing set to your Claude plan — your saved API key is not charged. Flip back to bill the key. $ figures show what the API-key path would cost.'
+          : 'No API key set: workflow steps run on your Claude subscription (no per-token cost). $ figures show what the API-key path would cost.'),
   };
 }
