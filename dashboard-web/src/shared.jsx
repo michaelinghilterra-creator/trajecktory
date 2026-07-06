@@ -240,7 +240,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
             if (job.status === 'done' || job.status === 'error' || job.status === 'interrupted') {
               clearInterval(poll); delete pollersRef.current[key];
               setDeepJobs(d => ({ ...d, [card.url]: job.status === 'interrupted'
-                ? { status: 'error', error: 'Interrupted — the dashboard restarted. Retry.' }
+                ? { status: 'error', error: 'Interrupted. The dashboard restarted. Retry.' }
                 : { status: job.status, error: job.error } }));
               if (job.status === 'done') {
                 onDataChanged && onDataChanged();
@@ -250,7 +250,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                 setTimeout(() => dismissCard(card.url), 1500);
               }
             }
-          }).catch(() => { clearInterval(poll); delete pollersRef.current[key]; setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: 'Interrupted — the dashboard restarted. Retry.' } })); });
+          }).catch(() => { clearInterval(poll); delete pollersRef.current[key]; setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: 'Interrupted. The dashboard restarted. Retry.' } })); });
         }, 2000);
         pollersRef.current[key] = poll;
       })
@@ -273,12 +273,12 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           fetch(`/api/agent/status/${b.jobId}`).then(r => r.status === 404 ? { status: 'interrupted' } : r.json()).then(job => {
             if (job.status === 'done' || job.status === 'error' || job.status === 'interrupted') {
               clearInterval(poll); delete pollersRef.current['paste']; setPasteBusy(false);
-              setPasteMsg(job.status === 'done' ? 'Done — see the Pipeline tab.'
-                : job.status === 'interrupted' ? 'Interrupted — the dashboard restarted. Try again.'
+              setPasteMsg(job.status === 'done' ? 'Done. See the Pipeline tab.'
+                : job.status === 'interrupted' ? 'Interrupted. The dashboard restarted. Try again.'
                 : (job.error || 'Evaluation failed.'));
               if (job.status === 'done') onDataChanged && onDataChanged();
             }
-          }).catch(() => { clearInterval(poll); delete pollersRef.current['paste']; setPasteBusy(false); setPasteMsg('Interrupted — the dashboard restarted. Try again.'); });
+          }).catch(() => { clearInterval(poll); delete pollersRef.current['paste']; setPasteBusy(false); setPasteMsg('Interrupted. The dashboard restarted. Try again.'); });
         }, 2000);
         pollersRef.current['paste'] = poll;
       })
@@ -365,7 +365,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     if (step.type === 'cli') {
       // Copy command to clipboard, mark as "queued" so user knows what to do
       navigator.clipboard?.writeText(step.command).catch(() => {});
-      setJobs(j => ({ ...j, [step.id]: { status: 'cli-pending', summary: `Copied "${step.command}" — paste into Claude CLI, then click ✓ when done` } }));
+      setJobs(j => ({ ...j, [step.id]: { status: 'cli-pending', summary: `Copied "${step.command}". Paste into Claude CLI, then click ✓ when done` } }));
       return;
     }
     setJobs(j => ({ ...j, [step.id]: { status: 'running', summary: 'Starting…' } }));
@@ -569,7 +569,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               )}
               {job?.status === 'interrupted' && (
                 <div className="workflow-summary" style={{ color: 'var(--orange)' }}>
-                  Run interrupted{typeof job.progressTotal === 'number' && job.progressTotal > 0 && (job.evaluationsDone || 0) > 0 ? ` at ${Math.min(job.evaluationsDone, job.progressTotal)} of ${job.progressTotal}` : ''} — click Run to retry.
+                  Run interrupted{typeof job.progressTotal === 'number' && job.progressTotal > 0 && (job.evaluationsDone || 0) > 0 ? ` at ${Math.min(job.evaluationsDone, job.progressTotal)} of ${job.progressTotal}` : ''}. Click Run to retry.
                 </div>
               )}
               {job?.error && job.status !== 'interrupted' && (
@@ -593,7 +593,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               <div key={card.url} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                   <span style={{ color, fontWeight: 700, fontFamily: 'var(--mono)', fontSize: 12 }}>{sc == null ? '—' : sc.toFixed(1)}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${card.company} — ${card.title}`}>{card.company} · {card.title}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${card.company}: ${card.title}`}>{card.company} · {card.title}</span>
                 </div>
                 {card.rationale && <div style={{ fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4, marginTop: 2 }}>{card.rationale}</div>}
                 <div style={{ display: 'flex', gap: 10, marginTop: 4, alignItems: 'center' }}>
@@ -756,18 +756,18 @@ window.Drawer = function Drawer({ app, onClose, onAction }) {
               </div>
 
               <div className="report-preview">
-                <h4>Evaluation Report — Auto-generated</h4>
+                <h4>Evaluation Report (Auto-generated)</h4>
                 <p style={{ marginTop: 0 }}><strong style={{ color: "var(--text)" }}>Verdict:</strong> {app.score == null ? "Score unavailable." : app.score >= 4.0 ? "Strong fit. Apply within 48h." : app.score >= 3.0 ? "Borderline. Review JD detail before applying." : "Weak fit. Consider skipping."}</p>
                 <h4 style={{ marginTop: 12 }}>Why this scored {app.score != null ? app.score.toFixed(1) : "N/A"}</h4>
                 <ul>
                   <li>Role archetype <span className="mono" style={{ color: "var(--accent)" }}>{app.archetype}</span> matches your profile</li>
                   <li>Posted comp <span className="mono">${app.salary}k</span> {app.salary >= app.target ? "meets" : "is below"} your target band</li>
                   <li>Sector exposure to <span className="mono">{app.sector}</span> aligns with stated preferences</li>
-                  <li>{app.size === "Late" ? "Late-stage growth — proven motion, lower equity upside" : app.size === "Mid" ? "Mid-stage — fastest learning curve" : "Early-stage — high equity, high risk"}</li>
+                  <li>{app.size === "Late" ? "Late-stage growth: proven motion, lower equity upside" : app.size === "Mid" ? "Mid-stage: fastest learning curve" : "Early-stage: high equity, high risk"}</li>
                 </ul>
                 <h4>Risks</h4>
                 <ul>
-                  <li>{app.score >= 4.0 ? "Competitive process — recruiter may already have a shortlist" : "Comp gap may surface in screen"}</li>
+                  <li>{app.score >= 4.0 ? "Competitive process: recruiter may already have a shortlist" : "Comp gap may surface in screen"}</li>
                   <li>JD emphasis on tooling not yet validated against your stack</li>
                 </ul>
               </div>
@@ -914,7 +914,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
 
   function applyUpdate() {
     if (info.requiresReinstall) {
-      toast('This update needs a fresh installer — download the latest trajecktory setup.', 'warn');
+      toast('This update needs a fresh installer. Download the latest trajecktory setup.', 'warn');
       return;
     }
     setBusy(true);
@@ -933,7 +933,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
               else {
                 setBusy(false);
                 toast(job.status === 'reinstall-required'
-                  ? 'This update needs a fresh installer — download the latest setup.'
+                  ? 'This update needs a fresh installer. Download the latest setup.'
                   : 'Update failed. Your install is unchanged.', 'warn');
               }
             })

@@ -119,7 +119,7 @@ function v1ToFallbackHtml(data) {
   const lg = data.legitimacy || {};
   const out = [];
 
-  out.push(`<h1>${e(data.company)} — ${e(data.role)}</h1>`);
+  out.push(`<h1>${e(data.company)}: ${e(data.role)}</h1>`);
 
   // TL;DR callout
   if (s.tldr) {
@@ -169,19 +169,19 @@ function v1ToFallbackHtml(data) {
   if (Array.isArray(data.redFlagQs) && data.redFlagQs.length) {
     out.push('<h2>Red Flag Q&amp;A</h2><ul>');
     data.redFlagQs.forEach(r => {
-      out.push(`<li><strong>${e(r.q)}</strong>${r.a ? ' — ' + e(r.a) : ''}</li>`);
+      out.push(`<li><strong>${e(r.q)}</strong>${r.a ? ': ' + e(r.a) : ''}</li>`);
     });
     out.push('</ul>');
   }
 
   // Legitimacy
   if (lg.tier) {
-    out.push(`<h2>Legitimacy — ${e(lg.tier)}</h2>`);
+    out.push(`<h2>Legitimacy: ${e(lg.tier)}</h2>`);
     if (lg.conclusion) out.push(`<p>${e(lg.conclusion)}</p>`);
     if (Array.isArray(lg.signals) && lg.signals.length) {
       out.push('<ul>');
       lg.signals.forEach(sig => {
-        const text = typeof sig === 'string' ? sig : `${sig.signal || ''}${sig.finding ? ' — ' + sig.finding : ''}`;
+        const text = typeof sig === 'string' ? sig : `${sig.signal || ''}${sig.finding ? ': ' + sig.finding : ''}`;
         out.push(`<li>${e(text)}</li>`);
       });
       out.push('</ul>');

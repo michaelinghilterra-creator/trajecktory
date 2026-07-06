@@ -134,7 +134,7 @@ function appendTTRows(rows) {
     const emailGiven = (r.email || '').trim();
     const alreadyFlagged = /⚠|unverified|bounced|verified|pattern-med|pattern-low/i.test(notes);
     if (emailGiven && !r.emailVerified && !alreadyFlagged) {
-      notes = '⚠ Email unverified (auto-synthesized — confirm before sending). ' + notes;
+      notes = '⚠ Email unverified (auto-synthesized, confirm before sending). ' + notes;
     }
     const row = `| ${id} | ${esc(r.company)} | ${esc(r.last)} | ${esc(r.first)} | ${esc(r.salute)} | ${esc(r.title)} | ${esc(r.city)} | ${esc(r.state)} | ${esc(r.zip)} | ${esc(r.phone)} | ${esc(r.email)} | ${esc(r.linkedin)} | Not Contacted |  | ${esc(notes)} | ${esc(r.website)} |`;
     newRows.push({ id, row, ...r });

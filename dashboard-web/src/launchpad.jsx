@@ -15,8 +15,8 @@ const LP_SECTIONS = [
     title: 'Make sure the engine runs',
     why: 'Confirms Node, dependencies, Playwright, and the data folders are in place before you invest time in setup.' },
   { id: 'cv',         kind: 'gen', req: 'Required',        icon: 'cv', label: 'Your CV',
-    title: 'Start here — your CV sets up the rest',
-    why: 'The fastest path to value. From your CV we draft your identity, target roles, and your edge, so most of setup becomes a quick review and you can go straight to evaluating jobs. Paste it, share a LinkedIn URL, or upload a .docx/.pdf — a .docx also seeds your resume master.',
+    title: 'Start here: your CV sets up the rest',
+    why: 'The fastest path to value. From your CV we draft your identity, target roles, and your edge, so most of setup becomes a quick review and you can go straight to evaluating jobs. Paste it, share a LinkedIn URL, or upload a .docx/.pdf (a .docx also seeds your resume master).',
     handoff: 'cv' },
   { id: 'identity',   kind: 'form', req: 'Required',       icon: 'identity', label: 'Identity & links',
     title: 'Who you are',
@@ -131,7 +131,7 @@ function lpSectionSummary(id, cfg) {
     impact = 'These titles are exactly what the scanner hunts for. Add or remove titles to widen or narrow what shows up in your pipeline.';
   } else if (id === 'edge' && cfg.edge) {
     rows = [row('Headline', cfg.edge.headline), ['Superpowers', `${cfg.edge.superpowers || 0}`], ['Proof points', `${cfg.edge.proofPoints || 0}`]];
-    impact = 'This is the biggest lever on evaluation quality — it is how each role is scored against your strengths. Re-run to refine after a few evaluations.';
+    impact = 'This is the biggest lever on evaluation quality. It is how each role is scored against your strengths. Re-run to refine after a few evaluations.';
   } else if (id === 'location' && cfg.location) {
     const l = cfg.location;
     rows = [row('Home', l.home ? (l.radiusMiles != null ? `${l.home} (${l.radiusMiles} mi radius)` : l.home) : null), row('Will work in', l.allow), row('Hybrid / remote only', l.hybridRemoteOnly), row('Will NOT work in', l.hardNo)];
@@ -214,9 +214,9 @@ function ModelsCostPanel() {
       <div style={{ fontSize: 12.5, marginBottom: 14, padding: '9px 12px', borderRadius: 'var(--r-ctl)',
         background: showCost ? 'rgba(34,197,94,0.07)' : 'var(--panel-2)', border: `1px solid ${showCost ? 'rgba(34,197,94,0.22)' : 'var(--border)'}`,
         color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        {showCost ? '● API key active — $ figures are estimates for the API-key path. '
-          : state.keyPresent ? '○ Billing: Claude plan — your saved key is not charged. '
-          : '○ No API key — steps run on your Claude subscription (no per-token cost). '}
+        {showCost ? '● API key active. $ figures are estimates for the API-key path. '
+          : state.keyPresent ? '○ Billing: Claude plan. Your saved key is not charged. '
+          : '○ No API key. Steps run on your Claude subscription (no per-token cost). '}
         {state.note}
       </div>
 
@@ -248,7 +248,7 @@ function ModelsCostPanel() {
                 onChange={e => save(s.key, e.target.value)}>
                 {s.options.map(a => (
                   <option key={a} value={a}>
-                    {a}{showCost ? ` — ~${lpUsd(s.costs[a])}/run` : ` — ${LP_TIER[a]}`}
+                    {a}{showCost ? ` · ~${lpUsd(s.costs[a])}/run` : ` · ${LP_TIER[a]}`}
                   </option>
                 ))}
               </select>
@@ -561,7 +561,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       .then(({ prompt }) => {
         navigator.clipboard?.writeText(prompt).catch(() => {});
         setPendingGen(p => ({ ...p, [sectionId]: prompt }));
-        toast && toast('Prompt copied — paste into your Claude Code', 'success');
+        toast && toast('Prompt copied. Paste into your Claude Code', 'success');
       })
       .catch(() => toast && toast('Could not load prompt', 'error'));
   };
@@ -663,7 +663,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           pendingBaseline.current.cv = state?.sections?.cv?.status || 'empty';
           navigator.clipboard?.writeText(res.prompt).catch(() => {});
           setPendingGen(p => ({ ...p, cv: res.prompt }));
-          toast && toast(res.seededMaster ? 'Uploaded — also seeded resume master' : 'Uploaded — prompt copied', 'success');
+          toast && toast(res.seededMaster ? 'Uploaded. Also seeded resume master' : 'Uploaded. Prompt copied', 'success');
         }).catch(() => toast && toast('Upload failed', 'error'));
       };
       reader.readAsDataURL(file);
@@ -691,7 +691,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         {pendingGen.cv && (
           <div style={{ marginTop: 14, border: '1px solid var(--accent)', borderRadius: 'var(--r-card)', padding: 14, background: 'var(--accent-bg)' }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>One step in Claude Code sets up your whole profile</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.55 }}>The prompt below was copied to your clipboard. Paste it into Claude Code (the same chat you used to start the dashboard) and run it. It reads your CV and drafts your identity, target roles, and your edge, so the steps below fill in for you to review — then you can go straight to the first evaluation. This checks itself off the moment it finishes; you don't have to come back here.</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.55 }}>The prompt below was copied to your clipboard. Paste it into Claude Code (the same chat you used to start the dashboard) and run it. It reads your CV and drafts your identity, target roles, and your edge, so the steps below fill in for you to review, then you can go straight to the first evaluation. This checks itself off the moment it finishes; you don't have to come back here.</div>
             <textarea readOnly value={pendingGen.cv} rows={4} className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: 'var(--accent)' }}>⧖ Waiting for you to run it in Claude Code…</span>
@@ -710,7 +710,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       <div>
         {isDone && !prompt && (
           <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-            <span style={{ color: 'var(--green)', fontWeight: 500 }}>✓ This is set up</span> — Claude Code saved it from your inputs, so nothing more is required here. To see exactly what it set or change it, re-run below, or ask Claude Code in chat to "show me my current {section.label.toLowerCase()}."
+            <span style={{ color: 'var(--green)', fontWeight: 500 }}>✓ This is set up.</span> Claude Code saved it from your inputs, so nothing more is required here. To see exactly what it set or change it, re-run below, or ask Claude Code in chat to "show me my current {section.label.toLowerCase()}."
           </div>
         )}
         <button className="btn primary" disabled={gated(section.id)} onClick={() => startHandoff(section.id, section.handoff)}>
@@ -722,7 +722,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             <textarea readOnly value={prompt} rows={4}
               className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
             <div style={{ marginTop: 8 }}>
-              <button className="btn success" onClick={() => ackHandoff(section.id)}>✓ I ran it — refresh status</button>
+              <button className="btn success" onClick={() => ackHandoff(section.id)}>✓ I ran it. Refresh status</button>
             </div>
           </div>
         )}
@@ -736,7 +736,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       <div style={{ marginTop: 6 }}>
         <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>Copied to your clipboard. Paste it into your Claude Code, then click done.</div>
         <textarea readOnly value={pendingGen[id]} rows={4} className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
-        <div style={{ marginTop: 8 }}><button className="btn success" onClick={() => ackHandoff(id)}>✓ I ran it — refresh status</button></div>
+        <div style={{ marginTop: 8 }}><button className="btn success" onClick={() => ackHandoff(id)}>✓ I ran it. Refresh status</button></div>
       </div>
     );
   }
@@ -779,7 +779,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           </div>
         </div>
         <div>
-          <div style={{ ...LP_SUB, color: 'var(--green)' }}>Suggested from your CV — tap to include</div>
+          <div style={{ ...LP_SUB, color: 'var(--green)' }}>Suggested from your CV. Tap to include</div>
           {suggestions.length ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {suggestions.map((s, i) => {
@@ -795,7 +795,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                 );
               })}
             </div>
-          ) : <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>Run the generate step below — Claude Code will suggest adjacent roles here.</div>}
+          ) : <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>Run the generate step below. Claude Code will suggest adjacent roles here.</div>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
           <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Titles the scanner will search</span>
@@ -844,7 +844,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <LpLegend />
         <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>A neutral starter set ships by default. Add your own below, or pick from Claude Code's suggestions.</div>
-        <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5, padding: '8px 11px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>💡 Tip: add a few companies you already care about <i>before</i> you run the suggestions — Claude Code uses them to tune what it recommends, so you'll get sharper local and industry matches.</div>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5, padding: '8px 11px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>💡 Tip: add a few companies you already care about <i>before</i> you run the suggestions. Claude Code uses them to tune what it recommends, so you'll get sharper local and industry matches.</div>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={LP_SUB}>Commute radius</div>
           <input type="number" min="5" max="200" step="5" className="inp" value={radius} style={{ width: 90 }} onChange={e => saveStage('companies', { ...c, radiusMiles: parseInt(e.target.value || '0', 10) })} />
@@ -867,7 +867,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             {industry.length > 0 && <div><div style={{ ...LP_SUB, color: 'var(--green)' }}>By industry</div><div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>{industry.map(sugRow)}</div></div>}
             <div style={{ fontSize: 11, color: 'var(--text-mute)' }}><span style={{ color: 'var(--green)' }}>free</span> = zero-token ATS API scan · <span style={{ color: 'var(--orange)' }}>web</span> = website search (costs tokens)</div>
           </>
-        ) : <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>Run the step below — Claude Code will suggest local-by-radius and by-industry companies here.</div>}
+        ) : <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>Run the step below. Claude Code will suggest local-by-radius and by-industry companies here.</div>}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
           <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Companies you've selected to add</span>
           <span className="mono" style={{ fontSize: 18, color: 'var(--accent)' }}>{picks.length}</span>
@@ -940,7 +940,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                 <span key={i} style={lpChipStyle()}>{it.name}{it.org ? ` · ${it.org}` : ''}<span onClick={() => removeCert(i)} style={{ cursor: 'pointer', marginLeft: 6 }}>×</span></span>
               )) : <span style={{ fontSize: 12, color: 'var(--text-mute)' }}>No certifications added.</span>}
             </div>
-            <div style={{ ...LP_SUB, color: 'var(--green)' }}>Detected from your CV — tap to keep</div>
+            <div style={{ ...LP_SUB, color: 'var(--green)' }}>Detected from your CV. Tap to keep</div>
             {detected.length ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {detected.map((d, i) => {
@@ -953,7 +953,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                   );
                 })}
               </div>
-            ) : <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>Run detect — Claude Code will list certs from your CV here.</div>}
+            ) : <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>Run detect. Claude Code will list certs from your CV here.</div>}
             <div><button className="btn" disabled={gated('identity')} onClick={() => startHandoff('identity', 'identity-certs')}>Detect certifications from CV ⧉</button></div>
             {handoffBox('identity')}
           </div>
@@ -1052,7 +1052,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           {!preflightOk
             ? <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-mute)' }}>The remaining steps unlock once the engine checks above pass.</div>
             : (preflight.checks || []).some(c => !c.pass)
-              ? <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-mute)' }}>Engine ready. The amber items above are part of setup — add them in the steps below. Nothing is locked.</div>
+              ? <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-mute)' }}>Engine ready. The amber items above are part of setup. Add them in the steps below. Nothing is locked.</div>
               : null}
         </div>
       );
@@ -1069,7 +1069,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               <div style={{ fontSize: 13, color: health.ok ? 'var(--green)' : 'var(--orange)', marginBottom: 6 }}>{health.ok ? '✓ Everything looks good' : 'Found a few formatting nits'}</div>
               {!health.ok && (
                 <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 8, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.25)' }}>
-                  These are data-formatting issues, not crashes, and they usually clear up once evaluations run through the normal flow. Safe to ignore for now — or paste <span className="mono">fix the trajecktory pipeline health issues</span> into Claude Code and it will read the details below and clean them up.
+                  These are data-formatting issues, not crashes, and they usually clear up once evaluations run through the normal flow. Safe to ignore for now, or paste <span className="mono">fix the trajecktory pipeline health issues</span> into Claude Code and it will read the details below and clean them up.
                 </div>
               )}
               {health.output && <pre style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-dim)', padding: 10, fontSize: 11, fontFamily: 'var(--mono)', maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{health.output}</pre>}
@@ -1092,7 +1092,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         </svg>
         <div style={{ flex: 1 }}>
           <h2 style={{ margin: 0, fontSize: 18, color: 'var(--text)' }}>Launchpad</h2>
-          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{allReady ? 'Setup complete — edit any section below.' : 'Get set up to search and apply. No YAML editing required.'}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{allReady ? 'Setup complete. Edit any section below.' : 'Get set up to search and apply. No YAML editing required.'}</div>
         </div>
         {allReady
           ? <span className="pill" style={{ background: 'var(--accent-bg)', color: 'var(--green)' }}>✓ ready</span>
@@ -1104,7 +1104,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-mute)', marginBottom: 12 }}>
         <span>Setup readiness</span>
-        {state.demo ? <span style={{ color: 'var(--yellow)' }}>demo mode — read only</span> : <span>{readiness.pct}%</span>}
+        {state.demo ? <span style={{ color: 'var(--yellow)' }}>demo mode (read only)</span> : <span>{readiness.pct}%</span>}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18, padding: '8px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
@@ -1209,7 +1209,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                   <div style={{ marginTop: 12 }}>
                     <textarea readOnly value={pendingGen['opt:' + o.id]} rows={3}
                       className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
-                    <div style={{ marginTop: 8 }}><button className="btn success" onClick={() => ackHandoff('opt:' + o.id)}>✓ Done — refresh</button></div>
+                    <div style={{ marginTop: 8 }}><button className="btn success" onClick={() => ackHandoff('opt:' + o.id)}>✓ Done. Refresh</button></div>
                   </div>
                 )}
               </div>
@@ -1416,7 +1416,7 @@ function TwcPanel() {
         <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.55 }}>
           This module will help you assemble the biweekly work-search activity you report when you file
           for unemployment, pulled straight from your applications and outreach. Still collecting the data
-          points — details land soon.
+          points. Details land soon.
         </div>
       </div>
     </div>
@@ -1474,7 +1474,7 @@ function AboutPanel() {
   const GH = 'https://github.com/michaelinghilterra-creator/trajecktory';
   const faqs = [
     { q: 'What is trajecktory?', a: 'An AI-assisted job-search command center: it tracks your pipeline, scores roles against your profile, drafts tailored resumes and outreach, and surfaces what to do next.' },
-    { q: 'Does it apply to jobs for me?', a: 'No. It prepares everything — evaluation, resume, cover letter, form answers — but always stops before submit. You make the final call on every application.' },
+    { q: 'Does it apply to jobs for me?', a: 'No. It prepares everything (evaluation, resume, cover letter, form answers) but always stops before submit. You make the final call on every application.' },
     { q: 'Where does the AI run?', a: 'On your Claude plan by default (no API key needed) for writing features and Insights. An Anthropic API key is an optional faster path.' },
     { q: 'Where is my data?', a: 'Local. Your applications, reports, and contacts live in plain markdown files on your machine. Nothing is uploaded to a trajecktory server.' },
     { q: 'How do updates work?', a: 'A banner appears when a new version is available; one click updates and restarts. The Change Log tab shows what shipped.' },
@@ -1492,7 +1492,7 @@ function AboutPanel() {
         <div style={{ fontSize: 13, lineHeight: 1.6 }}>
           <b>trajecktory</b> turns a messy job hunt into a tracked, scored, AI-assisted pipeline. It reads your CV
           and goals once, then helps you evaluate roles, tailor materials, time your follow-ups, and see what's
-          actually working — without ever sending anything on your behalf.
+          actually working, without ever sending anything on your behalf.
         </div>
         <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
           <a className="btn" href={GH} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>GitHub ↗</a>

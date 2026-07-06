@@ -538,7 +538,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
                           { ltr: "C", on: p.connected, c: "var(--green)",  title: "Connected" },
                           { ltr: "E", on: p.engaged,   c: "var(--blue)",   title: "Engaged" },
                         ].map((s) => (
-                          <span key={s.ltr} title={s.title + (s.on ? "" : " — not yet")}
+                          <span key={s.ltr} title={s.title + (s.on ? "" : " (not yet)")}
                             style={{ width: 19, height: 19, borderRadius: 5, display: "inline-flex", alignItems: "center", justifyContent: "center",
                               fontFamily: "var(--mono)", fontSize: 9.5, fontWeight: 700,
                               color: s.on ? s.c : "var(--text-mute)", border: `1px solid ${s.on ? s.c : "var(--border)"}`,
@@ -837,7 +837,7 @@ function WeeklyView({ weeks, target, setSsiData }) {
               {PILLAR_FIELDS.map((p) => (
                 <div className="field" key={p.key}>
                   <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: 99, background: p.color }} />{p.label} (0–25)
+                    <span style={{ width: 6, height: 6, borderRadius: 99, background: p.color }} />{p.label} (0-25)
                   </label>
                   <input
                     className="inp" type="number" min="0" max="25" placeholder="0"

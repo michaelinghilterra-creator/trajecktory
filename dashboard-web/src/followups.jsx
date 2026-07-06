@@ -76,10 +76,10 @@ function ChannelBadge({ channel }) {
 // 5d, Interview 3d) mean items can arrive on this list well under 14d, so the
 // buckets start at 0d and step up from there.
 function ageBucket(days) {
-  if (days >= 45) return { key: '45d+',  label: '45d+ — likely ghosted',         color: '#ef4444' };
-  if (days >= 21) return { key: '21-45d', label: '21-45d — write-off candidates', color: '#f59e0b' };
-  if (days >= 10) return { key: '10-21d', label: '10-21d — aging, push hard',     color: '#a78bfa' };
-  return                  { key: '0-10d', label: '0-10d — fresh stale, due now',   color: '#60a5fa' };
+  if (days >= 45) return { key: '45d+',  label: '45d+: likely ghosted',         color: '#ef4444' };
+  if (days >= 21) return { key: '21-45d', label: '21-45d: write-off candidates', color: '#f59e0b' };
+  if (days >= 10) return { key: '10-21d', label: '10-21d: aging, push hard',     color: '#a78bfa' };
+  return                  { key: '0-10d', label: '0-10d: fresh stale, due now',   color: '#60a5fa' };
 }
 
 // ─── Follow-Ups Overview ─────────────────────────────────────────────────
@@ -186,16 +186,16 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
 
       {/* KPI row */}
       <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-        <FUKpi label="Stale touchpoints" value={total} sub={`${sourceCounts.app} app · ${sourceCounts.ta} TA — work the list, oldest first`} tone={staleTone} />
+        <FUKpi label="Stale touchpoints" value={total} sub={`${sourceCounts.app} app · ${sourceCounts.ta} TA. Work the list, oldest first`} tone={staleTone} />
         <FUKpi label="Critical" value={criticalValue} sub={interviewStale > 0
-          ? 'Interview silence — nudge same-day or lose momentum'
-          : giveUpCount > 0 ? `${criticalLabel} ready — close cleanly and move on` : 'No high-urgency items right now'} tone={criticalTone} />
+          ? 'Interview silence. Nudge same-day or lose momentum'
+          : giveUpCount > 0 ? `${criticalLabel} ready. Close cleanly and move on` : 'No high-urgency items right now'} tone={criticalTone} />
         <FUKpi label="High leverage" value={highLeverage} sub={highLeverage > 0
-          ? 'Score ≥ 4.0 going cold — prioritize the strongest fits'
-          : 'No strong-fit apps in the stale list — good'} tone={leverageTone} />
+          ? 'Score ≥ 4.0 going cold. Prioritize the strongest fits'
+          : 'No strong-fit apps in the stale list. Good'} tone={leverageTone} />
         <FUKpi label="Avg silence" value={`${avgSilence}d`} sub={avgSilence >= 21
-          ? 'Queue is aging — clear the 21d+ bucket before adding new apps'
-          : 'Healthy — staying inside the response window'} tone={silenceTone} />
+          ? 'Queue is aging. Clear the 21d+ bucket before adding new apps'
+          : 'Healthy. Staying inside the response window'} tone={silenceTone} />
       </div>
 
       {/* Three visuals */}
@@ -209,10 +209,10 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
           </div>
           <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
             {(bucketCounts['45d+'] || 0) > 0
-              ? `${bucketCounts['45d+']} in the 45d+ bucket — likely ghosted, close them out.`
+              ? `${bucketCounts['45d+']} in the 45d+ bucket (likely ghosted), close them out.`
               : (bucketCounts['21-45d'] || 0) > 0
-                ? 'Work the 21-45d bucket next — last fair window to recover them.'
-                : 'Stale queue is fresh — every item is recoverable.'}
+                ? 'Work the 21-45d bucket next. Last fair window to recover them.'
+                : 'Stale queue is fresh. Every item is recoverable.'}
           </div>
         </div>
 
@@ -224,10 +224,10 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
           </div>
           <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
             {sourceCounts.app > sourceCounts.ta * 4
-              ? 'Mostly app silence — your TA pipeline is keeping up.'
+              ? 'Mostly app silence. Your TA pipeline is keeping up.'
               : sourceCounts.ta > sourceCounts.app
-                ? 'TA contacts are slipping — warm them before they go cold.'
-                : 'Balanced — alternate App nudges with TA touchpoints.'}
+                ? 'TA contacts are slipping. Warm them before they go cold.'
+                : 'Balanced. Alternate App nudges with TA touchpoints.'}
           </div>
         </div>
 
@@ -240,10 +240,10 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
           </div>
           <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
             {window.INTERVIEW_STAGES.reduce((n, s) => n + (statusCounts[s] || 0), 0) > 0
-              ? 'Interview rows first — they convert at the highest rate.'
+              ? 'Interview rows first. They convert at the highest rate.'
               : (statusCounts['Responded'] || 0) > 0
-                ? 'Responded rows next — momentum is fragile, keep it.'
-                : 'Applied bucket only — straightforward nudge cycle.'}
+                ? 'Responded rows next. Momentum is fragile, keep it.'
+                : 'Applied bucket only. Straightforward nudge cycle.'}
           </div>
         </div>
       </div>
@@ -255,7 +255,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
           <span className="card-meta mono">{orderedActions.length} items</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {orderedActions.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>You're caught up — nothing urgent.</div>}
+          {orderedActions.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>You're caught up. Nothing urgent.</div>}
           {orderedActions.map(it => {
             const isTA = it.source === 'ta';
             const sc = parseScore(it.score);
@@ -705,7 +705,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
         <div className="card padded-lg" style={{ marginTop: 12, opacity: 0.85 }}>
           <div className="card-head" style={{ marginBottom: 10 }}>
             <span className="card-title">💤 Snoozed ({data.snoozed.length})</span>
-            <span className="card-meta mono">hidden until their date — clock still running</span>
+            <span className="card-meta mono">hidden until their date (clock still running)</span>
           </div>
           <div className="col" style={{ gap: 6 }}>
             {data.snoozed.map(it => (
@@ -983,7 +983,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
                 subject: draft.subject,
                 body: draft.body,
               })}>
-                I sent this — log touch{crossLogIds.size > 0 && ` + ${crossLogIds.size} TA`}
+                I sent this. Log touch{crossLogIds.size > 0 && ` + ${crossLogIds.size} TA`}
               </button>
             </div>
           </div>

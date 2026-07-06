@@ -91,7 +91,7 @@ window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
           <div className="sub">
             {insights?.generated_at
               ? <>Last analysis {insAgeLabel(insights.generated_at)} · across {insights.pipeline_size} entries · {insights.model}</>
-              : <>Run a Claude-powered synthesis across every tab — pipeline, follow-ups, TA, recruiters, LinkedIn.</>}
+              : <>Run a Claude-powered synthesis across every tab: pipeline, follow-ups, TA, recruiters, LinkedIn.</>}
           </div>
         </div>
         <div className="act">
@@ -112,7 +112,7 @@ window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>No analysis yet.</div>
           <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.55 }}>
             Click <b>Generate Analysis</b> and Claude will read your full pipeline ({apps.length} entries),
-            stale touchpoints, TA Outreach, recruiter rolodex, and engagement data — then return a tight
+            stale touchpoints, TA Outreach, recruiter rolodex, and engagement data, then return a tight
             synthesis: what's working, what's not, recommended moves, and a focus list for this week.
             Each insight cites the specific rows or signals it's based on. Re-run anytime to refresh.
           </div>
@@ -124,7 +124,7 @@ window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
           <div className="mono dim" style={{ fontSize: 12 }}>
             Reading pipeline · synthesizing patterns · drafting recommendations…
           </div>
-          <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>This usually takes 15–30 seconds.</div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>This usually takes 15-30 seconds.</div>
         </div>
       )}
 
@@ -446,7 +446,7 @@ function Linkify({ text, apps, onOpen }) {
           <span
             key={i}
             onClick={(e) => { e.stopPropagation(); onOpen(p.app); }}
-            title={`Open ${p.app.company} — ${p.app.role}`}
+            title={`Open ${p.app.company}: ${p.app.role}`}
             style={{
               color: 'var(--accent)',
               cursor: 'pointer',
@@ -482,7 +482,7 @@ function Citations({ items, apps, onOpen }) {
             key={i}
             className="mono"
             onClick={clickable ? (e) => { e.stopPropagation(); onOpen(app); } : undefined}
-            title={clickable ? `Open #${app.id} ${app.company} — ${app.role}` : c}
+            title={clickable ? `Open #${app.id} ${app.company}: ${app.role}` : c}
             style={{
               fontSize: 10,
               color: clickable ? 'var(--accent)' : 'var(--text-mute)',

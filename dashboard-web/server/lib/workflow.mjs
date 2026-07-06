@@ -47,7 +47,7 @@ function scanSummary(output) {
 
 function gateSummary(output) {
   // No-work case: gate-pipeline exits early with this exact message
-  if (/No pending .* items in pipeline\.md/i.test(output)) return 'Pipeline already empty — nothing to gate';
+  if (/No pending .* items in pipeline\.md/i.test(output)) return 'Pipeline already empty, nothing to gate';
   // gate-pipeline prints "Live: N", "Dead: N", "Uncertain: N"
   const live = (output.match(/Live:\s+(\d+)/) || [])[1] || '?';
   const dead = (output.match(/Dead:\s+(\d+)/) || [])[1] || '?';

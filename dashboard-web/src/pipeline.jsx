@@ -59,7 +59,7 @@ function shortenComp(raw) {
   if (nums.length === 0) return raw.length > 22 ? raw.slice(0, 21) + '…' : raw;
   const k = (n) => (n >= 1000 ? '$' + Math.round(n / 1000) + 'K' : '$' + n);
   if (nums.length === 1) return k(nums[0]);
-  return `${k(nums[0])}–${k(nums[1])}`;
+  return `${k(nums[0])}-${k(nums[1])}`;
 }
 
 // Compact comp display for tables: a single midpoint dollar amount when comp
@@ -128,7 +128,7 @@ function ScoreChip({ score, provisional = false }) {
   const rgb = b === 'strong' ? '34,197,94' : b === 'border' ? '234,179,8' : '239,68,68';
   return (
     <span className="score-chip"
-      title={provisional ? 'Provisional Haiku triage score — run Deep Dive for the full evaluation' : undefined}
+      title={provisional ? 'Provisional Haiku triage score. Run Deep Dive for the full evaluation' : undefined}
       style={{
         color: c, borderColor: `rgba(${rgb},${provisional ? 0.5 : 0.42})`, background: `rgba(${rgb},${provisional ? 0.06 : 0.12})`,
         borderStyle: provisional ? 'dashed' : 'solid', opacity: provisional ? 0.9 : 1,
@@ -215,7 +215,7 @@ function NeedsAttention({ apps, onOpen, selId, isStale = () => false, staleDays 
   // Stale rows come from the canonical Follow-Ups engine — same data the
   // parent PipelineTab fetched once and now shares with every sub-view.
   const hot = apps.filter(a => a.status === 'Evaluated' && a.score != null && a.score >= 4.0)
-    .map(a => ({ a, label: 'Hot lead — apply', icon: PI.zap, color: 'var(--accent)' }));
+    .map(a => ({ a, label: 'Hot lead, apply', icon: PI.zap, color: 'var(--accent)' }));
   const stale = apps.filter(a => isStale(a))
     .sort((x, y) => (staleDays(y) || 0) - (staleDays(x) || 0))
     .map(a => ({ a, label: `Follow up · ${staleDays(a) ?? daysAgo(a.date)}d silent`, icon: PI.send, color: 'var(--red)' }));
@@ -240,7 +240,7 @@ function NeedsAttention({ apps, onOpen, selId, isStale = () => false, staleDays 
         <span className="card-meta mono">{queue.length} items</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-        {queue.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>Nothing urgent — pipeline is clear.</div>}
+        {queue.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>Nothing urgent. Pipeline is clear.</div>}
         {queue.map(({ a, label, icon, color }) => (
           <div key={a.id} onClick={() => onOpen(a)}
             style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto auto', gap: 12, alignItems: 'center',
@@ -438,7 +438,7 @@ function TriageRowActions({ row, job, onDeep, onDismiss }) {
           onClick={e => e.stopPropagation()}>open JD <PIcon d={PI.arrowR} size={10} /></a>
       )}
       <button className="btn ghost sm" style={{ padding: '2px 7px', fontSize: 10.5 }}
-        title="Not a match — dismiss (it won't come back on the next scan)" onClick={() => onDismiss(row)}>✕ dismiss</button>
+        title="Not a match. Dismiss (it won't come back on the next scan)" onClick={() => onDismiss(row)}>✕ dismiss</button>
       {s === 'error' && <span className="mono" style={{ fontSize: 10, color: 'var(--red)' }} title={job.error}>failed, retry</span>}
     </div>
   );
@@ -519,7 +519,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
                     <div className="co-cell">
                       <span className="co-name">{a.company}</span>
                       {stale && (
-                        <span className="stale-tag" title="Flagged by Follow-Ups engine — overdue for a nudge">
+                        <span className="stale-tag" title="Flagged by Follow-Ups engine, overdue for a nudge">
                           ↻ {staleDays(a) ?? sit}d overdue
                         </span>
                       )}
@@ -752,7 +752,7 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
           </div>
           {bestArch && (
             <Insight kind="good">
-              <b>{bestArch.k}</b> roles convert best — {bestArch.conv}% reach interview. Weight your daily applications toward {bestArch.k}.
+              <b>{bestArch.k}</b> roles convert best: {bestArch.conv}% reach interview. Weight your daily applications toward {bestArch.k}.
             </Insight>
           )}
         </div>
@@ -787,7 +787,7 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
           ))}
         </div>
         <Insight kind="warn">
-          {bottleneck ? <>Roles pile up longest in <b>{bottleneck.s.id}</b> (avg {bottleneck.avgAge}d). That's your bottleneck — {bottleneck.s.id === 'Applied' ? 'send follow-up nudges on anything past 14 days' : bottleneck.s.id === 'Evaluated' ? 'decide and apply on the oldest sitting reports today' : 'chase the stalled threads to keep momentum'}.</> : 'Pipeline is moving cleanly — no stage is aging out.'}
+          {bottleneck ? <>Roles pile up longest in <b>{bottleneck.s.id}</b> (avg {bottleneck.avgAge}d). That's your bottleneck: {bottleneck.s.id === 'Applied' ? 'send follow-up nudges on anything past 14 days' : bottleneck.s.id === 'Evaluated' ? 'decide and apply on the oldest sitting reports today' : 'chase the stalled threads to keep momentum'}.</> : 'Pipeline is moving cleanly. No stage is aging out.'}
         </Insight>
       </div>
 
@@ -1492,7 +1492,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {leadStory && (
                 <div className="rp-callout accent">
-                  <div className="rp-callout-label">▶ Lead with — {leadStory.title}</div>
+                  <div className="rp-callout-label">▶ Lead with: {leadStory.title}</div>
                   <div className="rp-callout-body" style={{ marginBottom: 8 }}>{leadStory.reason}</div>
                   {leadStory.script && <blockquote className="rp-sell-phrase" style={{ borderLeftColor: 'rgba(var(--accent-rgb),0.6)' }}>"{leadStory.script}"</blockquote>}
                 </div>
@@ -1772,7 +1772,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
           return (
             <div className="dr-foot" style={{ borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
               <span style={{ color: 'var(--green)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
-                {isByo ? `✓ Logged as applied to ${app.company} — no assets generated` : `✓ Applied to ${app.company}`}
+                {isByo ? `✓ Logged as applied to ${app.company} (no assets generated)` : `✓ Applied to ${app.company}`}
               </span>
               {(r.docx || r.pdf) && <a className="btn sm" href={hrefFor(r.docx || r.pdf)} target="_blank" rel="noreferrer">{r.docx ? 'CV DOCX ↗' : 'CV PDF ↗'}</a>}
               {r.cover && <a className="btn sm" href={hrefFor(r.cover)} target="_blank" rel="noreferrer">Cover Letter ↗</a>}
@@ -2079,7 +2079,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
                 <div className="co-cell">
                   <span className="co-name">{a.company}</span>
                   {stale && (
-                    <span className="stale-tag" title="Flagged by Follow-Ups engine — overdue for a nudge">
+                    <span className="stale-tag" title="Flagged by Follow-Ups engine, overdue for a nudge">
                       ↻ {staleDays(a) ?? ''}{staleDays(a) != null ? 'd overdue' : 'overdue'}
                     </span>
                   )}

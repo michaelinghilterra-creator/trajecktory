@@ -267,7 +267,7 @@ function computeStaleTA() {
 
     let coachVerdict, coachLevel;
     if (overCap) {
-      coachVerdict = `Already nudged ${fuCount}× — let this contact cool.`;
+      coachVerdict = `Already nudged ${fuCount}×. Let this contact cool.`;
       coachLevel = 'give-up';
     } else if (fuCount === 0) {
       coachVerdict = `${daysSinceLastTouch}d since last touch · time to keep warm.`;

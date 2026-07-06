@@ -50,7 +50,7 @@ router.get('/api/report-view/:id', (req, res) => {
     // 'none' blocks script execution (incl. javascript: URLs and injected event
     // handlers); the inline <style> below needs style-src 'unsafe-inline'.
     res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data: http: https:");
-    res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>${escapeHtml(row.company)} — ${escapeHtml(row.role)}</title>
+    res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>${escapeHtml(row.company)}: ${escapeHtml(row.role)}</title>
 <style>
   *{box-sizing:border-box}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:20px 28px 40px;color:#1a1a1a;line-height:1.65;font-size:13.5px;background:#fff}
