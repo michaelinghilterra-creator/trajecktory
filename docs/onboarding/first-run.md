@@ -8,9 +8,11 @@ lifting; you mostly review and confirm.
 or Max). No Anthropic API key, and no manual Node, Git, or Chromium setup: the
 installer bundles all of it.
 
-For the full illustrated walkthrough, see `guide1.html` and `guide2.html` in this
-folder. For what each feature costs (free, Claude sign-in, or an optional API
-key), see `feature-tiers.md`.
+For the full illustrated walkthrough (with screenshots), see
+[guide1.html](guide1.html) and [guide2.html](guide2.html) in this folder. For what
+each feature costs (free, Claude sign-in, or an optional API key), see
+[feature-tiers.md](feature-tiers.md). A shorter version of these steps lives in the
+repo [README](../../README.md).
 
 ## The seven steps
 

@@ -64,7 +64,7 @@ From download to your first evaluated role. The installer and the in-app Launchp
 6. **(Optional) Models and cost.** Under Setup -> Models & cost you can pick which model runs each step, see the approximate cost per run, and flip billing between your Claude plan and an API key. Sensible, cheaper defaults are already applied, so you can skip this.
 7. **Run your first search.** From the left sidebar: API Scan (free, no AI) pulls fresh roles, then Triage scores the best fits (the API-key workflow uses Agent Scan and Evaluate instead). Review the scored roles, deep-dive the strongest, let trajecktory tailor a resume and cover letter, and track it. It schedules the follow-ups.
 
-More detail and screenshots: **[docs/onboarding](docs/onboarding)**.
+Fuller version with more context: **[docs/onboarding/first-run.md](docs/onboarding/first-run.md)**. Illustrated walkthrough with screenshots: the guides in **[docs/onboarding](docs/onboarding)** (`guide1.html`, `guide2.html`).
 
 ## What Is This
 
