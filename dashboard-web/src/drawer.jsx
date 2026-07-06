@@ -437,7 +437,7 @@ function InterviewSection({ cs }) {
     <div className="col" style={{ gap: 16 }}>
       {cs.leadStory.title && (
         <div className="cs-callout accent">
-          <div className="cs-callout-label">▶ Lead with — {cs.leadStory.title}</div>
+          <div className="cs-callout-label">▶ Lead with: {cs.leadStory.title}</div>
           {cs.leadStory.reason && <div className="cs-callout-body" style={{ marginBottom: 8 }}>{cs.leadStory.reason}</div>}
           {cs.leadStory.script && <blockquote className="lead-script">"{cs.leadStory.script}"</blockquote>}
         </div>
@@ -684,7 +684,7 @@ function DrawerFoot({ app, cs, onAction }) {
     return (
       <div className="drawer-foot" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
         <span style={{ color: 'var(--green)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
-          {isByo ? `✓ Logged as applied to ${app.company} — no assets generated` : `✓ Applied to ${app.company}`}
+          {isByo ? `✓ Logged as applied to ${app.company} (no assets generated)` : `✓ Applied to ${app.company}`}
         </span>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {(r.docx || r.pdf) && <a className="btn sm" href={hrefFor(r.docx || r.pdf)} target="_blank" rel="noreferrer">{r.docx ? 'CV DOCX ↗' : 'CV PDF ↗'}</a>}
@@ -725,7 +725,7 @@ function DrawerFoot({ app, cs, onAction }) {
           <button className="btn accent" onClick={() => startApply('claude')}>Claude Apply ✦</button>
           <button
             className="btn"
-            title="Skip CV + cover letter generation — just mark as Applied. Use when you've prepared your own assets."
+            title="Skip CV + cover letter generation: just mark as Applied. Use when you've prepared your own assets."
             onClick={() => startApply('byo')}
           >Already Applied ✓</button>
           <button className="btn" onClick={() => onAction(app, "SKIP")}>Skip</button>
@@ -755,7 +755,7 @@ function DrawerFoot({ app, cs, onAction }) {
       {(app.status === "Responded" || window.isInterviewStage(app.status) || app.status === "Offer") && (
         <button
           className="btn danger"
-          title={`Close as lost — analytics will keep crediting this entry to the ${app.status} stage`}
+          title={`Close as lost: analytics will keep crediting this entry to the ${app.status} stage`}
           onClick={() => {
             if (window.confirm(`Mark ${app.company} as Closed (Lost)?\n\nStatus will change to Rejected. Analytics will preserve that this entry reached the ${app.status} stage.`)) {
               onAction(app, "Rejected", false, app.status);

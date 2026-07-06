@@ -12,7 +12,7 @@ const DAILY_QUOTES = [
   { text: "Luck is what happens when preparation meets opportunity.", author: "Seneca" },
   { text: "Make the best use of what is in your power, and take the rest as it happens.", author: "Epictetus" },
   { text: "The mind that is anxious about future events is miserable.", author: "Seneca" },
-  { text: "You have power over your mind — not outside events. Realize this, and you will find strength.", author: "Marcus Aurelius" },
+  { text: "You have power over your mind, not outside events. Realize this, and you will find strength.", author: "Marcus Aurelius" },
   { text: "It always seems impossible until it's done.", author: "Nelson Mandela" },
   { text: "Our greatest glory is not in never falling, but in rising every time we fall.", author: "Confucius" },
   { text: "Fall seven times, stand up eight.", author: "Japanese proverb" },
@@ -242,7 +242,7 @@ const toggleRow = (id) => setSelected(s => {
         <span style={calloutTextStyle}>
           "{dailyQuote.text}"
         </span>
-        <span style={{ color: "var(--text-mute)", fontSize: 11 }}>— {dailyQuote.author}</span>
+        <span style={{ color: "var(--text-mute)", fontSize: 11 }}>· {dailyQuote.author}</span>
       </div>
 
       {/* KPIs */}
@@ -371,10 +371,10 @@ const toggleRow = (id) => setSelected(s => {
             const color = sc != null && sc >= 4.0 ? "var(--accent)"
                         : sc != null && sc >= 3.5 ? "var(--yellow)"
                         : "var(--text-mute)";
-            const label = sit === 0 ? "Scored today — apply or skip"
-                        : sit <= 3  ? `Scored ${sit}d ago — still fresh`
-                        : sit <= 7  ? `Scored ${sit}d ago — decide soon`
-                                    : `${sit}d silent — getting stale`;
+            const label = sit === 0 ? "Scored today. Apply or skip"
+                        : sit <= 3  ? `Scored ${sit}d ago, still fresh`
+                        : sit <= 7  ? `Scored ${sit}d ago, decide soon`
+                                    : `${sit}d silent, getting stale`;
             const labelColor = sit > 7 ? "var(--red)" : sit > 3 ? "var(--yellow)" : "var(--accent)";
             return (
               <div key={a.id} onClick={() => onOpen(a)}

@@ -280,7 +280,7 @@ function App() {
     const jumpCmds = apps.slice(0, 30).map(a => ({
       section: "Jump to role",
       icon: "›",
-      label: `${a.company} — ${a.role}`,
+      label: `${a.company}: ${a.role}`,
       hint: a.status,
       run: () => { setDrawerApp(a); },
     }));

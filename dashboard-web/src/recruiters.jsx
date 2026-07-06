@@ -211,7 +211,7 @@ function ColdCoaching({ firms, onBatch, coverage }) {
       <div>
         <div className="coach-eyebrow">{isCold ? 'Start here · 0% worked' : `Next batch · ${coverage}% worked`}</div>
         <div className="coach-title">
-          {isCold ? 'Your pipeline is cold — start the outreach motion.' : 'Keep momentum — these firms are still 100% untouched.'}
+          {isCold ? 'Your pipeline is cold. Start the outreach motion.' : 'Keep momentum. These firms are still 100% untouched.'}
         </div>
         <div className="coach-sub">{names} each hold {top[top.length - 1].n}+ contacts. {isCold ? 'Pick one firm and batch a first round of outreach to build momentum fast.' : 'Batch one to spread reach across new firms.'}</div>
       </div>
@@ -333,7 +333,7 @@ function ContactsView({ contacts, firms, kpis, landing, onOpen, onCompose, onQui
             <button className={sort === 'firm' ? 'on' : ''} onClick={() => setSort('firm')}>
               <RecIcon d={REC_I.building} size={13} /> Firm
             </button>
-            <button className={sort === 'name' ? 'on' : ''} onClick={() => setSort('name')}>A–Z</button>
+            <button className={sort === 'name' ? 'on' : ''} onClick={() => setSort('name')}>A-Z</button>
             <button className={sort === 'status' ? 'on' : ''} onClick={() => setSort('status')}>
               <RecIcon d={REC_I.trend} size={13} /> Stage
             </button>
@@ -472,7 +472,7 @@ function RecFirmsView({ firms, onOpen, onCompose, starred, toggleStar, search })
             <button className={sort === 'starred' ? 'on' : ''} onClick={() => setSort('starred')}>
               <RecIcon d={REC_I.star} size={13} /> Starred
             </button>
-            <button className={sort === 'name' ? 'on' : ''} onClick={() => setSort('name')}>A–Z</button>
+            <button className={sort === 'name' ? 'on' : ''} onClick={() => setSort('name')}>A-Z</button>
           </div>
         </div>
       </div>
@@ -524,7 +524,7 @@ function RecActivityView({ recruiters, onBatch, onOpen }) {
           <div className="feed-empty">
             <div className="fe-ico"><RecIcon d={REC_I.clock} size={26} /></div>
             <div className="fe-title">No activity yet</div>
-            <div className="fe-sub">Every message you send, reply you receive, and meeting you book will stream here as a timeline. Your pipeline is at the starting line — send a first outreach to light it up.</div>
+            <div className="fe-sub">Every message you send, reply you receive, and meeting you book will stream here as a timeline. Your pipeline is at the starting line. Send a first outreach to light it up.</div>
             <button className="btn primary" onClick={() => onBatch(null)}>
               <RecIcon d={REC_I.rocket} size={14} /> Start the recommended batch
             </button>
@@ -655,28 +655,28 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
     .slice(0, 6);
 
   const verdict = (c) => {
-    if (c.status === 'Replied') return 'Hot — book a meeting today';
+    if (c.status === 'Replied') return 'Hot. Book a meeting today';
     if (c.status === 'Meeting Scheduled') return 'Confirm + share roles you want';
-    if (c.status === 'Not Contacted' && firmHasEngaged.has(c.firmId)) return 'Same firm already engaged — easy intro';
-    if (c.status === 'Sent') return 'Awaiting reply — nudge if 7d+';
+    if (c.status === 'Not Contacted' && firmHasEngaged.has(c.firmId)) return 'Same firm already engaged, easy intro';
+    if (c.status === 'Sent') return 'Awaiting reply. Nudge if 7d+';
     return '';
   };
 
   const funnelInsight = sent === 0
-    ? 'Whole base sits at Not Contacted — draft the first 5 today to seed the funnel.'
+    ? 'Whole base sits at Not Contacted. Draft the first 5 today to seed the funnel.'
     : responseRate < 5
-      ? 'Sent → Replied is leaking — tighten the opener, name the specific role, drop the boilerplate.'
+      ? 'Sent → Replied is leaking. Tighten the opener, name the specific role, drop the boilerplate.'
       : responseRate < 10
-        ? `Replies are coming in (${responseRate}%) — push volume, the message works.`
-        : `${responseRate}% reply rate — now make every Replied land a meeting.`;
+        ? `Replies are coming in (${responseRate}%). Push volume, the message works.`
+        : `${responseRate}% reply rate. Now make every Replied land a meeting.`;
   const firmInsight = byFirm.length === 0
     ? 'No firm data yet.'
     : byFirm[0].engaged > 0
-      ? `${byFirm[0].key}: ${byFirm[0].engaged}/${byFirm[0].total} engaged — your strongest firm relationship.`
-      : `${byFirm[0].key} has the most contacts (${byFirm[0].total}) but no replies — try a fresh angle.`;
+      ? `${byFirm[0].key}: ${byFirm[0].engaged}/${byFirm[0].total} engaged. Your strongest firm relationship.`
+      : `${byFirm[0].key} has the most contacts (${byFirm[0].total}) but no replies. Try a fresh angle.`;
   const stageInsight = notContacted > total * 0.5
-    ? `${notContacted} contacts untouched — pick 5 to draft today.`
-    : 'Healthy distribution — keep weekly volume up.';
+    ? `${notContacted} contacts untouched. Pick 5 to draft today.`
+    : 'Healthy distribution. Keep weekly volume up.';
 
   return (
     <div className="fade-up col" style={{ gap: 16 }}>
@@ -689,19 +689,19 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
 
       <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
         <RecKpi label="Outreach Rate" value={`${outreachRate}%`}
-          sub={outreachRate >= 40 ? 'Steady cadence — keep it up' : 'Below 40% — draft a few more this week'}
+          sub={outreachRate >= 40 ? 'Steady cadence, keep it up' : 'Below 40%. Draft a few more this week'}
           tone={outreachTone} />
         <RecKpi label="Response Rate" value={sent ? `${responseRate}%` : '—'}
           sub={sent === 0 ? 'Send your first batch this week'
-             : responseRate >= 10 ? 'At/above benchmark — your hook works'
-             : responseRate >= 5 ? 'Around baseline — sharpen openers'
-             : 'Below 5% — rewrite hook, lead with the role'}
+             : responseRate >= 10 ? 'At/above benchmark, your hook works'
+             : responseRate >= 5 ? 'Around baseline, sharpen openers'
+             : 'Below 5%. Rewrite hook, lead with the role'}
           tone={responseTone} />
         <RecKpi label="Active Convos" value={activeConvos}
-          sub={activeConvos > 0 ? `${replied} replied · ${meeting} meetings — work the warm pipeline` : 'No live convos — replies fill this column'}
+          sub={activeConvos > 0 ? `${replied} replied · ${meeting} meetings. Work the warm pipeline` : 'No live convos. Replies fill this column'}
           tone={convoTone} />
         <RecKpi label="Firm Coverage" value={`${firmCoverage}%`}
-          sub={firmCoverage >= 40 ? `${firmsEngaged} of ${firms.length} firms warm` : `Only ${firmsEngaged} of ${firms.length} firms touched — broaden reach`}
+          sub={firmCoverage >= 40 ? `${firmsEngaged} of ${firms.length} firms warm` : `Only ${firmsEngaged} of ${firms.length} firms touched. Broaden reach`}
           tone={coverageTone} />
       </div>
 
@@ -752,7 +752,7 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
           <span className="card-meta mono">{actions.length} items</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {actions.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>No prioritized actions — start a draft for a top firm.</div>}
+          {actions.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>No prioritized actions. Start a draft for a top firm.</div>}
           {actions.map(c => {
             const status = c.status;
             const iconPath = status === 'Replied'           ? window.ICON.msg
@@ -864,7 +864,7 @@ function RecAnalyticsView({ recruiters, firms }) {
           <div className="divider" />
           <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6 }}>
             {sent === 0
-              ? <>The entire base sits at <span style={{ color: 'var(--text)' }}>Not Contacted</span>. The first and largest opportunity is the <span style={{ color: 'var(--accent-2)' }}>Not Contacted → Drafted</span> step — that's where to focus first.</>
+              ? <>The entire base sits at <span style={{ color: 'var(--text)' }}>Not Contacted</span>. The first and largest opportunity is the <span style={{ color: 'var(--accent-2)' }}>Not Contacted → Drafted</span> step. That's where to focus first.</>
               : <>Conversion at each step: aim to keep <span style={{ color: 'var(--accent-2)' }}>Sent → Replied</span> above 20% and <span style={{ color: 'var(--accent-2)' }}>Replied → Meeting</span> above 50%.</>}
           </div>
         </div>
@@ -1244,7 +1244,7 @@ function RecAICompose({ contact, contactId, onSaveDraft, onLogSent, onToast }) {
   const [tone, setTone] = useStateR('Warm');
   const [busy, setBusy] = useStateR(false);
   const [out, setOut] = useStateR('');
-  const [subject, setSubject] = useStateR(`Intro — ${contact.first}, exploring leadership mandates`);
+  const [subject, setSubject] = useStateR(`Intro: ${contact.first}, exploring leadership mandates`);
 
   const gen = useCallbackR(() => {
     setBusy(true); setOut('');
@@ -1302,7 +1302,7 @@ function RecAICompose({ contact, contactId, onSaveDraft, onLogSent, onToast }) {
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn primary sm" onClick={() => onLogSent(subject, fullEmail)}>
-              <RecIcon d={REC_I.outbound} size={12} /> I sent this — log it
+              <RecIcon d={REC_I.outbound} size={12} /> I sent this. Log it
             </button>
             <button className="btn sm" onClick={() => onSaveDraft(subject, fullEmail)}>
               <RecIcon d={REC_I.spark} size={12} /> Save as draft only
@@ -1582,7 +1582,7 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
               </div>
             </div>
             <div className="li-fallback">
-              <RecIcon d={REC_I.search} size={11} /> LinkedIn searched via Google — paste a profile URL once found.
+              <RecIcon d={REC_I.search} size={11} /> LinkedIn searched via Google. Paste a profile URL once found.
             </div>
           </div>
 
@@ -1682,7 +1682,7 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
             </div>
             {corr.length === 0 ? (
               <div className="empty" style={{ padding: '8px 2px' }}>
-                No correspondence yet — draft a first outreach to get started.
+                No correspondence yet. Draft a first outreach to get started.
               </div>
             ) : (
               <div className="thread">

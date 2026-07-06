@@ -565,7 +565,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
                   const unverified = !bounced && /email unverified|pattern-med|pattern-low|auto-synthesized/i.test(n);
                   if (!data.email && !bounced) return null;
                   if (bounced) return <span style={{ marginLeft: 8, padding: "1px 6px", borderRadius: 4, background: "rgba(239,68,68,0.18)", color: "#fca5a5", fontSize: 10, fontWeight: 600, letterSpacing: 0.4 }} title="See notes for details">BOUNCED</span>;
-                  if (unverified) return <span style={{ marginLeft: 8, padding: "1px 6px", borderRadius: 4, background: "rgba(234,179,8,0.18)", color: "#fde68a", fontSize: 10, fontWeight: 600, letterSpacing: 0.4 }} title="Auto-synthesized — confirm before sending">UNVERIFIED</span>;
+                  if (unverified) return <span style={{ marginLeft: 8, padding: "1px 6px", borderRadius: 4, background: "rgba(234,179,8,0.18)", color: "#fde68a", fontSize: 10, fontWeight: 600, letterSpacing: 0.4 }} title="Auto-synthesized. Confirm before sending">UNVERIFIED</span>;
                   return null;
                 })()}
               </span>

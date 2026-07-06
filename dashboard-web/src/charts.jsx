@@ -49,11 +49,11 @@ window.FunnelChart = function FunnelChart({ data, height = 220 }) {
         const topApps = (d.apps || []).slice().sort((a, b) => b.score - a.score).slice(0, 3);
         const avgScore = (d.apps || []).length ? ((d.apps.reduce((s, a) => s + a.score, 0) / d.apps.length)).toFixed(2) : "—";
         const insight = hover.i === 0
-          ? `Entry point — every logged role lands here.`
+          ? `Entry point: every logged role lands here.`
           : !next
             ? `Final stage. Conversion from entry: ${conv}%.`
             : drop > 60
-              ? `Steep drop — ${drop}% don't continue. Worth investigating.`
+              ? `Steep drop: ${drop}% don't continue. Worth investigating.`
               : drop > 40
                 ? `Moderate fall-off (${drop}%).`
                 : `Healthy passthrough (${100 - drop}% advance).`;
@@ -130,7 +130,7 @@ window.Histogram = function Histogram({ apps, height = 180 }) {
       {hover && (() => {
         const [k, items] = buckets[hover.i];
         const score = parseFloat(k);
-        const bucketLabel = `${k}–${(score + 0.4).toFixed(1)}`;
+        const bucketLabel = `${k}-${(score + 0.4).toFixed(1)}`;
         const verdict = score >= 4.0 ? "strong match" : score >= 3.0 ? "borderline" : "weak";
         const verdictColor = score >= 4.0 ? "var(--green)" : score >= 3.0 ? "var(--yellow)" : "var(--red)";
         const top = items.slice().sort((a, b) => b.score - a.score).slice(0, 4);
@@ -141,7 +141,7 @@ window.Histogram = function Histogram({ apps, height = 180 }) {
           : score >= 4.0 && applied < items.length
             ? `${items.length - applied} hot role${items.length - applied === 1 ? "" : "s"} here haven't been applied to.`
             : score < 3.0 && items.length > 0
-              ? `Weak band — consider tightening sourcing criteria.`
+              ? `Weak band. Consider tightening sourcing criteria.`
               : `${applied}/${items.length} progressed past Evaluated.`;
         return (
           <div className="tip" style={{ left: hover.px, top: hover.py }}>
@@ -239,7 +239,7 @@ window.Timeline = function Timeline({ apps, days = 28, height = 160 }) {
         const avg = items.length ? (items.reduce((s, a) => s + a.score, 0) / items.length).toFixed(2) : "—";
         const dAgo = window.daysAgo(d.date);
         const insight = items.length === 0
-          ? "Quiet day — no roles logged."
+          ? "Quiet day. No roles logged."
           : d.count === peak.count
             ? `Peak day in this window.`
             : items.filter(a => a.score >= 4.0).length > 0
@@ -303,9 +303,9 @@ window.HBars = function HBars({ data, height = 200, format = (v) => v.toFixed(2)
           const strong = items.filter(a => a.score >= 4.0).length;
           const rank = hover.i + 1;
           const insight = items.length === 0 ? "No roles in this archetype yet."
-            : rank === 1 ? `Highest-scoring archetype — lean into it.`
-            : strong > items.length / 2 ? `Strong yield — ${strong}/${items.length} score ≥4.0.`
-            : strong === 0 ? `No ≥4.0 hits — sourcing here may be off.`
+            : rank === 1 ? `Highest-scoring archetype. Lean into it.`
+            : strong > items.length / 2 ? `Strong yield: ${strong}/${items.length} score ≥4.0.`
+            : strong === 0 ? `No ≥4.0 hits. Sourcing here may be off.`
             : `${strong}/${items.length} hot. Mixed signal.`;
           return (
             <div className="tip" style={{ left: hover.px, top: hover.py }}>
@@ -320,10 +320,10 @@ window.HBars = function HBars({ data, height = 200, format = (v) => v.toFixed(2)
         if (tooltipMeta.kind === "response") {
           const top = items.slice().sort((a,b)=>b.score-a.score).slice(0,3);
           const insight = items.length === 0 ? "No applications in this sector yet."
-            : d.value >= 50 ? `Outstanding response rate — high-signal sector.`
+            : d.value >= 50 ? `Outstanding response rate: high-signal sector.`
             : d.value >= 30 ? `Healthy response rate.`
-            : d.value >= 15 ? `Below-average reply rate — prioritize warm-intro paths.`
-            : `Cold sector — applications mostly silent.`;
+            : d.value >= 15 ? `Below-average reply rate. Prioritize warm-intro paths.`
+            : `Cold sector. Applications mostly silent.`;
           return (
             <div className="tip" style={{ left: hover.px, top: hover.py }}>
               <div className="tip-head"><b>{d.label}</b><span style={{ color: d.color }}>{Math.round(d.value)}%</span></div>
@@ -354,7 +354,7 @@ window.HBars = function HBars({ data, height = 200, format = (v) => v.toFixed(2)
           });
           const top = sorted.slice(0, 3);
           const insight = items.length === 0 ? "No entries in this bucket yet."
-            : sharePct >= 40 ? `Dominant bucket — ${sharePct}% of total. Watch for concentration risk.`
+            : sharePct >= 40 ? `Dominant bucket: ${sharePct}% of total. Watch for concentration risk.`
             : sharePct >= 20 ? `Meaningful share (${sharePct}%) of the total mix.`
             : `Small slice (${sharePct}%) of the total mix.`;
           return (
@@ -464,9 +464,9 @@ window.Velocity = function Velocity({ apps, windowDays = 7, color = "var(--cyan)
         const prevS = series[hover.i - windowDays]?.sum;
         const wow = prevS != null ? s.sum - prevS : null;
         const insight = s.sum === 0 ? `No activity in this ${periodLabel} window.`
-          : s.sum < targetLow ? `Below sustainable cadence (${targetLow}–${targetHigh}/${periodLabel}).`
-          : s.sum > targetHigh ? `Above target — watch quality.`
-          : `On pace — sustainable cadence.`;
+          : s.sum < targetLow ? `Below sustainable cadence (${targetLow}-${targetHigh}/${periodLabel}).`
+          : s.sum > targetHigh ? `Above target. Watch quality.`
+          : `On pace. Sustainable cadence.`;
         return (
           <div className="tip" style={{ left: hover.px, top: hover.py }}>
             <div className="tip-head"><b>Window ending {labeled}</b><span style={{ color }}>{s.sum}</span></div>
@@ -542,10 +542,10 @@ window.CompGap = function CompGap({ apps }) {
           const a = hover.app;
           const gap = a.salary - a.target;
           const pct = Math.round((gap / a.target) * 100);
-          const insight = gap >= 20 ? "Well above target — strong negotiating leverage."
-            : gap >= 0 ? "At or above target — proceed."
-            : gap >= -15 ? "Just below target — negotiable."
-            : "Significantly below band — likely a skip unless equity sweetens.";
+          const insight = gap >= 20 ? "Well above target. Strong negotiating leverage."
+            : gap >= 0 ? "At or above target. Proceed."
+            : gap >= -15 ? "Just below target, negotiable."
+            : "Significantly below band. Likely a skip unless equity sweetens.";
           return (
             <div className="tip" style={{ left: hover.px, top: hover.py }}>
               <div className="tip-head"><b>{a.company}</b><span style={{ color: gap >= 0 ? "var(--green)" : "var(--red)" }}>{gap >= 0 ? "+" : ""}{gap}k ({pct >= 0 ? "+" : ""}{pct}%)</span></div>
@@ -562,10 +562,10 @@ window.CompGap = function CompGap({ apps }) {
         const below = items.length - above;
         const avgGap = items.length ? items.reduce((s,x)=>s+(x.salary-x.target),0)/items.length : 0;
         const insight = items.length === 0 ? "No roles in this archetype yet."
-          : avgGap >= 10 ? "Pays above your target on average — high-leverage archetype."
+          : avgGap >= 10 ? "Pays above your target on average: high-leverage archetype."
           : avgGap >= 0 ? "Pays at-or-near target."
-          : avgGap >= -10 ? "Slightly under target — negotiate up."
-          : "Consistently under-band — widen target or de-prioritize.";
+          : avgGap >= -10 ? "Slightly under target, negotiate up."
+          : "Consistently under-band. Widen target or de-prioritize.";
         return (
           <div className="tip" style={{ left: hover.px, top: hover.py }}>
             <div className="tip-head"><b>{hover.label}</b><span style={{ color: avgGap >= 0 ? "var(--green)" : "var(--red)" }}>{avgGap >= 0 ? "+" : ""}{avgGap.toFixed(1)}k avg</span></div>
@@ -800,14 +800,14 @@ window.Sankey = function Sankey({ apps }) {
           const top = n.items.slice().sort((a,b)=>b.score-a.score).slice(0,3);
           const avgS = n.items.length ? (n.items.reduce((s,a)=>s+a.score,0)/n.items.length).toFixed(2) : "—";
           const lastReached = "reached-" + (window.FUNNEL_ORDER.length - 1);
-          const insight = n.id.startsWith("arch-") ? `Source archetype — ${pct}% of total roles tracked.`
-            : n.id === "discarded" ? "Dismissed: SKIP, Not a Fit, or Discarded — filtered before applying."
-            : n.id === "agedOut" ? "Posting closed before you could act — aged out of the pipeline."
+          const insight = n.id.startsWith("arch-") ? `Source archetype: ${pct}% of total roles tracked.`
+            : n.id === "discarded" ? "Dismissed: SKIP, Not a Fit, or Discarded, filtered before applying."
+            : n.id === "agedOut" ? "Posting closed before you could act, aged out of the pipeline."
             : n.id === "live-0" ? "Sitting in queue. Pick or skip; don't park indefinitely."
             : n.id === "live-1" ? "Applied with no reply. Consider warmer paths."
             : n.id === lastReached ? "Bottom of the funnel. Negotiate confidently."
-            : n.id.startsWith("lost-") ? "Pipeline dropped at this rung — track for pattern (sector, archetype, round)."
-            : n.id.startsWith("live-") ? "Live in this round — keep momentum and prep the next step."
+            : n.id.startsWith("lost-") ? "Pipeline dropped at this rung. Track for pattern (sector, archetype, round)."
+            : n.id.startsWith("live-") ? "Live in this round. Keep momentum and prep the next step."
             : `${pct}% of total roles reach this stage.`;
           return (
             <div className="tip" style={{ left: hover.px, top: hover.py }}>
@@ -825,9 +825,9 @@ window.Sankey = function Sankey({ apps }) {
           const passRate = sCount ? Math.round((l.count / sCount) * 100) : 0;
           const top = l.items.slice().sort((a,b)=>b.score-a.score).slice(0,3);
           const insight = l.count === 0 ? "No roles took this path."
-            : passRate >= 70 ? `Strong throughput — most ${l.sourceNode.label} flow here.`
+            : passRate >= 70 ? `Strong throughput: most ${l.sourceNode.label} flow here.`
             : passRate >= 40 ? `Moderate split.`
-            : `Narrow path — only ${passRate}% of ${l.sourceNode.label} continue here.`;
+            : `Narrow path: only ${passRate}% of ${l.sourceNode.label} continue here.`;
           return (
             <div className="tip" style={{ left: hover.px, top: hover.py }}>
               <div className="tip-head"><b>{l.sourceNode.label} → {l.targetNode.label}</b><span style={{ color: l.targetNode.accent }}>{passRate}%</span></div>

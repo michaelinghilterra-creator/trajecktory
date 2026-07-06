@@ -63,11 +63,11 @@ export const SECTIONS = [
   },
   {
     key: 'eval', label: 'Evaluate (batch)', envKey: 'TJK_EVAL_MODEL',
-    hint: 'Full A–G reports. The cost driver.',
+    hint: 'Full A-G reports. The cost driver.',
     options: ['sonnet', 'opus', 'haiku'], default: 'sonnet',
     tokensPerUnit: 125_000, split: { in: 0.85, out: 0.15 },
     unitLabel: 'eval', unitsPerRun: null,   // resolved to the effective batch size
-    warn: { haiku: 'Scoring rubric is NOT validated at Haiku — quality may drop.' },
+    warn: { haiku: 'Scoring rubric is NOT validated at Haiku (quality may drop).' },
   },
   {
     key: 'insights', label: 'Insights', envKey: 'TJK_INSIGHTS_MODEL',
@@ -225,7 +225,7 @@ export function modelsState({ keyPresent, evalBatch } = {}) {
     note: hasKey
       ? 'Estimates are for the API-key path. Real per-run costs are shown below from your recent runs.'
       : (keyPresent
-          ? 'Billing set to your Claude plan — your saved API key is not charged. Flip back to bill the key. $ figures show what the API-key path would cost.'
+          ? 'Billing set to your Claude plan: your saved API key is not charged. Flip back to bill the key. $ figures show what the API-key path would cost.'
           : 'No API key set: workflow steps run on your Claude subscription (no per-token cost). $ figures show what the API-key path would cost.'),
   };
 }
