@@ -4,7 +4,7 @@ import path from 'path';
 import https from 'https';
 import { execFile } from 'child_process';
 import { ROOT_DIR } from '../config.mjs';
-import { generateText, readProjectFile } from './anthropic.mjs';
+import { generateText, readProjectFile, draftModel } from './anthropic.mjs';
 import { renderObsidianNote, warnObsidianPushFailed } from './obsidian.mjs';
 import { getIdentity } from './profile.mjs';
 
@@ -12,7 +12,7 @@ const applyJobs = new Map();
 // Hybrid generation: the Anthropic API when a key is present (fast), otherwise
 // the user's Claude plan via the bundled CLI (no key). See lib/anthropic.mjs.
 async function runClaudeSubprocess(prompt) {
-  return generateText(prompt, { model: 'claude-haiku-4-5-20251001', maxTokens: 1024 });
+  return generateText(prompt, { model: draftModel(), maxTokens: 1024 });
 }
 
 // BYO ("bring your own assets") apply: skip CV + cover letter + form-response

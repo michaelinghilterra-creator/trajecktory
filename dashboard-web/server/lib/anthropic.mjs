@@ -6,8 +6,16 @@ import path from 'path';
 import '../config.mjs';
 import { getIdentity } from './profile.mjs';
 import { runClaudePrompt } from './claude-cli.mjs';
+import { resolveModelId, currentModel } from './pricing.mjs';
 
 export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// The model the draft/outreach features should use, from the user's per-section
+// choice (TJK_DRAFT_MODEL, default haiku). Returned as a full model id for the
+// SDK path; generateText down-maps it to a CLI alias on the plan path.
+export function draftModel() {
+  return resolveModelId(currentModel('draft'));
+}
 
 // The SDK-based draft features (cover letters, resume tailoring, recruiter / TA
 // / LinkedIn outreach) need the user's own ANTHROPIC_API_KEY. Evaluate and Scan
@@ -29,7 +37,9 @@ export async function generateText(prompt, opts = {}) {
   const { system, model, maxTokens = 1024, tools, ...rest } = opts;
   if (hasAnthropicKey()) {
     const msg = await anthropic.messages.create({
-      model: model || 'claude-haiku-4-5',
+      // Callers may pass a bare alias (haiku/sonnet/opus) or a full id; the SDK
+      // needs a full id, so resolve. Falls back to Haiku when unset.
+      model: resolveModelId(model) || 'claude-haiku-4-5',
       max_tokens: maxTokens,
       ...(system ? { system } : {}),
       ...(tools ? { tools } : {}),

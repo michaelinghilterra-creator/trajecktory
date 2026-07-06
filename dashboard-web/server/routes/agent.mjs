@@ -190,18 +190,25 @@ function runClaudeAgent(jobId, mode, target) {
     // runs the `pipeline` mode file with deep, single-URL constraints.
     const slash = mode === 'deep' ? 'pipeline' : mode;
     const prompt = `/trajecktory ${slash}.${dashboardConstraints(mode, target)}`;
-    // Triage always runs on Haiku (cheap first-pass; calibrated faithful to Sonnet at
-    // this task, r≈0.89 / 100% recall of strong roles). Scan + Evaluate default to
-    // Sonnet to keep the 5-hour subscription quota in check; override with
-    // TJK_AGENT_MODEL in dashboard-web/.env (e.g. `opus` for max eval quality, or
-    // `inherit`/`default` to pass no --model). TJK_TRIAGE_MODEL overrides triage.
+    // Per-section model, chosen in the Models & Cost settings (persisted as TJK_*
+    // env keys, see server/lib/pricing.mjs). Defaults: Triage=Haiku (calibrated
+    // faithful to Sonnet, r≈0.89 / 100% recall of strong roles), Agent Scan=Haiku
+    // (synthesis over web results — the cheap default on an unbounded step),
+    // Evaluate=Sonnet (the tuned scorer; the cost driver). The legacy shared
+    // TJK_AGENT_MODEL is honored as a fallback for the split keys.
     const power = effectivePower(target);
     // A per-request model override drives the Opus "deep mode" toggle (pipeline /
     // deep only). Triage stays on its calibrated Haiku regardless.
     const reqModel = ((target && target.model) || '').trim();
-    const rawModelPref = mode === 'triage'
-      ? (process.env.TJK_TRIAGE_MODEL || 'haiku').trim()
-      : (reqModel || process.env.TJK_AGENT_MODEL || 'sonnet').trim();
+    let rawModelPref;
+    if (mode === 'triage') {
+      rawModelPref = (process.env.TJK_TRIAGE_MODEL || 'haiku').trim();
+    } else if (mode === 'scan') {
+      rawModelPref = (process.env.TJK_SCAN_MODEL || process.env.TJK_AGENT_MODEL || 'haiku').trim();
+    } else {
+      // pipeline / deep — the Evaluate step. reqModel is the Opus deep-mode override.
+      rawModelPref = (reqModel || process.env.TJK_EVAL_MODEL || process.env.TJK_AGENT_MODEL || 'sonnet').trim();
+    }
     // SECURITY: modelPref becomes a bare argv element and, under shell:true on
     // Windows (below), args are concatenated UNESCAPED — an attacker-supplied
     // value like `sonnet& <command>` would break out and run arbitrary commands.
@@ -366,6 +373,8 @@ function runClaudeAgent(jobId, mode, target) {
         status: ok ? 'done' : 'error',
         turns: job.turns,
         cost: job.cost,
+        model: job.evalModel || null,
+        billedTo: job.billedTo || null,
         warning: job.warning || null,
         toolCount: job.toolCount || 0,
         tools: (job.toolCalls || []).slice(-50),
@@ -535,6 +544,32 @@ router.get('/api/agent/active', (req, res) => {
   res.json(out);
 });
 
+
+// GET /api/agent/cost-history — recent real per-run costs, read from the
+// rotating logs/agent-runs.*.log files (written by agent-log.mjs). Powers the
+// "recent actual runs" table in the Models & Cost settings, so the user sees
+// what runs really cost (from the CLI's total_cost_usd) next to the estimates.
+router.get('/api/agent/cost-history', (req, res) => {
+  const dir = path.join(ROOT_DIR, 'logs');
+  const out = [];
+  try {
+    const files = fs.readdirSync(dir).filter(f => f.startsWith('agent-runs.') && f.endsWith('.log'));
+    for (const f of files) {
+      let text = '';
+      try { text = fs.readFileSync(path.join(dir, f), 'utf8'); } catch { continue; }
+      for (const line of text.split('\n')) {
+        if (!line.trim()) continue;
+        let rec;
+        try { rec = JSON.parse(line); } catch { continue; }
+        if (rec && typeof rec.cost === 'number') {
+          out.push({ ts: rec.ts, mode: rec.mode, cost: rec.cost, model: rec.model || null, billedTo: rec.billedTo || null, turns: rec.turns ?? null });
+        }
+      }
+    }
+  } catch { /* no logs yet — return empty */ }
+  out.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+  res.json(out.slice(0, 20));
+});
 
 export { agentJobs };
 

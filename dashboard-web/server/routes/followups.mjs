@@ -6,7 +6,7 @@ import { parseApplicationsMd, patchRowInMd } from '../lib/applications.mjs';
 import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute, logStatusEvent } from '../lib/sidecars.mjs';
-import { generateText, readProjectFile } from '../lib/anthropic.mjs';
+import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeGhostedCandidates, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
@@ -276,7 +276,7 @@ ${profileMd}
 Output ONLY a JSON object — no markdown, no code fences, no explanation:
 {"subject": "<email subject — keep tight, reference role>", "body": "<email body — plain text, no signature block, no greeting like 'Hi Name' (UI prefills salutation)>"}`;
 
-    const raw = await generateText(prompt, { model: 'claude-haiku-4-5', maxTokens: 800 });
+    const raw = await generateText(prompt, { model: draftModel(), maxTokens: 800 });
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: 'Could not parse draft', raw });
     const draft = JSON.parse(jsonMatch[0]);

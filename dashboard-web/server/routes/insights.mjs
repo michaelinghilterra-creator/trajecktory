@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { generateText } from '../lib/anthropic.mjs';
+import { currentModel, resolveModelId } from '../lib/pricing.mjs';
 import { INSIGHTS_DIR, INSIGHTS_LATEST, INSIGHTS_HISTORY_MAX, loadProfileContext, loadPriorInsight, pruneInsightsHistory, buildInsightsContext, buildInsightsMetrics, stageFunnelStats } from '../lib/insights.mjs';
 
 export const router = express.Router();
@@ -79,10 +80,14 @@ Aim for 2-4 items per insight array. Be ruthless about cuts: the user values pre
     promptParts.push(`## Current dashboard snapshot\n\n${JSON.stringify(ctx, null, 2)}`);
     promptParts.push(`Produce the insights JSON.`);
 
-    // API path keeps adaptive thinking + high effort; the keyless plan path
-    // ignores those knobs (best-effort) but still returns the JSON the prompt asks for.
+    // Model is the user's Insights choice (TJK_INSIGHTS_MODEL, default Sonnet to
+    // cut cost — the metrics are pre-computed, Sonnet just narrates; Opus is an
+    // opt-in for deeper strategy). Both allowed models support adaptive thinking +
+    // high effort. The API path keeps those knobs; the keyless plan path ignores
+    // them (best-effort) but still returns the JSON the prompt asks for.
+    const insightsModel = resolveModelId(currentModel('insights'));
     const raw = await generateText(promptParts.join('\n\n'), {
-      model: 'claude-opus-4-8',
+      model: insightsModel,
       maxTokens: 16000,
       system: sys,
       thinking: { type: 'adaptive' },
@@ -95,7 +100,7 @@ Aim for 2-4 items per insight array. Be ruthless about cuts: the user values pre
     const generatedAt = new Date().toISOString();
     const out = {
       generated_at: generatedAt,
-      model: 'claude-opus-4-8',
+      model: insightsModel,
       pipeline_size: ctx.pipeline.total,
       stale_count: ctx.staleTotal,
       metrics: buildInsightsMetrics(ctx),

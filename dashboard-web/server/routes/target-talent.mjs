@@ -1,7 +1,7 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
-import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile } from '../lib/anthropic.mjs';
+import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, TT_STATUSES } from '../lib/target-talent.mjs';
 import { appendFollowupRow } from '../lib/followups.mjs';
 import { getIdentity } from '../lib/profile.mjs';
@@ -270,7 +270,7 @@ Since prior messages exist, this should be a follow-up — acknowledge the prior
 Output ONLY a JSON object — no markdown, no code fences, no explanation:
 {"subject": "<email subject>", "body": "<email body — plain text, no signature block, NO trailing sign-off of any kind (no '${me.firstName}', no 'Best,\\n${me.firstName}', no contact info), NO greeting and NO bare first-name address. STRUCTURE: 3-4 short paragraphs separated by a LITERAL \\n\\n (double newline) between paragraphs in the JSON string — do NOT return one giant block. Each paragraph 1-2 sentences (~30-50 words). Pattern: (1) why-now opener referencing the application, (2) one quantified proof point, (3) why-here link to their team, (4) soft conversational ask. The UI prefills 'Hi ${r.first},' so the first sentence of body MUST begin with substantive content (e.g. 'I submitted my application…', 'Following up on…'). Do NOT start with '${r.first}', 'Hi', 'Hello', 'Hey', or any form of address.>"}`;
 
-    const raw = await generateText(prompt, { model: 'claude-haiku-4-5', maxTokens: 1024 });
+    const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: 'Could not parse draft from model output', raw });
     const draft = JSON.parse(jsonMatch[0]);

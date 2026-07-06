@@ -54,6 +54,7 @@ const LP_SECTIONS = [
 
 const LP_OPTIONAL = [
   { id: 'apikey',    label: 'AI draft key (optional)', why: 'Optional speed-up. Tailored resumes, cover letters, and outreach drafts run on your Claude plan with no key. Add an Anthropic API key only if you want the faster path. Evaluate and Scan never need it.' },
+  { id: 'models',    label: 'Models & cost', why: 'Pick which Claude model runs each workflow step and see the approximate cost per run.' },
   { id: 'discovery', label: 'Web discovery keys (optional)', why: 'Add a Brave Search (and optional Muse) API key to let Expand Coverage web-search for brand-new companies and postings. API Scan and Agent Scan still find roles without it.' },
   { id: 'obsidian',  label: 'Obsidian vault', why: 'Push applied-role notes into your vault.' },
   { id: 'language',  label: 'Market / language modes', why: 'Target DACH, French, or Japanese postings.' },
@@ -161,6 +162,137 @@ function LpSummaryBox({ id, configured }) {
         </div>
       ))}
       <div style={{ marginTop: 7, color: 'var(--text-mute)', fontStyle: 'italic' }}>{s.impact}</div>
+    </div>
+  );
+}
+
+// ── Models & Cost booster ─────────────────────────────────────────────────────
+// Per-section model picker + approximate cost, plus the Evaluate batch knobs and
+// a table of real recent-run costs. Reads/writes /api/setup/models (persists TJK_*
+// to .env) and /api/agent/cost-history. Self-contained: manages its own state.
+const LP_TIER = { haiku: 'fast · cheapest', sonnet: 'balanced', opus: 'deepest · priciest' };
+const LP_MODE_LABEL = { pipeline: 'Evaluate', deep: 'Deep eval', scan: 'Agent Scan', triage: 'Triage' };
+function lpUsd(n) {
+  if (n == null || isNaN(n)) return '—';
+  return n < 0.01 ? `$${n.toFixed(3)}` : `$${n.toFixed(2)}`;
+}
+function ModelsCostPanel() {
+  const { useState, useEffect } = React;
+  const [state, setState] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    fetch('/api/setup/models').then(r => r.json()).then(setState).catch(() => setMsg('Could not load model settings.'));
+    fetch('/api/agent/cost-history').then(r => r.json()).then(d => setHistory(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
+
+  function save(section, value) {
+    setBusy(true); setMsg('');
+    fetch('/api/setup/models', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ section, value }) })
+      .then(r => r.json().then(body => ({ ok: r.ok, body })))
+      .then(({ ok, body }) => {
+        if (!ok || body.error) { setMsg(body.error || 'Save failed.'); return; }
+        setState(body); setMsg('Saved. Takes effect on your next run.');
+      })
+      .catch(() => setMsg('Save failed.'))
+      .finally(() => setBusy(false));
+  }
+
+  if (!state) return <div style={{ fontSize: 13, color: 'var(--text-mute)' }}>{msg || 'Loading model settings…'}</div>;
+
+  const showCost = state.hasKey;
+  return (
+    <div>
+      <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>Models &amp; cost</h3>
+      <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+        Choose which Claude model runs each step and see the approximate cost per run. Cheaper defaults are already applied; every step stays overridable.
+      </p>
+      <div style={{ fontSize: 12.5, marginBottom: 14, padding: '9px 12px', borderRadius: 'var(--r-ctl)',
+        background: showCost ? 'rgba(34,197,94,0.07)' : 'var(--panel-2)', border: `1px solid ${showCost ? 'rgba(34,197,94,0.22)' : 'var(--border)'}`,
+        color: 'var(--text-dim)', lineHeight: 1.5 }}>
+        {showCost ? '● API key active — $ figures are estimates for the API-key path. ' : '○ No API key — steps run on your Claude subscription (no per-token cost). '}
+        {state.note}
+      </div>
+
+      {/* Per-section model dropdowns */}
+      {state.sections.map(s => {
+        const warnMsg = s.warn && s.warn[s.current];
+        return (
+          <div key={s.key} className="field" style={{ marginBottom: 14 }}>
+            <label>{s.label} <span style={{ color: 'var(--text-mute)', fontWeight: 400 }}>· {s.hint}</span></label>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <select className="inp" style={{ flex: '1 1 auto' }} value={s.current} disabled={busy}
+                onChange={e => save(s.key, e.target.value)}>
+                {s.options.map(a => (
+                  <option key={a} value={a}>
+                    {a}{showCost ? ` — ~${lpUsd(s.costs[a])}/run` : ` — ${LP_TIER[a]}`}
+                  </option>
+                ))}
+              </select>
+              <span className="mono" style={{ minWidth: 92, textAlign: 'right', fontSize: 12,
+                color: 'var(--text-dim)' }}>
+                {showCost ? `~${lpUsd(s.costs[s.current])}` : LP_TIER[s.current]}
+                <span style={{ color: 'var(--text-mute)' }}> / {s.unitLabel === 'eval' ? `run of ${s.unitsPerRun}` : s.unitLabel}</span>
+              </span>
+            </div>
+            {warnMsg && <div style={{ fontSize: 11.5, color: 'var(--orange)', marginTop: 4, lineHeight: 1.4 }}>⚠ {warnMsg}</div>}
+          </div>
+        );
+      })}
+
+      {/* Batch-size knobs */}
+      <div style={{ display: 'flex', gap: 16, marginTop: 4, marginBottom: 6 }}>
+        {state.batch.map(b => (
+          <div key={b.key} className="field" style={{ flex: 1 }}>
+            <label>{b.label}</label>
+            <input className="inp" type="number" min={b.min} max={b.max} value={b.current} disabled={busy}
+              onChange={e => save(b.key, e.target.value)} />
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--text-mute)', lineHeight: 1.5, marginBottom: 14 }}>
+        Batch size is the Evaluate throughput/cost trade: fewer per run costs less but clears the backlog slower. The API-key path stays higher so it does more than the plan alone.
+      </div>
+
+      {/* Full-run total */}
+      <div style={{ padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--accent-bg)', border: '1px solid var(--accent)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+        <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>Estimated total per full run <span style={{ color: 'var(--text-mute)' }}>(Triage + Evaluate batch)</span></span>
+        <span className="mono" style={{ fontSize: 15, color: 'var(--accent)', fontWeight: 600 }}>{showCost ? `~${lpUsd(state.totalPerRun)}` : 'subscription'}</span>
+      </div>
+
+      {/* Real recent runs */}
+      <div style={LP_SUB}>Recent runs (actual cost)</div>
+      {history.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: 'var(--text-mute)' }}>No priced runs logged yet. Run Evaluate or Agent Scan and the real cost shows here.</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="mono" style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ color: 'var(--text-mute)', textAlign: 'left' }}>
+                <th style={{ padding: '4px 8px 4px 0', fontWeight: 500 }}>When</th>
+                <th style={{ padding: '4px 8px', fontWeight: 500 }}>Step</th>
+                <th style={{ padding: '4px 8px', fontWeight: 500 }}>Model</th>
+                <th style={{ padding: '4px 0 4px 8px', fontWeight: 500, textAlign: 'right' }}>Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((h, i) => (
+                <tr key={i} style={{ color: 'var(--text-dim)', borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: '4px 8px 4px 0' }}>{h.ts ? new Date(h.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</td>
+                  <td style={{ padding: '4px 8px' }}>{LP_MODE_LABEL[h.mode] || h.mode}</td>
+                  <td style={{ padding: '4px 8px' }}>{h.model && h.model !== 'default' ? h.model : '—'}{h.billedTo === 'api' ? '' : ' (plan)'}</td>
+                  <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }}>{h.billedTo === 'api' ? lpUsd(h.cost) : '$0 (plan)'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {msg && <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-mute)' }}>{msg}</div>}
     </div>
   );
 }
@@ -997,6 +1129,9 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <LpErrorBoundary resetKey={active}>
           {active.startsWith('opt:') ? (() => {
             const o = LP_OPTIONAL.find(x => 'opt:' + x.id === active);
+            if (o.id === 'models') {
+              return <ModelsCostPanel />;
+            }
             if (o.id === 'apikey') {
               return (
                 <div>
