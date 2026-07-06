@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.11.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.10.1...v1.11.0) (2026-07-06)
+
+
+### Features
+
+* **dashboard:** add dim slate theme ([aa9885e](https://github.com/michaelinghilterra-creator/trajecktory/commit/aa9885eb46aeba282cadf76358073eeb0c528d0d))
+* **dashboard:** per-section model selection with cost estimates ([d54ea62](https://github.com/michaelinghilterra-creator/trajecktory/commit/d54ea6249a72c512b3d3ad4da534c8136fe50237))
+* **dashboard:** plan/key billing toggle; retire deep-mode checkbox ([29ec719](https://github.com/michaelinghilterra-creator/trajecktory/commit/29ec719966f83ec47d9eac19b4fa9cf16fbe2f66))
+
+
+### Bug Fixes
+
+* **dashboard:** show all releases in the Change Log with clean, trimmed notes ([5621b02](https://github.com/michaelinghilterra-creator/trajecktory/commit/5621b0253421f7748630cf8b9cf63ee515da3a03))
+* **dashboard:** sparkline window 75-&gt;60 days ([61e4f23](https://github.com/michaelinghilterra-creator/trajecktory/commit/61e4f236b4a2d31271dfaffcd027a9487228ed3b))
+* **dashboard:** surface interrupted agent runs instead of a frozen spinner ([1401c3b](https://github.com/michaelinghilterra-creator/trajecktory/commit/1401c3b733ca8c807c06ac32399e243a6f9719c6))
+* **dashboard:** trim Overview activity sparkline to 75 days ([1c4fb38](https://github.com/michaelinghilterra-creator/trajecktory/commit/1c4fb38d90eaec5e3736e639ee649bdbcd56f150))
+
 ## [1.10.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.10.0...v1.10.1) (2026-07-02)
 
 
