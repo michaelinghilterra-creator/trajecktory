@@ -190,7 +190,7 @@ function ModelsCostPanel() {
 
   function save(section, value) {
     setBusy(true); setMsg('');
-    fetch('/api/setup/models', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ section, value }) })
+    window.tjkMutate('/api/setup/models', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ section, value }) })
       .then(r => r.json().then(body => ({ ok: r.ok, body })))
       .then(({ ok, body }) => {
         if (!ok || body.error) { setMsg(body.error || 'Save failed.'); return; }
@@ -470,7 +470,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   // that's already fine. If preflight actually fails, the gate stays up.
   useEffect(() => {
     setPreflight({ running: true });
-    fetch('/api/setup/preflight', { method: 'POST' })
+    window.tjkMutate('/api/setup/preflight', { method: 'POST' })
       .then(r => r.json())
       .then(setPreflight)
       .catch(() => setPreflight({ ok: false, error: 'request failed' }));
@@ -524,7 +524,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const saveStage = (key, data) => {
     setStages(s => ({ ...s, [key]: data }));
     if (state?.demo) { toast && toast('Setup is read-only in demo mode', 'warn'); return; }
-    fetch(`/api/setup/stage/${key}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).catch(() => {});
+    window.tjkMutate(`/api/setup/stage/${key}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).catch(() => {});
   };
 
   const sectionStatus = useCallback((id) => {
@@ -550,7 +550,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   // ---- actions -------------------------------------------------------------
   const runPreflight = () => {
     setPreflight({ running: true });
-    fetch('/api/setup/preflight', { method: 'POST' }).then(r => r.json()).then(p => {
+    window.tjkMutate('/api/setup/preflight', { method: 'POST' }).then(r => r.json()).then(p => {
       setPreflight(p);
       if (p.ok) toast && toast('Preflight passed', 'success');
       else toast && toast(`Preflight: ${p.failures} issue${p.failures === 1 ? '' : 's'}`, 'warn');
@@ -559,7 +559,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
 
   const runHealth = () => {
     setHealth({ running: true });
-    fetch('/api/setup/healthcheck', { method: 'POST' }).then(r => r.json()).then(h => {
+    window.tjkMutate('/api/setup/healthcheck', { method: 'POST' }).then(r => r.json()).then(h => {
       setHealth(h);
       toast && toast(h.ok ? 'Health check passed' : 'Health check found issues', h.ok ? 'success' : 'warn');
     }).catch(() => setHealth({ ok: false, output: 'request failed' }));
@@ -567,7 +567,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
 
   const startHandoff = (sectionId, handoffKey) => {
     pendingBaseline.current[sectionId] = state?.sections?.[sectionId]?.status || 'empty';
-    fetch(`/api/setup/handoff/${handoffKey || sectionId}`, { method: 'POST' })
+    window.tjkMutate(`/api/setup/handoff/${handoffKey || sectionId}`, { method: 'POST' })
       .then(r => r.json())
       .then(({ prompt }) => {
         navigator.clipboard?.writeText(prompt).catch(() => {});
@@ -590,7 +590,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     const groups = { identity: 'candidate', comp: 'compensation', location: 'location', outputs: 'outputs' };
     const g = groups[sectionId];
     Object.assign(payload, forms[g] || {});
-    fetch(`/api/setup/save/${sectionId}`, {
+    window.tjkMutate(`/api/setup/save/${sectionId}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     }).then(r => r.json()).then(res => {
       if (res.error) { toast && toast(res.error, 'error'); return; }
@@ -604,7 +604,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   };
 
   const resetForm = (sectionId) => {
-    fetch(`/api/setup/reset/${sectionId}`, { method: 'POST' }).then(r => r.json()).then(res => {
+    window.tjkMutate(`/api/setup/reset/${sectionId}`, { method: 'POST' }).then(r => r.json()).then(res => {
       if (res.state) setState(res.state);
       const groups = { identity: 'candidate', comp: 'compensation', location: 'location', outputs: 'outputs' };
       const g = groups[sectionId];
@@ -626,7 +626,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     const key = (apiKey.input || '').trim();
     if (!key) { toast && toast('Paste your Anthropic API key first', 'warn'); return; }
     setApiKey(k => ({ ...k, saving: true, msg: '' }));
-    fetch('/api/setup/anthropic-key', {
+    window.tjkMutate('/api/setup/anthropic-key', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }),
     }).then(r => r.json()).then(res => {
       if (res.error) { setApiKey(k => ({ ...k, saving: false, msg: res.error })); toast && toast(res.error, 'error'); return; }
@@ -642,7 +642,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     const muse = (discKeys.museInput || '').trim();
     if (!brave && !muse) { toast && toast('Paste a Brave or Muse key first', 'warn'); return; }
     setDiscKeys(k => ({ ...k, saving: true, msg: '' }));
-    fetch('/api/setup/discovery-keys', {
+    window.tjkMutate('/api/setup/discovery-keys', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...(brave ? { brave } : {}), ...(muse ? { muse } : {}) }),
     }).then(r => r.json()).then(res => {
@@ -666,7 +666,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       const reader = new FileReader();
       reader.onerror = () => toast && toast('Could not read file', 'error');
       reader.onload = () => {
-        fetch('/api/setup/cv-upload', {
+        window.tjkMutate('/api/setup/cv-upload', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ filename: file.name, dataBase64: reader.result }),
         }).then(r => r.json()).then(res => {
@@ -1353,7 +1353,7 @@ function TellMeAboutYouPanel() {
 
   const generate = () => {
     setLoading(true); setError(null); setSaved(false);
-    fetch('/api/setup/pitch/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seniority, industry, interviewStage: stage, length }) })
+    window.tjkMutate('/api/setup/pitch/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seniority, industry, interviewStage: stage, length }) })
       .then(r => r.json().then(b => ({ ok: r.ok, b })))
       .then(({ ok, b }) => {
         setLoading(false);
@@ -1363,7 +1363,7 @@ function TellMeAboutYouPanel() {
       .catch(e => { setLoading(false); setError(e.message); });
   };
   const save = () => {
-    fetch('/api/setup/pitch/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pitch, tweaks: { seniority, industry, interviewStage: stage, length } }) })
+    window.tjkMutate('/api/setup/pitch/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pitch, tweaks: { seniority, industry, interviewStage: stage, length } }) })
       .then(() => { setSaved(true); setDirty(false); })
       .catch(() => {});
   };

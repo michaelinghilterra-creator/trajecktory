@@ -162,7 +162,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
     setImporting(true); setImportMsg("");
     const reader = new FileReader();
     reader.onload = () => {
-      fetch("/api/tt-reconcile/bulk-import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ csv: String(reader.result || "") }) })
+      window.tjkMutate("/api/tt-reconcile/bulk-import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ csv: String(reader.result || "") }) })
         .then(r => r.json().then(b => ({ ok: r.ok, b })))
         .then(({ ok, b }) => {
           setImporting(false);
@@ -460,20 +460,20 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
   }, [onClose, logModal, embedded]);
 
   const updateStatus = status => {
-    fetch(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })
+    window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })
       .then(() => { load(); onUpdate?.(); });
   };
   const saveNotes = () => {
-    fetch(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }) })
+    window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }) })
       .then(() => { load(); onUpdate?.(); });
   };
   const saveWebsite = () => {
-    fetch(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ website: website.trim() }) })
+    window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ website: website.trim() }) })
       .then(() => { setEditingWeb(false); load(); onUpdate?.(); });
   };
   const generateDraft = () => {
     setDrafting(true); setDraftResult(null);
-    fetch(`/api/target-talent/${id}/draft`, {
+    window.tjkMutate(`/api/target-talent/${id}/draft`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ interviewStage: draftStage }),
@@ -492,7 +492,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
       alsoLogToAppNum: appIds.length ? appIds[0] : undefined,
       alsoLogChannel: "Email",
     };
-    fetch(`/api/target-talent/${id}/correspondence`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    window.tjkMutate(`/api/target-talent/${id}/correspondence`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       .then(() => { load(); onUpdate?.(); setLogModal(null); setDraftResult(null); });
   };
 
@@ -797,7 +797,7 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
 
   const runDiscover = () => {
     setPhase("scanning"); setError(null);
-    fetch("/api/tt-reconcile/discover", {
+    window.tjkMutate("/api/tt-reconcile/discover", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ companies: [{ company, exampleRole: exampleRole || "" }] }),
@@ -824,7 +824,7 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
     }));
     if (contacts.length === 0) { onCancel?.(); return; }
     setPhase("adding");
-    fetch("/api/tt-reconcile/bulk-add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts }) })
+    window.tjkMutate("/api/tt-reconcile/bulk-add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts }) })
       .then(r => r.json())
       .then(d => { setAddedCount(d.written || contacts.length); setPhase("done"); onAdded?.(); })
       .catch(e => { setError(e.message); setPhase("review"); });
@@ -935,7 +935,7 @@ function ReconcileModal({ onClose, onApplied }) {
     try {
       for (let i = 0; i < companies.length; i += BATCH) {
         const slice = companies.slice(i, i + BATCH);
-        const res = await fetch("/api/tt-reconcile/discover", {
+        const res = await window.tjkMutate("/api/tt-reconcile/discover", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ companies: slice }),
@@ -969,7 +969,7 @@ function ReconcileModal({ onClose, onApplied }) {
     try {
       let archived = 0, added = 0;
       if (archSel.size > 0) {
-        const r = await fetch("/api/tt-reconcile/archive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(archSel) }) });
+        const r = await window.tjkMutate("/api/tt-reconcile/archive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(archSel) }) });
         const d = await r.json();
         archived = d.archived || 0;
       }
@@ -982,7 +982,7 @@ function ReconcileModal({ onClose, onApplied }) {
         }
       }
       if (toAdd.length > 0) {
-        const r = await fetch("/api/tt-reconcile/bulk-add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: toAdd }) });
+        const r = await window.tjkMutate("/api/tt-reconcile/bulk-add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: toAdd }) });
         const d = await r.json();
         added = d.written || 0;
       }

@@ -642,7 +642,7 @@ function DrawerFoot({ app, cs, onAction }) {
     // Skip for BYO: user has already applied, no need to surface the portal.
     if (cs?.url && mode !== 'byo' && mode !== 'cover') window.open(cs.url, '_blank');
     setApplyJob({ mode, status: 'running' });
-    fetch(`/api/apply/${app.id}`, {
+    window.tjkMutate(`/api/apply/${app.id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode, company: app.company }),

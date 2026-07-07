@@ -599,7 +599,7 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
     if (!topic.trim()) { setError("Topic is required."); return; }
     setBusy(true);
     try {
-      const res = await fetch('/api/linkedin-ssi/engagement-log', {
+      const res = await window.tjkMutate('/api/linkedin-ssi/engagement-log', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -773,7 +773,7 @@ function WeeklyView({ weeks, target, setSsiData }) {
         relationships: form.rel === "" ? null : Number(form.rel),
         notes: form.notes,
       };
-      const res = await fetch('/api/linkedin-ssi/tracker', {
+      const res = await window.tjkMutate('/api/linkedin-ssi/tracker', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -935,7 +935,7 @@ function AIResponseView({ influencers, lockedInfluencer, onLog }) {
     if (!who) { setError("Pick who you're responding to."); return; }
     setBusy(true);
     try {
-      const res = await fetch('/api/linkedin-ssi/generate-response', {
+      const res = await window.tjkMutate('/api/linkedin-ssi/generate-response', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ postText: post, influencerName: who, tone }),
@@ -1062,7 +1062,7 @@ function AIConnectView({ influencers, lockedInfluencer, onLog }) {
     if (!who) { setError("Pick an influencer first."); return; }
     setBusy(true);
     try {
-      const res = await fetch('/api/linkedin-ssi/generate-connect-request', {
+      const res = await window.tjkMutate('/api/linkedin-ssi/generate-connect-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1265,7 +1265,7 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
   const patchInfluencer = async (updates) => {
     setBusy(true);
     try {
-      const res = await fetch(`/api/linkedin-ssi/influencers/${influencer.id}`, {
+      const res = await window.tjkMutate(`/api/linkedin-ssi/influencers/${influencer.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -1284,7 +1284,7 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
   // influencer's status + last touch, and flip to Overview so the new entry is visible.
   const logToTimeline = async ({ actionType, topic, message, statusUpdates = {} }) => {
     const today = new Date().toISOString().split("T")[0];
-    const res = await fetch("/api/linkedin-ssi/engagement-log", {
+    const res = await window.tjkMutate("/api/linkedin-ssi/engagement-log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

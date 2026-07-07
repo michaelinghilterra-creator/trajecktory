@@ -157,3 +157,23 @@ window.appReached = (app, stage) => {
 
 window.TODAY = new Date();
 window.daysAgo = (iso) => Math.floor((window.TODAY - new Date(iso)) / 86400000);
+
+// ── Self-healing mutating fetch ──────────────────────────────────────────────
+// The dashboard issues a per-start auth token as a cookie when the HTML loads,
+// and requires it on every state-changing request (POST/PUT/PATCH/DELETE). That
+// token rotates each time the server restarts (relaunch, update, dev restart),
+// so a tab left open across a restart still holds the old token: reads keep
+// working but writes 403 — the "I hit Save but it didn't stick" bug. Routing all
+// writes through window.tjkMutate fixes it: on a 403 we re-GET the HTML root
+// (which re-issues the Set-Cookie with the current token) and retry once, so the
+// save lands without a manual reload and without losing the in-progress edit. A
+// 403 is rejected by the auth middleware before any handler runs, so the retry
+// never double-writes. Non-403 responses pass straight through unchanged.
+window.tjkMutate = async function tjkMutate(url, options) {
+  let res = await fetch(url, options);
+  if (res && res.status === 403) {
+    try { await fetch('/', { headers: { Accept: 'text/html' }, cache: 'no-store' }); } catch (e) { /* ignore */ }
+    res = await fetch(url, options);
+  }
+  return res;
+};
