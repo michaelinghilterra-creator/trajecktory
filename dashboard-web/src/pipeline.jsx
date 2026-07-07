@@ -990,6 +990,11 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   const [notes, setNotes] = useStateP([]);
   const [noteDraft, setNoteDraft] = useStateP('');
   const [savingNote, setSavingNote] = useStateP(false);
+  // Quick "add a to-do for this application" — posts to the Today tab's to-do
+  // list with source:'app' so it links back to this company.
+  const [todoDraft, setTodoDraft] = useStateP('');
+  const [todoDue, setTodoDue] = useStateP('');
+  const [todoAdded, setTodoAdded] = useStateP(false);
   // This company's TA contacts (from /api/target-talent/by-company/:company),
   // managed inline via the shared window.ContactPanel.
   const [contacts, setContacts] = useStateP([]);
@@ -1000,6 +1005,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     setTab('overview'); setStarOpen(0); setCustomWhich('cv');
     setApplyJob(null); setApplyResult(null); setElapsed(0);
     setNotes([]); setNoteDraft('');
+    setTodoDraft(''); setTodoDue(''); setTodoAdded(false);
     setContacts([]); setSelContact(null); setFindOpen(false);
   }, [app && app.id]);
 
@@ -1026,7 +1032,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     if (app && app.url && mode !== 'byo' && mode !== 'cover') window.open(app.url, '_blank');
     setApplyJob({ mode, status: 'running' });
     setApplyResult(null);
-    fetch(`/api/apply/${app.id}`, {
+    window.tjkMutate(`/api/apply/${app.id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mode, company: app.company }),
@@ -1085,7 +1091,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     const text = noteDraft.trim();
     if (!text || savingNote) return;
     setSavingNote(true);
-    fetch(`/api/notes/${app.id}`, {
+    window.tjkMutate(`/api/notes/${app.id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
@@ -1096,8 +1102,21 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
       .finally(() => setSavingNote(false));
   };
 
+  const saveTodo = () => {
+    const text = todoDraft.trim();
+    if (!text) return;
+    window.tjkMutate('/api/todos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, dueDate: todoDue || null, appId: app.id, company: app.company }),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(() => { setTodoDraft(''); setTodoDue(''); setTodoAdded(true); setTimeout(() => setTodoAdded(false), 2600); })
+      .catch(() => { /* keep draft so nothing is lost */ });
+  };
+
   const deleteNote = (timestamp) => {
-    fetch(`/api/notes/${app.id}`, {
+    window.tjkMutate(`/api/notes/${app.id}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ timestamp }),
@@ -1643,6 +1662,26 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
           {tab === 'notes' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div className="rp-section">
+                <div className="rp-section-head">
+                  <span>Add a to-do</span>
+                  {todoAdded ? <span className="mono" style={{ fontSize: 10.5, color: 'var(--green)' }}>added to Today ✓</span> : null}
+                </div>
+                <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                  <input
+                    className="dr-note-input"
+                    style={{ minHeight: 0, height: 34, resize: 'none', flex: 1 }}
+                    placeholder={`e.g. Prep for ${app.company} screen`}
+                    value={todoDraft}
+                    onChange={(e) => setTodoDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveTodo(); } }}
+                  />
+                  <input type="date" className="dr-todo-due" value={todoDue} onChange={(e) => setTodoDue(e.target.value)} title="Due date (optional)" />
+                  <button className="btn accent sm" disabled={!todoDraft.trim()} onClick={saveTodo}>Add</button>
+                </div>
+                <div className="mono dim" style={{ fontSize: 10.5, marginTop: 6 }}>Shows up on the <strong>Today</strong> tab, linked to {app.company}.</div>
+              </div>
+
+              <div className="rp-section">
                 <div className="rp-section-head"><span>Add a note</span></div>
                 <textarea
                   className="dr-note-input"
@@ -1862,7 +1901,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   // next scan won't resurface it. Never touches applications.md.
   const dismissTriage = (row) => {
     setTriageCards(cards => cards.filter(c => c.url !== row.url));
-    fetch('/api/triage/dismiss', {
+    window.tjkMutate('/api/triage/dismiss', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: row.url }),
     }).catch(() => loadTriage());
@@ -1877,7 +1916,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
     deepPollers.current[row.id] = true; // placeholder until the real interval handle exists
     setDeepJob(row.id, { status: 'running' });
     const clear = () => { clearInterval(deepPollers.current[row.id]); delete deepPollers.current[row.id]; };
-    fetch('/api/agent/deep', {
+    window.tjkMutate('/api/agent/deep', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: row.url, company: row.company, title: row.role }),
     })
@@ -1960,7 +1999,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
           a.notes = body.notes;
         }
       }
-      await fetch(`/api/applications/${a.id}`, {
+      await window.tjkMutate(`/api/applications/${a.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

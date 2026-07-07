@@ -33,7 +33,7 @@ window.RunWizardTab = function RunWizardTab({ toast }) {
   // Run ONE phase. Nothing chains — the user runs each step when they choose.
   function runPhase(phase) {
     setJobs(j => ({ ...j, [phase.id]: { status: 'running', activity: 'Starting…' } }));
-    fetch(phase.route, { method: 'POST' })
+    window.tjkMutate(phase.route, { method: 'POST' })
       .then(r => r.json().then(body => ({ ok: r.ok, body })))
       .then(({ ok, body }) => {
         if (!ok || body.error || !body.jobId) {

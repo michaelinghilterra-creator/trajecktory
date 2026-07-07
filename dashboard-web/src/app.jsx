@@ -46,6 +46,7 @@ function App() {
 
   const [tweaks, setTweak] = window.useTweaks ? window.useTweaks(TWEAK_DEFAULTS) : [TWEAK_DEFAULTS, () => {}];
   const [followupCount, setFollowupCount] = useState(0);
+  const [focusBadge, setFocusBadge] = useState(0);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateHidden, setUpdateHidden] = useState(false);
   const [version, setVersion] = useState(null);
@@ -100,6 +101,27 @@ function App() {
       .catch(() => {}); // non-critical — badge just stays at 0
   }, []);
 
+  // Today-tab badge = cadence blocks still to do today + overdue to-dos. Keeps
+  // the day's plan visible from every screen (the whole point of the Today tab).
+  // Refetched on mount and whenever the user tabs back, so it stays honest.
+  const refreshFocusBadge = useCallback(() => {
+    const ymd = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+    Promise.all([
+      fetch('/api/cadence/today').then(r => r.json()).catch(() => []),
+      fetch('/api/todos').then(r => r.json()).catch(() => ({ todos: [] })),
+    ]).then(([today, todoResp]) => {
+      const blocksLeft = (Array.isArray(today) ? today : []).filter(t => !t.done).length;
+      const overdue = ((todoResp && todoResp.todos) || []).filter(t => !t.done && t.dueDate && t.dueDate < ymd).length;
+      setFocusBadge(blocksLeft + overdue);
+    }).catch(() => {});
+  }, []);
+  useEffect(() => { refreshFocusBadge(); }, [refreshFocusBadge]);
+  useEffect(() => {
+    const onFocus = () => refreshFocusBadge();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refreshFocusBadge]);
+
   // First-run detection: if core config files are missing, open Launchpad so a
   // brand-new user lands on guided setup instead of an empty dashboard. Also
   // expose the per-section state to the Sidebar (for the incomplete badge).
@@ -126,7 +148,7 @@ function App() {
   // installed bundle (with a git remote + token) returns 'update-available'; a
   // dev checkout that's current returns 'up-to-date' and shows no banner.
   useEffect(() => {
-    fetch('/api/system/update-check', { method: 'POST' })
+    window.tjkMutate('/api/system/update-check', { method: 'POST' })
       .then(r => r.json())
       .then(d => { if (d && d.status === 'update-available') setUpdateInfo(d); })
       .catch(() => {}); // non-critical — no banner if the check can't run
@@ -215,7 +237,7 @@ function App() {
     // Persist to applications.md
     const body = { status: canonicalStatus, company: app.company };
     if (nextNotes !== undefined) body.notes = nextNotes;
-    fetch(`/api/applications/${app.id}`, {
+    window.tjkMutate(`/api/applications/${app.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -253,8 +275,8 @@ function App() {
   // Stats for sidebar nav badges (Pipeline pending-decisions + Follow-Ups count)
   const stats = useMemo(() => {
     const pending = apps.filter(a => a.status === "Evaluated").length;
-    return { pending, followups: followupCount };
-  }, [apps, followupCount]);
+    return { pending, followups: followupCount, today: focusBadge };
+  }, [apps, followupCount, focusBadge]);
 
   // Commands for palette
   const commands = useMemo(() => {
@@ -379,6 +401,7 @@ function App() {
 
         <div className="content" data-screen-label={`trajecktory · ${tab}`} data-tab={tab}>
           {!updateHidden && window.UpdateBanner ? <window.UpdateBanner info={updateInfo} toast={toast} onDismiss={() => setUpdateHidden(true)} /> : null}
+          {tab === "focus"     && <window.FocusTab toast={toast} onFocusDataChanged={refreshFocusBadge} />}
           {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} onQuickAction={handleAction} onDataChanged={refreshApps} search={search} compTweaks={{ walkAway: tweaks.walkAway, targetLow: tweaks.targetLow, targetHigh: tweaks.targetHigh }} />}
           {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} />}
           {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} />}

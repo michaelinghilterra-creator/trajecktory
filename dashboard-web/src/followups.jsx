@@ -322,25 +322,25 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   // keeps running). Mute is the indefinite "done for now / awaiting reply": it
   // keeps the app Applied and drops it from the warm queue with no expiry.
   const snooze = (it, days = 14) => {
-    fetch('/api/followups/snooze', {
+    window.tjkMutate('/api/followups/snooze', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: it.source || 'app', id: it.id, days }),
     }).then(() => load()).catch(() => {});
   };
   const unsnooze = (it) => {
-    fetch('/api/followups/unsnooze', {
+    window.tjkMutate('/api/followups/unsnooze', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: it.source || 'app', id: it.id }),
     }).then(() => load()).catch(() => {});
   };
   const mute = (it) => {
-    fetch('/api/followups/mute', {
+    window.tjkMutate('/api/followups/mute', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: it.id }),
     }).then(() => load()).catch(() => {});
   };
   const unmute = (it) => {
-    fetch('/api/followups/unmute', {
+    window.tjkMutate('/api/followups/unmute', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: it.id }),
     }).then(() => load()).catch(() => {});
@@ -348,7 +348,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   const archiveGhosted = (ids) => {
     if (!ids.length) return;
     if (!window.confirm(`Archive ${ids.length} ghosted application${ids.length === 1 ? '' : 's'} to "No Response"?\n\nThey'll leave the active pipeline but still count as applications-with-no-reply in your analytics.`)) return;
-    fetch('/api/followups/archive-ghosted', {
+    window.tjkMutate('/api/followups/archive-ghosted', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids }),
     }).then(() => load()).catch(() => {});
@@ -856,7 +856,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   const generateDraft = () => {
     setDrafting(true);
     setDraft(null);
-    fetch(`/api/followups/${appId}/draft`, { method: 'POST' })
+    window.tjkMutate(`/api/followups/${appId}/draft`, { method: 'POST' })
       .then(r => r.json())
       .then(d => { setDrafting(false); if (d.draft) setDraft(d.draft); else alert(d.error || 'Draft failed'); })
       .catch(err => { setDrafting(false); alert(err.message); });
@@ -864,7 +864,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
 
   const logTouch = (payload) => {
     const taIds = Array.from(crossLogIds);
-    fetch('/api/followups', {
+    window.tjkMutate('/api/followups', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -37,6 +37,11 @@ export const TARGET_TALENT_MD = path.resolve(__dirname, '../../data/target-talen
 export const TT_CORR_DIR = path.resolve(__dirname, '../../data/target-talent-correspondence');
 export const LINKEDIN_SSI_DIR = path.resolve(__dirname, '../../data/linkedin-ssi');
 
+// "Today" tab: weekly cadence template, its per-day completion log, and the to-do list.
+export const CADENCE_PATH = path.resolve(__dirname, '../../data/cadence.json');
+export const CADENCE_LOG_PATH = path.resolve(__dirname, '../../data/cadence-log.json');
+export const TODOS_PATH = path.resolve(__dirname, '../../data/todos.json');
+
 export const PORT = process.env.PORT || 3333;
 // Bind to loopback by default so the dashboard (no auth, can spawn agents and
 // read/write files) is not reachable from the local network. Set HOST=0.0.0.0

@@ -70,7 +70,7 @@ window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
   const generate = async () => {
     setLoading(true); setError(null);
     try {
-      const r = await fetch('/api/insights/generate', { method: 'POST' });
+      const r = await window.tjkMutate('/api/insights/generate', { method: 'POST' });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'Generation failed');
       setInsights(d);

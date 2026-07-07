@@ -90,6 +90,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
   // The `hint` field is gone too. Pipeline carries the pending-decisions badge
   // now that the standalone Overview tab is folded into Pipeline → Overview.
   const items = [
+    { key: "focus",         label: "Today",              icon: "◔", badge: stats.today || null },
     { key: "pipeline",      label: "Pipeline",           icon: "▥", badge: stats.pending },
     { key: "followups",     label: "Follow-Ups",         icon: "↻", badge: stats.followups || null },
     { key: "target-talent", label: "TA Outreach",        icon: "◎" },
@@ -201,7 +202,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
 
   function signInClaude() {
     setClaudeLoginMsg('Opening a sign-in window…');
-    fetch('/api/claude-login', { method: 'POST' }).then(r => r.json()).then(res => {
+    window.tjkMutate('/api/claude-login', { method: 'POST' }).then(r => r.json()).then(res => {
       if (res.error) { setClaudeLoginMsg(res.error); return; }
       setClaudeLoginMsg(res.bundled
         ? 'A console window opened. Follow its prompts to sign in, then run Agent Scan or Evaluate Pipeline.'
@@ -230,7 +231,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // Deep dive: full A-G Sonnet eval of one posting (a triage card or a pasted JD).
   function triggerDeep(card) {
     setDeepJobs(d => ({ ...d, [card.url]: { status: 'running' } }));
-    fetch('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: card.url, company: card.company, title: card.title, power: hasKey || undefined }) })
+    window.tjkMutate('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: card.url, company: card.company, title: card.title, power: hasKey || undefined }) })
       .then(r => r.json().then(b => ({ ok: r.ok, b })))
       .then(({ ok, b }) => {
         if (!ok || b.error || !b.jobId) { setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: b.error || 'failed to start' } })); return; }
@@ -264,7 +265,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     setPasteBusy(true); setPasteMsg('');
     const body = /^https?:\/\//i.test(v) ? { url: v } : { jd: v };
     if (hasKey) body.power = true;
-    fetch('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    window.tjkMutate('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       .then(r => r.json().then(b => ({ ok: r.ok, b })))
       .then(({ ok, b }) => {
         if (!ok || b.error || !b.jobId) { setPasteBusy(false); setPasteMsg(b.error || 'Could not start the evaluation.'); return; }
@@ -348,7 +349,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
       // The batch Evaluate step routes through the API key (power) when one is set,
       // with the Opus deep-mode override. Other agent steps post no body.
       const agentBody = step.mode === 'pipeline' ? { power: hasKey } : null;
-      fetch(`/api/agent/${step.mode}`, agentBody
+      window.tjkMutate(`/api/agent/${step.mode}`, agentBody
         ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(agentBody) }
         : { method: 'POST' })
         .then(r => r.json().then(body => ({ ok: r.ok, body })))
@@ -369,7 +370,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
       return;
     }
     setJobs(j => ({ ...j, [step.id]: { status: 'running', summary: 'Starting…' } }));
-    fetch(`/api/workflow/${step.id}`, { method: 'POST' })
+    window.tjkMutate(`/api/workflow/${step.id}`, { method: 'POST' })
       .then(r => r.json())
       .then(({ jobId, error }) => {
         if (error || !jobId) {
@@ -919,7 +920,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
     }
     setBusy(true);
     toast(`Updating to v${info.remote}…`, null);
-    fetch('/api/system/update-apply', { method: 'POST' })
+    window.tjkMutate('/api/system/update-apply', { method: 'POST' })
       .then(r => r.json())
       .then(({ jobId, error }) => {
         if (error || !jobId) { setBusy(false); toast('Update failed to start', 'error'); return; }
@@ -953,7 +954,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
       .then(r => r.ok ? r.json() : {}).catch(() => ({}))
       .then(d => {
         const oldBoot = (d && d.bootId) || null;
-        fetch('/api/system/restart', { method: 'POST' })
+        window.tjkMutate('/api/system/restart', { method: 'POST' })
           .then(r => r.json().then(b => ({ ok: r.ok, b })))
           .then(({ ok }) => {
             if (!ok) { setStage('manual'); return; }   // dev / no launcher → user reloads

@@ -912,7 +912,7 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
     setImporting(true); setImportMsg('');
     const reader = new FileReader();
     reader.onload = () => {
-      fetch('/api/recruiters/bulk-import', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ csv: String(reader.result || '') }) })
+      window.tjkMutate('/api/recruiters/bulk-import', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ csv: String(reader.result || '') }) })
         .then(r => r.json().then(b => ({ ok: r.ok, b })))
         .then(({ ok, b }) => {
           setImporting(false);
@@ -1116,7 +1116,7 @@ window.RecruitersTab = function RecruitersTab({ search } = {}) {
   const onOpen = (c) => setSelected(c.id);
   const onCompose = (c) => setSelected(c.id);
   const onQuickSent = (c) => {
-    fetch(`/api/recruiters/${c.id}`, {
+    window.tjkMutate(`/api/recruiters/${c.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'Sent', lastTouch: new Date().toISOString().slice(0, 10) }),
@@ -1248,7 +1248,7 @@ function RecAICompose({ contact, contactId, onSaveDraft, onLogSent, onToast }) {
 
   const gen = useCallbackR(() => {
     setBusy(true); setOut('');
-    fetch(`/api/recruiters/${contactId}/draft`, {
+    window.tjkMutate(`/api/recruiters/${contactId}/draft`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tone }),
@@ -1427,35 +1427,35 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
   const updateStatus = (status) => {
     const body = { status };
     if ((REC_STATUS_MAP[status]?.stage || 0) >= 2) body.lastTouch = new Date().toISOString().slice(0, 10);
-    fetch(`/api/recruiters/${id}`, {
+    window.tjkMutate(`/api/recruiters/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }).then(() => { load(); onUpdate?.(); });
   };
   const saveNotes = () => {
-    fetch(`/api/recruiters/${id}`, {
+    window.tjkMutate(`/api/recruiters/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notes: notesDraft }),
     }).then(() => { load(); onUpdate?.(); showToast('Notes saved', 'success'); });
   };
   const saveWebsite = () => {
-    fetch(`/api/recruiters/${id}`, {
+    window.tjkMutate(`/api/recruiters/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ website: website.trim() }),
     }).then(() => { setEditingWeb(false); load(); onUpdate?.(); showToast('Firm site saved', 'success'); });
   };
   const saveLinkedin = () => {
-    fetch(`/api/recruiters/${id}`, {
+    window.tjkMutate(`/api/recruiters/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ linkedin: linkedin.trim() }),
     }).then(() => { setEditingLi(false); load(); onUpdate?.(); showToast('LinkedIn saved', 'success'); });
   };
   const saveCorrespondence = (direction, subject, body) => {
-    fetch(`/api/recruiters/${id}/correspondence`, {
+    window.tjkMutate(`/api/recruiters/${id}/correspondence`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ direction, subject, body }),
