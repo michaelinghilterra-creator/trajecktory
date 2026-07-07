@@ -29,6 +29,7 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const COUNTER = path.join(ROOT, 'data', 'jd-counter.txt');
 const APPS = path.join(ROOT, 'data', 'applications.md');
 const REPORTS = path.join(ROOT, 'reports');
+const MERGED_TSV_DIR = path.join(ROOT, 'batch', 'tracker-additions', 'merged');
 
 function maxTrackerId() {
   if (!fs.existsSync(APPS)) return 0;
@@ -51,14 +52,29 @@ function maxReportNum() {
   return max;
 }
 
+// Rows pruned from applications.md still leave their merged TSV behind in
+// batch/tracker-additions/merged/, so a number can be "used" there without
+// showing up in maxTrackerId() or maxReportNum() (e.g. its report was deleted
+// too). Scan those filenames as a third floor so a stale archived number is
+// never reissued.
+function maxMergedTsvNum() {
+  if (!fs.existsSync(MERGED_TSV_DIR)) return 0;
+  let max = 0;
+  for (const f of fs.readdirSync(MERGED_TSV_DIR)) {
+    const m = f.match(/^(\d+)-/);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max;
+}
+
 // The highest number ever issued. Prefer the persisted counter; if it is
 // missing, derive a safe floor from existing data so we never reuse a live id.
 export function peekJd() {
   if (fs.existsSync(COUNTER)) {
     const n = parseInt(fs.readFileSync(COUNTER, 'utf8').trim(), 10);
-    if (Number.isFinite(n)) return Math.max(n, maxTrackerId(), maxReportNum());
+    if (Number.isFinite(n)) return Math.max(n, maxTrackerId(), maxReportNum(), maxMergedTsvNum());
   }
-  return Math.max(maxTrackerId(), maxReportNum());
+  return Math.max(maxTrackerId(), maxReportNum(), maxMergedTsvNum());
 }
 
 // Issue (reserve) the next number and persist it.
