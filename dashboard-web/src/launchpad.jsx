@@ -214,7 +214,7 @@ function ModelsCostPanel() {
       <div style={{ fontSize: 12.5, marginBottom: 14, padding: '9px 12px', borderRadius: 'var(--r-ctl)',
         background: showCost ? 'rgba(34,197,94,0.07)' : 'var(--panel-2)', border: `1px solid ${showCost ? 'rgba(34,197,94,0.22)' : 'var(--border)'}`,
         color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        {showCost ? '● API key active. $ figures are estimates for the API-key path. '
+        {showCost ? '● API key saved. '
           : state.keyPresent ? '○ Billing: Claude plan. Your saved key is not charged. '
           : '○ No API key. Steps run on your Claude subscription (no per-token cost). '}
         {state.note}
@@ -242,7 +242,12 @@ function ModelsCostPanel() {
         const warnMsg = s.warn && s.warn[s.current];
         return (
           <div key={s.key} className="field" style={{ marginBottom: 14 }}>
-            <label>{s.label} <span style={{ color: 'var(--text-mute)', fontWeight: 400 }}>· {s.hint}</span></label>
+            <label>{s.label} <span style={{ color: 'var(--text-mute)', fontWeight: 400 }}>· {s.hint}</span>
+              <span title={s.billsTo === 'api' ? 'Calls the Anthropic API directly and bills your API key.' : 'Runs on your Claude subscription via claude -p; only falls back to your API key if the subscription is unavailable.'}
+                style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 500, color: s.billsTo === 'api' ? 'var(--accent)' : 'var(--text-mute)' }}>
+                {s.billsTo === 'api' ? 'API key' : 'subscription'}
+              </span>
+            </label>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <select className="inp" style={{ flex: '1 1 auto' }} value={s.current} disabled={busy}
                 onChange={e => save(s.key, e.target.value)}>
@@ -284,10 +289,10 @@ function ModelsCostPanel() {
         <span className="mono" style={{ fontSize: 15, color: 'var(--accent)', fontWeight: 600 }}>{showCost ? `~${lpUsd(state.totalPerRun)}` : 'subscription'}</span>
       </div>
 
-      {/* Real recent runs */}
-      <div style={LP_SUB}>Recent runs (actual cost)</div>
+      {/* Recent runs — Claude Code's local token-cost estimate, not the API invoice */}
+      <div style={LP_SUB}>Recent runs (estimated cost)</div>
       {history.length === 0 ? (
-        <div style={{ fontSize: 12.5, color: 'var(--text-mute)' }}>No priced runs logged yet. Run Evaluate or Agent Scan and the real cost shows here.</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-mute)' }}>No runs logged yet. Run Evaluate or Agent Scan and its estimated cost shows here.</div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table className="mono" style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse' }}>
@@ -304,12 +309,18 @@ function ModelsCostPanel() {
                 <tr key={i} style={{ color: 'var(--text-dim)', borderTop: '1px solid var(--border)' }}>
                   <td style={{ padding: '4px 8px 4px 0' }}>{h.ts ? new Date(h.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</td>
                   <td style={{ padding: '4px 8px' }}>{LP_MODE_LABEL[h.mode] || h.mode}</td>
-                  <td style={{ padding: '4px 8px' }}>{h.model && h.model !== 'default' ? h.model : '—'}{h.billedTo === 'api' ? '' : ' (plan)'}</td>
-                  <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }}>{h.billedTo === 'api' ? lpUsd(h.cost) : '$0 (plan)'}</td>
+                  <td style={{ padding: '4px 8px' }}>{h.model && h.model !== 'default' ? h.model : '—'} <span style={{ color: 'var(--text-mute)' }}>· {h.billedTo === 'api' ? 'key avail.' : 'plan'}</span></td>
+                  <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }} title="Local estimate from token counts, not your API invoice.">~{lpUsd(h.cost)} <span style={{ color: 'var(--text-mute)' }}>est.</span></td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {history.length > 0 && (
+        <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.5 }}>
+          Estimates from Claude Code token counts, not your API invoice. The scan/evaluate workflow runs on your Claude subscription (it only bills your API key if the subscription auth is unavailable), so these usually will not appear in your Anthropic console.
         </div>
       )}
 

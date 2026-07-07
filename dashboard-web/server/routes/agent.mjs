@@ -91,11 +91,17 @@ const PRESSURE_WARNING = 'Claude usage or limit pressure detected. The run may s
 // The per-run Evaluate batch size: a small test cap (TJK_TEST_LIMIT) wins if set,
 // else TJK_EVAL_BATCH (default 5). Shared by the eval constraint and the progress
 // meter (it is the denominator for "Evaluated X of Y").
-// A "power" run routes the eval through the user's Anthropic API key (off the flat
-// Claude-plan quota), which lets us evaluate a bigger batch and lift the
-// no-subagents throttle. Only honored when a key actually exists, so a stray power
-// flag from the UI never bills against nothing — it falls back to the plan path.
-function effectivePower(opts) {
+// A "power" run KEEPS the user's Anthropic API key in the `claude -p` environment
+// (instead of stripping it) and lifts the batch cap + no-subagents throttle.
+// IMPORTANT: keeping the key does NOT guarantee the API is billed. Claude Code
+// prefers a healthy Claude subscription and only falls back to the key when the
+// subscription auth is unavailable, so a power run usually still bills the
+// subscription. The key is a fallback, not a guarantee.
+// HARD GUARD: only the full Evaluate paths (pipeline / deep) may ever be power.
+// Triage and Agent Scan ALWAYS run on the subscription, so a stray power flag from
+// the UI can never push them onto the key. Also requires a key to actually exist.
+function effectivePower(opts, mode) {
+  if (mode !== 'pipeline' && mode !== 'deep') return false;
   return !!(opts && opts.power) && apiKeyActive();
 }
 function evalBatchSize(power) {
@@ -106,7 +112,7 @@ function evalBatchSize(power) {
 }
 
 function dashboardConstraints(mode, opts) {
-  const power = effectivePower(opts);
+  const power = effectivePower(opts, mode);
   // Power pipeline runs bill the user's API key (separate from the flat plan
   // quota), so the "shares one subscription" reason for forbidding subagents is
   // gone: allow bounded parallelism across the batch. Other modes stay inline.
@@ -196,7 +202,7 @@ function runClaudeAgent(jobId, mode, target) {
     // (synthesis over web results — the cheap default on an unbounded step),
     // Evaluate=Sonnet (the tuned scorer; the cost driver). The legacy shared
     // TJK_AGENT_MODEL is honored as a fallback for the split keys.
-    const power = effectivePower(target);
+    const power = effectivePower(target, mode);
     // A per-request model override drives the Opus "deep mode" toggle (pipeline /
     // deep only). Triage stays on its calibrated Haiku regardless.
     const reqModel = ((target && target.model) || '').trim();
@@ -234,7 +240,11 @@ function runClaudeAgent(jobId, mode, target) {
       resolve({ ok: false, error: msg });
     };
 
-    // Surface which quota this run bills + the batch/model, for the UI and tests.
+    // Record the ROUTING decision (did we leave the API key available to `claude -p`),
+    // NOT verified billing: Claude Code prefers a healthy Claude subscription and only
+    // falls back to the key when the subscription auth is down, so an 'api' run usually
+    // still bills the subscription. `cost` (set later from the CLI) is a local token
+    // estimate, not the actual API invoice.
     update({ billedTo: power ? 'api' : 'plan', evalModel: modelFlag.length ? modelPref : 'default', batch: mode === 'pipeline' ? evalBatchSize(power) : undefined });
 
     let child;
@@ -418,7 +428,7 @@ async function runAgent(jobId, mode, target) {
   agentJobs.set(jobId, { mode, status: 'running', activity: 'Starting agent…', toolCalls: [], toolCount: 0, output: '', startedAt: Date.now(),
     // Progress meter: pipeline has a known batch size; deep is a single eval; scan
     // and triage are open-ended, so they show elapsed only (progressTotal null).
-    progressTotal: mode === 'pipeline' ? evalBatchSize(effectivePower(target)) : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
+    progressTotal: mode === 'pipeline' ? evalBatchSize(effectivePower(target, mode)) : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
   persistJobs();   // capture the running record immediately so a restart can mark it interrupted
   const res = await runClaudeAgent(jobId, mode, target);
   // Evaluate writes tracker TSVs; folding them into applications.md is the
