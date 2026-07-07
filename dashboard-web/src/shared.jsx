@@ -481,7 +481,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           mode) and billing are configured in Setup → Models & cost. */}
       <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4 }}>
         {hasKey ? (
-          <div style={{ color: 'var(--accent)' }}>API key active. Evaluations run on your key (bigger, faster batch; off your plan quota).</div>
+          <div style={{ color: 'var(--accent)' }}>API key active: Evaluate uses a bigger, faster batch. Runs still go to your Claude plan; your API key is only a fallback if the plan auth is unavailable.</div>
         ) : (
           <span>Runs on your Claude plan. Set models &amp; billing in Setup → Models &amp; cost.</span>
         )}
