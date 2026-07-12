@@ -165,7 +165,12 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     catch { return new Set(); }
   });
   const persistDismissed = (set) => { try { localStorage.setItem('trj.triageDismissed', JSON.stringify([...set])); } catch {} };
-  const dismissCard = (url) => setDismissed(prev => { const next = new Set(prev); next.add(url); persistDismissed(next); return next; });
+  // localStorage is only the optimistic hide; the server records the dismissal in
+  // data/triage-dismissed.tsv so the card stays gone across restarts and browsers.
+  const dismissCard = (url) => {
+    setDismissed(prev => { const next = new Set(prev); next.add(url); persistDismissed(next); return next; });
+    window.tjkMutate('/api/triage/dismiss', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) }).catch(() => {});
+  };
   const [pasteVal, setPasteVal] = useState('');
   const [pasteBusy, setPasteBusy] = useState(false);
   const [pasteMsg, setPasteMsg] = useState('');
