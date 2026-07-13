@@ -2662,9 +2662,25 @@ mark.dx-mark { background: rgba(167,139,250,0.22); color: var(--accent-2); paddi
 .sched-num input[type="time"] { width: 112px; }
 .sched-num input[type="number"] { width: 54px; }
 
+/* Today split — schedule on the left, to-do list on the right. Keeps the to-do
+   list in the initial viewport instead of buried below the schedule. The side
+   column sticks so it stays visible while a long schedule scrolls. Collapses to
+   a single stacked column on narrow viewports. */
+.today-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.today-split-side { position: sticky; top: 12px; }
+@media (max-width: 960px) {
+  .today-split { grid-template-columns: 1fr; gap: 14px; }
+  .today-split-side { position: static; }
+}
+
 /* To-do list */
 .todo-card { padding: 14px 16px; }
-.todo-add { display: flex; align-items: center; gap: 6px; }
+.todo-add { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .todo-add-input {
   flex: 1; background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--r-ctl);
   color: var(--text); font-family: inherit; font-size: 13px; padding: 8px 10px;
@@ -2710,11 +2726,34 @@ mark.dx-mark { background: rgba(167,139,250,0.22); color: var(--accent-2); paddi
   font-size: 11px; padding: 2px 4px; border-radius: 4px; line-height: 1;
 }
 .todo-disclosure:hover { color: var(--accent); background: var(--accent-bg); }
-.todo-has-notes { font-size: 10px; opacity: 0.75; }
-.todo-notes-wrap { padding: 6px 10px 8px 42px; }
+
+/* Collapsed-row notes preview: first line or two of the todo's notes, clamped.
+   Replaces the old 📝 indicator with the actual content. Shown only when the row
+   is collapsed (the expanded editor shows the full notes field). */
+.todo-note-preview {
+  margin-top: 4px; font-size: 11.5px; line-height: 1.45; color: var(--text-dim);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+
+/* To-do inline editor (expanded row): task text, priority, due date, notes.
+   Left-indented 42px so it lines up under the row text, past the checkbox. */
+.todo-edit { display: flex; flex-direction: column; gap: 10px; padding: 8px 10px 10px 42px; }
+.todo-edit-field { display: flex; flex-direction: column; gap: 4px; }
+.todo-edit-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-mute); }
+.todo-edit-grid { display: flex; gap: 14px; flex-wrap: wrap; }
+.todo-edit-grid .todo-edit-field { flex: 1; min-width: 140px; }
+.todo-edit-input {
+  width: 100%; background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--r-ctl);
+  color: var(--text); font-family: inherit; font-size: 13px; padding: 8px 10px;
+}
+.todo-edit-input:focus { border-color: var(--accent); outline: none; }
+.todo-edit .todo-add-prio { width: 100%; }
+.todo-edit-due { display: flex; align-items: center; gap: 6px; }
+.todo-edit-due .todo-add-due { flex: 1; min-width: 0; }
 .todo-notes {
   width: 100%; min-height: 54px; resize: vertical;
-  background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-ctl);
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--r-ctl);
   color: var(--text); font-family: inherit; font-size: 12.5px; line-height: 1.5; padding: 8px 10px;
 }
 .todo-notes:focus { border-color: var(--accent); outline: none; }
