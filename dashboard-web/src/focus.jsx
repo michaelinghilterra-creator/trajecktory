@@ -442,20 +442,73 @@ const PRIO_ORDER = { high: 0, med: 1, low: 2 };
 
 function isOverdue(t, tdy) { return !t.done && t.dueDate && t.dueDate < tdy; }
 
-// Expandable details for one to-do. Local draft, saved on blur so we don't PATCH
-// on every keystroke. Re-syncs if the underlying todo changes.
-function TodoNotes({ todo, onSave }) {
-  const [text, setText] = useStateF(todo.notes || '');
-  useEffectF(() => { setText(todo.notes || ''); }, [todo.id]);
+// Expandable editor for one to-do: task text, priority, due date, and notes.
+// Text and notes are drafted locally and saved on blur (only when changed) so we
+// don't PATCH on every keystroke; priority and due date bind straight to the
+// todo and save on change. Clearing the date field removes the due date. Drafts
+// re-sync if the underlying todo changes (e.g. an edit from elsewhere).
+function TodoEditor({ todo, onPatch }) {
+  const [text, setText] = useStateF(todo.text || '');
+  const [notes, setNotes] = useStateF(todo.notes || '');
+  useEffectF(() => { setText(todo.text || ''); setNotes(todo.notes || ''); }, [todo.id]);
+
+  const saveText = () => {
+    const clean = text.trim();
+    if (!clean) { setText(todo.text || ''); return; }   // never blank the title
+    if (clean !== todo.text) onPatch({ text: clean });
+  };
+  const saveNotes = () => { if ((notes || '') !== (todo.notes || '')) onPatch({ notes }); };
+
   return (
-    <div className="todo-notes-wrap">
-      <textarea
-        className="todo-notes"
-        placeholder="Add details, links, next steps…"
-        value={text}
-        onChange={e => setText(e.target.value)}
-        onBlur={() => { if ((text || '') !== (todo.notes || '')) onSave(text); }}
-      />
+    <div className="todo-edit">
+      <label className="todo-edit-field">
+        <span className="todo-edit-label">Task</span>
+        <input
+          className="todo-edit-input"
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onBlur={saveText}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+        />
+      </label>
+      <div className="todo-edit-grid">
+        <label className="todo-edit-field">
+          <span className="todo-edit-label">Priority</span>
+          <select className="todo-add-prio" value={todo.priority || 'med'} onChange={e => onPatch({ priority: e.target.value })}>
+            <option value="high">High</option>
+            <option value="med">Med</option>
+            <option value="low">Low</option>
+          </select>
+        </label>
+        <label className="todo-edit-field">
+          <span className="todo-edit-label">Due date</span>
+          <div className="todo-edit-due">
+            <input
+              className="todo-add-due" type="date" max="9999-12-31"
+              value={todo.dueDate || ''}
+              onChange={e => {
+                const v = e.target.value;
+                // A native date input can emit an out-of-range year (e.g. 5 digits);
+                // the backend would coerce that to null and wipe an existing date.
+                // Ignore malformed values (the controlled input reverts); '' clears.
+                if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+                onPatch({ dueDate: v || null });
+              }}
+            />
+            {todo.dueDate ? <button className="btn ghost sm" title="Clear due date" onClick={() => onPatch({ dueDate: null })}>Clear</button> : null}
+          </div>
+        </label>
+      </div>
+      <label className="todo-edit-field">
+        <span className="todo-edit-label">Notes</span>
+        <textarea
+          className="todo-notes"
+          placeholder="Add details, links, next steps…"
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          onBlur={saveNotes}
+        />
+      </label>
     </div>
   );
 }
@@ -549,13 +602,13 @@ function TodoList({ todos, onCreate, onPatch, onDelete }) {
                       <span className="todo-prio" style={{ color: pm.color }}>● {pm.label}</span>
                       {t.company ? <span className="pill" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>{t.company}</span> : null}
                       {t.dueDate ? <span className="todo-due mono" style={{ color: overdue ? 'var(--red)' : 'var(--text-dim)' }}>{overdue ? 'overdue · ' : 'due '}{t.dueDate.slice(5)}</span> : null}
-                      {hasNotes && !isOpen ? <span className="todo-has-notes" title="Has details">📝</span> : null}
                     </div>
+                    {hasNotes && !isOpen ? <div className="todo-note-preview">{t.notes}</div> : null}
                   </div>
-                  <button className="todo-disclosure" title={isOpen ? 'Hide details' : 'Add / show details'} onClick={toggle}>{isOpen ? '▾' : '▸'}</button>
+                  <button className="todo-disclosure" title={isOpen ? 'Close editor' : 'Edit'} onClick={toggle}>{isOpen ? '▾' : '✎'}</button>
                   <button className="todo-del" title="Delete" onClick={() => onDelete(t.id)}>✕</button>
                 </div>
-                {isOpen ? <TodoNotes todo={t} onSave={(notes) => onPatch(t.id, { notes })} /> : null}
+                {isOpen ? <TodoEditor todo={t} onPatch={(patch) => onPatch(t.id, patch)} /> : null}
               </div>
             );
           })}
@@ -647,7 +700,7 @@ window.FocusTab = function FocusTab({ toast, onFocusDataChanged }) {
     mutate(`/api/todos/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(() => { loadTodos(); notifyBadge(); })
-      .catch(() => { loadTodos(); });
+      .catch(() => { loadTodos(); toast && toast('Could not save — is the server running?', 'warn'); });
   };
   const deleteTodo = (id) => {
     setTodos(ts => ts.filter(t => t.id !== id)); // optimistic
@@ -665,19 +718,23 @@ window.FocusTab = function FocusTab({ toast, onFocusDataChanged }) {
       </div>
 
       {sub === 'today' && (
-        <div className="col" style={{ gap: 14 }}>
-          <TodayView
-            today={today}
-            streak={streak}
-            prefs={prefs}
-            setPrefs={setPrefs}
-            activeTaskId={activeTaskId}
-            setActiveTaskId={setActiveTaskId}
-            onToggleDone={toggleDone}
-            onPomodoroComplete={onPomodoroComplete}
-            restoreRef={restoreRef}
-          />
-          <TodoList todos={todos} onCreate={createTodo} onPatch={patchTodo} onDelete={deleteTodo} />
+        <div className="today-split">
+          <div className="today-split-main">
+            <TodayView
+              today={today}
+              streak={streak}
+              prefs={prefs}
+              setPrefs={setPrefs}
+              activeTaskId={activeTaskId}
+              setActiveTaskId={setActiveTaskId}
+              onToggleDone={toggleDone}
+              onPomodoroComplete={onPomodoroComplete}
+              restoreRef={restoreRef}
+            />
+          </div>
+          <div className="today-split-side">
+            <TodoList todos={todos} onCreate={createTodo} onPatch={patchTodo} onDelete={deleteTodo} />
+          </div>
         </div>
       )}
 
