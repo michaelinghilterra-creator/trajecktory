@@ -57,22 +57,34 @@ router.post('/api/setup/pitch/generate', async (req, res) => {
       return res.status(422).json({ error: 'Finish your Launchpad profile (CV + edge) first so the pitch has something to work from.' });
     }
 
-    const sys = `You are an interview coach. Write a spoken "Tell me about yourself" answer the candidate can deliver out loud — natural, confident, first person. Not a bio, not a cover letter.
+    // Static system prompt: it describes HOW to use the parameters but never
+    // interpolates the request body. The user-provided tweaks (length, seniority,
+    // industry, stage) go in the user message below instead, so untrusted input
+    // can't rewrite the model's instructions (CodeQL js/system-prompt-injection).
+    const sys = `You are an interview coach. Write a spoken "Tell me about yourself" answer the candidate can deliver out loud. Natural, confident, first person. Not a bio, not a cover letter.
+
+You will be given, as parameters in the user message, a target length, seniority level, industry, and interview stage. Honor them.
 
 RULES:
-- About ${words} words (a ${length} spoken answer). Stay close to that length.
+- Match the requested spoken length (roughly the given word count). Stay close to it.
 - First person, conversational, no corporate filler, no em dashes.
 - Open with a one-line identity hook, give 2-3 proof points anchored in real experience from the profile/CV, then close on why this kind of role now.
-- Frame for a ${seniority}-level candidate.${industry ? ` Tailor the language and examples to the ${industry} industry.` : ''}
-- Audience is the ${interviewStage}: ${interviewStage === 'Hiring manager' ? 'go deeper on scope, impact, and how you operate.' : interviewStage === 'Final loop' ? 'emphasize leadership, judgment, and fit for the specific team.' : 'keep it crisp and high-level, focused on fit and trajectory.'}
+- Frame the answer for the requested seniority level.
+- If an industry is given, tailor the language and examples to it.
+- Match the audience to the interview stage: for a hiring manager go deeper on scope, impact, and how you operate; for a final loop emphasize leadership, judgment, and fit for the specific team; otherwise keep it crisp and high-level, focused on fit and trajectory.
 - Use only facts supported by the profile/CV. Do not invent employers, titles, or metrics.
 - Output ONLY the pitch text. No preamble, no headings, no quotes around it.`;
 
     const parts = [];
+    parts.push(`## Parameters for this pitch
+- Length: about ${words} words (${length})
+- Seniority: ${seniority}
+- Industry: ${industry || '(none specified)'}
+- Interview stage: ${interviewStage}`);
     if (id.fullName) parts.push(`## Candidate\n${id.fullName}${id.headline ? ` — ${id.headline}` : ''}`);
     if (profile) parts.push(`## Profile (modes/_profile.md)\n\n${profile}`);
     if (cv) parts.push(`## CV (cv.md, trimmed)\n\n${cv}`);
-    parts.push(`Write the ${length} "Tell me about yourself" answer now.`);
+    parts.push(`Write the "Tell me about yourself" answer now, honoring the parameters above.`);
 
     const pitch = (await generateText(parts.join('\n\n'), {
       model: 'claude-sonnet-4-6',
