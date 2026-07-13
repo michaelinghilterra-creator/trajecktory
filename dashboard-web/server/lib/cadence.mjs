@@ -133,8 +133,7 @@ function deriveToday(date = localToday()) {
 
 // Object keys that could climb the prototype chain if they arrived from a
 // crafted request. taskId comes straight off the API body, and `log[date][taskId]`
-// would otherwise let a "__proto__" value resolve to Object.prototype and pollute
-// it on the assignments below.
+// would otherwise let a "__proto__" value resolve to Object.prototype.
 const UNSAFE_KEY = new Set(['__proto__', 'constructor', 'prototype']);
 
 // Toggle completion / bump the pomodoro count for one task on one date.
@@ -143,8 +142,17 @@ function logTask(taskId, { done, pomodorosDone, date = localToday() } = {}) {
   if (!taskId) throw new Error('taskId is required');
   if (UNSAFE_KEY.has(taskId)) throw new Error('invalid taskId');
   const log = readLog();
-  if (!log[date]) log[date] = {};
-  const entry = log[date][taskId] || { done: false, pomodorosDone: 0, completedAt: null };
+  const day = log[date] || (log[date] = {});
+  // Read prior state via an own-property check (never an inherited member like
+  // toString), then build a FRESH object literal to write into. Writing the
+  // completion fields onto a brand-new object — not one obtained by indexing with
+  // the user-controlled taskId — makes prototype pollution structurally
+  // impossible (js/prototype-polluting-assignment).
+  const prior = Object.prototype.hasOwnProperty.call(day, taskId) ? day[taskId] : null;
+  const entry = {
+    done: false, pomodorosDone: 0, completedAt: null,
+    ...(prior && typeof prior === 'object' ? prior : {}),
+  };
   if (done !== undefined) {
     entry.done = !!done;
     entry.completedAt = entry.done ? new Date().toISOString() : null;
@@ -152,9 +160,9 @@ function logTask(taskId, { done, pomodorosDone, date = localToday() } = {}) {
   if (pomodorosDone !== undefined) {
     entry.pomodorosDone = Math.max(0, parseInt(pomodorosDone, 10) || 0);
   }
-  log[date][taskId] = entry;
+  day[taskId] = entry;
   writeLog(log);
-  return log[date];
+  return day;
 }
 
 // Consistency stats. A scheduled day "counts" only when EVERY task scheduled for
