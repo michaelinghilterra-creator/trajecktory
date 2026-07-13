@@ -131,10 +131,17 @@ function deriveToday(date = localToday()) {
   });
 }
 
+// Object keys that could climb the prototype chain if they arrived from a
+// crafted request. taskId comes straight off the API body, and `log[date][taskId]`
+// would otherwise let a "__proto__" value resolve to Object.prototype and pollute
+// it on the assignments below.
+const UNSAFE_KEY = new Set(['__proto__', 'constructor', 'prototype']);
+
 // Toggle completion / bump the pomodoro count for one task on one date.
 // Partial: pass `done` and/or `pomodorosDone`. Returns the day's log entries.
 function logTask(taskId, { done, pomodorosDone, date = localToday() } = {}) {
   if (!taskId) throw new Error('taskId is required');
+  if (UNSAFE_KEY.has(taskId)) throw new Error('invalid taskId');
   const log = readLog();
   if (!log[date]) log[date] = {};
   const entry = log[date][taskId] || { done: false, pomodorosDone: 0, completedAt: null };
