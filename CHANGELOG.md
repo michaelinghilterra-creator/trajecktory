@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.13.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.12.0...v1.13.0) (2026-07-13)
+
+
+### Features
+
+* **dashboard:** add Today tab for daily cadence, pomodoro, and to-dos ([a883a50](https://github.com/michaelinghilterra-creator/trajecktory/commit/a883a5079731e55271a8e0cbb746e6a50e522cc3))
+* **dashboard:** two-column Today with editable to-dos and notes previews ([ee76357](https://github.com/michaelinghilterra-creator/trajecktory/commit/ee76357440d37bc191555d1879f89e7270a4800f))
+
+
+### Bug Fixes
+
+* **dashboard:** guard cadence taskId and de-taint the pitch system prompt ([391e01c](https://github.com/michaelinghilterra-creator/trajecktory/commit/391e01c44edf4d6cb1e6307b89cc071774594f3b))
+* **dashboard:** honest billing display; never route triage/scan to API key ([db9243d](https://github.com/michaelinghilterra-creator/trajecktory/commit/db9243db1bbb7589ef2788df3831c232db396f5b))
+* **next-jd:** scan the merged tracker-additions archive for the id floor ([e056666](https://github.com/michaelinghilterra-creator/trajecktory/commit/e056666f4b114d26697ea3bc3cb12119fdadcc0a))
+* persist triage card dismissals server-side ([3b2f450](https://github.com/michaelinghilterra-creator/trajecktory/commit/3b2f45082647a06c3dfef6c3db3eb3a0b12d6c00))
+
 ## [1.12.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.11.0...v1.12.0) (2026-07-06)
 
 
