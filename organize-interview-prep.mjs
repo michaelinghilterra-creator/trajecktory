@@ -24,11 +24,13 @@
 // Usage:
 //   node organize-interview-prep.mjs             # DRY RUN (default): print the plan
 //   node organize-interview-prep.mjs --apply     # actually move the files
+//   node organize-interview-prep.mjs --check      # QA gate: exit 1 if any flat artifact exists (never moves)
 //   node organize-interview-prep.mjs --json      # machine-readable output
 //   node organize-interview-prep.mjs --dir <p>   # override the interview-prep dir
 //
 // Exit code: 0 on success (including "nothing to do"); 1 if any file could not be
-// resolved to a company folder or a move failed.
+// resolved to a company folder, a move failed, or (in --check mode) any flat
+// cheat sheet / intel report is present that belongs in a company folder.
 
 import fs from 'fs';
 import path from 'path';
@@ -36,7 +38,8 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
-const APPLY = argv.includes('--apply');
+const CHECK = argv.includes('--check');       // QA gate: report only, exit 1 on any flat artifact
+const APPLY = argv.includes('--apply') && !CHECK; // --check always implies dry run
 const JSON_OUT = argv.includes('--json');
 
 if (argv.includes('--help') || argv.includes('-h')) {
@@ -44,6 +47,7 @@ if (argv.includes('--help') || argv.includes('-h')) {
 
   node organize-interview-prep.mjs            dry run (default)
   node organize-interview-prep.mjs --apply    perform the moves
+  node organize-interview-prep.mjs --check    QA gate: exit 1 if any flat artifact exists (never moves)
   node organize-interview-prep.mjs --json     machine-readable output
   node organize-interview-prep.mjs --dir <p>  override interview-prep directory`);
   process.exit(0);
@@ -242,8 +246,13 @@ if (JSON_OUT) {
     console.log(`\n⚠️  ${unresolved.length} file(s) need manual filing:`);
     for (const u of unresolved) console.log(`  ${u.file}  (${u.reason})`);
   }
-  if (!APPLY && moves.length) console.log('\nRun again with --apply to perform these moves.');
+  if (CHECK && (moves.length + unresolved.length) > 0) {
+    console.log(`\nCHECK FAILED: ${moves.length + unresolved.length} flat interview-prep artifact(s) that belong in company folders.`);
+  }
+  if (!APPLY && !CHECK && moves.length) console.log('\nRun again with --apply to perform these moves.');
   console.log('');
 }
 
+// --check is a QA gate: any flat artifact (would-move or unresolved) fails.
+if (CHECK) process.exit(moves.length + unresolved.length > 0 ? 1 : 0);
 process.exit(unresolved.length > 0 || failed > 0 ? 1 : 0);

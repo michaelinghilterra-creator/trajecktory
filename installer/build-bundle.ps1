@@ -150,6 +150,25 @@ $RepoUrl   = "https://github.com/michaelinghilterra-creator/trajecktory.git"
   Set-Content -Path (Join-Path $PayloadApp '.bundle-version') -Value '1' -NoNewline
   Write-Host "Self-update repo ready (tokenless public origin, baseline committed at v$bundleVer)."
 
+# ── 6.6 interview-prep layout QA: no stray FLAT cheat sheets may ship ─────────
+# The folder-per-company convention (modes/interview-prep.md + organize-interview-
+# prep.mjs) puts every shipped cheat sheet in interview-prep/{Company}/. git archive
+# should carry only interview-prep/.gitkeep (all prep is gitignored), so --check must
+# find nothing. A flat .md here means one was force-tracked past the .gitignore and
+# would reach every new user unorganized — fail the build. --check never moves files.
+Write-Host "Checking interview-prep layout in payload ..."
+$ipDir     = Join-Path $PayloadApp 'interview-prep'
+$orgScript = Join-Path $PayloadApp 'organize-interview-prep.mjs'
+if ((Test-Path $ipDir) -and (Test-Path $orgScript)) {
+  & $NodeExe $orgScript --dir $ipDir --check
+  if ($LASTEXITCODE -ne 0) {
+    throw "Refusing to build: flat interview-prep file(s) in payload. Cheat sheets must live in interview-prep/{Company}/. A flat file here was force-tracked past .gitignore (interview-prep/* is ignored) — remove it from git, or run 'node organize-interview-prep.mjs --apply' and re-commit the source."
+  }
+  Write-Host "  interview-prep layout OK."
+} else {
+  Write-Host "  (interview-prep dir or organizer script absent — skipping)"
+}
+
 # ── 7. PII backstop: fail the build if any personal data slipped into payload ─
 # Mirrors the repo PII scrub. Add patterns if the candidate identity changes.
 Write-Host "Scanning payload for residual PII ..."
