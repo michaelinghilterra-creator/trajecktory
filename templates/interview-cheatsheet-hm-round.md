@@ -1,7 +1,7 @@
 # Interview Prep — {Company} | {Role} | Round {N}: Hiring Manager
 
 > **Template:** `interview-cheatsheet-hm-round` (Hiring manager / functional-leader round)
-> **Filename convention:** `interview-prep/{company-slug}-round-{N}-{hm-firstname-lastname}.md`
+> **Filename convention:** `interview-prep/{Company Folder}/{company-slug}-round-{N}-{hm-firstname-lastname}.md` (one subfolder per company; create it if missing)
 
 **Stage:** Round {N} — Hiring Manager
 **Hiring manager:** {Name}, {Title} — [LinkedIn]({URL})
@@ -181,4 +181,4 @@ The HM is evaluating:
 - [ ] **Thank-you to {HM}** within 2 hours — 4–6 sentences, NOT a form letter. Reference ONE specific thing they said that you've been thinking about. Reaffirm interest. Suggest one next-step artifact (e.g., "happy to share a one-pager on how I'd structure the first 90 days" — only if you'd actually do it).
 - [ ] Log call notes in `data/applications.md` notes column for #{NNN}
 - [ ] Self-debrief in this file: 3 bullets — what landed, what didn't, what you'd say differently. Future-you will use this in round 3.
-- [ ] If advanced: open `interview-prep/{company-slug}-round-{N+1}-final-loop.md` from the `interview-cheatsheet-final-loop` template
+- [ ] If advanced: open `interview-prep/{Company Folder}/{company-slug}-round-{N+1}-final-loop.md` from the `interview-cheatsheet-final-loop` template

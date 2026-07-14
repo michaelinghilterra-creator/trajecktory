@@ -4,7 +4,20 @@ When the user asks to prep for an interview at a specific company+role, or when 
 
 **Output location:** all interview-prep files are written into the folder named
 by `outputs.interview_prep_dir` in `config/profile.yml` (default
-`interview-prep/`). The `{company-slug}-...` filenames below are relative to it.
+`interview-prep/`), and then into a **per-company subfolder** inside it. The
+`{company-slug}-...` filenames below live at
+`{interview_prep_dir}/{Company Folder}/{filename}`.
+
+**Company subfolder rule (REQUIRED):** every intel report and cheat sheet goes
+into a folder named for the company, so a growing list stays browsable
+(`interview-prep/Example Co/…`, `interview-prep/Example Co/…`). Derive
+`{Company Folder}` from the company's display name as it appears in the report
+header / `data/applications.md` company column: strip trailing legal suffixes
+(`, Inc.`, `, LLC`, `, Corp.`, `Corporation`) and replace any Windows-forbidden
+path characters (`\ / : * ? " < > |`) with a space, then trim. Examples: "DHI
+Group, Inc." → `Example Co`; "Example Co" → `Example Co`. Create the
+folder if it does not exist. The shared `story-bank.md` stays at the top level
+of `interview-prep/`, NOT inside a company folder.
 
 ## ⚡ Two Artifact Types — Pick Before You Start
 
@@ -12,13 +25,13 @@ This mode produces **two different kinds of files**. Decide which the user wants
 
 ### 1. Intel Research Report (durable, one per company+role)
 
-The Glassdoor / Blind / engineering-blog deep-dive. Created **once** when the user accepts a role and starts prepping. Lives at `interview-prep/{company-slug}-{role-slug}.md`. Output structure is described in the Steps 1–7 + Output section below.
+The Glassdoor / Blind / engineering-blog deep-dive. Created **once** when the user accepts a role and starts prepping. Lives at `interview-prep/{Company Folder}/{company-slug}-{role-slug}.md`. Output structure is described in the Steps 1–7 + Output section below.
 
 **Trigger phrases:** "research the interview process", "what should I know about interviewing at X", "build intel on X", "deep prep for X".
 
 ### 2. Pre-Call Cheat Sheet (one per round, stage-specific)
 
-The "20 minutes before joining the call" prep doc. Created **once per interview round**. Lives at `interview-prep/{company-slug}-round-{N}-{stage-descriptor}.md`. Uses one of three stage-specific templates:
+The "20 minutes before joining the call" prep doc. Created **once per interview round**. Lives at `interview-prep/{Company Folder}/{company-slug}-round-{N}-{stage-descriptor}.md`. Uses one of three stage-specific templates:
 
 | Stage | Template | Header focus |
 |---|---|---|
@@ -37,8 +50,8 @@ Every cheat sheet starts with **§0 30-Second Pre-Call Strip** (pitch one-liner 
 4. Read `interview-prep/story-bank.md` if it exists for prepared STAR stories.
 5. Read `cv.md` + `article-digest.md` for metrics.
 6. Fill every `{placeholder}` in the template with role-specific content — do NOT leave placeholders unresolved.
-7. Save to `interview-prep/{company-slug}-round-{N}-{stage-descriptor}.md`.
-8. Run `node verify-interview-prep.mjs` to confirm all required headings are present.
+7. Save to `interview-prep/{Company Folder}/{company-slug}-round-{N}-{stage-descriptor}.md` (create the company subfolder if it does not exist — see the Company subfolder rule above).
+8. Run `node verify-interview-prep.mjs` to confirm all required headings are present (the validator recurses into the company subfolders).
 
 **Heading discipline:** the cheat sheet templates use `## §0 — …`, `## §1 — …`, etc. The validator checks for these. Do NOT deviate from the heading format — that's the whole point of standardizing.
 
@@ -160,7 +173,7 @@ Things to say, do, and avoid based on research:
 
 ## Output
 
-Save the full report to `interview-prep/{company-slug}-{role-slug}.md` with this header:
+Save the full report to `interview-prep/{Company Folder}/{company-slug}-{role-slug}.md` (create the company subfolder if needed) with this header:
 
 ```markdown
 # Interview Intel: {Company} — {Role}

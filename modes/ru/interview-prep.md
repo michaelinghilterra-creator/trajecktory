@@ -117,7 +117,7 @@ WebSearch-запросы. Извлекать структурированные 
 
 ## Вывод
 
-Сохранить отчёт в `interview-prep/{company-slug}-{role-slug}.md`.
+Сохранить отчёт в `interview-prep/{Company Folder}/{company-slug}-{role-slug}.md` (одна подпапка на компанию; создать её, если нет).
 
 ```markdown
 # Подготовка к собеседованию: {Компания} — {Роль}
