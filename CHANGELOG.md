@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.14.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.13.0...v1.14.0) (2026-07-14)
+
+
+### Features
+
+* **build:** gate installer payload on interview-prep layout ([d8157d8](https://github.com/michaelinghilterra-creator/trajecktory/commit/d8157d8724777fbf2a97d30cc8e3ec11f9a53b7e))
+* **interview-prep:** add organize-interview-prep.mjs backstop ([41ddf48](https://github.com/michaelinghilterra-creator/trajecktory/commit/41ddf485fcb7a3002049c4e3c7cebe00de3d9a20))
+* **interview-prep:** file cheat sheets into per-company subfolders ([ad30cb0](https://github.com/michaelinghilterra-creator/trajecktory/commit/ad30cb0fedc7742c1381cddc1736d8956280ff7a))
+
+
+### Bug Fixes
+
+* **dashboard:** write cadence log entries into a fresh object literal ([20dbb7d](https://github.com/michaelinghilterra-creator/trajecktory/commit/20dbb7d6b66679f141fea6f45e7e6c77aa1f61ec))
+
 ## [1.13.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.12.0...v1.13.0) (2026-07-13)
 
 
