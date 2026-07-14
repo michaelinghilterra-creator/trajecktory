@@ -19,6 +19,11 @@ Group, Inc." → `Example Co`; "Example Co" → `Example Co`. Create the
 folder if it does not exist. The shared `story-bank.md` stays at the top level
 of `interview-prep/`, NOT inside a company folder.
 
+To retrofit pre-existing flat cheat sheets into this layout, run
+`node organize-interview-prep.mjs` (dry run) then `node organize-interview-prep.mjs --apply`.
+It derives each company folder from the file's H1 header, reconciles casing
+against existing folders, never overwrites, and leaves `story-bank.md` alone.
+
 ## ⚡ Two Artifact Types — Pick Before You Start
 
 This mode produces **two different kinds of files**. Decide which the user wants before generating anything.
