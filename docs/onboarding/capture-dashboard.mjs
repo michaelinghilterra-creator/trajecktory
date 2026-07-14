@@ -134,7 +134,7 @@ async function installMocks(page) {
     // handoff prompt text is static + read-only; let it hit the server for authenticity
     return route.continue();
   });
-  await page.route('**/api/system/version', route => json(route, { version: '1.11.0' }));
+  await page.route('**/api/system/version', route => json(route, { version: '1.14.0' }));
   await page.route('**/api/claude-status', route => json(route, { signedIn: false }));
   await page.route('**/api/triage/results', route => json(route, TRIAGE));
   await page.route('**/api/agent/cost-history', route => json(route, []));
