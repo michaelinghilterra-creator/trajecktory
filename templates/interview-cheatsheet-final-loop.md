@@ -1,7 +1,7 @@
 # Interview Prep — {Company} | {Role} | Final Loop
 
 > **Template:** `interview-cheatsheet-final-loop` (Final round, multi-interviewer panel, or onsite loop)
-> **Filename convention:** `interview-prep/{company-slug}-round-{N}-final-loop.md`
+> **Filename convention:** `interview-prep/{Company Folder}/{company-slug}-round-{N}-final-loop.md` (one subfolder per company; create it if missing)
 
 **Stage:** Final loop / panel — {N} interviewers / {X} hours
 **Date & format:** {YYYY-MM-DD} — {On-site location / Virtual / Hybrid (which panels in-person vs remote)}

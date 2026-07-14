@@ -1,7 +1,7 @@
 # Interview Prep — {Company} | {Role}
 
 > **Template:** `interview-cheatsheet-screen` (Phone screen / recruiter conversation)
-> **Filename convention:** `interview-prep/{company-slug}-round-1-{stage-descriptor}.md`
+> **Filename convention:** `interview-prep/{Company Folder}/{company-slug}-round-1-{stage-descriptor}.md` (one subfolder per company; create it if missing)
 
 **Stage:** First conversation / phone screen
 **Recruiter:** {Name}, {Title} ({inbound source — LinkedIn outreach, application response, referral, etc.})
@@ -172,4 +172,4 @@ This is a recruiter-driven screen. {Recruiter}'s job is to:
 
 - [ ] Send a short thank-you note to {recruiter} (3–4 sentences, reference one specific thing she said, reiterate interest, confirm next step)
 - [ ] Log call notes in `data/applications.md` notes column for #{NNN}
-- [ ] If advanced: open `interview-prep/{company-slug}-round-2-{hiring-manager-name}.md` from the `interview-cheatsheet-hm-round` template
+- [ ] If advanced: open `interview-prep/{Company Folder}/{company-slug}-round-2-{hiring-manager-name}.md` from the `interview-cheatsheet-hm-round` template

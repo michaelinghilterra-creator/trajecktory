@@ -155,18 +155,19 @@ Every line earns its place. No filler. Tables and bullet points only — no pros
 
 ## Step 3 — Save to File
 
-Derive slugs from company name and role title:
+Derive the company folder and slugs from company name and role title:
+- `{Company Folder}` = company display name with trailing legal suffixes (`, Inc.`, `, LLC`, `, Corp.`, `Corporation`) stripped and Windows-forbidden characters (`\ / : * ? " < > |`) replaced by a space, then trimmed (e.g., "Example Co, Inc." → "Example Co", "PulseOps" → "PulseOps"). This is the per-company subfolder — create it if it does not exist.
 - `{company-slug}` = company name lowercase, spaces → hyphens (e.g., "PulseOps" → "pulseops")
 - `{role-slug}` = role title lowercase, spaces → hyphens, strip punctuation (e.g., "Director of Revenue Operations" → "director-revenue-operations")
 
-Save to:
+Save to a per-company subfolder so a growing list stays browsable:
 ```
-interview-prep/{company-slug}-{role-slug}-cheat-sheet.md
+interview-prep/{Company Folder}/{company-slug}-{role-slug}-cheat-sheet.md
 ```
 
 Print confirmation:
 ```
-✅ Cheat sheet saved: interview-prep/{company-slug}-{role-slug}-cheat-sheet.md
+✅ Cheat sheet saved: interview-prep/{Company Folder}/{company-slug}-{role-slug}-cheat-sheet.md
 ```
 
 ---
