@@ -72,8 +72,8 @@ AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluat
 | `generate-pdf.mjs` | Playwright: HTML to PDF (legacy) |
 | `generate-latex.mjs` | LaTeX CV validator + pdflatex compiler (legacy) |
 | `article-digest.md` | Compact proof points from portfolio (optional) |
-| `interview-prep/story-bank.md` | Accumulated STAR+R stories across evaluations |
-| `interview-prep/{company}-{role}.md` | Company-specific interview intel reports |
+| `interview-prep/story-bank.md` | Accumulated STAR+R stories across evaluations (shared; stays at the top level) |
+| `interview-prep/{Company}/` | One folder per company holding that company's interview intel report and per-round cheat sheets, e.g. `interview-prep/Example Co/example-co-round-2-hiring-manager.md`. Create the folder from the company display name (strip legal suffixes and illegal path chars: "Example Co, Inc." → `Example Co`). See `modes/interview-prep.md` and `modes/cheat-sheet.md`. |
 | `analyze-patterns.mjs` | Pattern analysis script (JSON output) |
 | `followup-cadence.mjs` | Follow-up cadence calculator (JSON output) |
 | `data/follow-ups.md` | Follow-up history tracker |
