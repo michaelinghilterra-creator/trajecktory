@@ -55,6 +55,17 @@ check(normalizeForMatch('Engineer (Backend), Remote') === 'engineer backend remo
 check(normalizeForMatch('Sales & Marketing') === 'sales marketing',
   'drops " & "');
 check(normalizeForMatch('') === '', 'empty stays empty');
+// Spelled-out "Vice President" folds to "vp" so one "VP of X" positive covers
+// both forms (audit 2026-07-15: GitLab "Vice President, Data & Insights" was
+// invisible to the "VP of Data & Insights" positive).
+check(normalizeForMatch('Vice President, Data & Insights') === 'vp data insights',
+  '"Vice President" folds to "vp"');
+check(normalizeForMatch('Vice-President of Analytics') === 'vp analytics',
+  'hyphenated "Vice-President" folds to "vp"');
+check(normalizeForMatch('VP of Data & Insights') === 'vp data insights',
+  'abbreviated VP form normalizes identically');
+check(normalizeForMatch('Executive Vice President, Sales') === 'executive vp sales',
+  'EVP spelled-out form folds without clobbering the prefix');
 
 // ── buildTitleFilter (positive/negative gate) ─────────────────────────────────
 const f = buildTitleFilter({ positive: ['engineer', 'developer'], negative: ['intern', 'junior'] });
