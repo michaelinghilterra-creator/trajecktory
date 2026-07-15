@@ -222,12 +222,22 @@ function buildPortalsEntry(parsed, today, companyHint) {
 
 function writePortals(portalsRaw, newEntries) {
   const HEADER = '  # -- Auto-discovered via site: search --';
+  // portals.yml is user-edited and on Windows is typically CRLF. The old
+  // implementation replaced `HEADER + '\n'`, which never matches a CRLF file
+  // (the header line ends '\r\n'), so writeFileSync rewrote identical bytes and
+  // every registration silently no-oped. Detect the file's EOL, insert after
+  // the header line via index (EOL-agnostic), and emit the block in the file's
+  // own EOL so we don't mix line endings.
+  const eol = portalsRaw.includes('\r\n') ? '\r\n' : '\n';
   let text = portalsRaw;
-  const block = newEntries.map(e => e.yaml).join('') + '\n';
-  if (text.includes(HEADER)) {
-    text = text.replace(HEADER + '\n', HEADER + '\n' + block);
+  const block = (newEntries.map(e => e.yaml).join('') + '\n').split('\n').join(eol);
+  const headerIdx = text.indexOf(HEADER);
+  if (headerIdx !== -1) {
+    const lineEnd = text.indexOf('\n', headerIdx);
+    const insertAt = lineEnd === -1 ? text.length : lineEnd + 1;
+    text = text.slice(0, insertAt) + block + text.slice(insertAt);
   } else {
-    text = text.trimEnd() + '\n\n' + HEADER + block;
+    text = text.trimEnd() + eol + eol + HEADER + block;
   }
   writeFileSync(PORTALS_PATH, text, 'utf8');
 }
