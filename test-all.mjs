@@ -306,6 +306,7 @@ for (const suite of [
   'tests/scan-core.test.mjs',
   'tests/outcome.test.mjs',
   'tests/tracker.test.mjs',
+  'tests/liveness-workday.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);

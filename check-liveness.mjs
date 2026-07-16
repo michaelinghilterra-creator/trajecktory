@@ -23,7 +23,7 @@
 
 import { chromium } from 'playwright';
 import { readFile } from 'fs/promises';
-import { classifyLiveness } from './liveness-core.mjs';
+import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness } from './liveness-core.mjs';
 
 // Navigate to a URL and classify it. Shared by both the reused-page and
 // isolated (fresh-page) modes so the detection logic exists in one place.
@@ -75,6 +75,14 @@ async function probePage(page, url) {
 // Check one URL. In isolated mode, use a fresh page (closed afterwards);
 // otherwise reuse the shared page.
 async function checkUrl(browser, sharedPage, url, isolated) {
+  // Workday job pages 404 / time out on a raw Playwright load even when live, so
+  // resolve them via the CXS JSON API first. Only a definitive verdict short-
+  // circuits; an inconclusive API result (null) falls through to Playwright.
+  if (parseWorkdayUrl(url)) {
+    const verdict = await checkWorkdayLiveness(url);
+    if (verdict) return verdict;
+  }
+
   const page = isolated ? await browser.newPage() : sharedPage;
   try {
     return await probePage(page, url);
