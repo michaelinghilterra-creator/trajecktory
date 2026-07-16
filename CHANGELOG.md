@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.14.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.14.0...v1.14.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* **discover:** make writePortals line-ending tolerant; ship discovery scripts in self-update ([9756566](https://github.com/michaelinghilterra-creator/trajecktory/commit/9756566d9211a195da44d88d84ee5f4aef480bbb))
+* **gate:** resolve Workday job liveness via CXS API instead of Playwright ([8ec7522](https://github.com/michaelinghilterra-creator/trajecktory/commit/8ec7522c670e4be9e1fd73faa7d84d2f4a028b15))
+* **merge:** tighten role match and dedup additions within a batch ([654c076](https://github.com/michaelinghilterra-creator/trajecktory/commit/654c0760af987f595187827c93631b27f7dc13de))
+* **scan:** fold spelled-out 'Vice President' into 'vp' in title normalization ([c5bfe38](https://github.com/michaelinghilterra-creator/trajecktory/commit/c5bfe389be1662b4b2a158bcbb8737faf977cc69))
+* **scan:** preserve gh_jid job id in normalizeUrl dedup key ([2759b87](https://github.com/michaelinghilterra-creator/trajecktory/commit/2759b87fdea60d09bf12ac493b9fe8ee9ab3d588))
+* **scan:** treat city-less location strings as unknown, not blocked ([8c6a00c](https://github.com/michaelinghilterra-creator/trajecktory/commit/8c6a00ccb45096670d635e14dea5141244346dc0))
+
 ## [1.14.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.13.0...v1.14.0) (2026-07-14)
 
 
