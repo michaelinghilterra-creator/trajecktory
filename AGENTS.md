@@ -75,7 +75,10 @@ AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluat
 | `interview-prep/story-bank.md` | Accumulated STAR+R stories across evaluations (shared; stays at the top level) |
 | `interview-prep/{Company}/` | One folder per company holding that company's interview intel report and per-round cheat sheets, e.g. `interview-prep/Example Co/example-co-round-2-hiring-manager.md`. Create the folder from the company display name (strip legal suffixes and illegal path chars: "Example Co, Inc." → `Example Co`). See `modes/interview-prep.md` and `modes/cheat-sheet.md`. |
 | `organize-interview-prep.mjs` | Retrofits pre-existing FLAT interview-prep files into per-company folders (dry run by default; `--apply` to move). Idempotent, never overwrites, leaves `story-bank.md` at the top level. |
-| `verify-interview-prep.mjs` | Validates cheat-sheet section headings; recurses into the company subfolders. `--json` for machine-readable output. |
+| `verify-interview-prep.mjs` | Validates cheat-sheet section headings; recurses into the company subfolders. `--json` for machine-readable output. Skips `*.run.md`. |
+| `interview-prep/{Company}/{slug}-round-N-{descriptor}.run.md` | **Run sheet.** A compiled sidecar beside the prose prep file: JSON frontmatter (the live click-a-cue board) + a narrative debrief body. Spec: `templates/runsheet-schema-v1.md`. Written by `modes/runsheet.md`, NEVER by hand. The prose prep file is durable research; the run sheet is a performance script and is safe to overwrite wholesale. A round without one simply has no board. |
+| `render-runsheet.mjs` | Compiles a `.run.md` into the standalone HTML board (`node render-runsheet.mjs <file>.run.md [-o out.html]`). Also exports `parseRunsheet`/`derive` — the dashboard imports `derive()` from here, so there is exactly ONE collision engine. |
+| `verify-runsheets.mjs` | Validates run-sheet frontmatter: schema string, required fields, cue/answer resolution, story ids against the bank, one panic section, no derivable facts in `tag`. |
 | `analyze-patterns.mjs` | Pattern analysis script (JSON output) |
 | `followup-cadence.mjs` | Follow-up cadence calculator (JSON output) |
 | `data/follow-ups.md` | Follow-up history tracker |
@@ -241,6 +244,7 @@ Default modes are in `modes/` (English). Additional language-specific modes are 
 | Wants LinkedIn outreach | `contacto` |
 | Asks for company research | `deep` |
 | Preps for interview at specific company | `interview-prep` |
+| Wants the live click-a-cue board for a round ("make me a run sheet", "compile the board") | `runsheet` |
 | Wants to generate a tailored Word resume (full tailor: title, summary, AoE, bullets reordered, keywords injected) | `docx` |
 | Wants a light-tailored Word resume (title + 3 keywords + summary + AoE only, bullets untouched) | `docx-light` |
 | Wants the old HTML/PDF flow (deprecated) | `pdf` |

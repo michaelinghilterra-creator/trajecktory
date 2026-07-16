@@ -76,7 +76,16 @@ function walk(dir) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...walk(full));
-    } else if (entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'story-bank.md') {
+    } else if (
+      entry.isFile() &&
+      entry.name.endsWith('.md') &&
+      entry.name !== 'story-bank.md' &&
+      // Run sheets are compiled sidecars with JSON frontmatter, not prose prep
+      // files. They have no §-sections, so inferStage() would file every one as a
+      // legacy warning. They are validated by their own schema instead.
+      // See templates/runsheet-schema-v1.md
+      !entry.name.endsWith('.run.md')
+    ) {
       out.push(full);
     }
   }

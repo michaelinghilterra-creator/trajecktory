@@ -13,7 +13,7 @@
 
 import { execSync, execFileSync } from 'child_process';
 import { readFileSync, existsSync, readdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, relative } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -65,6 +65,7 @@ console.log('\n2. Script execution (graceful on empty data)');
 const scripts = [
   { name: 'cv-sync-check.mjs', expectExit: 1, allowFail: true }, // fails without cv.md (normal in repo)
   { name: 'verify-pipeline.mjs', expectExit: 0 },
+  { name: 'verify-runsheets.mjs', expectExit: 0 }, // exits 0 with no .run.md files (user layer)
   { name: 'normalize-statuses.mjs', expectExit: 0 },
   { name: 'dedup-tracker.mjs', expectExit: 0 },
   { name: 'merge-tracker.mjs', expectExit: 0 },
@@ -232,6 +233,51 @@ if (!absPathResult) {
 } else {
   for (const line of absPathResult.split('\n').filter(Boolean)) {
     fail(`Absolute path: ${line.slice(0, 100)}`);
+  }
+}
+
+// ── 7b. DASHBOARD ESCAPE-HATCH IMPORTS ──────────────────────────
+//
+// dashboard-web/server/index.mjs statically imports its routers, so a missing
+// module is fatal at RESOLUTION time: the whole dashboard dies, not just one tab.
+// SYSTEM_PATHS ships 'dashboard-web/' as a directory but enumerates root-level
+// .mjs files INDIVIDUALLY, so any server file importing '../../../foo.mjs' will
+// be delivered WITHOUT its target unless foo.mjs is listed. A local test can never
+// catch this (the file exists in a dev checkout), so assert the manifest instead.
+
+console.log('\n7b. Dashboard imports that escape dashboard-web/ are shipped');
+
+const sysPathsSrc = readFileSync(join(ROOT, 'update-system.mjs'), 'utf8');
+const sysPathsBlock = sysPathsSrc.match(/SYSTEM_PATHS\s*=\s*\[([\s\S]*?)\n\]/);
+const shipped = sysPathsBlock
+  ? [...sysPathsBlock[1].matchAll(/'([^']+)'/g)].map((m) => m[1])
+  : [];
+
+const escapes = [];
+const scanImports = (dir) => {
+  if (!existsSync(dir)) return;
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, e.name);
+    if (e.isDirectory()) { scanImports(full); continue; }
+    if (!e.name.endsWith('.mjs')) continue;
+    const src = readFileSync(full, 'utf-8');
+    for (const m of src.matchAll(/^\s*import\s[^'"]*from\s+['"](\.\.[^'"]+)['"]/gm)) {
+      // join() normalises the '..' segments for us
+      const rel = relative(ROOT, join(dir, m[1])).replace(/\\/g, '/');
+      if (rel.startsWith('dashboard-web/')) continue; // stays inside the shipped dir
+      escapes.push({ from: relative(ROOT, full).replace(/\\/g, '/'), target: rel });
+    }
+  }
+};
+scanImports(join(ROOT, 'dashboard-web', 'server'));
+
+if (!escapes.length) {
+  pass('No dashboard server imports escape dashboard-web/');
+} else {
+  for (const { from, target } of escapes) {
+    const covered = shipped.some((p) => p === target || (p.endsWith('/') && target.startsWith(p)));
+    if (covered) pass(`${from} -> ${target} (in SYSTEM_PATHS)`);
+    else fail(`${from} imports ${target}, which is NOT in SYSTEM_PATHS. An update would ship the importer without the target and kill the entire dashboard at module-resolution time.`);
   }
 }
 
