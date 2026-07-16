@@ -8,7 +8,7 @@
  * Run: node tests/scan-core.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { normalizeUrl, buildTitleFilter, normalizeForMatch, scoreOffer } from '../lib/scan-core.mjs';
+import { normalizeUrl, buildTitleFilter, buildLocationFilter, normalizeForMatch, scoreOffer } from '../lib/scan-core.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -140,6 +140,75 @@ check(scoreOffer({ title: '' }, tf) === 0 && scoreOffer({}, tf) === 0,
 check(scoreOffer({ title: 'AI Product Manager', postedAt: new Date().toISOString() }, tf) >
       scoreOffer({ title: 'AI Product Manager', postedAt: '2000-01-01T00:00:00Z' }, tf),
   'a fresh posting outranks an identical stale one');
+
+// ── buildLocationFilter (geo gate) ─────────────────────────────────────────────
+// Mirrors the shape of portals.yml's title_filter.location_policy, trimmed to
+// the entries these tests exercise.
+const locPolicy = {
+  location_policy: {
+    home: { lat: 33.0857, lon: -97.2969, commute_radius_miles: 50 },
+    hard_no: ['new york', 'san francisco', 'chicago'],
+    dfw_core: ['dallas', 'fort worth', 'dfw'],
+    metro_allow: ['plano', 'frisco'],
+    hybrid_remote_only: ['austin'],
+    tx_city_coords: [
+      { name: 'waco', lat: 31.5493, lon: -97.1467 },      // ~85mi, outside radius
+      { name: 'denton', lat: 33.2148, lon: -97.1331 },    // ~12mi, inside radius
+    ],
+  },
+};
+const lf = buildLocationFilter(locPolicy);
+
+check(lf('') === true, 'empty location passes (unknown)');
+check(lf(undefined) === true, 'undefined location passes (unknown)');
+
+// Regression (audit 2026-07-15): a bare arrangement word, a country-only
+// string, or a Workday "N Locations" placeholder names no city at all, so it
+// must be treated as UNKNOWN and passed through to eval — not blocked.
+check(lf('Hybrid') === true, 'bare "Hybrid" with no city passes as unknown');
+check(lf('Remote') === true, 'bare "Remote" with no city passes as unknown');
+check(lf('Onsite') === true, 'bare "Onsite" with no city passes as unknown');
+check(lf('United States') === true, 'country-only "United States" passes as unknown');
+check(lf('Canada/US') === true, '"Canada/US" combo passes as unknown');
+check(lf('US') === true, 'bare "US" abbreviation passes as unknown');
+check(lf('2 Locations') === true, 'Workday "2 Locations" placeholder passes as unknown');
+check(lf('3 Locations') === true, 'Workday "3 Locations" placeholder passes as unknown');
+check(lf('Multiple Locations') === true, 'Workday "Multiple Locations" placeholder passes as unknown');
+check(lf('Various Locations') === true, '"Various Locations" placeholder passes as unknown');
+check(lf('Several Locations') === true, '"Several Locations" placeholder passes as unknown');
+check(lf('Multiple Cities') === true, '"Multiple Cities" placeholder passes as unknown');
+check(lf('Various') === true, 'bare "Various" placeholder passes as unknown');
+// The placeholder strip only fires on a qualifier token, so a real city that
+// merely contains "city"/"cities" is NOT stripped and still blocks (non-TX).
+check(lf('Kansas City, MO') === false, '"Kansas City" is not a placeholder — real non-TX city still blocks');
+check(lf('Twin Cities, MN') === false, '"Twin Cities" is not a placeholder — real non-TX metro still blocks');
+
+// A hard-no city named ALONGSIDE noise must still block — the fix only widens
+// city-LESS strings, it never weakens a named-city block. Cover BOTH strip
+// families: the arrangement-word strip AND the country strip (the country
+// regexes are the new code, and a hard-no city + "United States" is the most
+// realistic ATS string that must stay blocked — a greedier country regex that
+// swallowed the city would silently re-open the bug in reverse).
+check(lf('Hybrid - Chicago, IL') === false, 'hybrid role naming a hard-no city still blocks');
+check(lf('San Francisco, CA') === false, 'onsite hard-no city still blocks');
+check(lf('New York, United States') === false, 'hard-no city + country string still blocks (country-strip path)');
+check(lf('San Francisco, United States') === false, 'hard-no city + country string still blocks (country-strip path)');
+check(lf('San Francisco, CA; Remote') === true, 'hard-no city WITH a remote signal still passes (unchanged)');
+// A NAMED non-TX city + arrangement word must still block: only a case that (a)
+// runs the strip and (b) names a city that must survive can catch the strip
+// eating a real city token. Hybrid does not rescue a non-TX city under rule 11.
+check(lf('Denver, CO (Hybrid)') === false, 'named non-TX city + hybrid still blocks (over-strip guard)');
+
+// Pre-existing DFW/metro/Austin/TX-radius/non-TX behavior must survive the change.
+check(lf('Dallas, TX') === true, 'DFW core passes onsite');
+check(lf('Plano, TX') === true, 'DFW metro suburb passes onsite');
+check(lf('Austin, TX') === false, 'Austin onsite still blocks');
+check(lf('Austin, TX (Hybrid)') === true, 'Austin hybrid still passes');
+check(lf('Denton, TX') === true, 'TX city within commute radius passes onsite');
+check(lf('Waco, TX') === false, 'TX city outside commute radius blocks onsite');
+check(lf('Waco, TX (Remote)') === true, 'TX city outside commute radius passes remote');
+check(lf('Denver, CO') === false, 'named non-TX city with no remote signal still blocks');
+check(lf('Denver, CO (Remote)') === true, 'named non-TX city with remote signal still passes');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
