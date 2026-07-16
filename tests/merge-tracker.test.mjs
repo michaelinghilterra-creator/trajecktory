@@ -182,5 +182,109 @@ console.log('\n5. No collateral damage');
 }
 
 rmSync(sandbox, { recursive: true, force: true });
+
+// ── Scenario B: 2026-07-15 regressions ────────────────────────────────────────
+// Two bugs surfaced by the 2026-07-15 eval batches, exercised on a FRESH
+// applications.md (independent of Scenario A's carefully-counted assertions):
+//   1. roleFuzzyMatch too loose — two DISTINCT new roles in the same family
+//      ("Director, Sales Strategy", "Director, Sales Operations (Planning)")
+//      both matched one existing row "Director, Sales Operations" and clobbered
+//      it, losing one top-4 eval.
+//   2. No intra-batch dedup — two same-company+role postings (ViralNation
+//      1116/1117 regional variants) both got added as separate rows.
+// The seed file is written CRLF to prove the in-place update splice
+// (appLines.indexOf(existing.raw)) is EOL-tolerant.
+function runMerge(seedRows, caseMap) {
+  const sb = mkdtempSync(join(ROOT, 'merge-tracker-test-'));
+  mkdirSync(join(sb, 'data'));
+  mkdirSync(join(sb, 'batch/tracker-additions'), { recursive: true });
+  copyFileSync(join(ROOT, 'merge-tracker.mjs'), join(sb, 'merge-tracker.mjs'));
+  mkdirSync(join(sb, 'lib'), { recursive: true });
+  for (const m of ['discard.mjs', 'tracker.mjs', 'scan-core.mjs']) {
+    copyFileSync(join(ROOT, 'lib', m), join(sb, 'lib', m));
+  }
+  mkdirSync(join(sb, 'templates'), { recursive: true });
+  copyFileSync(join(ROOT, 'templates/states.yml'), join(sb, 'templates/states.yml'));
+  // CRLF on purpose — the data files are CRLF in the field.
+  writeFileSync(join(sb, 'data/applications.md'), [HEADER, ...seedRows, ''].join('\r\n'));
+  for (const [name, content] of Object.entries(caseMap)) {
+    writeFileSync(join(sb, 'batch/tracker-additions', name), content);
+  }
+  let out = '';
+  try {
+    out = execFileSync(process.execPath, [join(sb, 'merge-tracker.mjs')], { encoding: 'utf8' });
+  } catch (e) {
+    console.log('  ❌ merge-tracker.mjs crashed in Scenario B sandbox:');
+    console.log((e.stdout || '') + (e.stderr || e.message));
+    rmSync(sb, { recursive: true, force: true });
+    process.exit(1);
+  }
+  const res = readFileSync(join(sb, 'data/applications.md'), 'utf8');
+  rmSync(sb, { recursive: true, force: true });
+  const rws = res.split('\n').filter(l => /^\|\s*\d+\s*\|/.test(l));
+  return { output: out, rows: rws, rowsFor: (c) => rws.filter(r => r.includes(c)) };
+}
+
+const B = runMerge(
+  [
+    '| 71 | 2026-05-01 | Zendesk | Director, Sales Operations | 4.0/5 | Closed | ❌ | — | [71](reports/71-zendesk-2026-05-01.md) | Posting closed |',
+    '| 50 | 2026-05-01 | Acme2 | VP, Revenue Operations | 3.0/5 | Evaluated | ❌ | — | [50](reports/50-acme2-2026-05-01.md) | Seed VP |',
+  ],
+  {
+    // Legit re-eval of the existing VP row (report-number match) — must update
+    // in place on the CRLF file, proving the splice is EOL-tolerant.
+    '50-acme2.tsv': tsv(['50', '2026-07-15', 'Acme2', 'VP, Revenue Operations',
+      'Evaluated', '4.6/5', '❌', '[50](reports/50-acme2-2026-07-15.md)', 'Legit re-eval']),
+    // Two DISTINCT Zendesk roles in the "Sales/Operations/Director" family — must
+    // NOT collapse onto existing #71, and must NOT collapse into each other.
+    '1084-zendesk.tsv': tsv(['1084', '2026-07-15', 'Zendesk', 'Director, Sales Strategy',
+      'Evaluated', '4.1/5', '❌', '[1084](reports/1084-zendesk-2026-07-15.md)', 'Sales Strategy']),
+    '1086-zendesk.tsv': tsv(['1086', '2026-07-15', 'Zendesk', 'Director, Sales Operations (Planning)',
+      'Evaluated', '4.0/5', '❌', '[1086](reports/1086-zendesk-2026-07-15.md)', 'Sales Ops Planning']),
+    // Same-company+role postings with different JD numbers — must consolidate to
+    // the highest score (4.2), not leave two intra-batch dupes.
+    '1116-viralnation.tsv': tsv(['1116', '2026-07-15', 'ViralNation', 'Partnerships Director',
+      'Evaluated', '4.2/5', '❌', '[1116](reports/1116-viralnation-2026-07-15.md)', 'Regional hi']),
+    '1117-viralnation.tsv': tsv(['1117', '2026-07-15', 'ViralNation', 'Partnerships Director',
+      'Evaluated', '3.8/5', '❌', '[1117](reports/1117-viralnation-2026-07-15.md)', 'Regional lo']),
+    // Same core nouns, DIFFERENT level (Director vs the existing VP) — must NOT
+    // match; added as its own distinct row.
+    '2001-acme2.tsv': tsv(['2001', '2026-07-15', 'Acme2', 'Director, Revenue Operations',
+      'Evaluated', '4.5/5', '❌', '[2001](reports/2001-acme2-2026-07-15.md)', 'Different level']),
+  },
+);
+
+console.log('\n6. Tightened fuzzy match — distinct roles do not collapse (bug 1)');
+{
+  const z = B.rowsFor('Zendesk');
+  check(z.length === 3, `Zendesk keeps 3 distinct rows (existing + 2 new): got ${z.length}`);
+  const closed = z.find(r => r.includes('[71]'));
+  check(!!closed && cols(closed)[STATUS] === 'Closed' && cols(closed)[SCORE] === '4.0/5',
+    `existing #71 "Director, Sales Operations" NOT clobbered (still Closed / 4.0/5): "${closed ? cols(closed)[SCORE] + ' ' + cols(closed)[STATUS] : 'MISSING'}"`);
+  check(z.some(r => r.includes('Sales Strategy')), 'Director, Sales Strategy kept as its own row (not silently lost)');
+  check(z.some(r => r.includes('(Planning)')), 'Director, Sales Operations (Planning) kept as its own row');
+}
+
+console.log('\n7. Level distinction — Director ≠ VP (bug 1)');
+{
+  const a = B.rowsFor('Acme2');
+  check(a.length === 2, `Acme2 keeps VP re-eval + distinct Director row: got ${a.length}`);
+  const vp = a.find(r => r.includes('[50]'));
+  check(!!vp && cols(vp)[SCORE] === '4.6/5',
+    `legit VP re-eval updated in place on CRLF file (4.6/5): "${vp ? cols(vp)[SCORE] : 'MISSING'}"`);
+  check(a.some(r => r.includes('[2001]') && r.includes('Director,')),
+    'Director, Revenue Operations added as its own row (Director ≠ VP, same core)');
+}
+
+console.log('\n8. Intra-batch dedup — same company+role consolidates to highest score (bug 2)');
+{
+  const v = B.rowsFor('ViralNation');
+  check(v.length === 1, `ViralNation intra-batch dupes consolidated to 1 row: got ${v.length}`);
+  check(v.length === 1 && cols(v[0])[SCORE] === '4.2/5',
+    `kept the highest score (4.2/5): "${v[0] ? cols(v[0])[SCORE] : 'MISSING'}"`);
+  check(/Consolidated \(intra-batch\)/.test(B.output), 'intra-batch consolidation is logged');
+  check(/Summary: \+4 added/.test(B.output), 'batch reported +4 added (2 Zendesk + 1 ViralNation + 1 Acme2)');
+}
+
 console.log(`\n📊 merge-tracker fixtures: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

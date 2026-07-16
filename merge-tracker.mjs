@@ -140,30 +140,84 @@ const ROLE_STOPWORDS = new Set([
   'with', 'from', 'into', 'over', 'this', 'that',
 ]);
 
-function roleTokens(s) {
-  return s
+// Level / seniority tokens, compared as a SEPARATE axis from the role's core
+// noun phrase. Two roles with DIFFERENT explicit levels are never the same
+// posting even when the rest of the title is identical (Director ≠ VP ≠ Senior
+// Director). Abbreviations fold to a canonical form so "Sr" == "Senior" and
+// "VP" == "vice president".
+const LEVEL_CANON = new Map([
+  ['intern', 'intern'], ['internship', 'intern'],
+  ['jr', 'junior'], ['junior', 'junior'],
+  ['associate', 'associate'],
+  ['mid', 'mid'], ['middle', 'mid'],
+  ['sr', 'senior'], ['snr', 'senior'], ['senior', 'senior'],
+  ['staff', 'staff'],
+  ['principal', 'principal'],
+  ['lead', 'lead'],
+  ['mgr', 'manager'], ['manager', 'manager'],
+  ['dir', 'director'], ['director', 'director'],
+  ['vp', 'vp'], ['svp', 'svp'], ['evp', 'evp'], ['avp', 'avp'],
+  ['head', 'head'],
+  ['chief', 'chief'],
+  ['president', 'president'],
+]);
+
+// Split a role title into a { levels, core } signature:
+//   • levels — seniority/level tokens (canonicalized), compared on their own axis
+//   • core   — the distinguishing content nouns (length > 3, minus stopwords and
+//              level words). This is what actually names the function, e.g.
+//              {sales, strategy} vs {sales, operations} vs {sales, operations,
+//              planning} are three different cores.
+// Multi-word "vice president" collapses to the single level token "vp".
+function roleSignature(s) {
+  const raw = String(s || '')
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
-    .filter(w => w.length > 3 && !ROLE_STOPWORDS.has(w));
+    .filter(Boolean);
+  const levels = new Set();
+  const core = new Set();
+  for (let i = 0; i < raw.length; i++) {
+    const w = raw[i];
+    if (w === 'vice' && raw[i + 1] === 'president') { levels.add('vp'); i++; continue; }
+    if (LEVEL_CANON.has(w)) { levels.add(LEVEL_CANON.get(w)); continue; }
+    if (ROLE_STOPWORDS.has(w)) continue;
+    if (w.length > 3) core.add(w);
+  }
+  return { levels, core };
 }
 
+function setsEqual(a, b) {
+  if (a.size !== b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
+}
+
+// Two role titles are the SAME posting only when:
+//   1. their distinguishing core nouns are identical — so "Sales Strategy",
+//      "Sales Operations", and "Sales Operations Planning" are all distinct
+//      (the qualifier that separates them must match, not just the shared
+//      "Sales"/"Operations"/"Director" family tokens); likewise "Revenue
+//      Operations" ≠ "Revenue Enablement"; AND
+//   2. their explicit levels are compatible — equal, or one side unspecified —
+//      so Director ≠ VP ≠ Senior Director, while a bare "X" re-eval that omits
+//      the level still matches "Director X".
+// This is deliberately stricter than the old Jaccard-on-smaller-side ratio,
+// which let a superset ("Sales Operations Planning") and two same-family roles
+// ("Sales Strategy", "Sales Operations") all collapse onto one existing row.
+// Because merge-tracker UPDATES rows in place, a false positive silently
+// clobbers a distinct role's row; a genuine near-duplicate that slips through
+// is consolidated later by dedup-tracker, which is the safe way to err.
 function roleFuzzyMatch(a, b) {
-  const wordsA = roleTokens(a);
-  const wordsB = roleTokens(b);
-  if (wordsA.length === 0 || wordsB.length === 0) return false;
-
-  const setB = new Set(wordsB);
-  const overlap = wordsA.filter(w => setB.has(w)).length;
-  if (overlap === 0) return false;
-
-  // Jaccard-style ratio on content tokens. Two roles are "the same" only
-  // when the overlap dominates the smaller side — not when they just share
-  // a location + "engineer".
-  const minLen = Math.min(wordsA.length, wordsB.length);
-  const ratio = overlap / minLen;
-
-  return overlap >= 2 && ratio >= 0.6;
+  const sigA = roleSignature(a);
+  const sigB = roleSignature(b);
+  // Need at least some distinguishing signal on both sides.
+  if (sigA.core.size === 0 && sigA.levels.size === 0) return false;
+  if (sigB.core.size === 0 && sigB.levels.size === 0) return false;
+  // Different explicit levels → different posting.
+  if (sigA.levels.size > 0 && sigB.levels.size > 0 && !setsEqual(sigA.levels, sigB.levels)) return false;
+  // Core nouns must match exactly (no superset/subset collapse).
+  return setsEqual(sigA.core, sigB.core);
 }
 
 function extractReportNum(reportStr) {
@@ -409,129 +463,179 @@ let skipped = 0;
 const newLines = [];
 const processedReports = [];
 
+// Resolve which existing row (if any) an addition is a re-eval of. Three tiers,
+// each requiring the company to match:
+//   1. Exact report number match (number collision across companies ≠ same role)
+//   2. Exact entry number match (guards against ID reuse across companies)
+//   3. Company + role fuzzy match (tightened — see roleFuzzyMatch)
+function findExistingMatch(addition) {
+  const reportNum = addition._reportNum;
+  const normAdditionCompany = addition._normCompany;
+
+  if (reportNum) {
+    const byReport = existingApps.find(app =>
+      extractReportNum(app.report) === reportNum && normalizeCompany(app.company) === normAdditionCompany);
+    if (byReport) return byReport;
+  }
+
+  const byNum = existingApps.find(app =>
+    app.num === addition.num && normalizeCompany(app.company) === normAdditionCompany);
+  if (byNum) return byNum;
+  if (existingApps.find(app => app.num === addition.num)) {
+    console.warn(`⚠️  ID #${addition.num} already used by a different company — will assign next available ID to ${addition.company}`);
+  }
+
+  return existingApps.find(app =>
+    normalizeCompany(app.company) === normAdditionCompany && roleFuzzyMatch(addition.role, app.role)) || null;
+}
+
+// Do two additions in THIS batch describe the same posting? Same tiers as the
+// existing-row match, so regional re-scans / reposts that got different JD
+// numbers still collapse via the (tightened) role fuzzy match.
+function additionsMatch(a, b) {
+  if (a._normCompany !== b._normCompany) return false;
+  if (a._reportNum && b._reportNum && a._reportNum === b._reportNum) return true;
+  if (a.num === b.num) return true;
+  return roleFuzzyMatch(a.role, b.role);
+}
+
+// ── Pass 1: parse every addition and resolve its target ───────────────────────
+// existingApps is a start-of-run snapshot, so without cross-addition dedup two
+// new same-company+role postings both became separate rows and two additions
+// that matched the SAME existing row both wrote it (the second clobbering the
+// first — one top-4 eval was silently lost on 2026-07-15). We fix both here:
+//   • at most ONE addition updates any given existing row (highest score wins)
+//   • new additions dedupe against each OTHER (highest score wins)
+const parsed = [];
 for (const file of tsvFiles) {
   const content = readFileSync(join(ADDITIONS_DIR, file), 'utf-8').trim();
   const addition = parseTsvContent(content, file);
   if (!addition) { skipped++; continue; }
   // Enforce source from pipeline.md before any status/dedup logic reads the notes.
   addition.notes = enforceSource(addition.report, addition.notes, addition.company);
+  addition._file = file;
+  addition._reportNum = extractReportNum(addition.report);
+  addition._normCompany = normalizeCompany(addition.company);
   processedReports.push(addition.report);
+  parsed.push(addition);
+}
 
-  // Check for duplicate by:
-  // 1. Exact report number match (same company required — number collision ≠ same role)
-  // 2. Exact entry number match (same company required — guards against ID reuse across companies)
-  // 3. Company + role fuzzy match
-  const reportNum = extractReportNum(addition.report);
-  const normAdditionCompany = normalizeCompany(addition.company);
-  let duplicate = null;
+// ── Pass 2: bucket additions into updates-of-existing vs new, deduping both ────
+const updatesByExisting = new Map(); // existing.raw → { addition, existing }
+const pendingNew = [];               // additions that will become new rows
+function consolidate(drop, keep, scope) {
+  console.log(`🧹 Consolidated (${scope}): dropped #${drop.num} ${drop.company} — ${drop.role} (${drop.score}) in favor of #${keep.num} ${keep.role} (${keep.score})`);
+  skipped++;
+}
 
-  if (reportNum) {
-    // Report number match — only treat as duplicate if company also matches
-    duplicate = existingApps.find(app => {
-      const existingReportNum = extractReportNum(app.report);
-      return existingReportNum === reportNum && normalizeCompany(app.company) === normAdditionCompany;
-    });
-  }
-
-  if (!duplicate) {
-    // Entry number match — only treat as duplicate if company also matches.
-    // If numbers collide but companies differ, it is a collision, not a re-eval;
-    // the new entry will receive the next available ID instead.
-    duplicate = existingApps.find(app =>
-      app.num === addition.num && normalizeCompany(app.company) === normAdditionCompany
-    );
-    if (!duplicate && existingApps.find(app => app.num === addition.num)) {
-      console.warn(`⚠️  ID #${addition.num} already used by a different company — will assign next available ID to ${addition.company}`);
-    }
-  }
-
-  if (!duplicate) {
-    // Company + role fuzzy match
-    duplicate = existingApps.find(app => {
-      if (normalizeCompany(app.company) !== normAdditionCompany) return false;
-      return roleFuzzyMatch(addition.role, app.role);
-    });
-  }
-
-  if (duplicate) {
-    const newScore = parseScore(addition.score);
-    const oldScore = parseScore(duplicate.score);
-
-    if (newScore > oldScore) {
-      console.log(`🔄 Update: #${duplicate.num} ${addition.company} — ${addition.role} (${oldScore}→${newScore})`);
-      const lineIdx = appLines.indexOf(duplicate.raw);
-      if (lineIdx >= 0) {
-        // Determine status for the updated entry:
-        //   - Preserve user-set terminal states (Applied/Responded/interview rounds/Offer/Rejected)
-        //     — the user took action on this, don't undo it
-        //   - If old status was Discarded/SKIP from auto-discard AND the new score
-        //     would NOT trigger auto-discard, reset to Evaluated (the re-eval
-        //     showed it's worth a fresh look)
-        //   - Otherwise keep the existing status
-        const userTerminal = ['Applied', 'Responded', 'Phone Screen', '1st Interview', '2nd Interview', '3rd Interview', '4th Interview', 'Offer', 'Rejected'].includes(duplicate.status);
-        const autoDiscarded = /auto-discarded:/i.test(duplicate.notes || '');
-        const newNotesLower = (addition.notes || '').toLowerCase();
-        const newRecAgainst = /\b(do not apply|do not pursue|recommend against|hard\s*(?:no|blocker|disqualifier)|location\s+(?:blocker|hard.?no|mismatch|disqualifier)|international\s+relocation|not recommended|not applicable)\b/.test(newNotesLower);
-        const isSelfSourced = /\[self-sourced\]|\[referral:|\[cowork\]/i.test(addition.notes || '');
-        const wouldAutoDiscard = !isSelfSourced && (newScore <= 2.5 || newRecAgainst);
-        let resolvedStatus = duplicate.status;
-        if (!userTerminal && autoDiscarded && !wouldAutoDiscard) {
-          resolvedStatus = 'Evaluated';
-          console.log(`   ↳ Reset status: ${duplicate.status} → Evaluated (re-eval cleared the auto-discard condition)`);
-        }
-        const resumeVal = duplicate.resume || '—';
-        const updatedLine = `| ${duplicate.num} | ${addition.date} | ${addition.company} | ${addition.role} | ${addition.score} | ${resolvedStatus} | ${duplicate.pdf} | ${resumeVal} | ${addition.report} | Re-eval ${addition.date} (${oldScore}→${newScore}). ${addition.notes} |`;
-        appLines[lineIdx] = updatedLine;
-        updated++;
-      }
+for (const addition of parsed) {
+  const existing = findExistingMatch(addition);
+  if (existing) {
+    const key = existing.raw;
+    const prev = updatesByExisting.get(key);
+    if (!prev) {
+      updatesByExisting.set(key, { addition, existing });
+    } else if (parseScore(addition.score) > parseScore(prev.addition.score)) {
+      consolidate(prev.addition, addition, `existing #${existing.num}`);
+      updatesByExisting.set(key, { addition, existing });
     } else {
-      console.log(`⏭️  Skip: ${addition.company} — ${addition.role} (existing #${duplicate.num} ${oldScore} >= new ${newScore})`);
-      skipped++;
+      consolidate(addition, prev.addition, `existing #${existing.num}`);
     }
   } else {
-    // New entry. With the persistent counter (next-jd.mjs) the report number IS
-    // the canonical, never-reused JD#, so the tracker id should match it exactly
-    // (this is what kills the old id<->report drift). Only if that number is
-    // already taken by a DIFFERENT company — a leftover from the pre-counter
-    // "max existing + 1" era — do we draw a fresh, monotonic number.
-    let entryNum = addition.num;
-    if (usedNums.has(entryNum)) {
-      entryNum = issueJd ? issueJd() : ++maxNum;
-      console.warn(`⚠️  #${addition.num} already in use — assigned fresh JD #${entryNum} to ${addition.company}`);
+    const rivalIdx = pendingNew.findIndex(p => additionsMatch(p, addition));
+    if (rivalIdx === -1) {
+      pendingNew.push(addition);
+    } else if (parseScore(addition.score) > parseScore(pendingNew[rivalIdx].score)) {
+      consolidate(pendingNew[rivalIdx], addition, 'intra-batch');
+      pendingNew[rivalIdx] = addition; // keep position, swap in the higher score
+    } else {
+      consolidate(addition, pendingNew[rivalIdx], 'intra-batch');
     }
-    usedNums.add(entryNum);
-    if (entryNum > maxNum) maxNum = entryNum;
-
-    // Auto-discard entries that aren't worth pursuing:
-    //   (a) numerical score <= 2.5  OR
-    //   (b) notes contain "do not apply" / "recommend against" / "hard no" /
-    //       "not recommended" — catches cases where the agent gave a 3+
-    //       score on individual dimensions but flagged the role as a
-    //       structural mismatch in the verdict.
-    //
-    // EXEMPT from auto-discard:
-    //   - Entries tagged [self-sourced] in notes — user explicitly chose this
-    //     JD, they want to see the evaluation regardless of score.
-    //   - Entries tagged [referral:...] in notes — referrals always get the
-    //     full evaluation; user can decide what to do with the relationship.
-    //   The source-tag convention is documented in modes/auto-pipeline.md.
-    const numScore = parseScore(addition.score);
-    let finalStatus = addition.status;
-    let finalNotes = addition.notes;
-    if (shouldAutoDiscard({ status: finalStatus, score: addition.score, notes: finalNotes })) {
-      finalStatus = 'Discarded';
-      const reason = recommendsAgainst(finalNotes)
-        ? `auto-discarded: agent recommends against`
-        : `auto-discarded: score ${numScore} <= 2.5`;
-      finalNotes = finalNotes ? `${reason}. ${finalNotes}` : reason;
-    }
-
-    const newLine = `| ${entryNum} | ${addition.date} | ${addition.company} | ${addition.role} | ${addition.score} | ${finalStatus} | ${addition.pdf} | — | ${addition.report} | ${finalNotes} |`;
-    newLines.push(newLine);
-    added++;
-    const tag = finalStatus === 'Discarded' ? '🗑️ ' : '➕ ';
-    console.log(`${tag}Add #${entryNum}: ${addition.company} — ${addition.role} (${addition.score}, ${finalStatus})`);
   }
+}
+
+// ── Apply updates (one per existing row, higher-score-wins vs the existing) ────
+for (const { addition, existing: duplicate } of updatesByExisting.values()) {
+  const newScore = parseScore(addition.score);
+  const oldScore = parseScore(duplicate.score);
+
+  if (newScore > oldScore) {
+    console.log(`🔄 Update: #${duplicate.num} ${addition.company} — ${addition.role} (${oldScore}→${newScore})`);
+    const lineIdx = appLines.indexOf(duplicate.raw);
+    if (lineIdx >= 0) {
+      // Determine status for the updated entry:
+      //   - Preserve user-set terminal states (Applied/Responded/interview rounds/Offer/Rejected)
+      //     — the user took action on this, don't undo it
+      //   - If old status was Discarded/SKIP from auto-discard AND the new score
+      //     would NOT trigger auto-discard, reset to Evaluated (the re-eval
+      //     showed it's worth a fresh look)
+      //   - Otherwise keep the existing status
+      const userTerminal = ['Applied', 'Responded', 'Phone Screen', '1st Interview', '2nd Interview', '3rd Interview', '4th Interview', 'Offer', 'Rejected'].includes(duplicate.status);
+      const autoDiscarded = /auto-discarded:/i.test(duplicate.notes || '');
+      const newNotesLower = (addition.notes || '').toLowerCase();
+      const newRecAgainst = /\b(do not apply|do not pursue|recommend against|hard\s*(?:no|blocker|disqualifier)|location\s+(?:blocker|hard.?no|mismatch|disqualifier)|international\s+relocation|not recommended|not applicable)\b/.test(newNotesLower);
+      const isSelfSourced = /\[self-sourced\]|\[referral:|\[cowork\]/i.test(addition.notes || '');
+      const wouldAutoDiscard = !isSelfSourced && (newScore <= 2.5 || newRecAgainst);
+      let resolvedStatus = duplicate.status;
+      if (!userTerminal && autoDiscarded && !wouldAutoDiscard) {
+        resolvedStatus = 'Evaluated';
+        console.log(`   ↳ Reset status: ${duplicate.status} → Evaluated (re-eval cleared the auto-discard condition)`);
+      }
+      const resumeVal = duplicate.resume || '—';
+      const updatedLine = `| ${duplicate.num} | ${addition.date} | ${addition.company} | ${addition.role} | ${addition.score} | ${resolvedStatus} | ${duplicate.pdf} | ${resumeVal} | ${addition.report} | Re-eval ${addition.date} (${oldScore}→${newScore}). ${addition.notes} |`;
+      appLines[lineIdx] = updatedLine;
+      updated++;
+    }
+  } else {
+    console.log(`⏭️  Skip: ${addition.company} — ${addition.role} (existing #${duplicate.num} ${oldScore} >= new ${newScore})`);
+    skipped++;
+  }
+}
+
+// ── Apply new rows (deduped winners) ──────────────────────────────────────────
+for (const addition of pendingNew) {
+  // New entry. With the persistent counter (next-jd.mjs) the report number IS
+  // the canonical, never-reused JD#, so the tracker id should match it exactly
+  // (this is what kills the old id<->report drift). Only if that number is
+  // already taken by a DIFFERENT company — a leftover from the pre-counter
+  // "max existing + 1" era — do we draw a fresh, monotonic number.
+  let entryNum = addition.num;
+  if (usedNums.has(entryNum)) {
+    entryNum = issueJd ? issueJd() : ++maxNum;
+    console.warn(`⚠️  #${addition.num} already in use — assigned fresh JD #${entryNum} to ${addition.company}`);
+  }
+  usedNums.add(entryNum);
+  if (entryNum > maxNum) maxNum = entryNum;
+
+  // Auto-discard entries that aren't worth pursuing:
+  //   (a) numerical score <= 2.5  OR
+  //   (b) notes contain "do not apply" / "recommend against" / "hard no" /
+  //       "not recommended" — catches cases where the agent gave a 3+
+  //       score on individual dimensions but flagged the role as a
+  //       structural mismatch in the verdict.
+  //
+  // EXEMPT from auto-discard:
+  //   - Entries tagged [self-sourced] in notes — user explicitly chose this
+  //     JD, they want to see the evaluation regardless of score.
+  //   - Entries tagged [referral:...] in notes — referrals always get the
+  //     full evaluation; user can decide what to do with the relationship.
+  //   The source-tag convention is documented in modes/auto-pipeline.md.
+  const numScore = parseScore(addition.score);
+  let finalStatus = addition.status;
+  let finalNotes = addition.notes;
+  if (shouldAutoDiscard({ status: finalStatus, score: addition.score, notes: finalNotes })) {
+    finalStatus = 'Discarded';
+    const reason = recommendsAgainst(finalNotes)
+      ? `auto-discarded: agent recommends against`
+      : `auto-discarded: score ${numScore} <= 2.5`;
+    finalNotes = finalNotes ? `${reason}. ${finalNotes}` : reason;
+  }
+
+  const newLine = `| ${entryNum} | ${addition.date} | ${addition.company} | ${addition.role} | ${addition.score} | ${finalStatus} | ${addition.pdf} | — | ${addition.report} | ${finalNotes} |`;
+  newLines.push(newLine);
+  added++;
+  const tag = finalStatus === 'Discarded' ? '🗑️ ' : '➕ ';
+  console.log(`${tag}Add #${entryNum}: ${addition.company} — ${addition.role} (${addition.score}, ${finalStatus})`);
 }
 
 // Insert new lines after the header (line index of first data row)
