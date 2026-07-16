@@ -19,7 +19,7 @@
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import yaml from 'js-yaml';
-import { buildTitleFilter, normalizeUrl, scoreOffer } from './lib/scan-core.mjs';
+import { buildTitleFilter, buildLocationFilter, normalizeUrl, scoreOffer } from './lib/scan-core.mjs';
 const parseYaml = yaml.load;
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -222,111 +222,7 @@ async function fetchWorkdayJobs(apiUrl, baseUrl, companyName) {
 //
 // normalizeForMatch and buildTitleFilter now live in lib/scan-core.mjs.
 
-// ── Location filter ─────────────────────────────────────────────────
-
-/** Haversine distance in miles between two lat/lon points */
-function haversineMiles(lat1, lon1, lat2, lon2) {
-  const R = 3958.8; // Earth radius in miles
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-/**
- * Builds a smart location filter from portals.yml location_policy.
- *
- * Decision tree (applied in order):
- *  1. Empty/unknown location          → PASS
- *  2. Hard-no city                    → BLOCK
- *  3. "Remote" with no city signal    → PASS
- *  4. Dallas / Fort Worth / DFW       → PASS (any arrangement)
- *  5. DFW metro suburb                → PASS (any arrangement)
- *  6. Austin                          → PASS if remote/hybrid, BLOCK if onsite
- *  7. Other TX city ≤ radius miles    → PASS (any arrangement)
- *  8. Other TX city > radius + remote → PASS
- *  9. Other TX city > radius + onsite → BLOCK
- * 10. Non-TX with "remote" signal     → PASS
- * 11. Non-TX without "remote"         → BLOCK
- */
-function buildLocationFilter(titleFilter) {
-  const policy = titleFilter?.location_policy;
-  if (!policy) return () => true; // no policy = allow all
-
-  const home       = policy.home || {};
-  const homeLat    = home.lat || 33.0857;
-  const homeLon    = home.lon || -97.2969;
-  const radiusMi   = home.commute_radius_miles || 50;
-
-  const hardNo     = (policy.hard_no || []).map(k => k.toLowerCase());
-  const dfwCore    = (policy.dfw_core || []).map(k => k.toLowerCase());
-  const metro      = (policy.metro_allow || []).map(k => k.toLowerCase());
-  const hybridOnly = (policy.hybrid_remote_only || []).map(k => k.toLowerCase());
-  const txCoords   = (policy.tx_city_coords || []).map(c => ({
-    name: c.name.toLowerCase(),
-    lat: c.lat,
-    lon: c.lon,
-  }));
-
-  return (location) => {
-    // 1. Unknown/empty → pass
-    if (!location || !location.trim()) return true;
-
-    const loc = location.toLowerCase();
-
-    // Detect work arrangement signals in the location string
-    const hasRemote = loc.includes('remote');
-    const hasHybrid = loc.includes('hybrid');
-    const isFlexible = hasRemote || hasHybrid;
-
-    // 2. Hard-no cities block, UNLESS the posting carries a remote signal.
-    //    A remote role tagged with an HQ city (e.g. "San Francisco, CA; Remote")
-    //    should not be killed for the HQ. Onsite/hybrid in a hard-no metro still
-    //    blocks (cannot make in-office days from TX). Errs toward catching: a
-    //    geo-restricted "remote, Bay Area only" role slips through to eval, where
-    //    the full JD and the user make the call. (Widen 2026-06-23.)
-    if (hardNo.some(city => loc.includes(city))) {
-      if (hasRemote) return true;
-      return false;
-    }
-
-    // 3. Pure "remote" with no city noise → pass
-    if (hasRemote && loc.replace(/remote/g, '').trim().length < 5) return true;
-
-    // 4. DFW core (Dallas, Fort Worth, DFW) → always pass
-    if (dfwCore.some(city => loc.includes(city))) return true;
-
-    // 5. DFW metro suburbs → always pass
-    if (metro.some(city => loc.includes(city))) return true;
-
-    // 6. Austin → pass only if remote or hybrid signal
-    if (hybridOnly.some(city => loc.includes(city))) {
-      return isFlexible;
-    }
-
-    // 7–9. Other TX city (contains "texas", " tx" or ", tx")
-    const isTX = loc.includes('texas') || loc.includes(' tx') || loc.includes(', tx');
-    if (isTX) {
-      // Try haversine against known TX city coords
-      const match = txCoords.find(c => loc.includes(c.name));
-      if (match) {
-        const dist = haversineMiles(homeLat, homeLon, match.lat, match.lon);
-        if (dist <= radiusMi) return true;   // within commute → any arrangement
-        return isFlexible;                    // outside radius → remote/hybrid only
-      }
-      // Unknown TX city not in coords table → pass through (let Claude decide)
-      return true;
-    }
-
-    // 10. Non-TX with remote signal → pass
-    if (hasRemote) return true;
-
-    // 11. Non-TX, no remote signal → block
-    return false;
-  };
-}
+// haversineMiles and buildLocationFilter now live in lib/scan-core.mjs.
 
 // ── Dedup ───────────────────────────────────────────────────────────
 
