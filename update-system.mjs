@@ -69,6 +69,15 @@ const SYSTEM_PATHS = [
   'merge-tracker.mjs',
   'next-jd.mjs',
   'verify-pipeline.mjs',
+  // Imported at module scope by dashboard-web/server/lib/interview.mjs, which
+  // index.mjs imports statically. If it is missing the WHOLE dashboard dies at
+  // module-resolution time, not just the Interview tab. Guarded by test-all.mjs §7b.
+  'render-runsheet.mjs',
+  'verify-runsheets.mjs',
+  // Same hazard, pre-existing: dashboard-web/server/lib/obsidian.mjs statically
+  // imports scripts/render-obsidian-companion.mjs. scripts/ was never listed, so it
+  // was frozen at install time and no fix to it ever reached an updated install.
+  'scripts/',
   'dedup-tracker.mjs',
   'normalize-statuses.mjs',
   'cv-sync-check.mjs',

@@ -283,6 +283,7 @@ function App() {
     const navCmds = [
       { section: "Navigate", icon: "▥", label: "Go to Pipeline",     run: () => setTab("pipeline") },
       { section: "Navigate", icon: "↻", label: "Go to Follow-Ups",   run: () => setTab("followups") },
+      { section: "Navigate", icon: "◈", label: "Go to Interview",    run: () => setTab("interview") },
       { section: "Navigate", icon: "≡", label: "Go to All Entries",  run: () => { setTab("pipeline"); setPipelineView("all"); } },
       { section: "Navigate", icon: "🔗", label: "Go to LinkedIn SSI", run: () => setTab("linkedin-ssi") },
       { section: "Navigate", icon: "◎", label: "Go to TA Outreach", run: () => setTab("target-talent") },
@@ -405,6 +406,7 @@ function App() {
           {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} onQuickAction={handleAction} onDataChanged={refreshApps} search={search} compTweaks={{ walkAway: tweaks.walkAway, targetLow: tweaks.targetLow, targetHigh: tweaks.targetHigh }} />}
           {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} />}
           {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} />}
+          {tab === "interview" && <window.InterviewTab apps={apps} toast={toast} />}
           {tab === "recruiters"&& <window.RecruitersTab search={search} />}
           {tab === "target-talent" && <window.TargetTalentTab initialOpenId={pendingTaOpen} onInitialOpenConsumed={() => setPendingTaOpen(null)} search={search} />}
           {tab === "linkedin-ssi" && <window.LinkedInSSITab />}

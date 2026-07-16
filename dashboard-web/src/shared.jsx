@@ -96,6 +96,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
     { key: "target-talent", label: "TA Outreach",        icon: "◎" },
     { key: "linkedin-ssi",  label: "LinkedIn SSI",       icon: "🔗" },
     { key: "recruiters",    label: "Recruiters",         icon: "☎" },
+    { key: "interview",     label: "Interview",          icon: "◈" },
     { key: "analytics",     label: "Insights",           icon: "✦" },
   ];
 

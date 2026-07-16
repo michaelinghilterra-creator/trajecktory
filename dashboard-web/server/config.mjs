@@ -37,6 +37,34 @@ export const TARGET_TALENT_MD = path.resolve(__dirname, '../../data/target-talen
 export const TT_CORR_DIR = path.resolve(__dirname, '../../data/target-talent-correspondence');
 export const LINKEDIN_SSI_DIR = path.resolve(__dirname, '../../data/linkedin-ssi');
 
+// "Interview" tab: the per-company prep folders (and their .run.md board
+// sidecars). NOT a fixed path — the Launchpad writes outputs.interview_prep_dir
+// into config/profile.yml, so a user who redirected their prep folder (commonly
+// to Documents\trajecktory interview prep) would otherwise get an empty tab
+// while their files sit somewhere else. Resolution mirrors resolveDir() in
+// organize-interview-prep.mjs exactly: same regex, same first-match-wins scan,
+// same relative-to-repo-root join, same interview-prep/ fallback. Read with a
+// line regex rather than a YAML parse so a profile that is mid-edit (and not
+// valid YAML) still boots the server on the default.
+function resolveInterviewPrepDir() {
+  try {
+    const profile = path.join(ROOT_DIR, 'config', 'profile.yml');
+    if (fs.existsSync(profile)) {
+      for (const line of fs.readFileSync(profile, 'utf8').split(/\r?\n/)) {
+        const m = line.match(/^\s*interview_prep_dir:\s*["']?([^"'#]+?)["']?\s*(?:#.*)?$/);
+        if (m) {
+          const v = m[1].trim();
+          if (v) return path.isAbsolute(v) ? v : path.join(ROOT_DIR, v);
+        }
+      }
+    }
+  } catch { /* unreadable or half-written profile — fall through to the default */ }
+  return path.join(ROOT_DIR, 'interview-prep');
+}
+// Never mkdir'd: this is a read-only surface, and "the folder does not exist
+// yet" is a legitimate empty state, not something to paper over on boot.
+export const INTERVIEW_PREP_DIR = resolveInterviewPrepDir();
+
 // "Today" tab: weekly cadence template, its per-day completion log, and the to-do list.
 export const CADENCE_PATH = path.resolve(__dirname, '../../data/cadence.json');
 export const CADENCE_LOG_PATH = path.resolve(__dirname, '../../data/cadence-log.json');
