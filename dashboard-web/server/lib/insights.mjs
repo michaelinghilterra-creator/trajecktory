@@ -54,21 +54,50 @@ function pruneInsightsHistory() {
   } catch (_) {}
 }
 
+// Furthest funnel rung an app EVER reached: the max of its live status, any dated
+// status-event, and the [reached:] notes tag. Terminal rows (Rejected / No
+// Response) imply they at least Applied. Shared by the funnel and the metrics so
+// the two always credit history the same way.
+function makeFurthestIdx(events) {
+  const eventsByApp = new Map();
+  for (const e of events) {
+    if (!eventsByApp.has(e.app)) eventsByApp.set(e.app, []);
+    eventsByApp.get(e.app).push(e);
+  }
+  const idxOf = s => FUNNEL_ORDER.indexOf(s);
+  const APPLIED_IDX = idxOf('Applied');
+  const furthestIdx = (a) => {
+    let idx = idxOf(a.status);
+    if (a.status === 'Rejected' || a.status === 'No Response') idx = Math.max(idx, APPLIED_IDX);
+    for (const e of (eventsByApp.get(String(a.id)) || [])) idx = Math.max(idx, idxOf(e.status));
+    const r = reachedStage(a.notes);
+    if (r) idx = Math.max(idx, idxOf(r));
+    return idx;
+  };
+  return { furthestIdx, idxOf, eventsByApp };
+}
+
 function buildInsightsContext() {
   const apps = parseApplicationsMd();
   const recruiters = parseRecruitersMd().map(({ raw, ...r }) => r);
   const taContacts = parseTargetTalentMd();
 
   const activeStatuses = ACTIVE_STATUSES;
-  // 'No Response' (ghosted) counts as a real sent application that got no reply,
-  // like 'Rejected' — it stays in the denominator but never in respondedSet, so
-  // ghosting honestly drags the response rate down instead of vanishing.
-  const appliedSet     = ['Applied','Responded',...INTERVIEW_STAGES,'Offer','Rejected','No Response'];
-  const respondedSet   = ['Responded',...INTERVIEW_STAGES,'Offer'];
+  // Credit the furthest rung each app ever reached rather than its live status.
+  // Reading live status alone drops anyone who replied and was later rejected out
+  // of the numerator while keeping them in the denominator, understating the reply
+  // rate roughly 3x. 'No Response' (ghosted) stays in the denominator but never in
+  // the numerator, so ghosting honestly drags the rate down instead of vanishing.
+  const { furthestIdx, idxOf } = makeFurthestIdx(parseStatusEvents());
+  const APPLIED_IDX = idxOf('Applied'), RESPONDED_IDX = idxOf('Responded');
+  const SCREEN_IDX = idxOf('Phone Screen'), OFFER_IDX = idxOf('Offer');
+  const hasApplied   = a => furthestIdx(a) >= APPLIED_IDX;
+  const hasResponded = a => furthestIdx(a) >= RESPONDED_IDX;
+  const hasInterview = a => furthestIdx(a) >= SCREEN_IDX;
 
-  const applied = apps.filter(a => appliedSet.includes(a.status));
-  const responded = apps.filter(a => respondedSet.includes(a.status));
-  const interview = apps.filter(a => isInterviewStage(a.status) || a.status === 'Offer');
+  const applied = apps.filter(hasApplied);
+  const responded = apps.filter(hasResponded);
+  const interview = apps.filter(hasInterview);
 
   // Archetype performance — apply + reply rates by role family
   const archetypes = {};
@@ -76,8 +105,8 @@ function buildInsightsContext() {
     const k = a.archetype || 'Unknown';
     if (!archetypes[k]) archetypes[k] = { count: 0, applied: 0, responded: 0, scoreSum: 0, scoreN: 0 };
     archetypes[k].count++;
-    if (appliedSet.includes(a.status))   archetypes[k].applied++;
-    if (respondedSet.includes(a.status)) archetypes[k].responded++;
+    if (hasApplied(a))   archetypes[k].applied++;
+    if (hasResponded(a)) archetypes[k].responded++;
     if (a.score != null) { archetypes[k].scoreSum += a.score; archetypes[k].scoreN++; }
   }
   const archByPerf = Object.entries(archetypes)
@@ -96,8 +125,8 @@ function buildInsightsContext() {
     if (!a.sector) continue;
     if (!sectors[a.sector]) sectors[a.sector] = { count: 0, applied: 0, responded: 0 };
     sectors[a.sector].count++;
-    if (appliedSet.includes(a.status))   sectors[a.sector].applied++;
-    if (respondedSet.includes(a.status)) sectors[a.sector].responded++;
+    if (hasApplied(a))   sectors[a.sector].applied++;
+    if (hasResponded(a)) sectors[a.sector].responded++;
   }
   const sectorByPerf = Object.entries(sectors)
     .filter(([, v]) => v.applied >= 1)
@@ -148,7 +177,7 @@ function buildInsightsContext() {
       applied: applied.length,
       responded: responded.length,
       interview: interview.length,
-      offer: apps.filter(a => a.status === 'Offer').length,
+      offer: apps.filter(a => furthestIdx(a) >= OFFER_IDX).length,
       responseRate: applied.length ? Math.round(responded.length / applied.length * 100) : 0,
       interviewRate: applied.length ? Math.round(interview.length / applied.length * 100) : 0,
     },
@@ -210,27 +239,7 @@ export function stageFunnelStats() {
   const apps = parseApplicationsMd();
   const events = parseStatusEvents();
 
-  const eventsByApp = new Map();
-  for (const e of events) {
-    if (!eventsByApp.has(e.app)) eventsByApp.set(e.app, []);
-    eventsByApp.get(e.app).push(e);
-  }
-
-  const idxOf = s => FUNNEL_ORDER.indexOf(s);
-  const APPLIED_IDX = idxOf('Applied');
-
-  // Furthest funnel rung an app EVER reached: the max of its live status, any
-  // dated status-event, and the [reached:] notes tag. Terminal rows (Rejected /
-  // No Response) imply they at least Applied. Makes the funnel monotonic and
-  // historically honest instead of only crediting the live status.
-  const furthestIdx = (a) => {
-    let idx = idxOf(a.status);
-    if (a.status === 'Rejected' || a.status === 'No Response') idx = Math.max(idx, APPLIED_IDX);
-    for (const e of (eventsByApp.get(String(a.id)) || [])) idx = Math.max(idx, idxOf(e.status));
-    const r = reachedStage(a.notes);
-    if (r) idx = Math.max(idx, idxOf(r));
-    return idx;
-  };
+  const { furthestIdx, idxOf, eventsByApp } = makeFurthestIdx(events);
 
   const reached = {};
   for (const stage of FUNNEL_ORDER) {
