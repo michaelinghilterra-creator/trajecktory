@@ -141,10 +141,18 @@ window.reachedStage = (app) => {
 
 // Did this app reach `stage` (either currently at it, advanced past it,
 // or got tagged `[reached: <stage-or-later>]` after closure)?
+//
+// Prefers `app.reached`, the furthest rung the server computed from the live
+// status, the dated status-event log, and the [reached:] tag. The browser never
+// sees the event log, so the fallback below can only credit the live status and
+// the tag: a row that replied and was later rejected reads as "Rejected" and
+// looks like it never replied. Keep the fallback for app objects built without
+// a server round-trip.
 window.appReached = (app, stage) => {
   const order = window.FUNNEL_ORDER;
   const idx = order.indexOf(stage);
   if (idx < 0) return false;
+  if (app.reached != null) return order.indexOf(app.reached) >= idx;
   const currentIdx = order.indexOf(app.status);
   // Currently at this stage or later (only for canonical funnel stages)
   if (currentIdx >= idx) return true;

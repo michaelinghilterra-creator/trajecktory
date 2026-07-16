@@ -6,7 +6,7 @@ import { computeStaleApps, computeStaleTA } from './followups.mjs';
 import { parseRecruitersMd } from './recruiters.mjs';
 import { parseTargetTalentMd } from './target-talent.mjs';
 import { parseStatusEvents } from './sidecars.mjs';
-import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, isInterviewStage, reachedStage } from './statuses.mjs';
+import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, isInterviewStage, reachedStage, makeFurthestIdx } from './statuses.mjs';
 
 const INSIGHTS_DIR = path.resolve(ROOT_DIR, 'data', 'insights');
 const INSIGHTS_LATEST = path.join(INSIGHTS_DIR, 'latest.json');
@@ -52,29 +52,6 @@ function pruneInsightsHistory() {
       try { fs.unlinkSync(path.join(INSIGHTS_DIR, f)); } catch (_) {}
     }
   } catch (_) {}
-}
-
-// Furthest funnel rung an app EVER reached: the max of its live status, any dated
-// status-event, and the [reached:] notes tag. Terminal rows (Rejected / No
-// Response) imply they at least Applied. Shared by the funnel and the metrics so
-// the two always credit history the same way.
-function makeFurthestIdx(events) {
-  const eventsByApp = new Map();
-  for (const e of events) {
-    if (!eventsByApp.has(e.app)) eventsByApp.set(e.app, []);
-    eventsByApp.get(e.app).push(e);
-  }
-  const idxOf = s => FUNNEL_ORDER.indexOf(s);
-  const APPLIED_IDX = idxOf('Applied');
-  const furthestIdx = (a) => {
-    let idx = idxOf(a.status);
-    if (a.status === 'Rejected' || a.status === 'No Response') idx = Math.max(idx, APPLIED_IDX);
-    for (const e of (eventsByApp.get(String(a.id)) || [])) idx = Math.max(idx, idxOf(e.status));
-    const r = reachedStage(a.notes);
-    if (r) idx = Math.max(idx, idxOf(r));
-    return idx;
-  };
-  return { furthestIdx, idxOf, eventsByApp };
 }
 
 function buildInsightsContext() {
