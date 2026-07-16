@@ -20,10 +20,12 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { chromium } from 'playwright';
-import { classifyLiveness } from './liveness-core.mjs';
+import yaml from 'js-yaml';
+import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness, workdaySiteFromCareersUrl } from './liveness-core.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(__dirname, 'data/pipeline.md');
+const PORTALS = join(__dirname, 'portals.yml');
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
@@ -84,7 +86,55 @@ function hydrationDelayFor(url) {
   } catch { return 2500; }
 }
 
+// ── Workday career-site hints from portals.yml ────────────────────────────────
+// Workday's CXS API needs the career-site name, which is NOT always present in a
+// direct job URL (short-form URLs go straight to /job/…). portals.yml's Workday
+// careers_urls carry the authoritative site, so we index tenant.shard → site(s)
+// and hand them to checkWorkdayLiveness as hints. Best-effort: a missing or
+// unparseable portals.yml just yields no hints (site === tenant still works on
+// many tenants, and unresolved Workday URLs fall back to Playwright). Site
+// extraction (incl. locale stripping) lives in liveness-core so it stays testable.
+const WORKDAY_TENANT_RX = /([^./]+)\.(wd\d+)\.myworkdayjobs\.com/i;
+
+function buildWorkdaySiteHints() {
+  const map = new Map();   // "tenant.shard" (lowercase) → [site, …]
+  if (!existsSync(PORTALS)) return map;
+  let config;
+  try {
+    // js-yaml is EOL-tolerant, so CRLF portals.yml parses fine.
+    config = yaml.load(readFileSync(PORTALS, 'utf8'));
+  } catch { return map; }
+  for (const company of config?.tracked_companies || []) {
+    const careersUrl = company?.careers_url || '';
+    const tenantMatch = careersUrl.match(WORKDAY_TENANT_RX);
+    const site = workdaySiteFromCareersUrl(careersUrl);
+    if (!tenantMatch || !site) continue;
+    const [, tenant, shard] = tenantMatch;
+    const key = `${tenant}.${shard}`.toLowerCase();
+    const sites = map.get(key) || [];
+    if (!sites.includes(site)) sites.push(site);
+    map.set(key, sites);
+  }
+  return map;
+}
+
+const workdaySiteHints = buildWorkdaySiteHints();
+
+function siteHintsFor(parsedWd) {
+  if (!parsedWd) return [];
+  return workdaySiteHints.get(`${parsedWd.tenant}.${parsedWd.shard}`.toLowerCase()) || [];
+}
+
 async function checkOne(item) {
+  // Workday job pages 404 / time out on a raw Playwright load even when live, so
+  // resolve them via the CXS JSON API. Only a definitive verdict short-circuits;
+  // an inconclusive API result (null) falls through to the Playwright path below.
+  const wd = parseWorkdayUrl(item.url);
+  if (wd) {
+    const verdict = await checkWorkdayLiveness(item.url, { siteHints: siteHintsFor(wd) });
+    if (verdict) return { ...item, ...verdict };
+  }
+
   const page = await context.newPage();
   try {
     const response = await page.goto(item.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
