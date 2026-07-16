@@ -119,11 +119,15 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
 
   // Recent activity (last 14d, active apps only)
   const recent = useMemoO(() => activeApps.filter(a => window.daysAgo(a.date) <= 14).length, [activeApps]);
-  const responseRate = useMemoO(() => {
-    const applied = activeApps.filter(a => ["Applied", "Responded", "Offer", "Rejected", "No Response"].includes(a.status) || window.isInterviewStage(a.status)).length;
-    const responded = activeApps.filter(a => ["Responded", "Offer"].includes(a.status) || window.isInterviewStage(a.status)).length;
-    return applied ? Math.round((responded / applied) * 100) : 0;
-  }, [activeApps]);
+  // Read the same rungs the funnel below renders so the card and the funnel can
+  // never disagree. Counting live status instead would undercount: anyone who
+  // replied and was later rejected drops out of the numerator (they now read
+  // "Rejected") while still sitting in the denominator.
+  const { responded, appliedN, responseRate } = useMemoO(() => {
+    const at = stage => funnel.find(f => f.label === stage)?.value || 0;
+    const appliedN = at("Applied"), responded = at("Responded");
+    return { responded, appliedN, responseRate: appliedN ? Math.round((responded / appliedN) * 100) : 0 };
+  }, [funnel]);
   const avgScore = useMemoO(() => {
     const scored = activeApps.filter(a => a.score != null);
     if (!scored.length) return "—";
@@ -261,7 +265,7 @@ const toggleRow = (id) => setSelected(s => {
           <span className="kpi-label">Response Rate</span>
           <span className="kpi-value">{responseRate}%</span>
           <span className={`kpi-delta ${responseRate >= 22 ? "up" : "down"}`}>
-            {responseRate >= 22 ? "▲ above" : "▼ below"} 22% benchmark
+            {responded} of {appliedN} replied · {responseRate >= 22 ? "▲ above" : "▼ below"} 22% benchmark
           </span>
         </div>
         <div className="kpi">
