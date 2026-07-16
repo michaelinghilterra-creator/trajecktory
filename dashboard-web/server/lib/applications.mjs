@@ -1,9 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import { APPS_MD, ROOT_DIR } from '../config.mjs';
+import { APPS_MD, ROOT_DIR, STATUS_EVENTS_PATH } from '../config.mjs';
 import { parseTrackerLine } from '../../../lib/tracker.mjs';
 import { hasV1Frontmatter, parseV1, v1Header } from '../v1-loader.mjs';
 import { logStatusEvent, parseStatusEvents } from './sidecars.mjs';
+import { FUNNEL_ORDER, makeFurthestIdx } from './statuses.mjs';
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
@@ -191,18 +192,23 @@ function classifySource(notes, url) {
 // invalidates the cache automatically. Note: a report-header edit that does not
 // touch applications.md will not invalidate this until the next write or a
 // server restart (report headers are themselves mtime-cached for fresh reads).
-let _appsCache = null; // { mtimeMs, rows }
+// Also keyed on the status-event log's mtime: each row carries a `reached` rung
+// derived from that log, so an event-only write (no tracker edit) must
+// invalidate this too or `reached` goes stale.
+let _appsCache = null; // { mtimeMs, evMtimeMs, rows }
 function parseApplicationsMd() {
   let mtimeMs = 0;
+  let evMtimeMs = 0;
   let missing = false;
   try { mtimeMs = fs.statSync(APPS_MD).mtimeMs; } catch { missing = true; }
-  if (_appsCache && _appsCache.mtimeMs === mtimeMs) return _appsCache.rows;
+  try { evMtimeMs = fs.statSync(STATUS_EVENTS_PATH).mtimeMs; } catch { /* no events logged yet */ }
+  if (_appsCache && _appsCache.mtimeMs === mtimeMs && _appsCache.evMtimeMs === evMtimeMs) return _appsCache.rows;
   if (missing) {
     // Fresh install / pre-onboarding: the tracker doesn't exist yet. Return an
     // empty set instead of throwing so /api/applications and the follow-up
     // endpoints don't 500 on first launch (caches as mtime 0; once onboarding
     // creates applications.md, statSync returns a real mtime and this misses).
-    _appsCache = { mtimeMs: 0, rows: [] };
+    _appsCache = { mtimeMs: 0, evMtimeMs, rows: [] };
     return _appsCache.rows;
   }
   const text = fs.readFileSync(APPS_MD, 'utf8');
@@ -262,7 +268,16 @@ function parseApplicationsMd() {
       legitimacy,          // 'High Confidence' | 'Proceed with Caution' | 'Suspicious' | null
     });
   }
-  _appsCache = { mtimeMs, rows };
+  // Stamp the furthest funnel rung each row ever reached. The browser cannot
+  // read the event log, so without this the UI can only see the live status and
+  // the [reached:] tag, and undercounts anyone who replied then got rejected.
+  const { furthestIdx } = makeFurthestIdx(parseStatusEvents());
+  for (const r of rows) {
+    const i = furthestIdx(r);
+    r.reached = i >= 0 ? FUNNEL_ORDER[i] : null;
+  }
+
+  _appsCache = { mtimeMs, evMtimeMs, rows };
   return rows;
 }
 
