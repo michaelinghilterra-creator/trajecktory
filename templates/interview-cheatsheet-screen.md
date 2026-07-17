@@ -16,7 +16,7 @@
 
 > The cheat strip you read in the 60 seconds before joining the call. Keep these three items memorized verbatim.
 
-- **Pitch one-liner:** "{one sentence — your identity + altitude, e.g., 'BI & sales-strategy director who's spent 17 years at the intersection of data and revenue, most recently owning executive reporting across four regions and $400M ARR'}"
+- **Pitch one-liner:** "{one sentence — your identity + altitude, e.g., 'Supply-chain analytics lead who's spent a decade turning freight telemetry into margin, most recently owning carrier scorecarding across three lanes and $400M of managed spend'}"
 - **Lead-story title:** {The single story you'd open with if asked "tell me your background" — handle name only, e.g., "First EMEA Carrier Scorecard"}
 - **Walk-away number:** ${X}K base / ${Y}K OTE — the floor below which you politely close the conversation. NOT what you say out loud; the number you hold internally.
 

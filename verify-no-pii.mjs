@@ -53,10 +53,15 @@ function targets() {
 
 // Files where the maintainer's own contact/attribution legitimately appears.
 // Mirrors the allowlists in test-all.mjs and build-bundle.ps1.
+// Attribution and contact files only: an MIT LICENSE must name the copyright
+// holder, and a CODE_OF_CONDUCT must give an enforcement contact. Nothing else
+// belongs here. Notably absent are this file and test-all.mjs: both derive their
+// terms at runtime and are supposed to hold no literal, so exempting them would
+// only ever hide a mistake — which it did, on the first draft of this file.
 const IDENTITY_ALLOW = new Set([
   'README.md', 'LICENSE', 'CITATION.cff', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md',
   'SECURITY.md', 'SUPPORT.md', 'NOTICE.md', 'AGENTS.md', 'CLAUDE.md', 'package.json',
-  'FUNDING.yml', 'verify-no-pii.mjs', 'test-all.mjs',
+  'FUNDING.yml',
 ]);
 
 // ── 1. ARCHIVES ────────────────────────────────────────────────────────────
@@ -115,6 +120,43 @@ for (const src of ['data/target-talent.md', 'data/follow-ups.md']) {
   }
 }
 
+// career figures: the distinctive money amounts in the owner's CV and story bank.
+// A template whose example is written from a real bio (an employer, a tenure, a
+// revenue figure, a real story title) ships that bio to every user, and no
+// identity/comp/company rule catches it — the amount is not a salary, not a
+// company, and not a name. Money tokens are the highest-signal, lowest-noise handle
+// on this class: they are rare, exact, and an amount in someone's CV is theirs.
+//
+// Do NOT paste a real example of the thing here to illustrate it. The first draft
+// of this comment quoted the actual revenue figure it exists to catch, which put
+// that figure into a tracked file — and this file was allowlisted, so the check
+// skipped itself and reported clean. A leak-checker must not be the leak, and an
+// allowlist is how it becomes one.
+const figures = new Set();
+const cvText = ['cv.md', 'interview-prep/story-bank.md', 'article-digest.md']
+  .map(read).filter(Boolean).join('\n');
+for (const m of cvText.matchAll(/\$\d+(?:\.\d+)?[KMB]\b/g)) figures.add(m[0]);
+
+// Employer names and story titles from the same sources. These need a heuristic
+// (there is no employer field to read) and the obvious one — every proper noun in
+// the CV — is unusable: it flags LinkedIn, RevOps, MEDDPICC, OpenAI, SaaS, i.e.
+// the industry vocabulary any CV shares with any codebase in this domain. What
+// distinguishes an employer is that it is a CamelCase/compound token in HIS CV
+// that a generic corpus would not contain, so subtract the vocabulary explicitly.
+// Story titles come from the story-bank headings, which are already his phrasing.
+const GENERIC = new Set(['LinkedIn', 'RevOps', 'MEDDPICC', 'ZoomInfo', 'OpenAI', 'SaaS', 'STAR',
+  'FIRST', 'AMEA', 'EMEA', 'LATAM', 'APAC', 'GitHub', 'YouTube', 'PowerBI', 'BigQuery', 'HubSpot',
+  'Marketo', 'Salesforce', 'Workday', 'Greenhouse', 'JavaScript', 'TypeScript', 'PostgreSQL',
+  'ChatGPT', 'ClaudeCode', 'PowerPoint', 'NetSuite', 'QuickBooks', 'DataRobot', 'SalesLoft']);
+const career = new Map();
+for (const m of cvText.matchAll(/\b[A-Z][a-z]+[A-Z][A-Za-z]{2,}\b/g)) {
+  if (!GENERIC.has(m[0])) career.set(m[0], 'employer/product from the owner CV');
+}
+for (const m of (read('interview-prep/story-bank.md') || '').matchAll(/^#{1,4}\s+(.{10,70})$/gm)) {
+  const t = m[1].replace(/[*_`#]/g, '').trim();
+  if (t.split(/\s+/).length >= 4) career.set(t, 'story title from the owner story bank');
+}
+
 // pipeline state. A company name alone is NOT a leak, and this is the trap that
 // makes a naive rule useless: templates/portals.example.yml ships ~45 real tech
 // companies as a product feature, dashboard-web/src/data.js ships ~53 fabricated
@@ -157,6 +199,20 @@ for (const abs of files) {
   }
 
   let buf; try { buf = readFileSync(abs); } catch { continue; }
+
+  // Binary content is not scannable as text and must not be treated as if it were.
+  // A PNG stores its pixels zlib-compressed, so rendered text never appears as
+  // plaintext bytes, while random bytes DO occasionally spell a short token — a
+  // screenshot in docs/ matched one of the money figures below by pure chance.
+  // Scanning binaries for strings is therefore all false positive and no signal,
+  // which is exactly why archives are refused structurally above rather than
+  // searched. (The figure itself is deliberately not quoted here: it is real, and
+  // this file is tracked. Naming a leak while documenting it is how it ships.)
+  //
+  // The residual risk this leaves is real but not solvable by grep: a SCREENSHOT of
+  // a real dashboard leaks whatever is on screen, and no byte scan can see it. That
+  // is a human review item, called out in docs/ rather than pretended away here.
+  if (buf.subarray(0, 8192).includes(0)) continue;
   const text = buf.toString('utf8');
 
   // 2. owner identity (skips attribution files)
@@ -173,6 +229,21 @@ for (const abs of files) {
   //    theirs, and no attribution file has a reason to carry one.
   for (const addr of thirdParty) {
     if (text.includes(addr)) leak(rel, 'THIRD-PARTY EMAIL', addr);
+  }
+
+  // 3b. career content from the owner's own CV / story bank
+  if (!IDENTITY_ALLOW.has(name)) {
+    for (const f of figures) {
+      if (text.includes(f)) {
+        leak(rel, 'CAREER FIGURE', `${f} — appears in the owner CV/story bank; example content in a shipped file must be invented`);
+      }
+    }
+    for (const [t, why] of career) {
+      const re = t.length < 12 ? new RegExp(`\\b${rx(t)}\\b`) : null;
+      if (re ? re.test(text) : text.includes(t)) {
+        leak(rel, 'CAREER CONTENT', `"${t}" — ${why}; example content in a shipped file must be invented`);
+      }
+    }
   }
 
   // 4. compensation literals

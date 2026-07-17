@@ -121,7 +121,7 @@ Negative values render as red bars. `max` is per-dimension (usually 5).
 "sellSenior": [
   {
     "claim": "Open with scope, not title",
-    "proof": "Owned BI across NA + AMEA — 11 reports, 4 regions, $400M ARR",
+    "proof": "Owned carrier analytics across EMEA + LATAM — 9 dashboards, 3 lanes, $400M managed spend",
     "phrase": "The title was Director; the scope was VP."
   }
 ]
@@ -159,18 +159,18 @@ Negative values render as red bars. `max` is per-dimension (usually 5).
 ### Interview
 ```json
 "starStories": [
-  { "title": "First EMEA Carrier Scorecard", "req": "Establish unified revenue KPIs",
+  { "title": "First EMEA Carrier Scorecard", "req": "Establish unified carrier KPIs",
     "S": "...", "T": "...", "A": "...", "R": "..." }
 ],
 "leadStory": {
-  "title": "MEDDPICC + KPI baseline",
-  "reason": "Shows org change at 150+ sellers, RevOps thinking, systems builder",
+  "title": "Scorecard + tender baseline",
+  "reason": "Shows org change at 200+ carriers, ops thinking, systems builder",
   "script": "Optional verbatim opening line"
 },
 "redFlagQs": [
   { "q": "You're a Director. Why apply for VP?",
     "behind": "Recruiter wants title-vs-scope honesty",
-    "a": "Scope, not title. I owned BI/RevOps for $400M ARR..." }
+    "a": "Scope, not title. I owned carrier analytics for $400M of managed spend..." }
 ]
 ```
 

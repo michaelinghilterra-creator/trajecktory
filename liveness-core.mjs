@@ -110,11 +110,13 @@ function sameReq(a, b) {
  *
  *   { tenant, shard, siteFromUrl, externalPath, reqId }
  *
- * Handles both URL shapes seen in the wild:
- *   short: https://zendesk.wd1.myworkdayjobs.com/job/Remote-NY/Director--Sales-Strategy_R00000
+ * Handles both URL shapes seen in the wild (tenants and requisitions below are
+ * invented; a real posting the maintainer was tracking does not belong in a doc
+ * comment that ships to every user):
+ *   short: https://contoso.wd1.myworkdayjobs.com/job/Remote-NY/Director--Revenue-Operations_R00000
  *          → siteFromUrl null (site not in path; resolve from hints/tenant)
- *   full:  https://datarobot.wd1.myworkdayjobs.com/en-US/DataRobot_External_Careers/job/…_R-102632
- *          → siteFromUrl "DataRobot_External_Careers" (leading en-US locale dropped)
+ *   full:  https://fabrikam.wd1.myworkdayjobs.com/en-US/Fabrikam_External_Careers/job/…_R-000000
+ *          → siteFromUrl "Fabrikam_External_Careers" (leading en-US locale dropped)
  */
 export function parseWorkdayUrl(url) {
   if (typeof url !== 'string') return null;
