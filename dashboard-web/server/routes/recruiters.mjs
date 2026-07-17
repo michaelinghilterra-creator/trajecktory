@@ -140,6 +140,13 @@ router.post('/api/recruiters/:id/draft', async (req, res) => {
     const messageType = req.body?.messageType || (isFirstTouch ? 'first-touch' : 'follow-up');
 
     const me = getIdentity();
+    // The "documented approach" link is OPTIONAL and entirely config-driven: it
+    // resolves from candidate.portfolio_url in profile.yml (getIdentity ->
+    // trajecktoryUrl) and is '' for any user who has not set one. Gate the whole
+    // block on a non-empty URL, otherwise the prompt orders the model to paste an
+    // empty string into a cold email as a "required" differentiator. Never
+    // hardcode a URL here: one that 404s for the recipient is worse than none.
+    const linkBlock = isFirstTouch && me.trajecktoryUrl;
     const prompt = `You are drafting a cold-outreach email from ${me.fullName} to an executive recruiter. Your job: write a short, direct, professional email in ${me.firstName}'s voice.
 
 == RECRUITER ==
@@ -162,10 +169,10 @@ ${profileMd}
 - Never invent metrics or claims not on the CV.
 - Lead with a specific reason for contacting THIS recruiter (their firm specialty, location, recent placements if known). Generic outreach gets ignored.
 - Make the ask specific: a 20-minute conversation about RevOps/SalesOps/Analytics director-level openings in their network.
-- Include one quantified proof point from the CV (e.g., "$400M ARR reporting", "47-person SDR org redesign", "MEDDPICC across 150+ sellers").
+- Include one quantified proof point taken verbatim from the CV above. Never invent, round, or embellish a metric.
 - Close with a clear next step.
-${isFirstTouch ? `
-- FOR FIRST-TOUCH RECRUITER OUTREACH (REQUIRED — do NOT omit): Include ONE sentence that references ${me.firstName}'s documented approach to strategic hiring/job search at ${me.trajecktoryUrl}. This is a load-bearing differentiator — it shows he thinks systematically about process and understands AI tooling, which distinguishes him from typical candidates. Weave it in naturally (not as a tacked-on PS) and ALWAYS include the full URL "${me.trajecktoryUrl}" verbatim so the recruiter can click through. Example phrasings: "I've documented my approach to strategic hiring and process design at ${me.trajecktoryUrl}" or "I approach hiring conversations the way a RevOps leader approaches forecasting — see ${me.trajecktoryUrl} for context." Pick whichever fits the tone; do not skip it.
+${linkBlock ? `
+- FOR FIRST-TOUCH RECRUITER OUTREACH: Include ONE sentence that references ${me.firstName}'s documented approach to strategic hiring/job search at ${me.trajecktoryUrl}. It shows he thinks systematically about process and understands AI tooling, which distinguishes him from typical candidates. Weave it in naturally (not as a tacked-on PS) and include the full URL "${me.trajecktoryUrl}" verbatim so the recruiter can click through. Example phrasings: "I've documented my approach to strategic hiring and process design at ${me.trajecktoryUrl}" or "I approach hiring conversations the way a RevOps leader approaches forecasting — see ${me.trajecktoryUrl} for context." Pick whichever fits the tone.
 ` : ''}
 
 ${isFirstTouch ? '' : `

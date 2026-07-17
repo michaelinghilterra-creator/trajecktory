@@ -55,7 +55,7 @@ Follow the **cover letter structure from _profile.md** exactly. Under 350 words 
 
 **Structure:**
 1. **Hook** (1–2 sentences) — specific to this company or role; references something real from the JD or Block A. Never opens with "I am writing to express my interest in..." or "I'm excited to apply for..."
-2. **Who I am + what I owned** (2–3 sentences) — the exit narrative bridge from _profile.md; establish scope without naming Northwind Logistics
+2. **Who I am + what I owned** (2–3 sentences) — the exit narrative bridge from _profile.md; establish scope without naming the most recent employer
 3. **Achievement 1** (2–3 sentences) — the recommended case study from Block F, quantified; matches the role's primary need from Block E
 4. **Achievement 2 or company connection** (2–3 sentences) — second proof point from Block B, OR something specific about this company that maps to your experience
 5. **What the resume doesn't show** (1–2 sentences) — the cross-cutting advantage from _profile.md ("bilingual: data and sales"); adapt to the archetype
@@ -66,10 +66,10 @@ Follow the **cover letter structure from _profile.md** exactly. Under 350 words 
 | Archetype | Hook angle |
 |-----------|------------|
 | Revenue Operations | Open on the gap between having a CRM and having a revenue system — then land MEDDPICC |
-| Analytics / BI | Open on the gap between dashboards and decisions — then land the 10d → 36h infrastructure story |
+| Analytics / BI | Open on the gap between dashboards and decisions — then land the executive-reporting infrastructure story (pull the cycle-time numbers from cv.md) |
 | Sales Operations | Open on the gap between sales activity and sales clarity — then land MEDDPICC + CRM governance |
 | Commercial Excellence / Sales Strategy | Open on the gap between sales effort and sales effectiveness — then land sales process programs + seller productivity |
-| Sales / Revenue Enablement | Open on the gap between hiring sellers and ramping them — then land MEDDPICC rollout across 150+ sellers + seller-productivity systems |
+| Sales / Revenue Enablement | Open on the gap between hiring sellers and ramping them — then land the MEDDPICC rollout as deploying a methodology to a whole salesforce (pull the seller count from cv.md) + seller-productivity systems |
 
 **Keep the letter consistent with the tailored CV.** When a CV is being
 generated for the same role, read the archetype's `resume_framing` block in
@@ -90,11 +90,10 @@ If `[referral: NAME]` was in the Notes column: weave it in naturally in paragrap
 - Passive constructions: "was tasked with," "was selected to," "was responsible for"
 - Vague scope: "multiple stakeholders," "various teams," "cross-functional projects"
 
-**Sensitive framing rules (from _profile.md — always apply):**
-- Director BDS (6-month tenure): "CRO-sponsored strategic rotation" — never "short stint"
-- No degree: never mention it; flag if JD requires one
-- Departure: "My role was eliminated in a restructuring at the end of 2025..."
-- Overqualification: frame as moving toward building and execution
+**Sensitive framing rules:** read from `modes/_profile.md` if present. That file is
+the user layer and holds the candidate's own framing and verbatim scripts; this mode
+is the system layer and must not restate them. If the section is absent, skip it
+rather than improvising a framing for the candidate's background.
 
 ---
 
@@ -172,7 +171,7 @@ Then ask:
 - **NEVER invent metrics or experience** — all quantified claims come from cv.md
 - **NEVER use prohibited phrases** — read the hard ban list from _profile.md before writing
 - **NEVER use double-dashes (`--`) or em-dashes (`—`) anywhere in the cover letter.** Hyphens connecting compound words are fine ("data-driven", "cross-functional", "real-time"). For separating clauses, use periods (split into two sentences), commas, semicolons, colons, or parentheses. **Before writing the PDF: scan the body text for `--` and `—` characters. If any are found, rewrite those sentences before rendering.** This rule applies to ALL outputs (markdown draft, HTML, PDF, regenerations).
-- **Sensitive framing always applies** — BDS rotation, departure narrative, no degree
+- **Sensitive framing always applies** — read the rules from `modes/_profile.md`
 - **One specific company or role reference per letter** — generic cover letters are rejected; anchor to something real from Block A or Block E
 - **The letter is not the resume** — no bullet points, no tables; prose only
 - **Closing line must be direct** — one sentence, no hedging, no "I look forward to..."

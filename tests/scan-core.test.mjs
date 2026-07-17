@@ -42,24 +42,24 @@ check(normalizeUrl('https://jobs.lever.co/acme/29bda415-3896-45d3/apply') === 'h
   'strips trailing /apply (Lever)');
 check(normalizeUrl('https://jobs.lever.co/acme/29bda415-3896-45d3/apply?utm=x') === 'https://jobs.lever.co/acme/29bda415-3896-45d3',
   '/apply + query string both stripped (dedupes to clean url)');
-check(normalizeUrl('https://jobs.lever.co/applydigital/be70d3cb-2d5e-4b59') === 'https://jobs.lever.co/applydigital/be70d3cb-2d5e-4b59',
-  'does NOT strip "apply" inside the applydigital company slug');
-check(normalizeUrl('https://apply.workable.com/fleetio/j/BA4D0137BF/') === 'https://apply.workable.com/fleetio/j/BA4D0137BF',
+check(normalizeUrl('https://jobs.lever.co/applyworks/be70d3cb-2d5e-4b59') === 'https://jobs.lever.co/applyworks/be70d3cb-2d5e-4b59',
+  'does NOT strip "apply" inside a company slug that merely starts with it');
+check(normalizeUrl('https://apply.workable.com/northwind/j/BA4D0137BF/') === 'https://apply.workable.com/northwind/j/BA4D0137BF',
   'does NOT strip the apply.workable.com host (apply only in hostname)');
 
 // gh_jid is the ONLY thing distinguishing postings on a Greenhouse board
-// proxied through a shared-path custom domain (Databricks, Fivetran, ZoomInfo,
-// Lattice, Stability AI, ...). Stripping it collapsed every posting from that
-// company to one dedup key (audit 2026-07-15). It must survive normalization,
-// and two different job ids must NOT normalize to the same key.
-check(normalizeUrl('https://databricks.com/company/careers/open-positions/job?gh_jid=8479034002') === 'https://databricks.com/company/careers/open-positions/job?gh_jid=8479034002',
+// proxied through a shared-path custom domain. Stripping it collapsed every
+// posting from that company to one dedup key (audit 2026-07-15). It must
+// survive normalization, and two different job ids must NOT normalize to the
+// same key.
+check(normalizeUrl('https://contoso.com/company/careers/open-positions/job?gh_jid=4001001001') === 'https://contoso.com/company/careers/open-positions/job?gh_jid=4001001001',
   'preserves gh_jid on a shared-path Greenhouse proxy URL');
-check(normalizeUrl('https://databricks.com/company/careers/open-positions/job?gh_jid=1111') !==
-      normalizeUrl('https://databricks.com/company/careers/open-positions/job?gh_jid=2222'),
+check(normalizeUrl('https://contoso.com/company/careers/open-positions/job?gh_jid=1111') !==
+      normalizeUrl('https://contoso.com/company/careers/open-positions/job?gh_jid=2222'),
   'two different gh_jid values do NOT collapse to the same dedup key');
-check(normalizeUrl('https://lattice.com/job?gh_jid=8581365002&utm_source=indeed&utm_medium=cpc') === 'https://lattice.com/job?gh_jid=8581365002',
+check(normalizeUrl('https://northwind.com/job?gh_jid=4002002002&utm_source=indeed&utm_medium=cpc') === 'https://northwind.com/job?gh_jid=4002002002',
   'strips utm_* tracking params while keeping gh_jid');
-check(normalizeUrl('https://www.zoominfo.com/careers?utm_source=x&gh_jid=8536807002') === 'https://www.zoominfo.com/careers?gh_jid=8536807002',
+check(normalizeUrl('https://www.acme.com/careers?utm_source=x&gh_jid=4003003003') === 'https://www.acme.com/careers?gh_jid=4003003003',
   'keeps gh_jid regardless of its position in the query string');
 check(normalizeUrl('https://x.com/jobs/1/application?gh_jid=555') === 'https://x.com/jobs/1?gh_jid=555',
   'strips /application segment while still preserving gh_jid');
@@ -68,7 +68,7 @@ check(normalizeUrl('https://x.com/jobs/1/apply?gh_jid=555') === 'https://x.com/j
 // A board that already bakes the job id into the PATH (boards.greenhouse.io
 // style) has no query-string ambiguity, so a bare gh_jid with no other
 // tracking params round-trips unchanged.
-check(normalizeUrl('https://boards.greenhouse.io/6sense/jobs/7809001?gh_jid=7809001') === 'https://boards.greenhouse.io/6sense/jobs/7809001?gh_jid=7809001',
+check(normalizeUrl('https://boards.greenhouse.io/exampleco/jobs/5550001?gh_jid=5550001') === 'https://boards.greenhouse.io/exampleco/jobs/5550001?gh_jid=5550001',
   'path-unique Greenhouse URL keeps its gh_jid too (harmless — key stays unique either way)');
 // Non-identifying query strings with no gh_jid still fully strip, unaffected
 // by the new allowlist logic.
@@ -84,7 +84,7 @@ check(normalizeForMatch('Sales & Marketing') === 'sales marketing',
   'drops " & "');
 check(normalizeForMatch('') === '', 'empty stays empty');
 // Spelled-out "Vice President" folds to "vp" so one "VP of X" positive covers
-// both forms (audit 2026-07-15: GitLab "Vice President, Data & Insights" was
+// both forms (audit 2026-07-15: a "Vice President, Data & Insights" posting was
 // invisible to the "VP of Data & Insights" positive).
 check(normalizeForMatch('Vice President, Data & Insights') === 'vp data insights',
   '"Vice President" folds to "vp"');
@@ -146,14 +146,14 @@ check(scoreOffer({ title: 'AI Product Manager', postedAt: new Date().toISOString
 // the entries these tests exercise.
 const locPolicy = {
   location_policy: {
-    home: { lat: 33.0857, lon: -97.2969, commute_radius_miles: 50 },
+    home: { lat: 32.7767, lon: -96.7970, commute_radius_miles: 50 },
     hard_no: ['new york', 'san francisco', 'chicago'],
     dfw_core: ['dallas', 'fort worth', 'dfw'],
     metro_allow: ['plano', 'frisco'],
     hybrid_remote_only: ['austin'],
     tx_city_coords: [
-      { name: 'waco', lat: 31.5493, lon: -97.1467 },      // ~85mi, outside radius
-      { name: 'denton', lat: 33.2148, lon: -97.1331 },    // ~12mi, inside radius
+      { name: 'waco', lat: 31.5493, lon: -97.1467 },      // ~87mi, outside radius
+      { name: 'denton', lat: 33.2148, lon: -97.1331 },    // ~36mi, inside radius
     ],
   },
 };
@@ -209,6 +209,23 @@ check(lf('Waco, TX') === false, 'TX city outside commute radius blocks onsite');
 check(lf('Waco, TX (Remote)') === true, 'TX city outside commute radius passes remote');
 check(lf('Denver, CO') === false, 'named non-TX city with no remote signal still blocks');
 check(lf('Denver, CO (Remote)') === true, 'named non-TX city with remote signal still passes');
+
+// A policy with no home block must NOT fall back to some hardcoded town: there
+// is no origin to measure from, so the radius math is skipped and TX cities
+// pass through to eval (rule 7's unknown-city path). Guards against a default
+// coordinate pair creeping back in and silently measuring every commute from
+// the wrong place. Non-TX behavior is unaffected (rules 10-11 need no origin).
+const noHome = buildLocationFilter({
+  location_policy: {
+    hard_no: ['new york'],
+    dfw_core: ['dallas'],
+    tx_city_coords: [{ name: 'waco', lat: 31.5493, lon: -97.1467 }],
+  },
+});
+check(noHome('Waco, TX') === true, 'no home configured: TX city passes through to eval, not judged by a default origin');
+check(noHome('Dallas, TX') === true, 'no home configured: dfw_core list still passes (no coords needed)');
+check(noHome('New York, NY') === false, 'no home configured: hard_no still blocks (no coords needed)');
+check(noHome('Denver, CO') === false, 'no home configured: non-TX with no remote signal still blocks');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

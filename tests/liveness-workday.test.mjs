@@ -24,16 +24,16 @@ console.log('liveness-workday.test.mjs');
 
 // ── parseWorkdayUrl ───────────────────────────────────────────────────────────
 
-const zendesk = parseWorkdayUrl(
-  'https://zendesk.wd1.myworkdayjobs.com/job/Remote-New-York-United-States-of-America/Director--Sales-Strategy_R00000'
+const contoso = parseWorkdayUrl(
+  'https://contoso.wd1.myworkdayjobs.com/job/Remote-New-York-United-States-of-America/Director--Revenue-Operations_R00000'
 );
-check(zendesk?.tenant === 'zendesk' && zendesk?.shard === 'wd1',
+check(contoso?.tenant === 'contoso' && contoso?.shard === 'wd1',
   'short-form: extracts tenant + shard');
-check(zendesk?.siteFromUrl === null,
+check(contoso?.siteFromUrl === null,
   'short-form: no site in path → siteFromUrl null');
-check(zendesk?.reqId === 'R00000',
+check(contoso?.reqId === 'R00000',
   'short-form: extracts trailing _R00000 requisition id');
-check(zendesk?.externalPath === '/job/Remote-New-York-United-States-of-America/Director--Sales-Strategy_R00000',
+check(contoso?.externalPath === '/job/Remote-New-York-United-States-of-America/Director--Revenue-Operations_R00000',
   'short-form: externalPath starts at /job/');
 
 const full = parseWorkdayUrl(
@@ -52,20 +52,20 @@ const dashedReq = parseWorkdayUrl(
 check(dashedReq?.reqId === 'JR-000627-1',
   'requisition id after the LAST underscore only (JR-000627-1)');
 
-check(parseWorkdayUrl('https://zendesk.wd1.myworkdayjobs.com/zendesk') === null,
+check(parseWorkdayUrl('https://contoso.wd1.myworkdayjobs.com/contoso') === null,
   'board / careers-home URL (no /job/) → null (use Playwright)');
 check(parseWorkdayUrl('https://boards.greenhouse.io/acme/jobs/123') === null,
   'non-Workday URL → null');
 check(parseWorkdayUrl('') === null && parseWorkdayUrl(null) === null,
   'empty / non-string input → null');
 check(parseWorkdayUrl(
-  'https://zendesk.wd1.myworkdayjobs.com/job/Remote/Director_R00000?src=indeed#top'
+  'https://contoso.wd1.myworkdayjobs.com/job/Remote/Director_R00000?src=indeed#top'
 )?.reqId === 'R00000',
   'query string + hash are ignored when extracting the req id');
 
 // ── workdaySiteFromCareersUrl (portals.yml hint extraction) ───────────────────
 
-check(workdaySiteFromCareersUrl('https://zendesk.wd1.myworkdayjobs.com/zendesk') === 'zendesk',
+check(workdaySiteFromCareersUrl('https://contoso.wd1.myworkdayjobs.com/contoso') === 'contoso',
   'careers_url: bare site path → site');
 check(workdaySiteFromCareersUrl('https://alkami.wd12.myworkdayjobs.com/Alkami') === 'Alkami',
   'careers_url: preserves site-name casing (Alkami)');
@@ -95,12 +95,12 @@ function stubFetch(router) {
 }
 
 const ZENDESK_URL =
-  'https://zendesk.wd1.myworkdayjobs.com/job/Remote-New-York-United-States-of-America/Director--Sales-Strategy_R00000';
+  'https://contoso.wd1.myworkdayjobs.com/job/Remote-New-York-United-States-of-America/Director--Revenue-Operations_R00000';
 
 // 1) Direct detail endpoint returns the posting → active.
 {
   const fetchImpl = stubFetch((url) => {
-    if (url.includes('/wday/cxs/zendesk/zendesk/job/')) {
+    if (url.includes('/wday/cxs/contoso/contoso/job/')) {
       return { status: 200, body: { jobPostingInfo: { title: 'Director, Sales Strategy', canApply: true } } };
     }
     return { status: 200, body: { total: 0, jobPostings: [] } };
@@ -114,7 +114,7 @@ const ZENDESK_URL =
   const fetchImpl = stubFetch((url, init) => {
     if (init?.method === 'POST') {
       return { status: 200, body: { total: 1, jobPostings: [
-        { title: 'Director, Sales Strategy', externalPath: '/job/Remote/Director--Sales-Strategy_R00000' },
+        { title: 'Director, Sales Strategy', externalPath: '/job/Remote/Director--Revenue-Operations_R00000' },
       ] } };
     }
     return { status: 404 };   // detail miss
@@ -139,15 +139,15 @@ const ZENDESK_URL =
   const calls = [];
   const fetchImpl = stubFetch((url, init) => {
     calls.push(url);
-    if (url.includes('/wday/cxs/zendesk/WrongSite/')) return { status: 404 };   // bad hint
-    if (url.includes('/wday/cxs/zendesk/zendesk/job/')) {
+    if (url.includes('/wday/cxs/contoso/WrongSite/')) return { status: 404 };   // bad hint
+    if (url.includes('/wday/cxs/contoso/contoso/job/')) {
       return { status: 200, body: { jobPostingInfo: { title: 'Director, Sales Strategy' } } };
     }
     return { status: 200, body: { total: 0, jobPostings: [] } };
   });
   const v = await checkWorkdayLiveness(ZENDESK_URL, { siteHints: ['WrongSite'], fetchImpl });
   check(v?.result === 'active', 'falls through a wrong site hint to the tenant site → active');
-  check(calls.some((u) => u.includes('/WrongSite/')) && calls.some((u) => u.includes('/zendesk/')),
+  check(calls.some((u) => u.includes('/WrongSite/')) && calls.some((u) => u.includes('/contoso/')),
     'tried the wrong hint before the tenant fallback');
 }
 
@@ -204,13 +204,13 @@ const ZENDESK_URL =
 {
   const fetchImpl = stubFetch((url, init) => {
     // "SiteA" is a real career site (search 200) that does NOT have the req.
-    if (url.includes('/wday/cxs/zendesk/SiteA/')) {
+    if (url.includes('/wday/cxs/contoso/SiteA/')) {
       return init?.method === 'POST'
         ? { status: 200, body: { total: 0, jobPostings: [] } }
         : { status: 404 };   // detail miss on SiteA
     }
     // The tenant-default site DOES host it.
-    if (url.includes('/wday/cxs/zendesk/zendesk/job/')) {
+    if (url.includes('/wday/cxs/contoso/contoso/job/')) {
       return { status: 200, body: { jobPostingInfo: { title: 'Director, Sales Strategy', canApply: true } } };
     }
     return { status: 200, body: { total: 0, jobPostings: [] } };
@@ -224,13 +224,13 @@ const ZENDESK_URL =
 {
   const seenSites = new Set();
   const fetchImpl = stubFetch((url, init) => {
-    const m = url.match(/\/wday\/cxs\/zendesk\/([^/]+)\//);
+    const m = url.match(/\/wday\/cxs\/contoso\/([^/]+)\//);
     if (m) seenSites.add(m[1]);
     if (init?.method === 'POST') return { status: 200, body: { total: 0, jobPostings: [] } };
     return { status: 404 };   // detail miss everywhere
   });
   const v = await checkWorkdayLiveness(ZENDESK_URL, { siteHints: ['SiteA'], fetchImpl });
-  check(v?.result === 'expired' && seenSites.has('SiteA') && seenSites.has('zendesk'),
+  check(v?.result === 'expired' && seenSites.has('SiteA') && seenSites.has('contoso'),
     'expired only after every candidate site (hint + tenant) was searched');
 }
 

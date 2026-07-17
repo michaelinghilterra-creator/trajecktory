@@ -382,7 +382,7 @@ const normRole = (r) => (r || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim
 // Build provisional rows from triage cards, dropping any whose posting already
 // exists as a real row. Match by normalized URL FIRST; fall back to
 // company+exact-role ONLY for real rows that have no URL yet (pre-report). This
-// is why two genuinely different roles at one company — e.g. Diligent "Director,
+// is why two genuinely different roles at one company — e.g. Contoso "Director,
 // GTM Operations" (evaluated, has a URL) vs "Director, GTM Technology" (triage,
 // different URL) — both stay visible: URL-primary dedup keeps them apart, and
 // the exact-role fallback never fires for the URL-bearing evaluated row.
@@ -626,9 +626,12 @@ function CompPositioningCard(props) {
 }
 
 function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => false }) {
-  const walkAway = compTweaks?.walkAway ?? 160;
-  const targetLow = compTweaks?.targetLow ?? 220;
-  const targetHigh = compTweaks?.targetHigh ?? 250;
+  // Neutral placeholder fallbacks — real comp targets come from compTweaks
+  // (Tweaks panel) and the gitignored config/profile.yml. Never hardcode a
+  // real walk-away or target band here; this file ships to every user.
+  const walkAway = compTweaks?.walkAway ?? 90;
+  const targetLow = compTweaks?.targetLow ?? 100;
+  const targetHigh = compTweaks?.targetHigh ?? 140;
   const stageOf = (a) => STATUS_MAP[a.status]?.stage ?? -1;
   const reached = (a, s) => stageOf(a) >= s;
 
