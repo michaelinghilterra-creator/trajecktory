@@ -1,0 +1,32 @@
+{
+  "_comment": "EXAMPLE slot definitions. The real templates/cv-template-slots.json is USER-LAYER (gitignored), because its 'locator' values are verbatim text from YOUR cv-master.docx and are therefore personal data. The docx generator falls back to THIS file when the real one is absent, but the fictional locators below will not match your master, so the docx mode regenerates the real slots file from your CV during setup. Do not put real resume text here.",
+  "title": {
+    "locator": "Regional Logistics & Freight Operations Director",
+    "match": "exact",
+    "baseline_chars": 47,
+    "description": "Bold centered role-title line under the name. ~50 chars."
+  },
+  "subtitle_secondary": {
+    "locator": "Carrier Analytics | Network Optimization | Cost-to-Serve Strategy",
+    "match": "exact",
+    "baseline_chars": 64,
+    "description": "3-keyword centered line below the title. Three phrases separated by ' | '. ~60 chars."
+  },
+  "summary": {
+    "locator": "Supply-chain analytics leader who turns",
+    "match": "prefix",
+    "baseline_chars": 869,
+    "baseline_words": 130,
+    "page_break_sensitive": true,
+    "description": "Professional summary paragraph. Target ~130 words / ~870 chars to preserve page-break geometry."
+  },
+  "areas_of_expertise": {
+    "locator": "Carrier Scorecarding & Tender Analytics",
+    "match": "prefix",
+    "baseline_chars": 407,
+    "baseline_words": 50,
+    "baseline_items": 12,
+    "page_break_sensitive": true,
+    "description": "Comma-separated list of expertise phrases. Target 12 phrases, ~50 words / ~410 chars."
+  }
+}

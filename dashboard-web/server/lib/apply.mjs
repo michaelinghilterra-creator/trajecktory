@@ -6,7 +6,7 @@ import { execFile } from 'child_process';
 import { ROOT_DIR } from '../config.mjs';
 import { generateText, readProjectFile, draftModel } from './anthropic.mjs';
 import { renderObsidianNote, warnObsidianPushFailed } from './obsidian.mjs';
-import { getIdentity } from './profile.mjs';
+import { getIdentity, getObsidianAppliedFolder } from './profile.mjs';
 
 const applyJobs = new Map();
 // Hybrid generation: the Anthropic API when a key is present (fast), otherwise
@@ -58,7 +58,7 @@ async function runByoApplyJob(jobId, row) {
     const dateMDY = `${m}-${d2}-${y}`;
     const safeRole = row.role.replace(/[/\\:*?"<>|]/g, '-');
     const noteName = `${dateMDY} - ${row.company} - ${safeRole}`;
-    const notePath = `Job Search/Company Research/Applied/${noteName}.md`;
+    const notePath = `${getObsidianAppliedFolder()}/${noteName}.md`;
 
     const byoFallbackHeader = `# ${row.company} — ${row.role}\n\n**Applied:** ${todayFormal}\n**Score:** ${row.scoreRaw || 'N/A'}\n**Status:** Applied\n**Assets:** Bring-your-own (no trajecktory-generated CV or cover letter)\n`;
     const reportText = row.report ? readProjectFile(projectRoot, row.report) : '';
@@ -357,7 +357,7 @@ ${STYLE_RULES}`;
     const dateMDY = `${m}-${d2}-${y}`;
     const safeRole = row.role.replace(/[/\\:*?"<>|]/g, '-');
     const noteName = `${dateMDY} - ${row.company} - ${safeRole}`;
-    const notePath = `Job Search/Company Research/Applied/${noteName}.md`;
+    const notePath = `${getObsidianAppliedFolder()}/${noteName}.md`;
 
     // Build note content from report (or minimal fallback)
     const fallbackHeader = `# ${row.company} — ${row.role}\n\n**Applied:** ${todayFormal}\n**Score:** ${row.scoreRaw || 'N/A'}\n**Status:** Applied\n`;

@@ -123,6 +123,42 @@ if (profile) {
   }
 }
 
+// Customized profile SCALARS beyond the three identity keys. The gate read only
+// full_name/email/phone, so a real gitignored profile value hardcoded as a default
+// in shipped code was invisible — that shipped the owner's private Obsidian vault
+// taxonomy as a fallback path in apply.mjs, the same family as the walk-away leak
+// (a gitignored value pasted into shipped code). Derive EVERY distinctive scalar in
+// profile.yml that is NOT also the placeholder in the tracked profile.example.yml
+// (so it is genuinely user-customized, not a shipped default like resume_dir
+// "output"). The example-subtraction is load-bearing: without it, benign shared
+// defaults would flag. The length/shape gate keeps a city or currency from adding
+// noise.
+const profileScalars = new Map();
+{
+  const example = read('config/profile.example.yml') || '';
+  const exampleVals = new Set(
+    [...example.matchAll(/^\s*[\w-]+:\s*["']?([^"'\n#]+)/gm)].map((m) => m[1].trim()).filter(Boolean),
+  );
+  // Only two shapes are distinctive enough to flag without crying wolf (verified by
+  // running: the broad "any scalar >= 12 chars" version produced 4 false positives —
+  // a format string, an enum, a YAML-key parse artifact, and a generic career level —
+  // and zero of those is personal data). A gate that fires on those gets switched off.
+  //   (a) PATH-SHAPED: 2+ path separators. This is the vault-path leak, and the shape
+  //       of any private filesystem path a user might paste into code.
+  //   (b) LONG FREE TEXT: >= 18 chars WITH a space, no format braces / colons. Catches
+  //       a customized headline or summary sentence; excludes enums (no space), format
+  //       strings ({...}), and keys (trailing colon).
+  const prof = read('config/profile.yml') || '';
+  for (const m of prof.matchAll(/^\s*([\w-]+):\s*["']?([^"'\n#]+)/gm)) {
+    const key = m[1], val = m[2].trim();
+    if (exampleVals.has(val)) continue;                    // shipped placeholder, not user data
+    if (/[{}]/.test(val) || val.endsWith(':')) continue;   // format string / parse artifact
+    const pathShaped = (val.match(/[\\/]/g) || []).length >= 2;
+    const longFreeText = val.length >= 18 && /\s/.test(val);
+    if (pathShaped || longFreeText) profileScalars.set(val, key);
+  }
+}
+
 // third-party emails: every address the owner has collected about someone else.
 // v1.14.0 shipped a real recruiter's work email in a tracked fixture.
 const thirdParty = new Set();
@@ -152,6 +188,24 @@ const cvText = ['cv.md', 'interview-prep/story-bank.md', 'article-digest.md']
   .map(read).filter(Boolean).join('\n');
 for (const m of cvText.matchAll(/\$\d+(?:\.\d+)?[KMB]\b/g)) figures.add(m[0]);
 
+// Career METRICS as prose. A hero metric or a story Result is his real achievement,
+// and it leaked as an example title ("N days to N hours") in the batch prompt. It is
+// not a $-figure, not CamelCase, not a story heading, so nothing above saw it. Derive
+// the distinctive number-bearing spans from hero_metric and the story-bank Result
+// lines, and register BOTH the "→" and the spelled-out "to" form (the leak paraphrased
+// the arrow). Anchoring to a span that actually appears in his gitignored sources is
+// what keeps this from flagging generic "reduced X to Y" process copy.
+const metricText = [
+  (read('config/profile.yml') || '').match(/hero_metric:\s*["']?([^"'\n#]+)/)?.[1] || '',
+  ...[...(read('interview-prep/story-bank.md') || '').matchAll(/\*\*R[^:]*:\*\*\s*(.{10,120})/g)].map((m) => m[1]),
+].join('\n');
+for (const m of metricText.matchAll(/\b\d+\+?\s*[A-Za-z]+\s*(?:→|->|to)\s*\d+\+?\s*[A-Za-z]+/g)) {
+  const span = m[0].replace(/\s+/g, ' ').trim();
+  figures.add(span.replace(/→|->/g, 'to'));
+  figures.add(span.replace(/\bto\b/g, '→'));
+}
+for (const m of metricText.matchAll(/\b\d{2,}\+?-[A-Za-z]{3,}\b/g)) figures.add(m[0]); // hyphenated-number tokens, e.g. "NN-slide" (real values not quoted here — this file is tracked)
+
 // Employer names and story titles from the same sources. These need a heuristic
 // (there is no employer field to read) and the obvious one — every proper noun in
 // the CV — is unusable: it flags LinkedIn, RevOps, MEDDPICC, OpenAI, SaaS, i.e.
@@ -170,6 +224,47 @@ for (const m of cvText.matchAll(/\b[A-Z][a-z]+[A-Z][A-Za-z]{2,}\b/g)) {
 for (const m of (read('interview-prep/story-bank.md') || '').matchAll(/^#{1,4}\s+(.{10,70})$/gm)) {
   const t = m[1].replace(/[*_`#]/g, '').trim();
   if (t.split(/\s+/).length >= 4) career.set(t, 'story title from the owner story bank');
+}
+
+// Distinctive CV LINES. The CamelCase and $-figure rules above see only a fraction
+// of a resume; the bulk of its identifying content is multi-word Title-Case prose
+// (a role title, a summary sentence, an employer+dates line) that matches neither.
+// That gap shipped his verbatim role title, subtitle, summary opening and AoE line
+// as the `locator` values in templates/cv-template-slots.json, and again in
+// modes/docx-light.md and a test fixture. It also shipped his phone in a dotted
+// form the hyphen-based identity rule never saw.
+//
+// The match unit is a whole distinctive LINE (or its leading prefix — the docx slot
+// tool uses the first few words of the summary/AoE lines as prefix locators). A
+// 25+ char verbatim span of someone's CV in a tracked file is never coincidental:
+// generic industry vocabulary is single words, never a 25-char line. That is what
+// keeps this near zero false positives where a per-token rule could not.
+// Two false-positive sources, learned by running this against the tree (examples
+// below are described, NOT quoted: quoting a real cv.md line here would leak it into
+// this tracked file, which the rule then flags — that is not hypothetical, an
+// earlier draft did exactly that):
+//   - Generic resume SECTION HEADERS (an "…Experience" / "…Tools & Platforms" title)
+//     are his cv.md lines but identify nobody. Stoplist them (CV_SECTION_HEADER).
+//   - PREFIXES of a job-title-with-dates header (a "#### <Role> | <dates>" line) are
+//     generic titles that the fabricated demo rows in data.js legitimately reuse. So
+//     generate a prefix ONLY from non-header body lines; the real prefix-style slot
+//     locators are the openings of the summary and areas-of-expertise BODY lines, so
+//     they are still caught. A full job-title line is kept: it carries his dates and
+//     is distinctive.
+const CV_SECTION_HEADER = /^(professional |work |additional relevant )?(experience|summary|profile|objective|areas? of expertise|core competencies|technical skills|selected tools( & platforms)?|skills|education|certifications?|projects?|publications?|awards?|languages?|interests?|references?|contact|employment history)$/i;
+const cvLines = new Set();
+for (let raw of (read('cv.md') || '').split('\n')) {
+  const isHeader = /^\s*#{1,6}\s/.test(raw);
+  const line = raw.replace(/^[#>\s*+\-]+/, '').replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim();
+  const words = line.split(' ').filter(Boolean);
+  if (line.length < 25 || words.length < 3 || !/[A-Za-z]/.test(line)) continue;
+  if (CV_SECTION_HEADER.test(line)) continue;     // generic section header, identifies nobody
+  cvLines.add(line);
+  if (!isHeader) {                                // prefix only from body lines (see note)
+    let pfx = '';
+    for (const w of words) { pfx = pfx ? `${pfx} ${w}` : w; if (pfx.length >= 25) break; }
+    if (pfx.length >= 25 && pfx.length < line.length) cvLines.add(pfx);
+  }
 }
 
 // pipeline state. A company name alone is NOT a leak, and this is the trap that
@@ -387,6 +482,12 @@ for (const abs of files) {
     for (const { re, label } of identityRx) {
       if (re.test(text)) leak(rel, 'OWNER IDENTITY', label);
     }
+    // 2b. any customized profile scalar hardcoded into a tracked file
+    for (const [val, key] of profileScalars) {
+      if (text.includes(val)) {
+        leak(rel, 'PROFILE VALUE', `${key} = "${val.slice(0, 44)}${val.length > 44 ? '…' : ''}" — a user value from the gitignored config/profile.yml. Read it from profile at runtime; never hardcode it in shipped code.`);
+      }
+    }
   }
 
   // 3. third-party identity — never allowlisted. Another person's work email is
@@ -406,6 +507,11 @@ for (const abs of files) {
       const re = t.length < 12 ? new RegExp(`\\b${rx(t)}\\b`) : null;
       if (re ? re.test(text) : text.includes(t)) {
         leak(rel, 'CAREER CONTENT', `"${t}" — ${why}; example content in a shipped file must be invented`);
+      }
+    }
+    for (const line of cvLines) {
+      if (text.includes(line)) {
+        leak(rel, 'CV LINE', `"${line.slice(0, 50)}${line.length > 50 ? '…' : ''}" — a verbatim line from the owner CV. If a slot locator, the whole cv-template-slots file is user-layer and must be gitignored; if an example, invent it.`);
       }
     }
   }

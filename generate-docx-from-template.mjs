@@ -151,6 +151,20 @@ function main() {
     console.error('Provide your Word resume at templates/cv-master.docx. It is user-layer (not shipped); the dashboard Launchpad / onboarding generates it from your CV.');
     process.exit(1);
   }
+  // The real slots file is user-layer (gitignored), because its locators are
+  // verbatim text from the user's own master resume. A fresh clone will not have it;
+  // fall back to the shipped .example so the tool runs and reports which locators
+  // failed to match (prompting the user to regenerate slots from their CV) rather
+  // than crashing with a bare "not found".
+  if (!existsSync(opts.slots)) {
+    const example = `${REPO}/templates/cv-template-slots.example.json`;
+    if (existsSync(example)) {
+      console.warn(`slots file not found: ${opts.slots}`);
+      console.warn(`Falling back to ${example} — its locators are fictional and will not match your master.`);
+      console.warn('Run the docx mode to regenerate templates/cv-template-slots.json from your CV.');
+      opts.slots = example;
+    }
+  }
   for (const [k, v] of Object.entries({ slots: opts.slots, swaps: opts.swaps })) {
     if (!existsSync(v)) {
       console.error(`${k} not found: ${v}`);

@@ -65,7 +65,7 @@ AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluat
 | `data/scan-history.tsv` | Scanner dedup history |
 | `portals.yml` | Query and company config |
 | `templates/cv-master.docx` | **CV master template (default).** The user's Word resume. Tailored CVs are produced by copying this file and surgically swapping the top four slots (title, 3-keyword subtitle, summary, areas of expertise) in `word/document.xml`. Every other byte is preserved exactly. To update the master, edit it in Word and resync `cv.md`. |
-| `templates/cv-template-slots.json` | Slot definitions: locators, baseline character counts, and which slots are page-break-sensitive (drift more than ±15% blocks output). |
+| `templates/cv-template-slots.json` | Slot definitions: locators, baseline character counts, and which slots are page-break-sensitive (drift more than ±15% blocks output). **User-layer (gitignored):** the `locator` values are verbatim lines from the user's own `cv-master.docx`, so this file is personal data. The tracked default is `templates/cv-template-slots.example.json` (fictional locators); the generator falls back to it, and the docx mode regenerates the real file from the user's CV. |
 | `generate-docx-from-template.mjs` | **Default CV generator.** Copies `cv-master.docx`, swaps slots per a JSON swaps file, writes to output. Pure Node + adm-zip. No external tools required. |
 | `templates/cv-template.html` | HTML template for CVs (legacy PDF path) |
 | `templates/cv-template.tex` | LaTeX/Overleaf template for CVs (legacy PDF path) |

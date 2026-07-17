@@ -124,3 +124,32 @@ export function getIdentity() {
   _cache = { mtimeMs, identity };
   return identity;
 }
+
+// The Obsidian vault folder that applied-role notes are filed under. Read from the
+// user's gitignored profile (integrations.obsidian.applied_folder, three levels
+// deep, so getScalar's two-level reader does not reach it). Falls back to a NEUTRAL
+// default: this used to be hardcoded to the maintainer's real personal vault
+// taxonomy in apply.mjs, which both disclosed his private folder structure in
+// shipped code AND filed every other user's notes into his path.
+export function getObsidianAppliedFolder() {
+  let text = '';
+  try { text = fs.readFileSync(PROFILE_YML, 'utf8'); } catch { /* fresh user */ }
+  const lines = text.split(/\r?\n/);
+  let inInteg = false, inObs = false;
+  for (const ln of lines) {
+    if (/^integrations:\s*$/.test(ln)) { inInteg = true; inObs = false; continue; }
+    if (inInteg && /^\S/.test(ln)) break;                 // dedented out of integrations
+    if (inInteg && /^\s+obsidian:\s*$/.test(ln)) { inObs = true; continue; }
+    if (inObs && /^\s{0,2}\S/.test(ln)) inObs = false;    // dedented out of obsidian
+    if (inObs) {
+      const m = ln.match(/^\s+applied_folder:\s*(.*)$/);
+      if (m) {
+        let v = m[1].trim();
+        if (v.startsWith('"') || v.startsWith("'")) { const q = v[0], e = v.indexOf(q, 1); if (e > 0) v = v.slice(1, e); }
+        else { const h = v.indexOf(' #'); if (h >= 0) v = v.slice(0, h).trim(); }
+        if (v) return v.replace(/\/+$/, '');
+      }
+    }
+  }
+  return 'Job Search/Applied';
+}
