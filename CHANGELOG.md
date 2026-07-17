@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.14.1...v1.15.0) (2026-07-17)
+
+
+### Features
+
+* maintenance and hardening release: strengthened the personal-data ship gate (now covers commit messages, CV content, profile values, and report-path correspondence, with a derivation-health self-check), and the self-update now removes stale content-matched files from existing installs. Update recommended for all installs.
+
 ## [1.14.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.14.0...v1.14.1) (2026-07-16)
 
 

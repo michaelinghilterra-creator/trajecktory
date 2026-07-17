@@ -139,8 +139,23 @@ const SYSTEM_PATHS = [
 // release which purged it. Append; do not prune.
 const PURGE_PATHS = [
   'dashboard-web/Career-Ops-Live.zip',
-  'dashboard-web/talent-acquisition-design-audit.md',
+  // NOTE: dashboard-web/talent-acquisition-design-audit.md is deliberately NOT here.
+  // It is a legitimate TRACKED file (scrubbed to a fictional persona at HEAD), so the
+  // normal system-file checkout overwrites any dirty on-disk copy with the clean one.
+  // Purging it would delete a real doc. Only UNTRACKED leaked files belong in this list.
 ];
+
+// Files to delete ONLY IF their content matches a known-leaked version. Unconditional
+// purge is wrong for a file that is now user-layer: cv-template-slots.json is gitignored
+// (its locators are verbatim lines from the user's own resume), so a legitimate user's
+// own file must be preserved — but a dirty pre-fix installer shipped the maintainer's
+// real one, tracked. Delete it only when its content hash matches a leaked blob, so a
+// user's own slots file (any other content) is never touched. Append hashes; never prune.
+const PURGE_IF_HASH = {
+  'templates/cv-template-slots.json': new Set([
+    'b008c1177398492424b01610d8df58a51672678e', // maintainer real CV locators, shipped tracked in v1.14.x
+  ]),
+};
 
 // User layer paths — NEVER touch these (safety check)
 const USER_PATHS = [
@@ -571,6 +586,23 @@ async function apply() {
         console.log(`  purged: ${path}`);
       } catch {
         // Not present on this install (already purged, or never had it) — fine.
+      }
+    }
+
+    // Content-conditional purge: delete only when the on-disk file's blob hash matches
+    // a known-leaked version, so a user's own (differently-hashed) file is preserved.
+    for (const [path, hashes] of Object.entries(PURGE_IF_HASH)) {
+      const abs = join(ROOT, path);
+      if (!existsSync(abs)) continue;
+      try {
+        const h = git('hash-object', abs).trim();
+        if (hashes.has(h)) {
+          git('rm', '-f', '--ignore-unmatch', '--', path); // drop from index if this install tracked it
+          if (existsSync(abs)) unlinkSync(abs);
+          console.log(`  purged (leaked content): ${path}`);
+        }
+      } catch {
+        // hash failed / not present — leave the file alone (fail safe: keep, don't delete)
       }
     }
 
