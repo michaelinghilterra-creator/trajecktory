@@ -168,7 +168,7 @@
   "customizationCV": [
     {
       "section": "Professional Summary",
-      "current": "Opens with 'Freight Operations Director' and analytics framing",
+      "current": "Opens with 'Freight Operations Director' and logistics framing",
       "change": "Reframe the opening line: 'Revenue Operations executive who turns pipeline data into sales leader decisions.' Keep the $60M context and the qualification framework proof point.",
       "why": "RevOps hiring managers want an operator identity, not an analytics architect. Reorder the framing without losing the data-and-sales duality."
     },
@@ -194,7 +194,7 @@
   "customizationLI": [
     {
       "section": "Headline",
-      "current": "Regional Freight Operations Director | Revenue Operations | Dashboards",
+      "current": "Regional Freight Operations Director | Network Analytics | Scorecards",
       "change": "Director, Revenue Operations | GTM Strategy | Pipeline & Forecast Execution | $60M ARR",
       "why": "RevOps keywords surface in recruiter searches; pipeline/forecast language matches the JD"
     },
