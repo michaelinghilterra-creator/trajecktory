@@ -25,6 +25,13 @@ const argv = process.argv.slice(2);
 const payloadIdx = argv.indexOf('--payload');
 const PAYLOAD = payloadIdx !== -1 ? argv[payloadIdx + 1] : null;
 const JSON_OUT = argv.includes('--json');
+// --messages [range]  scan COMMIT MESSAGES instead of files.
+// --msg-file <path>   scan one message file (the commit-msg hook path).
+const msgIdx = argv.indexOf('--messages');
+const MESSAGES = msgIdx !== -1;
+const MSG_RANGE = MESSAGES && argv[msgIdx + 1] && !argv[msgIdx + 1].startsWith('--') ? argv[msgIdx + 1] : null;
+const msgFileIdx = argv.indexOf('--msg-file');
+const MSG_FILE = msgFileIdx !== -1 ? argv[msgFileIdx + 1] : null;
 
 const hits = [];
 const leak = (file, why, detail) => hits.push({ file, why, detail });
@@ -75,13 +82,21 @@ const ARCHIVE_ALLOW = new Set([]);
 
 // ── 2. COMPENSATION ────────────────────────────────────────────────────────
 // A walk-away is the number a candidate holds back in a negotiation; publishing
-// it inverts the negotiation for every role they pursue. v1.14.0 shipped a real
-// walk-away and a real OTE band as dashboard defaults.
-// Deriving "his numbers" from profile.yml is not enough: profile.yml declared
-// a declared range while the hardcoded defaults were different numbers, so two of the three would
-// have passed. The invariant is structural instead — a comp key in a tracked
-// file may hold ONLY a value from this neutral set. Anything else is either a
-// real number or an unreviewed one, and both should stop the build.
+// it inverts the negotiation for every role they pursue. A real walk-away and a
+// real OTE band once shipped as dashboard defaults.
+//
+// Deriving the owner's figures from profile.yml is NOT sufficient, and this is the
+// whole reason the rule is shaped the way it is: the values hardcoded as defaults
+// were not the values declared in profile.yml, so a derive-and-compare check would
+// have matched some and waved the rest through. The invariant is structural instead
+// — a comp key in a tracked file may hold ONLY a value from the neutral set below.
+// Anything else is either a real number or an unreviewed one, and both should stop
+// the build.
+//
+// Do not restore the illustrative figures that this comment used to carry. They were
+// the owner's real band and walk-away, they sat here for hours, and they reached a
+// built installer: every check above was blind to them because they were prose, not
+// a key assignment. Describe the shape; never write the values.
 const COMP_KEYS = /\b(targetLow|targetHigh|walkAway|target_low|target_high|walk_away)\b\s*[:=]\s*\{?\s*(\d{2,4})/g;
 const COMP_NEUTRAL = new Set(['100', '140', '90']);
 
@@ -196,6 +211,106 @@ if (apps) {
 const prepPaths = new Map();
 for (const co of pipeline.keys()) prepPaths.set(`interview-prep/${co}/`, co);
 
+// ── COMMIT MESSAGES ────────────────────────────────────────────────────────
+// A commit message is published exactly as surely as a file, and nothing here used
+// to look at one. That is not hypothetical: while the file gate above was being
+// built, three commit messages in this repo named the interview counterparties and
+// one spelled out the owner's real compensation band and walk-away in prose. The
+// gate scanned files, so it saw none of it.
+//
+// Scope is origin/main..HEAD, the unpushed commits. That is the only window where a
+// message can still be amended; once pushed it is published and a check is too late.
+// A fresh clone has HEAD == origin/main, so the range is empty and this is a no-op.
+function commitMessages() {
+  if (MSG_FILE) {
+    // commit-msg hook: the message being written, before the commit exists
+    try { return [{ id: '(pending)', body: readFileSync(MSG_FILE, 'utf8') }]; } catch { return []; }
+  }
+  let range = MSG_RANGE;
+  if (!range) {
+    // Default to unpushed work. Prefer the tracked upstream; fall back to origin/main.
+    for (const cand of ['@{upstream}..HEAD', 'origin/main..HEAD', 'origin/HEAD..HEAD']) {
+      try {
+        execSync(`git rev-list --count ${cand}`, { cwd: ROOT, stdio: 'pipe' });
+        range = cand;
+        break;
+      } catch { /* no such ref here */ }
+    }
+  }
+  if (!range) return [];   // no remote to compare against: nothing is "unpushed"
+  try {
+    const raw = execSync(`git log --format=%H%x00%B%x1e ${range}`,
+      { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 26 });
+    return raw.split('\x1e').filter((r) => r.trim()).map((r) => {
+      const [id, body] = r.split('\x00');
+      return { id: id.trim().slice(0, 8), body: body || '' };
+    });
+  } catch { return []; }
+}
+
+// Compensation written as PROSE, rather than assigned to a key. COMP_KEYS is
+// structural (a comp key assigned a number) and cannot see a sentence that simply
+// states the figures, which is the form that actually shipped: a commit message
+// narrating a declared range and a real walk-away, and later a docs table quoting
+// them as its example. Bare numbers are far too common to flag alone, so require a
+// compensation word on the same line.
+//
+// Applies to FILES and MESSAGES both. It was message-only for one iteration, and in
+// that window a rule written to forbid quoting these figures quoted them, into a
+// tracked file, and this scan walked straight past. Same class, both surfaces.
+//
+// THREE digits per figure, not two. A comp band is a thousands value (three digits
+// here); a two-digit pair is a ratio, and "50/50 below the activity band" in a JSX
+// layout comment is a false positive that would train someone to ignore this gate.
+const COMP_WORD = /\b(walk[- ]?away|OTE|target(Low|High)?|comp|compensation|salary|base pay|floor|ceiling|band)\b/i;
+const COMP_PROSE = /\b[1-9]\d{2}\s*\/\s*[1-9]\d{2}(?:\s*\/\s*[1-9]\d{2})?\b/;
+
+function scanMessages() {
+  const msgs = commitMessages();
+  for (const { id, body } of msgs) {
+    const where = `commit ${id}`;
+    for (const term of identity) if (body.includes(term)) leak(where, 'OWNER IDENTITY', term);
+    for (const { re, label } of identityRx) if (re.test(body)) leak(where, 'OWNER IDENTITY', label);
+    for (const addr of thirdParty) if (body.includes(addr)) leak(where, 'THIRD-PARTY EMAIL', addr);
+    for (const f of figures) if (body.includes(f)) leak(where, 'CAREER FIGURE', `${f} — from the owner CV/story bank`);
+    for (const [t, why] of career) {
+      const re = t.length < 12 ? new RegExp(`\\b${rx(t)}\\b`) : null;
+      if (re ? re.test(body) : body.includes(t)) leak(where, 'CAREER CONTENT', `"${t}" — ${why}`);
+    }
+    for (const [p, co] of prepPaths) {
+      if (body.includes(p) || body.includes(`interview-prep/${co}`)) {
+        leak(where, 'INTERVIEW STATE', `${p} — "${co}" is a company in the tracker`);
+      }
+    }
+    for (const m of body.matchAll(COMP_KEYS)) {
+      if (!COMP_NEUTRAL.has(m[2])) leak(where, 'COMP LITERAL', `${m[1]} = ${m[2]}`);
+    }
+    if (COMP_WORD.test(body) && COMP_PROSE.test(body)) {
+      leak(where, 'COMP IN PROSE',
+        `${(body.match(COMP_PROSE) || [''])[0]} next to a compensation word. A real band or walk-away does not belong in a published message; describe the shape, not the numbers.`);
+    }
+  }
+  return msgs.length;
+}
+
+// ── message mode: scan messages and report, never touching the file sweep ───
+if (MESSAGES || MSG_FILE) {
+  const n = scanMessages();
+  const scope = MSG_FILE ? 'the message being committed' : `${n} unpushed commit message(s)`;
+  if (JSON_OUT) {
+    console.log(JSON.stringify({ ok: hits.length === 0, scanned: n, hits }, null, 2));
+    process.exit(hits.length ? 1 : 0);
+  }
+  console.log(`Scanning ${scope}`);
+  console.log(`  derived: ${identity.length} identity, ${thirdParty.size} third-party, ${figures.size} figures, ${prepPaths.size} prep paths`);
+  if (!hits.length) { console.log('  OK — no personal data in any message.'); process.exit(0); }
+  console.log(`\n${hits.length} LEAK(S) IN COMMIT MESSAGE(S):`);
+  for (const h of hits) console.log(`  [${h.why}] ${h.file}\n      ${h.detail}`);
+  console.log('\nA commit message is published like any file, and it is NOT covered by the');
+  console.log('file scan. Amend before pushing: git commit --amend  (or rebase for older ones).');
+  process.exit(1);
+}
+
 // ── the sweep ──────────────────────────────────────────────────────────────
 const files = targets();
 for (const abs of files) {
@@ -269,6 +384,26 @@ for (const abs of files) {
   for (const m of text.matchAll(COMP_KEYS)) {
     if (!COMP_NEUTRAL.has(m[2])) {
       leak(rel, 'COMP LITERAL', `${m[1]} = ${m[2]} (neutral set: ${[...COMP_NEUTRAL].join('/')}; real targets belong in the gitignored config/profile.yml)`);
+    }
+  }
+
+  // 4b. compensation stated as prose (see the note on COMP_PROSE above).
+  // WINDOW, not line. A comment block or a paragraph states the subject once and the
+  // figures several lines later, so a per-line rule sees a comp word with no numbers
+  // and then numbers with no comp word, and reports clean on both. That is exactly
+  // how a real band and walk-away survived in this very file's own comment and
+  // reached a built installer. Same lesson as the prose-vs-line scope in the
+  // pipeline-state rule below; it simply was not applied here.
+  {
+    const lines = text.split('\n');
+    const W = 6;
+    for (let i = 0; i < lines.length; i++) {
+      if (!COMP_PROSE.test(lines[i])) continue;
+      const near = lines.slice(Math.max(0, i - W), i + W + 1).join('\n');
+      if (COMP_WORD.test(near)) {
+        leak(`${rel}:${i + 1}`, 'COMP IN PROSE',
+          `${(lines[i].match(COMP_PROSE) || [''])[0]} within ${W} lines of a compensation word. Describe the shape, not the numbers: a real band or walk-away must not ship.`);
+      }
     }
   }
 

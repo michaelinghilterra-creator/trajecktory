@@ -115,6 +115,10 @@ const SYSTEM_PATHS = [
   'LICENSE',
   'CITATION.cff',
   '.github/',
+  // The commit-msg hook that keeps personal data out of a published message.
+  // Shipping it does NOT enable it: git never runs a hook from a tracked directory
+  // on its own, so each clone must opt in with `git config core.hooksPath .githooks`.
+  '.githooks/',
   'package.json',
 ];
 
