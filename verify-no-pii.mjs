@@ -296,11 +296,12 @@ if (apps) {
 
 // Report PATHS as correspondence. A report filename reports/{id}-{slug}-{date}.md
 // reproduces a real tracker row (id + company-slug + date), but the pipeline rule
-// above matches the company DISPLAY name ("Arize AI") while the path carries the
-// SLUG ("arize-ai"), so a real evaluation used as a doc "worked example" slips past.
-// Match on the id+date pair being adjacent in a reports/ path: both matching one real
-// row is strong correspondence and effectively never coincidental. (The audit refuted
-// this; it was wrong — it is his real row #1, tied to him via LICENSE.)
+// above matches the company DISPLAY name (e.g. "Example Co") while the path carries
+// the SLUG ("example-co"), so a real evaluation used as a doc "worked example" slips
+// past. Match on the id+date pair being adjacent in a reports/ path: both matching one
+// real row is strong correspondence and effectively never coincidental. (An audit
+// refuted a real instance of this once; the real company slug is deliberately not
+// quoted here, since this file is tracked and the rule would then flag itself.)
 const trackerIdDate = new Set();
 {
   const appsSrc = read('data/applications.md') || '';
