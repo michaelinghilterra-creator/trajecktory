@@ -210,14 +210,20 @@ resolution in `guardrails`.
 `.run.md`. That is the whole rule. It guarantees the two files sit as siblings and that the `prep`
 field is exactly the prep file's basename.
 
-Do **not** re-derive `{descriptor}` from the stage. The descriptor is whatever the prep file already
-chose, and prep files choose differently on purpose: some name the round's shape, some name the
-stage, some name the hiring manager.
+Do **not** re-derive `{descriptor}` from the stage. **Mirror the prep file's basename exactly.** The
+descriptor is whatever the prep file already chose, and prep files legitimately choose differently:
+some name the round's shape, some name the stage.
 
 | Prep file | Run sheet | Descriptor is |
 |---|---|---|
 | `northwind-logistics-round-2-hiring-manager.md` | `northwind-logistics-round-2-hiring-manager.run.md` | the round's shape |
 | `northwind-logistics-round-1-phone-screen.md` | `northwind-logistics-round-1-phone-screen.run.md` | the stage |
+
+> **A descriptor is NEVER a person's name.** `modes/interview-prep.md` owns that rule; this mode
+> inherits it by mirroring. If you are handed a prep file named after an interviewer, mirror it
+> anyway (an orphan pair is worse than a bad name) and **tell the user it should be renamed to the
+> round type**. Filenames leak into public path examples; the interviewer's name belongs inside the
+> file, in `session.who`.
 
 A re-derived descriptor produces `northwind-logistics-round-2-hm-round.run.md` sitting next to
 `northwind-logistics-round-2-hiring-manager.md`, an orphan pair where the board looks like it belongs
