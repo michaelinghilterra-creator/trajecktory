@@ -96,3 +96,7 @@ backups/
 data/followup-snooze.json
 data/apply-dates.json
 data/app-notes.json
+
+# User-layer: locators are verbatim text from the user's master resume (see cv-master.docx).
+# The shipped default is cv-template-slots.example.json.
+templates/cv-template-slots.json

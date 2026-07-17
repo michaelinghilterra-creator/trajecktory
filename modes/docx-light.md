@@ -21,12 +21,15 @@ match the title and keywords to this JD." For more aggressive tailoring
 | Slot | Locator in master | Baseline length | What gets swapped |
 |------|-------------------|-----------------|--------------------|
 | `title` | "Regional Logistics & Freight Operations Director" | ~50 chars | Bold centered role-title line under the name |
-| `subtitle_secondary` | "Sales Operations \| Revenue Operations \| Go-to-Market Strategy" | ~60 chars | 3-keyword centered line below the title |
-| `summary` | starts with "Regional Freight Operations Director" | **~870 chars / ~130 words** | Professional summary paragraph |
+| `subtitle_secondary` | "Carrier Analytics \| Network Optimization \| Cost-to-Serve Strategy" | ~60 chars | 3-keyword centered line below the title |
+| `summary` | starts with "Supply-chain analytics leader who turns" | **~870 chars / ~130 words** | Professional summary paragraph |
 | `areas_of_expertise` | starts with "Carrier Scorecarding & Tender Analytics" | **~410 chars / ~50 words / 12 phrases** | Comma-separated areas-of-expertise list |
 
-Slot definitions live in `templates/cv-template-slots.json` — if the master
-changes structurally, update locators there.
+The locators above are fictional examples. Your real slot definitions live in
+`templates/cv-template-slots.json`, which is **user-layer (gitignored)** because its
+locators are verbatim lines from your own master resume. The shipped default is
+`templates/cv-template-slots.example.json`; regenerate the real file from your CV if
+the master changes structurally.
 
 ## What this mode NEVER touches
 

@@ -174,7 +174,7 @@
     },
     {
       "section": "Areas of Expertise",
-      "current": "Leads with 'Carrier Scorecarding & Tender Analytics, Seller Productivity Analytics'",
+      "current": "Leads with 'Carrier Scorecarding & Tender Analytics, Network Cost Modeling'",
       "change": "Add 'Forecast Management' and 'Pipeline Inspection' to the front; move dashboard governance later in the list",
       "why": "Mirror the JD's operating-cadence language ahead of the technical reporting terms"
     },

@@ -9,6 +9,8 @@ These files contain your personal data, customizations, and work product. Update
 | File | Purpose |
 |------|---------|
 | `cv.md` | Your CV in markdown |
+| `templates/cv-master.docx` | Your Word resume (the master the docx generator swaps into) |
+| `templates/cv-template-slots.json` | Slot locators — verbatim lines from your master resume, so this is your data. Ships as `cv-template-slots.example.json` (fictional); the real file is generated from your CV. |
 | `config/profile.yml` | Your identity, targets, comp range |
 | `modes/_profile.md` | Your archetypes, narrative, negotiation scripts |
 | `article-digest.md` | Your proof points from portfolio |
