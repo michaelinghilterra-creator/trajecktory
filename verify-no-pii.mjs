@@ -311,6 +311,43 @@ if (MESSAGES || MSG_FILE) {
   process.exit(1);
 }
 
+// ── derivation health ──────────────────────────────────────────────────────
+// A checker that derives NOTHING finds nothing and reports "OK". That output is
+// indistinguishable from a real all-clear, and it is the exact failure that let
+// test-all.mjs section 6 pass for months while doing nothing (a `2>/dev/null` that
+// Windows cmd could not honour made every grep fail, and the empty result read as
+// "no leaks"). This file is one schema change away from the same lie: rename
+// `full_name` in profile.yml, or reformat the tracker table, and identity,
+// third-party, company, figure, career and prep-path checking all silently switch
+// off while the summary still prints OK.
+//
+// So: assert the derivation actually worked. Only assert what is CERTAIN. A source
+// that is ABSENT is not a fault (a fresh clone has no profile.yml and genuinely has
+// nothing to leak); a source that is PRESENT but yields nothing is a broken parser.
+// A CV with no money figures is legitimate, so figures are never asserted.
+const health = [];
+{
+  const prof = read('config/profile.yml');
+  if (prof && identity.length === 0) {
+    health.push('config/profile.yml exists but yielded 0 identity terms — the full_name/email/phone parser is broken (renamed field? reformatted?). Identity checking is OFF.');
+  }
+  const talent = read('data/target-talent.md');
+  if (talent && /@[\w.-]+\.\w{2,}/.test(talent) && thirdParty.size === 0) {
+    health.push('data/target-talent.md contains email addresses but yielded 0 third-party terms — the parser is broken. Third-party checking is OFF.');
+  }
+  const appsSrc = read('data/applications.md');
+  if (appsSrc && /^\|\s*\d+\s*\|/m.test(appsSrc) && pipeline.size === 0) {
+    health.push('data/applications.md has table rows but yielded 0 companies — the row parser is broken. Pipeline/interview-state checking is OFF.');
+  }
+}
+if (health.length) {
+  console.error('\nDERIVATION FAILURE — this check cannot certify anything:\n');
+  for (const h of health) console.error(`  ${h}`);
+  console.error('\nA source is present but produced no terms, so the scan would report a vacuous');
+  console.error('OK. Refusing to pass. Fix the parser, or delete the source if it is genuinely gone.');
+  process.exit(2);
+}
+
 // ── the sweep ──────────────────────────────────────────────────────────────
 const files = targets();
 for (const abs of files) {
