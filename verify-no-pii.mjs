@@ -184,6 +184,18 @@ if (apps) {
   }
 }
 
+// interview state. Distinct from pipeline state above, and NOT reducible to it.
+// `interview-prep/{Company}/` names a company the owner is actively interviewing
+// with: one token, yet unambiguous, because that folder exists only when a round is
+// live. The correspondence rule needs two matching fields and reads straight past
+// this. AGENTS.md documents this exact path convention, so the SHAPE is expected in
+// tracked docs and only the company makes it a leak; the example must use an
+// invented one. This is not hypothetical: a real hiring manager name reached the
+// public repo inside precisely this path, and a history scan found the real company
+// still sitting in old revisions of AGENTS.md and modes/interview-prep.md.
+const prepPaths = new Map();
+for (const co of pipeline.keys()) prepPaths.set(`interview-prep/${co}/`, co);
+
 // ── the sweep ──────────────────────────────────────────────────────────────
 const files = targets();
 for (const abs of files) {
@@ -243,6 +255,13 @@ for (const abs of files) {
       if (re ? re.test(text) : text.includes(t)) {
         leak(rel, 'CAREER CONTENT', `"${t}" — ${why}; example content in a shipped file must be invented`);
       }
+    }
+  }
+
+  // 3c. interview state — a real company in an interview-prep path
+  for (const [p, co] of prepPaths) {
+    if (text.includes(p)) {
+      leak(rel, 'INTERVIEW STATE', `${p} — "${co}" is a company in the tracker; a prep folder names a live interview round. Use an invented company in examples.`);
     }
   }
 
