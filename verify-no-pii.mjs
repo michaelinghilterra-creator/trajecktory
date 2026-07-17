@@ -294,6 +294,23 @@ if (apps) {
   }
 }
 
+// Report PATHS as correspondence. A report filename reports/{id}-{slug}-{date}.md
+// reproduces a real tracker row (id + company-slug + date), but the pipeline rule
+// above matches the company DISPLAY name ("Arize AI") while the path carries the
+// SLUG ("arize-ai"), so a real evaluation used as a doc "worked example" slips past.
+// Match on the id+date pair being adjacent in a reports/ path: both matching one real
+// row is strong correspondence and effectively never coincidental. (The audit refuted
+// this; it was wrong — it is his real row #1, tied to him via LICENSE.)
+const trackerIdDate = new Set();
+{
+  const appsSrc = read('data/applications.md') || '';
+  for (const line of appsSrc.split('\n')) {
+    const c = line.split('|').map((s) => s.trim());
+    if (c.length < 3 || !/^\d+$/.test(c[1] || '') || !/^\d{4}-\d{2}-\d{2}$/.test(c[2] || '')) continue;
+    trackerIdDate.add(`${c[1]}:${c[2]}`);
+  }
+}
+
 // interview state. Distinct from pipeline state above, and NOT reducible to it.
 // `interview-prep/{Company}/` names a company the owner is actively interviewing
 // with: one token, yet unambiguous, because that folder exists only when a round is
@@ -520,6 +537,15 @@ for (const abs of files) {
   for (const [p, co] of prepPaths) {
     if (text.includes(p)) {
       leak(rel, 'INTERVIEW STATE', `${p} — "${co}" is a company in the tracker; a prep folder names a live interview round. Use an invented company in examples.`);
+    }
+  }
+
+  // 3d. report path reproducing a real tracker row (id + date), slug-form
+  if (/\.(md|mjs|js|jsx|ya?ml|json|txt)$/i.test(abs)) {
+    for (const m of text.matchAll(/reports\/(\d+)-[a-z0-9-]+-(\d{4}-\d{2}-\d{2})\.md/g)) {
+      if (trackerIdDate.has(`${m[1]}:${m[2]}`)) {
+        leak(`${rel}`, 'TRACKER ROW (report path)', `${m[0]} reproduces real tracker row #${m[1]} (${m[2]}). Use a fictional example path (an id/date matching no real row).`);
+      }
     }
   }
 
