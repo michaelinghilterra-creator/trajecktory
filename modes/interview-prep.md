@@ -38,6 +38,20 @@ The Glassdoor / Blind / engineering-blog deep-dive. Created **once** when the us
 
 The "20 minutes before joining the call" prep doc. Created **once per interview round**. Lives at `interview-prep/{Company Folder}/{company-slug}-round-{N}-{stage-descriptor}.md`. Uses one of three stage-specific templates:
 
+> **`{stage-descriptor}` is the ROUND TYPE, never a person.** Use `screen`, `phone-screen`,
+> `hiring-manager`, `hm-round`, `panel`, `final-loop`. **Never an interviewer's name**
+> (`jane-doe`, `a-lastname`), even though the name is right there in the report header and
+> it feels like the natural label.
+>
+> Why: filenames leak. They get pasted into path examples in docs and code comments, and
+> from there into a public repo, where they publish a real individual's name attached to
+> the fact that someone is interviewing with them. That has already happened once in this
+> project. The round type carries every bit of information the filename actually needs, and
+> it stays true when the interviewer changes.
+>
+> The interviewer's name belongs **inside** the file (the header, `session.who`), which is
+> gitignored. Not in the path.
+
 | Stage | Template | Header focus |
 |---|---|---|
 | Recruiter screen / first conversation | [`templates/interview-cheatsheet-screen.md`](../templates/interview-cheatsheet-screen.md) | Recruiter name, comp anchor, location fit |
