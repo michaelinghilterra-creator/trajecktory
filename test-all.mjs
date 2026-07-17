@@ -210,20 +210,45 @@ const grepPathspec = scanExtensions.map(e => `'*.${e}'`).join(' ');
 
 let leakFound = false;
 for (const pattern of leakPatterns) {
-  const result = run(
-    `git grep -n "${pattern}" -- ${grepPathspec} 2>/dev/null`
-  );
+  // No `2>/dev/null` here. This suite runs on Windows, where cmd has no /dev/null:
+  // the redirect made every invocation fail with "The system cannot find the path
+  // specified", run() swallowed the error, result came back empty, and the loop
+  // reported a green "no leaks" having never actually grepped. run() already
+  // try/catches, and git grep exits 1 on no-match, which is the same empty result.
+  const result = run(`git grep -n "${pattern}" -- ${grepPathspec}`);
   if (result) {
     for (const line of result.split('\n')) {
       const file = line.split(':')[0];
       if (allowedFiles.some(a => file.includes(a))) continue;
-      warn(`Possible personal data in ${file}: "${pattern}"`);
+      warn(`Possible upstream-author residue in ${file}: "${pattern}"`);
       leakFound = true;
     }
   }
 }
 if (!leakFound) {
-  pass('No personal data leaks outside allowed files');
+  pass('No upstream-author residue outside allowed files');
+}
+
+// The real gate. The loop above is a migration-hygiene check over an extension
+// allowlist, and it calls warn(), which does not affect the exit code — so it
+// could never block anything. v1.14.0 shipped a real CV, a real recruiter's work
+// email, a real walk-away figure, and real evaluation reports past a green run of
+// this file. The .zip was not merely unflagged, it was unreadable: no extension in
+// scanExtensions covers an archive, and its contents are compressed anyway.
+//
+// verify-no-pii.mjs is the enforcing check. It reads every tracked file regardless
+// of extension, derives its terms at runtime from the gitignored sources, and
+// exits nonzero on a hit. Same engine the installer runs against the built payload
+// (build-bundle.ps1 §7), because `git archive HEAD` makes tracked == shipped.
+try {
+  execFileSync(process.execPath, ['verify-no-pii.mjs'], { cwd: ROOT, encoding: 'utf-8', stdio: 'pipe' });
+  pass('No personal data in tracked files (verify-no-pii.mjs)');
+} catch (e) {
+  const out = `${e.stdout || ''}${e.stderr || ''}`.trim();
+  fail('Personal data in tracked files — these ship to every user:');
+  for (const line of out.split('\n').filter(l => /^\s+\[/.test(l) || /^\s{6}/.test(l))) {
+    console.log(`      ${line.trim()}`);
+  }
 }
 
 // ── 7. ABSOLUTE PATH CHECK ──────────────────────────────────────
@@ -256,9 +281,15 @@ console.log('\n7b. Dashboard imports that escape dashboard-web/ are shipped');
 
 const sysPathsSrc = readFileSync(join(ROOT, 'update-system.mjs'), 'utf8');
 const sysPathsBlock = sysPathsSrc.match(/SYSTEM_PATHS\s*=\s*\[([\s\S]*?)\n\]/);
+// Strip // comments BEFORE extracting the quoted entries. The entries are matched
+// pairwise on ', so a lone apostrophe anywhere in a comment ("isn't", "doesn't")
+// shifts every subsequent quote onto the wrong partner and silently drops real
+// entries from the parse — which then fails this check against paths that ARE
+// shipped. The manifest is the code; comments are not part of it.
 const shipped = sysPathsBlock
-  ? [...sysPathsBlock[1].matchAll(/'([^']+)'/g)].map((m) => m[1])
+  ? [...sysPathsBlock[1].replace(/\/\/[^\n]*/g, '').matchAll(/'([^']+)'/g)].map((m) => m[1])
   : [];
+if (!shipped.length) fail('Could not parse SYSTEM_PATHS from update-system.mjs — this check is inert until fixed');
 
 const escapes = [];
 const scanImports = (dir) => {

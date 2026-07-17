@@ -92,6 +92,13 @@ const SYSTEM_PATHS = [
   'analyze-patterns.mjs',
   'followup-cadence.mjs',
   'test-all.mjs',
+  // Spawned by test-all.mjs section 6 and by installer/build-bundle.ps1 section 7b.
+  // test-all.mjs ships (above), so omitting this would leave every updated install
+  // calling a script that is not there, and the check would fail on a clean tree.
+  // Same class as the render-runsheet.mjs and scripts/ hazards noted above.
+  // (Avoid apostrophes in this block: test-all.mjs parses these entries by pairing
+  // quote characters, so a stray one in a comment shifts the parse.)
+  'verify-no-pii.mjs',
   'lib/',
   'dashboard-web/',
   'batch/batch-prompt.md',
@@ -109,6 +116,26 @@ const SYSTEM_PATHS = [
   'CITATION.cff',
   '.github/',
   'package.json',
+];
+
+// System-layer files that must be DELETED on update, not merely overwritten.
+//
+// SYSTEM_PATHS is applied with `git checkout <ref> -- <path>`, which writes the
+// paths present in <ref>. A file deleted upstream is never written, and therefore
+// never removed: it sits on disk through every subsequent update, indefinitely.
+// Removing something from the repo does nothing for a machine that already has it.
+//
+// v1.14.0 shipped an archive containing the maintainer personal documents. It was
+// deleted from the repo, but that deletion cannot reach an existing install on its
+// own — this list is the only thing that can. Anything shipped in error and then
+// un-shipped belongs here.
+//
+// Entries are PERMANENT. An install may update from any older version, so a path
+// removed from this list would start surviving again on machines that skipped the
+// release which purged it. Append; do not prune.
+const PURGE_PATHS = [
+  'dashboard-web/Career-Ops-Live.zip',
+  'dashboard-web/talent-acquisition-design-audit.md',
 ];
 
 // User layer paths — NEVER touch these (safety check)
@@ -518,6 +545,28 @@ async function apply() {
         updated.push(path);
       } catch {
         // File may not exist in remote (new additions), skip
+      }
+    }
+
+    // 4b. Purge files that were REMOVED from the system layer.
+    //
+    // The loop above cannot do this. `git checkout <ref> -- <path>` writes the
+    // paths that EXIST in <ref>; a file deleted upstream is simply not written,
+    // so it survives on disk untouched, forever, through every future update.
+    // Overwriting is not removing.
+    //
+    // That distinction is why PURGE_PATHS exists: v1.14.0 shipped files that had
+    // to be un-shipped, and deleting them from the repo does nothing for a machine
+    // that already installed them. This is the only mechanism that reaches those
+    // machines. `git rm` (not unlink) so the index drops the entry too — otherwise
+    // a later checkout or reset restores it from the install's own baseline.
+    for (const path of PURGE_PATHS) {
+      try {
+        git('rm', '-f', '--ignore-unmatch', '--', path);
+        if (existsSync(join(ROOT, path))) unlinkSync(join(ROOT, path));
+        console.log(`  purged: ${path}`);
+      } catch {
+        // Not present on this install (already purged, or never had it) — fine.
       }
     }
 
