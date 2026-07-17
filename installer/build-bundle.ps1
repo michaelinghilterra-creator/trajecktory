@@ -235,6 +235,35 @@ if ($hits) {
   throw "Refusing to build: personal data or secrets found in payload (see warnings above)."
 }
 
+# ── 7b. PII gate (the enforcing one) ─────────────────────────────────────────
+# The scan above only knows THREE literals: the builder's own name, email and
+# phone, matched as plaintext. v1.14.0 shipped past it carrying a .zip of the
+# builder's CV (an archive stores its contents compressed, so no plaintext scan
+# can see inside), a real recruiter's work email (not the builder — no concept of
+# third parties), a real walk-away figure (a bare number — no concept of comp),
+# and real evaluation reports (no concept of pipeline state).
+#
+# verify-no-pii.mjs covers those four classes and is the same engine test-all.mjs
+# runs against the tracked tree, so the repo gate and the ship gate cannot drift.
+# It derives every term at runtime from the gitignored sources on THIS machine,
+# which is why it runs from $RepoRoot (where config/profile.yml and data/ live)
+# and points --payload at the staged tree.
+Write-Host "Scanning payload for personal data (verify-no-pii.mjs) ..."
+# Scanned surface is $PayloadApp, not $Payload: $PayloadApp is the `git archive HEAD`
+# tree (the app itself, and the exact surface this gate is built for), while $Payload
+# also holds the vendored Node runtime and Chromium — hundreds of MB of third-party
+# binaries fetched from nodejs.org that cannot contain this maintainer personal data.
+$piiScript = Join-Path $RepoRoot 'verify-no-pii.mjs'
+if (Test-Path $piiScript) {
+  Push-Location $RepoRoot
+  try { & $NodeExe $piiScript --payload $PayloadApp } finally { Pop-Location }
+  if ($LASTEXITCODE -ne 0) {
+    throw "Refusing to build: personal data in payload (see the leak list above). These files would ship to every user who installs or updates. Remove them from git — the payload is built with 'git archive HEAD', so tracked means shipped."
+  }
+} else {
+  throw "Refusing to build: verify-no-pii.mjs not found at $piiScript. The personal-data gate is mandatory; a build without it is how a real CV shipped in v1.14.0."
+}
+
 # ── 8. Report ─────────────────────────────────────────────────────────────────
 $sizeMB = [math]::Round((Get-ChildItem $Payload -Recurse -File | Measure-Object Length -Sum).Sum / 1MB, 1)
 Write-Host "`nPayload staged at $Payload ($sizeMB MB)."
