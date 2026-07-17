@@ -30,7 +30,7 @@ RULES:
 - Weight insights against the user's profile — archetypes, walk-away comp, North Star — so recommendations feel personal, not generic.
 
 CITATIONS (important — the frontend turns "#NNN" pills into clickable drawer links):
-- ANY time you reference a row from topStale, pendingHot, or another id-bearing entity, you MUST cite it with the "#NNN Company" format (e.g. "#149 Precision AQ"). This is required; it is what makes the report navigable.
+- ANY time you reference a row from topStale, pendingHot, or another id-bearing entity, you MUST cite it with the "#NNN Company" format (e.g. "#42 Contoso"). This is required; it is what makes the report navigable.
 - Each whats_working / whats_not / recommended_moves item should ideally include at least one "#NNN" citation when row-level evidence exists in the data. If you reference 3 stale apps, cite all 3 by id.
 - Archetype and sector citations stay as plain text ("Analytics archetype", "Healthcare sector") — those are not clickable, but use them for cohort-level claims.
 - Never reference an id that does not appear verbatim in the snapshot.
@@ -60,7 +60,7 @@ Coach tone — this is the user's first read every session, set the temperature:
 
 CITATIONS in every section (important — frontend turns "#NNN" into clickable drawer links anywhere in text, not just in citation arrays):
 - Inline ANY #NNN row id you reference, in the body text of insights / moves / why / actions / focus targets. Don't only list ids in the citation arrays; embed them in the prose too so the user can drill in from the sentence.
-- Use "#NNN Company" format (e.g. "#149 Precision AQ").
+- Use "#NNN Company" format (e.g. "#42 Contoso").
 - Archetype and sector references stay plain ("Analytics archetype", "Healthcare sector") — those are not clickable.
 
 Aim for 2-4 items per insight array. Be ruthless about cuts: the user values precision over completeness.`;

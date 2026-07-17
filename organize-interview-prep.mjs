@@ -12,10 +12,11 @@
 //     company subfolder and the shared story-bank.md are left alone, so the
 //     script is idempotent (a second run finds nothing to do).
 //   - The company display name comes from each file's H1 header (e.g.
-//     "# Interview Prep - Example Co | ..."), which is the reliable source;
-//     de-slugifying the filename would lose casing (example-co -> "PAR
-//     Technology"). Names are reconciled against existing subfolders by slug, so
-//     casing is preserved and never duplicated as a case-variant.
+//     "# Interview Prep - ACME Corp | ..."), which is the reliable source;
+//     de-slugifying the filename would lose the company's own casing (the slug
+//     "acme-corp" title-cases back to "Acme Corp", never "ACME Corp"). Names are
+//     reconciled against existing subfolders by slug, so casing is preserved and
+//     never duplicated as a case-variant.
 //   - Trailing legal suffixes are stripped ("Example Co, Inc." -> "Example Co")
 //     and Windows-forbidden path characters removed, matching the mode rule.
 //   - Files that aren't recognizable interview-prep artifacts are left untouched.

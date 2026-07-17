@@ -165,9 +165,16 @@ console.log('\n6. Personal data leak check');
 // with no owner name/email/phone literal and the check works for any deployment.
 // profile.yml is gitignored (present locally, never shipped); on a fresh clone
 // it is absent and only the upstream patterns apply.
+//
+// Only patterns that are safe to PUBLISH belong here: this file is tracked, so
+// every literal below ships to end users. The upstream author's name and site
+// are required MIT attribution and are already public. His personal phone and
+// personal email address are NOT, so they are deliberately absent — a
+// leak-checker must not be the leak. Coverage is unchanged: the 'santifer.io'
+// domain pattern still substring-matches any address at that domain.
 const leakPatterns = [
   'Santiago', 'santifer.io', 'Santifer iRepair', 'Zinkee', 'ALMAS',
-  'hi@santifer.io', '688921377', '/Users/santifer/',
+  '/Users/santifer/',
 ];
 try {
   const prof = readFileSync(join(ROOT, 'config', 'profile.yml'), 'utf8');

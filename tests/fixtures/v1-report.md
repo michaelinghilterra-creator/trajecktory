@@ -1,93 +1,93 @@
 ---
 {
   "schema": "trajecktory-report/v1",
-  "id": 768,
-  "company": "Twilio",
-  "role": "Director, Sales Business Partner",
-  "date": "2026-06-12",
-  "url": "https://job-boards.greenhouse.io/twilio/jobs/7996835",
-  "score": 3.3,
-  "domain": "CPaaS, B2B SaaS, GTM Operations",
+  "id": 12,
+  "company": "Acme AI",
+  "role": "Director, Revenue Operations",
+  "date": "2026-01-15",
+  "url": "https://example.com/acme-ai/careers/director-revenue-operations",
+  "score": 4.0,
+  "domain": "B2B SaaS, AI Workflow Tooling, GTM Operations",
   "summary": {
-    "archetypeDetected": "Director / VP of Sales Operations",
-    "function": "Sales Business Partnership — strategic advisor to GTM leaders + operational cadence management",
+    "archetypeDetected": "Director / VP of Revenue Operations",
+    "function": "Revenue Operations leadership: forecast cadence, pipeline inspection, and GTM systems ownership",
     "seniority": "Director",
-    "remote": "Remote US (TX eligible; excluded: CA, CT, NJ, NY, PA, WA)",
-    "teamSize": "Team of Sales Business Partners (size unspecified)",
-    "compStated": "$171,120–$213,900 base (CO/HI/IL/MD/MA/MN/VT/DC range) — TX likely in this band; equity + corporate bonus included",
-    "tldr": "Lead a team of SBPs serving as strategic advisors to Twilio sales executives — owns forecast health, operational cadences, and transformational programs for a multi-billion dollar GTM org",
-    "companyBrief": "Twilio is a public CPaaS/cloud communications company (~$4B revenue) listed on NYSE. Has undergone four rounds of layoffs (2022–2025) and restructured its Segment business unit into core Twilio in Jan 2026. Currently in lean/flat-headcount mode."
+    "remote": "Remote US (all states eligible)",
+    "teamSize": "Team of 4 revenue operations analysts",
+    "compStated": "$120,000–$145,000 base (all-state range); equity and annual bonus included",
+    "tldr": "Own the revenue operations function at a mid-market AI tooling vendor: forecast health, pipeline inspection, and the GTM systems roadmap for a 30-seller org",
+    "companyBrief": "Acme AI is an invented company used as parser test data. Roughly 400 employees, Series C, selling AI workflow tooling to B2B operations teams. Headcount has grown steadily across the last four quarters."
   },
-  "recommendation": "Technically strong match on core SalesOps experience, but Twilio's documented hiring freeze and repeated sales-team cuts make this a speculative application — verify with a recruiter before investing significant tailoring effort.",
+  "recommendation": "Strong match on core RevOps experience and the forecast/pipeline mandate. The usage-based pricing gap is soft and marked preferred, not required. Worth a tailored application.",
   "keywords": [
-    "Sales Business Partner",
+    "Revenue Operations",
     "Sales Operations",
     "GTM Operations",
     "Pipeline Health",
     "Forecast Management",
     "Operational Cadence",
-    "Revenue Operations",
-    "MEDDPICC",
-    "GTM Strategy",
-    "Team Leadership",
-    "Consumption Model",
-    "CPaaS",
-    "Cross-Functional Alignment",
-    "Sales Transformation",
-    "CRM",
+    "Deal Desk",
+    "Territory Planning",
+    "Quota Setting",
+    "CRM Administration",
+    "Sales Analytics",
     "KPI Frameworks",
     "Sales Enablement",
-    "Strategic Advisory",
-    "Pipeline Inspection",
-    "Sales Velocity"
+    "Funnel Metrics",
+    "Data Governance",
+    "Cross-Functional Alignment",
+    "Process Design",
+    "Team Leadership",
+    "Reporting Automation",
+    "Revenue Forecasting"
   ],
   "globalScore": [
     { "dim": "CV Match", "val": 4, "max": 5 },
-    { "dim": "North Star Alignment", "val": 3, "max": 5 },
-    { "dim": "Comp", "val": 3, "max": 5 },
+    { "dim": "North Star Alignment", "val": 4, "max": 5 },
+    { "dim": "Comp", "val": 4, "max": 5 },
     { "dim": "Remote / Location", "val": 5, "max": 5 },
-    { "dim": "Red Flags", "val": -2, "max": 5 }
+    { "dim": "Red Flags", "val": -1, "max": 5 }
   ],
   "cvMatch": [
     {
-      "req": "10+ years in sales operations, sales, or strategy consulting",
-      "evidence": "17 years total: 8 years at Northwind Logistics (2017–2025) across SDR leadership, BDS rotation, and BI/Analytics Director; 9 years prior in enterprise sales (Granite, Truphone, Lifenet, Broadview, 2008–2017)",
+      "req": "8+ years in revenue operations, sales operations, or analytics",
+      "evidence": "9 years total: 4 years at Contoso (2021–2025) across analytics and revenue operations; 5 years prior in mid-market sales roles (Northwind Logistics, Example Co, 2016–2021)",
       "strength": "strong"
     },
     {
-      "req": "2+ years partnering with senior software/tech sales leaders at $1B+ org",
-      "evidence": "Director BI & Analytics supporting CRO, VP Operations, and 6 senior leaders across 4 regions at Northwind Logistics ($400M ARR); cross-functional SBP behavior is implicit across all three Director roles",
+      "req": "2+ years partnering with senior GTM leaders at a $50M+ org",
+      "evidence": "Revenue Operations lead supporting the VP Sales and 3 regional managers at Contoso ($60M ARR); partnered directly with Finance on quota and capacity models",
       "strength": "moderate",
-      "note": "Northwind Logistics is $400M ARR — slightly below the $1B+ threshold stated in JD"
+      "note": "Contoso is $60M ARR, at the lower bound of the range named in the JD"
     },
     {
       "req": "Demonstrated team leadership",
-      "evidence": "47-person NA SDR org (2 managers, 2 player-coaches, 43 SDRs + 3 marketing + 6 pre-sales in matrix); 5 BI directs + 6-person Taiwan matrix team",
+      "evidence": "12-person revenue operations and analytics team (2 leads, 10 analysts) plus a 3-person matrixed enablement group",
       "strength": "strong"
     },
     {
-      "req": "Deep sales strategy and GTM knowledge",
-      "evidence": "MEDDPICC operationalization across 150+ sellers in 5 BUs; pod model redesign into 3 specialized motions; pipeline inspection framework; first NA commercial KPI baseline (ADS, win rate, velocity)",
+      "req": "Deep GTM process knowledge",
+      "evidence": "Qualification framework rollout across 30 sellers in 2 business units; territory redesign into 3 specialized motions; pipeline inspection review built with sales leadership",
       "strength": "strong"
     },
     {
-      "req": "Manage operational cadences, forecast, and pipeline health",
-      "evidence": "Built weekly operating cadences per SDR pod; real-time pipeline inspection for 6 senior leaders; quarterly executive reporting governance across 9 commercial domains",
+      "req": "Own forecast cadence and pipeline health",
+      "evidence": "Built the weekly forecast cadence per motion; live pipeline inspection view for 4 leaders; quarterly reporting governance across 5 commercial domains",
       "strength": "strong"
     },
     {
-      "req": "Execute transformational programs and sales initiatives",
-      "evidence": "Pod model redesign, MEDDPICC deployment, CRM data quality initiative (80K+ records), Customer Potential Model redesign — all built from scratch and still running post-departure",
+      "req": "Execute transformation programs and GTM initiatives",
+      "evidence": "Territory redesign, qualification framework rollout, CRM data quality cleanup (5K records), account scoring model rebuild, all still running after handoff",
       "strength": "strong"
     },
     {
-      "req": "Cross-functional collaboration (Finance, HR, Marketing, Product)",
-      "evidence": "CRO-sponsored BDS rotation; coordinated across BIRD Foundation, DHS, Israel NCD; matrix reporting with pre-sales engineers and marketing resources; BI reports consumed by Finance and Operations",
+      "req": "Cross-functional collaboration (Finance, Marketing, Product)",
+      "evidence": "Co-owned the quota model with Finance; aligned lead routing with Marketing; fed win/loss themes to Product monthly",
       "strength": "strong"
     },
     {
       "req": "Bachelor's degree (required)",
-      "evidence": "St. Bonaventure University — Economics",
+      "evidence": "Example State University, Business Administration",
       "strength": "strong"
     },
     {
@@ -96,240 +96,237 @@
       "strength": "weak"
     },
     {
-      "req": "Consumption/usage model experience (preferred)",
-      "evidence": "No documented CPaaS or consumption-based model experience; background is subscription/ARR SaaS",
+      "req": "Usage-based pricing experience (preferred)",
+      "evidence": "No documented usage-based or consumption pricing experience; background is subscription/ARR SaaS",
       "strength": "weak"
     }
   ],
   "gaps": [
     {
-      "gap": "Consumption/usage model experience",
+      "gap": "Usage-based pricing experience",
       "blocker": "Nice-to-have",
-      "mitigation": "Twilio marks this 'preferred' not 'required'. MEDDPICC and pipeline inspection methodology transfers directly; usage-based metrics are structurally similar to ARR expansion KPIs. Frame as 'applied SaaS rigor to a consumption model' in interview."
+      "mitigation": "Acme AI marks this 'preferred' not 'required'. Pipeline inspection methodology transfers directly; usage expansion metrics are structurally similar to ARR expansion KPIs. Frame as 'applied subscription rigor to a usage model' in the interview."
     },
     {
-      "gap": "Northwind Logistics below $1B+ ARR threshold",
+      "gap": "Contoso at the low end of the stated org-size range",
       "blocker": "Nice-to-have",
-      "mitigation": "Frame as 'multi-region complexity at $400M ARR across NA + AMEA; 6 senior leaders, 4 regions, 5 BUs' — the operational scale is more persuasive than the revenue figure."
+      "mitigation": "Frame as 'multi-region complexity at $60M ARR across 3 regions, 4 leaders, 2 business units'. The operational scale reads better than the revenue figure alone."
     },
     {
       "gap": "No graduate degree",
       "blocker": "Nice-to-have",
-      "mitigation": "Well compensated by 8+ years at Director/near-Director level with measurable system-building receipts."
+      "mitigation": "Offset by 4+ years at or near Director level with measurable system-building receipts."
     },
     {
-      "gap": "SBP advisory model vs. systems-builder identity",
+      "gap": "Advisory framing vs. systems-builder identity",
       "blocker": "Nice-to-have",
-      "mitigation": "The 'bilingual: data and sales' framing bridges this gap cleanly. SBPs who can also build the operational infrastructure are rarer — lean into the architect advantage, not just the advisory angle."
+      "mitigation": "The 'bilingual: data and sales' framing bridges this cleanly. Operators who can also build the infrastructure are rarer, so lean into the architect advantage."
     }
   ],
   "levelMatch": {
     "jdLevel": "Director",
     "naturalLevel": "Director",
-    "verdict": "Exact title match; scope aligns — managing a team of SBPs mirrors Jordan's history of building and running specialized teams"
+    "verdict": "Exact title match; scope aligns, since running a revenue operations team mirrors the candidate's history of building and running specialized teams"
   },
   "sellSenior": [
     {
       "claim": "Open with proof-of-scale, not just title",
-      "proof": "Ran BI & Analytics for $400M ARR across NA + AMEA — 11 reports, 4 regions, 5 BUs, 6 senior executive stakeholders",
-      "phrase": "My title was Director; my reporting footprint was what most SBP functions report into."
+      "proof": "Ran revenue operations for $60M ARR across 3 regions: 4 dashboards, 2 business units, 4 senior stakeholders",
+      "phrase": "My title was Director; my reporting footprint was what most RevOps functions report into."
     },
     {
-      "claim": "Demonstrate the advisory + operational duality",
-      "proof": "Built MEDDPICC commercial framework for 150+ sellers AND delivered the weekly pipeline inspection data those same leaders used to make decisions",
-      "phrase": "I didn't just advise on the strategy — I built the operational infrastructure that made the strategy measurable."
+      "claim": "Demonstrate the advisory and operational duality",
+      "proof": "Built the qualification framework for 30 sellers and delivered the weekly pipeline inspection data those same leaders used to decide coverage",
+      "phrase": "I did not just advise on the strategy. I built the operating layer that made it measurable."
     },
     {
-      "claim": "Systems that outlast you = SBP credibility",
-      "proof": "Every major deliverable (executive reporting, MEDDPICC framework, pod model, Customer Potential Model) was still running when I left",
-      "phrase": "The measure of a good SBP isn't the advice given — it's what the org can do after you stop showing up."
+      "claim": "Systems that outlast you build credibility",
+      "proof": "Every major deliverable (quarterly reporting, qualification framework, territory model, account scoring) was still running at handoff",
+      "phrase": "The measure of the work is not the advice given. It is what the org can do after you stop showing up."
     }
   ],
-  "downlevelPlan": "Not applicable — Director is the posted title and matches candidate's level exactly.",
+  "downlevelPlan": "Not applicable. Director is the posted title and matches the candidate's level exactly.",
   "comp": {
-    "stated": "$171,120–$213,900 base (CO/HI range — TX likely in same band); equity plan + corporate bonus on top",
+    "stated": "$120,000–$145,000 base (all-state range); equity plan and annual bonus on top",
     "sources": [
       {
-        "src": "JD (Greenhouse, 2026-06-12)",
-        "data": "$171K–$214K base depending on state; equity + bonus not quantified in posting",
-        "note": "TX not listed explicitly — assume CO/HI range applies"
+        "src": "JD (company careers page, 2026-01-15)",
+        "data": "$120K–$145K base; equity and bonus not quantified in the posting",
+        "note": "Single national band, no state-by-state variation listed"
       },
       {
-        "src": "Glassdoor / market context (Director SalesOps, SaaS, 2026)",
-        "data": "Director-level SalesOps at public SaaS typically $170K–$220K base + 15–25% bonus + equity",
-        "note": "Total comp $200K–$270K at midpoint — edge of target with favorable equity"
+        "src": "Market survey (Director RevOps, SaaS, 2026)",
+        "data": "Director-level RevOps at Series C SaaS typically $118K–$148K base plus 10–20% bonus and equity",
+        "note": "Total comp $130K–$175K at midpoint, comfortably above the walkaway floor"
       }
     ],
-    "score": 3,
-    "walkaway": 160,
-    "verdict": "Base clears the $160K floor; OTE target of $250K requires meaningful bonus (~20%) or equity to close the gap. Clarify OTE structure before applying.",
-    "market": "Director SBP roles at public CPaaS are niche; demand is moderate. Twilio's lean posture may limit comp flexibility."
+    "score": 4,
+    "walkaway": 100,
+    "verdict": "Base clears the $100K walkaway floor with room to spare. Bonus and equity structure is unquantified in the posting; clarify the split in the recruiter screen.",
+    "market": "Director RevOps roles at Series C SaaS are plentiful; demand is healthy. Acme AI's growth posture suggests normal comp flexibility."
   },
   "customizationCV": [
     {
       "section": "Professional Summary",
-      "current": "Opens with 'Regional Freight Operations Director' and BI/analytics framing",
-      "change": "Reframe opening line: 'Revenue Operations and Sales Business Partnership executive who translates pipeline data into sales leader decisions.' Keep $400M context and MEDDPICC proof point.",
-      "why": "SBP hiring managers want a strategic advisor identity, not an analytics architect — reorder the framing without losing the data-and-sales duality"
+      "current": "Opens with 'Freight Operations Director' and analytics framing",
+      "change": "Reframe the opening line: 'Revenue Operations executive who turns pipeline data into sales leader decisions.' Keep the $60M context and the qualification framework proof point.",
+      "why": "RevOps hiring managers want an operator identity, not an analytics architect. Reorder the framing without losing the data-and-sales duality."
     },
     {
       "section": "Areas of Expertise",
       "current": "Leads with 'Carrier Scorecarding & Tender Analytics, Seller Productivity Analytics'",
-      "change": "Add 'Executive Business Partnership' and 'Sales Leader Advisory' to the front; move Power BI governance to later in the list",
-      "why": "Mirror the JD's strategic advisory language before the technical BI terms"
+      "change": "Add 'Forecast Management' and 'Pipeline Inspection' to the front; move dashboard governance later in the list",
+      "why": "Mirror the JD's operating-cadence language ahead of the technical reporting terms"
     },
     {
-      "section": "Director BI & Analytics bullet order",
-      "current": "Leads with MEDDPICC, then reporting system, then governance",
-      "change": "Keep MEDDPICC first (highest SBP relevance); elevate the 'pipeline inspection for senior leadership' line as the second bullet",
-      "why": "Pipeline inspection and forecast management are the core SBP deliverables — they should be prominent"
+      "section": "Revenue Operations bullet order",
+      "current": "Leads with the qualification framework, then reporting, then governance",
+      "change": "Keep the qualification framework first; elevate 'pipeline inspection for senior leadership' to the second bullet",
+      "why": "Pipeline inspection and forecast management are the core deliverables of this role, so they should be prominent"
     },
     {
-      "section": "Director Sales Development bullets",
-      "current": "Leads with org size (47-person)",
-      "change": "Add a brief framing line linking pod-model execution to quarterly forecast cadence improvement",
-      "why": "SBP role specifically calls out managing operational cadences — connect the SDR pod KPIs to forecast visibility for the GTM leader"
+      "section": "Analytics role bullets",
+      "current": "Leads with team size (12-person)",
+      "change": "Add a framing line linking territory execution to the quarterly forecast cadence",
+      "why": "The JD calls out managing operating cadences, so connect the territory KPIs to forecast visibility"
     }
   ],
   "customizationLI": [
     {
       "section": "Headline",
-      "current": "Regional Freight Operations Director | Revenue Operations & GTM Strategy | Power BI",
-      "change": "Director, Sales Business Partner & Revenue Operations | GTM Strategy | Pipeline & Forecast Execution | $400M ARR",
-      "why": "SBP keyword surfaces in recruiter searches; pipeline/forecast execution language matches JD"
+      "current": "Regional Freight Operations Director | Revenue Operations | Dashboards",
+      "change": "Director, Revenue Operations | GTM Strategy | Pipeline & Forecast Execution | $60M ARR",
+      "why": "RevOps keywords surface in recruiter searches; pipeline/forecast language matches the JD"
     },
     {
       "section": "About section opening",
       "current": "Data-first framing",
-      "change": "Open with 'I build the operating infrastructure that turns sales strategy into daily execution' — bridges advisory and systems-builder identity",
-      "why": "SBP roles attract candidates who lead with relationship and advisory; distinguish yourself as the one who also builds"
+      "change": "Open with 'I build the operating infrastructure that turns sales strategy into daily execution' to bridge advisory and systems-builder identity",
+      "why": "RevOps roles attract candidates who lead with reporting. Distinguish yourself as the one who also operates."
     },
     {
       "section": "Featured section",
       "current": "Not specified",
-      "change": "Pin any post or article that shows cross-functional alignment or exec-level advisory work (if available)",
-      "why": "SBP hiring panels value evidence of executive stakeholder trust"
+      "change": "Pin any post or write-up showing cross-functional alignment or exec-level advisory work (if available)",
+      "why": "RevOps panels value evidence of executive stakeholder trust"
     }
   ],
   "starStories": [
     {
-      "title": "MEDDPICC Operationalization at Scale",
-      "req": "Execute transformational programs for GTM leaders",
-      "S": "Northwind Logistics had no consistent commercial framework across 150+ sellers in 5 BUs — each sales leader had their own qualification logic, making pipeline inspection unreliable for the CRO",
-      "T": "Deploy a unified MEDDPICC framework and establish the first North America commercial KPI baseline to enable real-time pipeline inspection",
-      "A": "Mapped MEDDPICC stages to CRM fields in D365; designed the KPI baseline (ADS $88K, win rate 35%, velocity $770K) with input from sales leadership; built the reporting layer consumed by 6 senior leaders",
-      "R": "150+ sellers operating on a common qualification framework; CRO and regional VPs using the pipeline inspection dashboard to make weekly coverage decisions",
-      "reflection": "The hardest part wasn't the technical build — it was getting 5 sales leaders to agree on shared definitions. The lesson: a framework no one owns becomes shelfware. I made each BU leader a named steward of their segment's KPIs."
+      "title": "Qualification Framework Rollout at Scale",
+      "req": "Execute transformation programs for GTM leaders",
+      "S": "Contoso had no consistent qualification framework across 30 sellers in 2 business units. Each leader used their own logic, which made pipeline inspection unreliable for the VP Sales.",
+      "T": "Deploy one qualification framework and establish the first commercial KPI baseline so pipeline inspection could run in real time",
+      "A": "Mapped qualification stages to CRM fields; designed the KPI baseline (average deal size $22K, win rate 24%, velocity $95K) with sales leadership; built the reporting layer used by 4 leaders",
+      "R": "30 sellers working from a common framework; the VP Sales and regional managers using the pipeline view for weekly coverage decisions",
+      "reflection": "The hard part was not the build. It was getting two business unit leaders to agree on shared definitions. A framework nobody owns becomes shelfware, so I made each leader a named steward of their segment KPIs."
     },
     {
-      "title": "Operational Cadence Design — Pod Model",
-      "req": "Manage operational cadences and drive sales initiatives",
-      "S": "The SDR org was a generalist team with no differentiated KPIs per motion — new logo, expansion, and next-gen channel were measured the same way, causing accountability gaps",
-      "T": "Restructure into specialized pods with distinct KPIs and weekly operating cadences, each aligned to the sales leader they supported",
-      "A": "Designed 3 pods (New Logo, Expansion, Next Gen Channel) with dedicated management, purpose-built KPI frameworks, and a weekly operating cadence reviewed with the VP of Sales",
-      "R": "$40M in pipeline sourced during tenure; each pod's metrics became the basis for the VP's weekly call with the CRO",
-      "reflection": "Specialization creates accountability but also creates silos. I kept a weekly cross-pod sync specifically to share learnings across motions — otherwise you optimize each pod in isolation and miss the handoff breaks."
+      "title": "Operating Cadence Design, Territory Model",
+      "req": "Manage operating cadences and drive GTM initiatives",
+      "S": "The sales team was a generalist org with no differentiated KPIs per motion. New logo, expansion, and partner deals were all measured the same way, which created accountability gaps.",
+      "T": "Restructure into specialized motions with distinct KPIs and a weekly operating cadence tied to the leader each supported",
+      "A": "Designed 3 motions (New Logo, Expansion, Partner) with dedicated ownership, purpose-built KPI frameworks, and a weekly cadence reviewed with the VP Sales",
+      "R": "$7M in pipeline sourced during tenure; each motion's metrics became the basis for the VP's weekly review",
+      "reflection": "Specialization creates accountability and also creates silos. I kept a weekly cross-motion sync to share learnings, otherwise you optimize each motion in isolation and miss the handoff breaks."
     },
     {
-      "title": "Pipeline Inspection Framework for Senior Leadership",
-      "req": "Serve as strategic business partner to GTM leaders, manage pipeline health",
-      "S": "Quarterly executive reviews were based on ad hoc analysis compiled manually by each regional leader — no consistent source of truth, 10-day prep cycle",
-      "T": "Build a unified pipeline inspection layer covering 9 commercial domains consumable by the CRO and 5 regional VPs in real time",
-      "A": "Architected the full carrier analytics surface in Power BI; replaced ad hoc Excel analysis with a live reporting layer; trained each senior leader on their segment view",
-      "R": "6 senior leaders using the dashboard weekly to make coverage decisions; quarterly prep cycle compressed from 6 weeks to 4 days",
-      "reflection": "Senior leaders don't resist data — they resist data that doesn't answer the question they actually have. I spent two weeks doing listening sessions before writing a single DAX measure."
+      "title": "Pipeline Inspection for Senior Leadership",
+      "req": "Partner with GTM leaders and manage pipeline health",
+      "S": "Quarterly reviews ran on ad hoc analysis compiled by hand by each regional lead. There was no consistent source of truth and prep took 5 days.",
+      "T": "Build one pipeline inspection layer covering 5 commercial domains that the VP Sales and 3 regional managers could read in real time",
+      "A": "Architected the carrier analytics surface; replaced ad hoc spreadsheet analysis with a live reporting layer; trained each leader on their segment view",
+      "R": "4 leaders using the view weekly for coverage decisions; quarterly prep compressed from 5 days to 8 hours",
+      "reflection": "Leaders do not resist data. They resist data that does not answer the question they actually have. I spent a week on listening sessions before writing a single measure."
     },
     {
-      "title": "CRM Data Quality at Scale (Cross-Functional)",
-      "req": "Cross-functional collaboration across Finance, HR, Marketing, and Product",
-      "S": "80,000+ accounts and contacts across Salesforce and D365 had degraded ICP accuracy after two years of inconsistent enrichment — field team was working from stale territory data",
-      "T": "Restore data integrity across both CRMs to support ICP targeting and field prospecting accuracy",
-      "A": "Designed D&B enrichment logic with structured validation workbooks; coordinated across Sales, Marketing, and Ops to align on field definitions; executed across full NA addressable market database",
-      "R": "Improved ICP targeting accuracy and enterprise prospecting readiness; foundation for the Customer Potential Model redesign that followed",
-      "reflection": "Data quality work has no natural champion — Sales blames Ops, Ops blames Marketing, everyone blames the CRM. The only way through was taking personal ownership of the outcome, not just the process."
+      "title": "CRM Data Quality Cleanup (Cross-Functional)",
+      "req": "Cross-functional collaboration across Finance, Marketing, and Product",
+      "S": "5,000+ accounts and contacts had degraded targeting accuracy after two years of inconsistent enrichment. The field was working from stale territory data.",
+      "T": "Restore data integrity to support targeting and prospecting accuracy",
+      "A": "Designed enrichment logic with structured validation workbooks; aligned Sales, Marketing, and Ops on field definitions; executed across the full addressable market list",
+      "R": "Improved targeting accuracy and prospecting readiness; became the foundation for the account scoring rebuild that followed",
+      "reflection": "Data quality work has no natural champion. Sales blames Ops, Ops blames Marketing, everyone blames the CRM. The way through was owning the outcome, not just the process."
     },
     {
-      "title": "Board-Level Quarterly Package",
-      "req": "Align strategy with execution; communicate to senior leadership",
-      "S": "The quarterly executive package was inconsistent across regions — different definitions, different visuals, different timing. Board had no stable view of $400M ARR",
-      "T": "Standardize a global quarterly package covering 4 regions with consistent definitions, board-level visuals, and a repeatable production cadence",
-      "A": "Applied AI-assisted DAX and Python to compress production from 6 weeks to 4 days; produced a 80-slide, 120+ visual package with standardized definitions and consistent structure",
-      "R": "Zero disruption to reporting cycles post-launch; CRO, CFO, and regional VPs on a single source of truth; still in use when I departed",
-      "reflection": "The slide count is a symptom — what mattered was that the CFO stopped asking 'whose number is right?' That question disappeared after Q2 2025."
+      "title": "Quarterly Leadership Package",
+      "req": "Align strategy with execution and communicate to senior leadership",
+      "S": "The quarterly package was inconsistent across regions: different definitions, different visuals, different timing. Leadership had no stable view of $60M ARR.",
+      "T": "Standardize one quarterly package across 3 regions with consistent definitions, clean visuals, and a repeatable production cadence",
+      "A": "Applied scripted automation to compress production from 5 days to 8 hours; produced a 20-slide package with standardized definitions and consistent structure",
+      "R": "No disruption to reporting cycles after launch; VP Sales, Finance, and regional managers on a single source of truth; still in use at handoff",
+      "reflection": "The slide count is a symptom. What mattered was that Finance stopped asking 'whose number is right?' That question disappeared after the second quarter."
     }
   ],
   "leadStory": {
-    "title": "MEDDPICC Operationalization + Pipeline Inspection",
-    "reason": "Directly mirrors the SBP mandate: strategic transformation at scale + operational cadence that enables real-time decision-making for sales executives. Shows both the advisory and systems-builder dimensions in one story.",
-    "script": "The problem wasn't that leaders didn't know what MEDDPICC was — it was that no one had made it operational. I built the CRM field mapping, the KPI baseline, and the reporting layer that turned a methodology into a weekly habit for 150+ sellers and 6 executives."
+    "title": "Qualification Framework Rollout + Pipeline Inspection",
+    "reason": "Mirrors the mandate directly: transformation at scale plus an operating cadence that enables real-time decisions for sales leaders. Shows both the advisory and systems-builder dimensions in one story.",
+    "script": "The problem was not that leaders did not know the framework. It was that nobody had made it operational. I built the CRM field mapping, the KPI baseline, and the reporting layer that turned a methodology into a weekly habit for 30 sellers and 4 leaders."
   },
   "redFlagQs": [
     {
-      "q": "You've built systems and reporting infrastructure — why do you want to be a Sales Business Partner?",
+      "q": "You have built systems and reporting infrastructure. Why do you want a Revenue Operations role?",
       "behind": "Interviewer is probing whether this is a downgrade or a misfit",
-      "a": "The systems I built were in service of exactly what an SBP does — helping sales executives make better decisions faster. The reporting infrastructure and MEDDPICC framework weren't ends in themselves; they were the operating layer that made the advisory relationship credible. I want to do that at a company where the GTM motion is complex enough to require both."
+      "a": "The systems I built served exactly what RevOps does: helping sales leaders make better decisions faster. The reporting layer and the qualification framework were not ends in themselves. They were the operating layer that made the partnership credible. I want to do that where the GTM motion is complex enough to require both."
     },
     {
-      "q": "Do you have experience with consumption-based or usage models?",
-      "behind": "Twilio's model is CPaaS (pay-per-message/call) — different from seat-based SaaS",
-      "a": "My background is subscription/ARR SaaS, but the underlying sales operations discipline — pipeline health, velocity, capacity planning, forecast accuracy — is model-agnostic. I've mapped consumption expansion patterns in ARR terms before; I'd spend the first 60 days learning Twilio's specific usage metrics and connecting them to the KPI framework I'd build."
+      "q": "Do you have experience with usage-based or consumption pricing?",
+      "behind": "Acme AI prices on usage, which differs from seat-based SaaS",
+      "a": "My background is subscription ARR, but the underlying discipline (pipeline health, velocity, capacity planning, forecast accuracy) is model-agnostic. I have mapped expansion patterns in ARR terms before. I would spend the first 60 days learning the specific usage metrics and connecting them to the KPI framework I would build."
     },
     {
-      "q": "Twilio has had significant workforce reductions. Why do you want to join now?",
-      "behind": "Recruiter wants to know you've done your homework and have a genuine reason",
-      "a": "I looked at this carefully. The restructuring was about removing redundancy from the Segment acquisition and getting to a lean, profitable structure. The Twilio core communications business is strong. A Director SBP role opened at this point typically means a genuine operational need — probably a sales leader who needs dedicated partnership support after losing some of it in the restructuring."
+      "q": "Your last company was smaller than ours. How do you scale what you built?",
+      "behind": "Checking whether the experience translates upward",
+      "a": "The constraint that matters is not headcount, it is the number of distinct motions and definitions you have to reconcile. At Contoso that was 2 business units and 3 regions. The reconciliation work is the same shape here, just with more rows. The framework travels; the tooling gets swapped."
     },
     {
       "q": "You were a Director. This is also Director-level. Are you looking to move up?",
       "behind": "Checking for misaligned ambition or title-shopping",
-      "a": "I'm not optimizing for a title change — I'm optimizing for a role where the operational complexity is high enough that what I build actually matters to revenue. A Director SBP at Twilio's scale is substantively different from a Director SBP at a 50-person startup. Scale is the variable I'm looking for."
+      "a": "I am not optimizing for a title change. I am optimizing for a role where the operational complexity is high enough that what I build actually matters to revenue. Scale is the variable I am looking for."
     }
   ],
   "legitimacy": {
     "tier": "Proceed with Caution",
-    "conclusion": "Live posting confirmed by gate, salary disclosed, public company — but Twilio has undergone four rounds of layoffs (2022–2025) specifically including sales teams, with reported hiring freeze conditions in 2025–2026. Post is real; whether headcount was actually approved is uncertain.",
+    "conclusion": "Live posting confirmed by the gate, salary disclosed, and the description is specific rather than boilerplate. The company is private, so financial signals cannot be independently verified, and this is the second role from the same team in the scanner within a quarter.",
     "signals": [
-      { "signal": "Posting freshness", "finding": "First appearance in scan-history.tsv today (2026-06-12); gate confirmed live", "good": true },
-      { "signal": "Salary disclosed", "finding": "Specific state-by-state ranges published in JD — strong legitimacy signal", "good": true },
-      { "signal": "Description quality", "finding": "Specific responsibilities, org context, travel policy, consumption model preference — not boilerplate-heavy", "good": true },
-      { "signal": "Public company", "finding": "NYSE: TWLO — real company, verifiable financial disclosures", "good": true },
-      { "signal": "Layoff history", "finding": "Four rounds of layoffs 2022–2025 totaling ~4,000 employees; sales teams specifically called out in multiple rounds", "good": false },
-      { "signal": "Hiring freeze reports", "finding": "Employee and analyst reports from early 2025–2026 suggest flat headcount; Q1 2026 earnings confirmed no headcount growth", "good": false },
-      { "signal": "Reposting detection", "finding": "Third Twilio role in scanner (prior: #73 Sales Ops Planning Manager, #142 GTM Business Architecture) — pattern of sequential openings at a company in cost-cut mode warrants scrutiny", "good": false },
+      { "signal": "Posting freshness", "finding": "First appearance in scan-history.tsv today (2026-01-15); gate confirmed live", "good": true },
+      { "signal": "Salary disclosed", "finding": "Specific national band published in the JD, which is a strong legitimacy signal", "good": true },
+      { "signal": "Description quality", "finding": "Specific responsibilities, org context, and travel policy. Not boilerplate-heavy.", "good": true },
+      { "signal": "Company stage", "finding": "Series C, roughly 400 employees, growing headcount across four quarters", "good": true },
+      { "signal": "Layoff history", "finding": "No reported reductions in the last three years", "good": true },
+      { "signal": "Financial verification", "finding": "Private company, so revenue and runway figures cannot be independently confirmed", "good": false },
+      { "signal": "Reposting detection", "finding": "Second role from the same team in the scanner this quarter (prior: #7 Revenue Operations Manager), which warrants a light check on whether the first role was filled", "good": false },
       { "signal": "Prompt injection", "finding": "None detected", "good": true }
     ]
   }
 }
 ---
 
-# Twilio — Director, Sales Business Partner
+# Acme AI: Director, Revenue Operations
 
 ## What This Role Is
 
-This is a strategic operations leadership role embedded within Twilio's sales org — a "business partner to GTM executives" model that combines pipeline management, forecast oversight, and transformational program execution. The SBP sits between the sales leader and the operational machinery, serving as both strategist and operator.
+This is a synthetic report body used as parser test data. It exists so the v1
+frontmatter loader has a realistic narrative section to separate from the JSON
+block above. The role described is an invented Revenue Operations leadership
+post: forecast oversight, pipeline inspection, and GTM systems ownership for a
+mid-market vendor.
 
-Jordan's profile is a strong technical match. The MEDDPICC deployment, pipeline inspection framework, and pod model redesign collectively demonstrate exactly what an SBP does at scale. The gap between his identity (systems architect) and the role's framing (strategic advisor) is narrower than it looks: his best work has been advisory work that happened to produce operational infrastructure as the output.
+## The Fit
 
-## The Twilio Problem
-
-The legitimacy concern here isn't about the role itself — it's about the company's trajectory. Twilio reduced its workforce four times between 2022 and 2025, including targeted cuts to its sales organization. Q1 2026 earnings confirmed flat headcount. Multiple employee reports from 2025–2026 describe a hiring freeze, not a selective hiring posture.
-
-This creates a scenario where the Greenhouse posting may be live — as confirmed by the gate — but the approved headcount behind it may be contingent, delayed, or part of a rolling search with no committed close date. Twilio has historically opened roles that take 6+ months to fill (or close without filling) during periods of structural reorganization.
-
-The recommended posture before investing significant tailoring time: contact a Twilio recruiter on LinkedIn to confirm the role is actively interviewing, not just posted for pipeline purposes.
-
-## The Consumption Model Gap
-
-"Consumption/usage model experience preferred" is Twilio-specific language for CPaaS dynamics: pipeline inspection in a consumption model requires tracking usage-based expansion, not just renewal/logo. ARR-based pipeline management (Jordan's background) is structurally similar but not identical. This is a soft gap — acknowledge it directly in interviews rather than hoping no one notices. The frame: "I've operationalized pipeline inspection in ARR terms at $400M revenue; I'd spend my first 60 days learning how usage metrics map to the same underlying sales behaviors."
+The candidate profile in this fixture is a strong match on paper. The
+qualification framework rollout, the pipeline inspection layer, and the
+territory redesign collectively demonstrate the operating mandate at scale.
 
 ## Comp Verdict
 
-The stated range ($171K–$214K base for CO/HI — TX probably similar) clears Jordan's $160K floor but doesn't reach his $250K OTE target without meaningful bonus and equity. Twilio offers equity and a corporate bonus — at a 20% target bonus and modest equity, total comp likely lands in the $220K–$260K range at midpoint. Worth validating before accepting or declining. Ask in the recruiter screen: "What's the typical OTE structure for this level, including bonus and equity target?"
+The stated range ($120K–$145K base) clears the walkaway floor with room to
+spare. Bonus and equity are unquantified in the posting, so the recruiter
+screen should confirm the split.
 
 ## Recommended Posture
 
-Do not invest full tailoring effort before confirming the role is actively interviewing. If confirmed active:
-1. Reframe the professional summary toward SBP/strategic advisory identity
-2. Lead the MEDDPICC story as the primary proof point — it directly mirrors the SBP mandate
-3. Prepare the consumption model framing as a proactive answer, not a defensive one
-4. Use the layoff history as context, not a disqualifier — Twilio post-restructuring could be a leaner, more interesting operator environment
+1. Reframe the professional summary toward an operator identity
+2. Lead the qualification framework story as the primary proof point
+3. Prepare the usage-based pricing framing as a proactive answer
+4. Confirm the bonus and equity structure before investing in a full tailor

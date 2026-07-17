@@ -2,10 +2,10 @@
 // Fields: id, date (ISO), company, role, archetype, score, status, salary, target, sector, size, notes
 window.APPS = (() => {
   const rows = [
-    [1,  "2026-04-30", "Pager Health",      "VP, Revenue Operations",         "RevOps",        4.5, "Evaluated", 245, 240, "Healthtech",  "Mid",     "Strong PLG motion, fits comp band"],
-    [2,  "2026-04-30", "Sparrow",           "Director, Analytics",            "Analytics",     4.3, "Evaluated", 220, 230, "Fintech",     "Mid",     "Series C, analytics-led culture"],
-    [3,  "2026-04-29", "Cribl",             "VP, Sales Operations",           "SalesOps",      4.4, "Evaluated", 260, 240, "Infra",       "Late",    "Hot comp, observability"],
-    [4,  "2026-04-29", "Armada",            "Director, Business Development", "BizDev",        4.0, "Evaluated", 210, 220, "Defense",     "Mid",     "Edge compute, gov-heavy"],
+    [1,  "2026-04-30", "Contoso Health",    "VP, Revenue Operations",         "RevOps",        4.5, "Evaluated", 245, 240, "Healthtech",  "Mid",     "Strong PLG motion, fits comp band"],
+    [2,  "2026-04-30", "Northwind",         "Director, Analytics",            "Analytics",     4.3, "Evaluated", 220, 230, "Fintech",     "Mid",     "Series C, analytics-led culture"],
+    [3,  "2026-04-29", "Acme Corp",         "VP, Sales Operations",           "SalesOps",      4.4, "Evaluated", 260, 240, "Infra",       "Late",    "Hot comp, observability"],
+    [4,  "2026-04-29", "Example Co",        "Director, Business Development", "BizDev",        4.0, "Evaluated", 210, 220, "Defense",     "Mid",     "Edge compute, gov-heavy"],
     [5,  "2026-04-28", "Lattice",           "VP, Revenue Operations",         "RevOps",        4.2, "Applied",   235, 240, "HR-Tech",     "Late",    "Recruiter reached out"],
     [6,  "2026-04-28", "Ramp",              "Head of Sales Operations",       "SalesOps",      4.6, "2nd Interview", 270, 250, "Fintech",     "Late",    "Round 2 with CRO Wed"],
     [7,  "2026-04-27", "Notion",            "Director, RevOps",               "RevOps",        4.1, "Responded", 225, 230, "Productivity","Late",    "Recruiter screen scheduled"],
@@ -54,7 +54,7 @@ window.APPS = (() => {
     [50, "2026-04-06", "Rippling",          "VP, Revenue Operations",         "RevOps",        4.4, "Applied",   260, 250, "HR-Tech",     "Late",    "Multi-product"],
     [51, "2026-04-05", "Deel",              "Head of GTM Analytics",          "Analytics",     4.0, "Responded", 225, 230, "HR-Tech",     "Late",    "Global payroll"],
     [52, "2026-04-05", "Brex",              "Director, RevOps",               "RevOps",        3.9, "Applied",   215, 225, "Fintech",     "Late",    "Recruiter pinged"],
-    [53, "2026-05-05", "Splitero",          "Director of Revenue Operations", "RevOps",        4.0, "Evaluated", 250, 240, "Fintech",     "Mid",     "$350M Blue Owl backed; HEI fintech; build RevOps from scratch"],
+    [53, "2026-05-12", "Contoso Capital",   "Director of Revenue Operations", "RevOps",        4.2, "Evaluated", 250, 240, "Fintech",     "Mid",     "Series B lender; build RevOps from scratch"],
   ];
   return rows.map(r => ({
     id: r[0], date: r[1], company: r[2], role: r[3], archetype: r[4],

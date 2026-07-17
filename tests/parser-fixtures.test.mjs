@@ -9,7 +9,12 @@
  * what the drawer receives fails loudly here instead of silently
  * rendering empty tabs.
  *
- * Fixtures are real reports copied from reports/ (tests/fixtures/).
+ * Fixtures (tests/fixtures/) are fully synthetic: invented companies, roles,
+ * comp figures, and work history. They mirror the STRUCTURE of real reports
+ * (every field the parsers read, every heading shape) so the parsers are
+ * genuinely exercised, but carry no personal data. tests/ is tracked, and
+ * installer/build-bundle.ps1 ships every tracked file to end users via
+ * `git archive`, so never paste a real report from reports/ in here.
  * Run: node tests/parser-fixtures.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
@@ -42,7 +47,7 @@ console.log('\n1. Legacy report (## X) block format)');
   check(cs.cvMatch.length === 9, `cvMatch rows extracted (${cs.cvMatch.length}/9)`);
   check(cs.customizationCV.length === 5, `customizationCV extracted (${cs.customizationCV.length}/5)`);
   check(cs.legitimacySignals.length === 6, `legitimacySignals extracted (${cs.legitimacySignals.length}/6)`);
-  check(cs.comp.stated === '$171K–$279K ($216K median)', `comp.stated parsed (${cs.comp.stated})`);
+  check(cs.comp.stated === '$120K–$145K ($132K median)', `comp.stated parsed (${cs.comp.stated})`);
   check(!!cs.tldr, 'tldr present');
   check(!!cs.archetypeDetected, 'archetype detected');
 }
@@ -79,8 +84,8 @@ console.log('\n4. v1 report (JSON frontmatter)');
   check(!hasV1Frontmatter(legacyMd), 'legacy report NOT detected as v1');
 
   const { data, body } = parseV1(v1Md);
-  check(data.company === 'Twilio' && data.id === 768, `frontmatter fields (company=${data.company}, id=${data.id})`);
-  check(data.score === 3.3, `score from frontmatter (${data.score})`);
+  check(data.company === 'Acme AI' && data.id === 12, `frontmatter fields (company=${data.company}, id=${data.id})`);
+  check(data.score === 4.0, `score from frontmatter (${data.score})`);
   check(body.length > 0 && !body.startsWith('---'), 'narrative body separated from frontmatter');
 
   const cs = v1ToCheatsheet(data);

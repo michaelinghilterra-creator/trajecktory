@@ -271,7 +271,7 @@ The JSON must have exactly these four keys with strict length targets:
 
 2. "subtitle_secondary" (~60 chars) — Three role themes separated by " | " (e.g. "Pipeline & Forecasting | Sales Enablement | Field Strategy"). Pull themes from the JD's top requirements.
 
-3. "summary" (~870 chars / ~130 words) — Professional summary paragraph reframed through the JD's lens. Use ${id.firstName}'s voice. Reuse his proof points (80+ direct/matrix reports, 150+ sellers MEDDPICC, 6 weeks → 4 days, six regions, $400M revenue) but reorder by JD relevance. Do NOT start with "I". Do NOT invent skills. Stay within ±15% of the 870-char baseline — going short or long shifts page break geometry.
+3. "summary" (~870 chars / ~130 words) — Professional summary paragraph reframed through the JD's lens. Use ${id.firstName}'s voice. Reuse the proof points from the CV above (verbatim metrics only, never invented or rounded) but reorder by JD relevance. Do NOT start with "I". Do NOT invent skills. Stay within ±15% of the 870-char baseline — going short or long shifts page break geometry.
 
 4. "areas_of_expertise" (~410 chars / ~50 words, exactly 12 comma-separated phrases) — Rebuild the list from JD requirements. Every phrase must trace to a real bullet in ${id.firstName}'s CV above. If you cannot point to a bullet, drop the phrase. Stay within ±15% of the 410-char baseline.
 

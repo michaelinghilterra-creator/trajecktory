@@ -2,14 +2,23 @@
 const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
 // Default tweak knobs (host can rewrite this block)
+//
+// COMP DEFAULTS. This file is TRACKED: it ships in the published repo AND inside the
+// installer payload (build-bundle.ps1 packs the tree with `git archive`). A walk-away
+// is the number a candidate holds back during a negotiation, so hardcoding a real one
+// here hands it to everyone who installs the app.
+//
+// Real targets belong in the gitignored config/profile.yml. The values below are
+// arbitrary starting points. If you change them, pick numbers that are not your own:
+// this exact block once shipped a real user's floor and OTE target.
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "accent": "#a78bfa",
   "density": "comfortable",
   "theme": "dark",
   "defaultPipelineView": "table",
-  "targetLow": 220,
-  "targetHigh": 250,
-  "walkAway": 160
+  "targetLow": 100,
+  "targetHigh": 140,
+  "walkAway": 90
 }/*EDITMODE-END*/;
 
 // Theme cycle order by luminance: dark -> dim -> light -> dark

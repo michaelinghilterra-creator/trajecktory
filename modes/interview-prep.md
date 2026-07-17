@@ -10,14 +10,15 @@ by `outputs.interview_prep_dir` in `config/profile.yml` (default
 
 **Company subfolder rule (REQUIRED):** every intel report and cheat sheet goes
 into a folder named for the company, so a growing list stays browsable
-(`interview-prep/Example Co/…`, `interview-prep/Example Co/…`). Derive
+(`interview-prep/Example Co/…`, `interview-prep/Northwind Logistics/…`). Derive
 `{Company Folder}` from the company's display name as it appears in the report
 header / `data/applications.md` company column: strip trailing legal suffixes
 (`, Inc.`, `, LLC`, `, Corp.`, `Corporation`) and replace any Windows-forbidden
-path characters (`\ / : * ? " < > |`) with a space, then trim. Examples: "DHI
-Group, Inc." → `Example Co`; "Example Co" → `Example Co`. Create the
-folder if it does not exist. The shared `story-bank.md` stays at the top level
-of `interview-prep/`, NOT inside a company folder.
+path characters (`\ / : * ? " < > |`) with a space, then trim. Examples: "Example
+Co, Inc." → `Example Co`; "Northwind Logistics" → `Northwind Logistics` (no
+suffix, unchanged). Create the folder if it does not exist. The shared
+`story-bank.md` stays at the top level of `interview-prep/`, NOT inside a
+company folder.
 
 To retrofit pre-existing flat cheat sheets into this layout, run
 `node organize-interview-prep.mjs` (dry run) then `node organize-interview-prep.mjs --apply`.

@@ -110,15 +110,18 @@ Every line earns its place. No filler. Tables and bullet points only — no pros
 ---
 
 ## Sensitive Framing Reminders
-{Pull directly from _profile.md — only include the items relevant to this role}
+{Pull directly from the sensitive framing section of `modes/_profile.md`. That file
+is the user layer and holds the verbatim scripts; this mode is the system layer and
+must not restate them. Include only the items relevant to this role and archetype.}
 
-**Departure from Northwind Logistics:**
-> "My role was eliminated in a restructuring at the end of 2025. It wasn't a performance issue — I had just led the build-out of a reporting infrastructure supporting $400M in revenue across four regions. The timing was theirs, not mine."
+**{sensitive item, e.g. the departure narrative}:**
+> "{verbatim script copied exactly from _profile.md; do not paraphrase}"
 
-**Director BDS (if tenure comes up):**
-> "CRO-sponsored strategic rotation — not a lateral move, not a step back. The CRO identified a commercial gap and asked me to own it."
+**{sensitive item, if it is likely to come up in this round}:**
+> "{verbatim script copied exactly from _profile.md; do not paraphrase}"
 
-{include other items from _profile.md sensitive framing only if relevant to the specific archetype}
+{If _profile.md has no sensitive framing section, omit this whole section rather than
+improvising a framing for the candidate's background.}
 
 ---
 

@@ -161,19 +161,19 @@ The module has **3 UI surfaces** (not subtabs -- overlays on a single list view)
 ```
 +-----------------------------------------------+
 | #923 [Sent] [+ 1 related app]          [X]    |
-| Jane Doe                                     |
+| Jane Doe                                       |
 | Talent Acquisition Specialist                   |
 | Example Corp                                    |
 |                                                 |
 | CONTACT                                         |
-| Company Website | example.com  Copy         |
-| Email           | jane@...         Copy         |
-| Location        | Example City, TX                   |
+| Company Website | example.com      Copy         |
+| Email           | jane@...        Copy         |
+| Location        | Austin, TX                    |
 | LinkedIn        | Open profile                  |
 | Last Touch      | 2026-05-27                    |
 |                                                 |
 | RELATED APPLICATIONS AT EXAMPLE CORP        1  |
-| [#332 Director of Revenue Ops  4.6/5 Applied]  |
+| [#332 Senior Operations Manager 4.6/5 Applied] |
 |                                                 |
 | PIPELINE STAGE                                  |
 | [Not Contacted][Drafted][Sent][Replied]...      |
@@ -186,7 +186,7 @@ The module has **3 UI surfaces** (not subtabs -- overlays on a single list view)
 |                                                 |
 | CORRESPONDENCE                          1 MSG  |
 | Sent                          2026-05-27 13:17  |
-| Following up: Director of Revenue Ops...        |
+| Following up: Senior Operations Manager...     |
 | (full email body)                               |
 +-----------------------------------------------+
 ```
@@ -255,15 +255,15 @@ The module has **3 UI surfaces** (not subtabs -- overlays on a single list view)
   "first": "Jane",
   "salute": "Ms.",
   "title": "Talent Acquisition Specialist",
-  "city": "Example City",
+  "city": "Austin",
   "state": "TX",
-  "zip": "00000",
+  "zip": "78701",
   "phone": "",
   "email": "jane.doe@example.com",
   "linkedin": "https://linkedin.com/in/example",
   "status": "Sent",
   "lastTouch": "2026-05-27",
-  "notes": "Confirmed via LinkedIn & ZoomInfo; SHRM-CP certified"
+  "notes": "Confirmed via LinkedIn; SHRM-CP certified"
 }
 ```
 

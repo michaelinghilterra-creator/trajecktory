@@ -154,13 +154,13 @@
       ]
     },
     "badKpi": {
-      "title": "The KPI that paid for the wrong thing",
+      "title": "The gate I shipped without a pilot",
       "tag": "lead with the miss",
       "story": 4,
       "seconds": 90,
       "spoken": [
-        "\"I specialized the sales motion but not the measurement. I graded a partner-led team on the same KPIs as direct sellers, and they failed all of them even though the work was solid.",
-        "Once I saw it, I pulled the scorecard and rebuilt it on the right metrics, and I told the team straight: **the scorecard was wrong, not your work.** The lesson: if you specialize the motion, you specialize the measurement. I owned the framework, so I owned the miss.\""
+        "\"I shipped a stage gate to all three business units on a single day, with no pilot. The logic was sound and I wanted a clean cutover. That was the mistake.",
+        "Within two weeks reps were parking deals a stage early to dodge the gate, and my pipeline number got **less** accurate, not more. I paused the rollout, ran it in one unit first, and rebuilt the gate with the reps who had to live in it. The lesson: a control people route around is worse than no control. I shipped it, so the bad quarter of data was mine.\""
       ],
       "notes": [
         "**Lead with the miss, then the fix.** They need to see you surface problems early.",
@@ -186,7 +186,8 @@
       "story": 2,
       "seconds": 75,
       "spoken": [
-        "\"Frameworks don't drive adoption, **operating cadences do.** It stuck because it was wired into the CRM and because the CRO started inspecting deals in that language. Once leadership spoke it, sellers followed within weeks.\""
+        "\"I stopped asking for compliance and gave them something they wanted. The gate added two fields per deal, so I cut four fields nobody read and wired the stage picker to autofill from the quote.",
+        "Net, a rep spent **less** time in the CRM than before, and the data I needed arrived as a side effect of work they were already doing. Adoption follows self-interest. If hygiene only serves the dashboard, it decays the week you stop nagging.\""
       ],
       "notes": [
         "Show you can drive discipline **without losing the field**."
