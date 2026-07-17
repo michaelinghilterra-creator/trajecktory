@@ -251,6 +251,25 @@ try {
   }
 }
 
+// The check above reads FILES. A commit message is published just as surely and is
+// not a file, so none of it applies. That gap is not theoretical: while this very
+// gate was being written, three commit messages here named the interview
+// counterparties and one spelled out a real compensation band and walk-away in prose.
+// Every one passed a green run of this suite.
+//
+// Scope is the unpushed commits, the only window where a message can still be
+// amended. A fresh clone has nothing unpushed, so this is a silent no-op there.
+try {
+  execFileSync(process.execPath, ['verify-no-pii.mjs', '--messages'], { cwd: ROOT, encoding: 'utf-8', stdio: 'pipe' });
+  pass('No personal data in unpushed commit messages');
+} catch (e) {
+  const out = `${e.stdout || ''}${e.stderr || ''}`.trim();
+  fail('Personal data in a commit message — amend before pushing:');
+  for (const line of out.split('\n').filter(l => /^\s+\[/.test(l) || /^\s{6}/.test(l))) {
+    console.log(`      ${line.trim()}`);
+  }
+}
+
 // ── 7. ABSOLUTE PATH CHECK ──────────────────────────────────────
 
 console.log('\n7. Absolute path check');

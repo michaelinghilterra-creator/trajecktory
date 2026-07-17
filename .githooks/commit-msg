@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# commit-msg: refuse a commit whose MESSAGE carries personal data.
+#
+# test-all.mjs catches this too, but only when someone remembers to run it, and by
+# then the message is already in history and needs an amend or a rebase. This fires
+# at the one moment the message is still just a file in .git/, costing nothing to fix.
+#
+# Enable (once per clone; hooks are not tracked by git, so this cannot be automatic):
+#   git config core.hooksPath .githooks
+#
+# Bypass, when you are certain the finding is wrong:
+#   git commit --no-verify
+#
+# The check derives every term at runtime from the gitignored sources. On a clone
+# without them it derives nothing and passes, which is the correct behaviour for a
+# contributor who has no personal data in the repo to leak.
+set -euo pipefail
+
+MSG_FILE="$1"
+ROOT="$(git rev-parse --show-toplevel)"
+
+[ -f "$ROOT/verify-no-pii.mjs" ] || exit 0
+command -v node >/dev/null 2>&1 || exit 0
+
+if ! node "$ROOT/verify-no-pii.mjs" --msg-file "$MSG_FILE" 2>&1; then
+  echo ""
+  echo "commit-msg hook: refusing this message (see above)."
+  echo "Fix the message, or re-run with --no-verify if this is a false positive."
+  exit 1
+fi

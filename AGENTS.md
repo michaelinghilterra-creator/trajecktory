@@ -381,6 +381,33 @@ node verify-reports.mjs
 
 - **RULE: NEVER create new entries in applications.md if company+role already exists.** Update the existing entry.
 
+### Commit messages are published (RULE)
+
+`verify-no-pii.mjs` scans **files**. A commit message is not a file, and it is published
+exactly as surely as one. Writing about a leak tempts you to quote it, and that is how a
+real compensation band, a real walk-away, and real interview counterparties reached commit
+messages in this repo — every one of them written by an agent documenting the fix for that
+exact class of problem, and every one passing a green test run.
+
+When a commit message needs to describe personal data, **describe the shape, never the
+value**:
+
+| Don't | Do |
+|---|---|
+| Quote the figures (`it declared <band> while the leak was <low>/<high>/<walkaway>`) | `a hardcoded default and a declared range can be different numbers` |
+| Name the company (``turned up `interview-prep/<a real company>/` ``) | `turned up real companies in interview-prep example paths` |
+| Itemise what leaked (`a zip of the CV, a recruiter's work email`) | `shipped personal data past every gate` |
+
+The left column is deliberately written with placeholders. The first draft of this table
+used the real values as its examples, in this tracked file, and the gate flagged it. Even
+a rule against quoting a leak will quote the leak if you let it.
+
+Enforced two ways:
+- `node verify-no-pii.mjs --messages` over the unpushed commits, wired into `test-all.mjs`.
+- `.githooks/commit-msg`, which blocks the commit while the message is still a scratch
+  file. **Enable it once per clone:** `git config core.hooksPath .githooks` (git will not
+  run a hook out of a tracked directory by itself). Bypass with `--no-verify`.
+
 ### TSV Format for Tracker Additions
 
 Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slug}.tsv`. Single line, 9 tab-separated columns:
