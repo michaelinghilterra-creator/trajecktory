@@ -46,12 +46,17 @@ router.post('/api/setup/pitch/save', (req, res) => {
 // POST /api/setup/pitch/generate — body { seniority, industry, interviewStage, length }
 router.post('/api/setup/pitch/generate', async (req, res) => {
   try {
-    let { seniority = 'Director', industry = '', interviewStage = 'Recruiter screen', length = '90s' } = req.body || {};
-    // Coerce to strings: req.body values can arrive as arrays/objects under parameter
-    // tampering, which would break the string sinks below (prompt text + the
-    // LENGTH_WORDS[length] object-key lookup).
-    seniority = String(seniority); industry = String(industry);
-    interviewStage = String(interviewStage); length = String(length);
+    // req.body values can arrive as arrays/objects under parameter tampering, which
+    // would break the string sinks below (prompt text + the LENGTH_WORDS[length]
+    // object-key lookup). Take each only when it is genuinely a string; otherwise use
+    // the default. The typeof guard is the type-narrowing CodeQL requires (a later
+    // String() coercion does not satisfy the dataflow — it flags the binding itself).
+    const body = (req.body && typeof req.body === 'object') ? req.body : {};
+    const asStr = (v, d) => (typeof v === 'string' ? v : d);
+    const seniority = asStr(body.seniority, 'Director');
+    const industry = asStr(body.industry, '');
+    const interviewStage = asStr(body.interviewStage, 'Recruiter screen');
+    const length = asStr(body.length, '90s');
     const id = getIdentity();
     const profile = loadProfileContext();           // modes/_profile.md, trimmed
     let cv = '';
