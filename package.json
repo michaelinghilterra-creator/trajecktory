@@ -38,14 +38,14 @@
     "node": ">=18"
   },
   "dependencies": {
-    "adm-zip": "^0.5.18",
+    "adm-zip": "^0.6.0",
     "dotenv": "^17.4.2",
     "js-yaml": "^4.3.0",
     "playwright": "^1.61.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.6.0",
+    "eslint": "^10.7.0",
     "globals": "^17.7.0"
   }
 }
