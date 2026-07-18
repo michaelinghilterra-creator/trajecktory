@@ -46,7 +46,12 @@ router.post('/api/setup/pitch/save', (req, res) => {
 // POST /api/setup/pitch/generate — body { seniority, industry, interviewStage, length }
 router.post('/api/setup/pitch/generate', async (req, res) => {
   try {
-    const { seniority = 'Director', industry = '', interviewStage = 'Recruiter screen', length = '90s' } = req.body || {};
+    let { seniority = 'Director', industry = '', interviewStage = 'Recruiter screen', length = '90s' } = req.body || {};
+    // Coerce to strings: req.body values can arrive as arrays/objects under parameter
+    // tampering, which would break the string sinks below (prompt text + the
+    // LENGTH_WORDS[length] object-key lookup).
+    seniority = String(seniority); industry = String(industry);
+    interviewStage = String(interviewStage); length = String(length);
     const id = getIdentity();
     const profile = loadProfileContext();           // modes/_profile.md, trimmed
     let cv = '';

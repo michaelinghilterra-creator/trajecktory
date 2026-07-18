@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { rateLimit } from 'express-rate-limit';
 import path from 'path';
 import { randomBytes } from 'crypto';
 import { existsSync } from 'fs';
@@ -122,6 +123,20 @@ app.use(express.static(STATIC, {
 app.use('/output', express.static(OUTPUT_DIR));
 
 // ── Mount per-domain routers (same order the routes were defined in) ──────────
+// Rate-limit the API surface as defense-in-depth for the exposed case (HOST=0.0.0.0).
+// Mounted AFTER the static + /output handlers (so SPA bundle loads are never throttled)
+// and BEFORE every router (so all API handlers and the SPA fallback are covered). The
+// ceiling is far above a single user's polling; it only trips on a flood from a LAN peer
+// when the server is deliberately exposed; inert in the default localhost case. Also
+// satisfies CodeQL js/missing-rate-limiting across the route surface.
+app.use(rateLimit({
+  windowMs: 60 * 1000,     // 1 minute
+  limit: 1000,             // per IP per minute (~16 req/s sustained); raise if polling ever trips it
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many requests — slow down and retry shortly.' },
+}));
+
 app.use(applicationsRoutes);
 app.use(followupsRoutes);
 app.use(applyRoutes);
@@ -161,7 +176,7 @@ app.get('/*splat', (req, res) => {
 // hung request. Async-handler rejections are caught by the process net above;
 // the per-route try/catch blocks turn those into 500s too. Must stay last.
 app.use((err, req, res, next) => {
-  console.error(`[${new Date().toISOString()}] Request error on ${req.method} ${req.path}:`, err);
+  console.error(`[${new Date().toISOString()}] Request error on %s %s:`, req.method, req.path, err);
   if (res.headersSent) return next(err);
   res.status(500).json({ error: err && err.message ? err.message : 'Internal server error' });
 });

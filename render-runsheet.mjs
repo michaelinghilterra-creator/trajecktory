@@ -89,7 +89,7 @@ export function derive(d) {
 }
 
 // ------------------------------------------------------------------------- html
-const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 // **bold** -> <b>. Escape first, so authored text can never inject markup.
 const md = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 
