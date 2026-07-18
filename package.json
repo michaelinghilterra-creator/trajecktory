@@ -40,6 +40,7 @@
   "dependencies": {
     "adm-zip": "^0.5.18",
     "dotenv": "^17.4.2",
+    "express-rate-limit": "^7.5.0",
     "js-yaml": "^4.3.0",
     "playwright": "^1.61.1"
   },
