@@ -1,4 +1,3 @@
-import https from 'https';
 import { render as renderObsidianCompanion, extractJsonFromSourceReport } from '../../../scripts/render-obsidian-companion.mjs';
 
 // Render a schema-v1 source report into clean Obsidian Markdown. Falls back to
@@ -27,8 +26,5 @@ function warnObsidianPushFailed(company, detail) {
   console.warn(`[obsidian] PUSH FAILED for ${company}: ${detail} — note NOT written to vault. Is Obsidian running with the Local REST API plugin enabled?`);
 }
 
-// Reusable HTTPS agent that skips self-signed cert verification (localhost only)
-const localhostAgent = new https.Agent({ rejectUnauthorized: false });
-
-export { renderObsidianNote, warnObsidianPushFailed, localhostAgent };
+export { renderObsidianNote, warnObsidianPushFailed };
 
