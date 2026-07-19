@@ -55,6 +55,17 @@ git tag -s vX.Y.Z -f "vX.Y.Z^{commit}" -m "trajecktory vX.Y.Z"
 git push origin vX.Y.Z -f
 ```
 
+Then confirm it took, rather than assuming:
+
+```bash
+gh workflow run tag-signature.yml
+```
+
+That workflow (`.github/workflows/tag-signature.yml`) fails if the newest tag is
+not signed by a key in `trusted-signers`. It also runs daily, so a forgotten
+signature turns into a red build within a day instead of sitting unnoticed. See
+[Why this step is easy to miss](#why-this-step-is-easy-to-miss).
+
 Then rebuild and ship the installer so new installs carry both the trust anchor
 and the signed release:
 
@@ -79,6 +90,32 @@ With `trusted-signers` present, `update-system.mjs` (both `check` and `apply`):
 `trusted-signers` ships in the bundle and is not self-updated, so changing it
 requires a new `.exe`. Add the new public-key line, commit, rebuild, and ship.
 Keep the old line until every install has moved to a bundle carrying the new key.
+
+## Why this step is easy to miss
+
+Forgetting to sign does **not** break an install. It silently freezes it.
+
+`update-system.mjs` only offers a tag whose signature verifies, so an unsigned
+newest tag makes every anchored install report "nothing newer" and say nothing
+else. There is no error anywhere: `release.yml` emits a `::warning` when
+`TAG_SIGNING_SSH_KEY` is unset and still exits 0, so the release run goes green.
+
+That is not hypothetical. It happened to `v1.11.0` and again to `v1.16.0`, both
+with a green release run.
+
+`.github/workflows/tag-signature.yml` exists for exactly this. It fails when the
+newest tag is unsigned, distinguishing the two cases, because they need different
+fixes:
+
+- a **lightweight** tag (what Release Please creates via the API) cannot carry a
+  signature at all;
+- an **annotated** tag whose signature is absent, malformed, or made by a key not
+  pinned in `trusted-signers`.
+
+It deliberately does not live in `release.yml`. The signing key is kept off CI on
+purpose, so the unset-key branch is the normal path and failing there would go red
+on every release by design — and a check that always fails is a check nobody
+reads, which is the failure being guarded against.
 
 ## Notes
 

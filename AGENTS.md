@@ -324,7 +324,13 @@ changelog when that PR is **merged**. The bump size comes from
 - `fix:` → patch (1.7.32 → 1.7.33)
 - `feat:` → minor (1.7.32 → 1.8.0)
 - `feat!:` / `fix!:` / a `BREAKING CHANGE:` footer → major
-- `chore:` / `ci:` / `docs:` / `refactor:` / `test:` → no release on their own (but ride along in the next release's changelog)
+- `chore:` / `ci:` / `docs:` / `refactor:` / `test:` → no release on their own, and **absent from the
+  changelog**. `release-please-config.json` sets no `changelog-sections`, so the default applies and
+  only `feat` and `fix` are rendered. These commits ride along in the release, not in its notes.
+  Worked example: the `docs:` commit that landed just before v1.16.0 is nowhere in that release's
+  changelog. If you want one of these types to show up, give it a `feat:` or `fix:` prefix honestly,
+  or add `changelog-sections` to the config — do not mislabel a docs change as a fix to make it
+  visible.
 
 **RULE: write Conventional Commit messages.** A commit without a recognized type prefix is
 ignored by Release Please — it will neither bump the version nor appear in the changelog.
