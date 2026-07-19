@@ -23,7 +23,10 @@ export function parseRunsheet(raw) {
   try {
     data = JSON.parse(m[1]);
   } catch (err) {
-    throw new Error(`Frontmatter is not valid JSON: ${err.message}`);
+    // Keep the parser's own error as `cause`: the message below names the file's
+    // problem, but the position info that says WHERE the JSON broke lives on the
+    // original SyntaxError, and dropping it makes a malformed sidecar harder to fix.
+    throw new Error(`Frontmatter is not valid JSON: ${err.message}`, { cause: err });
   }
   // Exact match, never a regex. A v2 file must not be fed to the v1 renderer.
   if (data.schema !== SCHEMA_ID) {
