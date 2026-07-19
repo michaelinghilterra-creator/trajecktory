@@ -39,8 +39,11 @@ Claude model for each workflow step and see an approximate cost per run:
 
 The defaults are the cheaper, calibrated choices. Each option shows a rough `~$/run`
 estimate, plus an "Estimated total per full run (Triage + Evaluate batch)" and a small
-"Recent runs (actual cost)" table of your real recent costs. Those dollar figures apply
-only to the API-key path; on the Claude plan there is no per-token cost.
+"Recent runs (estimated cost)" table. Those dollar figures apply only to the API-key
+path; on the Claude plan there is no per-token cost. They are estimates derived from
+Claude Code token counts, not your Anthropic invoice, and the scan/evaluate workflow
+normally bills the subscription anyway, so they usually will not show up in your
+Anthropic console at all.
 
 A **"Bill workflow & drafts to"** toggle switches between **API key** and **Claude
 plan**. Setting it to **Claude plan** routes the whole workflow plus drafts to the
