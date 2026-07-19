@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.16.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.15.1...v1.16.0) (2026-07-19)
+
+
+### Features
+
+* **interview:** sectioned prep view, offline printing, and company documents ([10b43b6](https://github.com/michaelinghilterra-creator/trajecktory/commit/10b43b69614a587d05799d4f22d3ca50ee50f392))
+* **security:** add a pre-commit hook gating staged file content ([58b2661](https://github.com/michaelinghilterra-creator/trajecktory/commit/58b26619f8aa3a7d1318619732b621b57cf66572))
+
+
+### Bug Fixes
+
+* **deps:** upgrade adm-zip to 0.6.0 to clear GHSA-xcpc-8h2w-3j85 ([189cf35](https://github.com/michaelinghilterra-creator/trajecktory/commit/189cf35c6afcd445d5dc79d8a408b9066e9e6c16))
+* **lint:** attach cause to the run-sheet frontmatter error ([f2f641a](https://github.com/michaelinghilterra-creator/trajecktory/commit/f2f641adbb8e15f69dce9706abf05ea35b565cce))
+* **privacy:** use invented content in shipped examples, not a scrubbed real one ([d342c6b](https://github.com/michaelinghilterra-creator/trajecktory/commit/d342c6b0bbd75ddd07af42a5f0a6e14ca68bb267))
+* **runsheet:** parse CRLF frontmatter, and pin run sheets to LF ([f990769](https://github.com/michaelinghilterra-creator/trajecktory/commit/f9907692c9ed529a9b1491b5a5dc1f8e77368bc6))
+* **verify:** check the shipped run-sheet example, not just user boards ([f03bf95](https://github.com/michaelinghilterra-creator/trajecktory/commit/f03bf956d7b38552404cdc491b4c004ae328352a))
+
 ## [1.15.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.14.1...v1.15.0) (2026-07-17)
 
 
