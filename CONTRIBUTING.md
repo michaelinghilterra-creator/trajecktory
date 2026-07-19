@@ -18,7 +18,16 @@ PRs without a corresponding issue may be closed if they don't align with the pro
 
 1. Open an issue to discuss your idea
 2. Fork the repo
-3. Create a branch (`git checkout -b feature/my-feature`)
+3. **Enable the repo's git hooks** (one time per clone, git will not run hooks from a
+   tracked directory on its own):
+   ```bash
+   git config core.hooksPath .githooks
+   ```
+   This turns on two guards that run on every commit: `pre-commit` blocks staged files
+   containing personal data, and `commit-msg` blocks a message that names a real person,
+   company, or figure. They cost a few hundred milliseconds. Bypass with `--no-verify`
+   only when you are certain a finding is wrong.
+4. Create a branch (`git checkout -b feature/my-feature`)
 4. Make your changes
 5. Test with a fresh clone (see [docs/SETUP.md](docs/SETUP.md))
 6. Commit and push

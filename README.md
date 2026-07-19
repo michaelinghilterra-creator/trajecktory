@@ -106,6 +106,7 @@ Everything runs from a local web dashboard (`http://localhost:3333`, bound to `1
 # 1. Clone and install
 git clone https://github.com/michaelinghilterra-creator/trajecktory.git
 cd trajecktory
+git config core.hooksPath .githooks   # enable the pre-commit / commit-msg guards
 npm ci
 npm --prefix dashboard-web ci
 npx playwright install chromium     # liveness checks + scraping
