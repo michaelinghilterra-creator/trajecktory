@@ -902,7 +902,6 @@ function ReconcileModal({ onClose, onApplied }) {
   const [discoveries, setDiscoveries] = useState([]);
   const [discSel, setDiscSel] = useState(new Set());
   const [outcome, setOutcome] = useState(null);
-  const [undone, setUndone] = useState(false);
   const [scanning, setScanning] = useState(false);
 
   useEffect(() => {
@@ -1073,15 +1072,23 @@ function ReconcileModal({ onClose, onApplied }) {
           {step === 2 && (
             <div className="fade-up" style={{ textAlign: "center", padding: "12px 0" }}>
               {loading ? <div className="ai-loading" style={{ justifyContent: "center" }}><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> Applying changes…</div> : <>
-                <div className="apply-done-icon"><TIcon d={undone ? TI.undo : TI.check} size={26} stroke={3} /></div>
-                <h2 style={{ fontSize: 17, margin: "0 0 6px" }}>{undone ? "Changes reverted" : "Reconcile complete"}</h2>
+                <div className="apply-done-icon"><TIcon d={TI.check} size={26} stroke={3} /></div>
+                <h2 style={{ fontSize: 17, margin: "0 0 6px" }}>Reconcile complete</h2>
                 <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginBottom: 18 }}>
-                  {undone ? "Your TA list is back to its previous state." : "Your TA list is now in sync with the application pipeline."}
+                  Your TA list is now in sync with the application pipeline.
                 </div>
-                {!undone && outcome && (
+                {outcome && (
                   <div className="apply-grid" style={{ maxWidth: 420, margin: "0 auto" }}>
                     <div className="apply-tile"><div className="at-v" style={{ color: "var(--orange)" }}>{outcome.archived}</div><div className="at-k">Archived</div></div>
                     <div className="apply-tile"><div className="at-v" style={{ color: "var(--green)" }}>{outcome.added}</div><div className="at-k">Contacts added</div></div>
+                  </div>
+                )}
+                {outcome && (outcome.archived > 0 || outcome.added > 0) && (
+                  <div style={{ fontSize: 11.5, color: "var(--text-mute)", maxWidth: 430, margin: "16px auto 0", lineHeight: 1.65 }}>
+                    These changes are already saved, so there is nothing further to confirm. Archived
+                    contacts are not deleted: they stay in your list behind <b>Show archived</b>, and
+                    anything added is live now. To change either one, open the contact and set its
+                    stage.
                   </div>
                 )}
               </>}
@@ -1094,11 +1101,13 @@ function ReconcileModal({ onClose, onApplied }) {
           <div className="right" style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
             {step === 0 && !loading && <button className="btn primary" onClick={runDiscover}>Discover contacts <TIcon d={TI.arrowR} size={13} /></button>}
             {step === 1 && !scanning && <button className="btn primary" onClick={apply}>Apply changes <TIcon d={TI.arrowR} size={13} /></button>}
-            {step === 2 && !loading && !undone && <>
-              <button className="btn" onClick={() => setUndone(true)}><TIcon d={TI.undo} size={13} /> Undo</button>
-              <button className="btn primary" onClick={onClose}>Done</button>
-            </>}
-            {step === 2 && !loading && undone && <button className="btn primary" onClick={onClose}>Close</button>}
+            {/* No Undo. It used to flip a local boolean and assert "Changes
+                reverted" while the archive and bulk-add writes stayed on disk;
+                there is no revert endpoint, and inventing one would have to
+                invert two different writes against a user-layer file. The
+                completion panel now states plainly what changed and where to
+                adjust it instead. */}
+            {step === 2 && !loading && <button className="btn primary" onClick={onClose}>Done</button>}
           </div>
         </div>
       </div>
