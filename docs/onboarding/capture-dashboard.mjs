@@ -112,7 +112,120 @@ const PITCH = {
   tweaks: { seniority: 'Director', interviewStage: 'Recruiter screen', length: '90s', industry: '' },
 };
 
+// ---- Today tab (cadence + to-dos + streak) ---------------------------------
+// Bare array, exactly as GET /api/cadence/today returns it (server/lib/cadence.mjs
+// deriveToday). Blocks are the shipped starter template, renamed to read like a
+// real week without naming anything real.
+const CADENCE_TODAY = [
+  { id: 't_seed_deepwork', label: 'Deep work block',         days: [1, 3, 5], start: '09:00', durationMin: 50, pomodoros: 2, notes: '', order: 0, archived: false, done: true,  pomodorosDone: 2 },
+  { id: 't_seed_outreach', label: 'Applications & outreach', days: [1, 3, 5], start: '11:00', durationMin: 50, pomodoros: 2, notes: '', order: 1, archived: false, done: false, pomodorosDone: 1 },
+  { id: 't_seed_network',  label: 'Networking / LinkedIn',   days: [1, 3, 5], start: '14:00', durationMin: 25, pomodoros: 1, notes: '', order: 2, archived: false, done: false, pomodorosDone: 0 },
+];
+const CADENCE_TEMPLATE = {
+  version: 1,
+  tasks: [
+    { id: 't_seed_deepwork', label: 'Deep work block',         days: [1, 3, 5], start: '09:00', durationMin: 50, pomodoros: 2, notes: '', order: 0, archived: false },
+    { id: 't_seed_outreach', label: 'Applications & outreach', days: [1, 3, 5], start: '11:00', durationMin: 50, pomodoros: 2, notes: '', order: 1, archived: false },
+    { id: 't_seed_network',  label: 'Networking / LinkedIn',   days: [2, 4],    start: '10:00', durationMin: 25, pomodoros: 1, notes: '', order: 2, archived: false },
+    { id: 't_seed_skill',    label: 'Skill building',          days: [2, 4],    start: '14:00', durationMin: 50, pomodoros: 2, notes: '', order: 3, archived: false },
+  ],
+};
+// last7 is oldest -> newest, exactly 7 entries; pct null iff rest.
+const CADENCE_STREAK = {
+  current: 4, best: 9,
+  last7: [
+    { date: '2026-07-13', pct: 100, rest: false },
+    { date: '2026-07-14', pct: 100, rest: false },
+    { date: '2026-07-15', pct: 67,  rest: false },
+    { date: '2026-07-16', pct: 100, rest: false },
+    { date: '2026-07-17', pct: 100, rest: false },
+    { date: '2026-07-18', pct: null, rest: true },
+    { date: '2026-07-19', pct: 33,  rest: false },
+  ],
+};
+const TODOS = { todos: [
+  { id: 'd_1a2b3c4d', text: 'Prep for Northwind Analytics screen', notes: '', done: false, priority: 'high', createdAt: '2026-07-17T14:02:00.000Z', dueDate: '2026-07-21', completedAt: null, order: 0, source: 'app',    appId: 412, company: 'Northwind Analytics' },
+  { id: 'd_2b3c4d5e', text: 'Send thank-you note to Globex Health', notes: '', done: false, priority: 'med',  createdAt: '2026-07-16T09:20:00.000Z', dueDate: '2026-07-15', completedAt: null, order: 1, source: 'app',    appId: 408, company: 'Globex Health' },
+  { id: 'd_3c4d5e6f', text: 'Refresh portfolio case study',        notes: '', done: false, priority: 'low',  createdAt: '2026-07-15T11:45:00.000Z', dueDate: null,        completedAt: null, order: 2, source: 'manual', appId: null, company: null },
+  { id: 'd_4d5e6f70', text: 'Ask Dana for a referral intro',       notes: '', done: true,  createdAt: '2026-07-14T08:10:00.000Z', priority: 'med', dueDate: null, completedAt: '2026-07-16T17:30:00.000Z', order: 3, source: 'manual', appId: null, company: null },
+] };
+
+// ---- Interview tab ---------------------------------------------------------
+// NOTE prepDir/prepPath/runPath are REAL absolute paths in the live response and
+// therefore carry the user's Windows account name. They are replaced here with a
+// generic "you" path: the tab renders no path, but a screenshot must not depend
+// on that staying true.
+const IPREP = 'C:\\Users\\you\\Documents\\trajecktory interview prep';
+const INTERVIEW_SESSIONS = {
+  active: [
+    {
+      id: 'northwind-analytics', company: 'Northwind Analytics', role: 'VP, Revenue Operations',
+      status: '2nd Interview', round: 2, prepDir: `${IPREP}\\Northwind Analytics`, appId: 412,
+      rounds: [
+        { round: 1, stage: 'Phone Screen',   descriptor: 'recruiter-screen', prepPath: `${IPREP}\\Northwind Analytics\\northwind-analytics-round-1-recruiter-screen.md`, runPath: `${IPREP}\\Northwind Analytics\\northwind-analytics-round-1-recruiter-screen.run.md`, hasBoard: true },
+        { round: 2, stage: '2nd Interview',  descriptor: 'hiring-manager',   prepPath: `${IPREP}\\Northwind Analytics\\northwind-analytics-round-2-hiring-manager.md`,   runPath: null, hasBoard: false },
+      ],
+      docs: [{ key: 'northwind-analytics-vp-revenue-operations', kind: 'intel', label: 'Company intel', name: 'Vp Revenue Operations', title: 'Northwind Analytics: company intel', path: `${IPREP}\\Northwind Analytics\\northwind-analytics-vp-revenue-operations.md` }],
+    },
+    {
+      id: 'globex-health', company: 'Globex Health', role: 'Director of GTM Systems',
+      status: 'Phone Screen', round: 1, prepDir: `${IPREP}\\Globex Health`, appId: 408,
+      rounds: [
+        { round: 1, stage: 'Phone Screen', descriptor: 'recruiter-screen', prepPath: `${IPREP}\\Globex Health\\globex-health-round-1-recruiter-screen.md`, runPath: null, hasBoard: false },
+      ],
+      docs: [],
+    },
+  ],
+  archive: [
+    {
+      id: 'initech-cloud', company: 'Initech Cloud', role: 'Sr. Manager, Sales Ops',
+      status: 'Rejected', round: 1, prepDir: `${IPREP}\\Initech Cloud`, appId: 377,
+      rounds: [{ round: 1, stage: null, descriptor: 'panel', prepPath: `${IPREP}\\Initech Cloud\\initech-cloud-round-1-panel.md`, runPath: null, hasBoard: false }],
+      docs: [],
+    },
+  ],
+};
+
+// The Prep pane renders server-produced HTML. parsePrepDoc() splits it on <h2>
+// boundaries and reads a "§N" / "N)" marker, so the headings below are what make
+// the Sections rail (and the Cram sheet print option) appear.
+const INTERVIEW_PREP_HTML = `
+<h2>§0a Say first</h2>
+<p>Ten years turning scattered revenue data into a picture an operations team will act on. Most recently
+rebuilt carrier scorecarding and lane costing end to end.</p>
+<ul><li>Lead with the rebuild, not the tooling.</li><li>Name the business outcome inside 30 seconds.</li></ul>
+<h2>§1 Their world</h2>
+<p>Northwind Analytics sells supply-chain visibility to mid-market shippers. The RevOps function is new: this
+role is the first senior hire under the CRO, so expect "what would you do in the first 90 days".</p>
+<ul><li>Two acquisitions in the last 18 months, so systems consolidation is live.</li>
+<li>Their pricing page implies a land-and-expand motion, so net revenue retention will matter.</li></ul>
+<h2>§2 Hero story</h2>
+<p><b>Situation.</b> Carrier performance was reported three different ways by three teams.</p>
+<p><b>Action.</b> Built one scorecard on a single definition of on-time delivery, then made the planners own it.</p>
+<p><b>Result.</b> Claims recovery improved by roughly a fifth within two quarters.</p>
+<h2>§3 Do not</h2>
+<ul><li>Do not relitigate the old stack. They know it was messy.</li>
+<li>Do not quote a comp number first. Let them anchor.</li></ul>
+<h2>§4 Ask them</h2>
+<ul><li>Who owns the forecast today, and who do you want owning it in a year?</li>
+<li>What has to be true 90 days in for this hire to have been obviously right?</li></ul>
+`;
+
+// Identity feeds the drawer's Quick copy bar and signature helpers. The live
+// response is the user's real name, email, phone and links.
+const IDENTITY = {
+  name: 'Jordan Avery', email: 'jordan.avery@example.com', phone: '(555) 010-4477',
+  location: 'Austin, TX', linkedin: 'https://linkedin.com/in/example',
+  portfolio: 'https://example.com', github: '', certifications: [],
+};
+
 let stateMode = 'firstrun'; // 'firstrun' | 'ready'
+// 'empty'      → a genuinely fresh install: no triage results, no to-dos, no
+//                cadence, so no sidebar badges. This is what the first-run
+//                screenshot must show, because the guide says "it starts empty".
+// 'populated'  → the Today / Interview tabs, where content is the whole point.
+let dataMode = 'empty';
+const EMPTY_STREAK = { current: 0, best: 0, last7: Array.from({ length: 7 }, (_, i) => ({ date: `2026-07-${13 + i}`, pct: null, rest: true })) };
 
 async function installMocks(page) {
   const json = (route, obj) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(obj) });
@@ -134,10 +247,39 @@ async function installMocks(page) {
     // handoff prompt text is static + read-only; let it hit the server for authenticity
     return route.continue();
   });
-  await page.route('**/api/system/version', route => json(route, { version: '1.14.0' }));
+  await page.route('**/api/system/version', route => json(route, { version: '1.16.1' }));
   await page.route('**/api/claude-status', route => json(route, { signedIn: false }));
-  await page.route('**/api/triage/results', route => json(route, TRIAGE));
+  await page.route('**/api/triage/results', route => json(route, dataMode === 'empty' ? { cards: [] } : TRIAGE));
   await page.route('**/api/agent/cost-history', route => json(route, []));
+  await page.route('**/api/agent/active', route => json(route, {}));
+  // Pin the updater to "current". A fresh install has nothing to update, and an
+  // update banner across the top of the first-run screenshot would be a lie.
+  await page.route('**/api/system/update-check', route => json(route, { status: 'up-to-date' }));
+
+  // App shell: these three are fetched on every page load, and all three read
+  // real user data. /api/identity is the user's name, email and phone outright.
+  await page.route('**/api/applications', route => json(route, []));
+  await page.route('**/api/identity', route => json(route, IDENTITY));
+  await page.route('**/api/followups/stale', route => json(route, { warm: [], cold: [] }));
+
+  // Today tab. Order matters: '/api/cadence/today' and '/api/cadence/streak' are
+  // matched before the bare '/api/cadence' template route.
+  await page.route('**/api/cadence/today', route => json(route, dataMode === 'empty' ? [] : CADENCE_TODAY));
+  await page.route('**/api/cadence/streak', route => json(route, dataMode === 'empty' ? EMPTY_STREAK : CADENCE_STREAK));
+  await page.route('**/api/cadence/log', route => json(route, {}));
+  await page.route('**/api/cadence', route => json(route, CADENCE_TEMPLATE));
+  await page.route('**/api/todos', route => json(route, dataMode === 'empty' ? { todos: [] } : TODOS));
+  await page.route('**/api/todos/*', route => json(route, { ok: true }));
+
+  // Interview tab. The prep/runsheet/doc routes are per-round, hence the globs.
+  await page.route('**/api/interview/sessions', route => json(route, INTERVIEW_SESSIONS));
+  await page.route('**/api/interview/prep/**', route => json(route, { markdown: '', html: INTERVIEW_PREP_HTML }));
+  // No board is mocked: "Prep only" and the no-board empty state are the honest
+  // first-run experience, and a fabricated run sheet would have to satisfy the
+  // whole runsheet-v1 schema to render truthfully.
+  await page.route('**/api/interview/runsheet/**', route =>
+    route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'No run sheet for this round.' }) }));
+  await page.route('**/api/interview/doc/**', route => json(route, { markdown: '', html: INTERVIEW_PREP_HTML, label: 'Company intel', title: 'Company intel' }));
 }
 
 async function shotContent(page, name) {
@@ -146,6 +288,32 @@ async function shotContent(page, name) {
   await page.waitForTimeout(350);
   await el.screenshot({ path: resolve(OUT, `${name}.png`) });
   console.log('  saved', name + '.png');
+}
+// Like shotContent, but trimmed to where the content actually ends. `.content` is
+// a full-height flex column, so a short screen (Today) otherwise yields a tall
+// image that is mostly empty background and reduces to an unreadable strip once
+// the guide scales it to page width. `maxCss` additionally caps a long screen
+// (the Interview prep doc) to just its structural top.
+async function shotContentTight(page, name, maxCss = null, pad = 14) {
+  const el = page.locator('.content').first();
+  await el.waitFor({ state: 'visible' });
+  await page.waitForTimeout(350);
+  const box = await el.boundingBox();
+  const bottom = await page.evaluate(() => {
+    const c = document.querySelector('.content');
+    if (!c) return 0;
+    let max = 0;
+    for (const n of c.querySelectorAll('*')) {
+      const r = n.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) max = Math.max(max, r.bottom);
+    }
+    return max;
+  });
+  let height = Math.min(box.height, Math.max(140, bottom - box.y + pad));
+  if (maxCss) height = Math.min(height, maxCss);
+  await page.screenshot({ path: resolve(OUT, `${name}.png`),
+    clip: { x: Math.max(0, box.x), y: Math.max(0, box.y), width: box.width, height } });
+  console.log('  saved', name + '.png (tight ' + Math.round(height) + 'px)');
 }
 async function shotPanel(page, name) {
   const el = page.locator('.card.padded-lg').first();
@@ -185,6 +353,17 @@ async function main() {
   await waitRailEnabled(page, 'Your CV');
   await page.waitForTimeout(700);
 
+  // The whole window exactly as a new user first sees it: sidebar (Launchpad
+  // pinned to the top with its incomplete-count badge) plus the Launchpad itself.
+  // Replaces the old dash-overview-full.png, which predated the demo-mode removal
+  // and showed a sidebar that no longer matches the app.
+  // Cropped to the top 640px: the full 1000px window is nearly square, and at
+  // page width that leaves no room for the rest of the page (it overflowed).
+  // 640px still carries the whole nav list, which is what this figure is for.
+  await page.screenshot({ path: resolve(OUT, 'dash-firstrun-full.png'),
+    clip: { x: 0, y: 0, width: VIEWPORT.width, height: 640 } });
+  console.log('  saved dash-firstrun-full.png (top 640px)');
+
   // sidebar Workflow — the default Claude-plan flow. Clip to the steps (drop the
   // triage cards + paste box below) so the image stays compact for the guide's
   // side-by-side layout; the guide text covers triage + Deep dive.
@@ -213,7 +392,9 @@ async function main() {
   await clickRail(page, 'Roles & seniority');await shotPanel(page, 'lp-roles');
   await clickRail(page, 'Your edge');        await shotPanel(page, 'lp-edge');
   try {
-    await page.locator('button', { hasText: 'Set up with my Claude Code' }).first().click();
+    // The handoff button's label varies per section ("Set up with my Claude Code ⧉"
+    // on some, "Hand off to my Claude Code" on others), so match either.
+    await page.locator('button', { hasText: /(Set up with|Hand off to) my Claude Code/ }).first().click();
     await page.waitForTimeout(600);
     await shotPanel(page, 'lp-edge-handoff');
   } catch (e) { console.log('  edge handoff skip:', e.message); }
@@ -266,6 +447,37 @@ async function main() {
   await waitRailEnabled(page, 'Your CV');
   await page.waitForTimeout(600);
   await shotContent(page, 'lp-ready');
+
+  // ---- Phase C: the two day-to-day tabs (Today, Interview) ----------------
+  // Captured in the 'ready' state, which is where a user actually meets them.
+  // Every endpoint behind both tabs is intercepted above, so nothing on screen
+  // comes off disk.
+  console.log('Phase C — Today + Interview');
+  dataMode = 'populated';
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+
+  try {
+    await clickNav(page, 'Today');
+    await page.waitForTimeout(800);
+    await shotContentTight(page, 'today-tab');
+  } catch (e) { console.log('  today skip:', e.message); }
+
+  try {
+    await clickNav(page, 'Interview');
+    await page.waitForTimeout(900);
+    // Pick the first company. Its latest round auto-selects, which is what we
+    // want: the chip strip then shows a "Live" round and a "Prep only" round side
+    // by side, and the Prep pane has content rather than an empty state.
+    try {
+      await page.locator('.focus-task').first().click();
+      await page.waitForTimeout(700);
+    } catch (e) { console.log('  interview company skip:', e.message); }
+    await page.waitForTimeout(400);
+    // Capped: the page needs the company list, round chips and sub-tabs, not the
+    // whole prep document, which the surrounding text describes instead.
+    await shotContentTight(page, 'interview-prep', 560);
+  } catch (e) { console.log('  interview skip:', e.message); }
 
   await browser.close();
   console.log('Done. Screenshots in', OUT);
