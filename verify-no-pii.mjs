@@ -16,7 +16,10 @@
  * zero terms, and the structural checks (archives, comp literals) still apply.
  * Exit 0 = clean, 1 = leak.
  */
-import { execSync } from 'node:child_process';
+// execFileSync for anything that interpolates a value: it takes an argv array and
+// spawns git directly, with no shell to interpret metacharacters. execSync stays
+// only for fully constant command strings, where there is nothing to inject.
+import { execSync, execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, extname, basename } from 'node:path';
 
@@ -71,9 +74,13 @@ function targets() {
 
 // In --staged mode read the INDEX copy, not the working tree: with a partially
 // staged file the two differ, and the index is what the commit will contain.
+// `rel` is a REPO FILENAME, so it is attacker-influenced: anyone who can get a
+// file into the index chooses it. Interpolated into a shell string, a name like
+// `$(...)` or a backticked one executes when the pre-commit hook runs this in
+// --staged mode. argv form passes it to git as one literal argument instead.
 function readTarget(abs, rel) {
   if (!STAGED) { try { return readFileSync(abs); } catch { return null; } }
-  try { return execSync(`git show ":${rel}"`, { cwd: ROOT, maxBuffer: 1 << 26 }); } catch { return null; }
+  try { return execFileSync('git', ['show', `:${rel}`], { cwd: ROOT, maxBuffer: 1 << 26 }); } catch { return null; }
 }
 
 // Files where the maintainer's own contact/attribution legitimately appears.
@@ -362,7 +369,7 @@ function commitMessages() {
     // Default to unpushed work. Prefer the tracked upstream; fall back to origin/main.
     for (const cand of ['@{upstream}..HEAD', 'origin/main..HEAD', 'origin/HEAD..HEAD']) {
       try {
-        execSync(`git rev-list --count ${cand}`, { cwd: ROOT, stdio: 'pipe' });
+        execFileSync('git', ['rev-list', '--count', cand], { cwd: ROOT, stdio: 'pipe' });
         range = cand;
         break;
       } catch { /* no such ref here */ }
@@ -370,7 +377,8 @@ function commitMessages() {
   }
   if (!range) return [];   // no remote to compare against: nothing is "unpushed"
   try {
-    const raw = execSync(`git log --format=%H%x00%B%x1e ${range}`,
+    // `range` comes from --messages argv when given, so it is also interpolated.
+    const raw = execFileSync('git', ['log', '--format=%H%x00%B%x1e', range],
       { cwd: ROOT, encoding: 'utf8', maxBuffer: 1 << 26 });
     return raw.split('\x1e').filter((r) => r.trim()).map((r) => {
       const [id, body] = r.split('\x00');
