@@ -68,9 +68,20 @@ const INFLUENCERS_TEMPLATE_CSV =
   + 'Jane Rivera,VP of Revenue Operations,revops,national,"Austin, TX",https://www.linkedin.com/in/example,'
   + 'Posts weekly about GTM systems,Comment on her pipeline-hygiene threads\n';
 
+// Upper bound on a single import. The row count comes straight off an uploaded
+// file, so without this the parse loop is user-controlled and unbounded, which is
+// both a denial-of-service shape and a way to write an arbitrarily large
+// influencers.json. Rejected outright rather than silently truncated: quietly
+// dropping half of someone's list is worse than telling them to split the file.
+const MAX_IMPORT_ROWS = 2000;
+
 function parseCsvInfluencers(csv) {
   const lines = String(csv || '').split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) return [];
+  const dataRows = lines.length - 1;
+  if (dataRows > MAX_IMPORT_ROWS) {
+    throw new Error(`That file has ${dataRows} rows. Import up to ${MAX_IMPORT_ROWS} at a time.`);
+  }
   const header = parseCsvLine(lines[0]).map(h => h.toLowerCase());
   const idx = {
     name: header.indexOf('name'),
@@ -85,7 +96,10 @@ function parseCsvInfluencers(csv) {
   if (idx.name < 0) throw new Error('CSV must have a "name" column.');
   const get = (v, i) => (i >= 0 && i < v.length ? v[i] : '');
   const rows = [];
-  for (let i = 1; i < lines.length; i++) {
+  // Bound the loop against the constant as well as validating above, so the
+  // iteration count can never be driven purely by the uploaded file.
+  const limit = Math.min(lines.length, MAX_IMPORT_ROWS + 1);
+  for (let i = 1; i < limit; i++) {
     const v = parseCsvLine(lines[i]);
     const name = get(v, idx.name);
     if (!name) continue;
