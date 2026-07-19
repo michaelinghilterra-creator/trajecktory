@@ -32,6 +32,32 @@ import { parseRunsheet, derive } from '../../../render-runsheet.mjs';
 const ROUND_RE = /-round-(\d+)-(.+)\.md$/i;
 const RUN_SUFFIX = /\.run\.md$/i;
 
+// A company folder also holds files that are NOT rounds: the intel research report
+// and the cheat sheet from modes/cheat-sheet.md, which save as
+// `{company-slug}-{role-slug}[-cheat-sheet].md`. They used to be skipped outright,
+// which meant the tab could not show a document that was sitting right next to the
+// rounds it did show. They are company-level, not round-level, so they are carried
+// as `docs` rather than being forced into a round number they do not have.
+const CHEAT_RE = /cheat-?sheet/i;
+const DOC_LABEL_MAX = 34;
+
+function firstHeadingOf(p) {
+  const raw = safeRead(p);
+  if (raw == null) return null;
+  const m = raw.match(/^#\s+(.+)$/m);
+  return m ? m[1].trim() : null;
+}
+
+// "convoso-sr-director-revenue-operations.md" -> "Sr Director Revenue Operations"
+function prettifyDocName(base, companySlug) {
+  let s = base.replace(/\.md$/i, '');
+  if (companySlug && s.toLowerCase().startsWith(companySlug + '-')) s = s.slice(companySlug.length + 1);
+  s = s.replace(/-/g, ' ').trim();
+  if (!s) return 'Document';
+  s = s.replace(/\b\w/g, c => c.toUpperCase());
+  return s.length > DOC_LABEL_MAX ? s.slice(0, DOC_LABEL_MAX - 1).trimEnd() + '…' : s;
+}
+
 // Active for this tab = the interview ladder (Phone Screen .. 4th Interview,
 // from states.yml via statuses.mjs) plus Offer, which is still a live session
 // you prep for (the negotiation call). Everything else — Applied, Rejected,
@@ -75,10 +101,24 @@ function scanPrepFolders() {
     try { files = fs.readdirSync(prepDir); } catch { continue; }
 
     const rounds = [];
+    const docs = [];
+    const companySlug = slug(cleanCompany(e.name) || e.name);
     for (const base of files) {
       if (RUN_SUFFIX.test(base)) continue;      // sidecar, paired below
+      if (!/\.md$/i.test(base)) continue;
       const m = base.match(ROUND_RE);
-      if (!m) continue;                          // company intel report, not a round
+      if (!m) {
+        // Company-level document, not a round. Collected rather than dropped.
+        const docPath = path.join(prepDir, base);
+        docs.push({
+          key: base.replace(/\.md$/i, ''),
+          path: docPath,
+          kind: CHEAT_RE.test(base) ? 'cheat-sheet' : 'intel',
+          name: prettifyDocName(base, companySlug),
+          title: firstHeadingOf(docPath),
+        });
+        continue;
+      }
       const prepPath = path.join(prepDir, base);
       const runPath = path.join(prepDir, base.replace(/\.md$/i, '.run.md'));
       const sheet = fs.existsSync(runPath) ? readRunsheet(runPath) : null;
@@ -96,8 +136,9 @@ function scanPrepFolders() {
       });
     }
     rounds.sort((a, b) => a.round - b.round);
+    docs.sort((a, b) => a.name.localeCompare(b.name));
 
-    folders.push({ folder: e.name, company: cleanCompany(e.name) || e.name, prepDir, rounds });
+    folders.push({ folder: e.name, company: cleanCompany(e.name) || e.name, prepDir, rounds, docs });
   }
   return folders;
 }
@@ -159,6 +200,20 @@ function buildSession(folder, row) {
   const sheetRole = folder.rounds.map(r => r.runPath).filter(Boolean)
     .map(p => readRunsheet(p)?.data?.role).find(Boolean) || null;
 
+  // A single doc of a kind can take the short label; several of a kind need the
+  // distinguishing name or the chips would be indistinguishable.
+  const allDocs = folder.docs || [];
+  const docs = allDocs.map(d => ({
+    key: d.key,
+    kind: d.kind,
+    label: allDocs.filter(x => x.kind === d.kind).length > 1
+      ? d.name
+      : (d.kind === 'cheat-sheet' ? 'Cheat sheet' : 'Company intel'),
+    name: d.name,
+    title: d.title,
+    path: d.path,
+  }));
+
   return {
     // Slug, not the tracker id: it is the folder's identity, so it exists even for
     // a prep folder with no tracker row (which is exactly what archive is for).
@@ -171,6 +226,7 @@ function buildSession(folder, row) {
     prepDir: folder.prepDir,
     appId: row?.id ?? null,
     rounds,
+    docs,
   };
 }
 
@@ -239,7 +295,7 @@ function getRunsheet(id, round) {
   const raw = safeRead(entry.runPath);
   if (raw == null) return { error: `Run sheet is not readable: ${entry.runPath}` };
 
-  const { data } = parseRunsheet(raw);
+  const { data, body } = parseRunsheet(raw);
   const { warnings, problems, collidingKeys, heroKey } = derive(data);
   return {
     data,                              // frontmatter, verbatim
@@ -247,7 +303,61 @@ function getRunsheet(id, round) {
     problems,
     collidingKeys: [...collidingKeys], // derive() returns a Set; JSON needs an array
     heroKey: heroKey ?? null,
+    debrief: buildDebrief(body),
   };
+}
+
+// parseRunsheet has always returned { data, body }, and this module only ever took
+// `data` — so the narrative debrief under the frontmatter, real post-call intel
+// already written to disk, never reached the UI.
+//
+// A freshly compiled sheet ships a debrief STUB, and a stub is not empty: it has an
+// instructional blockquote, headings with nothing under them, bullets that are a
+// bold label and a colon with no answer, and an all-unchecked action checklist.
+// Every one of those has characters on the line, so "is there any text" reports a
+// blank template as written-up notes.
+//
+// What actually separates written from unwritten is a line that carries an ANSWER:
+// a real paragraph, a bullet with content past its label, or a ticked action.
+function buildDebrief(body) {
+  const raw = String(body || '').trim();
+  if (!raw) return null;
+
+  const answered = (line) => {
+    const t = line.trim();
+    if (!t) return false;
+    if (/^#{1,6}\s/.test(t)) return false;              // heading: structure
+    if (/^>/.test(t)) return false;                     // the "written after the call" instruction
+    if (/^(-{3,}|\*{3,})$/.test(t)) return false;       // rule
+    const li = t.match(/^[-*]\s+(.*)$/);
+    if (!li) return true;                               // a plain paragraph is an answer
+    let rest = li[1].trim();
+    const box = rest.match(/^\[([ xX])\]\s*(.*)$/);
+    if (box) return box[1].toLowerCase() === 'x';       // only a TICKED action counts
+    rest = rest.replace(/^\*\*[^*]*:\*\*\s*/, '').trim(); // drop a leading "**Label:**"
+    return rest.length > 0;
+  };
+
+  const hasProse = raw.split('\n').some(answered);
+  let html = null;
+  try { html = reportMdToHtml(raw); } catch { html = null; }
+  return { html, markdown: raw, hasProse };
+}
+
+// One company-level document (intel report or cheat sheet). The key is matched
+// against the scanned list rather than joined onto a path, so a traversal attempt
+// in the URL simply finds no document.
+function getDoc(id, key) {
+  const session = findSession(id);
+  if (!session) return { error: `No interview prep found for "${id}".` };
+  const want = String(key == null ? '' : key);
+  const doc = (session.docs || []).find(d => d.key === want);
+  if (!doc) return { error: `${session.company} has no document "${want}".` };
+  const markdown = safeRead(doc.path);
+  if (markdown == null) return { error: `Document not found: ${doc.path}` };
+  let html = null;
+  try { html = reportMdToHtml(markdown); } catch { html = null; }
+  return { markdown, html, label: doc.label, title: doc.title };
 }
 
 // The prep prose for one round. Returns { error } when the file is gone.
@@ -279,6 +389,7 @@ export {
   findSession,
   getRunsheet,
   getPrep,
+  getDoc,
   isActiveInterviewStatus,
   INTERVIEW_STAGES,
 };

@@ -57,9 +57,11 @@ narrative:
   #   password: "demo-2026"
 
 compensation:
-  target_range: "$150K-200K"     # Your target total comp
+  # Illustrative only. Replace both with your own numbers in config/profile.yml,
+  # which is gitignored — never put real compensation in this tracked example.
+  target_range: "$95K-135K"      # Your target total comp
   currency: "USD"
-  minimum: "$120K"               # Walk-away number
+  minimum: "$88K"                # Walk-away number
   location_flexibility: "Remote preferred, 1 week/month on-site possible"
 
 location:

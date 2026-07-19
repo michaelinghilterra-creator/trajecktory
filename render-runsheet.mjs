@@ -17,7 +17,11 @@ const SCHEMA_ID = 'trajecktory-runsheet/v1';
 
 // ---------------------------------------------------------------- load + parse
 export function parseRunsheet(raw) {
-  const m = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  // \r?\n throughout: a CRLF checkout is the Windows default (core.autocrlf), and
+  // an LF-only anchor makes this throw "No JSON frontmatter found" on a file that
+  // is entirely valid. This is the renderer the dashboard imports, so the symptom
+  // was a round with a board on disk showing no board at all.
+  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!m) throw new Error('No JSON frontmatter found (expected --- ... --- at the top).');
   let data;
   try {

@@ -479,6 +479,94 @@ const PREP_CSS = `
 .ib-prep ul{margin:5px 0 9px;padding-left:18px}
 .ib-prep li{margin:3px 0;font-size:13px;color:var(--text);line-height:1.55}
 .ib-prep b{font-weight:600;color:var(--text)}
+
+/* reportMdToHtml also emits table/thead/tbody/th/td/ol/code/a. Without these the
+   prep sheets rendered them at UA defaults — th/td at padding:1px, no borders,
+   border-collapse:separate — which turned every table into run-together text.
+   The prep files are table-dense (question/anchor grids, gap tables, fact packs). */
+.ib-prep table{border-collapse:collapse;width:100%;margin:9px 0;font-size:12.5px}
+.ib-prep th{text-align:left;padding:6px 10px;background:var(--panel-2);border-bottom:1px solid var(--border-2);
+            color:var(--text-dim);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em}
+.ib-prep td{padding:6px 10px;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.5;color:var(--text)}
+.ib-prep tbody tr:last-child td{border-bottom:none}
+.ib-prep tbody tr:hover td{background:var(--panel-2)}
+.ib-prep ol{margin:5px 0 9px;padding-left:20px}
+.ib-prep ol li{margin:3px 0;font-size:13px;color:var(--text);line-height:1.55}
+.ib-prep code{font-family:var(--mono);font-size:11.5px;background:var(--panel-3);border:1px solid var(--border);border-radius:4px;padding:1px 5px}
+.ib-prep a{color:var(--accent-2);text-decoration:none;border-bottom:1px solid rgba(var(--accent-rgb),.35)}
+.ib-prep a:hover{border-bottom-color:var(--accent-2)}
+
+/* ── Sectioned layout: rail + document ─────────────────────────────────────── */
+.ib-prepwrap{display:grid;grid-template-columns:184px minmax(0,1fr);gap:22px;align-items:start}
+/* .content is the scroll container (body is overflow:hidden), and it is the
+   nearest scrolling ancestor, so sticky resolves against it. */
+.ib-preprail{position:sticky;top:0;align-self:start;max-height:calc(100vh - 150px);
+             overflow-y:auto;padding:2px 10px 8px 0;border-right:1px solid var(--border)}
+/* MUST come after the base rule: same specificity, so order decides. With this
+   block above it the rail kept position:sticky when stacked, pinning the whole
+   section list to the top of a one-column layout. */
+@media (max-width:1100px){
+  .ib-prepwrap{grid-template-columns:1fr;gap:12px}
+  .ib-preprail{position:static;max-height:none;overflow-y:visible;
+               border-right:none;border-bottom:1px solid var(--border);padding:0 0 8px}
+  .ib-preprail .ib-railttl{margin-left:0}
+}
+.ib-preprail .ib-railttl{font-size:9.5px;text-transform:uppercase;letter-spacing:.14em;
+             color:var(--text-mute);font-family:var(--mono);margin:0 0 7px 8px}
+.ib-navitem{display:flex;align-items:baseline;gap:7px;padding:4px 8px;border-radius:6px;
+            cursor:pointer;border-left:2px solid transparent;margin-bottom:1px}
+.ib-navitem:hover{background:var(--panel-2)}
+.ib-navitem.on{background:var(--accent-bg);border-left-color:var(--accent)}
+.ib-navitem .mk{font-family:var(--mono);font-size:9.5px;color:var(--text-mute);min-width:24px;flex:none}
+.ib-navitem.on .mk{color:var(--accent-2)}
+.ib-navitem .lb{font-size:11.5px;color:var(--text-dim);line-height:1.35}
+.ib-navitem.on .lb{color:var(--text);font-weight:500}
+
+.ib-sec{scroll-margin-top:14px;padding:20px 0 2px;border-top:1px solid var(--border)}
+.ib-sec:first-of-type{border-top:none;padding-top:2px}
+.ib-sechead{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.ib-secmk{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:99px;
+          background:var(--panel-3);color:var(--text-dim);border:1px solid var(--border);flex:none}
+.ib-sectitle{font-size:13.5px;font-weight:600;color:var(--text);letter-spacing:-.01em}
+.ib-sec .ib-secbody > :first-child{margin-top:0}
+
+/* Role treatments. Roles come from the heading TEXT, never the § number — see
+   prepRole(). The point is that a line you deliver verbatim must not look like a
+   line you merely need to know. */
+.ib-sec[data-role="strip"] .ib-secbody,
+.ib-sec[data-role="open"] .ib-secbody,
+.ib-sec[data-role="hero"] .ib-secbody{
+  border-left:3px solid var(--accent);background:var(--accent-bg);
+  border-radius:0 8px 8px 0;padding:12px 15px}
+.ib-sec[data-role="strip"] .ib-secbody p,
+.ib-sec[data-role="open"] .ib-secbody p{font-size:14px;line-height:1.7}
+.ib-sec[data-role="probes"] .ib-secbody,
+.ib-sec[data-role="behavioral"] .ib-secbody{
+  border-left:3px solid var(--orange);border-radius:0 8px 8px 0;padding:12px 15px;
+  background:color-mix(in srgb, var(--orange) 7%, transparent)}
+.ib-sec[data-role="ask"] .ib-secbody ul{list-style:none;padding-left:2px}
+.ib-sec[data-role="ask"] .ib-secbody ul li{position:relative;padding-left:22px;margin:5px 0}
+.ib-sec[data-role="ask"] .ib-secbody ul li::before{content:"☐";position:absolute;left:2px;top:-1px;
+  color:var(--accent-2);font-size:13px}
+.ib-sec[data-role="debrief"],.ib-sec[data-role="after"],.ib-sec[data-role="logistics"]{opacity:.82}
+
+/* Preamble: 11 bolded key/value paragraphs that rendered as undifferentiated prose. */
+.ib-meta{display:grid;grid-template-columns:minmax(96px,auto) minmax(0,1fr);gap:5px 14px;
+         padding:13px 15px;margin-bottom:6px;background:var(--panel-2);
+         border:1px solid var(--border);border-radius:var(--r-card)}
+.ib-metak{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-mute);
+          font-family:var(--mono);text-align:right;padding-top:3px;line-height:1.5}
+.ib-metav{font-size:12.5px;color:var(--text);line-height:1.55}
+.ib-metav a{color:var(--accent-2);text-decoration:none}
+.ib-metav b{font-weight:600}
+.ib-prephead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+.ib-prepttl{font-size:15px;font-weight:600;color:var(--text);line-height:1.35;margin:0}
+
+/* The debrief reuses .ib-prep typography but is a panel, not a document: its own
+   h1 ("# Debrief") is redundant next to the <summary> label. */
+.ib-debrief > summary::marker{color:var(--text-mute)}
+.ib-debrief .ib-prep h1{display:none}
+.ib-debrief .ib-prep h2{margin-top:14px}
 `;
 
 // Prose prep sheets are headings + paragraphs + bullets. Bold is the only inline
@@ -516,6 +604,493 @@ function PrepProse({ markdown }) {
         if (b.t === 'ul') return <ul key={i}>{b.items.map((x, j) => <li key={j}>{mdBold(x)}</li>)}</ul>;
         return <p key={i}>{mdBold(b.s)}</p>;
       })}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Sectioning the prep sheet.
+//
+// The prep files use a validated heading grammar (`## §0 — …`, enforced by
+// verify-interview-prep.mjs and specified in modes/interview-prep.md). We do NOT
+// re-parse the markdown to find those sections: that would mean a SECOND markdown
+// parser in this file, and PrepProse right above is the standing proof of how much
+// a hand-rolled one drops (tables, ordered lists, links, code). Instead the server
+// converter keeps its job and we split the RESULTING HTML on its <h2> boundaries
+// using the DOM. One converter, one grammar, and no regex over HTML.
+// ════════════════════════════════════════════════════════════════════════════
+
+// § NUMBERS DO NOT CARRY STABLE MEANING ACROSS TEMPLATES. §5 is "Top 3 Proof
+// Points" on a screen round but "Hero Story" on an hm-round; §7 is "Questions to
+// Ask" on a screen but "Tradeoff Probes" on an hm-round, where asking lives at §8
+// (templates/interview-cheatsheet-{screen,hm-round,final-loop}.md). Anything keyed
+// on the number is wrong on two templates out of three, so roles come from the
+// heading TEXT.
+//
+// ORDER IS LOAD-BEARING: "Questions to Ask" has to win before the generic /likely/
+// question rule, and "Hard Questions Prep" has to land on probes rather than ask.
+const PREP_ROLE_RULES = [
+  // The company-level intel documents phrase this several ways and never as the
+  // template's "Questions to Ask": "Three Questions YOU Need to Ask Spencer",
+  // "YOUR 4 Critical Questions".
+  [/questions to ask|questions you need to ask|critical questions/i, 'ask'],
+  [/reply to /i,                                        'reply'],
+  [/pre-?call strip|pre-?panel strip/i,                 'strip'],
+  [/mental model/i,                                     'model'],
+  [/hero story|proof point/i,                           'hero'],
+  [/behavio/i,                                          'behavioral'],
+  // `will probe` / `what to avoid` come from the intel documents; \bprobes?\b also
+  // covers "Judgment / Tradeoff Probes".
+  [/tradeoff|tough question|hard question|red.?flag|will probe|what to avoid|\bprobes?\b/i, 'probes'],
+  // `\bstories\b` catches the per-company phrasings the templates never anticipated
+  // ("The Other Two Required Stories"). Safe here because the hero rule above has
+  // already claimed anything calling itself a hero story.
+  [/backup stor|story bank|\bstories\b/i,               'backup'],
+  [/logistics/i,                                        'logistics'],
+  [/debrief/i,                                          'debrief'],
+  [/after the /i,                                       'after'],
+  [/likely|case ?\/ ?exercise/i,                        'likely'],
+  // \bframe\b, NOT /frame/: a bare substring matched "SQL / Python Honest REframe"
+  // and dressed a gap-handling section up as an opening script — which also put it
+  // in the cram sheet's "Say first" block. There is no word boundary inside
+  // "Reframe", so the anchored form rejects it and still matches "90-Second Frame".
+  [/pitch|opening|opener|\bframe\b|panel-by-panel/i,    'open'],
+  [/^why|cross-panel/i,                                 'why'],
+];
+function prepRole(label) {
+  for (const [re, role] of PREP_ROLE_RULES) if (re.test(label)) return role;
+  return 'plain';
+}
+
+// THREE numbering grammars are on disk, not one:
+//
+//   "## §4B - Behavioral Question Bank"    the documented grammar
+//   "## §0a — PAR Core Values Alignment"   lowercase suffix, and it sorts BEFORE §0
+//   "## 7) Questions to Ask Kim"           an older sheet with no § at all
+//
+// and four separators between the marker and the title (`-`, `—`, `.`, `:`).
+// Letter suffixes and out-of-band sections are real: verify-interview-prep.mjs
+// checks that §0-§10 are PRESENT, never that extras are absent, so per-company
+// sections must pass through intact rather than being dropped or renumbered.
+const PREP_SEC_RE = /^(?:§\s*([0-9]+[A-Za-z]?)|([0-9]{1,2}[A-Za-z]?)\))\s*[-–—:.]?\s*([\s\S]*)$/;
+function splitPrepHeading(raw) {
+  const t = String(raw == null ? '' : raw).trim();
+  const m = t.match(PREP_SEC_RE);
+  if (!m) return { marker: '', label: t };
+  // Show the marker in the grammar the document itself used: a file that never
+  // wrote § should not sprout one in the rail.
+  const marker = m[1] != null ? '§' + m[1] : m[2];
+  return { marker, label: (m[3] || '').trim() || marker };
+}
+// Rail labels only: drop the parenthetical asides the headings carry
+// ("Why-This-Role-This-Org (deeper than screen's why-now)").
+const railLabel = (s) => String(s).replace(/\s*\([^)]*\)\s*/g, ' ').trim() || s;
+
+const outerHtmlOf = (node) => {
+  const holder = document.createElement('div');
+  holder.appendChild(node.cloneNode(true));
+  return holder.innerHTML;
+};
+
+// The block above §0: 3 blockquotes and ~11 `**Key:** value` paragraphs carrying
+// the interviewer, the format, the time budget and the links. It is the richest
+// structured data in the file and rendered as flat prose. Anything that is not a
+// leading-bold key/value falls through to restHtml rather than being lost.
+function parsePrepPreamble(nodes) {
+  const kv = [], rest = [];
+  for (const n of nodes) {
+    if (n.nodeType !== 1) continue;
+    if (n.tagName === 'HR') continue;
+    const strong = n.querySelector('strong, b');
+    const lead = strong && strong.textContent.trim();
+    if (lead && /:$/.test(lead) && n.textContent.trim().indexOf(lead) === 0) {
+      const clone = n.cloneNode(true);
+      const s = clone.querySelector('strong, b');
+      if (s) s.remove();
+      kv.push({ k: lead.replace(/:$/, '').trim(), html: clone.innerHTML.replace(/^(\s|&nbsp;)+/, '').trim() });
+      continue;
+    }
+    rest.push(outerHtmlOf(n));
+  }
+  return { kv, restHtml: rest.join('') };
+}
+
+// Returns null when the grammar is absent, which is the signal to fall back to the
+// flat render. Of the round files on disk, that protects any written before the
+// heading discipline landed — verify-interview-prep.mjs calls those "legacy" and
+// warns rather than failing, so they are a supported state, not an error.
+function parsePrepDoc(html) {
+  if (!html || typeof document === 'undefined') return null;
+  const host = document.createElement('div');
+  host.innerHTML = html;
+  const pre = [];
+  const sections = [];
+  let cur = null, title = '';
+  for (const node of Array.from(host.childNodes)) {
+    const el = node.nodeType === 1 ? node : null;
+    if (el && el.tagName === 'H1' && !cur && !title) { title = el.textContent.trim(); continue; }
+    if (el && el.tagName === 'H2') {
+      const { marker, label } = splitPrepHeading(el.textContent);
+      cur = { id: 'ibsec-' + sections.length, marker, label, role: prepRole(label), html: '' };
+      sections.push(cur);
+      continue;
+    }
+    if (cur) cur.html += outerHtmlOf(node);
+    else if (el) pre.push(el);
+  }
+  if (!sections.length) return null;
+  return { title, sections, meta: parsePrepPreamble(pre) };
+}
+
+// The cram sheet's "do not" block. These live INSIDE other sections (the §1 mental
+// model carries "Do NOT:", the probes section carries "Traps (do not step in):"),
+// so they are pulled out by finding the label and taking the list that follows it.
+function extractPrepDoNot(sections) {
+  if (typeof document === 'undefined') return '';
+  const out = [];
+  for (const s of sections) {
+    const host = document.createElement('div');
+    host.innerHTML = s.html;
+    const kids = Array.from(host.children);
+    kids.forEach((k, i) => {
+      if (!/^\s*(do not|don'?t|traps)\b/i.test(k.textContent || '')) return;
+      const next = kids[i + 1];
+      if (next && (next.tagName === 'UL' || next.tagName === 'OL')) out.push(next.outerHTML);
+    });
+  }
+  return out.join('');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PrepDoc — rail + sectioned document.
+// ════════════════════════════════════════════════════════════════════════════
+function PrepDoc({ doc, actions }) {
+  const [active, setActive] = useStateI(doc.sections.length ? doc.sections[0].id : null);
+  const nodes = useRefI({});
+
+  // Scrollspy. The scroll container is .content, but the VIEWPORT is the correct
+  // observer root anyway: .content fills it, so sections cross the viewport as it
+  // scrolls and we never have to go find the container. The margins bias the
+  // active band to the upper third so the highlight matches what you are reading.
+  useEffectI(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const els = doc.sections.map(s => nodes.current[s.id]).filter(Boolean);
+    if (!els.length) return;
+    const seen = new Map();
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => seen.set(e.target.id, e));
+      let best = null;
+      seen.forEach(e => {
+        if (!e.isIntersecting) return;
+        if (!best || e.boundingClientRect.top < best.boundingClientRect.top) best = e;
+      });
+      if (best) setActive(best.target.id);
+    }, { rootMargin: '-6% 0px -72% 0px', threshold: 0 });
+    els.forEach(el => io.observe(el));
+    return () => io.disconnect();
+  }, [doc]);
+
+  const jump = (id) => {
+    const el = nodes.current[id];
+    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setActive(id);
+  };
+
+  return (
+    <div className="ib-prepwrap">
+      <nav className="ib-preprail">
+        <div className="ib-railttl">Sections</div>
+        {doc.sections.map(s => (
+          <div
+            key={s.id}
+            className={'ib-navitem' + (active === s.id ? ' on' : '')}
+            onClick={() => jump(s.id)}
+            title={s.label}
+          >
+            <span className="mk">{s.marker || '·'}</span>
+            <span className="lb">{railLabel(s.label)}</span>
+          </div>
+        ))}
+      </nav>
+
+      <div className="ib-prep">
+        <div className="ib-prephead">
+          {doc.title ? <h2 className="ib-prepttl">{doc.title}</h2> : <span />}
+          {actions}
+        </div>
+
+        {doc.meta.kv.length ? (
+          <div className="ib-meta">
+            {doc.meta.kv.map((r, i) => (
+              <React.Fragment key={i}>
+                <div className="ib-metak">{r.k}</div>
+                <div className="ib-metav" dangerouslySetInnerHTML={{ __html: r.html }} />
+              </React.Fragment>
+            ))}
+          </div>
+        ) : null}
+        {doc.meta.restHtml ? <div dangerouslySetInnerHTML={{ __html: doc.meta.restHtml }} /> : null}
+
+        {doc.sections.map(s => (
+          <section
+            key={s.id}
+            id={s.id}
+            className="ib-sec"
+            data-role={s.role}
+            ref={el => { nodes.current[s.id] = el; }}
+          >
+            <div className="ib-sechead">
+              {s.marker ? <span className="ib-secmk">{s.marker}</span> : null}
+              <span className="ib-sectitle">{s.label}</span>
+            </div>
+            <div className="ib-secbody" dangerouslySetInnerHTML={{ __html: s.html }} />
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// DebriefPanel — the narrative body under a .run.md's frontmatter.
+//
+// parseRunsheet has always returned { data, body } and the server only ever read
+// `data`, so this content existed on disk and had no way onto the screen. It is
+// post-call material, which is why it sits below the board rather than in it.
+//
+// Uses <details> so it is never hidden and never in the way: written-up notes open
+// on arrival, an unwritten stub stays collapsed behind its own label instead of
+// filling the page with empty headings.
+// ════════════════════════════════════════════════════════════════════════════
+function DebriefPanel({ debrief }) {
+  if (!debrief || !debrief.html) return null;
+  return (
+    <details className="card ib-debrief" open={!!debrief.hasProse} style={{ padding: 12 }}>
+      <summary style={{ cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>
+        Debrief
+        <span className="dim" style={{ fontWeight: 400, marginLeft: 8, fontSize: 11 }}>
+          {debrief.hasProse ? 'written up after the call' : 'template, not filled in yet'}
+        </span>
+      </summary>
+      <div className="ib-prep" style={{ marginTop: 10 }} dangerouslySetInnerHTML={{ __html: debrief.html }} />
+    </details>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Printing — offline review.
+//
+// PRINT THROUGH A PORTAL, NOT THE LIVE DOM. The app is a fixed-chrome SPA: <body>
+// is overflow:hidden and the real scroll container is .content, so a print
+// stylesheet over the live tree prints one clipped viewport and stops. Rather than
+// unwind the sidebar, the topbar and the nested scroll containers one by one, this
+// renders a separate document as a direct child of <body> (the same portal Present
+// mode uses) and hides everything else. Nothing on screen moves.
+//
+// It also forces black-on-white. The default theme is --bg:#08080b; printing that
+// wastes a cartridge and reads badly on paper.
+// ════════════════════════════════════════════════════════════════════════════
+const PRINT_CSS = `
+.tjk-print-root{display:none}
+@media print{
+  @page{size:Letter;margin:.55in}
+  html,body{overflow:visible!important;height:auto!important;background:#fff!important}
+  body > *:not(.tjk-print-root){display:none!important}
+  .tjk-print-root{display:block!important;position:static!important;color:#111;background:#fff;
+    font-family:var(--sans);font-size:10pt;line-height:1.5;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  .tjk-print-root .p-head{border-bottom:1.5pt solid #111;padding-bottom:6pt;margin-bottom:11pt}
+  .tjk-print-root h1{font-size:17pt;font-weight:700;letter-spacing:-.01em;margin:0 0 3pt}
+  .tjk-print-root .p-sub{font-size:9.5pt;color:#444;margin:1pt 0}
+  .tjk-print-root .p-sub b{color:#111}
+
+  .tjk-print-root h2{font-size:10.5pt;font-weight:700;margin:13pt 0 5pt;text-transform:uppercase;
+    letter-spacing:.07em;border-bottom:.5pt solid #bbb;padding-bottom:2pt;
+    break-after:avoid;page-break-after:avoid}
+  .tjk-print-root h3{font-size:10.5pt;font-weight:700;margin:9pt 0 3pt;break-after:avoid;page-break-after:avoid}
+  .tjk-print-root p{margin:3pt 0}
+  .tjk-print-root ul,.tjk-print-root ol{margin:3pt 0 6pt;padding-left:15pt}
+  .tjk-print-root li{margin:2pt 0;break-inside:avoid;page-break-inside:avoid}
+  .tjk-print-root blockquote{margin:4pt 0;padding-left:8pt;border-left:2pt solid #999;color:#333}
+  .tjk-print-root code{font-family:var(--mono);font-size:8.5pt;background:#f0f0f0!important;
+    padding:.5pt 2.5pt;border-radius:2pt}
+  .tjk-print-root hr{border:none;border-top:.5pt solid #ccc;margin:7pt 0}
+  .tjk-print-root b,.tjk-print-root strong{font-weight:700;color:#000}
+
+  .tjk-print-root table{border-collapse:collapse;width:100%;margin:5pt 0;font-size:8.5pt}
+  .tjk-print-root th,.tjk-print-root td{border:.5pt solid #bbb;padding:3pt 5pt;text-align:left;vertical-align:top}
+  .tjk-print-root th{background:#ededed!important;font-weight:700}
+  /* Rows, not tables: a table long enough to need a break should get one. */
+  .tjk-print-root tr{break-inside:avoid;page-break-inside:avoid}
+
+  .tjk-print-root a{color:#111;text-decoration:none;border:none}
+  .tjk-print-root[data-mode="full"] a[href^="http"]::after{content:" (" attr(href) ")";
+    font-size:7.5pt;color:#666;word-break:break-all}
+
+  .tjk-print-root .p-toc{margin-bottom:9pt}
+  .tjk-print-root .p-toc ol{columns:2;column-gap:20pt;font-size:9pt;margin-top:2pt}
+
+  .tjk-print-root .p-meta{border-bottom:.5pt solid #ccc;padding-bottom:7pt;margin-bottom:2pt}
+  .tjk-print-root .p-metarow{display:grid;grid-template-columns:82pt minmax(0,1fr);gap:8pt;margin:2.5pt 0;
+    break-inside:avoid;page-break-inside:avoid}
+  .tjk-print-root .p-metak{font-size:7.5pt;text-transform:uppercase;letter-spacing:.06em;color:#666;
+    text-align:right;padding-top:1.5pt}
+  .tjk-print-root .p-metav{font-size:9pt}
+
+  /* A section must be allowed to break, or a 1,100px fact pack starts its own page
+     and the full document doubles in length. Only the cards below avoid breaking. */
+  .tjk-print-root .p-sec{break-inside:auto;page-break-inside:auto}
+  .tjk-print-root .p-sec[data-role="strip"] > .p-body,
+  .tjk-print-root .p-sec[data-role="open"] > .p-body,
+  .tjk-print-root .p-sec[data-role="hero"] > .p-body{border-left:2pt solid #111;padding-left:9pt}
+
+  /* ── Cram sheet ─────────────────────────────────────────────────────────── */
+  .tjk-print-root[data-mode="cram"]{font-size:9pt;line-height:1.4}
+  .tjk-print-root[data-mode="cram"] .p-card{break-inside:avoid;page-break-inside:avoid;
+    border:.75pt solid #888;border-radius:3pt;padding:6pt 9pt 7pt;margin:0 0 7pt}
+  .tjk-print-root[data-mode="cram"] .p-card > h2{margin:0 0 4pt;border:none;padding:0;font-size:8.5pt;color:#000}
+  .tjk-print-root[data-mode="cram"] .p-card h3{font-size:9pt;margin:5pt 0 2pt}
+  .tjk-print-root[data-mode="cram"] .p-card p{margin:2pt 0}
+  .tjk-print-root[data-mode="cram"] .p-warn{border-width:1.5pt;border-color:#111}
+  .tjk-print-root[data-mode="cram"] hr{display:none}
+}
+`;
+
+// Ordered exactly as the cram sheet reads: what you say, the story you land, what
+// you must not do, what you ask. Selection is by ROLE, which is what lets one
+// composition serve a screen, an hm-round and a final loop.
+const CRAM_BLOCKS = [
+  { label: 'Say first', roles: ['strip', 'open'] },
+  { label: 'Hero story', roles: ['hero'] },
+];
+
+function PrepPrintDoc({ doc, mode, session, roundMeta }) {
+  const metaHtml = (re) => {
+    const hit = (doc.meta.kv || []).find(r => re.test(r.k));
+    return hit ? hit.html : '';
+  };
+  const who = metaHtml(/hiring manager|interviewer|recruiter|panel/i);
+  const when = metaHtml(/^format$/i) || metaHtml(/when|date|schedule/i);
+
+  const head = (
+    <header className="p-head">
+      <h1>{(session && session.company) || doc.title || 'Interview prep'}</h1>
+      <div className="p-sub">
+        {session ? session.role : ''}
+        {roundMeta ? <> · <b>Round {roundMeta.round}</b></> : null}
+        {roundMeta && roundMeta.stage ? <> · {roundMeta.stage}</> : null}
+      </div>
+      {who ? <div className="p-sub">Interviewer: <span dangerouslySetInnerHTML={{ __html: who }} /></div> : null}
+      {when ? <div className="p-sub"><span dangerouslySetInnerHTML={{ __html: when }} /></div> : null}
+    </header>
+  );
+
+  if (mode === 'cram') {
+    const pick = (roles) => doc.sections.filter(s => roles.includes(s.role));
+    const donot = extractPrepDoNot(doc.sections);
+    const ask = pick(['ask']);
+    return (
+      <div className="tjk-print-root" data-mode="cram">
+        {head}
+        {CRAM_BLOCKS.map(b => {
+          const secs = pick(b.roles);
+          if (!secs.length) return null;
+          return (
+            <section className="p-card" key={b.label}>
+              <h2>{b.label}</h2>
+              {secs.map(s => <div key={s.id} dangerouslySetInnerHTML={{ __html: s.html }} />)}
+            </section>
+          );
+        })}
+        {donot ? (
+          <section className="p-card p-warn">
+            <h2>Do not</h2>
+            <div dangerouslySetInnerHTML={{ __html: donot }} />
+          </section>
+        ) : null}
+        {ask.length ? (
+          <section className="p-card">
+            <h2>Ask them</h2>
+            {ask.map(s => <div key={s.id} dangerouslySetInnerHTML={{ __html: s.html }} />)}
+          </section>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="tjk-print-root" data-mode="full">
+      {head}
+      {doc.meta.kv.length ? (
+        <section className="p-meta">
+          {doc.meta.kv.map((r, i) => (
+            <div className="p-metarow" key={i}>
+              <div className="p-metak">{r.k}</div>
+              <div className="p-metav" dangerouslySetInnerHTML={{ __html: r.html }} />
+            </div>
+          ))}
+        </section>
+      ) : null}
+      <nav className="p-toc">
+        <h2>Contents</h2>
+        <ol>{doc.sections.map(s => <li key={s.id}>{s.marker ? s.marker + '  ' : ''}{s.label}</li>)}</ol>
+      </nav>
+      {doc.sections.map(s => (
+        <section className="p-sec" key={s.id} data-role={s.role}>
+          <h2>{s.marker ? s.marker + '  ' : ''}{s.label}</h2>
+          <div className="p-body" dangerouslySetInnerHTML={{ __html: s.html }} />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+// Two outputs, so the control is a menu rather than a button. Closes on pick, on
+// Escape, and on any click outside it.
+function PrintMenu({ onPick, cram = true }) {
+  const [open, setOpen] = useStateI(false);
+  const box = useRefI(null);
+  useEffectI(() => {
+    if (!open) return;
+    const away = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const pick = (mode) => { setOpen(false); onPick(mode); };
+  return (
+    <div ref={box} style={{ position: 'relative' }}>
+      <button className="btn sm" onClick={() => setOpen(o => !o)} title="Print or save as PDF for offline review">
+        ⎙ Print {open ? '▴' : '▾'}
+      </button>
+      {open && (
+        <div className="card" style={{
+          position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 40,
+          padding: 5, minWidth: 232, boxShadow: 'var(--shadow)',
+        }}>
+          <div className="ib-navitem" onClick={() => pick('full')} style={{ borderLeft: 'none' }}>
+            <span className="lb" style={{ color: 'var(--text)' }}>
+              Full prep document
+              <div className="dim" style={{ fontSize: 10.5, marginTop: 1 }}>Everything, with contents</div>
+            </span>
+          </div>
+          <div
+            className="ib-navitem"
+            onClick={cram ? () => pick('cram') : undefined}
+            style={{ borderLeft: 'none', opacity: cram ? 1 : 0.45, cursor: cram ? 'pointer' : 'not-allowed' }}
+            title={cram ? '' : 'This document has no opener, hero story or questions to ask'}
+          >
+            <span className="lb" style={{ color: 'var(--text)' }}>
+              Cram sheet
+              <div className="dim" style={{ fontSize: 10.5, marginTop: 1 }}>
+                {cram ? 'Say / hero / do-not / ask, 1-2 pages' : 'Not available for this document'}
+              </div>
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -643,6 +1218,11 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
   const [loadErr, setLoadErr] = useStateI(null);
   const [selId, setSelId] = useStateI(null);
   const [selRound, setSelRound] = useStateI(null);
+  // A company-level document (intel report / cheat sheet) selected INSTEAD of a
+  // round. Non-null takes over the pane: a doc belongs to the company, not to a
+  // round, so it has no board and no Prep/Live split.
+  const [selDoc, setSelDoc] = useStateI(null);
+  const [docCache, setDocCache] = useStateI({});     // `${id}::${key}` -> { doc, docErr }
   const [sub, setSub] = useStateI('prep');
   const [cache, setCache] = useStateI({});           // `${id}:${round}` -> { run, runErr, prep, prepErr }
   const [present, setPresent] = useStateI(false);
@@ -654,6 +1234,16 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
   // or null when the form is closed. `round` stays a string so the field can be
   // emptied mid-edit without the value snapping back to NaN.
   const [newRound, setNewRound] = useStateI(null);
+  // null | { mode:'full'|'cram', seq }. Mounts the print document; cleared on
+  // afterprint. It carries a seq because setting the SAME mode twice is a no-op in
+  // React — it bails out on an identical value, the effect never re-runs, and if a
+  // browser had skipped afterprint the menu would be permanently dead. A fresh
+  // object per pick means every pick prints.
+  const [printReq, setPrintReq] = useStateI(null);
+  const askPrint = useCallbackI(
+    (mode) => setPrintReq(r => ({ mode, seq: (r ? r.seq : 0) + 1 })),
+    []
+  );
   const inflight = useRefI(new Set());
   const answerOpenRef = useRefI(false);   // set by the mounted Board; see the Esc contract below
 
@@ -671,6 +1261,21 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
       .then(r => r.ok ? r.json().then(j => ({ prep: j })) : asErr(r, 'No prep file for this round.').then(e => ({ prepErr: e })))
       .catch(() => ({ prepErr: 'Could not load the prep sheet.' }));
     Promise.all([run, prep]).then(([a, b]) => setCache(c => ({ ...c, [k]: { ...a, ...b, done: true } })));
+  }, []);
+
+  // Same shape for a company document. NOT prefetched with the rounds: a doc is
+  // reference reading, never opened mid-interview, so it does not have to satisfy
+  // the zero-network-in-present rule that forces the round prefetch.
+  const loadDoc = useCallbackI((id, key) => {
+    const k = id + '::' + key;
+    if (inflight.current.has(k)) return;
+    inflight.current.add(k);
+    fetch(`/api/interview/doc/${encodeURIComponent(id)}/${encodeURIComponent(key)}`)
+      .then(r => r.ok
+        ? r.json().then(j => ({ doc: j }))
+        : r.json().then(j => ({ docErr: (j && j.error) || 'Document not found.' })).catch(() => ({ docErr: 'Document not found.' })))
+      .catch(() => ({ docErr: 'Could not load the document.' }))
+      .then(v => setDocCache(c => ({ ...c, [k]: { ...v, done: true } })));
   }, []);
 
   // Load on mount, and PREFETCH every active round. Present mode must never touch
@@ -705,16 +1310,39 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
   const entry = cache[selId + ':' + selRound] || null;
   const runData = entry && entry.run ? entry.run : null;
   const boardReady = !!(runData && runData.data);
+  // null when the § grammar is absent, which is the fall-back-to-flat signal.
+  const prepDoc = useMemoI(
+    () => parsePrepDoc(entry && entry.prep && entry.prep.html),
+    [entry]
+  );
+
+  const docMeta = selDoc ? ((session && session.docs) || []).find(d => d.key === selDoc) || null : null;
+  const docEntry = selDoc ? (docCache[selId + '::' + selDoc] || null) : null;
+  const docParsed = useMemoI(
+    () => parsePrepDoc(docEntry && docEntry.doc && docEntry.doc.html),
+    [docEntry]
+  );
+  // What the Prep pane is actually showing right now: a company document if one is
+  // selected, otherwise the round's prep sheet. Print follows the same choice.
+  const shownDoc = selDoc ? docParsed : prepDoc;
+  // The cram sheet is composed from delivery-critical roles. An intel report is all
+  // research and may carry none of them, and printing a cram sheet that is just a
+  // header is worse than not offering one, so the option is gated on having content.
+  const cramAvailable = !!(shownDoc && shownDoc.sections.some(
+    s => s.role === 'strip' || s.role === 'open' || s.role === 'hero' || s.role === 'ask'
+  ));
 
   const pickSession = (s) => {
     setSelId(s.id);
     const r = defaultRound(s);
     setSelRound(r);
+    setSelDoc(null);     // a doc key is per-company; never carry one across companies
     setFit(null);
     setNewRound(null);   // the default round number is per-company; don't carry it over
     if (r != null) loadRound(s.id, r);       // archive rounds aren't prefetched
   };
-  const pickRound = (r) => { setSelRound(r); setFit(null); loadRound(selId, r); };
+  const pickRound = (r) => { setSelRound(r); setSelDoc(null); setFit(null); loadRound(selId, r); };
+  const pickDoc = (key) => { setSelDoc(key); setSub('prep'); loadDoc(selId, key); };
 
   // ── Present mode ───────────────────────────────────────────────────────────
   const exitPresent = useCallbackI(() => {
@@ -726,6 +1354,19 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
     const el = document.documentElement;
     if (el.requestFullscreen) el.requestFullscreen().catch(() => {});   // denied is survivable: the overlay still covers the chrome
   }, []);
+
+  // ── Print ──────────────────────────────────────────────────────────────────
+  // window.print() blocks synchronously, so it cannot be called in the same tick
+  // that sets the request: React would not have painted the print document yet and
+  // the dialog would show an empty page. Set it, let it paint, then print.
+  // afterprint clears it whether the user printed or cancelled.
+  useEffectI(() => {
+    if (!printReq) return;
+    const done = () => setPrintReq(null);
+    window.addEventListener('afterprint', done);
+    const t = setTimeout(() => window.print(), 80);
+    return () => { clearTimeout(t); window.removeEventListener('afterprint', done); };
+  }, [printReq]);
 
   // Escape exits BOTH. In fullscreen the browser eats the Esc keydown and just drops
   // fullscreen, so fullscreenchange is what actually tears down the overlay; the
@@ -773,7 +1414,7 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
 
   return (
     <div className="col" style={{ gap: 0 }}>
-      <style dangerouslySetInnerHTML={{ __html: BOARD_CSS + PREP_CSS + RAIL_CSS + HANDOFF_CSS }} />
+      <style dangerouslySetInnerHTML={{ __html: BOARD_CSS + PREP_CSS + RAIL_CSS + HANDOFF_CSS + PRINT_CSS }} />
 
       {/* ── Picker: it is a 2-item list. No search, no table. ───────────────── */}
       <div className="col" style={{ gap: 8, marginBottom: 14 }}>
@@ -826,18 +1467,35 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 10, flexWrap: 'wrap', gap: 10 }}>
             <div>
               <h1 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>{session.company}</h1>
+              {/* A company document is not a round, so the header must stop
+                  reporting the round that happens to be selected behind it. */}
               <div className="dim mono" style={{ fontSize: 11, marginTop: 3 }}>
-                {selRound != null ? <strong style={{ color: 'var(--text)' }}>Round {selRound}</strong> : 'No rounds on disk'}
-                {roundMeta && roundMeta.stage ? <> · <strong style={{ color: 'var(--text)' }}>{roundMeta.stage}</strong></> : null}
-                {roundMeta && roundMeta.descriptor ? ' · ' + roundMeta.descriptor : ''}
+                {selDoc ? (
+                  <>
+                    <strong style={{ color: 'var(--text)' }}>
+                      {(docMeta && docMeta.label) || 'Document'}
+                    </strong>
+                    {' · company-level'}
+                  </>
+                ) : (
+                  <>
+                    {selRound != null ? <strong style={{ color: 'var(--text)' }}>Round {selRound}</strong> : 'No rounds on disk'}
+                    {roundMeta && roundMeta.stage ? <> · <strong style={{ color: 'var(--text)' }}>{roundMeta.stage}</strong></> : null}
+                    {roundMeta && roundMeta.descriptor ? ' · ' + roundMeta.descriptor : ''}
+                  </>
+                )}
                 {' · '}{session.role}
               </div>
             </div>
             <button
               className="btn accent sm"
-              disabled={!boardReady}
+              disabled={!boardReady || !!selDoc}
               onClick={enterPresent}
-              title={boardReady ? 'Full-screen board over all app chrome (Esc exits)' : 'This round has no live board on disk'}
+              title={
+                selDoc ? 'Documents have no board. Pick a round to present.'
+                  : boardReady ? 'Full-screen board over all app chrome (Esc exits)'
+                    : 'This round has no live board on disk'
+              }
             >⛶ Present</button>
           </div>
 
@@ -848,7 +1506,7 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
               return (
                 <span
                   key={r.round}
-                  className={'chip' + (r.round === selRound ? ' on' : '')}
+                  className={'chip' + (r.round === selRound && !selDoc ? ' on' : '')}
                   onClick={() => pickRound(r.round)}
                   title={r.descriptor || r.stage || ''}
                 >
@@ -857,6 +1515,23 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
                 </span>
               );
             })}
+
+            {/* Company-level documents: the intel report and the cheat sheet. These
+                sit in the same folder as the rounds but carry no round number, so
+                for as long as the tab only matched `-round-N-` filenames they were
+                on disk and unreachable. They are chips beside the rounds, not
+                rounds, because they describe the company rather than one call. */}
+            {(session.docs || []).map(d => (
+              <span
+                key={d.key}
+                className={'chip' + (selDoc === d.key ? ' on' : '')}
+                onClick={() => pickDoc(d.key)}
+                title={d.title || d.name}
+              >
+                {d.label}
+                <span className="dim" style={{ marginLeft: 6, fontSize: 10 }}>doc</span>
+              </span>
+            ))}
             {/* The only entry point for a round that does not exist yet. Without it
                 the tab is a viewer: a round with no prep file is invisible, so there
                 is nothing to click. */}
@@ -927,7 +1602,18 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
               loadRound is never called and `entry` stays undefined forever — without this
               guard both subtabs would sit on "Loading…" for good. This is the documented
               FIRST state of any company, and the exact state "+ New round" exists for. */}
-          {selRound == null ? (
+          {/* ── A company document ────────────────────────────────────────────
+              Same three-tier render as a round's prep sheet, minus the subtabs:
+              a document describes the company, so there is no board to switch to. */}
+          {selDoc ? (
+            !docEntry ? <div className="no-data">Loading document…</div>
+              : docEntry.docErr ? <div className="no-data">{docEntry.docErr}</div>
+                : docParsed
+                  ? <PrepDoc doc={docParsed} actions={<PrintMenu onPick={askPrint} cram={cramAvailable} />} />
+                  : docEntry.doc && docEntry.doc.html
+                    ? <div className="ib-prep" dangerouslySetInnerHTML={{ __html: docEntry.doc.html }} />
+                    : <PrepProse markdown={(docEntry.doc && docEntry.doc.markdown) || ''} />
+          ) : selRound == null ? (
             <div className="no-data" style={{ padding: 24 }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>No rounds prepped yet</div>
               <div className="dim" style={{ fontSize: 12 }}>
@@ -943,15 +1629,19 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
             ))}
           </div>
 
-          {/* ── Prep ────────────────────────────────────────────────────────── */}
+          {/* ── Prep ──────────────────────────────────────────────────────────
+              Three renders, best first. PrepDoc needs the § grammar AND the server
+              HTML; a legacy prep file with no § headings still gets the flat server
+              render; and PrepProse stays the last resort for the case where
+              reportMdToHtml threw and only { markdown } came back. */}
           {sub === 'prep' && (
             !entry ? <div className="no-data">Loading prep sheet…</div>
               : entry.prepErr ? <div className="no-data">{entry.prepErr}</div>
-                // If the endpoint ever returns server-rendered `html` (reportMdToHtml,
-                // the codebase's one converter), prefer it. Otherwise render { markdown }.
-                : entry.prep && entry.prep.html
-                  ? <div className="ib-prep" dangerouslySetInnerHTML={{ __html: entry.prep.html }} />
-                  : <PrepProse markdown={(entry.prep && entry.prep.markdown) || ''} />
+                : prepDoc
+                  ? <PrepDoc doc={prepDoc} actions={<PrintMenu onPick={askPrint} cram={cramAvailable} />} />
+                  : entry.prep && entry.prep.html
+                    ? <div className="ib-prep" dangerouslySetInnerHTML={{ __html: entry.prep.html }} />
+                    : <PrepProse markdown={(entry.prep && entry.prep.markdown) || ''} />
           )}
 
           {/* ── Live ────────────────────────────────────────────────────────── */}
@@ -1006,6 +1696,7 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
                       Derived warnings are NOT repeated here: the board's own red panel
                       owns those, and it is the copy that survives into present mode. */}
                   <ProblemsPanel derived={runData} />
+                  <DebriefPanel debrief={runData.debrief} />
                   <div className="ib-rail">
                     <CalibrationPanel cam={cam} setCam={setCam} />
                     <div className="card" style={{ padding: 12 }}>
@@ -1069,6 +1760,23 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
             openRef={answerOpenRef}
           />
         </div>,
+        document.body
+      )}
+
+      {/* ── PRINT DOCUMENT ───────────────────────────────────────────────────
+          Portaled to <body> so it is a SIBLING of the app root, which is what lets
+          the print stylesheet hide the app with `body > *:not(.tjk-print-root)`
+          instead of unwinding .content's overflow and the fixed chrome. It is
+          display:none on screen, so mounting it disturbs nothing.               */}
+      {printReq && shownDoc && ReactDOM.createPortal(
+        <PrepPrintDoc
+          doc={shownDoc}
+          mode={printReq.mode}
+          session={session}
+          /* A company document has no round, so it must not print a round header
+             borrowed from whatever round happened to be selected behind it. */
+          roundMeta={selDoc ? null : roundMeta}
+        />,
         document.body
       )}
     </div>

@@ -18,6 +18,16 @@ const PREP_DIR = path.resolve(__dirname, 'interview-prep');
 const BANK = path.join(PREP_DIR, 'story-bank.md');
 const SCHEMA_ID = 'trajecktory-runsheet/v1';
 
+// The shipped worked example. It is TRACKED, it is what every generated board is
+// copied from, and until it was added here nothing checked it: this script walked
+// interview-prep/ only, which is gitignored, so CI validated zero files and passed.
+// A schema drift in the one file the mode tells the agent to imitate would have
+// shipped green.
+//
+// It is checked for STRUCTURE ONLY — see storyIdsFor(). Its `story` ids point at
+// the fictional bank in its own prose, not at the user's story-bank.md.
+const EXAMPLE = path.resolve(__dirname, 'templates', 'runsheet-example.run.md');
+
 const CAP_CUES = 48;
 const CAP_SECTIONS = 8;
 // tag must not assert anything the renderer derives
@@ -52,7 +62,12 @@ function check(file, ids) {
   const warns = [];
   const raw = fs.readFileSync(file, 'utf8');
 
-  const m = raw.match(/^---\n([\s\S]*?)\n---/);
+  // \r?\n, not \n: git checks tracked files out as CRLF wherever core.autocrlf is
+  // on, which is the Windows default and this project's primary platform. An
+  // LF-only anchor reports "No JSON frontmatter" for a file whose frontmatter is
+  // perfectly well formed. CI runs on Linux and checks out LF, so this failed on
+  // Windows only and would never have shown up in a green pipeline.
+  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return { errs: ['No JSON frontmatter (expected --- ... --- at the top).'], warns };
 
   let d;
@@ -124,8 +139,20 @@ function check(file, ids) {
 }
 
 const ids = bankIds();
-const files = walk(PREP_DIR);
-const results = files.map(f => ({ file: path.relative(PREP_DIR, f), ...check(f, ids) }));
+const userFiles = walk(PREP_DIR);
+const hasExample = fs.existsSync(EXAMPLE);
+
+// Story-id resolution is a USER-file check. Running it against the shipped example
+// would tie a tracked file's pass/fail to a gitignored one: green on this machine
+// because the real bank happens to hold ids 1/2/4/7, red on a machine whose bank is
+// shorter, and skipped entirely in CI where interview-prep/ does not exist. Three
+// different verdicts for one unchanged file. The example gets null.
+const targets = [
+  ...(hasExample ? [{ path: EXAMPLE, ids: null, label: path.relative(__dirname, EXAMPLE) }] : []),
+  ...userFiles.map(f => ({ path: f, ids, label: path.relative(PREP_DIR, f) })),
+];
+
+const results = targets.map(t => ({ file: t.label, ...check(t.path, t.ids) }));
 const failed = results.filter(r => r.errs.length);
 
 if (jsonMode) {
@@ -133,11 +160,14 @@ if (jsonMode) {
   process.exit(failed.length ? 1 : 0);
 }
 
-if (!files.length) {
-  console.log('No .run.md files found under interview-prep/.');
+if (!targets.length) {
+  console.log('No .run.md files found, and templates/runsheet-example.run.md is missing.');
   process.exit(0);
 }
-if (!ids) console.log('⚠️  story-bank.md not found, skipping story-id resolution.\n');
+// Only meaningful when there are user files to resolve ids for; the example never
+// resolves them by design.
+if (!ids && userFiles.length) console.log('⚠️  story-bank.md not found, skipping story-id resolution.\n');
+if (!userFiles.length) console.log('No .run.md files under interview-prep/ yet — checking the shipped example only.\n');
 
 for (const r of results) {
   const tag = r.errs.length ? '❌' : r.warns.length ? '⚠️ ' : '✅';

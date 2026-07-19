@@ -1,0 +1,10 @@
+# Run sheets are a compiled artifact with strict JSON frontmatter, and the shipped
+# worked example is tracked. Pin them to LF so the file in the working tree matches
+# the file in the repo on every platform.
+#
+# This is defence in depth, not the fix: the parsers in render-runsheet.mjs and
+# verify-runsheets.mjs accept \r?\n, so a user's own CRLF run sheet still loads.
+# Without both, a Windows checkout (core.autocrlf defaults on) rewrites the example
+# to CRLF and an LF-only anchor reports "No JSON frontmatter" on a valid file —
+# invisible in CI, which runs on Linux and checks out LF.
+*.run.md text eol=lf

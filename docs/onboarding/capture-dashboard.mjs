@@ -107,7 +107,7 @@ const TRIAGE = { cards: [
 ] };
 
 const PITCH = {
-  pitch: "I'm a revenue operations leader with about ten years turning messy go-to-market data into pipeline the whole team trusts. Most recently, as Director of RevOps at a Series C SaaS company, I rebuilt our forecasting and lead routing so sales cycles dropped by roughly a fifth. What I love is the seam between the data and the humans who act on it. I'm looking for a Director or VP role where I can own that end to end.",
+  pitch: "I'm a supply-chain analytics leader with about ten years turning scattered carrier data into a performance picture an operations team will actually act on. Most recently, as Director of Analytics at a mid-market logistics company, I rebuilt carrier scorecarding and lane costing so claims recovery improved by roughly a fifth. What I love is the seam between the measurement and the planners who live under it. I'm looking for a Director or VP role where I can own that end to end.",
   generated_at: '2026-07-06T15:00:00.000Z',
   tweaks: { seniority: 'Director', interviewStage: 'Recruiter screen', length: '90s', industry: '' },
 };
