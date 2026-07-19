@@ -63,7 +63,7 @@ Every line earns its place. No filler. Tables and bullet points only — no pros
 {From Block F "Recommended Case Study" — copy the story name and the 2-sentence pitch verbatim}
 
 **Open with:** "{opening line or hook from Block F recommendation}"
-**Close with:** "{the 'system outlasted me' closer from Block F}"
+**Close with:** "{the closing line from Block F recommendation}"
 
 ---
 
@@ -103,8 +103,8 @@ Every line earns its place. No filler. Tables and bullet points only — no pros
 ## The Angle to Own
 {From _profile.md cross-cutting advantage + Block C "Sell Senior Without Lying" phrases}
 
-- **The bilingual angle:** {from _profile.md + adapted to this archetype}
-- **The builder proof:** {which specific deliverable(s) outlasted you — relevant to this role}
+- **Your cross-cutting advantage:** {from _profile.md + adapted to this archetype}
+- **The delivery proof:** {which specific deliverable(s) are still in use — relevant to this role}
 - **The closer:** {the "here's what I'd build here" line from Block F recommendation}
 
 ---
@@ -134,9 +134,12 @@ improvising a framing for the candidate's background.}
 | **Your target** | {target_range from profile.yml} |
 | **Your floor** | {minimum from profile.yml} |
 
-**If asked:** *"Based on market data for this role, I'm targeting {target}. I'm flexible on structure — what matters is the total package and the opportunity."*
+**If asked / if offered below target:** use the negotiation scripts in `modes/_profile.md`, verbatim,
+adapted only for `{company}` and `{target}`.
 
-**If offered below target:** *"I'm comparing with opportunities in the {higher range}. I'm drawn to {company} because of [reason]. Can we explore {target}?"*
+> Do NOT restate those scripts here. `_profile.md` is user-layer and `modes/cheat-sheet.md` is
+> system-layer (see `DATA_CONTRACT.md`): a copy in this file ships to every user, drifts from the
+> one the user actually edits, and puts their negotiation wording in a tracked file.
 
 ---
 ```
@@ -161,7 +164,7 @@ improvising a framing for the candidate's background.}
 Derive the company folder and slugs from company name and role title:
 - `{Company Folder}` = company display name with trailing legal suffixes (`, Inc.`, `, LLC`, `, Corp.`, `Corporation`) stripped and Windows-forbidden characters (`\ / : * ? " < > |`) replaced by a space, then trimmed (e.g., "Example Co, Inc." → "Example Co", "PulseOps" → "PulseOps"). This is the per-company subfolder — create it if it does not exist.
 - `{company-slug}` = company name lowercase, spaces → hyphens (e.g., "PulseOps" → "pulseops")
-- `{role-slug}` = role title lowercase, spaces → hyphens, strip punctuation (e.g., "Director of Revenue Operations" → "director-revenue-operations")
+- `{role-slug}` = role title lowercase, spaces → hyphens, strip punctuation (e.g., "Director of Supply Chain Analytics" → "director-supply-chain-analytics")
 
 Save to a per-company subfolder so a growing list stays browsable:
 ```

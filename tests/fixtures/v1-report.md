@@ -120,7 +120,7 @@
     {
       "gap": "Advisory framing vs. systems-builder identity",
       "blocker": "Nice-to-have",
-      "mitigation": "The 'bilingual: data and sales' framing bridges this cleanly. Operators who can also build the infrastructure are rarer, so lean into the architect advantage."
+      "mitigation": "The cross-cutting data-plus-commercial framing bridges this cleanly. Operators who can also build the infrastructure are rarer, so lean into the architect advantage."
     }
   ],
   "levelMatch": {
@@ -216,7 +216,7 @@
       "title": "Qualification Framework Rollout at Scale",
       "req": "Execute transformation programs for GTM leaders",
       "S": "Contoso had no consistent qualification framework across 30 sellers in 2 business units. Each leader used their own logic, which made pipeline inspection unreliable for the VP Sales.",
-      "T": "Deploy one qualification framework and establish the first commercial KPI baseline so pipeline inspection could run in real time",
+      "T": "Deploy one qualification framework and establish a shared performance baseline so pipeline inspection could run in real time",
       "A": "Mapped qualification stages to CRM fields; designed the KPI baseline (average deal size $22K, win rate 24%, velocity $95K) with sales leadership; built the reporting layer used by 4 leaders",
       "R": "30 sellers working from a common framework; the VP Sales and regional managers using the pipeline view for weekly coverage decisions",
       "reflection": "The hard part was not the build. It was getting two business unit leaders to agree on shared definitions. A framework nobody owns becomes shelfware, so I made each leader a named steward of their segment KPIs."
@@ -255,7 +255,7 @@
       "T": "Standardize one quarterly package across 3 regions with consistent definitions, clean visuals, and a repeatable production cadence",
       "A": "Applied scripted automation to compress production from 5 days to 8 hours; produced a 20-slide package with standardized definitions and consistent structure",
       "R": "No disruption to reporting cycles after launch; VP Sales, Finance, and regional managers on a single source of truth; still in use at handoff",
-      "reflection": "The slide count is a symptom. What mattered was that Finance stopped asking 'whose number is right?' That question disappeared after the second quarter."
+      "reflection": "The slide count is a symptom. What mattered was that Finance stopped relitigating the definitions every cycle. That argument disappeared after the second quarter."
     }
   ],
   "leadStory": {

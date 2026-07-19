@@ -80,7 +80,7 @@ Optional. Renders the board header.
 
 ```json
 "session": {
-  "who": "Alex Chen, VP of Sales",
+  "who": "Dana Whitfield, VP of Global Logistics",
   "when": "2026-01-16T10:30:00-06:00",
   "minutes": 30,
   "format": "Zoom",
@@ -129,15 +129,15 @@ Inlining would duplicate prose *and* make collision detection impossible.
 ```json
 "answers": {
   "hero": {
-    "title": "HERO: The forecast rebuild",
+    "title": "HERO: The carrier scorecard rebuild",
     "tag": "2.5 to 3 min",
     "story": 1,
     "hero": true,
     "useOnce": true,
     "seconds": 165,
     "spoken": [
-      "Contoso Freight had no commercial KPI baseline. Three business units, 90 sellers, and every leader had a different definition of qualified pipeline...",
-      "Two moves. First, I made qualification **enforceable instead of aspirational**..."
+      "Contoso Freight had no shared carrier scorecard. Eleven carriers, four regional teams, and each team ranked them off a spreadsheet it maintained itself...",
+      "Two moves. First, I moved measurement to the source: on-time and damage came straight off the dock scans..."
     ],
     "notes": [
       "ONLY for \"biggest build / most impactful.\" Never spend it on a behavioral.",
@@ -169,8 +169,8 @@ renderer computes. Never type into `tag`:
 - **Round or stage** - derived from `round` / `stage`.
 
 This is not hypothetical. Author `"tag": "2 homes · angle it"` onto the example's
-`definitions` answer and the board renders "2 homes" one line above its own derived
-warning saying **3**, because `definitions` is reachable from three cue rows. The authored
+`definition` answer and the board renders "2 homes" one line above its own derived
+warning saying **3**, because `definition` is reachable from three cue rows. The authored
 count is the one that is wrong, and it goes wrong the moment a cue is added or moved,
 which is exactly when nobody re-reads the tag. An authored tag that claims a home count
 will eventually contradict the derived warning printed next to it.
@@ -235,8 +235,8 @@ collision warnings.
 ```json
 "guardrails": [
   "Q3 numbers ONLY. Q4 is not public until the February call",
-  "Never bluff the quoting platform. Name the gap, reframe to the layer above it",
-  "Do not raise comp in this round. It lands in the recruiter back-channel"
+  "Never bluff the TMS. Name the gap, reframe to the layer above it",
+  "Do not raise comp in this round. It belongs with the recruiter"
 ]
 ```
 
@@ -252,8 +252,8 @@ no net and you are stranded.
   "cues": [
     { "cue": "The stall line + universal opener",         "answer": "blank" },
     { "cue": "Failure, or a call you got wrong",          "answer": "badKpi" },
-    { "cue": "People, alignment, or conflict",            "answer": "definitions" },
-    { "cue": "Influence, driving change, disagreeing up", "answer": "definitions" }
+    { "cue": "People, alignment, or conflict",            "answer": "definition" },
+    { "cue": "Influence, driving change, disagreeing up", "answer": "definition" }
   ] }
 ```
 
