@@ -7,7 +7,7 @@
 **Recruiter:** {Name}, {Title} ({inbound source — LinkedIn outreach, application response, referral, etc.})
 **Role report:** [{NNN}-{company-slug}-{YYYY-MM-DD}.md](../reports/{NNN}-{company-slug}-{YYYY-MM-DD}.md)
 **URL:** {JD URL}
-**Location:** {Remote / Hybrid — city / On-site — city} ({fit assessment, e.g., "Irving = home metro ✅")
+**Location:** {Remote / Hybrid — city / On-site — city} ({fit assessment, e.g., "8 miles from home ✅" or "relocation required ⚠"})
 **Comp anchor:** {Range from JD} ({fit vs floor/target — note what to confirm in the call})
 
 ---
@@ -78,7 +78,7 @@ This is a recruiter-driven screen. {Recruiter}'s job is to:
 |---|---|
 | Walk me through your background | Use the 60-second pitch (§2) |
 | Why are you open to a move? | Exit story (§3) — concise, no bitterness |
-| What are you looking for in your next role? | {Sr. Director seat owning X end-to-end; bilingual in Y + Z; senior leadership visibility; scale of N} |
+| What are you looking for in your next role? | {seat + scope you want; your cross-cutting advantage; visibility; scale — from your own profile, not this example} |
 | Comp expectations? | "I'm targeting around ${X}K OTE; my floor is ${Y}K. I saw your range — looks like {framing}, but I'd love to understand {bonus % / equity / variable} so I can line it up against my target." |
 | Location / hybrid? | {Confirm fit, ask about cadence if hybrid} |
 | Timing / notice period? | {Available immediately OR current notice} |
@@ -172,4 +172,4 @@ This is a recruiter-driven screen. {Recruiter}'s job is to:
 
 - [ ] Send a short thank-you note to {recruiter} (3–4 sentences, reference one specific thing she said, reiterate interest, confirm next step)
 - [ ] Log call notes in `data/applications.md` notes column for #{NNN}
-- [ ] If advanced: open `interview-prep/{Company Folder}/{company-slug}-round-2-{hiring-manager-name}.md` from the `interview-cheatsheet-hm-round` template
+- [ ] If advanced: open `interview-prep/{Company Folder}/{company-slug}-round-2-hiring-manager.md` from the `interview-cheatsheet-hm-round` template (descriptor is the STAGE, never the interviewer's name)

@@ -19,7 +19,12 @@ router.post('/api/insights/generate', async (req, res) => {
     const profile = loadProfileContext();
     const prior = loadPriorInsight();
 
-    const sys = `You are a career-ops strategist analyzing a job search dashboard for a senior operator targeting Director-level RevOps/Analytics roles at $250K+ OTE. Your job: deliver direct, specific insights from the data — not generic advice.
+    // NEVER hardcode the user's target level or comp here. loadProfileContext()
+    // above already supplies archetypes, target range and walk-away from
+    // config/profile.yml, which is gitignored precisely because those are personal
+    // values — a literal in this tracked file both leaks them and goes stale the
+    // moment the profile changes.
+    const sys = `You are a career-ops strategist analyzing a job search dashboard for a senior operator. Their target level, roles and compensation are in the profile block below; read them from there and never assume. Your job: deliver direct, specific insights from the data — not generic advice.
 
 RULES:
 - Direct senior tone. No corporate filler. No em dashes.

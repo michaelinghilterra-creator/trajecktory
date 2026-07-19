@@ -1,5 +1,5 @@
 import express from 'express';
-import { listSessions, getRunsheet, getPrep } from '../lib/interview.mjs';
+import { listSessions, getRunsheet, getPrep, getDoc } from '../lib/interview.mjs';
 
 export const router = express.Router();
 
@@ -34,6 +34,19 @@ router.get('/api/interview/prep/:id/:round', (req, res) => {
     const prep = getPrep(req.params.id, req.params.round);
     if (prep.error) return res.status(404).json({ error: prep.error });
     res.json(prep);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/interview/doc/:id/:key — a company-level document (intel report or
+// cheat sheet). These live beside the round files but carry no round number, so
+// they get their own route rather than being wedged into /prep/:round.
+router.get('/api/interview/doc/:id/:key', (req, res) => {
+  try {
+    const doc = getDoc(req.params.id, req.params.key);
+    if (doc.error) return res.status(404).json({ error: doc.error });
+    res.json(doc);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

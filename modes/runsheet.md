@@ -70,7 +70,7 @@ sibling (`{interview_prep_dir}/{Company Folder}/{company-slug}-round-{N}-{descri
   "schema": "trajecktory-runsheet/v1",  // exact string. Loaders match literally, never by regex.
   "id": 417,                            // application id == report number. Read it, never mint it.
   "company": "Northwind Logistics",     // display name, same as the tracker column
-  "role": "Director of Revenue Operations",
+  "role": "Director of Supply Chain Analytics",
   "stage": "1st Interview",             // canonical status from templates/states.yml
   "round": 2,                           // the COMPANY's process ordinal. NEVER derived from stage.
   "template": "hm-round",               // "screen" | "hm-round" | "final-loop"
@@ -78,7 +78,7 @@ sibling (`{interview_prep_dir}/{Company Folder}/{company-slug}-round-{N}-{descri
   "generated": "2026-01-15",            // YYYY-MM-DD
 
   "session": {                          // optional. Renders the board header.
-    "who": "Alex Chen, VP of Sales",
+    "who": "Dana Whitfield, VP of Global Logistics",
     "when": "2026-01-16T10:30:00-06:00",
     "minutes": 30,
     "format": "Zoom",
@@ -98,7 +98,7 @@ sibling (`{interview_prep_dir}/{Company Folder}/{company-slug}-round-{N}-{descri
 
   "answers": {                          // cues[].answer is a KEY into this object, never inline text
     "hero": {
-      "title": "HERO: The forecast rebuild",
+      "title": "HERO: The carrier scorecard rebuild",
       "tag": "2.5 to 3 min",            // delivery INTENT only. Never a derivable fact.
       "story": 1,                       // story-bank id, or null for non-story answers
       "hero": true,                     // at most one answer on the whole board
@@ -111,7 +111,7 @@ sibling (`{interview_prep_dir}/{Company Folder}/{company-slug}-round-{N}-{descri
 
   "guardrails": [                       // authored, factual, non-derivable. Red panel.
     "Q3 numbers ONLY. Q4 is not public until the February call",
-    "Never bluff the quoting platform. Name the gap, reframe to the layer above it"
+    "Never bluff the TMS. Name the gap, reframe to the layer above it"
   ]
 }
 ---
@@ -269,9 +269,9 @@ So:
 - **Compression is allowed. Invention is not.** Turning a §5 STAR+R block into a 6-paragraph `spoken`
   array is the job. Adding a beat that was not in the STAR+R is not.
 - **Rephrasing into spoken voice is allowed** (see [Voice](#voice)). The prep file writes "Judgment
-  moment: leadership wanted headcount instead; you modeled both paths." The board writes "The
-  judgment moment I'd point to: leadership's first instinct was to just add headcount. I modeled
-  both paths against the same target." Same facts, first person, said out loud. That is compilation.
+  moment: the first instinct was to swap carriers; you modeled both options first." The board writes
+  "The judgment moment I'd point to: the reflex in the room was to swap carriers. I modeled both
+  options against the same lane cost." Same facts, first person, said out loud. That is compilation.
 
 **If the prep file lacks something the board needs, report the gap. Do not fill it with plausible
 prose.** Plausible prose is the failure mode. It reads as authoritative precisely because you wrote
@@ -320,13 +320,13 @@ have to compute it, it is already computed.
 `tag` renders **verbatim**. Anything you type there sits next to a derived warning and can silently
 contradict it.
 
-The example board's `definitions` answer is story **#7**. It is reachable from **three** cue rows:
+The example board's `definition` answer is story **#7**. It is reachable from **three** cue rows:
 "Aligning teams that disagreed" (behavioral), "People, alignment, or conflict" (the net), and
 "Influence, driving change, disagreeing up" (the net). Type `"tag": "2 homes · angle it"` onto it and
 the board renders "2 homes" one line above its own derived warning:
 
 ```
-⚠ Story #7 is reachable from 3 cues (Finance vs Sales on the definitions). Tell it ONCE.
+⚠ Story #7 is reachable from 3 cues (Operations vs Procurement on 'on time'). Tell it ONCE.
 ```
 
 The authored count is the one that is wrong, and it goes wrong the moment a cue is added or moved,
@@ -505,8 +505,8 @@ failure mode into a non-event.
   "cues": [
     { "cue": "The stall line + universal opener",         "answer": "blank" },
     { "cue": "Failure, or a call you got wrong",          "answer": "badKpi" },
-    { "cue": "People, alignment, or conflict",            "answer": "definitions" },
-    { "cue": "Influence, driving change, disagreeing up", "answer": "definitions" }
+    { "cue": "People, alignment, or conflict",            "answer": "definition" },
+    { "cue": "Influence, driving change, disagreeing up", "answer": "definition" }
   ] }
 ```
 
@@ -606,7 +606,7 @@ Traps, never-says, and what to land go here, not in `spoken`:
 "notes": [
   "**Never bluff a tool you have not used.** One bluffed answer kills the candidacy; the honest lane wins it.",
   "Name the gap, then reframe to the layer the JD actually asks for.",
-  "**Say it once, calmly, then move on.** Over-explaining reads as defensive."
+  "**Answer it once and move on.** Circling back to it reads as defensive."
 ]
 ```
 
@@ -662,8 +662,8 @@ derived collision warnings. It is the never-say list, and it comes from the prep
 ```json
 "guardrails": [
   "Q3 numbers ONLY. Q4 is not public until the February call",
-  "Never bluff the quoting platform. Name the gap, reframe to the layer above it",
-  "Do not raise comp in this round. It lands in the recruiter back-channel"
+  "Never bluff the TMS. Name the gap, reframe to the layer above it",
+  "Do not raise comp in this round. It belongs with the recruiter"
 ]
 ```
 
@@ -734,8 +734,8 @@ on blocking problems. Its stdout is what you report. Run against the worked exam
 ```
 Northwind Logistics · 1st Interview · round 2 · template hm-round
 15 cues · 12 answers · 6 sections
-  ⚠ Story #4 is reachable from 2 cues (The KPI that paid for the wrong thing). Tell it ONCE.
-  ⚠ Story #7 is reachable from 3 cues (Finance vs Sales on the definitions). Tell it ONCE.
+  ⚠ Story #4 is reachable from 2 cues (The routing rule I shipped without a pilot). Tell it ONCE.
+  ⚠ Story #7 is reachable from 3 cues (Operations vs Procurement on 'on time'). Tell it ONCE.
 ```
 
 **Report the derived collision count back to the user. Always, even when it is zero.** It is the one
@@ -755,10 +755,13 @@ compute by reading the file. Separate the two kinds:
 ```
 
 **If a hero-integrity warning fires, it is the one to read.** It means a cue outside the hero section
-points at the hero's story, so clicking it spends the hero on a behavioral. It reads like this:
+points at the hero's story, so clicking it spends the hero on a behavioral.
+
+**The shipped example does not produce one** — its hero is reachable only from its own cue, which is
+what the line above reports. On a board that *does*, it reads like this:
 
 ```
-⚠ "Getting sellers to do what they didn't want" shares the HERO's story (#1). Using it burns the hero. Prefer another story.
+⚠ "A build you're proud of" shares the HERO's story (#1). Using it burns the hero. Prefer another story.
 ```
 
 Report it separately from the plain collisions. It is a different **kind** of warning, not one more
@@ -784,9 +787,9 @@ Close with a review ask that is specific enough to actually be done:
 > 2. **The panic net's 3 buckets.** Failure to #4, people to #7, influence to #7. If you would
 >    reach for a different story when you blank, tell me and I'll swap it. This is the one section you
 >    use when you cannot think.
-> 3. **Every number, out loud.** $400M, three business units, 90 sellers. They all came from your
+> 3. **Every number, out loud.** $260M, four lanes, eleven carriers. They all came from your
 >    prep file and the story bank, but you are the one saying them.
-> 4. **The guardrails.** Q3 only, never bluff the quoting platform, no comp talk. Anything stale?
+> 4. **The guardrails.** Q3 only, never bluff the TMS, no comp talk. Anything stale?
 >
 > Read the hero aloud once, timed. It is written for 2.5-3 min.
 
@@ -808,9 +811,9 @@ The board is **spoken**, not read. That is the only style rule and everything fo
   time..."`. The user is reading this off the screen while a VP watches their eyes.
 - **`**bold** the landing lines.** The single clause that has to land. Bold is what the eye finds
   when it flicks down mid-sentence, so bold **one thing per paragraph**, not three. Bold the claim,
-  not the setup: **"The data won the argument, not my opinion."**
+  not the setup: **"The model decided it, not the loudest voice in the room."**
 - **`notes` carry traps and warnings**, in the prep file's own blunt register. "Never bluff a tool you
-  have not used." "Say it once, calmly, then move on." "**Only if they raise it.** Don't volunteer
+  have not used." "Answer it once and move on." "**Only if they raise it.** Don't volunteer
   competitor wins unprompted."
 - **Working doc, not a pep talk.** Direct. Specific numbers, verbatim phrases. No corporate filler,
   no encouragement, no "you've got this." Same house style as `modes/cheat-sheet.md` and
@@ -818,7 +821,7 @@ The board is **spoken**, not read. That is the only style rule and everything fo
 - **Generate in the language of the JD** (EN default).
 
 Compression from the prep file's prose into spoken voice is the craft of this mode. §5's
-`**A:** Two moves. First, I made qualification enforceable instead of aspirational...` is already
+`**A:** Two moves. First, I moved measurement to the source...` is already
 almost speakable; the compile turns it into first-person paragraphs, bolds the landing clauses,
 and stops. It does not add a beat.
 
