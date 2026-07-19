@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.16.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.16.0...v1.16.1) (2026-07-19)
+
+
+### Bug Fixes
+
+* **security:** pass git arguments as argv, not interpolated into a shell ([0f82392](https://github.com/michaelinghilterra-creator/trajecktory/commit/0f8239208109412275bec2e5b25ae5aad886c13f))
+
 ## [1.16.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.15.1...v1.16.0) (2026-07-19)
 
 
