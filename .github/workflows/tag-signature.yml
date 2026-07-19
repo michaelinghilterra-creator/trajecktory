@@ -1,0 +1,74 @@
+name: Release tag signature
+
+# Fails when the NEWEST release tag is not signed by a key in trusted-signers.
+#
+# Why this exists, and why it is not part of release.yml:
+#
+# update-system.mjs offers an update only for the highest version tag greater
+# than the local one WHOSE SIGNATURE VERIFIES (findSignedUpdate). An unsigned
+# newest tag therefore does not break an install, it silently freezes it: the
+# updater reports nothing newer and says nothing else. There is no error to
+# notice, which is exactly how v1.11.0 and then v1.16.0 both shipped unsigned
+# while the release workflow reported success.
+#
+# release.yml only emits a ::warning when TAG_SIGNING_SSH_KEY is unset, because
+# the signing key is deliberately kept OFF CI (see the comment there): the key is
+# the root of trust for self-update, and a compromised action holding it could
+# sign a malicious tag, which is the precise attack signing exists to prevent.
+#
+# So the tag is signed by hand after the release PR merges, and the gap this
+# guards appears AFTER a merge, not inside a PR. That rules out both test.yml
+# (runs pre-merge, when the tag does not exist yet) and release.yml (would go red
+# on every single release by design, and a check that always fails is a check
+# nobody reads).
+#
+# A daily schedule leaves a window to sign by hand and turns forgetting into a
+# red build instead of a silent freeze. Run it manually straight after signing to
+# confirm rather than waiting.
+
+on:
+  schedule:
+    - cron: '17 13 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  newest-tag-is-signed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Verify the newest release tag carries a trusted signature
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+
+          # Highest version tag, matching what findSignedUpdate walks. sort -V
+          # orders v1.10.0 above v1.9.0; a lexical sort does not.
+          TAG="$(git tag -l 'v*' | sort -V | tail -1)"
+          if [ -z "${TAG}" ]; then
+            echo "No version tags yet — nothing to verify."
+            exit 0
+          fi
+          echo "Newest release tag: ${TAG}"
+
+          # A lightweight tag is a plain commit ref. It cannot carry a signature
+          # at all, so it fails differently from a bad signature and is worth
+          # naming separately: Release Please creates exactly this, and it is
+          # what shipped unsigned twice.
+          TYPE="$(git cat-file -t "${TAG}")"
+          if [ "${TYPE}" != "tag" ]; then
+            echo "::error title=Newest release tag is unsigned::${TAG} is a lightweight tag (${TYPE}), so it cannot carry a signature. Every anchored install is frozen below it: update-system.mjs only offers a tag whose signature verifies, and reports nothing newer otherwise. Fix: git fetch --tags --force && git tag -s -f ${TAG} \"${TAG}^{commit}\" -m \"trajecktory ${TAG}\" && git push origin ${TAG} --force"
+            exit 1
+          fi
+
+          if ! git -c gpg.ssh.allowedSignersFile=trusted-signers verify-tag "${TAG}"; then
+            echo "::error title=Newest release tag signature does not verify::${TAG} is annotated but its signature is missing, malformed, or made by a key that is not pinned in trusted-signers. Anchored installs will refuse it. Re-sign with the pinned key per docs/RELEASING.md."
+            exit 1
+          fi
+
+          echo "OK — ${TAG} is signed by a key pinned in trusted-signers."
