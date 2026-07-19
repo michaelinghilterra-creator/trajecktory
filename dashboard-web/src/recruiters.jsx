@@ -503,7 +503,7 @@ function RecFirmsView({ firms, onOpen, onCompose, starred, toggleStar, search })
 }
 
 // ─── Activity view ──────────────────────────────────────────────────────────
-function RecActivityView({ recruiters, onBatch, onOpen }) {
+function RecActivityView({ recruiters, onBatch, onOpen, jumpView }) {
   // Use lastTouch as proxy — full per-contact correspondence fetch would be too
   // expensive at 515 contacts. Touched contacts show as feed items with the
   // status as the most recent action.
@@ -512,6 +512,12 @@ function RecActivityView({ recruiters, onBatch, onOpen }) {
     .sort((a, b) => (b.lastTouch || '').localeCompare(a.lastTouch || '')), [recruiters]);
 
   if (touched.length === 0) {
+    // Two distinct empty states. With no recruiters at all, "send a first
+    // outreach" is impossible advice — there is nobody to send it to — and the
+    // real next step is Directory, which is where contacts get imported. The
+    // single generic state used to point everyone at a batch that could not
+    // exist yet.
+    const noContacts = recruiters.length === 0;
     return (
       <div className="fade-up">
         <div className="rec-head">
@@ -523,10 +529,17 @@ function RecActivityView({ recruiters, onBatch, onOpen }) {
         <div className="card" style={{ padding: 0 }}>
           <div className="feed-empty">
             <div className="fe-ico"><RecIcon d={REC_I.clock} size={26} /></div>
-            <div className="fe-title">No activity yet</div>
-            <div className="fe-sub">Every message you send, reply you receive, and meeting you book will stream here as a timeline. Your pipeline is at the starting line. Send a first outreach to light it up.</div>
-            <button className="btn primary" onClick={() => onBatch(null)}>
-              <RecIcon d={REC_I.rocket} size={14} /> Start the recommended batch
+            <div className="fe-title">{noContacts ? 'No recruiters yet' : 'No activity yet'}</div>
+            <div className="fe-sub">
+              {noContacts
+                ? 'This timeline is built from the messages you exchange, so it needs your recruiter list first. Add them in Directory, and every outreach, reply and meeting will stream here automatically.'
+                : 'Every message you send, reply you receive, and meeting you book will stream here as a timeline. Your pipeline is at the starting line. Send a first outreach to light it up.'}
+            </div>
+            <button
+              className="btn primary"
+              onClick={() => (noContacts ? (jumpView && jumpView('directory')) : onBatch(null))}
+            >
+              <RecIcon d={REC_I.rocket} size={14} /> {noContacts ? 'Add recruiters in Directory' : 'Start the recommended batch'}
             </button>
           </div>
         </div>
@@ -766,7 +779,7 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
             const fullName = `${c.first || c.firstName || ''} ${c.last || c.lastName || ''}`.trim() || c.firm;
             const sub = [c.title || c.role, c.firm].filter(Boolean).join(' · ');
             return (
-              <div key={c.id} onClick={() => onOpen(c.id)}
+              <div key={c.id} onClick={() => onOpen(c)}
                 style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto auto', gap: 12, alignItems: 'center',
                   padding: '9px 11px', borderRadius: 9, cursor: 'pointer',
                   background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
@@ -1122,7 +1135,14 @@ window.RecruitersTab = function RecruitersTab({ search } = {}) {
       body: JSON.stringify({ status: 'Sent', lastTouch: new Date().toISOString().slice(0, 10) }),
     }).then(load);
   };
-  const onBatch = (f) => { if (f.contacts[0]) setSelected(f.contacts[0].id); };
+  // `f` may be null: the Activity empty state has no firm to hand over, it just
+  // means "open whoever I should contact first". Dereferencing it threw a
+  // TypeError, and because React does not route event-handler errors to an error
+  // boundary the button simply appeared dead.
+  const onBatch = (f) => {
+    const first = (f && f.contacts && f.contacts[0]) || recruiters[0];
+    if (first) setSelected(first.id);
+  };
   const toggleStar = (id) => setStarred(s => {
     const n = new Set(s);
     n.has(id) ? n.delete(id) : n.add(id);
@@ -1155,7 +1175,7 @@ window.RecruitersTab = function RecruitersTab({ search } = {}) {
           onImported={load}
         />
       )}
-      {view === 'activity' && <RecActivityView recruiters={recruiters} onBatch={onBatch} onOpen={onOpen} />}
+      {view === 'activity' && <RecActivityView recruiters={recruiters} onBatch={onBatch} onOpen={onOpen} jumpView={setView} />}
 
       {selected != null && (
         <window.RecruiterDrawer
