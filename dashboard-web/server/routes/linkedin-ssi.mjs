@@ -2,21 +2,83 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { LINKEDIN_SSI_DIR } from '../config.mjs';
-import { ensureLikedinSsiDir } from '../lib/linkedin-ssi.mjs';
+import {
+  ensureLikedinSsiDir,
+  readInfluencers, writeInfluencers, nextInfluencerId, normalizeInfluencer,
+  parseCsvInfluencers, INFLUENCERS_TEMPLATE_CSV,
+} from '../lib/linkedin-ssi.mjs';
 
 export const router = express.Router();
 
 // ── LinkedIn SSI Management ────────────────────────────────────────────────────
 
+// `currentSsi` is null until the user records a week. It used to default to 39,
+// which meant a brand-new install rendered a confident 39/100 gauge for a
+// measurement nobody had taken. A score you did not measure is worse than no
+// score: it is the one number on the tab people would act on.
 router.get('/api/linkedin-ssi/summary', (req, res) => {
   try {
     ensureLikedinSsiDir();
     const trackerPath = path.join(LINKEDIN_SSI_DIR, 'tracker.json');
     if (!fs.existsSync(trackerPath)) {
-      return res.json({ currentSsi: 39, targetSsi: 60, weeks: [] });
+      return res.json({ currentSsi: null, targetSsi: 60, weeks: [] });
     }
     const data = JSON.parse(fs.readFileSync(trackerPath, 'utf8'));
+    if (data.currentSsi === undefined) data.currentSsi = null;
     res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/linkedin-ssi/influencers/template — CSV starter, same "Excel floor"
+// idea as the TA Outreach and Recruiters importers.
+router.get('/api/linkedin-ssi/influencers/template', (req, res) => {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="linkedin-influencers-template.csv"');
+  res.send(INFLUENCERS_TEMPLATE_CSV);
+});
+
+// POST /api/linkedin-ssi/influencers — create one influencer.
+router.post('/api/linkedin-ssi/influencers', (req, res) => {
+  try {
+    const list = readInfluencers();
+    const created = normalizeInfluencer(req.body || {}, nextInfluencerId(list));
+    if (!created) return res.status(400).json({ error: 'A name is required.' });
+    list.push(created);
+    writeInfluencers(list);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/linkedin-ssi/influencers/import { csv } — bulk create.
+// Duplicates are skipped on name, case-insensitively, so re-importing the same
+// sheet after adding a few rows does not double the list.
+router.post('/api/linkedin-ssi/influencers/import', (req, res) => {
+  try {
+    const csv = req.body && req.body.csv;
+    if (!csv || !String(csv).trim()) return res.status(400).json({ error: 'A "csv" body is required.' });
+    let rows;
+    try { rows = parseCsvInfluencers(csv); }
+    catch (e) { return res.status(400).json({ error: e.message }); }
+    if (!rows.length) return res.status(400).json({ error: 'No valid rows found (need a header row plus at least one row with a name).' });
+
+    const list = readInfluencers();
+    const seen = new Set(list.map(i => String(i.name || '').trim().toLowerCase()));
+    let imported = 0, duplicates = 0;
+    for (const row of rows) {
+      const key = row.name.trim().toLowerCase();
+      if (seen.has(key)) { duplicates++; continue; }
+      const created = normalizeInfluencer(row, nextInfluencerId(list));
+      if (!created) continue;
+      list.push(created);
+      seen.add(key);
+      imported++;
+    }
+    writeInfluencers(list);
+    res.json({ ok: true, parsed: rows.length, imported, duplicates, influencers: list });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -194,14 +256,28 @@ router.post('/api/linkedin-ssi/tracker', (req, res) => {
   try {
     ensureLikedinSsiDir();
     const trackerPath = path.join(LINKEDIN_SSI_DIR, 'tracker.json');
-    let data = { currentSsi: 39, targetSsi: 60, weeks: [] };
+    let data = { currentSsi: null, targetSsi: 60, weeks: [] };
     if (fs.existsSync(trackerPath)) {
       data = JSON.parse(fs.readFileSync(trackerPath, 'utf8'));
     }
+    if (!Array.isArray(data.weeks)) data.weeks = [];
     // Update week. Treat null/undefined/'' as "not set"; 0 is a valid score.
     const pillar = (v) => (v === null || v === undefined || v === '') ? null : parseInt(v, 10);
-    const week = data.weeks.find(w => w.weekNum === req.body.weekNum);
+    // Upsert. This used to only update a week that already existed, so on a fresh
+    // install (weeks: []) every save silently wrote the file back unchanged and
+    // the tracker could never be started at all.
+    let week = data.weeks.find(w => w.weekNum === req.body.weekNum);
+    if (!week && Number.isFinite(Number(req.body.weekNum))) {
+      week = {
+        weekNum: Number(req.body.weekNum),
+        weekOf: String(req.body.weekOf || '').slice(0, 10),
+        brand: null, findPeople: null, engageInsights: null, relationships: null, notes: '',
+      };
+      data.weeks.push(week);
+      data.weeks.sort((a, b) => a.weekNum - b.weekNum);
+    }
     if (week) {
+      if (req.body.weekOf) week.weekOf = String(req.body.weekOf).slice(0, 10);
       week.brand = pillar(req.body.brand);
       week.findPeople = pillar(req.body.findPeople);
       week.engageInsights = pillar(req.body.engageInsights);
