@@ -290,10 +290,22 @@ Default modes are in `modes/` (English). Additional language-specific modes are 
 
 ## CI/CD and Quality
 
-- **GitHub Actions** run on every PR: `test-all.mjs` (63+ checks), auto-labeler (risk-based: 🔴 core-architecture, ⚠️ agent-behavior, 📄 docs), welcome bot for first-time contributors
-- **Branch protection** on `main`: status checks must pass before merge. No direct pushes to main (except admin bypass).
-- **Dependabot** monitors npm, Go modules, and GitHub Actions for security updates
-- **Contributing process**: issue first → discussion → PR with linked issue → CI passes → maintainer review → merge
+- **GitHub Actions** run on every PR: `test-all.mjs` (97 checks), CodeQL, dependency review,
+  auto-labeler (risk-based: 🔴 core-architecture, ⚠️ agent-behavior, 📄 docs), welcome bot for
+  first-time contributors
+- **`main` is protected** by the `main-guard` ruleset, which enforces four rules:
+  a pull request is **required** (0 approvals, because a solo maintainer cannot approve their own
+  PR and requiring one would deadlock every merge); the `test`, `dependency-review` and `CodeQL`
+  checks must pass; no force-push; no deletion. **The bypass list is empty**, so there is no admin
+  override — an emergency direct push means disabling the ruleset deliberately, which is visible,
+  rather than quietly using a standing exemption.
+- **Dependabot** security updates are on. Routine version-bump PRs are deliberately off, so
+  Dependabot opens a PR for a *vulnerability*, not for every release.
+- **Contributing process**: issue first → discussion → PR with linked issue → CI passes → merge
+
+> Keep this section true. It described protection the repo did not have — status checks that were
+> not required and an admin bypass that did not exist — which is worse than describing none,
+> because it invites trusting a guard that is not there.
 
 ## Versioning & Releases
 
@@ -318,11 +330,19 @@ changelog when that PR is **merged**. The bump size comes from
 ignored by Release Please — it will neither bump the version nor appear in the changelog.
 Tags are clean `vMAJOR.MINOR.PATCH` (e.g. `v1.7.33`); the baseline `v1.7.32` tag anchors history.
 
-> **One-time setup the repo owner must finish:** add a `RELEASE_PLEASE_TOKEN` repo secret
-> (fine-grained PAT or GitHub App token with Contents + Pull-requests write) and enable
-> Settings → Actions → "Allow GitHub Actions to create and approve pull requests". Until then
-> the workflow falls back to `GITHUB_TOKEN`, which opens the release PR but cannot trigger the
-> branch-protection status checks needed to merge it.
+> **Release authentication is configured.** `RELEASE_PLEASE_TOKEN` is a fine-grained PAT scoped to
+> this repo with Contents + Pull-requests write, and `release.yml` reads
+> `secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN`.
+>
+> **Do NOT "fix" this by enabling Settings → Actions → "Allow GitHub Actions to create and approve
+> pull requests".** That grants every workflow in the repo standing authority to open and approve
+> PRs, and it does not actually work here: a PR opened by `GITHUB_TOKEN` does not trigger other
+> workflows, so the required `test` / `dependency-review` / `CodeQL` checks never run and the
+> release PR can never satisfy `main-guard`. The PAT avoids both problems — its PRs do trigger
+> checks, and no ambient permission is granted. That checkbox is deliberately left OFF.
+>
+> The token expires. When it does, releases fail with an auth error rather than an obvious
+> "expired" message, so re-issue it with the same name and scopes.
 
 ## Community and Governance
 
