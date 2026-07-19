@@ -62,7 +62,12 @@ function check(file, ids) {
   const warns = [];
   const raw = fs.readFileSync(file, 'utf8');
 
-  const m = raw.match(/^---\n([\s\S]*?)\n---/);
+  // \r?\n, not \n: git checks tracked files out as CRLF wherever core.autocrlf is
+  // on, which is the Windows default and this project's primary platform. An
+  // LF-only anchor reports "No JSON frontmatter" for a file whose frontmatter is
+  // perfectly well formed. CI runs on Linux and checks out LF, so this failed on
+  // Windows only and would never have shown up in a green pipeline.
+  const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return { errs: ['No JSON frontmatter (expected --- ... --- at the top).'], warns };
 
   let d;
