@@ -130,23 +130,31 @@ function LinkedInSSITab() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/linkedin-ssi/summary').then(r => r.json()).catch(e => { console.error('Summary fetch:', e); return { currentSsi: 39, targetSsi: 60, weeks: [] }; }),
+      fetch('/api/linkedin-ssi/summary').then(r => r.json()).catch(e => { console.error('Summary fetch:', e); return { currentSsi: null, targetSsi: 60, weeks: [] }; }),
       fetch('/api/linkedin-ssi/influencers').then(r => r.json()).catch(e => { console.error('Influencers fetch:', e); return []; }),
       fetch('/api/linkedin-ssi/engagement-log').then(r => r.json()).catch(e => { console.error('Log fetch:', e); return []; })
     ]).then(([ssi, infl, log]) => {
-      // Normalize data: map API names to design spec names
+      // Normalize data: map API names to design spec names.
+      // score and prevScore are null until the user has actually recorded weeks.
+      // They used to fall back to 39 and a literal 35, so a fresh install showed a
+      // 39/100 gauge and a green "+4 this wk" for a measurement nobody had taken.
+      const weeks = (ssi.weeks || []).map(w => ({
+        wk: w.weekNum,
+        date: w.weekOf,
+        brand: w.brand,
+        people: w.findPeople,
+        engage: w.engageInsights,
+        rel: w.relationships
+      }));
+      const totals = weeks
+        .filter(w => w.brand != null && w.people != null && w.engage != null && w.rel != null)
+        .map(w => w.brand + w.people + w.engage + w.rel);
       const normalized = {
-        score: ssi.currentSsi || 39,
+        score: (ssi.currentSsi === null || ssi.currentSsi === undefined) ? null : ssi.currentSsi,
         target: ssi.targetSsi || 60,
-        weeks: (ssi.weeks || []).map(w => ({
-          wk: w.weekNum,
-          date: w.weekOf,
-          brand: w.brand,
-          people: w.findPeople,
-          engage: w.engageInsights,
-          rel: w.relationships
-        })),
-        prevScore: 35
+        weeks,
+        // Only meaningful with two recorded weeks to compare.
+        prevScore: totals.length >= 2 ? totals[totals.length - 2] : null,
       };
       setSsiData(normalized);
       setInfluencers(infl);
@@ -234,33 +242,71 @@ function LinkedInSSITab() {
                 <div className="card-head">
                   <div className="card-title"><span className="dot" />LinkedIn SSI Score</div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", padding: "6px 0 2px" }}>
-                  <div style={{ position: "relative" }}>
-                    <RadialGauge value={ssiData?.score || 0} max={100} target={ssiData?.target || 60} size={200} stroke={15} />
-                    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                      <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 52, lineHeight: 1, color: "var(--accent-2)" }}>{ssiData?.score || 0}</div>
-                      <div style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--text-mute)", letterSpacing: ".06em" }}>/ 100</div>
-                    </div>
-                  </div>
-                </div>
+                {(() => {
+                  // Everything below is gated on an actually-recorded score. The
+                  // gauge, the weekly delta and the sparkline all used to render
+                  // from hardcoded fallbacks, so a fresh install showed a measured
+                  // number and a week-on-week gain that had never happened.
+                  const hasScore = ssiData?.score != null;
+                  const target = ssiData?.target || 60;
+                  const delta = (hasScore && ssiData?.prevScore != null) ? ssiData.score - ssiData.prevScore : null;
+                  const totals = (ssiData?.weeks || [])
+                    .filter(w => w.brand != null && w.people != null && w.engage != null && w.rel != null)
+                    .map(w => w.brand + w.people + w.engage + w.rel);
+                  return (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", padding: "6px 0 2px" }}>
+                        <div style={{ position: "relative" }}>
+                          <RadialGauge value={hasScore ? ssiData.score : 0} max={100} target={target} size={200} stroke={15} />
+                          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                            {hasScore ? (
+                              <>
+                                <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 52, lineHeight: 1, color: "var(--accent-2)" }}>{ssiData.score}</div>
+                                <div style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--text-mute)", letterSpacing: ".06em" }}>/ 100</div>
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 19, lineHeight: 1.2, color: "var(--text-mute)", textAlign: "center" }}>Not measured</div>
+                                <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-mute)", letterSpacing: ".06em", marginTop: 3 }}>yet</div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
 
-                <div className="divider" />
+                      <div className="divider" />
 
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-mute)", letterSpacing: ".1em" }}>TARGET {ssiData?.target || 60}</span>
-                      <span className="pill green"><span className="d" />+{(ssiData?.score || 0) - (ssiData?.prevScore || 0)} this wk</span>
-                    </div>
-                    <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-dim)" }}>
-                      <span style={{ color: "var(--accent-2)" }}>{Math.round(((ssiData?.score || 0) / (ssiData?.target || 60)) * 100)}%</span> to goal · {(ssiData?.target || 60) - (ssiData?.score || 0)} pts to go
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "var(--text-mute)", letterSpacing: ".12em", marginBottom: 2 }}>LAST 3 WEEKS</div>
-                    <Sparkline data={[ssiData?.prevScore || 35, ...((ssiData?.weeks || []).filter(w => w.brand != null).slice(-2).map(w => w.brand + w.people + w.engage + w.rel))]} w={130} h={34} />
-                  </div>
-                </div>
+                      {hasScore ? (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-mute)", letterSpacing: ".1em" }}>TARGET {target}</span>
+                              {delta != null && (
+                                <span className={"pill " + (delta >= 0 ? "green" : "red")}><span className="d" />{delta >= 0 ? "+" : ""}{delta} this wk</span>
+                              )}
+                            </div>
+                            <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-dim)" }}>
+                              <span style={{ color: "var(--accent-2)" }}>{Math.round((ssiData.score / target) * 100)}%</span> to goal &middot; {Math.max(0, target - ssiData.score)} pts to go
+                            </div>
+                          </div>
+                          {totals.length >= 2 && (
+                            <div style={{ textAlign: "right" }}>
+                              <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "var(--text-mute)", letterSpacing: ".12em", marginBottom: 2 }}>LAST 3 WEEKS</div>
+                              <Sparkline data={totals.slice(-3)} w={130} h={34} />
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 11.5, color: "var(--text-mute)", lineHeight: 1.7 }}>
+                          Your SSI is a score LinkedIn calculates, so trajecktory cannot read it for
+                          you. Open your SSI page on LinkedIn, then record the four pillar scores under{" "}
+                          <b>Weekly Tracker</b>. This gauge starts tracking from your first entry, and
+                          shows a week-on-week trend once you have two.
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               {(() => {
@@ -405,6 +451,47 @@ const initialsOf = (name) =>
 
 function InfluencersView({ influencers, setInfluencers, onOpen }) {
   const [filter, setFilter] = useState("all");
+  // Adding people used to be impossible from the UI: there was no create route and
+  // no form, so the only way to populate this tab was to hand-author
+  // data/linkedin-ssi/influencers.json.
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ name: "", role: "", tier: "local", track: "", location: "", linkedin: "", whyFollow: "" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const submitNew = async () => {
+    if (!draft.name.trim() || busy) return;
+    setBusy(true); setMsg("");
+    try {
+      const r = await window.tjkMutate("/api/linkedin-ssi/influencers", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft),
+      });
+      const list = await r.json();
+      if (!Array.isArray(list)) throw new Error(list.error || "Could not add.");
+      setInfluencers(list);
+      setDraft({ name: "", role: "", tier: "local", track: "", location: "", linkedin: "", whyFollow: "" });
+      setAdding(false);
+      setMsg("Added.");
+    } catch (e) { setMsg(e.message || "Could not add."); }
+    finally { setBusy(false); }
+  };
+
+  const importCsv = async (file) => {
+    if (!file || busy) return;
+    setBusy(true); setMsg("");
+    try {
+      const csv = await file.text();
+      const r = await window.tjkMutate("/api/linkedin-ssi/influencers/import", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ csv }),
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.error || "Import failed.");
+      if (Array.isArray(d.influencers)) setInfluencers(d.influencers);
+      setMsg(`Imported ${d.imported}${d.duplicates ? `, ${d.duplicates} duplicates skipped` : ""}.`);
+    } catch (e) { setMsg(e.message || "Could not read the file."); }
+    finally { setBusy(false); }
+  };
+
   // Default sort surfaces the highest-value contacts that still need a motion.
   const [sortKey, setSortKey] = useState("priority");
   const [sortDir, setSortDir] = useState("asc");
@@ -474,10 +561,50 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
       <div className="card padded-lg">
         <div className="card-head">
           <span className="card-title">Influencers</span>
-          <span className="card-meta mono">
-            {shown.length} of {influencers.length} · {influencers.filter(i => i.following).length} followed
-          </span>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+            {msg && <span className="mono" style={{ fontSize: 10.5, color: "var(--text-mute)" }}>{msg}</span>}
+            <span className="card-meta mono">
+              {shown.length} of {influencers.length} · {influencers.filter(i => i.following).length} followed
+            </span>
+            <a className="btn" href="/api/linkedin-ssi/influencers/template" title="Download the CSV template (name, role, track, tier, location, linkedin, ...)">Template</a>
+            <label className="btn" style={{ cursor: busy ? "default" : "pointer" }} title="Bulk-import influencers from a CSV file">
+              {busy ? "Working…" : "Import CSV"}
+              <input type="file" accept=".csv,text/csv" style={{ display: "none" }} disabled={busy}
+                onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; importCsv(f); }} />
+            </label>
+            <button className="btn primary" onClick={() => setAdding(a => !a)}>{adding ? "Cancel" : "+ Add influencer"}</button>
+          </div>
         </div>
+
+        {adding && (
+          <div className="card" style={{ padding: "12px 14px", margin: "6px 0 12px" }}>
+            <div className="mono" style={{ fontSize: 10.5, color: "var(--text-mute)", letterSpacing: ".08em", marginBottom: 9 }}>NEW INFLUENCER</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 9 }}>
+              <input className="inp" placeholder="Name (required)" value={draft.name}
+                onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
+                onKeyDown={e => { if (e.key === "Enter") submitNew(); }} autoFocus />
+              <input className="inp" placeholder="Role, e.g. VP of Revenue Operations" value={draft.role}
+                onChange={e => setDraft(d => ({ ...d, role: e.target.value }))} />
+              <input className="inp" placeholder="Track, e.g. revops" value={draft.track}
+                onChange={e => setDraft(d => ({ ...d, track: e.target.value }))} />
+              <input className="inp" placeholder="Tier, e.g. local" value={draft.tier}
+                onChange={e => setDraft(d => ({ ...d, tier: e.target.value }))} />
+              <input className="inp" placeholder="Location" value={draft.location}
+                onChange={e => setDraft(d => ({ ...d, location: e.target.value }))} />
+              <input className="inp" placeholder="LinkedIn profile URL" value={draft.linkedin}
+                onChange={e => setDraft(d => ({ ...d, linkedin: e.target.value }))} />
+            </div>
+            <input className="inp" style={{ marginTop: 9, width: "100%" }} placeholder="Why follow them? (what they post about, and your angle)"
+              value={draft.whyFollow} onChange={e => setDraft(d => ({ ...d, whyFollow: e.target.value }))} />
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+              <button className="btn primary" onClick={submitNew} disabled={!draft.name.trim() || busy}>{busy ? "Saving…" : "Save influencer"}</button>
+              <span style={{ fontSize: 11, color: "var(--text-mute)" }}>
+                Only the name is required. The rest sharpens the drafts Claude writes for you later,
+                so it is worth filling in when you know it.
+              </span>
+            </div>
+          </div>
+        )}
 
         <div style={{ display: "flex", alignItems: "center", margin: "4px 0 10px", gap: 12, flexWrap: "wrap" }}>
           <div className="chips">
@@ -509,7 +636,19 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
             </thead>
             <tbody>
               {shown.length === 0 && (
-                <tr><td colSpan={cols.length}><div className="no-data" style={{ padding: 40, textAlign: "center" }}>No influencers in this tier.</div></td></tr>
+                <tr><td colSpan={cols.length}><div className="no-data" style={{ padding: 40, textAlign: "center", lineHeight: 1.7 }}>
+                  {influencers.length === 0 ? (
+                    <>
+                      No influencers yet.<br />
+                      <span style={{ fontSize: 11.5, color: "var(--text-mute)" }}>
+                        These are the people whose posts you want to show up under. Add a few with
+                        <b> + Add influencer</b>, or import a list with <b>Import CSV</b>. Everything
+                        else on this tab (your activity log, the AI drafts, your weekly score) is
+                        built from this list, so it is the place to start.
+                      </span>
+                    </>
+                  ) : "No influencers in this tier."}
+                </div></td></tr>
               )}
               {shown.map((p) => {
                 const tm = tierMeta(p.tier);
@@ -720,12 +859,29 @@ function WeeklyView({ weeks, target, setSsiData }) {
   ];
   const recordedCount = (weeks || []).filter((w) => w.brand != null).length;
 
+  // On a fresh install `weeks` is empty, which left the dropdown with no options,
+  // selectedWk stuck at null, and Save permanently disabled: the tracker could
+  // never be started at all. Offer this week plus the next eleven so there is
+  // always something to record against. Real weeks win as soon as any exist.
+  const weekOptions = useMemo(() => {
+    if (weeks && weeks.length) return weeks;
+    const monday = new Date();
+    monday.setHours(0, 0, 0, 0);
+    monday.setDate(monday.getDate() - ((monday.getDay() || 7) - 1));
+    const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(d.getDate() + i * 7);
+      return { wk: i + 1, date: ymd(d), brand: null, people: null, engage: null, rel: null };
+    });
+  }, [weeks]);
+
   // Default the form to the first un-recorded week; fall back to the first week.
   const defaultWeekNum = useMemo(() => {
-    if (!weeks || !weeks.length) return null;
-    const firstEmpty = weeks.find((w) => w.brand == null);
-    return (firstEmpty || weeks[0]).wk;
-  }, [weeks]);
+    if (!weekOptions.length) return null;
+    const firstEmpty = weekOptions.find((w) => w.brand == null);
+    return (firstEmpty || weekOptions[0]).wk;
+  }, [weekOptions]);
 
   const [selectedWk, setSelectedWk] = useState(defaultWeekNum);
   const [form, setForm] = useState({ brand: "", people: "", engage: "", rel: "", notes: "" });
@@ -741,7 +897,7 @@ function WeeklyView({ weeks, target, setSsiData }) {
   // Prefill the form whenever the selected week changes (preserves existing values for re-edit)
   useEffect(() => {
     if (selectedWk == null) return;
-    const w = (weeks || []).find((x) => x.wk === selectedWk);
+    const w = weekOptions.find((x) => x.wk === selectedWk);
     if (!w) return;
     setForm({
       brand: w.brand != null ? String(w.brand) : "",
@@ -767,6 +923,8 @@ function WeeklyView({ weeks, target, setSsiData }) {
     try {
       const payload = {
         weekNum: selectedWk,
+        // Carried so the server can create the week when it does not exist yet.
+        weekOf: (weekOptions.find((w) => w.wk === selectedWk) || {}).date || "",
         brand: form.brand === "" ? null : Number(form.brand),
         findPeople: form.people === "" ? null : Number(form.people),
         engageInsights: form.engage === "" ? null : Number(form.engage),
@@ -780,17 +938,23 @@ function WeeklyView({ weeks, target, setSsiData }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
-      // Renormalize the server's response into the shape the page uses (matches initial fetch)
+      // Renormalize the server's response into the shape the page uses. Must match
+      // the initial fetch exactly, including the null handling: falling back to 39
+      // and 35 here would reintroduce the invented score on the very first save.
+      const nextWeeks = (data.weeks || []).map((w) => ({
+        wk: w.weekNum, date: w.weekOf,
+        brand: w.brand, people: w.findPeople,
+        engage: w.engageInsights, rel: w.relationships,
+        notes: w.notes,
+      }));
+      const nextTotals = nextWeeks
+        .filter((w) => w.brand != null && w.people != null && w.engage != null && w.rel != null)
+        .map((w) => w.brand + w.people + w.engage + w.rel);
       const normalized = {
-        score: data.currentSsi || 39,
+        score: (data.currentSsi === null || data.currentSsi === undefined) ? null : data.currentSsi,
         target: data.targetSsi || 60,
-        weeks: (data.weeks || []).map((w) => ({
-          wk: w.weekNum, date: w.weekOf,
-          brand: w.brand, people: w.findPeople,
-          engage: w.engageInsights, rel: w.relationships,
-          notes: w.notes,
-        })),
-        prevScore: 35,
+        weeks: nextWeeks,
+        prevScore: nextTotals.length >= 2 ? nextTotals[nextTotals.length - 2] : null,
       };
       setSsiData(normalized);
       setSaveOk(true);
@@ -826,7 +990,7 @@ function WeeklyView({ weeks, target, setSsiData }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div className="field"><label>Week</label>
               <select className="sel" value={selectedWk ?? ""} onChange={(e) => setSelectedWk(Number(e.target.value))}>
-                {(weeks || []).map((w) => (
+                {weekOptions.map((w) => (
                   <option key={w.wk} value={w.wk}>
                     Week {w.wk} · {w.date}{w.brand != null ? " · ✓ recorded" : ""}
                   </option>
@@ -871,7 +1035,7 @@ function WeeklyView({ weeks, target, setSsiData }) {
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
-        {(weeks || []).map((w, i) => {
+        {weekOptions.map((w, i) => {
           const recorded = w.brand != null;
           const total = recorded ? w.brand + w.people + w.engage + w.rel : null;
           return (
