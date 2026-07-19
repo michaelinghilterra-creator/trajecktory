@@ -1,7 +1,8 @@
 # Interview Prep — {Company} | {Role} | Round {N}: Hiring Manager
 
 > **Template:** `interview-cheatsheet-hm-round` (Hiring manager / functional-leader round)
-> **Filename convention:** `interview-prep/{Company Folder}/{company-slug}-round-{N}-{hm-firstname-lastname}.md` (one subfolder per company; create it if missing)
+> **Filename convention:** `interview-prep/{Company Folder}/{company-slug}-round-{N}-{stage-descriptor}.md` (one subfolder per company; create it if missing)
+> **A descriptor is a STAGE, never a person.** Use `hiring-manager`, `panel`, `final-loop` — not the interviewer's name. See `modes/interview-prep.md`; putting a real person's name in a path has already happened once in this project.
 
 **Stage:** Round {N} — Hiring Manager
 **Hiring manager:** {Name}, {Title} — [LinkedIn]({URL})
@@ -159,7 +160,7 @@ The HM is evaluating:
 - What's a recent decision you made in this function that you'd make differently with hindsight?
 
 **Save for the final loop (don't ask in HM round):**
-- Comp specifics — base/bonus/equity/grant refresh — those land in the recruiter back-channel
+- Comp specifics — base/bonus/equity/grant refresh — those belong with the recruiter, not this round
 - Reference questions about specific team members — wait for the offer stage
 
 ---

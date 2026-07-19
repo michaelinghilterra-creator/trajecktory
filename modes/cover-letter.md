@@ -58,7 +58,7 @@ Follow the **cover letter structure from _profile.md** exactly. Under 350 words 
 2. **Who I am + what I owned** (2–3 sentences) — the exit narrative bridge from _profile.md; establish scope without naming the most recent employer
 3. **Achievement 1** (2–3 sentences) — the recommended case study from Block F, quantified; matches the role's primary need from Block E
 4. **Achievement 2 or company connection** (2–3 sentences) — second proof point from Block B, OR something specific about this company that maps to your experience
-5. **What the resume doesn't show** (1–2 sentences) — the cross-cutting advantage from _profile.md ("bilingual: data and sales"); adapt to the archetype
+5. **What the resume doesn't show** (1–2 sentences) — the cross-cutting advantage as stated in _profile.md; adapt to the archetype
 6. **Direct close** (1 sentence) — confident, specific; never "I look forward to hearing from you"
 
 **Adaptive hook by archetype (read from report Block A):**

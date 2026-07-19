@@ -121,7 +121,7 @@ Negative values render as red bars. `max` is per-dimension (usually 5).
 "sellSenior": [
   {
     "claim": "Open with scope, not title",
-    "proof": "Owned carrier analytics across EMEA + LATAM — 9 dashboards, 3 lanes, $400M managed spend",
+    "proof": "Owned carrier analytics across EMEA + LATAM — 22 dashboards, 4 lanes, $260M managed spend",
     "phrase": "The title was Director; the scope was VP."
   }
 ]
@@ -170,7 +170,7 @@ Negative values render as red bars. `max` is per-dimension (usually 5).
 "redFlagQs": [
   { "q": "You're a Director. Why apply for VP?",
     "behind": "Recruiter wants title-vs-scope honesty",
-    "a": "Scope, not title. I owned carrier analytics for $400M of managed spend..." }
+    "a": "Scope, not title. I owned carrier analytics for $260M of managed spend..." }
 ]
 ```
 
@@ -180,7 +180,7 @@ Negative values render as red bars. `max` is per-dimension (usually 5).
   "tier": "High Confidence",
   "conclusion": "Verified Series C, posting freshness confirmed",
   "signals": [
-    { "signal": "Description quality", "finding": "States $250K–$350K range, names reporting line", "good": true },
+    { "signal": "Description quality", "finding": "States $120K–$165K range, names reporting line", "good": true },
     { "signal": "Reposting detection", "finding": "First appearance in scan-history.tsv", "good": true }
   ]
 }
