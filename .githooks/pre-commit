@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# pre-commit: refuse a commit whose FILES carry personal data.
+#
+# The companion commit-msg hook guards the message. This guards the content, which
+# was the larger hole: every leak in the 2026-07 incident was a file, and a file was
+# only ever caught if somebody remembered to run the checker. Structural beats
+# remembering.
+#
+# Scans the STAGED content (`--staged`), not the working tree: it is the thing about
+# to be committed, and it keeps the hook at a few hundred ms instead of the ~7s a
+# full-tree scan costs. A hook that slow gets switched off, which is the same as
+# not having one.
+#
+# Enable (once per clone; git will not run hooks from a tracked dir on its own):
+#   git config core.hooksPath .githooks
+#
+# Bypass, when you are certain the finding is wrong:
+#   git commit --no-verify
+#
+# On a clone without the gitignored sources the checker derives no terms and passes,
+# which is correct: a contributor with none of the owner's data has none to leak.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+[ -f "$ROOT/verify-no-pii.mjs" ] || exit 0
+command -v node >/dev/null 2>&1 || exit 0
+
+# Any non-zero blocks: 1 = data found, 2 = the checker could not derive its terms and
+# therefore cannot certify anything. "I cannot check" is not "it is clean."
+if ! node "$ROOT/verify-no-pii.mjs" --staged; then
+  echo ""
+  echo "pre-commit: refusing this commit — personal data in the staged files (see above)."
+  echo "Replace the real value with invented content, or re-run with --no-verify if"
+  echo "this is genuinely a false positive."
+  exit 1
+fi

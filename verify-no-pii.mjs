@@ -32,6 +32,12 @@ const MESSAGES = msgIdx !== -1;
 const MSG_RANGE = MESSAGES && argv[msgIdx + 1] && !argv[msgIdx + 1].startsWith('--') ? argv[msgIdx + 1] : null;
 const msgFileIdx = argv.indexOf('--msg-file');
 const MSG_FILE = msgFileIdx !== -1 ? argv[msgFileIdx + 1] : null;
+// --staged  scan only the files being committed, reading their STAGED content.
+// This is the pre-commit hook's mode: a full-tree scan takes seconds (it correlates
+// every file against hundreds of tracker rows) and a hook that slow gets disabled.
+// It is also the more correct question at commit time — what is about to be
+// committed, not what happens to be sitting in the working tree.
+const STAGED = argv.includes('--staged');
 
 const hits = [];
 const leak = (file, why, detail) => hits.push({ file, why, detail });
@@ -54,8 +60,20 @@ function walk(dir) {
 }
 function targets() {
   if (PAYLOAD) return walk(PAYLOAD);
+  if (STAGED) {
+    // Added/Copied/Modified only: a deletion cannot introduce data.
+    return execSync('git diff --cached --name-only --diff-filter=ACM', { encoding: 'utf8', maxBuffer: 1 << 26, cwd: ROOT })
+      .split('\n').filter(Boolean).map((f) => join(ROOT, f));
+  }
   return execSync('git ls-files', { encoding: 'utf8', maxBuffer: 1 << 26, cwd: ROOT })
     .split('\n').filter(Boolean).map((f) => join(ROOT, f));
+}
+
+// In --staged mode read the INDEX copy, not the working tree: with a partially
+// staged file the two differ, and the index is what the commit will contain.
+function readTarget(abs, rel) {
+  if (!STAGED) { try { return readFileSync(abs); } catch { return null; } }
+  try { return execSync(`git show ":${rel}"`, { cwd: ROOT, maxBuffer: 1 << 26 }); } catch { return null; }
 }
 
 // Files where the maintainer's own contact/attribution legitimately appears.
@@ -475,7 +493,8 @@ for (const abs of files) {
     continue;
   }
 
-  let buf; try { buf = readFileSync(abs); } catch { continue; }
+  const buf = readTarget(abs, rel);
+  if (!buf) continue;
 
   // Binary content is not scannable as text and must not be treated as if it were.
   // A PNG stores its pixels zlib-compressed, so rendered text never appears as
