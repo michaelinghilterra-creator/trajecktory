@@ -44,19 +44,23 @@ does not load at all.
 **Read it before you emit anything.** Every rule below is that spec applied to the write side; the
 spec wins any disagreement.
 
-**The worked example. Read it before you write. It is the format, not an illustration:**
+**The worked examples. Read the one matching your template before you write. They are the format,
+not an illustration:**
 
 | Example | Template | Shape |
 |---|---|---|
 | [`templates/runsheet-example.run.md`](../templates/runsheet-example.run.md) | `hm-round` | 15 cues, 12 answers, 6 sections, hero, mandatory panic net, 2 derived collisions |
+| [`templates/runsheet-example-screen.run.md`](../templates/runsheet-example-screen.run.md) | `screen` | 18 cues, 17 answers, 6 sections, **no hero**, mandatory panic net, 1 derived collision |
 
-It is **abridged on purpose**: a real `hm-round` runs ~40-45 chronology cues (Step 3), where the
-example runs 11 plus the 4-cue net. It demonstrates the shape, the key indirection, and the derived
-collisions in a file you can read in one sitting. Do not read its size as the target.
+The `hm-round` one is **abridged on purpose**: a real one runs ~40-45 chronology cues (Step 3),
+where the example runs 11 plus the 4-cue net. It demonstrates the shape, the key indirection, and
+the derived collisions in a file you can read in one sitting. Do not read its size as the target.
+The `screen` one is full size, because a screen board really is that small.
 
-**The `screen` shape has no shipped file.** It is the same schema with a different layout: **no
-hero**, ~12-16 chronology cues plus the mandatory 4-cue net across 5-6 sections, and panels for
-comp/location/timing, soft spots, and questions to ask. Step 3 and Step 4 specify it in full.
+Both are the same fictional application one round apart (Northwind Logistics #417), so the contrast
+between the shapes is legible side by side: the screen carries **no hero** and spends its panels on
+comp/location/timing, soft spots and questions to ask, while the hm-round carries the hero the
+screen deliberately saved. Step 3 and Step 4 specify both in full.
 
 The input shape you will be reading is the **prose prep file** that sits beside the run sheet as its
 sibling (`{interview_prep_dir}/{Company Folder}/{company-slug}-round-{N}-{descriptor}.md`): the
@@ -385,8 +389,8 @@ Then fill the header fields:
 `session.rule` is the line the user reads when they look up. **Take it from the prep file's mental
 model section, do not compose a new one.** An hm-round whose §1 says "one hero story, not three"
 earns the example's rule: "One story per job. Click a cue. Eyes up." A screen whose §1 posture is a
-reconnection rather than an audition earns the opposite instruction: "Reconnecting, not auditioning.
-Short answers. Save the hero for the HM." Same field, different rounds, which is exactly why you read
+filter rather than an audition earns the opposite instruction: "Short answers. This is a filter, not
+the final. Save the hero for the HM." Same field, different rounds, which is exactly why you read
 it off the prep file instead of composing one.
 
 ---
@@ -465,11 +469,11 @@ abridged 6 of these: it drops `facts` and `substance`):
 | §7 tradeoff probes | `tradeoff` "Tradeoff and tough" | 6 | `cameraGap: true` |
 | §8 questions to ask | `questions` "Your questions to ask · last 5 min" | 7 | |
 
-**`screen`** (6 sections, no shipped file):
+**`screen`** (6 sections, shipped as [`runsheet-example-screen.run.md`](../templates/runsheet-example-screen.run.md)):
 
 | Prep source | Board section | `n` | `style` |
 |---|---|---|---|
-| §0 strip + §2 60-second pitch | `opening` "Open and reconnect" | 1 | |
+| §0 strip + §2 60-second pitch | `opening` "Open and frame" | 1 | |
 | §3 why-company/why-now + §4 | `why` "Why this, why you" | 2 | |
 | §4 recruiter questions (comp/location/timing) | `logistics` "Comp, location, timing" | 3 | |
 | §6 red-flag handling | `softspots` "Soft spots, answer straight" | 4 | |
@@ -552,9 +556,9 @@ Rules for the net:
 `cue` is the trigger text in the left column. `answer` is a **key into `answers{}`**, never inline
 content.
 
-- **Cue phrasing is the user's shorthand, not the interviewer's verbatim question.** "Get sellers to
-  do what they didn't want", not "Tell me about a time you had to influence a sales team to adopt a
-  process they were resistant to." Shorthand scans faster under pressure, and pressure is the only
+- **Cue phrasing is the user's shorthand, not the interviewer's verbatim question.** "Getting the
+  field to do what they didn't want", not "Tell me about a time you had to influence a team to adopt
+  a process they were resistant to." Shorthand scans faster under pressure, and pressure is the only
   condition this board is ever read under.
 - **`label` is optional and usually omitted.** It defaults to the answer's `title`, else the
   story-bank H3. Author it only when the title is too long for the column (the example's
@@ -648,7 +652,7 @@ around.
 
 Every non-null `story` must resolve to a real H3 in `story-bank.md`. `verify-runsheets.mjs` checks it.
 If the prep file maps a question to something that is not a numbered story ("the platform migration",
-"3 emerging programs at once"), write the answer from the prep text with `story: null` and **report
+"two overlapping pilots"), write the answer from the prep text with `story: null` and **report
 it as a gap** (see GROUNDING), suggesting the user add it to the bank.
 
 ---
@@ -813,8 +817,8 @@ The board is **spoken**, not read. That is the only style rule and everything fo
   when it flicks down mid-sentence, so bold **one thing per paragraph**, not three. Bold the claim,
   not the setup: **"The model decided it, not the loudest voice in the room."**
 - **`notes` carry traps and warnings**, in the prep file's own blunt register. "Never bluff a tool you
-  have not used." "Answer it once and move on." "**Only if they raise it.** Don't volunteer
-  competitor wins unprompted."
+  have not used." "Answer it once and move on." "**Only if they raise it.** Don't bring up the
+  reorg unprompted."
 - **Working doc, not a pep talk.** Direct. Specific numbers, verbatim phrases. No corporate filler,
   no encouragement, no "you've got this." Same house style as `modes/cheat-sheet.md` and
   `modes/interview-prep.md`: every line earns its place.
