@@ -1,0 +1,39 @@
+name: PR Title
+
+# Feature PRs are squash-merged, so the PR TITLE becomes the commit message on
+# main (repo setting: squash_merge_commit_title = PR_TITLE). Release Please reads
+# that subject to decide the version bump and to write the changelog. A title
+# without a Conventional Commit prefix is not an error anywhere else in CI: the
+# build stays green, the PR merges, and the release silently bumps nothing and
+# ships an empty changelog. This job is the only thing standing between a sloppy
+# title and a lost release entry.
+#
+# Release PRs are exempt in practice rather than by rule: Release Please already
+# titles them `chore(main): release X.Y.Z`, which passes.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  conventional-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the PR title is a Conventional Commit
+        env:
+          # Passed through the environment, never interpolated into the script.
+          # A PR title is attacker-controlled text; `${{ }}` inside run: would be
+          # a shell injection vector.
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          TYPES='feat|fix|chore|docs|refactor|test|ci|perf|build|style|revert'
+          if printf '%s' "$TITLE" | grep -qE "^($TYPES)(\([a-zA-Z0-9 ._/-]+\))?!?: .+"; then
+            echo "OK: $TITLE"
+            exit 0
+          fi
+          echo "::error title=PR title is not a Conventional Commit::\"$TITLE\" does not start with a recognized type. Because this PR will be SQUASH-merged, the title becomes the commit message on main, and Release Please reads it to decide the version bump and write the changelog. As written it would bump nothing and add no changelog line, with every other check still green. Use one of: $TYPES. Example: fix: keep tracker rows at 10 columns when a field contains a pipe"
+          exit 1

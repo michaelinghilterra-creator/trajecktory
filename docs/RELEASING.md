@@ -51,10 +51,15 @@ rather than trusting this list. Run it at the end; if it is green, you are done.
 
 - [ ] **1. Merge the Release Please PR with a MERGE COMMIT, not a squash.**
       A squash takes the PR title (`chore(main): release X.Y.Z`) as the commit
-      message, and Release Please would then re-read that on the next cycle. More
-      importantly, squashing the *feature* PRs that feed a release collapses their
-      Conventional Commit subjects into the PR title, which usually has no type
-      prefix — so the release silently bumps nothing and the changelog is empty.
+      message, and Release Please would then re-read that on the next cycle.
+      *Feature* PRs are the opposite: squash those. This item used to warn against
+      squashing them too, on the grounds that a PR title usually has no type prefix,
+      so squashing would collapse real Conventional Commit subjects into a title
+      that bumps nothing. That risk is now closed at the source: `pr-title.yml`
+      fails any PR whose title is not a Conventional Commit. Merge-committing
+      feature PRs instead causes its own problem, because GitHub puts the PR title
+      in the merge commit BODY and Release Please counts the same fix twice. See
+      *How to merge a PR* in `AGENTS.md`.
 - [ ] **2. Sign the tag.** Release Please creates a lightweight tag via the API,
       which cannot carry a signature. Replace it (commands below).
       *Fails silently:* anchored installs freeze rather than erroring.
