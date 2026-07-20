@@ -1037,10 +1037,12 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
                   {sec.heading.toUpperCase()}
                 </div>
               ) : null}
-              {sec.items.map((it, j) => (
+              {sec.items.map((it, j) => it.type === 'bullet' ? (
                 <div key={j} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', marginBottom: 2 }}>
-                  <span style={{ color: 'var(--accent)', flexShrink: 0 }}>•</span><span>{it}</span>
+                  <span style={{ color: 'var(--accent)', flexShrink: 0 }}>•</span><span>{it.text}</span>
                 </div>
+              ) : (
+                <div key={j} style={{ marginBottom: 5 }}>{it.text}</div>
               ))}
             </div>
           ))}

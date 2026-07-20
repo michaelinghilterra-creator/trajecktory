@@ -136,15 +136,18 @@ function parseChangelog(md) {
     const sh = ln.match(/^###\s+(.+)$/);
     if (sh) { sec = { heading: sh[1].trim(), items: [] }; cur.sections.push(sec); inProse = false; continue; }
     const it = ln.match(/^[-*]\s+(.+)$/);
-    if (it) { ensureSec(); sec.items.push(cleanNote(it[1])); inProse = false; continue; }
+    if (it) { ensureSec(); sec.items.push({ type: 'bullet', text: cleanNote(it[1]) }); inProse = false; continue; }
     // Free-text paragraph: fold consecutive lines into a single clean note.
+    // Same {type, text} item shape as parseReleaseBody, because the same two
+    // components render whichever of the two sources answered.
     const prose = ln.trim();
     if (prose) {
       ensureSec();
-      if (inProse && sec.items.length) {
-        sec.items[sec.items.length - 1] = cleanNote(sec.items[sec.items.length - 1] + ' ' + prose);
+      const last = sec.items[sec.items.length - 1];
+      if (inProse && last) {
+        last.text = cleanNote(last.text + ' ' + prose);
       } else {
-        sec.items.push(cleanNote(prose)); inProse = true;
+        sec.items.push({ type: 'prose', text: cleanNote(prose) }); inProse = true;
       }
     }
   }

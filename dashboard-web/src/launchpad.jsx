@@ -1471,11 +1471,16 @@ function ChangelogPanel() {
           {e.sections.map((sec, j) => (
             <div key={j} className="col" style={{ gap: 5 }}>
               {sec.heading && <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.08em', color: 'var(--text-dim)' }}>{sec.heading.toUpperCase()}</div>}
-              {sec.items.map((it, k) => (
+              {/* A paragraph renders as a paragraph. Bulleting written prose turned
+                  every sentence into a list item, which is exactly the look the
+                  hand-written notes exist to replace. */}
+              {sec.items.map((it, k) => it.type === 'bullet' ? (
                 <div key={k} className="row" style={{ gap: 8, alignItems: 'flex-start', fontSize: 12.5, lineHeight: 1.5 }}>
                   <span style={{ color: 'var(--accent)', flexShrink: 0 }}>•</span>
-                  <span>{it}</span>
+                  <span>{it.text}</span>
                 </div>
+              ) : (
+                <div key={k} style={{ fontSize: 12.5, lineHeight: 1.55 }}>{it.text}</div>
               ))}
             </div>
           ))}
