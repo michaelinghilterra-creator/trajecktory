@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.16.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.16.1...v1.16.2) (2026-07-20)
+
+
+### Bug Fixes
+
+* **linkedin-ssi:** bound the CSV import loop ([fd84ea0](https://github.com/michaelinghilterra-creator/trajecktory/commit/fd84ea0978e284fec620f95e58159f1bb248318f))
+* **linkedin-ssi:** stop inventing a score, and make the tab possible to populate ([e98c43b](https://github.com/michaelinghilterra-creator/trajecktory/commit/e98c43b7842d6329c8fca94a3b60d21d187398b3))
+* **linkedin-ssi:** stop inventing a score, and make the tab possible to populate ([360de8d](https://github.com/michaelinghilterra-creator/trajecktory/commit/360de8d36e50ebe4cf292be4173b3dd70a9849b7))
+* **recruiters:** make the two dead controls on the landing views work ([9095907](https://github.com/michaelinghilterra-creator/trajecktory/commit/9095907638bc34a9b895bdc5c344c0727e64fabd))
+* **recruiters:** make the two dead controls on the landing views work ([d3caf26](https://github.com/michaelinghilterra-creator/trajecktory/commit/d3caf2650ec8fa5aabc4ce79ce867933d0152149))
+* **target-talent:** remove the Reconcile Undo that never undid anything ([b450c63](https://github.com/michaelinghilterra-creator/trajecktory/commit/b450c6346bd6b73ed21aad07aca286a8cf9ee813))
+* **target-talent:** remove the Reconcile Undo that never undid anything ([dfb3325](https://github.com/michaelinghilterra-creator/trajecktory/commit/dfb3325708e65eaf808659f0cfcc4cb95065093b))
+
 ## [1.16.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.16.0...v1.16.1) (2026-07-19)
 
 
