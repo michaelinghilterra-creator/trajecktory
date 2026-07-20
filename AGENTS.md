@@ -295,10 +295,14 @@ Default modes are in `modes/` (English). Additional language-specific modes are 
   first-time contributors
 - **`main` is protected** by the `main-guard` ruleset, which enforces four rules:
   a pull request is **required** (0 approvals, because a solo maintainer cannot approve their own
-  PR and requiring one would deadlock every merge); the `test`, `dependency-review` and `CodeQL`
-  checks must pass; no force-push; no deletion. **The bypass list is empty**, so there is no admin
-  override — an emergency direct push means disabling the ruleset deliberately, which is visible,
-  rather than quietly using a standing exemption.
+  PR and requiring one would deadlock every merge); the `test`, `dependency-review`, `CodeQL` and
+  `conventional-title` checks must pass; no force-push; no deletion. **The bypass list is empty**,
+  so there is no admin override — an emergency direct push means disabling the ruleset
+  deliberately, which is visible, rather than quietly using a standing exemption.
+  `conventional-title` is required rather than advisory for the same reason it exists: feature PRs
+  are squash-merged, so the PR title becomes the commit message, and a title Release Please cannot
+  parse costs a version bump and a changelog line while every other check stays green. An advisory
+  check does not stop a merge, and this failure is invisible without one.
 - **Dependabot** security updates are on. Routine version-bump PRs are deliberately off, so
   Dependabot opens a PR for a *vulnerability*, not for every release.
 - **Contributing process**: issue first → discussion → PR with linked issue → CI passes → merge
