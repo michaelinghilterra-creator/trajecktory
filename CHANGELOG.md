@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.4](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.3...v1.17.4) (2026-07-20)
+
+
+### Bug Fixes
+
+* close interview-surface data leaks and ship mode fixes to installs ([#36](https://github.com/michaelinghilterra-creator/trajecktory/issues/36)) ([3484329](https://github.com/michaelinghilterra-creator/trajecktory/commit/348432966edeb6a92775bbdc2451627c456aa997))
+
 ## [1.17.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.2...v1.17.3) (2026-07-20)
 
 
