@@ -336,6 +336,33 @@ changelog when that PR is **merged**. The bump size comes from
 ignored by Release Please — it will neither bump the version nor appear in the changelog.
 Tags are clean `vMAJOR.MINOR.PATCH` (e.g. `v1.7.33`); the baseline `v1.7.32` tag anchors history.
 
+### How to merge a PR (RULE)
+
+**Feature PRs: squash.** `gh pr merge <n> --squash`. The squash commit's subject is the
+**PR title**, so the PR title MUST itself be a Conventional Commit (`fix: ...`, `feat: ...`).
+A vague PR title is not a cosmetic problem here: it becomes the changelog line, permanently.
+
+**Release PRs: merge commit, never squash.** `gh pr merge <n> --merge`. Squashing a release
+PR detaches the release commit Release Please expects to find, which breaks the version
+anchor for the following release.
+
+Why the split, since merge commits used to be the default for everything: GitHub writes the
+PR title into a merge commit's BODY while the subject stays `Merge pull request #n from ...`.
+Release Please unwraps merge commits by reading that body, so it counts the same
+Conventional Commit twice, once on the real commit and once on the merge commit. Release
+1.17.3 shipped with a duplicated changelog line for exactly this reason. Squashing produces
+one commit per PR and nothing to double count. Release PRs are immune because their commit
+is a `chore:`, which generates no changelog entry either way.
+
+Repo settings back this up: squash commits take `PR_TITLE` as the subject and `PR_BODY` as
+the body. Both merge methods stay enabled because both are needed.
+
+> **A squash commit's body is the PR description, and squashing happens on GitHub's side.**
+> It therefore never passes through `.githooks/commit-msg` or `verify-no-pii.mjs --messages`,
+> which only see commits made locally. The "describe the shape, never the value" rule in
+> *Commit messages are published* applies in full to PR descriptions. Personal data written
+> into a PR body reaches `main` with every local gate bypassed.
+
 > **Release authentication is configured.** `RELEASE_PLEASE_TOKEN` is a fine-grained PAT scoped to
 > this repo with Contents + Pull-requests write, and `release.yml` reads
 > `secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN`.
