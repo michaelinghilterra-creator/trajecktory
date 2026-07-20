@@ -1451,6 +1451,15 @@ function ChangelogPanel() {
       </div>
       {error && <div className="card padded-lg"><div className="mono" style={{ color: 'var(--red)', fontSize: 12 }}>{error}</div></div>}
       {!data && !error && <div className="card padded-lg dim" style={{ fontSize: 12 }}>Loading…</div>}
+      {/* Say when these are commit subjects rather than notes written for a reader,
+          instead of letting the raw fallback pass as the real thing. */}
+      {data && data.source === 'changelog-md' && (data.entries || []).length > 0 && (
+        <div className="card" style={{ padding: '9px 13px' }}>
+          <div className="mono dim" style={{ fontSize: 11 }}>
+            Showing the local changelog. Release notes could not be reached, so these are commit summaries rather than the written notes.
+          </div>
+        </div>
+      )}
       {data && (data.entries || []).length === 0 && <div className="card padded-lg dim" style={{ fontSize: 12 }}>No changelog yet.</div>}
       {data && (data.entries || []).map((e, i) => (
         <div key={i} className="card padded-lg col" style={{ gap: 10 }}>
