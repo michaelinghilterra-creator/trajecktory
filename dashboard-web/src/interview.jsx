@@ -631,8 +631,8 @@ function PrepProse({ markdown }) {
 // question rule, and "Hard Questions Prep" has to land on probes rather than ask.
 const PREP_ROLE_RULES = [
   // The company-level intel documents phrase this several ways and never as the
-  // template's "Questions to Ask": "Three Questions YOU Need to Ask Spencer",
-  // "YOUR 4 Critical Questions".
+  // template's "Questions to Ask": "Three Questions YOU Need to Ask the Hiring
+  // Manager", "YOUR 3 Critical Questions".
   [/questions to ask|questions you need to ask|critical questions/i, 'ask'],
   [/reply to /i,                                        'reply'],
   [/pre-?call strip|pre-?panel strip/i,                 'strip'],
@@ -640,17 +640,17 @@ const PREP_ROLE_RULES = [
   [/hero story|proof point/i,                           'hero'],
   [/behavio/i,                                          'behavioral'],
   // `will probe` / `what to avoid` come from the intel documents; \bprobes?\b also
-  // covers "Judgment / Tradeoff Probes".
+  // covers per-company variants like "Judgment and Risk Probes".
   [/tradeoff|tough question|hard question|red.?flag|will probe|what to avoid|\bprobes?\b/i, 'probes'],
   // `\bstories\b` catches the per-company phrasings the templates never anticipated
-  // ("The Other Two Required Stories"). Safe here because the hero rule above has
+  // ("The Two Remaining Required Stories"). Safe here because the hero rule above has
   // already claimed anything calling itself a hero story.
   [/backup stor|story bank|\bstories\b/i,               'backup'],
   [/logistics/i,                                        'logistics'],
   [/debrief/i,                                          'debrief'],
   [/after the /i,                                       'after'],
   [/likely|case ?\/ ?exercise/i,                        'likely'],
-  // \bframe\b, NOT /frame/: a bare substring matched "SQL / Python Honest REframe"
+  // \bframe\b, NOT /frame/: a bare substring matched "Tooling Gap Honest REframe"
   // and dressed a gap-handling section up as an opening script — which also put it
   // in the cram sheet's "Say first" block. There is no word boundary inside
   // "Reframe", so the anchored form rejects it and still matches "90-Second Frame".
@@ -664,9 +664,9 @@ function prepRole(label) {
 
 // THREE numbering grammars are on disk, not one:
 //
-//   "## §4B - Behavioral Question Bank"    the documented grammar
-//   "## §0a — PAR Core Values Alignment"   lowercase suffix, and it sorts BEFORE §0
-//   "## 7) Questions to Ask Kim"           an older sheet with no § at all
+//   "## §4B - Situational Question Bank"    the documented grammar
+//   "## §0a — Acme Core Values Alignment"   lowercase suffix, and it sorts BEFORE §0
+//   "## 7) Questions to Ask the Recruiter"  an older sheet with no § at all
 //
 // and four separators between the marker and the title (`-`, `—`, `.`, `:`).
 // Letter suffixes and out-of-band sections are real: verify-interview-prep.mjs
@@ -743,7 +743,7 @@ function parsePrepDoc(html) {
 }
 
 // The cram sheet's "do not" block. These live INSIDE other sections (the §1 mental
-// model carries "Do NOT:", the probes section carries "Traps (do not step in):"),
+// model carries "Do NOT:", the probes section carries "Traps:"),
 // so they are pulled out by finding the label and taking the list that follows it.
 function extractPrepDoNot(sections) {
   if (typeof document === 'undefined') return '';

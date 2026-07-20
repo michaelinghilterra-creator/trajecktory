@@ -18,15 +18,25 @@ const PREP_DIR = path.resolve(__dirname, 'interview-prep');
 const BANK = path.join(PREP_DIR, 'story-bank.md');
 const SCHEMA_ID = 'trajecktory-runsheet/v1';
 
-// The shipped worked example. It is TRACKED, it is what every generated board is
-// copied from, and until it was added here nothing checked it: this script walked
-// interview-prep/ only, which is gitignored, so CI validated zero files and passed.
-// A schema drift in the one file the mode tells the agent to imitate would have
+// The shipped worked examples. They are TRACKED, they are what every generated board
+// is copied from, and until they were added here nothing checked them: this script
+// walked interview-prep/ only, which is gitignored, so CI validated zero files and
+// passed. A schema drift in the files the mode tells the agent to imitate would have
 // shipped green.
 //
-// It is checked for STRUCTURE ONLY — see storyIdsFor(). Its `story` ids point at
-// the fictional bank in its own prose, not at the user's story-bank.md.
-const EXAMPLE = path.resolve(__dirname, 'templates', 'runsheet-example.run.md');
+// There is one per SHAPE, and that is the point. When only the hm-round example
+// existed, every claim the docs made about the `screen` shape had to be measured off
+// a real board in the author's gitignored interview-prep/, because it was the only
+// screen board in existence. Documentation sourced from a private file cannot be
+// checked by anyone else and quietly leaks whatever it measured. A shape with no
+// shipped example is a shape whose spec is unverifiable.
+//
+// They are checked for STRUCTURE ONLY. Their `story` ids point at the fictional bank
+// in their own prose, not at the user's story-bank.md.
+const EXAMPLES = [
+  path.resolve(__dirname, 'templates', 'runsheet-example.run.md'),
+  path.resolve(__dirname, 'templates', 'runsheet-example-screen.run.md'),
+];
 
 const CAP_CUES = 48;
 const CAP_SECTIONS = 8;
@@ -140,15 +150,15 @@ function check(file, ids) {
 
 const ids = bankIds();
 const userFiles = walk(PREP_DIR);
-const hasExample = fs.existsSync(EXAMPLE);
+const examples = EXAMPLES.filter(p => fs.existsSync(p));
 
 // Story-id resolution is a USER-file check. Running it against the shipped example
-// would tie a tracked file's pass/fail to a gitignored one: green on this machine
-// because the real bank happens to hold ids 1/2/4/7, red on a machine whose bank is
+// would tie a tracked file's pass/fail to a gitignored one: green on a machine whose
+// bank happens to hold every id the example cites, red on one whose bank is
 // shorter, and skipped entirely in CI where interview-prep/ does not exist. Three
 // different verdicts for one unchanged file. The example gets null.
 const targets = [
-  ...(hasExample ? [{ path: EXAMPLE, ids: null, label: path.relative(__dirname, EXAMPLE) }] : []),
+  ...examples.map(p => ({ path: p, ids: null, label: path.relative(__dirname, p) })),
   ...userFiles.map(f => ({ path: f, ids, label: path.relative(PREP_DIR, f) })),
 ];
 
@@ -161,13 +171,13 @@ if (jsonMode) {
 }
 
 if (!targets.length) {
-  console.log('No .run.md files found, and templates/runsheet-example.run.md is missing.');
+  console.log('No .run.md files found, and the shipped examples in templates/ are missing.');
   process.exit(0);
 }
 // Only meaningful when there are user files to resolve ids for; the example never
 // resolves them by design.
 if (!ids && userFiles.length) console.log('⚠️  story-bank.md not found, skipping story-id resolution.\n');
-if (!userFiles.length) console.log('No .run.md files under interview-prep/ yet — checking the shipped example only.\n');
+if (!userFiles.length) console.log('No .run.md files under interview-prep/ yet — checking the shipped examples only.\n');
 
 for (const r of results) {
   const tag = r.errs.length ? '❌' : r.warns.length ? '⚠️ ' : '✅';

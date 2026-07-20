@@ -56,6 +56,22 @@ const SYSTEM_PATHS = [
   'modes/tracker.md',
   'modes/training.md',
   'modes/latex.md',
+  // Added to the repo later than this list was curated, and stranded ever since.
+  // AGENTS.md defines every mode as system layer and auto-updatable, so the omission
+  // was drift, not a decision. Nothing edited in these files could reach an install
+  // that already existed: not a feature, and not a correction either. The 2026-07-19
+  // privacy pass edited cheat-sheet.md, cover-letter.md and runsheet.md, and none of
+  // those corrections shipped to a single installed machine. A fix that cannot travel
+  // is indistinguishable from no fix at all.
+  'modes/cheat-sheet.md',
+  'modes/cover-letter.md',
+  'modes/docx.md',
+  'modes/docx-light.md',
+  'modes/followup.md',
+  'modes/interview-prep.md',
+  'modes/patterns.md',
+  'modes/runsheet.md',
+  'modes/triage.md',
   'modes/de/',
   'modes/fr/',
   'modes/ja/',
