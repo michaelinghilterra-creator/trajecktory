@@ -117,9 +117,35 @@ purpose, so the unset-key branch is the normal path and failing there would go r
 on every release by design — and a check that always fails is a check nobody
 reads, which is the failure being guarded against.
 
+## A red release run does not mean the release failed
+
+The opposite of the trap above, and it happened on `v1.16.2`.
+
+`release-please` creates the GitHub release and the tag, and only *then* goes on
+to build the next standing release PR. A transient GitHub API error during that
+second phase fails the job **after** the release is already published. The run
+shows red, the release exists anyway.
+
+Check what actually happened before reacting:
+
+```bash
+gh release view vX.Y.Z --json tagName,isDraft
+git fetch --tags && git cat-file -t vX.Y.Z     # "tag" = annotated, "commit" = lightweight
+```
+
+If the release and tag exist, do **not** re-run the workflow or re-cut the
+version. Carry on and sign the tag as normal.
+
+One consequence worth knowing: the in-workflow signing step is gated on
+`release_created`, so a job that dies mid-run skips it entirely. If you ever do
+set `TAG_SIGNING_SSH_KEY`, a red release run means the tag is unsigned even
+though signing was configured.
+
 ## Notes
 
 - Sign the tag promptly after Release Please creates it, before you build the
   `.exe` for that version.
+- `tag.gpgsign` is deliberately left unset, so tags are signed only when you pass
+  `-s` explicitly. That is why every command here spells it out.
 - Windows binary signing (SmartScreen) is a separate, independent concern; tag
   signing protects the self-update channel specifically.
