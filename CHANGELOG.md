@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.0...v1.17.1) (2026-07-20)
+
+
+### Bug Fixes
+
+* **dashboard:** show written release notes in the Change Log, not commit subjects ([36f14c8](https://github.com/michaelinghilterra-creator/trajecktory/commit/36f14c8dda7b1a70f523fb693720f92ea6504eb4))
+
 ## [1.17.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.16.2...v1.17.0) (2026-07-20)
 
 
