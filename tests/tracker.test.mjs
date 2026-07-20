@@ -7,7 +7,9 @@
  * Run: node tests/tracker.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { parseTrackerLine, parseTracker, TRACKER_COLUMNS } from '../lib/tracker.mjs';
+import {
+  parseTrackerLine, parseTracker, TRACKER_COLUMNS, formatTrackerLine, sanitizeTrackerCell,
+} from '../lib/tracker.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -77,6 +79,51 @@ const rows = parseTracker(doc);
 check(rows.length === 2, 'parseTracker returns only the 2 data rows');
 check(rows[0].num === 691 && rows[1].num === 692, 'rows in order');
 check(TRACKER_COLUMNS[8] === 'report' && TRACKER_COLUMNS[7] === 'resume', 'TRACKER_COLUMNS has resume at 7, report at 8');
+
+// ── formatTrackerLine — the write side ─────────────────────────────────────────
+// Rows used to be written with hand-rolled template literals, so any '|' inside a
+// field became a column delimiter. Row #1125 hit this in the field: notes ending
+// "…remote | [self-sourced]" had the tag stripped, and the orphaned pipe left an
+// 11-cell row that the dashboard parsed with a truncated Notes column.
+const roundTrip = {
+  num: 800, date: '2026-07-20', company: 'Acme', role: 'Director, RevOps',
+  score: '4.1/5', status: 'Evaluated', pdf: '❌', resume: '—',
+  report: '[800](reports/800-acme-2026-07-20.md)', notes: 'clean note',
+};
+const formatted = formatTrackerLine(roundTrip);
+const reparsed = parseTrackerLine(formatted);
+check(reparsed !== null, 'formatTrackerLine output parses back');
+check(reparsed.cellCount === 10, 'formatted row has exactly 10 cells');
+check(reparsed.num === 800 && reparsed.company === 'Acme' && reparsed.notes === 'clean note',
+  'round-trip preserves fields');
+check(reparsed.report === '[800](reports/800-acme-2026-07-20.md)', 'round-trip preserves the report link');
+
+// The regression: a pipe anywhere in a field must not create a cell.
+const piped = parseTrackerLine(formatTrackerLine({
+  ...roundTrip, notes: 'IC role, $100K–$120K remote | [self-sourced]',
+}));
+check(piped.cellCount === 10, 'pipe in notes does NOT add a cell (row #1125 regression)');
+check(!piped.notes.includes('|'), 'pipe in notes is neutralized');
+check(piped.notes.includes('[self-sourced]') && piped.notes.includes('remote'),
+  'note text survives sanitizing, only the delimiter changes');
+
+// A pipe in any other free-text field is the same hazard.
+const pipedRole = parseTrackerLine(formatTrackerLine({ ...roundTrip, role: 'Director | RevOps' }));
+check(pipedRole.cellCount === 10, 'pipe in role does NOT add a cell');
+check(pipedRole.notes === 'clean note', 'fields after a piped role do not shift');
+
+// Newlines and tabs split or re-delimit the row just as badly as a pipe.
+const multiline = parseTrackerLine(formatTrackerLine({ ...roundTrip, notes: 'line one\nline two\ttabbed' }));
+check(multiline !== null && multiline.cellCount === 10, 'newline/tab in notes does not break the row');
+check(!/[\r\n\t]/.test(multiline.notes), 'newlines and tabs collapse to spaces');
+
+check(parseTrackerLine(formatTrackerLine({ ...roundTrip, resume: '' })).resume === null,
+  'empty resume writes the "—" placeholder and reads back as null');
+check(formatTrackerLine({ ...roundTrip, notes: undefined }).endsWith('|  |'),
+  'undefined field writes an empty cell rather than "undefined"');
+
+check(sanitizeTrackerCell('a | b') === 'a / b', 'sanitizeTrackerCell swaps the delimiter');
+check(sanitizeTrackerCell(null) === '', 'sanitizeTrackerCell handles null');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
