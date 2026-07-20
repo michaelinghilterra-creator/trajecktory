@@ -131,16 +131,44 @@ The structure, in order:
 1. **An opening paragraph with no heading.** One or two sentences characterising the
    release ("Data integrity release.", "Accuracy release.", "Maintenance release."),
    what it addresses, and whether it is recommended for all installs.
-2. **`## Install (Windows)`.** Boilerplate, carried over verbatim. The "New install?"
-   line must name the newest release that actually carries a `trajecktory-setup-*.exe`
-   asset, which is usually NOT the release being written. Confirm it rather than
-   assuming, because most releases ship no installer at all:
-   `gh release view <tag> --json assets -q '[.assets[].name]|join(", ")'`
+2. **`## Install (Windows)`.** Required on every release, copied verbatim from the
+   block below. Only the installer version changes.
 3. **`## What changed`**, one `###` subheading per change, each written as prose. Name
    the user-visible symptom first, then the cause, then what is true now. Where nothing
    of theirs was damaged, say so plainly; that is usually the reader's actual question.
 4. **`### For contributors`.** File names, module boundaries, test coverage. Bullets
    are fine here.
+
+### The Install (Windows) block
+
+Paste this into every release, immediately after the opening paragraph. It is not
+optional and it is not generated: a release published without it leaves anyone who does
+not already have trajecktory with no way to install it, because most releases carry no
+installer of their own.
+
+```markdown
+## Install (Windows)
+
+**Already installed?** Launch trajecktory once and accept the update prompt. It self-updates to this build.
+
+**New install?** No installer is attached to this release. Download `trajecktory-setup-vX.Y.Z.exe` from [vX.Y.Z](https://github.com/michaelinghilterra-creator/trajecktory/releases/tag/vX.Y.Z), run it, then launch trajecktory and accept the update prompt to reach this version.
+
+The installer is not code-signed yet, so Windows SmartScreen may warn "unknown publisher." Choose **More info → Run anyway**.
+```
+
+`vX.Y.Z` in the "New install?" line is the **newest release that actually carries a
+`trajecktory-setup-*.exe` asset**, which is usually NOT the release being written and is
+often several versions behind it. Look it up rather than assuming, because guessing here
+sends people to a download that does not exist:
+
+```bash
+for t in $(gh release list --limit 12 --json tagName -q '.[].tagName'); do
+  gh release view "$t" --json assets -q '[.assets[].name]|join(" ")' | grep -q 'setup.*exe' && echo "$t" && break
+done
+```
+
+If the release being written *does* ship its own installer (checklist step 5), replace
+the whole "New install?" paragraph with a direct pointer to the attached `.exe` instead.
 
 **Never name a real company, person, or figure from the maintainer's own job search.**
 The release body is published and is rendered inside the product, and it never passes
