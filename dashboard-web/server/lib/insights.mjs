@@ -3,7 +3,7 @@ import path from 'path';
 import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { computeStaleApps, computeStaleTA } from './followups.mjs';
-import { parseRecruitersMd } from './recruiters.mjs';
+import { parseRecruitersMd, RECRUITER_CONTACTED } from './recruiters.mjs';
 import { parseTargetTalentMd } from './target-talent.mjs';
 import { parseStatusEvents } from './sidecars.mjs';
 import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, isInterviewStage, reachedStage, makeFurthestIdx } from './statuses.mjs';
@@ -116,12 +116,31 @@ function buildInsightsContext() {
     .sort((a, b) => b.responseRate - a.responseRate)
     .slice(0, 10);
 
-  // TA + Recruiter funnel summaries
-  const taActive = taContacts.filter(c => c.status !== 'Archived');
-  const taSent    = taActive.filter(c => ['Sent','Replied','Meeting Scheduled','Connected'].includes(c.status)).length;
-  const taReplied = taActive.filter(c => ['Replied','Meeting Scheduled','Connected'].includes(c.status)).length;
-  const recSent    = recruiters.filter(r => ['Sent','Replied','Meeting Scheduled','Connected'].includes(r.status)).length;
-  const recReplied = recruiters.filter(r => ['Replied','Meeting Scheduled','Connected'].includes(r.status)).length;
+  // TA + Recruiter funnel summaries.
+  //
+  // Outreach rates run over EVERY contact, not just the currently-active ones.
+  // `Archived` is applied by the Reconcile flow after all related apps close, so
+  // filtering on it retroactively deletes the outreach that happened before the
+  // row closed. On a mature list the archived rows can be the majority, and they
+  // vanish from numerator and denominator together. Same class of bug as counting
+  // an application's live status instead of the furthest rung it ever reached.
+  const taActive = taContacts.filter(c => c.status !== 'Archived');   // still the honest "open contacts" count
+  const REPLIED_SET = ['Replied', 'Meeting Scheduled', 'Connected'];
+  const TA_CONTACTED = ['Sent', 'Dormant', ...REPLIED_SET];
+  // Archiving OVERWRITES the outreach status in place, so an archived contact's
+  // prior state is unrecoverable — but `lastTouch` survives and is only ever
+  // stamped when a message actually went out. It is therefore valid evidence for
+  // the DENOMINATOR. The numerator cannot be repaired the same way: an archived
+  // contact who replied now reads "Archived" like any other, so taReplied is a
+  // FLOOR, not a count. `repliedIsFloor` tells the UI to say so rather than
+  // presenting an understated rate as measured.
+  const taTouchedArchive = taContacts.filter(c =>
+    c.status === 'Archived' && /^\d{4}-\d{2}-\d{2}$/.test(String(c.lastTouch || '')));
+  const taSent    = taContacts.filter(c => TA_CONTACTED.includes(c.status)).length + taTouchedArchive.length;
+  const taReplied = taContacts.filter(c => REPLIED_SET.includes(c.status)).length;
+  // Dormant and Bounced are post-send states, so they belong in `sent`.
+  const recSent    = recruiters.filter(r => RECRUITER_CONTACTED.has(r.status)).length;
+  const recReplied = recruiters.filter(r => REPLIED_SET.includes(r.status)).length;
 
   // Stale touchpoints (apps + TA, top 15 by silence)
   const staleApps = computeStaleApps().map(it => ({ source: 'app', ...it }));
@@ -160,7 +179,11 @@ function buildInsightsContext() {
     },
     archetypes: archByPerf,
     sectors: sectorByPerf,
-    talent:    { total: taActive.length,    sent: taSent,    replied: taReplied,    responseRate: taSent  ? Math.round(taReplied / taSent * 100)  : 0 },
+    // `total` means the same thing on both rows: every contact on record. It
+    // previously meant "active" for talent and "all" for recruiters, one line apart.
+    talent:     { total: taContacts.length, active: taActive.length, sent: taSent, replied: taReplied,
+                  responseRate: taSent ? Math.round(taReplied / taSent * 100) : 0,
+                  repliedIsFloor: taTouchedArchive.length > 0, archivedTouched: taTouchedArchive.length },
     recruiters: { total: recruiters.length, sent: recSent,   replied: recReplied,   responseRate: recSent ? Math.round(recReplied / recSent * 100) : 0 },
     staleTotal: staleApps.length + staleTA.length,
     topStale,

@@ -19,23 +19,33 @@ if (fs.existsSync(envPath)) {
 // Repo root (dashboard-web/server -> dashboard-web -> repo root).
 export const ROOT_DIR = path.resolve(__dirname, '../..');
 
-export const APPS_MD = path.resolve(__dirname, '../../data/applications.md');
+// Every user-layer data file lives under one directory, overridable with
+// TJK_DATA_DIR. The override exists so tests can exercise the write paths
+// (status events, apply dates, todos) against a temp dir instead of the user's
+// real job search: data/ is gitignored end to end, so a test that wrote there
+// would have no way back. Deliberately NOT mkdir'd — a typo in the env var
+// should fail loudly on first read, not silently create a stray directory.
+export const DATA_DIR = process.env.TJK_DATA_DIR
+  ? path.resolve(process.env.TJK_DATA_DIR)
+  : path.resolve(__dirname, '../../data');
+
+export const APPS_MD = path.join(DATA_DIR, 'applications.md');
 export const REPORTS_DIR = path.resolve(__dirname, '../../reports');
 export const STATIC = path.resolve(__dirname, '../src');
 export const OUTPUT_DIR = path.resolve(__dirname, '../../output');
 if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
-export const FOLLOWUPS_MD = path.resolve(__dirname, '../../data/follow-ups.md');
-export const SNOOZE_PATH = path.resolve(__dirname, '../../data/followup-snooze.json');
-export const APPLY_DATES_PATH = path.resolve(__dirname, '../../data/apply-dates.json');
-export const MUTE_PATH = path.resolve(__dirname, '../../data/followup-mute.json');
-export const APP_NOTES_PATH = path.resolve(__dirname, '../../data/app-notes.json');
-export const STATUS_EVENTS_PATH = path.resolve(__dirname, '../../data/status-events.tsv');
-export const RECRUITERS_MD = path.resolve(__dirname, '../../data/recruiters.md');
-export const RECRUITER_CORR_DIR = path.resolve(__dirname, '../../data/recruiter-correspondence');
-export const TARGET_TALENT_MD = path.resolve(__dirname, '../../data/target-talent.md');
-export const TT_CORR_DIR = path.resolve(__dirname, '../../data/target-talent-correspondence');
-export const LINKEDIN_SSI_DIR = path.resolve(__dirname, '../../data/linkedin-ssi');
+export const FOLLOWUPS_MD = path.join(DATA_DIR, 'follow-ups.md');
+export const SNOOZE_PATH = path.join(DATA_DIR, 'followup-snooze.json');
+export const APPLY_DATES_PATH = path.join(DATA_DIR, 'apply-dates.json');
+export const MUTE_PATH = path.join(DATA_DIR, 'followup-mute.json');
+export const APP_NOTES_PATH = path.join(DATA_DIR, 'app-notes.json');
+export const STATUS_EVENTS_PATH = path.join(DATA_DIR, 'status-events.tsv');
+export const RECRUITERS_MD = path.join(DATA_DIR, 'recruiters.md');
+export const RECRUITER_CORR_DIR = path.join(DATA_DIR, 'recruiter-correspondence');
+export const TARGET_TALENT_MD = path.join(DATA_DIR, 'target-talent.md');
+export const TT_CORR_DIR = path.join(DATA_DIR, 'target-talent-correspondence');
+export const LINKEDIN_SSI_DIR = path.join(DATA_DIR, 'linkedin-ssi');
 
 // "Interview" tab: the per-company prep folders (and their .run.md board
 // sidecars). NOT a fixed path — the Launchpad writes outputs.interview_prep_dir
@@ -66,9 +76,9 @@ function resolveInterviewPrepDir() {
 export const INTERVIEW_PREP_DIR = resolveInterviewPrepDir();
 
 // "Today" tab: weekly cadence template, its per-day completion log, and the to-do list.
-export const CADENCE_PATH = path.resolve(__dirname, '../../data/cadence.json');
-export const CADENCE_LOG_PATH = path.resolve(__dirname, '../../data/cadence-log.json');
-export const TODOS_PATH = path.resolve(__dirname, '../../data/todos.json');
+export const CADENCE_PATH = path.join(DATA_DIR, 'cadence.json');
+export const CADENCE_LOG_PATH = path.join(DATA_DIR, 'cadence-log.json');
+export const TODOS_PATH = path.join(DATA_DIR, 'todos.json');
 
 export const PORT = process.env.PORT || 3333;
 // Bind to loopback by default so the dashboard (no auth, can spawn agents and

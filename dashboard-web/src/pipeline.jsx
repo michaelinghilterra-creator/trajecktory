@@ -307,7 +307,7 @@ function OverviewView({ apps, onOpen, onAction, search }) {
 }
 
 // ─── Filter toolbar (shared by Board + Table) ──────────────────────────────
-const ARCHETYPES = ['RevOps', 'SalesOps', 'Analytics', 'BizDev', 'SalesDev', 'Strategy'];
+const ARCHETYPES = ['RevOps', 'SalesOps', 'Analytics', 'BizDev', 'SalesDev', 'Strategy', 'Unclassified'];
 
 function applyFilters(apps, filters, search) {
   return apps.filter(a => {
@@ -632,8 +632,17 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
   const walkAway = compTweaks?.walkAway ?? 90;
   const targetLow = compTweaks?.targetLow ?? 100;
   const targetHigh = compTweaks?.targetHigh ?? 140;
-  const stageOf = (a) => STATUS_MAP[a.status]?.stage ?? -1;
-  const reached = (a, s) => stageOf(a) >= s;
+  // Furthest rung ever reached, not the live status. STATUS_MAP has no key for
+  // Rejected, so the old local rule returned -1 for every closed row: the "Adv"
+  // column and the archetype bars counted 1 where the canonical engine counts 6.
+  // window.appReached reads the server-stamped `reached` field.
+  const STAGE_AT = window.FUNNEL_ORDER;
+  const reached = (a, s) => window.appReached(a, STAGE_AT[s]);
+
+  // The full tracker. Every historical measure on this view (rates, source
+  // effectiveness, archetype conversion) runs over this rather than the active
+  // subset the snapshot tiles use. `apps` is activeApps; `allApps` is everything.
+  const ratePool = allApps || apps;
 
   // Time-to-rejection: days from application to the date a row was marked
   // Rejected, served from the status-event sidecar (fills in over time).
@@ -647,9 +656,14 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
     return () => { alive = false; };
   }, []);
 
+  // Both panels answer historical questions — "which channel produces roles that
+  // advance" and "which archetype converts" — so they run over the whole tracker,
+  // not the active subset. Scoped to active roles the advance counts summed to 1
+  // across every channel, because advancing usually ends in a rejection and a
+  // rejection leaves the active pool.
   const srcKeys = Object.keys(SOURCE);
   const bySource = srcKeys.map(k => {
-    const items = apps.filter(a => a.source === k);
+    const items = ratePool.filter(a => a.source === k);
     const scored = items.filter(a => a.score != null);
     const avg = scored.length ? scored.reduce((s, a) => s + a.score, 0) / scored.length : 0;
     const strong = items.filter(a => a.score != null && a.score >= 4.0).length;
@@ -660,13 +674,20 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
   const bestSource = [...bySource].sort((a, b) => b.strongRate - a.strongRate)[0];
 
   const byArch = ARCHETYPES.map(k => {
-    const items = apps.filter(a => a.archetype === k);
+    const items = ratePool.filter(a => a.archetype === k);
     const applied = items.filter(a => reached(a, 1)).length;
     const interviewed = items.filter(a => reached(a, 3)).length;
     const conv = applied ? Math.round((interviewed / applied) * 100) : 0;
     return { k, n: items.length, applied, interviewed, conv };
   }).filter(a => a.n > 0).sort((a, b) => b.conv - a.conv);
-  const bestArch = byArch.find(a => a.applied >= 2) || byArch[0];
+  // Needs a real sample before it gets to recommend anything. At the old >= 2 gate
+  // a single interview off two applications became "this archetype converts best,
+  // weight your applications toward it". 5 matches the server's own thin-sample
+  // floor in insights.mjs.
+  const MIN_ARCH_SAMPLE = 5;
+  // Never recommend the catch-all: "Unclassified converts best" would be advice
+  // to target a gap in the matching rules.
+  const bestArch = byArch.find(a => a.applied >= MIN_ARCH_SAMPLE && a.k !== 'Unclassified') || null;
 
   // Comp positioning: bucket each role's midpoint salary into four bands.
   // walkAway / targetLow / targetHigh come from the Tweaks panel.
@@ -686,9 +707,16 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
   const maxAge = Math.max(...vel.map(v => v.avgAge), 1);
   const bottleneck = [...vel].filter(v => v.n > 0 && v.s.stage < LAST_STAGE).sort((a, b) => b.avgAge - a.avgAge)[0];
 
-  const appliedAll = apps.filter(a => reached(a, 1)).length;
-  const respAll = apps.filter(a => reached(a, 2)).length;
-  const intvAll = apps.filter(a => reached(a, 3)).length;
+  // Rates are ALL-TIME over the full tracker, not the active subset the rest of
+  // this view uses. Scoping them to active roles deleted every reply that later
+  // became a rejection — which is the outcome the metric most wants to count —
+  // so the number decayed toward zero as the pipeline aged regardless of how
+  // well things were going, reading a fraction of the true rate.
+  // window.appReached reads the server-stamped `reached` rung (live status maxed
+  // with the event log and the [reached:] tag), the same engine the Overview uses.
+  const appliedAll = ratePool.filter(a => window.appReached(a, 'Applied')).length;
+  const respAll = ratePool.filter(a => window.appReached(a, 'Responded')).length;
+  const intvAll = ratePool.filter(a => window.appReached(a, 'Phone Screen')).length;
   const respRate = appliedAll ? Math.round((respAll / appliedAll) * 100) : 0;
   const intvRate = appliedAll ? Math.round((intvAll / appliedAll) * 100) : 0;
 
@@ -704,12 +732,16 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
       <OverviewKpis apps={apps} isStale={isStale} />
 
       <div className="grid cols-4" style={{ marginBottom: 14 }}>
-        <Kpi k="Response Rate" v={respRate + '%'} sub={`${respAll} of ${appliedAll} applied`} icon={PI.msg} />
-        <Kpi k="Interview Rate" v={intvRate + '%'} sub={`${intvAll} reached interview`} icon={PI.briefcase} />
+        {/* Labelled "all time" because every other tile on this view is scoped to
+            the active roles named in the heading above. */}
+        <Kpi k="Response Rate" v={respRate + '%'} sub={`${respAll} of ${appliedAll} applied · all time`} icon={PI.msg} />
+        <Kpi k="Interview Rate" v={intvRate + '%'} sub={`${intvAll} reached a screen · all time`} icon={PI.briefcase} />
         <Kpi
           k="Avg Days to Rejection"
           v={rejTiming && rejTiming.n > 0 ? rejTiming.avgDays + 'd' : '—'}
-          sub={rejTiming && rejTiming.n > 0 ? `median ${rejTiming.medianDays}d · n=${rejTiming.n}` : 'fills as you mark rejections'}
+          sub={rejTiming && rejTiming.n > 0
+            ? `median ${rejTiming.medianDays}d · n=${rejTiming.n}${rejTiming.excluded ? ` · ${rejTiming.excluded} excluded (date conflict)` : ''}`
+            : 'fills as you mark rejections'}
           icon={PI.clock}
         />
         <Kpi k="On / Above Target" v={inOrAbovePct + '%'} sub={`avg posted comp $${avgComp}K`} color={inOrAbovePct < 40 ? 'var(--red)' : 'var(--text)'} icon={PI.trend} />
@@ -978,6 +1010,14 @@ const DRAWER_TABS = [
 // The Follow-up tab only makes sense once an application is out the door.
 const FOLLOWUP_TAB_STATUSES = ['Applied', 'Responded', ...window.INTERVIEW_STAGES];
 
+// Today in the user's LOCAL timezone. Deliberately not toISOString().slice(0,10),
+// which is UTC and rolls over around 5-7pm US time — pre-filling a status change
+// with tomorrow's date is exactly the silent wrongness this field exists to fix.
+function localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () => false, onFollowupChange = () => {} }) {
   const [tab, setTab] = useStateP('overview');
   // Structured cheat-sheet object from /api/cheatsheets/:id — exactly the
@@ -1003,6 +1043,11 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   const [contacts, setContacts] = useStateP([]);
   const [selContact, setSelContact] = useStateP(null);  // contact id open in the inline panel
   const [findOpen, setFindOpen] = useStateP(false);     // per-company finder open
+  // When a status change actually happened — specifically when it was booked or
+  // notified, not when it was conducted, and not when it was typed in. Every
+  // status event before this field existed recorded the day of the click, so the
+  // timing analytics measured data entry rather than the job search.
+  const [eventDate, setEventDate] = useStateP(localToday);
 
   useEffectP(() => {
     setTab('overview'); setStarOpen(0); setCustomWhich('cv');
@@ -1010,6 +1055,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     setNotes([]); setNoteDraft('');
     setTodoDraft(''); setTodoDue(''); setTodoAdded(false);
     setContacts([]); setSelContact(null); setFindOpen(false);
+    setEventDate(localToday());
   }, [app && app.id]);
 
   // Load this company's TA contacts when the drawer opens / switches roles.
@@ -1053,7 +1099,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                 setApplyResult({ ...job, mode });
                 // Advance status to Applied (parent handles tracker + drawerApp update).
                 // Cover-letter runs are not an apply action — leave status untouched.
-                if (mode !== 'cover' && onAction) onAction(app, 'already_applied');
+                if (mode !== 'cover' && onAction) onAction(app, 'already_applied', eventDate);
               } else if (job.status === 'error') {
                 clearInterval(poll);
                 setApplyJob({ mode, status: 'error', error: job.error || 'Generation failed' });
@@ -1069,7 +1115,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   const handleFooterClick = (b) => {
     const mode = APPLY_MODES[b.id];
     if (mode) { startApply(mode); return; }
-    if (onAction) onAction(app, b.id);
+    if (onAction) onAction(app, b.id, eventDate);
   };
 
   useEffectP(() => {
@@ -1259,7 +1305,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                 if (s.stage < fillStage) cls = 'done';
                 else if (s.stage === fillStage) cls = isClosed ? 'lost' : 'cur';
                 return (
-                  <button key={s.id} className={'pipe-step ' + cls} style={isClosed ? { cursor: 'default', pointerEvents: 'none' } : null} onClick={() => { if (!isClosed && onStatusChange) onStatusChange(app, s.id); }}>
+                  <button key={s.id} className={'pipe-step ' + cls} style={isClosed ? { cursor: 'default', pointerEvents: 'none' } : null} onClick={() => { if (!isClosed && onStatusChange) onStatusChange(app, s.id, eventDate); }}>
                     <span className="pipe-bar" />
                     <span className="pipe-lbl">{s.short}</span>
                   </button>
@@ -1272,9 +1318,21 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                   ? <>{dropLabel ? <>Reached {dropLabel} · stage {dropStage + 1} of {STATUS.length} · </> : null}<span style={{ color: statusColor }}>{app.status}</span></>
                   : <>Stage {m.stage + 1} of {STATUS.length} · <span style={{ color: m.color }}>{app.status}</span></>}
               </span>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {!isClosed && m.stage > 0 && <button className="btn ghost sm" onClick={() => onStatusChange && onStatusChange(app, STATUS[m.stage - 1].id)}>← Back</button>}
-                {!isClosed && m.stage < LAST_STAGE && <button className="btn ghost sm" style={{ color: 'var(--accent-2)' }} onClick={() => onStatusChange && onStatusChange(app, STATUS[m.stage + 1].id)}>Advance →</button>}
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {/* Governs every status change made from this drawer: the stage
+                    track above and the action buttons in the footer. Quiet and
+                    pre-filled, because same-day is the common case. */}
+                <label className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', letterSpacing: '.06em', textTransform: 'uppercase' }}>Booked</label>
+                <input
+                  type="date"
+                  className="dr-todo-due"
+                  value={eventDate}
+                  max={localToday()}
+                  onChange={e => setEventDate(e.target.value)}
+                  title="When this was booked or notified — not when it was conducted, and not when you're typing it in. Defaults to today."
+                />
+                {!isClosed && m.stage > 0 && <button className="btn ghost sm" onClick={() => onStatusChange && onStatusChange(app, STATUS[m.stage - 1].id, eventDate)}>← Back</button>}
+                {!isClosed && m.stage < LAST_STAGE && <button className="btn ghost sm" style={{ color: 'var(--accent-2)' }} onClick={() => onStatusChange && onStatusChange(app, STATUS[m.stage + 1].id, eventDate)}>Advance →</button>}
               </div>
             </div>
           </div>
@@ -1847,7 +1905,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
           ))}
           {primary.length > 0 && closers.length > 0 && <span className="dr-foot-div" />}
           {closers.map(b => (
-            <button key={b.id} className={'btn ghost' + (b.danger ? ' danger' : '')} onClick={() => onAction && onAction(app, b.id)}>
+            <button key={b.id} className={'btn ghost' + (b.danger ? ' danger' : '')} onClick={() => onAction && onAction(app, b.id, eventDate)}>
               {b.label}
             </button>
           ))}
@@ -1987,9 +2045,10 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   };
 
   // Drawer action handlers — primary actions advance status via API PATCH
-  const advance = async (a, newStatus) => {
+  const advance = async (a, newStatus, eventDate) => {
     try {
       const body = { status: newStatus };
+      if (eventDate) body.eventDate = eventDate;
       // Auto-attribute the exit stage: closing from an interview round (or
       // Responded/Offer) stamps [reached: <stage>] so the funnel + rejections-
       // by-stage analytics credit the right rung. Mirrors app.jsx handleAction.
@@ -2002,11 +2061,18 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
           a.notes = body.notes;
         }
       }
-      await window.tjkMutate(`/api/applications/${a.id}`, {
+      const res = await window.tjkMutate(`/api/applications/${a.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+      // The server now 400s an invalid eventDate. Without this check a rejected
+      // date would fail silently while the UI showed the new status anyway.
+      if (res && !res.ok) {
+        const msg = await res.json().then(j => j.error).catch(() => `HTTP ${res.status}`);
+        if (window.tjkToast) window.tjkToast(`Save failed for ${a.company}: ${msg}`, 'error');
+        return;
+      }
       // Update local app object for instant visual feedback
       a.status = newStatus;
       setDrawerApp({ ...a });
@@ -2019,7 +2085,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
     } catch (err) { /* swallow — toast comes from parent */ }
   };
 
-  const onAction = (a, actionId) => {
+  const onAction = (a, actionId, eventDate) => {
     const MAP = {
       apply_manual: 'Applied', apply_claude: 'Applied', already_applied: 'Applied',
       responded: 'Responded', offer: 'Offer', accept: 'Offer',
@@ -2031,13 +2097,13 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
     };
     const next = MAP[actionId];
     if (!next) return;
-    advance(a, next).then(() => {
+    advance(a, next, eventDate).then(() => {
       // Closed states leave the pipeline
       if (!ACTIVE_STATUSES.includes(next)) setDrawerApp(null);
     });
   };
 
-  const onStatusChange = (a, newStatus) => advance(a, newStatus);
+  const onStatusChange = (a, newStatus, eventDate) => advance(a, newStatus, eventDate);
 
   return (
     <div className="col" style={{ gap: 0 }}>
