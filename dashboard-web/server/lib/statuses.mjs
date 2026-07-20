@@ -13,9 +13,13 @@ import { ROOT_DIR } from '../config.mjs';
 const STATES_FILE = path.join(ROOT_DIR, 'templates', 'states.yml');
 
 let _states = [];
+let _recruiterStates = [];
+let _talentStates = [];
 try {
   const doc = yaml.load(fs.readFileSync(STATES_FILE, 'utf8'));
   _states = Array.isArray(doc?.states) ? doc.states : [];
+  _recruiterStates = Array.isArray(doc?.recruiter_states) ? doc.recruiter_states : [];
+  _talentStates = Array.isArray(doc?.talent_states) ? doc.talent_states : [];
 } catch (e) {
   console.warn('[statuses] could not load templates/states.yml:', e.message);
 }
@@ -40,6 +44,29 @@ export const FUNNEL_ORDER = _states
 export const ACTIVE_STATUSES = FUNNEL_ORDER.slice();
 export const CLOSED_STATUSES = ALL_STATUSES.filter(s => !FUNNEL_ORDER.includes(s));
 
+// ─── Outreach ladders (recruiters + target talent) ──────────────────────────
+// Separate vocabularies from the application funnel, but loaded from the SAME
+// file so they cannot drift the way the hardcoded arrays did. `contacted` is
+// intentionally not derived from `stage`: Dormant and Bounced are entered after
+// a message goes out yet sit off the ladder, so a stage comparison erases them.
+export const RECRUITER_STATES = _recruiterStates;
+export const TALENT_STATES = _talentStates;
+export const RECRUITER_STATUS_LABELS = _recruiterStates.map(s => s.label);
+export const TALENT_STATUS_LABELS = _talentStates.map(s => s.label);
+export const RECRUITER_CONTACTED = new Set(_recruiterStates.filter(s => s.contacted).map(s => s.label));
+export const TALENT_CONTACTED = new Set(_talentStates.filter(s => s.contacted).map(s => s.label));
+export const RECRUITER_REPLIED = new Set(_recruiterStates.filter(s => s.replied).map(s => s.label));
+export const TALENT_REPLIED = new Set(_talentStates.filter(s => s.replied).map(s => s.label));
+
+// A status seen in the data that no ladder knows about is a silent data-quality
+// hole — it is how `Bounced` rendered as "Not Contacted" for a month. Warn on it
+// the same way logStatusEvent does, rather than coercing it to a default rung.
+export function warnUnknownStatus(kind, status, labels, id) {
+  if (!status || labels.includes(status)) return false;
+  console.warn(`[statuses] unknown ${kind} status "${status}"${id ? ` on ${id}` : ''} — not in templates/states.yml, so every ladder-based metric will skip it`);
+  return true;
+}
+
 const _interviewSet = new Set(INTERVIEW_STAGES);
 export function isInterviewStage(status) { return _interviewSet.has(status); }
 
@@ -49,6 +76,18 @@ export function funnelIndex(status) { return FUNNEL_ORDER.indexOf(status); }
 export function reachedStage(notes) {
   const m = (notes || '').match(/\[reached:\s*([^\]]+)\]/i);
   return m ? m[1].trim() : null;
+}
+
+// `[inbound]` notes tag: the recruiter reached out BEFORE any application, so
+// this row's "response" was never a response to something the user sent. Kept in
+// every count for now, but surfaced so the mix is visible — an inbound-heavy
+// period makes the application response rate look better than it is.
+//
+// The signature is an invite dated at or before the application. Left untagged,
+// those rows read as unusually fast outbound replies and drag the average
+// days-to-response down.
+export function isInbound(notes) {
+  return /\[inbound\]/i.test(notes || '');
 }
 
 // Furthest funnel rung an app EVER reached: the max of its live status, any

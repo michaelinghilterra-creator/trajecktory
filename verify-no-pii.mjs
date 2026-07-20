@@ -349,6 +349,14 @@ const trackerIdDate = new Set();
 const prepPaths = new Map();
 for (const co of pipeline.keys()) prepPaths.set(`interview-prep/${co}/`, co);
 
+// Verbs that assert an INTERACTION with a counterparty, for rule 3e. Deliberately
+// excludes the bare canonical status labels ("Phone Screen", "1st Interview",
+// "Replied", "Offer"): those are the vocabulary of the product itself and appear
+// in demo rows, status ladders and docs with no leak attached. What makes a
+// sentence leak is a claim that something HAPPENED — an invite arrived, a
+// recruiter reached out, a round got booked.
+const OUTREACH_VERB = /\b(invit(e|ed|es|ation)|reach(ed)? out|heard back|got back to|came back to|screened|interviewed|interviewing with|recruiter (reached|contacted|invited)|hiring manager|booked (a|the) (call|screen|round)|scheduled (a|the) (call|screen|round)|ghosted|turned (us|me|them) down)\b/i;
+
 // ── COMMIT MESSAGES ────────────────────────────────────────────────────────
 // A commit message is published exactly as surely as a file, and nothing here used
 // to look at one. That is not hypothetical: while the file gate above was being
@@ -565,6 +573,43 @@ for (const abs of files) {
   for (const [p, co] of prepPaths) {
     if (text.includes(p)) {
       leak(rel, 'INTERVIEW STATE', `${p} — "${co}" is a company in the tracker; a prep folder names a live interview round. Use an invented company in examples.`);
+    }
+  }
+
+  // 3e. interview state in PROSE — a real tracker company named beside an
+  // outreach verb, with no date/role/score to trip the correspondence rule.
+  //
+  // The correspondence rule (5, below) deliberately ignores a bare company name,
+  // because portals.example.yml ships dozens of real employers as a feature and the
+  // demo rows reuse real names; requiring two matching fields is what keeps that
+  // rule quiet enough to stay switched on. But a sentence can leak interview state
+  // with ZERO structured fields: name the company, say an invite arrived, and the
+  // reader learns the owner is in a live process. That shape passed every rule here.
+  //
+  // It is the shape a coding agent produces while documenting WHY a fix was needed —
+  // the same failure mode AGENTS.md already records for commit messages, which is
+  // why that rule exists. It has already reached a tracked source file once.
+  //
+  // Scoped to COMMENTS and prose files, never to data literals: a demo row carrying
+  // a real company name and the status "1st Interview" is not a leak, and flagging
+  // it is exactly the cry-wolf failure the correspondence rule was designed around.
+  // Window is +/-1 line, because wrapped prose splits the company from the verb.
+  if (pipeline.size) {
+    const proseFile = /\.(md|markdown|txt|html?)$/i.test(abs);
+    const lines = text.split('\n');
+    const isProseLine = (l) => proseFile || /^\s*(\/\/|\*|#|<!--)/.test(l);
+    const hit = new Set();
+    for (let i = 0; i < lines.length; i++) {
+      if (!isProseLine(lines[i])) continue;
+      const win = [lines[i - 1], lines[i], lines[i + 1]].filter(l => l != null && isProseLine(l)).join(' ');
+      if (!OUTREACH_VERB.test(win)) continue;
+      for (const co of pipeline.keys()) {
+        if (hit.has(co)) continue;
+        if (!new RegExp(`\\b${rx(co)}\\b`).test(win)) continue;
+        hit.add(co);
+        leak(`${rel}:${i + 1}`, 'INTERVIEW STATE (prose)',
+          `"${co}" is a company in the tracker, named beside "${(win.match(OUTREACH_VERB) || [''])[0]}". A sentence can leak a live process with no date or score attached. Describe the shape, not the counterparty.`);
+      }
     }
   }
 

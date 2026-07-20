@@ -16,10 +16,18 @@ These files contain your personal data, customizations, and work product. Update
 | `article-digest.md` | Your proof points from portfolio |
 | `interview-prep/story-bank.md` | Your accumulated STAR+R stories |
 | `portals.yml` | Your customized company list |
+| `data/*` | **All of it.** Every file under `data/` is yours. The rows below name the main ones, but the rule is the directory, not the list — `.gitignore` ignores `data/*` wholesale, and a file that is not named here is still yours. |
 | `data/applications.md` | Your application tracker |
 | `data/pipeline.md` | Your URL inbox |
 | `data/scan-history.tsv` | Your scan history |
 | `data/follow-ups.md` | Your follow-up history |
+| `data/status-events.tsv` | Every status change, dated. 5 columns: `app# / date / status / company / logged`. `date` is when the change HAPPENED (specifically when it was booked or notified); `logged` is when the row was written. Rows written before the date could be entered by hand have an empty `logged`, which also marks a date nobody confirmed. Legacy 4-column rows still parse. |
+| `data/apply-dates.json` | When you actually applied, per app — distinct from the tracker's Date column, which is when the row was evaluated. Anchors follow-up cadence and the timing analytics. |
+| `data/app-notes.json` | Your per-application notes log |
+| `data/followup-snooze.json` | Deferred follow-up alerts |
+| `data/followup-mute.json` | Indefinitely muted follow-ups ("done for now") |
+| `data/cadence.json`, `data/cadence-log.json` | Your Today-tab weekly cadence and its completion log |
+| `data/todos.json` | Your to-do list |
 | `writing-samples/*` | Your personal writing samples for style calibration |
 | `reports/*` | Your evaluation reports |
 | `output/*` | Your generated PDFs |

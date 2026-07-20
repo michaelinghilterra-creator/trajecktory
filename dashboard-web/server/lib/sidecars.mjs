@@ -1,5 +1,11 @@
 import fs from 'fs';
 import { SNOOZE_PATH, APPLY_DATES_PATH, STATUS_EVENTS_PATH, MUTE_PATH } from '../config.mjs';
+import { ALL_STATUSES } from './statuses.mjs';
+
+// A calendar date the caller supplied, or null. Anything that is not exactly
+// YYYY-MM-DD is rejected rather than written, so a malformed date degrades to
+// "today" instead of corrupting a column every timing metric parses.
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // ─── Follow-up snooze store ───────────────────────────────────────────────────
 // Defers a stale follow-up alert without logging a touch. Shape:
@@ -71,29 +77,51 @@ function readApplyDates() {
 function writeApplyDates(map) {
   fs.writeFileSync(APPLY_DATES_PATH, JSON.stringify(map, null, 2) + '\n');
 }
-// Record today as the apply date for an app the first time it goes Applied.
-// Never overwrites an existing date (the first apply is the cadence anchor).
-function recordApplyDate(appNum) {
+// Record the apply date for an app the first time it goes Applied. Defaults to
+// today; pass an explicit `date` when the user states when they actually
+// applied. Never overwrites an existing date (the first apply is the cadence
+// anchor) unless `force` is set — a correction to a wrong anchor is the one
+// legitimate reason to overwrite, and it has to be asked for by name.
+function recordApplyDate(appNum, date, { force = false } = {}) {
   const map = readApplyDates();
   const key = String(appNum);
-  if (map[key]) return map[key];
-  map[key] = snoozeToday();
+  if (map[key] && !force) return map[key];
+  map[key] = (date && ISO_DATE.test(date)) ? date : snoozeToday();
   writeApplyDates(map);
   return map[key];
 }
 // ── Status event sidecar ──────────────────────────────────────────────────
 // Append-only TSV log of every dashboard-driven status change, kept OUT of
 // applications.md (which stays a fixed 10-column table). Columns:
-//   app#  date(YYYY-MM-DD)  status  company
+//   app#  date(YYYY-MM-DD)  status  company  logged(YYYY-MM-DD)
 // Enables time-in-stage analytics (e.g. days-to-rejection) that the single
 // Date column in applications.md can't express. Only dashboard PATCHes are
 // captured, so the metric fills in over time.
-function logStatusEvent(appNum, status, { company = '' } = {}) {
+//
+// `date` is when the change HAPPENED — specifically when it was booked or
+// notified, not when it was conducted. `logged` is when the row was written.
+// The two were the same thing until the user could state a date, which meant
+// every timing metric silently measured data entry rather than the job search.
+// Rows written before that have an empty `logged`, which is also the marker for
+// "this date was never confirmed by anyone".
+function logStatusEvent(appNum, status, { company = '', date } = {}) {
   try {
     const clean = (s) => String(s ?? '').replace(/[\t\r\n]+/g, ' ').trim();
-    const row = `${clean(appNum)}\t${snoozeToday()}\t${clean(status)}\t${clean(company)}\n`;
+    const st = clean(status);
+    // Nothing validated status on the way in, which is how non-canonical rows
+    // (e.g. a bare "Interview") got logged and then silently ignored by every
+    // funnel calculation. Warn, but still write: dropping the row would lose
+    // history, and logging must never break the status change it records.
+    if (st && !ALL_STATUSES.includes(st)) {
+      console.warn(`[status-events] non-canonical status "${st}" for app ${clean(appNum)} — written, but funnel analytics will skip it`);
+    }
+    const when = (date && ISO_DATE.test(date)) ? date : snoozeToday();
+    if (date && !ISO_DATE.test(date)) {
+      console.warn(`[status-events] ignoring malformed date "${date}" for app ${clean(appNum)} — using today`);
+    }
+    const row = `${clean(appNum)}\t${when}\t${st}\t${clean(company)}\t${snoozeToday()}\n`;
     if (!fs.existsSync(STATUS_EVENTS_PATH)) {
-      fs.writeFileSync(STATUS_EVENTS_PATH, 'app#\tdate\tstatus\tcompany\n' + row);
+      fs.writeFileSync(STATUS_EVENTS_PATH, 'app#\tdate\tstatus\tcompany\tlogged\n' + row);
     } else {
       fs.appendFileSync(STATUS_EVENTS_PATH, row);
     }
@@ -108,9 +136,14 @@ function parseStatusEvents() {
     const out = [];
     for (const line of fs.readFileSync(STATUS_EVENTS_PATH, 'utf8').split('\n')) {
       if (!line.trim() || line.startsWith('app#')) continue;
-      const [app, date, status, company = ''] = line.split('\t');
+      // 5-column rows carry `logged`; legacy 4-column rows do not and read as
+      // null. Same tolerance the tracker parser uses for its 9/10-column split.
+      const [app, date, status, company = '', logged = ''] = line.split('\t');
       if (!app || !date) continue;
-      out.push({ app: app.trim(), date: date.trim(), status: (status || '').trim(), company: company.trim() });
+      out.push({
+        app: app.trim(), date: date.trim(), status: (status || '').trim(),
+        company: company.trim(), logged: logged.trim() || null,
+      });
     }
     return out;
   } catch {

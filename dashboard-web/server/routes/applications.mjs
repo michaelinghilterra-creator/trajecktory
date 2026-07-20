@@ -46,23 +46,46 @@ router.get('/api/applications', (req, res) => {
 router.patch('/api/applications/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { status, notes, company } = req.body;
+    const { status, notes, company, eventDate } = req.body;
 
     if (status && !ALL_STATUSES.includes(status)) {
       return res.status(400).json({ error: `Invalid status: ${status}` });
     }
 
+    // A bad date is rejected outright rather than quietly ignored. The body is
+    // destructured against a fixed allowlist, so an unrecognised field vanishes
+    // with no error — which would let a broken client look like it was saving
+    // dates while writing none. Fail loudly instead.
+    if (eventDate !== undefined && eventDate !== null && eventDate !== '') {
+      if (typeof eventDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+        return res.status(400).json({ error: `Invalid eventDate: ${eventDate} (expected YYYY-MM-DD)` });
+      }
+      const parsed = new Date(`${eventDate}T00:00:00Z`);
+      if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== eventDate) {
+        return res.status(400).json({ error: `Invalid eventDate: ${eventDate} is not a real date` });
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      if (eventDate > today) {
+        return res.status(400).json({ error: `Invalid eventDate: ${eventDate} is in the future` });
+      }
+      if (eventDate < '2000-01-01') {
+        return res.status(400).json({ error: `Invalid eventDate: ${eventDate} is implausibly old` });
+      }
+    }
+    const when = eventDate || undefined;
+
     const updates = {};
     if (status !== undefined) updates.status = status;
     if (notes !== undefined) updates.notes = notes;
 
-    const ok = patchRowInMd(id, updates, { company });
+    const ok = patchRowInMd(id, updates, { company, eventDate: when });
     if (!ok) return res.status(404).json({ error: `Row ${id} not found` });
 
     // Capture the real apply date the first time a row goes Applied, so
     // follow-up cadence counts from when the user actually applied — not the
-    // evaluation/scrape date in the Date column.
-    if (status === 'Applied') recordApplyDate(id);
+    // evaluation/scrape date in the Date column. An explicit eventDate is the
+    // user correcting the anchor, so it is allowed to overwrite.
+    if (status === 'Applied') recordApplyDate(id, when, { force: !!when });
 
     // Read back the updated row — use company to disambiguate duplicate ids
     const rows = parseApplicationsMd();
