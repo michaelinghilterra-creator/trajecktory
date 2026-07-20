@@ -48,7 +48,7 @@ function firstHeadingOf(p) {
   return m ? m[1].trim() : null;
 }
 
-// "convoso-sr-director-revenue-operations.md" -> "Sr Director Revenue Operations"
+// "northwind-logistics-director-supply-chain-analytics.md" -> "Director Supply Chain Analytics"
 function prettifyDocName(base, companySlug) {
   let s = base.replace(/\.md$/i, '');
   if (companySlug && s.toLowerCase().startsWith(companySlug + '-')) s = s.slice(companySlug.length + 1);

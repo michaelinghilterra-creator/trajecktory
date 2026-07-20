@@ -22,12 +22,29 @@ never sits on top of a document you actually read.
 **Prep files never migrate.** A round with no `.run.md` simply has no board. That is a
 correct state, not a debt.
 
-## The worked example
+## The worked examples
 
-[`runsheet-example.run.md`](runsheet-example.run.md) is a complete, valid v1 file. Every
-rule below is visible in it, and the counts quoted in this spec are its real rendered
-output. It is **abridged on purpose**: 15 cues where a full `hm-round` runs ~40-45, so it
-stays readable in one sitting. It demonstrates the *shape*, not the target size.
+One per shape. Both are complete, valid v1 files:
+
+| File | Template | Rendered |
+|---|---|---|
+| [`runsheet-example.run.md`](runsheet-example.run.md) | `hm-round` | 15 cues, 12 answers, 6 sections |
+| [`runsheet-example-screen.run.md`](runsheet-example-screen.run.md) | `screen` | 18 cues, 17 answers, 6 sections |
+
+Every rule below is visible in one or both, and the counts quoted in this spec are their
+real rendered output. The `hm-round` file is **abridged on purpose**: 15 cues where a full
+one runs ~40-45, so it stays readable in one sitting. It demonstrates the *shape*, not the
+target size. The `screen` file is full size, because a screen board really is that small.
+
+Both are the same fictional application one round apart (Northwind Logistics #417), which
+makes the difference between the shapes legible side by side.
+
+> **Every shape ships an example, and that is a rule, not a convenience.** While only the
+> `hm-round` file existed, every claim this spec made about the `screen` shape was measured
+> off a real board in the author's gitignored `interview-prep/`, because that was the only
+> screen board in existence. A spec sourced from a private file cannot be checked by its
+> readers and quietly publishes whatever it measured. When `final-loop` is built, it ships
+> an example in the same commit.
 
 ## File layout
 
@@ -344,5 +361,5 @@ no §-sections, and its `inferStage()` would file every one as a legacy warning.
 The board is a best guess at what is most likely to come up. A wrong guess is cheap: you
 do not click it. The expensive failure is blanking with no net, which is why the
 **`style:"panic"` section is mandatory** and why cue phrasing uses **your** shorthand
-("Get sellers to do what they didn't want"), not a verbatim interview question.
+("Getting the field to do what they didn't want"), not a verbatim interview question.
 Shorthand scans faster under pressure.
