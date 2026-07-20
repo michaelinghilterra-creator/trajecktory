@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { APPS_MD, ROOT_DIR, STATUS_EVENTS_PATH } from '../config.mjs';
-import { parseTrackerLine } from '../../../lib/tracker.mjs';
+import { parseTrackerLine, formatTrackerLine } from '../../../lib/tracker.mjs';
 import { hasV1Frontmatter, parseV1, v1Header } from '../v1-loader.mjs';
 import { logStatusEvent, parseStatusEvents } from './sidecars.mjs';
 import { FUNNEL_ORDER, makeFurthestIdx, isInbound } from './statuses.mjs';
@@ -306,11 +306,9 @@ function patchRowInMd(id, updates, hint = {}) {
   // Collect all lines that match this id
   const candidates = [];
   lines.forEach((line, idx) => {
-    if (!line.startsWith('|')) return;
-    const cells = line.split('|');
-    if (cells.length < 10) return;
-    if (parseInt(cells[1].trim(), 10) !== id) return;
-    candidates.push({ idx, cells, company: cells[3].trim() });
+    const row = parseTrackerLine(line);
+    if (!row || row.num !== id) return;
+    candidates.push({ idx, row, company: row.company });
   });
 
   if (candidates.length === 0) return false;
@@ -319,10 +317,14 @@ function patchRowInMd(id, updates, hint = {}) {
   const target = (hint.company && candidates.find(c => c.company === hint.company))
     || candidates[0];
 
+  // Write through formatTrackerLine: notes arrive from the dashboard's edit
+  // field, so a pipe typed by the user would otherwise split the row.
   const newLines = [...lines];
-  if (updates.status !== undefined) target.cells[6] = ` ${updates.status} `;
-  if (updates.notes !== undefined) target.cells[10] = ` ${updates.notes} `;
-  newLines[target.idx] = target.cells.join('|');
+  newLines[target.idx] = formatTrackerLine({
+    ...target.row,
+    ...(updates.status !== undefined ? { status: updates.status } : {}),
+    ...(updates.notes !== undefined ? { notes: updates.notes } : {}),
+  });
 
   fs.writeFileSync(APPS_MD, newLines.join('\n'), 'utf8');
   // Record the status transition in the sidecar event log (dated), so analytics

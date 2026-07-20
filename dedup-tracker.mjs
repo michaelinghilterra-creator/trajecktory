@@ -12,7 +12,7 @@
 import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { parseTrackerLine } from './lib/tracker.mjs';
+import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md (original)
@@ -186,9 +186,8 @@ for (const [company, companyEntries] of groups) {
     if (bestStatus !== keeper.status) {
       const lineIdx = entryLineMap.get(keeper.num);
       if (lineIdx !== undefined) {
-        const parts = lines[lineIdx].split('|').map(s => s.trim());
-        parts[6] = bestStatus;
-        lines[lineIdx] = '| ' + parts.slice(1, -1).join(' | ') + ' |';
+        const row = parseTrackerLine(lines[lineIdx]);
+        if (row) lines[lineIdx] = formatTrackerLine({ ...row, status: bestStatus });
         console.log(`  📝 #${keeper.num}: status promoted to "${bestStatus}" (from #${cluster.find(e => e.status === bestStatus)?.num})`);
       }
     }
