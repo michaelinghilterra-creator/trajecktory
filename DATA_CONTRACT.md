@@ -28,6 +28,7 @@ These files contain your personal data, customizations, and work product. Update
 | `data/followup-mute.json` | Indefinitely muted follow-ups ("done for now") |
 | `data/cadence.json`, `data/cadence-log.json` | Your Today-tab weekly cadence and its completion log |
 | `data/todos.json` | Your to-do list |
+| `data/release-notes-cache.json` | Cached GitHub release notes for the Change Log tab (6h TTL). Pure cache: delete it any time and it refetches, or falls back to `CHANGELOG.md` offline. |
 | `writing-samples/*` | Your personal writing samples for style calibration |
 | `reports/*` | Your evaluation reports |
 | `output/*` | Your generated PDFs |

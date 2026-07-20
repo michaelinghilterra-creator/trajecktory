@@ -3,10 +3,12 @@
 //   - Tell Me About Yourself: a Claude-written 90-second elevator pitch, tweakable
 //     by seniority / industry / interview stage / length. Runs on the Claude plan
 //     (generateText, keyless by default), the same path Insights uses.
-//   - Change Log: serves the Release-Please CHANGELOG.md as structured entries.
+//   - Change Log: serves the GitHub release notes as structured entries, falling
+//     back to the Release-Please CHANGELOG.md when offline.
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
+import { execFileSync } from 'child_process';
 import { ROOT_DIR } from '../config.mjs';
 import { generateText } from '../lib/anthropic.mjs';
 import { getIdentity } from '../lib/profile.mjs';
@@ -162,14 +164,106 @@ function parseChangelog(md) {
   return entries;
 }
 
-// GET /api/setup/changelog — current version + parsed release notes (newest first).
-router.get('/api/setup/changelog', (req, res) => {
+// ─── GitHub release notes ────────────────────────────────────────────────────
+// CHANGELOG.md is written by Release Please from commit SUBJECTS, so rendering it
+// here showed users lines like "Verify-no-pii: flag a tracker company named
+// beside an outreach verb" as though it were a feature name. The plain-language
+// notes are hand-written on the GitHub release; read those instead. CHANGELOG.md
+// stays as the offline fallback, so the panel still works with no network and an
+// install that has never reached GitHub behaves exactly as before.
+const RELEASE_CACHE = path.resolve(ROOT_DIR, 'data', 'release-notes-cache.json');
+const RELEASE_TTL_MS = 6 * 60 * 60 * 1000;
+const RELEASE_FALLBACK_SLUG = 'michaelinghilterra-creator/trajecktory';
+
+// Prefer the install's own origin so a fork shows its own notes; fall back to the
+// canonical public repo (the same constant update-system.mjs anchors on).
+function repoSlug() {
   try {
-    let version = '';
-    try { version = fs.readFileSync(VERSION_FILE, 'utf8').trim(); } catch { /* dev checkout */ }
-    let md = '';
-    try { md = fs.readFileSync(CHANGELOG_MD, 'utf8'); } catch { /* no changelog yet */ }
-    const entries = parseChangelog(md).filter(e => e.date && e.date >= CHANGELOG_SINCE);
-    res.json({ version, entries });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const url = execFileSync('git', ['remote', 'get-url', 'origin'], { cwd: ROOT_DIR, encoding: 'utf8', timeout: 4000 }).trim();
+    const m = url.match(/github\.com[/:]([^/]+)\/([^/.\s]+)/);
+    if (m) return `${m[1]}/${m[2]}`;
+  } catch { /* no git, no remote, or not a checkout */ }
+  return RELEASE_FALLBACK_SLUG;
+}
+
+async function fetchReleases() {
+  try {
+    const c = JSON.parse(fs.readFileSync(RELEASE_CACHE, 'utf8'));
+    if (Date.now() - c.at < RELEASE_TTL_MS && Array.isArray(c.releases)) return c.releases;
+  } catch { /* cold or stale cache */ }
+  // Unauthenticated: 60 req/hr per IP, hence the cache. A failure here is not an
+  // error condition — the caller falls back to the local changelog.
+  const res = await fetch(`https://api.github.com/repos/${repoSlug()}/releases?per_page=30`, {
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'trajecktory-dashboard' },
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+  const releases = (await res.json())
+    .filter(r => r && !r.draft && !r.prerelease)
+    .map(r => ({
+      version: String(r.tag_name || '').replace(/^trajecktory[\s-]*/i, '').replace(/^v/, ''),
+      date: String(r.published_at || '').slice(0, 10),
+      body: String(r.body || ''),
+    }));
+  try {
+    fs.mkdirSync(path.dirname(RELEASE_CACHE), { recursive: true });
+    fs.writeFileSync(RELEASE_CACHE, JSON.stringify({ at: Date.now(), releases }, null, 2));
+  } catch { /* cache is an optimisation, not a requirement */ }
+  return releases;
+}
+
+// Install instructions are the bulk of a release body and are useless in-app: by
+// the time this renders, the reader is already installed.
+const SKIP_SECTION = /^(install|download|upgrad|getting started)/i;
+
+function parseReleaseBody(body) {
+  const sections = [];
+  let sec = null, skipping = false, inProse = false;
+  const open = (heading) => { sec = { heading, items: [] }; sections.push(sec); inProse = false; };
+  for (const ln of String(body).split(/\r?\n/)) {
+    const h3 = ln.match(/^###\s+(.+)$/);
+    const h2 = !h3 && ln.match(/^##\s+(.+)$/);
+    if (h2) {
+      const t = h2[1].trim();
+      skipping = SKIP_SECTION.test(t);
+      // "What changed" is a wrapper, not a section — its ### children carry the headings.
+      if (!skipping && !/^what changed/i.test(t)) open(t); else sec = null;
+      continue;
+    }
+    if (h3) { if (!skipping) open(h3[1].trim()); continue; }
+    if (skipping) continue;
+    const it = ln.match(/^[-*]\s+(.+)$/);
+    if (it) { if (!sec) open(''); sec.items.push(cleanNote(it[1])); inProse = false; continue; }
+    const prose = ln.trim();
+    if (!prose) { inProse = false; continue; }
+    if (/^<!--/.test(prose)) continue;
+    if (!sec) open('');
+    if (inProse && sec.items.length) sec.items[sec.items.length - 1] = cleanNote(`${sec.items[sec.items.length - 1]} ${prose}`);
+    else { sec.items.push(cleanNote(prose)); inProse = true; }
+  }
+  return sections.filter(s => s.items.length);
+}
+
+// GET /api/setup/changelog — current version + parsed release notes (newest first).
+// `source` tells the UI which it got, so a fallback render can say so rather than
+// silently presenting commit subjects as if they were written for a reader.
+router.get('/api/setup/changelog', async (req, res) => {
+  let version = '';
+  try { version = fs.readFileSync(VERSION_FILE, 'utf8').trim(); } catch { /* dev checkout */ }
+
+  let entries = [];
+  try {
+    entries = (await fetchReleases())
+      .filter(r => r.date && r.date >= CHANGELOG_SINCE && r.body.trim())
+      .map(r => ({ version: r.version, date: r.date, sections: parseReleaseBody(r.body) }))
+      .filter(e => e.sections.length);
+  } catch { /* offline, rate-limited, or a fork with no releases */ }
+
+  if (entries.length) return res.json({ version, entries, source: 'release-notes' });
+
+  try {
+    const md = fs.readFileSync(CHANGELOG_MD, 'utf8');
+    entries = parseChangelog(md).filter(e => e.date && e.date >= CHANGELOG_SINCE);
+  } catch { /* no changelog either */ }
+  res.json({ version, entries, source: 'changelog-md' });
 });
