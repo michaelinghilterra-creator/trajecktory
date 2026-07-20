@@ -83,6 +83,12 @@ export async function fetchReleases() {
 // time this renders, the reader is already installed.
 const SKIP_SECTION = /^(install|download|upgrad|getting started)/i;
 
+// Items carry their own kind. A release body mixes real bullet lists with prose
+// paragraphs, and flattening both into strings made the UI bullet everything:
+// hand-written prose rendered as a wall of one-sentence bullets, which is the
+// look the written notes exist to avoid. `type` is what lets a paragraph render
+// as a paragraph. Both this and parseChangelog in routes/setup-modules.mjs emit
+// the shape, because both feed the same two components.
 export function parseReleaseBody(body) {
   const sections = [];
   let sec = null, skipping = false, inProse = false;
@@ -100,13 +106,16 @@ export function parseReleaseBody(body) {
     if (h3) { if (!skipping) open(h3[1].trim()); continue; }
     if (skipping) continue;
     const it = ln.match(/^[-*]\s+(.+)$/);
-    if (it) { if (!sec) open(''); sec.items.push(cleanNote(it[1])); inProse = false; continue; }
+    if (it) { if (!sec) open(''); sec.items.push({ type: 'bullet', text: cleanNote(it[1]) }); inProse = false; continue; }
     const prose = ln.trim();
     if (!prose) { inProse = false; continue; }
     if (/^<!--/.test(prose)) continue;
     if (!sec) open('');
-    if (inProse && sec.items.length) sec.items[sec.items.length - 1] = cleanNote(`${sec.items[sec.items.length - 1]} ${prose}`);
-    else { sec.items.push(cleanNote(prose)); inProse = true; }
+    const last = sec.items[sec.items.length - 1];
+    // inProse is only ever set by a prose line, and a bullet clears it, so `last`
+    // here is always the prose item this line continues.
+    if (inProse && last) last.text = cleanNote(`${last.text} ${prose}`);
+    else { sec.items.push({ type: 'prose', text: cleanNote(prose) }); inProse = true; }
   }
   return sections.filter(s => s.items.length);
 }
