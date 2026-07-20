@@ -114,3 +114,92 @@ states:
     aliases: [no response, ghosted, no reply, ghost]
     description: Applied but the company never responded (ghosted). Counts as a sent application with no response in analytics.
     dashboard_group: no_response
+
+# ─── Outreach states ─────────────────────────────────────────────────────────
+# Recruiter and Target-Talent contacts move along their OWN ladders, separate
+# from the application funnel above. They lived only as hardcoded arrays in
+# dashboard-web/src/recruiters.jsx and server/lib/recruiters.mjs,
+# which is how `Bounced` came to exist in the data and in no ladder at all: it
+# fell through a `?.stage || 0` lookup and rendered as "Not Contacted", telling
+# the user a hard-bounced address had never been contacted.
+#
+# contacted: true means a message actually went out. It is deliberately separate
+# from `stage`, because Dormant and Bounced are entered AFTER contact yet sit off
+# the ladder — so any `stage >= sent` test silently erases them from outreach
+# counts, and (since they are denominator-only) inflates the reply rate.
+
+recruiter_states:
+  - id: not_contacted
+    label: Not Contacted
+    stage: 0
+    contacted: false
+  - id: drafted
+    label: Drafted
+    stage: 1
+    contacted: false
+  - id: sent
+    label: Sent
+    stage: 2
+    contacted: true
+  - id: replied
+    label: Replied
+    stage: 3
+    contacted: true
+    replied: true
+  - id: meeting_scheduled
+    label: Meeting Scheduled
+    stage: 4
+    contacted: true
+    replied: true
+  - id: connected
+    label: Connected
+    stage: 5
+    contacted: true
+    replied: true
+  - id: dormant
+    label: Dormant
+    description: Parked after contact (commonly a bounce or a dead thread). Off the ladder, but the outreach happened.
+    contacted: true
+  - id: bounced
+    label: Bounced
+    description: Hard bounce. The message was sent; the address is dead.
+    contacted: true
+
+# Target-Talent contacts share the recruiter vocabulary plus Archived.
+talent_states:
+  - id: not_contacted
+    label: Not Contacted
+    stage: 0
+    contacted: false
+  - id: sent
+    label: Sent
+    stage: 2
+    contacted: true
+  - id: replied
+    label: Replied
+    stage: 3
+    contacted: true
+    replied: true
+  - id: meeting_scheduled
+    label: Meeting Scheduled
+    stage: 4
+    contacted: true
+    replied: true
+  - id: connected
+    label: Connected
+    stage: 5
+    contacted: true
+    replied: true
+  - id: dormant
+    label: Dormant
+    contacted: true
+  - id: archived
+    label: Archived
+    description: >-
+      Set by the Reconcile flow once every related application closes. WARNING:
+      this OVERWRITES the prior outreach status in place, so a contact who had
+      replied becomes indistinguishable from one never contacted. `lastTouch`
+      survives and is the only remaining evidence that a message went out, which
+      makes it valid for an outreach DENOMINATOR but never for a reply numerator.
+      Any reply rate over archived contacts is a floor, not a measurement.
+    contacted: false

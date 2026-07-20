@@ -5,7 +5,7 @@ import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd, patchRowInMd } from '../lib/applications.mjs';
 import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
-import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute, logStatusEvent } from '../lib/sidecars.mjs';
+import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute } from '../lib/sidecars.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeGhostedCandidates, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
@@ -150,8 +150,9 @@ router.post('/api/followups/archive-ghosted', (req, res) => {
       // Only archive apps still in Applied — never override a real signal that
       // arrived since the candidate list was computed.
       if (!app || app.status !== 'Applied') continue;
-      if (patchRowInMd(id, { status: 'No Response' })) {
-        logStatusEvent(id, 'No Response', { company: app.company });
+      // patchRowInMd logs the status event itself; logging again here wrote two
+      // identical rows for every archived app and inflated the event count.
+      if (patchRowInMd(id, { status: 'No Response' }, { company: app.company })) {
         // Muting is moot once terminal; clear any lingering mute.
         setMute(id, false);
         archived++;

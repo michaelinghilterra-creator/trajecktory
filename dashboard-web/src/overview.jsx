@@ -84,16 +84,19 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
       "Phone Screen": "Screen", "1st Interview": "1st", "2nd Interview": "2nd",
       "3rd Interview": "3rd", "4th Interview": "4th", "Offer": "Offer",
     };
-    // Evaluated stage = entry point, includes everything (even SKIP/Discarded)
-    // Applied stage   = anything that reached Applied or beyond, OR was Rejected
-    //                   (Rejected implies an application was sent)
-    // Responded/Interview/Offer = use window.appReached which honors the
-    //                   `[reached: X]` notes-tag convention for closed entries
+    // Every rung, Evaluated included, counts rows that actually REACHED it.
+    // Evaluated previously counted every row in the tracker, folding in every row
+    // that never entered the funnel at all (Discarded, Closed, SKIP, Not a Fit).
+    // That understates the first conversion by the ratio of tracked rows to
+    // evaluated ones, which on a well-filtered tracker is several-fold. It also
+    // skewed every downstream "% of entry" in the chart tooltip, which divides by
+    // this bar. The server's stageFunnelStats has always computed it this way;
+    // this makes the two agree.
+    // Applied additionally credits Rejected / No Response, since either implies
+    // an application was sent.
     return window.FUNNEL_ORDER.map(stage => {
       let stageApps;
-      if (stage === "Evaluated") {
-        stageApps = apps;
-      } else if (stage === "Applied") {
+      if (stage === "Applied") {
         stageApps = apps.filter(a => window.appReached(a, "Applied") || a.status === "Rejected" || a.status === "No Response");
       } else {
         stageApps = apps.filter(a => window.appReached(a, stage));
@@ -252,9 +255,13 @@ const toggleRow = (id) => setSelected(s => {
       {/* KPIs */}
       <div className="grid cols-4">
         <div className="kpi">
+          {/* Counts every tracked row, matching the header and the funnel's base.
+              This card used to exclude Closed while both of those included it,
+              so the page showed two different totals with nothing explaining the
+              gap. Closed stays visible as a sub-note instead of a silent subtraction. */}
           <span className="kpi-label">Total Tracked</span>
-          <span className="kpi-value">{apps.filter(a => a.status !== "Closed").length}</span>
-          <span className="kpi-delta">{recent} added in last 14d · {apps.filter(a => a.status === "Closed").length} backfill closed</span>
+          <span className="kpi-value">{apps.length}</span>
+          <span className="kpi-delta">{recent} added in last 14d · {apps.filter(a => a.status === "Closed").length} closed before you could act</span>
         </div>
         <div className="kpi">
           <span className="kpi-label">Pending Decision</span>

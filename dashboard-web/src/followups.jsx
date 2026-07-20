@@ -466,14 +466,17 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
     SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
   };
   const ACTIVE = ['Evaluated', 'Applied', 'Responded', ...window.INTERVIEW_STAGES, 'Offer'];
-  const fuOnAction = (a, actionId) => {
+  // onAction here is app.jsx's handleAction(app, status, silent, reachedStage,
+  // eventDate) — the date rides in the 5th slot, so the two middle args stay
+  // undefined to keep their existing defaults.
+  const fuOnAction = (a, actionId, eventDate) => {
     const next = FU_ACTION_MAP[actionId];
     if (!next) return;
-    onAction && onAction(a, next);
+    onAction && onAction(a, next, undefined, undefined, eventDate);
     load();
     if (!ACTIVE.includes(next)) setSelected(null);
   };
-  const fuOnStatusChange = (a, newStatus) => { onAction && onAction(a, newStatus); load(); };
+  const fuOnStatusChange = (a, newStatus, eventDate) => { onAction && onAction(a, newStatus, undefined, undefined, eventDate); load(); };
   const selectedApp = selected != null ? (apps.find(a => a.id === selected) || null) : null;
 
   const FindContactsPanel = window.FindContactsPanel;
@@ -640,6 +643,14 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>{ghosted.length} application{ghosted.length === 1 ? '' : 's'} have had no response in {data.ghostDays || 45}+ days</div>
               <div className="dim mono" style={{ fontSize: 11, marginTop: 3 }}>Archive to "No Response" to clear the backlog honestly. They still count as applications-with-no-reply in analytics.</div>
+              {/* Rows with no recorded apply date fall back to the tracker Date column,
+                  which is the EVALUATION date and runs days early on self-sourced rows.
+                  This button bulk-writes status, so say which ones are estimates. */}
+              {ghosted.some(g => g.estimated) && (
+                <div className="mono" style={{ fontSize: 11, marginTop: 4, color: 'var(--amber, #fbbf24)' }}>
+                  {ghosted.filter(g => g.estimated).length} of these are estimated from the evaluation date, not a recorded apply date, so their age may run early.
+                </div>
+              )}
             </div>
             <button className="btn primary sm" onClick={() => archiveGhosted(ghosted.map(g => g.id))}>
               Archive {ghosted.length} → No Response

@@ -210,13 +210,20 @@ function App() {
     setToasts(t => [...t, { id, msg, kind }]);
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2800);
   }, []);
+  // Exposed globally because PipelineDrawer is rendered from three different
+  // parents and receives no toast prop, so its own saves had no way to report a
+  // failure and simply swallowed them. Modules communicate via window.* here
+  // (build.mjs runs esbuild with bundle:false), so this matches the house style.
+  useEffect(() => { window.tjkToast = toast; }, [toast]);
 
   // Action handler — updates local state + persists to applications.md via API.
   // `reachedStage` (optional): when closing a role that advanced past Applied,
   //   pass the furthest stage reached (e.g. "2nd Interview"). We prefix the notes
   //   with `[reached: <stage>]` so analytics keep crediting this entry to that
   //   stage in the funnel. See window.appReached in data.js.
-  const handleAction = useCallback((app, newStatus, silent, reachedStage) => {
+  // `eventDate` (optional): when the change actually happened (booked/notified).
+  //   Omitted, the server dates the event today, which is what it always did.
+  const handleAction = useCallback((app, newStatus, silent, reachedStage, eventDate) => {
     // Map UI-only labels to canonical statuses before storage
     const STATUS_ALIASES = { "Not a Fit": "Discarded" };
     const canonicalStatus = STATUS_ALIASES[newStatus] || newStatus;
@@ -246,6 +253,7 @@ function App() {
     // Persist to applications.md
     const body = { status: canonicalStatus, company: app.company };
     if (nextNotes !== undefined) body.notes = nextNotes;
+    if (eventDate) body.eventDate = eventDate;
     window.tjkMutate(`/api/applications/${app.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -265,7 +273,7 @@ function App() {
   // fires onAction(app, actionId) with a button/action id — not a canonical status
   // — so map it the same way Pipeline does (pipeline.jsx MAP) before persisting via
   // handleAction. onStatusChange already passes a canonical status straight through.
-  const handleDrawerAction = (app, actionId) => {
+  const handleDrawerAction = (app, actionId, eventDate) => {
     const MAP = {
       apply_manual: 'Applied', apply_claude: 'Applied', already_applied: 'Applied',
       responded: 'Responded', offer: 'Offer', accept: 'Offer', reopen: 'Evaluated',
@@ -275,7 +283,7 @@ function App() {
     };
     const next = MAP[actionId];
     if (!next) return;
-    handleAction(app, next);
+    handleAction(app, next, undefined, undefined, eventDate);
     // Leaving the active pipeline closes the drawer (parity with Pipeline).
     const TERMINAL = ['SKIP', 'Not a Fit', 'Closed', 'Rejected', 'Discarded', 'No Response'];
     if (TERMINAL.includes(next)) setDrawerApp(null);
@@ -428,7 +436,7 @@ function App() {
           app={drawerApp}
           onClose={() => setDrawerApp(null)}
           onAction={handleDrawerAction}
-          onStatusChange={(a, s) => handleAction(a, s)}
+          onStatusChange={(a, s, eventDate) => handleAction(a, s, undefined, undefined, eventDate)}
           isStale={() => false}
           onFollowupChange={refreshApps}
         />

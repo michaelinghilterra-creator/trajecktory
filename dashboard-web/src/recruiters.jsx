@@ -11,17 +11,36 @@
 const { useState: useStateR, useEffect: useEffectR, useMemo: useMemoR, useCallback: useCallbackR } = React;
 
 // ─── Status metadata ────────────────────────────────────────────────────────
+// `contacted` is deliberately separate from `stage`. Dormant and Bounced are
+// states a contact enters AFTER an email went out, but they sit off the ladder
+// (stage -1), so a `stage >= 2` test silently erased every row in those two
+// states — understating outreach and, because those rows are denominator-only,
+// OVERSTATING the reply rate. Note the sign is opposite to the applications bug:
+// there, live status suppressed the numerator.
 const REC_STATUS = [
-  { id: 'Not Contacted',     short: 'New',       color: 'var(--text-mute)', rgb: '93,93,102',   stage: 0,  pipeline: true },
-  { id: 'Drafted',           short: 'Drafted',   color: 'var(--accent)',    rgb: '167,139,250', stage: 1,  pipeline: true },
-  { id: 'Sent',              short: 'Sent',      color: 'var(--blue)',      rgb: '96,165,250',  stage: 2,  pipeline: true },
-  { id: 'Replied',           short: 'Replied',   color: 'var(--cyan)',      rgb: '34,211,238',  stage: 3,  pipeline: true },
-  { id: 'Meeting Scheduled', short: 'Meeting',   color: 'var(--orange)',    rgb: '245,158,11',  stage: 4,  pipeline: true },
-  { id: 'Connected',         short: 'Connected', color: 'var(--green)',     rgb: '34,197,94',   stage: 5,  pipeline: true },
-  { id: 'Dormant',           short: 'Dormant',   color: 'var(--text-mute)', rgb: '93,93,102',   stage: -1, pipeline: false },
+  { id: 'Not Contacted',     short: 'New',       color: 'var(--text-mute)', rgb: '93,93,102',   stage: 0,  pipeline: true,  contacted: false },
+  { id: 'Drafted',           short: 'Drafted',   color: 'var(--accent)',    rgb: '167,139,250', stage: 1,  pipeline: true,  contacted: false },
+  { id: 'Sent',              short: 'Sent',      color: 'var(--blue)',      rgb: '96,165,250',  stage: 2,  pipeline: true,  contacted: true },
+  { id: 'Replied',           short: 'Replied',   color: 'var(--cyan)',      rgb: '34,211,238',  stage: 3,  pipeline: true,  contacted: true },
+  { id: 'Meeting Scheduled', short: 'Meeting',   color: 'var(--orange)',    rgb: '245,158,11',  stage: 4,  pipeline: true,  contacted: true },
+  { id: 'Connected',         short: 'Connected', color: 'var(--green)',     rgb: '34,197,94',   stage: 5,  pipeline: true,  contacted: true },
+  { id: 'Dormant',           short: 'Dormant',   color: 'var(--text-mute)', rgb: '93,93,102',   stage: -1, pipeline: false, contacted: true },
+  // Occurs in real data but was previously in no ladder at all, so it fell
+  // through `?.stage || 0` and rendered with the "Not Contacted" badge — telling
+  // the user a hard-bounced address had never been contacted.
+  { id: 'Bounced',           short: 'Bounced',   color: 'var(--red)',       rgb: '239,68,68',   stage: -1, pipeline: false, contacted: true },
 ];
 const REC_STATUS_MAP = Object.fromEntries(REC_STATUS.map(s => [s.id, s]));
 const REC_PIPELINE = REC_STATUS.filter(s => s.pipeline);
+const wasContacted = (c) => !!REC_STATUS_MAP[c.status]?.contacted;
+
+// Local calendar date. toISOString() is UTC and rolls over around 5-7pm US time,
+// so an evening "Sent" was stamped with TOMORROW's date — which then reads back
+// as "today" forever, since the relative-time helper floors negative ages at 0.
+const localTodayRec = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function initials(name) {
@@ -271,17 +290,17 @@ function FlatRow({ c, onOpen, selId, qaFor }) {
 // ─── KPI computation ────────────────────────────────────────────────────────
 function computeKpis(contacts, firmsLen) {
   const total = contacts.length;
-  const touched = contacts.filter(c => (REC_STATUS_MAP[c.status]?.stage || 0) >= 2).length;
+  const touched = contacts.filter(c => wasContacted(c)).length;
   const replied = contacts.filter(c => (REC_STATUS_MAP[c.status]?.stage || 0) >= 3).length;
   const inFlight = contacts.filter(c => ['Replied','Meeting Scheduled','Connected'].includes(c.status)).length;
-  const firmsEngaged = new Set(contacts.filter(c => (REC_STATUS_MAP[c.status]?.stage || 0) >= 2).map(c => c.firmId)).size;
+  const firmsEngaged = new Set(contacts.filter(c => wasContacted(c)).map(c => c.firmId)).size;
   const coverage = total ? Math.round((touched / total) * 100) : 0;
   const response = touched ? Math.round((replied / touched) * 100) : 0;
   const today = new Date();
   const recentSent = contacts.filter(c => {
     if (!c.lastTouch) return false;
     const d = (today - new Date(c.lastTouch)) / 864e5;
-    return d <= 7 && (REC_STATUS_MAP[c.status]?.stage || 0) >= 2;
+    return d <= 7 && wasContacted(c);
   }).length;
   return { total, touched, replied, inFlight, firmsEngaged, coverage, response, firms: firmsLen, recentSent };
 }
@@ -395,7 +414,7 @@ function recFirmSegments(f) {
 function RecFirmCard({ f, onOpen, onCompose, starred, toggleStar }) {
   const segs = recFirmSegments(f);
   const total = f.n;
-  const touched = f.contacts.filter(c => (REC_STATUS_MAP[c.status]?.stage || 0) >= 2).length;
+  const touched = f.contacts.filter(c => wasContacted(c)).length;
   const isStar = starred.has(f.id);
   return (
     <div className="firm-card" onClick={() => onOpen(f.contacts[0])}>
@@ -626,13 +645,15 @@ function RecBar({ label, n, total, color }) {
 
 function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
   const total = recruiters.length;
-  const stageOf = (c) => REC_STATUS_MAP[c.status]?.stage || 0;
-  const sent      = recruiters.filter(c => stageOf(c) >= 2).length;
+  // `?? -1` not `|| 0`: an unknown status must not silently read as stage 0
+  // ("Not Contacted"), which is how Bounced hid for a month.
+  const stageOf = (c) => REC_STATUS_MAP[c.status]?.stage ?? -1;
+  const sent      = recruiters.filter(wasContacted).length;
   const replied   = recruiters.filter(c => stageOf(c) >= 3).length;
   const meeting   = recruiters.filter(c => stageOf(c) >= 4).length;
   const connected = recruiters.filter(c => c.status === 'Connected').length;
   const notContacted = recruiters.filter(c => c.status === 'Not Contacted').length;
-  const firmsEngaged = new Set(recruiters.filter(c => stageOf(c) >= 2).map(c => c.firmId)).size;
+  const firmsEngaged = new Set(recruiters.filter(wasContacted).map(c => c.firmId)).size;
   const responseRate = sent > 0 ? Math.round((replied / sent) * 100) : 0;
   const outreachRate = total > 0 ? Math.round((sent / total) * 100) : 0;
   const activeConvos = replied + meeting;
@@ -649,11 +670,11 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
 
   // Coverage by firm (top 6 by total contacts)
   const byFirm = [...firms]
-    .map(f => ({ key: (f.name || '').split(' — ')[0] || 'Unknown', total: f.n, engaged: f.contacts.filter(c => stageOf(c) >= 2).length }))
+    .map(f => ({ key: (f.name || '').split(' — ')[0] || 'Unknown', total: f.n, engaged: f.contacts.filter(c => wasContacted(c)).length }))
     .sort((a, b) => b.total - a.total).slice(0, 6);
 
   // Action items: Replied (book), Sent stale, Not Contacted at firms with engaged peers
-  const firmHasEngaged = new Set(recruiters.filter(c => stageOf(c) >= 2).map(c => c.firmId));
+  const firmHasEngaged = new Set(recruiters.filter(c => wasContacted(c)).map(c => c.firmId));
   const actionScore = (c) => {
     let s = 0;
     if (c.status === 'Replied') s += 100;
@@ -813,7 +834,7 @@ function RecAnalyticsView({ recruiters, firms }) {
     reached: recruiters.filter(c => (REC_STATUS_MAP[c.status]?.stage || 0) >= s.stage).length,
   }));
   const maxReached = cum[0]?.reached || 1;
-  const sent = recruiters.filter(c => (REC_STATUS_MAP[c.status]?.stage || 0) >= 2).length;
+  const sent = recruiters.filter(c => wasContacted(c)).length;
   const replied = recruiters.filter(c => (REC_STATUS_MAP[c.status]?.stage || 0) >= 3).length;
   const meeting = recruiters.filter(c => (REC_STATUS_MAP[c.status]?.stage || 0) >= 4).length;
   const connected = recruiters.filter(c => c.status === 'Connected').length;
@@ -823,7 +844,7 @@ function RecAnalyticsView({ recruiters, firms }) {
     .map(f => ({
       key: f.name.split(' — ')[0],
       total: f.n,
-      engaged: f.contacts.filter(c => (REC_STATUS_MAP[c.status]?.stage || 0) >= 2).length,
+      engaged: f.contacts.filter(c => wasContacted(c)).length,
     }))
     .sort((a, b) => b.total - a.total).slice(0, 9);
   const maxFirm = Math.max(...byFirm.map(v => v.total), 1);
@@ -1132,7 +1153,7 @@ window.RecruitersTab = function RecruitersTab({ search } = {}) {
     window.tjkMutate(`/api/recruiters/${c.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'Sent', lastTouch: new Date().toISOString().slice(0, 10) }),
+      body: JSON.stringify({ status: 'Sent', lastTouch: localTodayRec() }),
     }).then(load);
   };
   // `f` may be null: the Activity empty state has no firm to hand over, it just
@@ -1446,7 +1467,7 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
 
   const updateStatus = (status) => {
     const body = { status };
-    if ((REC_STATUS_MAP[status]?.stage || 0) >= 2) body.lastTouch = new Date().toISOString().slice(0, 10);
+    if (REC_STATUS_MAP[status]?.contacted) body.lastTouch = localTodayRec();
     window.tjkMutate(`/api/recruiters/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -1500,7 +1521,7 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
 
   const firm = firms.find(f => f.id === data.firmId);
   const peers = firm ? firm.contacts.filter(c => c.id !== data.id).slice(0, 5) : [];
-  const touched = firm ? firm.contacts.filter(c => (REC_STATUS_MAP[c.status]?.stage || 0) >= 2).length : 0;
+  const touched = firm ? firm.contacts.filter(c => wasContacted(c)).length : 0;
   const corr = data.correspondence || [];
   const m = REC_STATUS_MAP[data.status] || REC_STATUS_MAP['Not Contacted'];
   const domain = (data.email || '').split('@')[1] || '';

@@ -47,6 +47,18 @@ function insAgeLabel(iso) {
   return `${d}d ago`;
 }
 
+// insAgeLabel() alone is evaluated once at render, so a tab left open kept
+// reporting the age it had at mount — "2h ago" indefinitely. Isolated in its own
+// component like SyncIndicator so only this text re-renders on each tick.
+function InsAge({ iso }) {
+  const [, setTick] = useStateI(0);
+  useEffectI(() => {
+    const t = setInterval(() => setTick(x => x + 1), 60000);
+    return () => clearInterval(t);
+  }, []);
+  return <>{insAgeLabel(iso)}</>;
+}
+
 const INS_SUBTABS = [
   { id: 'overview', label: 'Overview',          icon: 'overview' },
   { id: 'working',  label: "What's working",    icon: 'working' },
@@ -81,7 +93,17 @@ window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
     }
   };
 
-  const apps = (rawApps || []).filter(a => a.status !== 'Closed');
+  // The full tracker, deliberately unfiltered. This array is used ONLY to resolve
+  // #NNN citations and for the entry count below, so filtering out Closed rows
+  // bought nothing and silently degraded every citation pointing at one of them
+  // to inert grey text. It also made this tab quote two different totals.
+  const apps = rawApps || [];
+
+  // The insights payload is a snapshot written on Generate, while every
+  // neighbouring tab recomputes live. Say so when it has drifted, rather than
+  // presenting frozen percentages as current.
+  const snapAgeMs = insights?.generated_at ? Date.now() - new Date(insights.generated_at).getTime() : 0;
+  const snapStale = !!insights && (snapAgeMs > 24 * 3600 * 1000 || insights.pipeline_size !== apps.length);
 
   return (
     <div className="col" style={{ gap: 16 }}>
@@ -90,7 +112,7 @@ window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
           <h1>Insights</h1>
           <div className="sub">
             {insights?.generated_at
-              ? <>Last analysis {insAgeLabel(insights.generated_at)} · across {insights.pipeline_size} entries · {insights.model}</>
+              ? <>Last analysis <InsAge iso={insights.generated_at} /> · across {insights.pipeline_size} entries · {insights.model}</>
               : <>Run a Claude-powered synthesis across every tab: pipeline, follow-ups, TA, recruiters, LinkedIn.</>}
           </div>
         </div>
@@ -104,6 +126,17 @@ window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
       {error && (
         <div className="card padded-lg" style={{ borderColor: 'rgba(239,68,68,0.4)' }}>
           <div className="mono" style={{ color: 'var(--red)', fontSize: 12 }}>Error: {error}</div>
+        </div>
+      )}
+
+      {snapStale && (
+        <div className="card" style={{ padding: '10px 14px', borderLeft: '3px solid var(--amber, #fbbf24)' }}>
+          <div className="mono" style={{ fontSize: 11.5, lineHeight: 1.5 }}>
+            <b>Snapshot, not live.</b> Every number on this tab is from the analysis generated{' '}
+            <InsAge iso={insights.generated_at} /> across {insights.pipeline_size} entries.
+            {insights.pipeline_size !== apps.length && <> Your tracker now holds <b>{apps.length}</b>.</>}
+            {' '}Regenerate to refresh.
+          </div>
         </div>
       )}
 
@@ -358,7 +391,15 @@ function StatStrip({ metrics, which }) {
   } else if (which === 'not') {
     if (metrics.staleTotal != null) cards.push({ label: 'Stale touchpoints', value: String(metrics.staleTotal), sub: 'awaiting follow-up', color: 'var(--yellow)' });
     if (metrics.worstArchetype) cards.push({ label: metrics.worstArchetype.archetype + ' (overweight)', value: metrics.worstArchetype.responseRate + '%', sub: metrics.worstArchetype.appliedN + ' applied', color: 'var(--red)' });
-    if (metrics.talent && metrics.talent.sent) cards.push({ label: 'TA outreach', value: metrics.talent.responseRate + '%', sub: metrics.talent.replied + ' of ' + metrics.talent.sent, color: 'var(--red)' });
+    // Archiving overwrote the prior status on {archivedTouched} contacts, so their
+    // replies are unrecoverable and this rate is a lower bound, not a measurement.
+    if (metrics.talent && metrics.talent.sent) cards.push({
+      label: 'TA outreach',
+      value: (metrics.talent.repliedIsFloor ? '≥' : '') + metrics.talent.responseRate + '%',
+      sub: metrics.talent.replied + ' of ' + metrics.talent.sent
+        + (metrics.talent.repliedIsFloor ? ` · floor, ${metrics.talent.archivedTouched} archived replies not preserved` : ''),
+      color: 'var(--red)',
+    });
   }
   if (!cards.length) return null;
   return (
