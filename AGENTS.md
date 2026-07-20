@@ -342,9 +342,9 @@ Tags are clean `vMAJOR.MINOR.PATCH` (e.g. `v1.7.33`); the baseline `v1.7.32` tag
 **PR title**, so the PR title MUST itself be a Conventional Commit (`fix: ...`, `feat: ...`).
 A vague PR title is not a cosmetic problem here: it becomes the changelog line, permanently.
 
-**Release PRs: merge commit, never squash.** `gh pr merge <n> --merge`. Squashing a release
-PR detaches the release commit Release Please expects to find, which breaks the version
-anchor for the following release.
+**Release PRs: merge commit, never squash.** `gh pr merge <n> --merge`. A squash would take
+the PR title (`chore(main): release X.Y.Z`) as the commit message, which Release Please then
+re-reads on the next cycle. Full release checklist: `docs/RELEASING.md`.
 
 Why the split, since merge commits used to be the default for everything: GitHub writes the
 PR title into a merge commit's BODY while the subject stays `Merge pull request #n from ...`.
@@ -355,7 +355,9 @@ one commit per PR and nothing to double count. Release PRs are immune because th
 is a `chore:`, which generates no changelog entry either way.
 
 Repo settings back this up: squash commits take `PR_TITLE` as the subject and `PR_BODY` as
-the body. Both merge methods stay enabled because both are needed.
+the body. Both merge methods stay enabled because both are needed. `pr-title.yml` fails any
+PR whose title is not a Conventional Commit, because under squash that title IS the commit
+message: a bad one silently bumps nothing and leaves the changelog empty, with a green build.
 
 > **A squash commit's body is the PR description, and squashing happens on GitHub's side.**
 > It therefore never passes through `.githooks/commit-msg` or `verify-no-pii.mjs --messages`,
