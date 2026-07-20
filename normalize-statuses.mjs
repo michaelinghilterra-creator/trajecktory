@@ -14,6 +14,7 @@
 import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md (original)
@@ -115,15 +116,14 @@ for (let i = 0; i < lines.length; i++) {
   const line = lines[i];
   if (!line.startsWith('|')) continue;
 
-  const parts = line.split('|').map(s => s.trim());
-  // Format: ['', '#', 'fecha', 'empresa', 'rol', 'score', 'STATUS', 'pdf', 'report', 'notas', '']
-  if (parts.length < 9) continue;
-  if (parts[1] === '#' || parts[1] === '---' || parts[1] === '') continue;
+  // Read and write through lib/tracker.mjs. The hand-rolled indices here were
+  // written for the legacy 9-column schema, so moveToNotes landed in the Report
+  // cell once the Resume column was added.
+  const row = parseTrackerLine(line);
+  if (!row) continue;
 
-  const num = parseInt(parts[1]);
-  if (isNaN(num)) continue;
-
-  const rawStatus = parts[6];
+  const num = row.num;
+  const rawStatus = row.status;
   const result = normalizeStatus(rawStatus);
 
   if (result.unknown) {
@@ -135,26 +135,19 @@ for (let i = 0; i < lines.length; i++) {
 
   // Apply change
   const oldStatus = rawStatus;
-  parts[6] = result.status;
 
   // Move DUPLICADO info to notes if needed
-  if (result.moveToNotes && parts[9]) {
-    const existing = parts[9] || '';
-    if (!existing.includes(result.moveToNotes)) {
-      parts[9] = result.moveToNotes + (existing ? '. ' + existing : '');
-    }
-  } else if (result.moveToNotes && !parts[9]) {
-    parts[9] = result.moveToNotes;
+  let notes = row.notes;
+  if (result.moveToNotes && !notes.includes(result.moveToNotes)) {
+    notes = notes ? `${result.moveToNotes}. ${notes}` : result.moveToNotes;
   }
 
-  // Also strip bold from score field
-  if (parts[5]) {
-    parts[5] = parts[5].replace(/\*\*/g, '');
-  }
-
-  // Reconstruct line
-  const newLine = '| ' + parts.slice(1, -1).join(' | ') + ' |';
-  lines[i] = newLine;
+  lines[i] = formatTrackerLine({
+    ...row,
+    status: result.status,
+    notes,
+    score: row.score.replace(/\*\*/g, ''),  // also strip bold from the score cell
+  });
   changes++;
 
   console.log(`#${num}: "${oldStatus}" → "${result.status}"`);
