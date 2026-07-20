@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.17.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.2...v1.17.3) (2026-07-20)
+
+
+### Bug Fixes
+
+* keep tracker rows at 10 columns when a field contains a pipe ([e59f3cd](https://github.com/michaelinghilterra-creator/trajecktory/commit/e59f3cdea62a23c922f9020460a63f5e0c1747bd))
+* read and write tracker rows through lib/tracker.mjs in the rewrite scripts ([e648227](https://github.com/michaelinghilterra-creator/trajecktory/commit/e6482276e86d230ccb119d8c2eeb814b01f08da4))
+* read and write tracker rows through lib/tracker.mjs in the rewrite scripts ([c046cbb](https://github.com/michaelinghilterra-creator/trajecktory/commit/c046cbb0d0051356849647ca4fc1fa5beb5b24ca))
+
 ## [1.17.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.1...v1.17.2) (2026-07-20)
 
 
