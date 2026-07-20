@@ -1,6 +1,14 @@
-name: Release tag signature
+name: Release health
 
-# Fails when the NEWEST release tag is not signed by a key in trusted-signers.
+# Guards the two steps that are done BY HAND after a release PR merges, and that
+# nothing else can catch:
+#   1. the newest tag is signed by a key in trusted-signers
+#   2. the newest release carries notes written for a reader
+#
+# Both fail the same way: silently, with a green release run, which is why they
+# need a guard rather than a line in a checklist. Signing was already missed on
+# two releases; the notes were missed on the two releases immediately after the
+# app started rendering them.
 #
 # Why this exists, and why it is not part of release.yml:
 #
@@ -72,3 +80,37 @@ jobs:
           fi
 
           echo "OK — ${TAG} is signed by a key pinned in trusted-signers."
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+
+      # Release Please writes the release body from commit SUBJECTS. Since the
+      # dashboard began rendering that body (Change Log tab + the update banner),
+      # leaving it raw ships Conventional Commit scopes and internal script names
+      # into the product, to a reader deciding whether to take an update. It is
+      # not a silent freeze like an unsigned tag, but it fails the same way: the
+      # release run goes green and nothing anywhere says the notes were never
+      # rewritten. It was missed on the two releases straight after that feature
+      # landed, including the release that shipped the feature itself.
+      - name: Verify the newest release has notes written for a reader
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "${TAG}" --json body > /tmp/rel.json 2>/dev/null; then
+            echo "::warning title=No GitHub release for ${TAG}::The tag exists but has no release. Release Please normally creates one; if this persists, the release step did not complete."
+            exit 0
+          fi
+          BODY="$(jq -r '.body // ""' /tmp/rel.json)"
+
+          if [ -z "${BODY//[$'\t\r\n ']/}" ]; then
+            echo "::error title=Release ${TAG} has an empty body::Write the notes per the checklist in docs/RELEASING.md. The dashboard renders this text in Setup → Change Log and in the update banner, so an empty body leaves users with nothing."
+            exit 1
+          fi
+
+          # A body Release Please generated opens with its compare link heading.
+          # A body written for a reader opens with prose.
+          if printf '%s\n' "${BODY}" | head -1 | grep -qE '^##[[:space:]]+\[[0-9]+\.[0-9]+\.[0-9]+\]\(.*/compare/'; then
+            echo "::error title=Release ${TAG} still has auto-generated notes::The body is the raw Release Please changelog, so the Change Log tab and the update banner will show commit subjects (internal script names, Conventional Commit scopes) instead of notes written for a reader. Fix: rewrite the body per docs/RELEASING.md, then re-run this workflow."
+            exit 1
+          fi
+
+          echo "OK — ${TAG} has a written release body."
