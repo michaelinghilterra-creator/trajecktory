@@ -96,7 +96,9 @@ const MODELS_STATE = {
   ],
   pricing: { haiku: { in: 1, out: 5 }, sonnet: { in: 3, out: 15 }, opus: { in: 5, out: 25 } },
   totalPerRun: 0.21,
-  note: 'Billing set to your Claude plan: your saved API key is not charged. Flip back to bill the key. $ figures show what the API-key path would cost.',
+  // Verbatim from pricing.mjs (billingMode 'plan'), so the screenshot matches the
+  // shipped app rather than paraphrasing it.
+  note: 'Billing set to your Claude plan: your saved API key is not charged. $ figures are estimates of what the API-key path would cost, not real charges.',
 };
 
 // Synthetic Haiku-triage cards for the sidebar plan flow (scored list under the steps).
@@ -219,12 +221,167 @@ const IDENTITY = {
   portfolio: 'https://example.com', github: '', certifications: [],
 };
 
+// ---- Guide 3: one invented search, used by every data-bearing screen ---------
+// Pipeline, Insights, Follow-Ups and Analytics are all derived from the tracker,
+// so there is exactly ONE application fixture and every page renders from it.
+// That is what makes the guide read as a single continuous story rather than a
+// pile of unrelated screenshots.
+//
+// Company names are deliberately the well-known fictional placeholders. A
+// plausible but real employer name would read as a real evaluation of a real
+// company, which is not something to publish.
+const APPS = [
+  { id: 412, date: '2026-07-02', company: 'Northwind Analytics', role: 'VP, Revenue Operations',     score: 4.6, status: '2nd Interview', archetype: 'RevOps',    sector: 'Logistics',  source: 'Greenhouse', compStated: '$190,000 - $230,000', url: 'https://jobs.example.com/northwind-vp-revops',  report: 'reports/412-northwind-analytics-2026-07-02.md', resume: 'trajecktory', seniority: 'VP',       remote: 'Remote' },
+  { id: 408, date: '2026-07-06', company: 'Globex Health',       role: 'Director of GTM Systems',    score: 4.1, status: 'Phone Screen',  archetype: 'RevOps',    sector: 'Health tech', source: 'Ashby',     compStated: '$170,000 - $200,000', url: 'https://jobs.example.com/globex-dir-gtm',       report: 'reports/408-globex-health-2026-07-06.md',       resume: 'trajecktory', seniority: 'Director', remote: 'Hybrid' },
+  { id: 405, date: '2026-07-08', company: 'Contoso Freight',     role: 'Director, Revenue Operations', score: 4.4, status: 'Offer',       archetype: 'RevOps',    sector: 'Logistics',  source: 'Lever',      compStated: '$180,000 - $210,000', url: 'https://jobs.example.com/contoso-dir-revops',   report: 'reports/405-contoso-freight-2026-07-08.md',    resume: 'trajecktory', seniority: 'Director', remote: 'Remote' },
+  { id: 401, date: '2026-07-09', company: 'Acme Robotics',       role: 'Head of Revenue Operations', score: 4.3, status: 'Applied',       archetype: 'RevOps',    sector: 'Robotics',   source: 'Greenhouse', compStated: '$185,000 - $215,000', url: 'https://jobs.example.com/acme-head-revops',     report: 'reports/401-acme-robotics-2026-07-09.md',      resume: 'trajecktory', seniority: 'Director', remote: 'Remote' },
+  { id: 397, date: '2026-07-11', company: 'Fabrikam Freight',    role: 'Manager, Sales Operations',  score: 3.6, status: 'Applied',       archetype: 'SalesOps',  sector: 'Logistics',  source: 'Ashby',      compStated: 'Not Stated',          url: 'https://jobs.example.com/fabrikam-mgr-salesops', report: 'reports/397-fabrikam-freight-2026-07-11.md',  resume: 'trajecktory', seniority: 'Manager',  remote: 'Onsite' },
+  { id: 394, date: '2026-07-14', company: 'Initech Cloud',       role: 'Sr. Manager, Sales Ops',     score: 3.4, status: 'Evaluated',     archetype: 'SalesOps',  sector: 'SaaS',       source: 'Website',    compStated: '$150,000 - $170,000', url: 'https://jobs.example.com/initech-sr-mgr-salesops', report: 'reports/394-initech-cloud-2026-07-14.md',   resume: '',            seniority: 'Manager',  remote: 'Hybrid' },
+  { id: 391, date: '2026-07-15', company: 'Umbra Logistics',     role: 'Director of Analytics',      score: 4.2, status: 'Evaluated',     archetype: 'Analytics', sector: 'Logistics',  source: 'Greenhouse', compStated: '$165,000 - $195,000', url: 'https://jobs.example.com/umbra-dir-analytics',  report: 'reports/391-umbra-logistics-2026-07-15.md',    resume: '',            seniority: 'Director', remote: 'Remote' },
+  { id: 386, date: '2026-06-24', company: 'Vertex Foods',        role: 'RevOps Manager',             score: 3.1, status: 'Rejected',      archetype: 'RevOps',    sector: 'CPG',        source: 'Lever',      compStated: '$130,000 - $150,000', url: 'https://jobs.example.com/vertex-revops-mgr',    report: 'reports/386-vertex-foods-2026-06-24.md',       resume: 'trajecktory', seniority: 'Manager',  remote: 'Onsite' },
+  { id: 383, date: '2026-06-19', company: 'Soylent Systems',     role: 'Director, Sales Strategy',   score: 3.9, status: 'No Response',   archetype: 'Strategy',  sector: 'SaaS',       source: 'Ashby',      compStated: 'Not Stated',          url: 'https://jobs.example.com/soylent-dir-strategy', report: 'reports/383-soylent-systems-2026-06-19.md',    resume: 'trajecktory', seniority: 'Director', remote: 'Remote' },
+  { id: 379, date: '2026-06-15', company: 'Stark Freight',       role: 'Revenue Operations Lead',    score: 2.8, status: 'Not a Fit',     archetype: 'RevOps',    sector: 'Logistics',  source: 'Website',    compStated: '$115,000 - $135,000', url: 'https://jobs.example.com/stark-revops-lead',    report: 'reports/379-stark-freight-2026-06-15.md',      resume: '',            seniority: 'Manager',  remote: 'Onsite' },
+];
+
+// The evaluation report behind app 412, as GET /api/cheatsheets/:id returns it.
+// Field names follow v1ToCheatsheet in dashboard-web/server/v1-loader.mjs; the
+// nested item shapes follow what the drawer actually reads.
+const CHEATSHEET = {
+  url: 'https://jobs.example.com/northwind-vp-revops',
+  legitimacy: 'Verified', archetypeDetected: 'RevOps', domain: 'Logistics',
+  seniority: 'VP', remote: 'Remote', teamSize: '6', compStated: '$190,000 - $230,000',
+  tldr: 'A genuine step up: first senior RevOps hire under a new CRO, with the systems mess to prove the mandate is real. Comp clears your target. The risk is scope creep into pure analytics.',
+  companyBrief: 'Northwind Analytics sells supply-chain visibility to mid-market shippers. Two acquisitions in eighteen months have left three overlapping CRM instances, which is why this role exists. The RevOps function is new, so you would be defining it rather than inheriting it.',
+  globalScore: [
+    { dim: 'Role fit', val: 4.8, max: 5 },
+    { dim: 'Seniority', val: 4.5, max: 5, note: 'true VP scope' },
+    { dim: 'Compensation', val: 4.6, max: 5 },
+    { dim: 'Domain', val: 4.7, max: 5, note: 'logistics, your home turf' },
+    { dim: 'Location', val: 5.0, max: 5, note: 'fully remote' },
+    { dim: 'Stability', val: 3.9, max: 5, note: 'post-acquisition churn' },
+  ],
+  recommendation: 'Apply. Lead with the carrier scorecard rebuild and frame it as consolidation, which is the problem they are actually hiring against.',
+  keywords: ['RevOps', 'CRM consolidation', 'forecasting', 'net revenue retention', 'GTM systems', 'post-merger integration'],
+  cvMatch: [
+    { req: 'Own revenue operations end to end', evidence: 'Ran RevOps for a 200-person logistics business', strength: 'strong' },
+    { req: 'Consolidate overlapping CRM instances', evidence: 'Merged two Salesforce orgs after an acquisition', strength: 'strong' },
+    { req: 'Build forecasting the exec team trusts', evidence: 'Rebuilt the forecast model; variance fell to single digits', strength: 'strong' },
+    { req: 'Manage a team of six', evidence: 'Led four directly, plus two contractors', strength: 'moderate', note: 'slightly smaller team' },
+    { req: 'Public-company reporting experience', evidence: 'Private-company only so far', strength: 'weak' },
+  ],
+  gaps: [
+    { gap: 'No public-company reporting', blocker: 'No', mitigation: 'They are private and pre-IPO. Name it before they ask, and point at audit-grade reporting you already built.' },
+    { gap: 'Team of four, not six', blocker: 'No', mitigation: 'Talk about span of influence rather than headcount: the scorecard rollout touched thirty people.' },
+  ],
+  levelMatch: { jdLevel: 'VP', naturalLevel: 'Director / VP', verdict: 'A genuine stretch, in the right direction. Their scope is real VP work, so do not apologise for the title jump.' },
+  sellSenior: [
+    { claim: 'You have already done the consolidation they are about to attempt', proof: 'Two CRM orgs merged with no reporting downtime', phrase: 'I have run the messy half of this before, and I know where it breaks.' },
+    { claim: 'You define functions rather than inherit them', proof: 'Built RevOps from a spreadsheet to a team of four', phrase: 'The first ninety days is deciding what RevOps is here, not tooling.' },
+  ],
+  comp: {
+    stated: '$190,000 - $230,000', score: 4.6, walkaway: false,
+    sources: [
+      { src: 'Job posting', data: '$190,000 - $230,000 base', note: 'disclosed, no equity detail' },
+      { src: 'Market range, VP RevOps, remote US', data: '$185,000 - $240,000', note: 'mid-market logistics' },
+    ],
+    verdict: 'Clears your target of $180,000 at the midpoint and clears your walk-away comfortably. Equity is unstated, so ask early.',
+    market: 'Remote VP RevOps roles at this stage cluster tightly. The top of their band is competitive rather than generous.',
+  },
+  customizationCV: [
+    { current: 'Director of Revenue Operations', change: 'VP, Revenue Operations (target title)', why: 'Their screen filters on title. You are applying at the level they posted.' },
+    { current: 'Summary leads with analytics', change: 'Lead with systems consolidation', why: 'Consolidation is the actual mandate. Analytics is the thing they already have.' },
+  ],
+  customizationLI: [
+    { current: 'Headline says "Analytics leader"', change: '"Revenue Operations leader | GTM systems"', why: 'Recruiters at this level search on RevOps, not analytics.' },
+  ],
+  leadStory: {
+    title: 'The carrier scorecard rebuild',
+    reason: 'It is consolidation, measurement and adoption in one story, which is the whole job description.',
+    script: 'Carrier performance was reported three different ways by three teams. I built one scorecard on a single definition of on-time delivery, then made the planners own it rather than my team. Claims recovery improved by roughly a fifth within two quarters.',
+  },
+  starStories: [
+    { title: 'Merging two CRM orgs', S: 'An acquisition left two Salesforce instances and duplicate accounts.', T: 'Consolidate without losing a quarter of reporting.', A: 'Froze schema changes, mapped both to one object model, migrated in three waves.', R: 'One org, no reporting downtime, and a forecast the CFO signed off.', Reflection: 'I under-communicated the freeze in week one, and paid for it in escalations.' },
+    { title: 'The forecast nobody believed', S: 'Sales forecast missed by 30% two quarters running.', T: 'Make the number trustworthy.', A: 'Rebuilt the stage definitions with the reps, not for them.', R: 'Variance fell to under 8% and stayed there.' },
+  ],
+  redFlagQs: [
+    { q: 'Why are you leaving?', behind: 'They want to know if you were pushed, and whether you will leave them too.', a: 'The scope stopped growing once the systems work was done. I want the version of this problem that is still open.' },
+    { q: 'You have not worked at a public company.', behind: 'Checking whether you can handle audit-grade rigour.', a: 'True. The reporting I built was audited annually, so the discipline is the same even if the filing is not.' },
+  ],
+  legitimacyConclusion: 'Verified. Real company, named hiring manager, disclosed comp, and a posting consistent with their funding stage.',
+  legitimacySignals: [
+    { signal: 'Company registered and trading', finding: 'Founded 2016, active', good: true },
+    { signal: 'Compensation disclosed', finding: 'Full band in the posting', good: true },
+    { signal: 'Named hiring manager', finding: 'Reports to the CRO', good: true },
+    { signal: 'Posting age', finding: 'Reposted once in six weeks', good: false },
+  ],
+};
+
+const NOTES = { notes: [
+  { id: 'n1', text: 'Recruiter screen went well. They pushed hard on CRM consolidation, which is the whole mandate. Next round is with the CRO.', createdAt: '2026-07-14T16:20:00.000Z' },
+  { id: 'n2', text: 'Asked about equity. Answer was vague, so revisit before any offer conversation.', createdAt: '2026-07-10T09:05:00.000Z' },
+] };
+
+// ---- Block D: the outreach + follow-up tabs ---------------------------------
+// Same invented search as APPS, seen from each tab's angle. Follow-Ups in
+// particular MUST stay mocked: the real endpoint derives from the user's own
+// tracker, so an unmocked capture here would put real companies in the guide.
+const FOLLOWUPS_STALE = {
+  warm: [
+    { id: 401, company: 'Acme Robotics', role: 'Head of Revenue Operations', score: 4.3, status: 'Applied', applyDate: '2026-07-09', lastTouchDate: '2026-07-09', daysSinceLastTouch: 8, daysSinceApply: 8, fuCount: 0, cap: 3, coachVerdict: '8d since application sent. 1st follow-up is overdue.', coachLevel: 'overdue', channel: 'email', muted: false, klass: 'warm', sector: 'Robotics', url: 'https://jobs.example.com/acme-head-revops', notes: '', followups: [] },
+    { id: 408, company: 'Globex Health', role: 'Director of GTM Systems', score: 4.1, status: 'Phone Screen', applyDate: '2026-07-06', lastTouchDate: '2026-07-12', daysSinceLastTouch: 5, daysSinceApply: 11, fuCount: 1, cap: 3, coachVerdict: '5d since last follow-up. 2nd follow-up due now.', coachLevel: 'overdue', channel: 'email', muted: false, klass: 'warm', sector: 'Health tech', url: 'https://jobs.example.com/globex-dir-gtm', notes: '', followups: [{ date: '2026-07-12', channel: 'email' }] },
+  ],
+  cold: [
+    { id: 397, company: 'Fabrikam Freight', role: 'Manager, Sales Operations', score: 3.6, status: 'Applied', applyDate: '2026-07-11', lastTouchDate: '2026-07-11', daysSinceLastTouch: 6, daysSinceApply: 6, fuCount: 0, cap: 3, coachVerdict: '6d since application sent. 1st follow-up is overdue.', coachLevel: 'overdue', channel: 'none', muted: false, klass: 'cold', sector: 'Logistics', url: 'https://jobs.example.com/fabrikam-mgr-salesops', notes: '', followups: [] },
+  ],
+  snoozed: [],
+};
+
+const RECRUITERS = [
+  { id: 1, firm: 'Meridian Search', first: 'Dana', last: 'Whitfield', title: 'Principal, GTM Practice', city: 'Austin', state: 'TX', phone: '', email: 'dana@example.com', status: 'Replied', lastTouch: '2026-07-14', notes: '', linkedin: 'https://example.com/in/example', website: 'https://example.com' },
+  { id: 2, firm: 'Meridian Search', first: 'Owen', last: 'Castellanos', title: 'Associate', city: 'Austin', state: 'TX', phone: '', email: 'owen@example.com', status: 'Sent', lastTouch: '2026-07-12', notes: '', linkedin: '', website: 'https://example.com' },
+  { id: 3, firm: 'Bluepeak Partners', first: 'Priya', last: 'Raghunathan', title: 'Managing Director', city: 'Denver', state: 'CO', phone: '', email: 'priya@example.com', status: 'Meeting Scheduled', lastTouch: '2026-07-15', notes: '', linkedin: '', website: 'https://example.com' },
+  { id: 4, firm: 'Bluepeak Partners', first: 'Marcus', last: 'Feld', title: 'Consultant', city: 'Remote', state: '', phone: '', email: '', status: 'Not Contacted', lastTouch: '', notes: '', linkedin: '', website: '' },
+  { id: 5, firm: 'Harborline Talent', first: 'Ingrid', last: 'Solberg', title: 'Partner, Operations', city: 'Chicago', state: 'IL', phone: '', email: 'ingrid@example.com', status: 'Drafted', lastTouch: '', notes: '', linkedin: '', website: 'https://example.com' },
+];
+
+const TARGET_TALENT = [
+  { id: 1, company: 'Northwind Analytics', first: 'Alex', last: 'Kim', title: 'Talent Acquisition Lead', city: 'Austin', state: 'TX', phone: '', email: 'alex.kim@example.com', linkedin: 'https://example.com/in/example', status: 'Replied', lastTouch: '2026-07-14', notes: '', website: 'https://example.com' },
+  { id: 2, company: 'Globex Health', first: 'Rosa', last: 'Delgado', title: 'Senior Technical Recruiter', city: 'Boston', state: 'MA', phone: '', email: 'rosa.delgado@example.com', linkedin: '', status: 'Sent', lastTouch: '2026-07-12', notes: '', website: 'https://example.com' },
+  { id: 3, company: 'Acme Robotics', first: 'Tomas', last: 'Brandt', title: 'Head of Talent', city: 'Remote', state: '', phone: '', email: 'tomas.brandt@example.com', linkedin: '', status: 'Not Contacted', lastTouch: '', notes: '', website: 'https://example.com' },
+  { id: 4, company: 'Contoso Freight', first: 'Yuki', last: 'Nakamura', title: 'Recruiting Manager', city: 'Seattle', state: 'WA', phone: '', email: 'yuki.n@example.com', linkedin: '', status: 'Meeting Scheduled', lastTouch: '2026-07-16', notes: '', website: 'https://example.com' },
+];
+
+const SSI_SUMMARY = {
+  currentSsi: 52, targetSsi: 60,
+  weeks: [
+    { weekNum: 1, weekOf: '2026-06-29', brand: 11, findPeople: 10, engageInsights: 12, relationships: 9,  notes: '' },
+    { weekNum: 2, weekOf: '2026-07-06', brand: 12, findPeople: 11, engageInsights: 13, relationships: 10, notes: '' },
+    { weekNum: 3, weekOf: '2026-07-13', brand: 13, findPeople: 12, engageInsights: 14, relationships: 13, notes: 'Commented daily, three replies.' },
+  ],
+};
+const SSI_INFLUENCERS = [
+  { id: 1, name: 'Jane Rivera',  role: 'VP of Revenue Operations', track: 'revops',    tier: 'national', location: 'Austin, TX',  linkedinUrl: 'https://example.com/in/example', whyFollow: 'Posts weekly on GTM systems consolidation.', engagementTip: 'Comment on her pipeline-hygiene threads.', following: true,  connected: true,  engaged: true,  lastEngagement: '2026-07-16', engagementCount: 6, notes: '' },
+  { id: 2, name: 'Marcus Ellery', role: 'Head of GTM Systems',      track: 'revops',    tier: 'local',    location: 'Austin, TX',  linkedinUrl: 'https://example.com/in/example', whyFollow: 'Runs the local RevOps meetup.', engagementTip: 'Ask about tooling migrations.', following: true,  connected: true,  engaged: false, lastEngagement: '2026-07-11', engagementCount: 2, notes: '' },
+  { id: 3, name: 'Priya Anand',   role: 'CRO',                      track: 'exec',      tier: 'national', location: 'Remote',      linkedinUrl: 'https://example.com/in/example', whyFollow: 'Writes about forecast discipline.', engagementTip: 'Add a data point, never just praise.', following: true,  connected: false, engaged: false, lastEngagement: '', engagementCount: 0, notes: '' },
+  { id: 4, name: 'Sam Okoro',     role: 'Director of Analytics',    track: 'analytics', tier: 'local',    location: 'Dallas, TX',  linkedinUrl: 'https://example.com/in/example', whyFollow: 'Adjacent field, shares hiring posts.', engagementTip: 'Engage on his hiring threads.', following: false, connected: false, engaged: false, lastEngagement: '', engagementCount: 0, notes: '' },
+];
+const SSI_LOG = [
+  { date: '2026-07-16', influencer: 'Jane Rivera',  actionType: 'Commented', topic: 'Forecast hygiene', message: 'Added our stage-definition approach.', responseReceived: 'Yes', connectionMade: 'Connected', notes: '', loggedAt: '2026-07-16T15:02:00.000Z' },
+  { date: '2026-07-15', influencer: 'Marcus Ellery', actionType: 'Reposted', topic: 'RevOps meetup',   message: '', responseReceived: 'No', connectionMade: 'Connected', notes: '', loggedAt: '2026-07-15T11:20:00.000Z' },
+  { date: '2026-07-14', influencer: 'Jane Rivera',  actionType: 'Messaged',  topic: 'Intro',           message: 'Short note after her post.', responseReceived: 'Yes', connectionMade: 'Connected', notes: '', loggedAt: '2026-07-14T09:41:00.000Z' },
+];
+
 let stateMode = 'firstrun'; // 'firstrun' | 'ready'
 // 'empty'      → a genuinely fresh install: no triage results, no to-dos, no
 //                cadence, so no sidebar badges. This is what the first-run
 //                screenshot must show, because the guide says "it starts empty".
 // 'populated'  → the Today / Interview tabs, where content is the whole point.
 let dataMode = 'empty';
+// Triage rows are provisional and sort to the top of the Pipeline tables, which
+// is correct behaviour but crowds out the real rows in a teaching screenshot.
+// The guide has its own page for triage, so it is served only where it is the
+// subject.
+let showTriage = true;
 const EMPTY_STREAK = { current: 0, best: 0, last7: Array.from({ length: 7 }, (_, i) => ({ date: `2026-07-${13 + i}`, pct: null, rest: true })) };
 
 async function installMocks(page) {
@@ -247,9 +404,9 @@ async function installMocks(page) {
     // handoff prompt text is static + read-only; let it hit the server for authenticity
     return route.continue();
   });
-  await page.route('**/api/system/version', route => json(route, { version: '1.16.1' }));
+  await page.route('**/api/system/version', route => json(route, { version: '1.16.2' }));
   await page.route('**/api/claude-status', route => json(route, { signedIn: false }));
-  await page.route('**/api/triage/results', route => json(route, dataMode === 'empty' ? { cards: [] } : TRIAGE));
+  await page.route('**/api/triage/results', route => json(route, (dataMode === 'empty' || !showTriage) ? { cards: [] } : TRIAGE));
   await page.route('**/api/agent/cost-history', route => json(route, []));
   await page.route('**/api/agent/active', route => json(route, {}));
   // Pin the updater to "current". A fresh install has nothing to update, and an
@@ -258,9 +415,24 @@ async function installMocks(page) {
 
   // App shell: these three are fetched on every page load, and all three read
   // real user data. /api/identity is the user's name, email and phone outright.
-  await page.route('**/api/applications', route => json(route, []));
+  // Empty on first run, the invented search everywhere else.
+  await page.route('**/api/applications', route => json(route, dataMode === 'empty' ? [] : APPS));
   await page.route('**/api/identity', route => json(route, IDENTITY));
-  await page.route('**/api/followups/stale', route => json(route, { warm: [], cold: [] }));
+  await page.route('**/api/cheatsheets/**', route => json(route, CHEATSHEET));
+  await page.route('**/api/notes/**', route => json(route, NOTES));
+  await page.route('**/api/target-talent/by-company/**', route => json(route, []));
+  await page.route('**/api/followups/stale', route =>
+    json(route, dataMode === 'empty' ? { warm: [], cold: [], snoozed: [] } : FOLLOWUPS_STALE));
+  await page.route('**/api/followups', route => json(route, []));
+  await page.route('**/api/recruiters', route => json(route, dataMode === 'empty' ? [] : RECRUITERS));
+  await page.route('**/api/recruiters/*', route => json(route, { ...RECRUITERS[0], correspondence: [] }));
+  await page.route('**/api/target-talent', route => json(route, dataMode === 'empty' ? [] : TARGET_TALENT));
+  await page.route('**/api/linkedin-ssi/summary', route => json(route, SSI_SUMMARY));
+  await page.route('**/api/linkedin-ssi/influencers', route => json(route, SSI_INFLUENCERS));
+  await page.route('**/api/linkedin-ssi/engagement-log', route => json(route, SSI_LOG));
+  // Insights is left unmocked-but-empty on purpose: a new user genuinely sees
+  // "No analysis yet" until they run it, and that is the honest screenshot.
+  await page.route('**/api/insights/latest', route => json(route, { generated_at: null }));
 
   // Today tab. Order matters: '/api/cadence/today' and '/api/cadence/streak' are
   // matched before the bare '/api/cadence' template route.
@@ -315,10 +487,20 @@ async function shotContentTight(page, name, maxCss = null, pad = 14) {
     clip: { x: Math.max(0, box.x), y: Math.max(0, box.y), width: box.width, height } });
   console.log('  saved', name + '.png (tight ' + Math.round(height) + 'px)');
 }
-async function shotPanel(page, name) {
+async function shotPanel(page, name, maxCss = null) {
   const el = page.locator('.card.padded-lg').first();
   await el.waitFor({ state: 'visible' });
   await page.waitForTimeout(350);
+  if (maxCss) {
+    // Some panels (Models & cost) are taller than they are wide, which is over
+    // seven inches at page width and overflows the page.
+    const b = await el.boundingBox();
+    const height = Math.min(Math.ceil(b.height), maxCss);
+    await page.screenshot({ path: resolve(OUT, `${name}.png`),
+      clip: { x: Math.floor(b.x), y: Math.floor(b.y), width: Math.ceil(b.width), height } });
+    console.log(`  saved ${name}.png (panel, capped ${height}px)`);
+    return;
+  }
   await el.screenshot({ path: resolve(OUT, `${name}.png`) });
   console.log('  saved', name + '.png (panel)');
 }
@@ -405,7 +587,7 @@ async function main() {
   await clickRail(page, 'Output locations'); await shotPanel(page, 'lp-outputs');
 
   // Models & cost booster (NEW in v1.11.0).
-  try { await clickRail(page, 'Models & cost'); await shotPanel(page, 'lp-models'); }
+  try { await clickRail(page, 'Models & cost'); await shotPanel(page, 'lp-models', 700); }
   catch (e) { console.log('  models skip:', e.message); }
 
   // Web discovery keys booster.
@@ -457,11 +639,151 @@ async function main() {
   await page.goto(BASE, { waitUntil: 'networkidle' });
   await page.waitForTimeout(900);
 
+  // The sidebar workflow WITH its scored triage cards below the steps. This is
+  // the plan-flow view; an API-key user never sees this panel at all.
+  // Just the scored cards, not the whole workflow panel. The full panel is ~1480px
+  // tall against 406px wide, which is over eight inches at page width and blew
+  // straight through the bottom of the page.
+  try {
+    const wf = page.locator('.workflow-panel').first();
+    await wf.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    const box = await wf.boundingBox();
+    const headTop = await page.evaluate(() => {
+      const n = [...document.querySelectorAll('.workflow-panel *')]
+        .find(x => /^TRIAGE\b/i.test(x.textContent.trim()) && x.children.length === 0);
+      return n ? n.getBoundingClientRect().top : null;
+    });
+    const y = headTop != null ? Math.max(0, headTop - 8) : box.y + 560;
+    const height = Math.min(660, Math.ceil(box.y + box.height - y));
+    await page.screenshot({ path: resolve(OUT, 'g3-triage.png'),
+      clip: { x: Math.floor(box.x), y: Math.floor(y), width: Math.ceil(box.width), height } });
+    console.log(`  saved g3-triage.png (cards only, ${height}px)`);
+  } catch (e) { console.log('  g3 triage skip:', e.message); }
+
+  await page.waitForTimeout(900);
+
   try {
     await clickNav(page, 'Today');
     await page.waitForTimeout(800);
     await shotContentTight(page, 'today-tab');
+
+    // Guide 3 page 1 is the map of the app, so it needs the whole window with the
+    // sidebar and its badges, in the state a set-up user actually sees.
+    await page.screenshot({ path: resolve(OUT, 'g3-map.png'),
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: 660 } });
+    console.log('  saved g3-map.png (top 660px)');
+
+    await page.locator('.subtab', { hasText: 'Schedule' }).first().click();
+    await page.waitForTimeout(700);
+    await shotContentTight(page, 'g3-today-schedule', 640);
   } catch (e) { console.log('  today skip:', e.message); }
+
+  // ---- Guide 3 captures -----------------------------------------------------
+  // Every one of these renders from the single APPS fixture above.
+  try {
+    showTriage = false;
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForTimeout(600);
+    await clickNav(page, 'Pipeline');
+    await page.waitForTimeout(900);
+    await shotContentTight(page, 'g3-pipeline-overview', 900);
+    await page.locator('.subtab', { hasText: 'Active' }).first().click();
+    await page.waitForTimeout(700);
+    await shotContentTight(page, 'g3-pipeline-active', 720);
+
+    await page.locator('.subtab', { hasText: 'Analytics' }).first().click();
+    await page.waitForTimeout(900);
+    // Capped to the KPI rows. Below them, Source Effectiveness needs response
+    // history the fixture does not have, so it renders as headers over empty
+    // space, and a guide should not point at a panel that looks broken.
+    await shotContentTight(page, 'g3-pipeline-analytics', 420);
+
+    // The report drawer, opened from a real row. Two tabs get their own figure:
+    // Overview (what a score is made of) and Notes (the only tab you type into).
+    await page.locator('.subtab', { hasText: 'Active' }).first().click();
+    await page.waitForTimeout(600);
+    // Open the row the CHEATSHEET fixture actually describes. The mock serves the
+    // same report for every id, so opening any other row would pair a VP RevOps
+    // write-up with a different company and title, which a careful reader spots.
+    // Triage rows are also non-interactive (cursor:default), so match on both.
+    await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('tbody tr')]
+        .filter(r => getComputedStyle(r).cursor === 'pointer');
+      const row = rows.find(r => /Northwind Analytics/.test(r.textContent)) || rows[0];
+      if (row) row.click();
+    });
+    // The Pipeline drawer is .pl-drawer. (.drawer is the Recruiters one.)
+    const drawer = page.locator('.pl-drawer.open').first();
+    await drawer.waitFor({ state: 'visible', timeout: 15000 });
+    await page.waitForTimeout(1400); // let the cheatsheet fetch settle + slide-in finish
+    await drawer.screenshot({ path: resolve(OUT, 'g3-drawer-overview.png') });
+    console.log('  saved g3-drawer-overview.png');
+    try {
+      // Tabs are plain elements inside the drawer; match on text via the DOM so we
+      // do not depend on a class name.
+      await page.evaluate(() => {
+        const d = document.querySelector('.pl-drawer.open');
+        if (!d) return;
+        // Tabs contain an icon plus a label, so a childless-node match misses them.
+        // Take the DEEPEST element whose text is exactly "Notes" and click it; the
+        // event bubbles to whichever ancestor carries the handler.
+        const nodes = [...d.querySelectorAll('*')].filter(n => n.textContent.trim() === 'Notes');
+        const t = nodes[nodes.length - 1];
+        if (t) { t.scrollIntoView({ block: 'nearest', inline: 'center' }); t.click(); }
+      });
+      await page.waitForTimeout(900);
+      await drawer.screenshot({ path: resolve(OUT, 'g3-drawer-notes.png') });
+      console.log('  saved g3-drawer-notes.png');
+    } catch (e) { console.log('  drawer notes skip:', e.message); }
+    // The stage track, cropped out of the open drawer: the control that moves a
+    // role along. Northwind sits at 2nd Interview, so it shows a part-filled
+    // track with both Back and Advance available.
+    try {
+      const b = await drawer.boundingBox();
+      await page.screenshot({ path: resolve(OUT, 'g3-stage-track.png'),
+        clip: { x: Math.floor(b.x), y: Math.floor(b.y) + 138, width: Math.ceil(b.width), height: 130 } });
+      console.log('  saved g3-stage-track.png');
+    } catch (e) { console.log('  stage track skip:', e.message); }
+
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+
+    // The apply buttons live ONLY on an Evaluated row, so this needs a different
+    // role from the one above. Cropped to the drawer footer.
+    try {
+      await page.evaluate(() => {
+        const rows = [...document.querySelectorAll('tbody tr')]
+          .filter(r => getComputedStyle(r).cursor === 'pointer');
+        const row = rows.find(r => /Umbra Logistics/.test(r.textContent));
+        if (row) row.click();
+      });
+      const d2 = page.locator('.pl-drawer.open').first();
+      await d2.waitFor({ state: 'visible', timeout: 15000 });
+      await page.waitForTimeout(1200);
+      const b2 = await d2.boundingBox();
+      await page.screenshot({ path: resolve(OUT, 'g3-apply-buttons.png'),
+        clip: { x: Math.floor(b2.x), y: Math.floor(b2.y + b2.height) - 150, width: Math.ceil(b2.width), height: 145 } });
+      console.log('  saved g3-apply-buttons.png');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+    } catch (e) { console.log('  apply buttons skip:', e.message); }
+  } catch (e) { console.log('  g3 pipeline skip:', e.message); }
+
+  // Block D tabs. Each renders from the same invented search.
+  for (const [nav, name, cap] of [
+    ['Follow-Ups', 'g3-followups', 640],
+    ['Recruiters', 'g3-recruiters', 660],
+    ['TA Outreach', 'g3-ta-outreach', 620],
+    ['LinkedIn SSI', 'g3-linkedin-ssi', 700],
+    ['Insights', 'g3-insights', 520],
+  ]) {
+    try {
+      await clickNav(page, nav);
+      await page.waitForTimeout(1100);
+      await shotContentTight(page, name, cap);
+    } catch (e) { console.log(`  ${name} skip:`, e.message); }
+  }
 
   try {
     await clickNav(page, 'Interview');

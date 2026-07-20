@@ -138,6 +138,43 @@ ul.plain li { margin: 3px 0; color: var(--ink-soft); }
 }
 .stuck b { color: var(--brand-deep); }
 
+/* ---------- guide 3 devices ---------- */
+/* Pro tip: an action that makes a workflow better. Deliberately louder than
+   .tip / .note, because these are the lines worth reading twice. */
+.pro {
+  position: relative; background: var(--brand-tint);
+  border: 1px solid var(--brand-soft); border-left: 4px solid var(--brand);
+  border-radius: 9px; padding: 10px 13px 10px 13px; margin: 10px 0;
+  font-size: 11px; line-height: 1.55; color: var(--ink-soft);
+}
+.pro .lbl {
+  display: block; font-family: Consolas, monospace; font-size: 8.5px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--brand-deep); margin-bottom: 3px;
+}
+.pro b { color: var(--brand-deep); }
+
+/* Why this matters: context, not an action. Quieter on purpose, so it never
+   competes with a Pro tip sitting on the same page. */
+.why {
+  border-left: 3px solid var(--line); padding: 2px 0 2px 11px; margin: 9px 0;
+  font-size: 10.5px; line-height: 1.6; color: var(--muted);
+}
+.why .lbl {
+  display: block; font-family: Consolas, monospace; font-size: 8.5px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 2px;
+}
+.why b { color: var(--ink-soft); }
+
+/* Which setup a sentence applies to. Inline, so it can sit mid-paragraph or
+   beside a heading without disturbing the line. */
+.tier {
+  display: inline-block; font-family: Consolas, monospace; font-size: 8px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; padding: 1px 5px; border-radius: 4px;
+  vertical-align: 1.5px; white-space: nowrap;
+}
+.tier.plan { background: var(--ok-bg); color: var(--ok); border: 1px solid #a7e8c4; }
+.tier.key  { background: var(--tip-bg); color: var(--tip); border: 1px solid #c7dbff; }
+
 /* ---------- figures + screenshots ---------- */
 figure { margin: 8px 0 6px; }
 .frame {
