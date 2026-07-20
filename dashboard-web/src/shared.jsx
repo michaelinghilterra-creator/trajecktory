@@ -1015,7 +1015,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
           Update available: <strong>v{info.local} → v{info.remote}</strong>
           {info.requiresReinstall ? <span style={{ color: 'var(--orange)' }}> (needs a fresh installer)</span> : null}
         </span>
-        {info.changelog ? (
+        {(info.releaseNotes || info.changelog) ? (
           <button style={{ ...btn, border: 'none', padding: '2px 6px', color: 'var(--accent)' }} onClick={() => setShowNotes(s => !s)}>
             {showNotes ? 'Hide notes' : "What's new"}
           </button>
@@ -1024,7 +1024,28 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
         <button style={primary} disabled={busy} onClick={applyUpdate}>{busy ? 'Updating…' : 'Update now'}</button>
         <button style={btn} disabled={busy} onClick={onDismiss}>Later</button>
       </div>
-      {showNotes && info.changelog ? (
+      {/* Written release notes when we could reach them, else the raw CHANGELOG
+          text update-system.mjs already returned. The prose gets prose styling;
+          the fallback keeps the mono block, since commit subjects read as code
+          and dressing them up would only disguise what they are. */}
+      {showNotes && info.releaseNotes ? (
+        <div style={{ marginTop: 10, maxHeight: 220, overflow: 'auto', fontSize: 12.5, lineHeight: 1.55, color: 'var(--text-dim)' }}>
+          {info.releaseNotes.sections.map((sec, i) => (
+            <div key={i} style={{ marginBottom: 8 }}>
+              {sec.heading ? (
+                <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.08em', color: 'var(--text-mute)', marginBottom: 3 }}>
+                  {sec.heading.toUpperCase()}
+                </div>
+              ) : null}
+              {sec.items.map((it, j) => (
+                <div key={j} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', marginBottom: 2 }}>
+                  <span style={{ color: 'var(--accent)', flexShrink: 0 }}>•</span><span>{it}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : showNotes && info.changelog ? (
         <pre style={{ marginTop: 10, marginBottom: 0, maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{info.changelog}</pre>
       ) : null}
     </div>
