@@ -25,14 +25,21 @@ const FALLBACK_SLUG = 'michaelinghilterra-creator/trajecktory';
 
 // Strip commit/issue reference links, leftover [label](url) markdown and bold
 // markers, then sentence-case. Turns a raw bullet into something readable.
+//
+// The sentence-casing exists for the CHANGELOG.md fallback, whose entries are
+// commit subjects and therefore start lowercase ("close the leak..."). It must
+// not fire on the brand, which is lowercase by house rule everywhere including
+// mid-UI and at the start of a sentence. Written notes legitimately open with
+// it, and this used to render them as "Trajecktory ...".
+const BRAND_FIRST = /^trajecktory\b/;
 export function cleanNote(text) {
-  return String(text)
+  const s = String(text)
     .replace(/\s*\([^()]*\[[^\]]+\]\([^)]*\)\)/g, '')
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/\*\*/g, '')
     .replace(/\s{2,}/g, ' ')
-    .trim()
-    .replace(/^([a-z])/, (_, c) => c.toUpperCase());
+    .trim();
+  return BRAND_FIRST.test(s) ? s : s.replace(/^([a-z])/, (_, c) => c.toUpperCase());
 }
 
 // Prefer the install's own origin so a fork shows its own notes; fall back to the
