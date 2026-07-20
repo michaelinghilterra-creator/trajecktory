@@ -194,10 +194,16 @@ rmSync(sandbox, { recursive: true, force: true });
 //      80/81 regional variants) both got added as separate rows.
 // The seed file is written CRLF to prove the in-place update splice
 // (appLines.indexOf(existing.raw)) is EOL-tolerant.
-function runMerge(seedRows, caseMap) {
+function runMerge(seedRows, caseMap, extraFiles = {}) {
   const sb = mkdtempSync(join(ROOT, 'merge-tracker-test-'));
   mkdirSync(join(sb, 'data'));
   mkdirSync(join(sb, 'batch/tracker-additions'), { recursive: true });
+  // Sandbox-relative files the scenario needs (reports/*.md for source
+  // resolution, data/pipeline.md for the scanned-vs-self-sourced decision).
+  for (const [rel, content] of Object.entries(extraFiles)) {
+    mkdirSync(join(sb, dirname(rel)), { recursive: true });
+    writeFileSync(join(sb, rel), content);
+  }
   copyFileSync(join(ROOT, 'merge-tracker.mjs'), join(sb, 'merge-tracker.mjs'));
   mkdirSync(join(sb, 'lib'), { recursive: true });
   for (const m of ['discard.mjs', 'tracker.mjs', 'scan-core.mjs']) {
@@ -284,6 +290,53 @@ console.log('\n8. Intra-batch dedup — same company+role consolidates to highes
     `kept the highest score (4.2/5): "${v[0] ? cols(v[0])[SCORE] : 'MISSING'}"`);
   check(/Consolidated \(intra-batch\)/.test(B.output), 'intra-batch consolidation is logged');
   check(/Summary: \+4 added/.test(B.output), 'batch reported +4 added (2 Contoso + 1 Northwind + 1 Acme2)');
+}
+
+// ── Scenario C: source-tag strip must not leave an orphaned delimiter ─────────
+// Reproduces row #1125 (2026-07-20). The eval agent attached the source tag with
+// a pipe ("…remote | [self-sourced]"); the URL was in pipeline.md, so enforceSource
+// correctly stripped the tag — and left the pipe. Written unescaped, that orphan
+// became an 11th cell, and the dashboard warned "11 columns, expected 10".
+const SCANNED_URL = 'https://jobs.lever.co/acme/16dbfc6c-2e50-4742-a1e1-f7ed9dd63765';
+const C = runMerge(
+  [],
+  {
+    // Tag attached with a pipe, URL IS in pipeline.md → tag stripped.
+    '900-acme.tsv': tsv(['900', '2026-07-20', 'Acme', 'Director, Revenue Enablement',
+      'Evaluated', '3.2/5', '❌', '[900](reports/900-acme-2026-07-20.md)',
+      'IC role (no direct reports), $100K–$120K remote | [self-sourced]']),
+    // A pipe in notes with no tag involved — the serializer alone must hold.
+    '901-beta.tsv': tsv(['901', '2026-07-20', 'Beta', 'Head of Analytics',
+      'Evaluated', '4.0/5', '❌', '[901](reports/901-beta-2026-07-20.md)',
+      'strong fit | remote | $180K']),
+  },
+  {
+    'reports/900-acme-2026-07-20.md': `---\n{ "schema": "trajecktory-report/v1", "url": "${SCANNED_URL}" }\n---\n`,
+    'reports/901-beta-2026-07-20.md': '---\n{ "schema": "trajecktory-report/v1" }\n---\n',
+    'data/pipeline.md': `- [x] ${SCANNED_URL} | Acme | Director, Revenue Enablement\n`,
+  },
+);
+
+console.log('\n9. Source-tag strip leaves no orphaned delimiter (row #1125)');
+{
+  const a = C.rowsFor('Acme')[0] || '';
+  check(cols(a).length === 10, `row has exactly 10 cells: got ${cols(a).length}`);
+  check(!/\[self-sourced\]/.test(a), 'tag stripped (URL is in pipeline.md → scanned)');
+  const n = cols(a)[NOTES] || '';
+  check(!n.endsWith('|') && !n.includes('|'), `no orphaned delimiter left in notes: "${n}"`);
+  check(n.includes('IC role') && n.includes('$100K–$120K remote'),
+    `note text preserved, only the tag and its delimiter removed: "${n}"`);
+}
+
+console.log('\n10. Unescaped pipe in notes cannot restructure a row');
+{
+  const b = C.rowsFor('Beta')[0] || '';
+  check(cols(b).length === 10, `row has exactly 10 cells: got ${cols(b).length}`);
+  check(cols(b)[STATUS] === 'Evaluated' && cols(b)[SCORE] === '4.0/5',
+    `fields do not shift (${cols(b)[SCORE]} / ${cols(b)[STATUS]})`);
+  const n = cols(b)[NOTES] || '';
+  check(n.includes('strong fit') && n.includes('$180K'),
+    `full note survives rather than being truncated at the first pipe: "${n}"`);
 }
 
 console.log(`\n📊 merge-tracker fixtures: ${passed} passed, ${failed} failed`);

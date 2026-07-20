@@ -22,7 +22,7 @@ import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
 import yaml from 'js-yaml';
 import { parseScore, shouldAutoDiscard, recommendsAgainst } from './lib/discard.mjs';
-import { parseTrackerLine } from './lib/tracker.mjs';
+import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
 import { normalizeUrl } from './lib/scan-core.mjs';
 // next-jd.mjs (persistent JD counter) can be one update cycle behind on installs
 // updating from a pre-counter version. Load it defensively so a missing file
@@ -440,13 +440,28 @@ if (existsSync(PIPELINE_FILE)) {
     for (const u of (line.match(/https?:\/\/[^\s|)]+/g) || [])) scannedUrls.add(normalizeUrl(u));
   }
 }
+// Remove a [self-sourced] tag AND whatever delimiter the agent used to attach
+// it. Agents write the tag as a trailing fragment ("…remote | [self-sourced]",
+// "…remote — [self-sourced]"), so lifting out only the tag leaves the delimiter
+// dangling. That is cosmetic for a dash and corrupting for a pipe: the orphaned
+// '|' becomes an extra table cell when the row is written. Handles the tag at
+// either end, since "[self-sourced] | note" strands a leading delimiter too.
+const SOURCE_TAG_SEPARATOR = '[|;,·—–-]';
+function stripSourceTag(notes) {
+  return String(notes)
+    .replace(new RegExp(`\\s*${SOURCE_TAG_SEPARATOR}?\\s*\\[self-sourced\\]\\s*`, 'i'), ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(new RegExp(`^\\s*${SOURCE_TAG_SEPARATOR}\\s*`), '')
+    .replace(new RegExp(`\\s*${SOURCE_TAG_SEPARATOR}\\s*$`), '')
+    .trim();
+}
 function enforceSource(reportLink, notes, label) {
   const u = reportUrl(reportLink);
   if (!u) return notes;                                 // unknown origin — don't guess
   if (scannedUrls.has(normalizeUrl(u))) {
     // Scanned: strip a stray [self-sourced] tag.
     if (!notes) return notes;
-    const cleaned = notes.replace(/\s*\[self-sourced\]\s*/i, ' ').replace(/\s{2,}/g, ' ').trim();
+    const cleaned = stripSourceTag(notes);
     if (cleaned !== notes) console.log(`   ↳ source: stripped [self-sourced] from scanned URL (${label || ''})`);
     return cleaned;
   }
@@ -582,7 +597,18 @@ for (const { addition, existing: duplicate } of updatesByExisting.values()) {
         console.log(`   ↳ Reset status: ${duplicate.status} → Evaluated (re-eval cleared the auto-discard condition)`);
       }
       const resumeVal = duplicate.resume || '—';
-      const updatedLine = `| ${duplicate.num} | ${addition.date} | ${addition.company} | ${addition.role} | ${addition.score} | ${resolvedStatus} | ${duplicate.pdf} | ${resumeVal} | ${addition.report} | Re-eval ${addition.date} (${oldScore}→${newScore}). ${addition.notes} |`;
+      const updatedLine = formatTrackerLine({
+        num: duplicate.num,
+        date: addition.date,
+        company: addition.company,
+        role: addition.role,
+        score: addition.score,
+        status: resolvedStatus,
+        pdf: duplicate.pdf,
+        resume: resumeVal,
+        report: addition.report,
+        notes: `Re-eval ${addition.date} (${oldScore}→${newScore}). ${addition.notes}`,
+      });
       appLines[lineIdx] = updatedLine;
       updated++;
     }
@@ -631,7 +657,18 @@ for (const addition of pendingNew) {
     finalNotes = finalNotes ? `${reason}. ${finalNotes}` : reason;
   }
 
-  const newLine = `| ${entryNum} | ${addition.date} | ${addition.company} | ${addition.role} | ${addition.score} | ${finalStatus} | ${addition.pdf} | — | ${addition.report} | ${finalNotes} |`;
+  const newLine = formatTrackerLine({
+    num: entryNum,
+    date: addition.date,
+    company: addition.company,
+    role: addition.role,
+    score: addition.score,
+    status: finalStatus,
+    pdf: addition.pdf,
+    resume: '—',
+    report: addition.report,
+    notes: finalNotes,
+  });
   newLines.push(newLine);
   added++;
   const tag = finalStatus === 'Discarded' ? '🗑️ ' : '➕ ';
