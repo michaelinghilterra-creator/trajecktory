@@ -70,7 +70,10 @@ window.INTERVIEW_STAGES = ["Phone Screen","1st Interview","2nd Interview","3rd I
 window.isInterviewStage = (s) => window.INTERVIEW_STAGES.includes(s);
 
 window.STATUSES = ["Evaluated","Applied","Responded",...window.INTERVIEW_STAGES,"Offer","Rejected","Discarded","SKIP","Closed","Not a Fit","No Response"];
-window.ARCHETYPES = ["RevOps","SalesOps","Analytics","BizDev","SalesDev","Strategy"];
+// "Unclassified" is the catch-all inferArchetype() falls through to (see
+// server/lib/applications.mjs). It is a gap in the matching rules, not a cohort —
+// keep it last and never treat it as a targeting recommendation.
+window.ARCHETYPES = ["RevOps","SalesOps","Analytics","BizDev","SalesDev","Strategy","Unclassified"];
 
 window.STATUS_META = {
   Evaluated:  { color: "#a78bfa", bg: "rgba(167,139,250,0.12)", icon: "◆" },

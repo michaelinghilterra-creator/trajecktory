@@ -312,13 +312,33 @@ function computeStaleTA() {
 // ago, no advancement to Responded / an interview round (implied by status === 'Applied').
 // These are candidates for the one-click "archive to No Response" bulk action so
 // the user clears the backlog honestly instead of closing things prematurely.
+// Anchor priority mirrors rejectionTimingStats: the recorded apply date, else the
+// earliest logged Applied event, else the tracker Date column. That last one is
+// the EVALUATION date (see the apply-date store comment in sidecars.mjs), which
+// on self-sourced rows routinely predates the real application by days — so
+// anchoring on it declares rows ghosted before they have actually been silent
+// 45 days. It stays as a last resort rather than dropping the row, but every
+// candidate now carries `anchorSource` so the UI can disclose which are estimates
+// instead of presenting all of them as measured. This list gates a bulk
+// destructive write, so an over-count here costs real applications.
 function computeGhostedCandidates() {
   const apps = parseApplicationsMd();
   const applyDates = readApplyDates();
+  const events = (() => { try { return parseStatusEvents(); } catch { return []; } })();
+  const earliestApplied = new Map();
+  for (const e of events) {
+    if (e.status !== 'Applied') continue;
+    const prev = earliestApplied.get(e.app);
+    if (!prev || e.date < prev) earliestApplied.set(e.app, e.date);
+  }
   const out = [];
   for (const a of apps) {
     if (a.status !== 'Applied') continue;
-    const appliedOn = applyDates[String(a.id)] || a.date;
+    const key = String(a.id);
+    const appliedOn = applyDates[key] || earliestApplied.get(key) || a.date;
+    const anchorSource = applyDates[key] ? 'apply-date'
+      : earliestApplied.get(key) ? 'event'
+      : 'row-date';
     const days = _daysAgo(appliedOn);
     if (days == null || days < GHOST_DAYS) continue;
     out.push({
@@ -329,6 +349,8 @@ function computeGhostedCandidates() {
       score: a.score,
       applyDate: appliedOn,
       daysSinceApply: days,
+      anchorSource,
+      estimated: anchorSource === 'row-date',
     });
   }
   out.sort((x, y) => y.daysSinceApply - x.daysSinceApply);

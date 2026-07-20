@@ -1,16 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import { RECRUITERS_MD, RECRUITER_CORR_DIR } from '../config.mjs';
+import { RECRUITER_STATUS_LABELS, RECRUITER_CONTACTED } from './statuses.mjs';
 
-const RECRUITER_STATUSES = [
-  'Not Contacted',
-  'Drafted',
-  'Sent',
-  'Replied',
-  'Meeting Scheduled',
-  'Connected',
-  'Dormant',
-];
+// Derived from templates/states.yml (recruiter_states) rather than hardcoded
+// here. The previous local array is how `Bounced` came to be live in the data
+// and absent from every ladder for a month.
+const RECRUITER_STATUSES = RECRUITER_STATUS_LABELS;
 
 function parseRecruitersMd() {
   if (!fs.existsSync(RECRUITERS_MD)) return [];
@@ -133,5 +129,5 @@ function appendRecruiterRows(rows) {
 
 // GET /api/recruiters — list all (search/filter handled client-side)
 
-export { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine, appendRecruiterRows, REC_HEADER, RECRUITER_STATUSES };
+export { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine, appendRecruiterRows, REC_HEADER, RECRUITER_STATUSES, RECRUITER_CONTACTED };
 

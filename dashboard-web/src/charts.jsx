@@ -592,11 +592,13 @@ window.Sankey = function Sankey({ apps }) {
   //   Col i+1 (i = 1..N-1): "reached rung i" main node (Applied … Offer)
   //   Col i+2 (i = 0..N-2): Lost @ rung i + Live-in rung i — share the next main col
   //
-  // Closed entries honor the [reached: X] notes tag — see data.js helpers.
-  // `eff()` returns the furthest funnel stage reached:
+  // `effIdx()` is the furthest rung a row ever reached, taken from the
+  // server-stamped `reached` field (statuses.mjs makeFurthestIdx: the max of live
+  // status, the dated status-event log, and the [reached: X] notes tag):
   //   - status=Rejected with [reached:2nd Interview] → "2nd Interview"
-  //   - status=Rejected with no tag                  → "Applied" (sent, then closed)
-  //   - status=2nd Interview (live)                  → "2nd Interview"
+  //   - status=Rejected with a 1st Interview event   → "1st Interview"
+  //   - status=Rejected with neither                 → "Applied" (sent, then closed)
+  //   - status=Offer with a stale [reached:Responded] tag → "Offer" (max wins)
   const flow = useMemo(() => {
     const all = apps.slice();
     const STAGES = window.FUNNEL_ORDER;          // Evaluated … Offer (9 rungs)
@@ -604,19 +606,31 @@ window.Sankey = function Sankey({ apps }) {
     const idxOf = {};
     STAGES.forEach((s, i) => { idxOf[s] = i; });
 
-    const eff = (a) => {
-      const r = window.reachedStage(a); // e.g. '2nd Interview' for Rejected with [reached:X]
-      if (r) return r;
-      // Rejected (no tag) and No Response (ghosted) both mean an application was
-      // sent that then closed at Applied.
-      if (a.status === "Rejected" || a.status === "No Response") return "Applied";
-      return a.status;
+    // Furthest rung, from the server-stamped `reached` field — the same engine
+    // the funnel and every rate use. The previous local rule let the [reached:]
+    // tag win OUTRIGHT over the live status, so a row reopened after being closed
+    // regressed to an earlier rung and the diagram silently lost mass; and it
+    // could not see the status-event log at all, so any interview recorded only
+    // as an event was invisible here while the funnel counted it.
+    const effIdx = (a) => {
+      if (a.reached != null) return idxOf[a.reached] ?? -1;
+      // Fallback for rows without the stamp (offline mock data). Mirrors the
+      // server: MAX of the signals, never letting a stale tag drag a row back.
+      let i = idxOf[a.status] ?? -1;
+      if (a.status === "Rejected" || a.status === "No Response") i = Math.max(i, idxOf["Applied"]);
+      const r = window.reachedStage(a);
+      if (r) i = Math.max(i, idxOf[r] ?? -1);
+      return i;
     };
-    const effIdx = (a) => idxOf[eff(a)] ?? -1;
 
-    const inEval = a => ["Evaluated","Applied","Responded","Offer","Rejected","No Response"].includes(a.status) || window.isInterviewStage(a.status);
-    const dropped = a => ["Discarded","SKIP","Not a Fit"].includes(a.status);
-    const aged = a => a.status === "Closed";
+    // The three buckets must partition every row exactly once, so "did it enter
+    // the funnel" is asked first and the terminal buckets only claim what's left.
+    // Asking by status alone put a SKIP-or-Closed row that had actually applied
+    // into a terminal bucket, which is why this node read 173 against the
+    // server's 177.
+    const inEval = a => effIdx(a) >= 0;
+    const dropped = a => !inEval(a) && ["Discarded","SKIP","Not a Fit"].includes(a.status);
+    const aged = a => !inEval(a) && a.status === "Closed";
     // "Lost" terminal statuses. No Response can only land at Applied (eff caps it
     // there), so it shows as a loss at Applied, never deeper.
     const isRej = a => a.status === "Rejected" || a.status === "No Response";
@@ -636,6 +650,8 @@ window.Sankey = function Sankey({ apps }) {
     const archColors = {
       RevOps: "#5b8def", SalesOps: "#22d3ee", Analytics: "#a78bfa",
       BizDev: "#f59e0b", SalesDev: "#22c55e", Strategy: "#ec4899",
+      // Deliberately muted: a matching gap, not a cohort to draw the eye.
+      Unclassified: "#6b7280",
     };
     const archNodes = window.ARCHETYPES.map(a => {
       const items = all.filter(x => x.archetype === a);

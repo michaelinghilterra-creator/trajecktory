@@ -4,7 +4,7 @@ import { APPS_MD, ROOT_DIR, STATUS_EVENTS_PATH } from '../config.mjs';
 import { parseTrackerLine } from '../../../lib/tracker.mjs';
 import { hasV1Frontmatter, parseV1, v1Header } from '../v1-loader.mjs';
 import { logStatusEvent, parseStatusEvents } from './sidecars.mjs';
-import { FUNNEL_ORDER, makeFurthestIdx } from './statuses.mjs';
+import { FUNNEL_ORDER, makeFurthestIdx, isInbound } from './statuses.mjs';
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
@@ -14,6 +14,14 @@ function parseScore(raw) {
   return m ? parseFloat(m[1]) : null;
 }
 
+// The final return is a CATCH-ALL, not a classification. It previously returned
+// a real archetype name, which made every unmatched title look like a deliberate
+// cohort — potentially a large share of any tracker — and let the dashboard
+// advise "X roles convert best, weight your applications toward X" about a bucket
+// that only means "none of the patterns above matched". Naming it honestly keeps
+// it visible as a gap in the archetype rules rather than dressing it up as a target.
+export const ARCHETYPE_UNCLASSIFIED = 'Unclassified';
+
 function inferArchetype(role) {
   const r = role.toLowerCase();
   if (/rev\s*ops|revenue ops|revenue operations/.test(r)) return 'RevOps';
@@ -21,7 +29,8 @@ function inferArchetype(role) {
   if (/analytics|business intelligence|\bbi\b|data & insights|revenue intelligence/.test(r)) return 'Analytics';
   if (/business development|biz\s*dev|bds|strategic partnerships|corporate development/.test(r)) return 'BizDev';
   if (/sales development|\bsdr\b|\bbdr\b/.test(r)) return 'SalesDev';
-  return 'Strategy';
+  if (/strategy|strategic planning|chief of staff/.test(r)) return 'Strategy';
+  return ARCHETYPE_UNCLASSIFIED;
 }
 
 // ── Report header enrichment cache ───────────────────────────────────────────
@@ -275,6 +284,9 @@ function parseApplicationsMd() {
   for (const r of rows) {
     const i = furthestIdx(r);
     r.reached = i >= 0 ? FUNNEL_ORDER[i] : null;
+    // Recruiter-inbound: the approach came before the application, so this row's
+    // reply is not evidence that the user's outbound applications are working.
+    r.inbound = isInbound(r.notes);
   }
 
   _appsCache = { mtimeMs, evMtimeMs, rows };
@@ -285,6 +297,8 @@ function parseApplicationsMd() {
 // Column positions in the pipe-split array:
 //   [0]='' [1]=# [2]=date [3]=company [4]=role [5]=score [6]=status [7]=pdf [8]=resume [9]=report [10]=notes [11]=''
 // hint.company is used to disambiguate when multiple rows share the same id (batch collision artifact).
+// hint.eventDate is when the change actually happened (booked/notified), if the
+// caller knows it; omitted, the event log falls back to today as it always did.
 function patchRowInMd(id, updates, hint = {}) {
   const text = fs.readFileSync(APPS_MD, 'utf8');
   const lines = text.split('\n');
@@ -313,7 +327,7 @@ function patchRowInMd(id, updates, hint = {}) {
   fs.writeFileSync(APPS_MD, newLines.join('\n'), 'utf8');
   // Record the status transition in the sidecar event log (dated), so analytics
   // like time-to-rejection can be derived without altering applications.md.
-  if (updates.status !== undefined) logStatusEvent(id, updates.status, { company: target.company });
+  if (updates.status !== undefined) logStatusEvent(id, updates.status, { company: target.company, date: hint.eventDate });
   return true;
 }
 // Days from application to rejection, using the date each app was MARKED
@@ -330,20 +344,37 @@ function rejectionTimingStats() {
     if (!prev || e.date < prev) appliedByApp.set(e.app, e.date);
   }
   const days = [];
+  // A rejection dated before its own apply anchor is not measurable, but it is
+  // also not nothing: it means one of the two dates is wrong. Counting the drops
+  // keeps that visible. While every date was stamped "now" this could not
+  // happen; it became reachable the moment users could enter a date by hand.
+  let excluded = 0;
+  // Earliest Rejected event per app. An application is rejected once; a second
+  // Rejected row is a data artifact (a re-click, or a status re-entered during a
+  // backfill), not a second rejection. Iterating raw events counted those twice,
+  // which barely showed while every date was "now" and both copies landed a few
+  // days apart — but once apply dates could be backdated, one duplicated app
+  // could contribute two large outliers and visibly drag the average.
+  const rejectedByApp = new Map();
   for (const e of events) {
     if (e.status !== 'Rejected') continue;
-    const base = appliedByApp.get(e.app) || rowDateById.get(e.app);
+    const prev = rejectedByApp.get(e.app);
+    if (!prev || e.date < prev) rejectedByApp.set(e.app, e.date);
+  }
+  for (const [app, date] of rejectedByApp) {
+    const base = appliedByApp.get(app) || rowDateById.get(app);
     if (!base) continue;
-    const d = Math.round((Date.parse(e.date) - Date.parse(base)) / 86400000);
+    const d = Math.round((Date.parse(date) - Date.parse(base)) / 86400000);
     if (Number.isFinite(d) && d >= 0) days.push(d);
+    else excluded++;
   }
   const n = days.length;
-  if (!n) return { n: 0, avgDays: null, medianDays: null };
+  if (!n) return { n: 0, avgDays: null, medianDays: null, excluded };
   const avgDays = Math.round((days.reduce((a, b) => a + b, 0) / n) * 10) / 10;
   const sorted = [...days].sort((a, b) => a - b);
   const mid = Math.floor(n / 2);
   const medianDays = n % 2 ? sorted[mid] : Math.round(((sorted[mid - 1] + sorted[mid]) / 2) * 10) / 10;
-  return { n, avgDays, medianDays };
+  return { n, avgDays, medianDays, excluded };
 }
 
 export { parseApplicationsMd, patchRowInMd, rejectionTimingStats };
