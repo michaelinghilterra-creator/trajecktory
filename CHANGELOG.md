@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.17.5](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.4...v1.17.5) (2026-07-20)
+
+
+### Bug Fixes
+
+* **dashboard:** render release-note paragraphs as prose, not bullets ([#42](https://github.com/michaelinghilterra-creator/trajecktory/issues/42)) ([16c53d8](https://github.com/michaelinghilterra-creator/trajecktory/commit/16c53d8b9ee367ff841df30d7ee4e5d61b324ea0))
+* **dashboard:** stop sentence-casing the brand in release notes ([#40](https://github.com/michaelinghilterra-creator/trajecktory/issues/40)) ([c87e7fa](https://github.com/michaelinghilterra-creator/trajecktory/commit/c87e7fafeebdf02d8892e1d0012c7489a3af6bae))
+
 ## [1.17.4](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.3...v1.17.4) (2026-07-20)
 
 
