@@ -63,11 +63,13 @@ rather than trusting this list. Run it at the end; if it is green, you are done.
 - [ ] **2. Sign the tag.** Release Please creates a lightweight tag via the API,
       which cannot carry a signature. Replace it (commands below).
       *Fails silently:* anchored installs freeze rather than erroring.
-- [ ] **3. Rewrite the release body in plain language.** The auto-generated body
-      is commit subjects. The dashboard **renders this text** in Setup → Change
-      Log and in the update banner, so leaving it raw ships internal script names
-      and commit scopes into the product.
+- [ ] **3. Rewrite the release body in the house format: PROSE, not bullet points.**
+      The auto-generated body is commit subjects. The dashboard **renders this text**
+      in Setup → Change Log and in the update banner, so leaving it raw ships internal
+      script names and commit scopes into the product.
       *Fails silently:* the release run is green either way.
+      Full spec: [Release notes: the house format](#release-notes-the-house-format).
+      **Read the previous release before writing this one.**
 - [ ] **4. Run the guard and confirm it is green:** `gh workflow run tag-signature.yml`
 - [ ] **5. (Optional) Rebuild and upload the installer.** Only needed when new
       installs should land on this version directly. Skipping it is fine:
@@ -105,6 +107,46 @@ pwsh -ExecutionPolicy Bypass -File installer/build-bundle.ps1
 & "C:/Program Files (x86)/Inno Setup 6/ISCC.exe" installer/trajecktory.iss
 gh release upload vX.Y.Z installer/Output/trajecktory-setup-vX.Y.Z.exe
 ```
+
+## Release notes: the house format
+
+Release notes are **product copy, not a changelog**. They are read inside the app by
+someone deciding whether to accept an update, so they are written for that person and
+not for whoever wrote the commits.
+
+**Open the previous release and copy its shape before writing a new one:**
+
+```bash
+gh release view "$(gh release list --limit 2 --json tagName -q '.[1].tagName')" --json body -q .body
+```
+
+**Write in prose.** Full sentences and paragraphs that say what happened and why it
+matters to the reader. Terse developer bullet points are the recurring regression here,
+and they are the one thing to check before publishing. Bullets belong in exactly one
+place, `### For contributors`, which is where a reader who wants mechanical detail goes
+looking for it.
+
+The structure, in order:
+
+1. **An opening paragraph with no heading.** One or two sentences characterising the
+   release ("Data integrity release.", "Accuracy release.", "Maintenance release."),
+   what it addresses, and whether it is recommended for all installs.
+2. **`## Install (Windows)`.** Boilerplate, carried over verbatim. The "New install?"
+   line must name the newest release that actually carries a `trajecktory-setup-*.exe`
+   asset, which is usually NOT the release being written. Confirm it rather than
+   assuming, because most releases ship no installer at all:
+   `gh release view <tag> --json assets -q '[.assets[].name]|join(", ")'`
+3. **`## What changed`**, one `###` subheading per change, each written as prose. Name
+   the user-visible symptom first, then the cause, then what is true now. Where nothing
+   of theirs was damaged, say so plainly; that is usually the reader's actual question.
+4. **`### For contributors`.** File names, module boundaries, test coverage. Bullets
+   are fine here.
+
+**Never name a real company, person, or figure from the maintainer's own job search.**
+The release body is published and is rendered inside the product, and it never passes
+through `.githooks/commit-msg` or `verify-no-pii.mjs --messages`, which only see commits
+made locally. The "describe the shape, never the value" rule in `AGENTS.md` applies here
+in full, and for the same reason it applies to a PR description.
 
 ## What the updater enforces
 
