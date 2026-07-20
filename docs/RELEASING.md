@@ -43,7 +43,33 @@ one extra step per release.
    git add trusted-signers && git commit -m "chore: add release signing trust anchor"
    ```
 
-## Each release
+## Each release — checklist
+
+Four steps are done by hand. Steps 2 and 3 both fail **silently with a green
+release run**, which is why `.github/workflows/tag-signature.yml` checks them
+rather than trusting this list. Run it at the end; if it is green, you are done.
+
+- [ ] **1. Merge the Release Please PR with a MERGE COMMIT, not a squash.**
+      A squash takes the PR title (`chore(main): release X.Y.Z`) as the commit
+      message, and Release Please would then re-read that on the next cycle. More
+      importantly, squashing the *feature* PRs that feed a release collapses their
+      Conventional Commit subjects into the PR title, which usually has no type
+      prefix — so the release silently bumps nothing and the changelog is empty.
+- [ ] **2. Sign the tag.** Release Please creates a lightweight tag via the API,
+      which cannot carry a signature. Replace it (commands below).
+      *Fails silently:* anchored installs freeze rather than erroring.
+- [ ] **3. Rewrite the release body in plain language.** The auto-generated body
+      is commit subjects. The dashboard **renders this text** in Setup → Change
+      Log and in the update banner, so leaving it raw ships internal script names
+      and commit scopes into the product.
+      *Fails silently:* the release run is green either way.
+- [ ] **4. Run the guard and confirm it is green:** `gh workflow run tag-signature.yml`
+- [ ] **5. (Optional) Rebuild and upload the installer.** Only needed when new
+      installs should land on this version directly. Skipping it is fine:
+      existing installs still self-update, but new ones land on the last release
+      that has an `.exe` and update from there.
+
+## Each release — the commands
 
 Release Please still bumps the version, writes the changelog, and creates the
 `vX.Y.Z` tag via the API. That API tag is **unsigned**, so replace it with a
