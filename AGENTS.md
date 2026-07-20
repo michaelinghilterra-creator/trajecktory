@@ -464,6 +464,43 @@ Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slu
 5. Health check: `node verify-pipeline.mjs`
 6. Normalize statuses: `node normalize-statuses.mjs`
 7. Dedup: `node dedup-tracker.mjs`
+8. **NEVER hand-roll a tracker row.** Read rows with `parseTrackerLine`, write them
+   with `formatTrackerLine`, both from `lib/tracker.mjs`. Never `line.split('|')`
+   with literal indices, and never build a row from a template literal.
+
+### Never hand-roll a tracker row (RULE)
+
+`data/applications.md` looks like a table you can slice with `split('|')`. Twice now
+that assumption has rotted silently, because a wrong row is still a syntactically
+valid row: nothing throws, nothing fails a test, and the damage only shows up later
+as a column that quietly holds the wrong thing.
+
+**On the read side**, five hand-rolled parsers disagreed about the layout. They split
+on `|` without dropping the empty cells the outer pipes create, so on the 10-column
+schema they read Resume as Report and Report as Notes. `analyze-patterns` could not
+open a single report file, and every archetype fell back to "Unknown" for months.
+That is why `lib/tracker.mjs` exists.
+
+**On the write side**, the same drift happened again in the scripts that rewrite
+rows. They were written for the legacy 9-column schema, so once a Resume column was
+added between PDF and Report, index 9 stopped being Notes. `auto-discard-low` then
+read a markdown link where it expected notes, which meant the `[self-sourced]`
+exemption could never match and a JD the user picked themselves was auto-discarded
+on score alone. Separately, notes are free text: a `|` typed into a note, or left
+behind when a source tag was stripped, added a cell and shifted every field after it.
+
+So the rule is not stylistic. Both engines exist because both halves of this file
+have already been gotten wrong in production:
+
+| Doing | Use | Why |
+|---|---|---|
+| Reading a row | `parseTrackerLine(line)` | Knows the current layout, returns `null` for headers, separators and non-rows, and still reads legacy 9-column rows correctly |
+| Writing a row | `formatTrackerLine(fields)` | Neutralizes `\|`, newlines and tabs, so output always parses back as exactly 10 cells |
+| Changing one cell | `formatTrackerLine({ ...row, status: 'Applied' })` | Spread the parsed row, override the field by NAME, never by index |
+
+Adding or removing a column should mean editing `lib/tracker.mjs` and nothing else.
+If you find yourself counting pipes, you are writing the next instance of this bug.
+Guarded by `tests/tracker.test.mjs` and `tests/tracker-writers.test.mjs`.
 
 ### Canonical States (applications.md)
 
