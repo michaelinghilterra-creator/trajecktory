@@ -413,6 +413,7 @@ for (const suite of [
   'tests/scan-core.test.mjs',
   'tests/outcome.test.mjs',
   'tests/tracker.test.mjs',
+  'tests/tracker-writers.test.mjs',
   'tests/liveness-workday.test.mjs',
   'tests/sidecars.test.mjs',
   'tests/metrics.test.mjs',

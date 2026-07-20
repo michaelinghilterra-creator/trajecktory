@@ -12,6 +12,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APPS = path.join(__dirname, 'data/applications.md');
@@ -23,20 +24,16 @@ const changes = [];
 const out = [];
 
 for (const line of lines) {
-  if (!line.startsWith('|') || line.includes('---') || /\|\s*#\s*\|/.test(line)) {
-    out.push(line);
-    continue;
-  }
-  // | id | date | company | role | score/5 | status | pdf | report | notes |
-  const parts = line.split('|').map(p => p);
-  if (parts.length < 10) { out.push(line); continue; }
+  // parseTrackerLine returns null for headers, separators and non-rows, and it
+  // knows the current 10-column layout. This used to hand-index line.split('|')
+  // against the legacy 9-column schema, which read the Report cell as notes — so
+  // the [self-sourced] exemption and the recommends-against check below both ran
+  // against a markdown link and never fired, and flipping a row overwrote the
+  // Report cell instead of the notes.
+  const row = parseTrackerLine(line);
+  if (!row) { out.push(line); continue; }
 
-  const id = parts[1].trim();
-  const company = parts[3].trim();
-  const role = parts[4].trim();
-  const scoreStr = parts[5].trim();
-  const status = parts[6].trim();
-  const notes = parts[9].trim();
+  const { num: id, company, role, score: scoreStr, status, notes } = row;
 
   // Only touch Evaluated entries (don't override Applied/Interview/Offer)
   if (status !== 'Evaluated') { out.push(line); continue; }
@@ -60,10 +57,7 @@ for (const line of lines) {
     ? `auto-discarded: agent recommends against`
     : `auto-discarded: score ${score} < 3.0`;
   const newNotes = notes ? `${reason}. ${notes}` : reason;
-  parts[6] = ' Discarded ';
-  parts[9] = ` ${newNotes} `;
-  const newLine = parts.join('|');
-  out.push(newLine);
+  out.push(formatTrackerLine({ ...row, status: 'Discarded', notes: newNotes }));
   changes.push({ id, score: score ?? '–', company, role, why: recommendsAgainst ? 'rec' : 'score' });
 }
 
