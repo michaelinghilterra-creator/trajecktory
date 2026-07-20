@@ -16,6 +16,7 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APPS = join(__dirname, 'data/applications.md');
@@ -116,18 +117,19 @@ if (!apply) {
 // Flip statuses
 const expiredIds = new Set(expired.map(e => e.id));
 const newLines = lines.map(line => {
-  if (!line.startsWith('|') || line.includes('---')) return line;
-  const parts = line.split('|');
-  if (parts.length < 10) return line;
-  const id = parseInt(parts[1].trim());
-  if (!expiredIds.has(id)) return line;
-  const notes = parts[9].trim();
-  const found = expired.find(e => e.id === id);
+  // Read and write through lib/tracker.mjs. Hand-indexing line.split('|') here
+  // used the legacy 9-column offsets, so the discard reason was prepended to the
+  // Report cell rather than the notes.
+  const row = parseTrackerLine(line);
+  if (!row || !expiredIds.has(row.num)) return line;
+  const found = expired.find(e => e.id === row.num);
   const statusLabel = found?.livenessStatus === 'uncertain' ? 'no apply control visible' : 'posting closed/expired';
   const reason = `auto-discarded: ${statusLabel}`;
-  parts[6] = ' Discarded ';
-  parts[9] = ` ${notes ? reason + '. ' + notes : reason} `;
-  return parts.join('|');
+  return formatTrackerLine({
+    ...row,
+    status: 'Discarded',
+    notes: row.notes ? `${reason}. ${row.notes}` : reason,
+  });
 });
 
 writeFileSync(APPS, newLines.join('\n'));
