@@ -4,6 +4,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join, resolve } from 'path';
 import { randomBytes } from 'crypto';
 import { ROOT_DIR } from '../config.mjs';
+import { notesForVersion } from '../lib/release-notes.mjs';
 
 export const router = express.Router();
 
@@ -27,12 +28,23 @@ const BOOT_ID = randomBytes(8).toString('hex');
 router.post('/api/system/update-check', (req, res) => {
   execFile(NODE, ['update-system.mjs', 'check'],
     { cwd: ROOT_DIR, timeout: 30000, maxBuffer: 1024 * 1024 },
-    (err, stdout) => {
+    async (err, stdout) => {
       // The checker prints a single JSON line to stdout. git fetch progress
       // goes to stderr, so the last non-empty stdout line is the verdict.
       const line = (stdout || '').trim().split('\n').filter(Boolean).pop() || '';
       let parsed;
       try { parsed = JSON.parse(line); } catch { parsed = { status: 'offline' }; }
+
+      // The checker's `changelog` is the top of CHANGELOG.md, which Release
+      // Please writes from commit subjects — so the "What's new" panel showed
+      // internal script names and commit scopes. Attach the written release
+      // notes when they exist. Enriched HERE rather than inside
+      // update-system.mjs on purpose: that script is the signature-gated
+      // updater and must keep working before an update is applied, so it stays
+      // free of this dependency and its CHANGELOG text remains the fallback.
+      if (parsed && parsed.status === 'update-available' && parsed.remote) {
+        try { parsed.releaseNotes = await notesForVersion(parsed.remote); } catch { /* offline: keep the fallback */ }
+      }
       res.json(parsed);
     });
 });
