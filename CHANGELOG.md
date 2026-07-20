@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.17.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.16.2...v1.17.0) (2026-07-20)
+
+
+### Features
+
+* **dashboard:** record real status-change dates and unify metric definitions ([8500c15](https://github.com/michaelinghilterra-creator/trajecktory/commit/8500c1509165d3b8c082fe6408fc4a09f5b76edc))
+* **verify-no-pii:** flag a tracker company named beside an outreach verb ([bacbf2c](https://github.com/michaelinghilterra-creator/trajecktory/commit/bacbf2cba409c0b5691dfe44ca39e597aaad3d37))
+
+
+### Bug Fixes
+
+* archive-ghosted wrote every status event twice ([8500c15](https://github.com/michaelinghilterra-creator/trajecktory/commit/8500c1509165d3b8c082fe6408fc4a09f5b76edc))
+
 ## [1.16.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.16.1...v1.16.2) (2026-07-20)
 
 
