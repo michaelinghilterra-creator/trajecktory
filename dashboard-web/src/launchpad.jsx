@@ -18,33 +18,33 @@ const LP_SECTIONS = [
     title: 'Start here: your CV sets up the rest',
     why: 'The fastest path to value. From your CV we draft your identity, target roles, and your edge, so most of setup becomes a quick review and you can go straight to evaluating jobs. Paste it, share a LinkedIn URL, or upload a .docx/.pdf (a .docx also seeds your resume master).',
     handoff: 'cv' },
-  { id: 'identity',   kind: 'form', req: 'Required',       icon: 'identity', label: 'Identity & links',
+  { id: 'identity',   kind: 'form', req: 'Recommended',    icon: 'identity', label: 'Identity & links',
     title: 'Who you are',
     why: 'Stamped onto every report and resume. Links and certifications are optional but raise match quality.' },
-  { id: 'roles',      kind: 'gen', req: 'Required',        icon: 'roles', label: 'Roles & seniority',
+  { id: 'roles',      kind: 'gen', req: 'Recommended',     icon: 'roles', label: 'Roles & seniority',
     title: 'What you are targeting',
     why: 'Your titles plus a level. This is what the scanner hunts for. Claude Code also suggests adjacent roles to widen your funnel.',
     handoff: 'roles' },
-  { id: 'edge',       kind: 'gen', req: 'Required',        icon: 'edge', label: 'Your edge',
+  { id: 'edge',       kind: 'gen', req: 'Recommended',     icon: 'edge', label: 'Your edge',
     title: 'What makes you the obvious hire',
     why: 'Superpowers and proof points drafted from your CV. The single biggest lever on evaluation quality.',
     handoff: 'edge' },
-  { id: 'comp',       kind: 'form', req: 'Required',       icon: 'comp', label: 'Compensation',
+  { id: 'comp',       kind: 'form', req: 'Recommended',    icon: 'comp', label: 'Compensation',
     title: 'Your numbers',
     why: 'Target and walk-away. Used to score offers and flag low-comp roles.' },
-  { id: 'location',   kind: 'form', req: 'Required',       icon: 'location', label: 'Location & policy',
+  { id: 'location',   kind: 'form', req: 'Recommended',    icon: 'location', label: 'Location & policy',
     title: 'Where you will and will not work',
     why: 'Drives the scanner geo filter so dead-on-arrival roles never reach you.',
     handoff: 'location', handoffLabel: 'Geocode + build scanner geo filter' },
-  { id: 'evaluation', kind: 'gen', req: 'Required',        icon: 'evaluation', label: 'Evaluation tuning',
+  { id: 'evaluation', kind: 'gen', req: 'Later',           icon: 'evaluation', label: 'Evaluation tuning',
     title: 'Priorities & deal-breakers',
     why: 'What you optimize for, and your hard nos. Tunes the score and the scanner exclusions.',
     handoff: 'evaluation' },
-  { id: 'companies',  kind: 'gen', req: 'Required',        icon: 'companies', label: 'Companies to track',
+  { id: 'companies',  kind: 'gen', req: 'Recommended',     icon: 'companies', label: 'Companies to track',
     title: 'Where to look',
     why: 'A neutral starter set ships by default. Claude Code suggests local-by-radius and by-industry companies, resolves each careers page, and merges them in without disturbing learned tuning.',
     handoff: 'companies' },
-  { id: 'outputs',    kind: 'form', req: 'Required',       icon: 'outputs', label: 'Output locations',
+  { id: 'outputs',    kind: 'form', req: 'Optional',       icon: 'outputs', label: 'Output locations',
     title: 'Where files land',
     why: 'Choose folders for tailored resumes and interview prep. Company reports always stay in the project.' },
   { id: 'health',     kind: 'action', req: 'verify',       icon: 'health', label: 'Health check',
@@ -62,7 +62,19 @@ const LP_OPTIONAL = [
   { id: 'import',    label: 'Import / demo tour', why: 'Bring in prior applications, or explore with sample data.' },
 ];
 
+// ── What is actually REQUIRED, versus what merely sharpens results ───────────
+// This list used to hold eight ids and the header rendered "N/8 required". That
+// was not a wording problem, it was a false claim the product made structurally:
+// nothing is gated on these (see `gated`, engine-only), and the app is usable as
+// soon as the CV step and its handoff finish. A beta tester read the meter the
+// way it was written, worked through all eight, and lost about two hours before
+// touching the product at all (report 2026-07-21).
+//
+// So: LP_REQUIRED is now the honest floor — what you truly cannot run without.
+// Everything else is LP_REFINE, which drives its own progress bar and is framed
+// as improving results rather than unlocking them.
 const LP_REQUIRED = LP_SECTIONS.filter(s => s.req === 'Required').map(s => s.id);
+const LP_REFINE = LP_SECTIONS.filter(s => s.req === 'Recommended' || s.req === 'Later' || s.req === 'Optional').map(s => s.id);
 
 // ---- small presentational helpers ------------------------------------------
 function LpDot({ status }) {
@@ -410,6 +422,8 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const [preflight, setPreflight] = useState(null);     // {ok, checks}
   const [pendingGen, setPendingGen] = useState({});     // sectionId -> prompt (copied, awaiting ack)
   const pendingBaseline = useRef({});                   // sectionId -> status when the handoff started (for empty→complete auto-clear)
+  const [checkMsg, setCheckMsg] = useState({});         // sectionId -> 'checking' | {ok:false, text} after a verify attempt
+  const [preview, setPreview] = useState(null);         // filter preview result (see runPreview)
   const [health, setHealth] = useState(null);           // {ok, output}
   const [apiKey, setApiKey] = useState({ has: null, input: '', saving: false, msg: '' });
   const [discKeys, setDiscKeys] = useState({ brave: null, muse: null, braveInput: '', museInput: '', saving: false, msg: '' });
@@ -541,11 +555,14 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const preflightOk = preflight?.engineOk ?? preflight?.ok;
   const gated = (id) => id !== 'preflight' && !preflightOk;
 
+  // canStart: the honest "you can use the product now" bar. Everything past this
+  // improves results; none of it unlocks anything.
+  const canStart = LP_REQUIRED.every(id => sectionStatus(id) === 'complete');
   const readiness = (() => {
-    const done = LP_REQUIRED.filter(id => sectionStatus(id) === 'complete').length;
-    return { done, total: LP_REQUIRED.length, pct: Math.round(done / LP_REQUIRED.length * 100) };
+    const done = LP_REFINE.filter(id => sectionStatus(id) === 'complete').length;
+    return { done, total: LP_REFINE.length, pct: Math.round(done / LP_REFINE.length * 100) };
   })();
-  const allReady = readiness.done === readiness.total;
+  const allReady = canStart && readiness.done === readiness.total;
 
   // ---- actions -------------------------------------------------------------
   const runPreflight = () => {
@@ -577,11 +594,55 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       .catch(() => toast && toast('Could not load prompt', 'error'));
   };
 
+  // ── Verify the handoff, do not take the user's word for it ──────────────────
+  // This replaced an "✓ I ran it" button that cleared the pending prompt and let
+  // the step read as done on the user's say-so alone. A beta tester ran the roles
+  // prompt, Claude never wrote data/setup/roles.json, and they advanced anyway
+  // (report 2026-07-21) — the UI manufactured confidence that carried them through
+  // several later steps.
+  //
+  // The question "did the agent write the file" is machine-checkable, and we were
+  // already polling /api/setup/state every 3s to answer it. So ask the server,
+  // and when the artifact is not there, SAY SO and keep the prompt on screen.
   const ackHandoff = (sectionId) => {
+    setCheckMsg(m => ({ ...m, [sectionId]: 'checking' }));
+    fetch('/api/setup/state').then(r => r.json()).then(s => {
+      setState(s);
+      loadStages(); // pick up suggestions / detected items the agent wrote back
+      const done = s.sections?.[sectionId]?.status === 'complete';
+      if (done) {
+        setPendingGen(p => { const n = { ...p }; delete n[sectionId]; return n; });
+        delete pendingBaseline.current[sectionId];
+        setCheckMsg(m => { const n = { ...m }; delete n[sectionId]; return n; });
+        toast && toast('Confirmed — that step is saved', 'success');
+      } else {
+        setCheckMsg(m => ({ ...m, [sectionId]: {
+          ok: false,
+          // No "Not saved yet." lead-in here: the renderer already supplies it in
+          // bold, and having it in both places printed it twice.
+          text: 'Nothing has landed on disk for this step, so it is not done. If Claude Code finished and asked you a question instead, answer it and let it run to the end. If it errored, re-copy the prompt and run it again.',
+        } }));
+      }
+    }).catch(() => setCheckMsg(m => ({ ...m, [sectionId]: { ok: false, text: 'Could not reach the dashboard server to check.' } })));
+  };
+
+  // Let the user prove the step really is finished and move on anyway. Kept
+  // deliberately separate from the check above and worded as an override, so
+  // "I am sure" is a conscious act rather than the default path.
+  const forceAck = (sectionId) => {
     setPendingGen(p => { const n = { ...p }; delete n[sectionId]; return n; });
     delete pendingBaseline.current[sectionId];
-    refresh();
-    loadStages(); // pick up suggestions / detected items the agent wrote back
+    setCheckMsg(m => { const n = { ...m }; delete n[sectionId]; return n; });
+    refresh(); loadStages();
+  };
+
+  // ── 1.7: prove the filter works BEFORE the user invests in tuning it ────────
+  const runPreview = () => {
+    setPreview({ running: true });
+    window.tjkMutate('/api/setup/preview-matches', { method: 'POST' })
+      .then(r => r.json())
+      .then(d => setPreview(d))
+      .catch(() => setPreview({ error: 'Preview failed. Is the dashboard server still running?' }));
   };
 
   const saveForm = (sectionId) => {
@@ -704,10 +765,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>One step in Claude Code sets up your whole profile</div>
             <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.55 }}>The prompt below was copied to your clipboard. Paste it into Claude Code (the same chat you used to start the dashboard) and run it. It reads your CV and drafts your identity, target roles, and your edge, so the steps below fill in for you to review, then you can go straight to the first evaluation. This checks itself off the moment it finishes; you don't have to come back here.</div>
             <textarea readOnly value={pendingGen.cv} rows={4} className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
-            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12, color: 'var(--accent)' }}>⧖ Waiting for you to run it in Claude Code…</span>
-              <button className="btn ghost sm" onClick={() => ackHandoff('cv')}>Check now</button>
-            </div>
+            {lpHandoffCheck("cv")}
           </div>
         )}
       </div>
@@ -729,12 +787,116 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         </button>
         {prompt && (
           <div style={{ marginTop: 14 }}>
-            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>Copied to your clipboard. Paste it into your Claude Code, then click done.</div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>Copied to your clipboard. Paste it into your Claude Code and let it finish. This checks itself off automatically the moment it saves.</div>
             <textarea readOnly value={prompt} rows={4}
               className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
-            <div style={{ marginTop: 8 }}>
-              <button className="btn success" onClick={() => ackHandoff(section.id)}>✓ I ran it. Refresh status</button>
+            {lpHandoffCheck(section.id)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Shared footer for every pending handoff: a real verification button plus the
+  // honest result of the last check. See ackHandoff for why this is not an ack.
+  //
+  // Plain function returning JSX, called as {lpHandoffCheck(id)}, matching
+  // handoffBox/renderRoles above. Do NOT turn this into <LpHandoffCheck /> — a
+  // component declared inside the render body gets a fresh identity on every
+  // parent render, so React unmounts and remounts the subtree each time and the
+  // click handlers land on detached nodes.
+  function lpHandoffCheck(id) {
+    const c = checkMsg[id];
+    return (
+      <div style={{ marginTop: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: 'var(--accent)' }}>⧖ Waiting for Claude Code to finish…</span>
+          <button className="btn ghost sm" disabled={c === 'checking'} onClick={() => ackHandoff(id)}>
+            {c === 'checking' ? 'Checking…' : 'Check if it saved'}
+          </button>
+        </div>
+        {c && c !== 'checking' && !c.ok && (
+          <div style={{ marginTop: 8, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(234,179,8,0.09)', border: '1px solid rgba(234,179,8,0.3)', fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55 }}>
+            <b style={{ color: 'var(--yellow)' }}>Not saved yet.</b> {c.text}
+            <div style={{ marginTop: 7 }}>
+              <button className="btn ghost sm" onClick={() => forceAck(id)}>Dismiss anyway</button>
             </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Filter preview ──────────────────────────────────────────────────────────
+  // The feedback loop that setup never had. Samples live postings through the
+  // user's CURRENT filter and reports what would survive it, so a filter that
+  // matches nothing is discovered in seconds instead of after an hour of tuning.
+  function lpPreview() {
+    const p = preview;
+    return (
+      <div style={{ marginTop: 4, padding: '11px 13px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button className="btn" disabled={p?.running} onClick={runPreview}>
+            {p?.running ? 'Checking live postings…' : 'Preview what this finds'}
+          </button>
+          <span style={{ fontSize: 11.5, color: 'var(--text-mute)' }}>Free. Reads a sample of real job boards, no AI involved.</span>
+        </div>
+
+        {p && !p.running && p.error && (
+          <div style={{ marginTop: 9, fontSize: 12, color: 'var(--red)' }}>{p.error}</div>
+        )}
+
+        {p && !p.running && !p.error && (
+          <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+            {p.seen === 0 ? (
+              <div>
+                <b style={{ color: 'var(--yellow)' }}>Could not read any postings.</b> {p.reachedCompanies === 0
+                  ? 'None of the sampled job boards responded. That is usually a network issue rather than a filter problem, so try again in a moment.'
+                  : 'The boards responded but had no open postings in the sample.'}
+              </div>
+            ) : p.matched === 0 ? (
+              // Coverage-aware wording. A thin sample can show zero matches simply
+              // because it happened to pick companies the user does not target, so
+              // it must not hand out confident "your filter is broken" advice. Only
+              // once the sample covers a meaningful share of the list does a zero
+              // become a statement about the filter rather than about the sample.
+              (() => {
+                const thin = p.totalCompanies > 0 && (p.sampledCompanies / p.totalCompanies) < 0.25;
+                return thin ? (
+                  <div>
+                    <b style={{ color: 'var(--text)' }}>No matches in this sample.</b> It covered {p.sampledCompanies} of your {p.totalCompanies} tracked companies, which is too few to judge your filter. If those happened to be employers you do not target, this is expected.
+                    <div style={{ marginTop: 5 }}>The number worth watching: your title filter dropped <b>{p.titleBlocked} of {p.seen}</b> postings, location dropped {p.geoBlocked}. On a narrow, well-tuned filter that is normal. On a brand-new setup it usually means the titles are too specific.</div>
+                  </div>
+                ) : (
+                  <div>
+                    <b style={{ color: 'var(--yellow)' }}>Nothing matches right now.</b> Out of {p.seen} live postings sampled, your title filter dropped {p.titleBlocked} and your location rules dropped {p.geoBlocked}.
+                    {p.titleBlocked > p.geoBlocked
+                      ? ' Most of the loss is on titles, so widen those first: add the other names employers use for your role.'
+                      : ' Most of the loss is on location, so check your commute radius and work-mode settings.'}
+                  </div>
+                );
+              })()
+            ) : (
+              <div>
+                <b style={{ color: 'var(--green)' }}>{p.matched} of {p.seen} sampled postings match.</b> Your title filter dropped {p.titleBlocked}, location dropped {p.geoBlocked}.
+              </div>
+            )}
+            <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--text-mute)' }}>
+              Sampled {p.sampledCompanies} of your {p.totalCompanies} tracked companies{p.reachedCompanies < p.sampledCompanies ? ` (${p.reachedCompanies} responded)` : ''}. A real scan covers all of them, so treat this as a direction check, not a forecast.
+            </div>
+            {p.examples?.length > 0 && (
+              <div style={{ marginTop: 9 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 5 }}>Examples that got through</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {p.examples.slice(0, 6).map((e, i) => (
+                    <div key={i} style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                      <span style={{ color: 'var(--text)' }}>{e.title}</span>
+                      <span style={{ color: 'var(--text-mute)' }}> · {e.company}{e.location ? ` · ${e.location}` : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -745,9 +907,9 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     if (!pendingGen[id]) return null;
     return (
       <div style={{ marginTop: 6 }}>
-        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>Copied to your clipboard. Paste it into your Claude Code, then click done.</div>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 6 }}>Copied to your clipboard. Paste it into your Claude Code and let it finish. This checks itself off automatically the moment it saves.</div>
         <textarea readOnly value={pendingGen[id]} rows={4} className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
-        <div style={{ marginTop: 8 }}><button className="btn success" onClick={() => ackHandoff(id)}>✓ I ran it. Refresh status</button></div>
+        {lpHandoffCheck(id)}
       </div>
     );
   }
@@ -817,6 +979,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>Saves your picks, then Claude Code builds the title filters, queries, and suggestions.</span>
         </div>
         {handoffBox('roles')}
+        {lpPreview()}
       </div>
     );
   }
@@ -854,7 +1017,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <LpLegend />
-        <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>A neutral starter set ships by default. Add your own below, or pick from Claude Code's suggestions.</div>
+        <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>A broad starter set of 123 employers ships by default, spread across 15 industries. It is a starting point, not a list picked for you, so expect to replace most of it. Add your own below, or pick from Claude Code's suggestions.</div>
         <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5, padding: '8px 11px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>💡 Tip: add a few companies you already care about <i>before</i> you run the suggestions. Claude Code uses them to tune what it recommends, so you'll get sharper local and industry matches.</div>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={LP_SUB}>Commute radius</div>
@@ -888,6 +1051,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>Claude Code resolves careers pages and merges picks without disturbing learned tuning.</span>
         </div>
         {handoffBox('companies')}
+        {lpPreview()}
       </div>
     );
   }
@@ -1103,18 +1267,33 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         </svg>
         <div style={{ flex: 1 }}>
           <h2 style={{ margin: 0, fontSize: 18, color: 'var(--text)' }}>Launchpad</h2>
-          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{allReady ? 'Setup complete. Edit any section below.' : 'Get set up to search and apply. No YAML editing required.'}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>{allReady ? 'Setup complete. Edit any section below.' : canStart ? 'You can start using trajecktory now. The steps below sharpen your results.' : 'Get set up to search and apply. No YAML editing required.'}</div>
         </div>
         {allReady
           ? <span className="pill" style={{ background: 'var(--accent-bg)', color: 'var(--green)' }}>✓ ready</span>
-          : <span className="pill mono" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>{readiness.done}/{readiness.total} required</span>}
+          : canStart
+            ? <span className="pill mono" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>{readiness.done}/{readiness.total} sharpened</span>
+            : <span className="pill mono" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>start with your CV</span>}
       </div>
+
+      {/* The activation banner. This is the single highest-value thing on the
+          page: it tells the user the product is usable BEFORE they grind through
+          the remaining steps. Its absence cost a beta tester ~2 hours. */}
+      {canStart && !allReady && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12, padding: '11px 13px', borderRadius: 'var(--r-card)', background: 'rgba(34,197,94,0.09)', border: '1px solid rgba(34,197,94,0.3)' }}>
+          <span style={{ fontSize: 15 }}>✓</span>
+          <span style={{ flex: 1, minWidth: 220, fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55 }}>
+            <b style={{ color: 'var(--text)' }}>You are ready to use trajecktory.</b> Your CV is in, so you can start evaluating real jobs right now. The steps below are refinements, not requirements. Most people get more out of them after seeing a few scores, so feel free to come back later.
+          </span>
+          {setTab && <button className="btn primary" onClick={() => setTab('pipeline')}>Start using it →</button>}
+        </div>
+      )}
 
       <div style={{ height: 8, background: 'var(--panel-2)', borderRadius: 999, overflow: 'hidden', marginBottom: 6 }}>
         <div style={{ height: '100%', width: `${readiness.pct}%`, background: 'var(--accent)', borderRadius: 999, transition: 'width .25s' }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-mute)', marginBottom: 12 }}>
-        <span>Setup readiness</span>
+        <span>{canStart ? 'Result quality (optional)' : 'Setup readiness'}</span>
         {state.demo ? <span style={{ color: 'var(--yellow)' }}>demo mode (read only)</span> : <span>{readiness.pct}%</span>}
       </div>
 

@@ -227,5 +227,67 @@ check(noHome('Dallas, TX') === true, 'no home configured: dfw_core list still pa
 check(noHome('New York, NY') === false, 'no home configured: hard_no still blocks (no coords needed)');
 check(noHome('Denver, CO') === false, 'no home configured: non-TX with no remote signal still blocks');
 
+// ── Region is configurable, not hardcoded to Texas (fix 2026-07-21) ───────────
+// Rules 7-11 used to test a literal 'texas'/' tx' token, so a user anywhere else
+// got no radius math and a rule-11 block on everything not spelled out by name —
+// including their own home city. Silent near-zero scans, no error, no counter.
+const ohio = buildLocationFilter({
+  location_policy: {
+    home: { lat: 39.9612, lon: -82.9988, commute_radius_miles: 50 },  // Columbus
+    home_region: ['ohio', ' oh', ', oh'],
+    hard_no: ['new york'],
+    home_core: ['columbus'],
+    metro_allow: ['dublin', 'westerville'],
+    flexible_only: ['cleveland'],
+    region_city_coords: [
+      { name: 'springfield', lat: 39.9242, lon: -83.8088 },  // ~44mi, inside
+      { name: 'toledo',      lat: 41.6528, lon: -83.5379 },  // ~120mi, outside
+    ],
+  },
+});
+check(ohio('Columbus, OH') === true,           'generic region: home core passes onsite');
+check(ohio('Dublin, OH') === true,             'generic region: metro suburb passes onsite');
+check(ohio('Springfield, OH') === true,        'generic region: in-region city within radius passes onsite');
+check(ohio('Toledo, OH') === false,            'generic region: in-region city outside radius blocks onsite');
+check(ohio('Toledo, OH (Remote)') === true,    'generic region: in-region city outside radius passes remote');
+check(ohio('Cleveland, OH') === false,         'generic region: flexible_only city blocks onsite');
+check(ohio('Cleveland, OH (Hybrid)') === true, 'generic region: flexible_only city passes hybrid');
+check(ohio('Denver, CO') === false,            'generic region: out-of-region blocks with no remote signal');
+check(ohio('Denver, CO (Remote)') === true,    'generic region: out-of-region passes remote');
+check(ohio('New York, NY') === false,          'generic region: hard_no still blocks');
+// The bug in one line: under the old hardcoded test this was FALSE, because an
+// Ohio address is not Texas and rule 11 blocked it.
+check(ohio('Dallas, TX') === false,            'generic region: Texas is out-of-region for an Ohio user');
+
+// Legacy Texas key names keep working untouched, so an existing portals.yml does
+// not need to be rewritten and a filter the user already tuned is not silently
+// widened underneath them.
+const legacy = buildLocationFilter({
+  location_policy: {
+    home: { lat: 32.7767, lon: -96.7970, commute_radius_miles: 50 },
+    dfw_core: ['dallas'],
+    hybrid_remote_only: ['austin'],
+    tx_city_coords: [{ name: 'denton', lat: 33.2148, lon: -97.1331 }],
+  },
+});
+check(legacy('Dallas, TX') === true,        'legacy keys: dfw_core still passes');
+check(legacy('Denton, TX') === true,        'legacy keys: tx_city_coords radius math still runs');
+check(legacy('Austin, TX') === false,       'legacy keys: hybrid_remote_only still blocks onsite');
+check(legacy('Denver, CO') === false,       'legacy keys: implied TX region still blocks out-of-region onsite');
+
+// A region-less policy must NOT block the world. This is the fail-open case:
+// with no home_region and no legacy TX keys there is no origin, so rule 11 stands
+// down and eval makes the call. Blocking here would reject the user's own city.
+const noRegion = buildLocationFilter({
+  location_policy: {
+    hard_no: ['new york'],
+    metro_allow: ['plano'],
+  },
+});
+check(noRegion('Denver, CO') === true,      'no region configured: out-of-region onsite passes to eval, not blocked');
+check(noRegion('Columbus, OH') === true,    'no region configured: any real city passes to eval');
+check(noRegion('Plano, TX') === true,       'no region configured: metro_allow still passes');
+check(noRegion('New York, NY') === false,   'no region configured: hard_no still blocks (needs no origin)');
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

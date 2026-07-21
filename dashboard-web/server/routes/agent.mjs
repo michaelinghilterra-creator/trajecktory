@@ -118,9 +118,21 @@ function dashboardConstraints(mode, opts) {
   // quota), so the "shares one subscription" reason for forbidding subagents is
   // gone: allow bounded parallelism across the batch. Other modes stay inline.
   const relax = power && mode === 'pipeline';
-  const common = relax
+  // NO-QUESTIONS is not politeness, it is a correctness requirement. This runs
+  // under `claude -p` with nobody attached, so a clarifying question is not a
+  // pause — it is the end of the run. The agent emits the question, exits 0, and
+  // every artifact it was asked for goes unwritten. A tester's first triage died
+  // exactly this way (2026-07-21): the agent stopped to ask which kind of role to
+  // prioritize, waited for an answer that could never come, and scored nothing.
+  const noQuestions =
+    ' You are running headless and there is NO human here to reply, so never ask a ' +
+    'clarifying question, never ask for confirmation, and never stop to wait for input — ' +
+    'doing so ends the run with nothing written. When something is ambiguous, choose the ' +
+    'most reasonable interpretation, state that assumption in one line, and finish the task.';
+  const common = (relax
     ? "Dashboard run, follow these constraints strictly. This run uses the user's Anthropic API key, so you may parallelize work across the batch to go faster, but stay strictly bounded by the batch cap below and never exceed it. Playwright is unavailable in this environment."
-    : 'Dashboard run, follow these constraints strictly. Work inline and never spawn subagents or background agents, because this run shares a single Claude subscription and parallel agents trip usage limits. Playwright is unavailable in this environment.';
+    : 'Dashboard run, follow these constraints strictly. Work inline and never spawn subagents or background agents, because this run shares a single Claude subscription and parallel agents trip usage limits. Playwright is unavailable in this environment.'
+  ) + noQuestions;
   // TEST CAP (temporary): when TJK_TEST_LIMIT is set, hard-limit how many
   // postings the Claude steps touch, so testing does not burn the whole quota.
   const limit = parseInt(process.env.TJK_TEST_LIMIT, 10) || 0;
@@ -152,6 +164,53 @@ function dashboardConstraints(mode, opts) {
   }
   return '';
 }
+
+// ── Did the run actually WRITE anything? ─────────────────────────────────────
+// A clean exit is not evidence of work. `claude -p` exits 0 when it emits a
+// clarifying question and stops (there is no human here to answer it), when the
+// workspace is untrusted and its web tools were silently stripped, or when it
+// simply decides there is nothing to do. The dashboard used to append "Triage
+// scored." on the exit code alone, so a run that wrote nothing still reported
+// success — beta report 2026-07-21: data/triage-results.tsv did not exist on
+// disk and the UI said Triage scored, so the user went hunting for results that
+// were never written and concluded the product was broken.
+//
+// Fingerprint the artifact the mode is supposed to produce BEFORE the run and
+// compare AFTER. Size and file count, never mtime: a rewrite that appends
+// nothing is not progress, and mtime moves when the agent merely touches a file.
+//
+// Writing nothing is NOT automatically an error — a scan whose hits are all
+// duplicates, or a triage whose URLs are all already evaluated, legitimately
+// writes nothing. So this does not fail the run. It only refuses to claim
+// success, which is the part that was actually broken.
+const AGENT_ARTIFACTS = {
+  triage:   { noun: 'triage scores', probe: () => fileSize('data/triage-results.tsv') },
+  scan:     { noun: 'new postings',  probe: () => fileSize('data/pipeline.md') },
+  pipeline: { noun: 'evaluations',   probe: () => tsvCount('batch/tracker-additions') },
+  deep:     { noun: 'evaluations',   probe: () => tsvCount('batch/tracker-additions') },
+};
+
+function fileSize(rel) {
+  try { return fs.statSync(path.join(ROOT_DIR, rel)).size; } catch { return 0; }
+}
+
+function tsvCount(rel) {
+  try { return fs.readdirSync(path.join(ROOT_DIR, rel)).filter(f => f.endsWith('.tsv')).length; }
+  catch { return 0; }
+}
+
+function probeArtifacts(mode) {
+  const spec = AGENT_ARTIFACTS[mode];
+  if (!spec) return null;
+  try { return spec.probe(); } catch { return null; }
+}
+
+// Why a clean run can produce nothing, in the order they actually happen.
+const WROTE_NOTHING_WHY =
+  'The agent finished cleanly but wrote nothing. Most often it stopped to ask a ' +
+  'clarifying question (nobody can answer one here — it runs headless), it could not ' +
+  'read the job pages, or everything it looked at was already evaluated or dismissed. ' +
+  'Open the run log to see which.';
 
 function summarizeToolUse(block) {
   const name = block.name || 'tool';
@@ -446,16 +505,31 @@ async function runAgent(jobId, mode, target) {
     // and triage are open-ended, so they show elapsed only (progressTotal null).
     progressTotal: mode === 'pipeline' ? evalBatchSize(effectivePower(target, mode)) : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
   persistJobs();   // capture the running record immediately so a restart can mark it interrupted
+  const before = probeArtifacts(mode);
   const res = await runClaudeAgent(jobId, mode, target);
+  // Only claim work when the artifact grew. `before === null` means we have no
+  // probe for this mode, so fall back to trusting the exit code rather than
+  // inventing a failure.
+  const wroteSomething = before === null || (probeArtifacts(mode) ?? 0) > before;
+
+  if (res.ok && !wroteSomething && AGENT_ARTIFACTS[mode]) {
+    const job = agentJobs.get(jobId) || {};
+    agentJobs.set(jobId, {
+      ...job,
+      summary: `No ${AGENT_ARTIFACTS[mode].noun} were written this run.`,
+      warning: job.warning || WROTE_NOTHING_WHY,
+    });
+  }
+
   // Evaluate writes tracker TSVs; folding them into applications.md is the
   // separate Merge Tracker step. Point the user at it so a written-but-not-yet-
   // merged result doesn't read as "nothing happened".
-  if (mode === 'pipeline' && res.ok) {
+  if (mode === 'pipeline' && res.ok && wroteSomething) {
     const job = agentJobs.get(jobId) || {};
     const note = 'Evaluations written. Run Merge Tracker to add them to your pipeline.';
     agentJobs.set(jobId, { ...job, summary: job.summary ? `${job.summary} · ${note}` : note });
   }
-  if (mode === 'triage' && res.ok) {
+  if (mode === 'triage' && res.ok && wroteSomething) {
     const job = agentJobs.get(jobId) || {};
     const note = 'Triage scored. Open the triage cards to deep-dive the ones worth a full report.';
     agentJobs.set(jobId, { ...job, summary: job.summary ? `${job.summary} · ${note}` : note });
@@ -463,7 +537,10 @@ async function runAgent(jobId, mode, target) {
   // Deep dive auto-promotes: fold the new eval into applications.md right away
   // so the triage row flips to a real Evaluated entry in one click (no separate
   // Merge step). Falls back to the manual-merge note if merge-tracker fails.
-  if (mode === 'deep' && res.ok) {
+  // `wroteSomething` gates this too: with no new TSV there is nothing to merge,
+  // and running merge-tracker anyway would report "complete and merged" over an
+  // evaluation that was never written.
+  if (mode === 'deep' && res.ok && wroteSomething) {
     // runClaudeAgent already flipped this job to 'done'. Flip it back to
     // 'running' BEFORE the merge so the single-flight guard keeps blocking other
     // agent runs while merge-tracker rewrites applications.md, and so the UI
