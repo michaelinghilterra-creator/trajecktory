@@ -138,6 +138,15 @@ $RepoUrl   = "https://github.com/michaelinghilterra-creator/trajecktory.git"
   & git -C $PayloadApp commit -q -m "trajecktory v$bundleVer bundled baseline"
   if ($LASTEXITCODE -ne 0) { throw "git baseline commit failed in payload" }
   & git -C $PayloadApp remote add origin $RepoUrl
+  # Fetch-only origin. update-system.mjs never pushes (it fetches, then commits
+  # locally), and an end user has no write access to the public repo regardless.
+  # But any editor that notices a git remote will cheerfully offer "Create PR",
+  # which reads to a tester as though contributing upstream were part of the
+  # product. Pointing the push URL at a non-repo turns that into an immediate,
+  # self-explaining failure instead of a confusing GitHub auth round trip.
+  # Fetch is unaffected: `remote set-url` without --push leaves the fetch URL alone,
+  # so ensureTokenlessOrigin()'s legacy-token rewrite still works.
+  & git -C $PayloadApp remote set-url --push origin 'trajecktory-is-read-only-fork-on-github-to-contribute'
   # Never prompt for or reuse machine credentials on fetch: the public repo needs
   # none, and this keeps a headless self-update from hanging on a credential prompt.
   & git -C $PayloadApp config credential.helper ''
