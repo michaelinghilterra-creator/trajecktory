@@ -10,56 +10,142 @@ const { useState, useEffect, useCallback, useRef } = React;
 // ---- section catalog -------------------------------------------------------
 // kind: 'action' (run something), 'form' (scalar fields saved direct),
 //       'gen' (hand off to Claude Code). req drives the readiness meter.
+// ── Section copy: four fields, not one blurb ─────────────────────────────────
+// Every section used to carry a single `why` string. In a first-install session a
+// tester asked, out loud and unprompted, four separate questions at almost every
+// step: "What does this do?", "Why do I have to do this?", "How does this help
+// me?", and "So what?" The old blurbs answered at most the first, and not one of
+// the eleven answered the question they asked most insistently — whether the step
+// changed their score.
+//
+// So the shape is now structural rather than a matter of writing discipline:
+//
+//   does         what it does. One sentence, plain verb, no product nouns.
+//   sowhat       what the user actually gets. A concrete outcome, not machinery.
+//   affectsScore 'yes' | 'no' | 'filter'. Rendered as a badge, never as prose.
+//   ifYouSkip    what really happens if they skip it, including "nothing".
+//
+// A blurb drifts back into machinery-speak one edit at a time; four labelled
+// fields make an omission visible. `affectsScore` earns its place twice over: it
+// answers the recurring question at a glance without reading, and it forces an
+// honest answer about which steps are theatre. Three of these are 'no'.
+//
+// Reading level is enforced, not aspired to — see tests/onboarding-copy.test.mjs.
+// Rules for edits here: second person, active voice, no jargon (no Node,
+// Playwright, dependencies, geo filter, scanner exclusions, "lever on evaluation
+// quality"), at most one analogy, and describe outcomes rather than internals.
 const LP_SECTIONS = [
   { id: 'preflight',  kind: 'action', req: 'gate',        icon: 'preflight', label: 'Preflight check',
     title: 'Make sure the engine runs',
-    why: 'Confirms Node, dependencies, Playwright, and the data folders are in place before you invest time in setup.' },
+    does: 'Checks that the app has everything it needs to run.',
+    sowhat: 'Ten seconds now, instead of finishing all of setup and then finding out something was broken the whole time.',
+    affectsScore: 'no',
+    ifYouSkip: 'You cannot. Everything else stays locked until this passes.' },
   { id: 'cv',         kind: 'gen', req: 'Required',        icon: 'cv', label: 'Your CV',
     title: 'Start here: your CV sets up the rest',
-    why: 'The fastest path to value. From your CV we draft your identity, target roles, and your edge, so most of setup becomes a quick review and you can go straight to evaluating jobs. Paste it, share a LinkedIn URL, or upload a .docx/.pdf (a .docx also seeds your resume master).',
+    does: 'Reads your resume and fills in most of the rest of this setup for you.',
+    sowhat: 'This is the only step you really need. When it finishes you can start scoring real jobs today. Everything below just sharpens the results.',
+    affectsScore: 'yes',
+    ifYouSkip: 'You cannot. Nothing works without it.',
+    extra: 'Paste your resume, share a LinkedIn URL, or upload a .docx or .pdf. A .docx also becomes the master your tailored resumes are built from.',
     handoff: 'cv' },
   { id: 'identity',   kind: 'form', req: 'Recommended',    icon: 'identity', label: 'Identity & links',
     title: 'Who you are',
-    why: 'Stamped onto every report and resume. Links and certifications are optional but raise match quality.' },
+    does: 'Your name, email, phone, and profile links.',
+    sowhat: 'These get printed on every resume the app makes for you. They also sit behind a copy button, so you are not hunting for your LinkedIn address while you fill out a form.',
+    affectsScore: 'no',
+    ifYouSkip: 'Your resumes come out with blanks where your contact details go.' },
   { id: 'roles',      kind: 'gen', req: 'Recommended',     icon: 'roles', label: 'Roles & seniority',
     title: 'What you are targeting',
-    why: 'Your titles plus a level. This is what the scanner hunts for. Claude Code also suggests adjacent roles to widen your funnel.',
+    does: 'The job titles you want, and how senior.',
+    sowhat: 'This is the size of the net. A narrow net brings back a handful of very close jobs. A wide net brings back more to sort through. Most people start far too narrow and then wonder why they see almost nothing.',
+    affectsScore: 'yes',
+    ifYouSkip: 'The scanner does not know what to look for, and you get close to zero results.',
     handoff: 'roles' },
   { id: 'edge',       kind: 'gen', req: 'Recommended',     icon: 'edge', label: 'Your edge',
     title: 'What makes you the obvious hire',
-    why: 'Superpowers and proof points drafted from your CV. The single biggest lever on evaluation quality.',
+    does: 'The two or three things that make you a stronger pick than the other people applying. Taken from your resume.',
+    sowhat: 'This is the difference between a score that says you match the words in the posting, and one that says you would probably win it. It is also what your tailored resume leads with.',
+    affectsScore: 'yes',
+    ifYouSkip: 'Your scores get bland, and your resumes read like everyone else’s.',
     handoff: 'edge' },
   { id: 'comp',       kind: 'form', req: 'Recommended',    icon: 'comp', label: 'Compensation',
     title: 'Your numbers',
-    why: 'Target and walk-away. Used to score offers and flag low-comp roles.' },
+    does: 'What you want to earn, and the number you would turn down.',
+    sowhat: 'Jobs that could never pay you enough get flagged before you spend an hour on the application.',
+    affectsScore: 'yes',
+    ifYouSkip: 'You will see roles you would never actually accept.' },
   { id: 'location',   kind: 'form', req: 'Recommended',    icon: 'location', label: 'Location & policy',
     title: 'Where you will and will not work',
-    why: 'Drives the scanner geo filter so dead-on-arrival roles never reach you.',
+    does: 'Where you will work, and how far you will travel.',
+    sowhat: 'Drops jobs you could never take. Skip it and a chunk of your results sit in cities you are not moving to.',
+    affectsScore: 'filter',
+    ifYouSkip: 'You sort through a lot of jobs by hand that the app could have removed for you.',
     handoff: 'location', handoffLabel: 'Geocode + build scanner geo filter' },
   { id: 'evaluation', kind: 'gen', req: 'Later',           icon: 'evaluation', label: 'Evaluation tuning',
     title: 'Priorities & deal-breakers',
-    why: 'What you optimize for, and your hard nos. Tunes the score and the scanner exclusions.',
+    does: 'Tells the scorer what matters most to you, and what you would never accept.',
+    sowhat: 'Two jobs can look the same on paper. This is what makes the one with the manager title score higher, because you said that is what you are after.',
+    affectsScore: 'yes',
+    ifYouSkip: 'Skip it for now, on purpose. Come back after you have seen five or ten scores. It is much easier to correct a scorer you have watched than to guess up front.',
     handoff: 'evaluation' },
   { id: 'companies',  kind: 'gen', req: 'Recommended',     icon: 'companies', label: 'Companies to track',
     title: 'Where to look',
-    why: 'A neutral starter set ships by default. Claude Code suggests local-by-radius and by-industry companies, resolves each careers page, and merges them in without disturbing learned tuning.',
+    does: 'The list of employers the app checks for new job postings.',
+    sowhat: 'Every scan walks this list. Twenty companies you do not care about is twenty wasted checks. Two hundred good ones is a real pipeline.',
+    affectsScore: 'filter',
+    ifYouSkip: 'The app only looks where the starter list points, which may be nowhere near your field.',
     handoff: 'companies' },
   { id: 'outputs',    kind: 'form', req: 'Optional',       icon: 'outputs', label: 'Output locations',
     title: 'Where files land',
-    why: 'Choose folders for tailored resumes and interview prep. Company reports always stay in the project.' },
+    does: 'Picks which folders your finished resumes and interview prep get saved in.',
+    sowhat: 'Put them somewhere you will actually look, like your Documents folder.',
+    affectsScore: 'no',
+    ifYouSkip: 'Nothing breaks. The defaults are fine.' },
   { id: 'health',     kind: 'action', req: 'verify',       icon: 'health', label: 'Health check',
     title: 'Confirm everything works',
-    why: 'Runs the verify scripts so you start on a clean, green pipeline.' },
+    does: 'Runs the checks one more time now that you are set up.',
+    sowhat: 'Confirms your first scan will really work, instead of failing quietly and leaving you thinking there are no jobs out there.',
+    affectsScore: 'no',
+    ifYouSkip: 'You find out something is wrong later, when it is harder to trace.' },
 ];
 
 const LP_OPTIONAL = [
-  { id: 'apikey',    label: 'AI draft key (optional)', why: 'Optional speed-up. Tailored resumes, cover letters, and outreach drafts run on your Claude plan with no key. Add an Anthropic API key only if you want the faster path. Evaluate and Scan never need it.' },
-  { id: 'models',    label: 'Models & cost', why: 'Pick which Claude model runs each workflow step and see the approximate cost per run.' },
-  { id: 'discovery', label: 'Web discovery keys (optional)', why: 'Add a Brave Search (and optional Muse) API key to let Expand Coverage web-search for brand-new companies and postings. API Scan and Agent Scan still find roles without it.' },
-  { id: 'obsidian',  label: 'Obsidian vault', why: 'Push applied-role notes into your vault.' },
-  { id: 'language',  label: 'Market / language modes', why: 'Target DACH, French, or Japanese postings.' },
-  { id: 'intensity', label: 'Search intensity', why: 'Set a weekly goal and scan cadence.' },
-  { id: 'import',    label: 'Import / demo tour', why: 'Bring in prior applications, or explore with sample data.' },
+  { id: 'apikey',    label: 'AI draft key (optional)',
+    does: 'Adds an Anthropic API key.',
+    sowhat: 'Most people should skip this. Resumes, cover letters, and emails already work on your Claude plan without a key. A key only makes them come back faster, and it costs money each time.',
+    affectsScore: 'no',
+    ifYouSkip: 'Everything still works. It is a little slower.' },
+  { id: 'models',    label: 'Models & cost',
+    does: 'Picks a cheaper or a smarter AI for each part of the work.',
+    sowhat: 'Scanning job boards is simple, so a cheap model is fine. Scoring a job is not, so the smarter one is worth it there. This screen is where you trade money for quality.',
+    affectsScore: 'no',
+    ifYouSkip: 'Sensible defaults are already set.' },
+  { id: 'discovery', label: 'Web discovery keys (optional)',
+    does: 'Lets the app search the open web for employers you have not heard of.',
+    sowhat: 'Without it, the app only checks the companies on your list. With it, it can go and find new ones.',
+    affectsScore: 'no',
+    ifYouSkip: 'Scanning still works. You just have to add companies yourself.' },
+  { id: 'obsidian',  label: 'Obsidian vault',
+    does: 'Copies notes about jobs you applied to into your Obsidian vault.',
+    sowhat: 'Useful only if you already keep your notes there.',
+    affectsScore: 'no',
+    ifYouSkip: 'Nothing at all. Skip this one unless you use Obsidian.' },
+  { id: 'language',  label: 'Market / language modes',
+    does: 'Turns on German, French, or Japanese job postings.',
+    sowhat: 'Only turn this on if you are applying for jobs in those languages.',
+    affectsScore: 'filter',
+    ifYouSkip: 'You get English postings, which is what most people want.' },
+  { id: 'intensity', label: 'Search intensity',
+    does: 'Sets how many jobs a week you are aiming for, and how often the app looks.',
+    sowhat: 'Sets the pace, so you get a steady trickle instead of a flood you end up ignoring.',
+    affectsScore: 'no',
+    ifYouSkip: 'The default pace is reasonable.' },
+  { id: 'import',    label: 'Import past applications',
+    does: 'Brings jobs you already applied to into the tracker.',
+    sowhat: 'Only worth doing if you have been tracking a search somewhere else and want the history in one place. A brand new search has nothing to import.',
+    affectsScore: 'no',
+    ifYouSkip: 'Nothing. Most people never need this.' },
 ];
 
 // ── What is actually REQUIRED, versus what merely sharpens results ───────────
@@ -77,6 +163,50 @@ const LP_REQUIRED = LP_SECTIONS.filter(s => s.req === 'Required').map(s => s.id)
 const LP_REFINE = LP_SECTIONS.filter(s => s.req === 'Recommended' || s.req === 'Later' || s.req === 'Optional').map(s => s.id);
 
 // ---- small presentational helpers ------------------------------------------
+
+// The score badge. Deliberately a badge and not a sentence: the question "does
+// this change my score?" came up at nearly every step during a first install, and
+// a badge answers it on all eighteen sections at a glance, without reading.
+const LP_SCORE_BADGE = {
+  yes:    { text: 'Affects your score',      fg: 'var(--accent)',    bg: 'var(--accent-bg)',        bd: 'rgba(var(--accent-rgb),0.35)' },
+  filter: { text: 'Changes what you see',    fg: 'var(--yellow)',    bg: 'rgba(234,179,8,0.09)',    bd: 'rgba(234,179,8,0.3)' },
+  no:     { text: 'Does not affect scoring', fg: 'var(--text-mute)', bg: 'var(--panel-2)',          bd: 'var(--border)' },
+};
+
+function LpScoreBadge({ value }) {
+  const b = LP_SCORE_BADGE[value];
+  if (!b) return null;
+  return (
+    <span style={{ display: 'inline-block', fontSize: 10.5, fontWeight: 500, letterSpacing: 0.2,
+      padding: '2px 8px', borderRadius: 999, color: b.fg, background: b.bg, border: `1px solid ${b.bd}` }}>
+      {b.text}
+    </span>
+  );
+}
+
+// Renders the four-field explainer. One component for both the required sections
+// and the optional boosters, so a booster can never quietly get a thinner
+// explanation than a main step — which is how the API-key entry ended up reading
+// like a capability unlock when it is really an optional speed-up.
+function LpWhy({ item }) {
+  if (!item) return null;
+  return (
+    <div style={{ margin: '0 0 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+        <LpScoreBadge value={item.affectsScore} />
+      </div>
+      <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--text)', lineHeight: 1.6 }}>{item.does}</p>
+      <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>{item.sowhat}</p>
+      {item.extra && <p style={{ margin: '0 0 8px', fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.6 }}>{item.extra}</p>}
+      {item.ifYouSkip && (
+        <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-mute)', lineHeight: 1.6 }}>
+          <b style={{ color: 'var(--text-dim)', fontWeight: 500 }}>If you skip it:</b> {item.ifYouSkip}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function LpDot({ status }) {
   const map = {
     complete: { ch: '✓', color: 'var(--green)' },
@@ -1347,7 +1477,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               return (
                 <div>
                   <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
-                  <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>{o.why}</p>
+                  <LpWhy item={o} />
                   {apiKey.has
                     ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 10 }}>✓ A key is saved. Drafts use the faster API path. Paste a new key to replace it.</div>
                     : <div style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 10 }}>○ No key set. Drafts run on your Claude plan (the same login as Evaluate and Scan); a key just makes them faster.</div>}
@@ -1367,7 +1497,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               return (
                 <div>
                   <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
-                  <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>{o.why}</p>
+                  <LpWhy item={o} />
                   <div style={{ fontSize: 12.5, color: 'var(--text)', fontWeight: 600, margin: '0 0 4px' }}>Brave Search key</div>
                   {discKeys.brave
                     ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved. Expand Coverage web search is on.</div>
@@ -1393,7 +1523,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             return (
               <div>
                 <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
-                <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>{o.why} This one is optional and runs through your Claude Code.</p>
+                <LpWhy item={o} />
                 <button className="btn primary" onClick={() => startHandoff('opt:' + o.id, o.id)}>Set up with my Claude Code ⧉</button>
                 {pendingGen['opt:' + o.id] && (
                   <div style={{ marginTop: 12 }}>
@@ -1411,7 +1541,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                 <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text)' }}>{sec.title}</h3>
                 {st === 'complete' && <span className="pill" style={{ background: 'var(--accent-bg)', color: 'var(--green)', marginLeft: 'auto' }}>done</span>}
               </div>
-              <p style={{ margin: '0 0 14px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>{sec.why}</p>
+              <LpWhy item={sec} />
               <LpSummaryBox id={sec.id} configured={state.values && state.values.configured} />
               {sec.id === 'cv' && state.sections?.cv?.warning === 'no-master-docx' && (
                 <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(234,179,8,0.12)', color: 'var(--yellow)', fontSize: 12.5, lineHeight: 1.5 }}>
