@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.17.7](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.6...v1.17.7) (2026-07-21)
+
+
+### Bug Fixes
+
+* **ci:** rename release SBOM asset to trajecktory-source-sbom.spdx.json ([#57](https://github.com/michaelinghilterra-creator/trajecktory/issues/57)) ([c6c86b0](https://github.com/michaelinghilterra-creator/trajecktory/commit/c6c86b08c9c0c933359799d51531eb12696af5eb))
+* **installer:** bump bundled Git for Windows to 2.55.0(3) ([#56](https://github.com/michaelinghilterra-creator/trajecktory/issues/56)) ([09a7f7a](https://github.com/michaelinghilterra-creator/trajecktory/commit/09a7f7a32b9eba37f4e3f3c3cfe456e9a1b7a005))
+* **installer:** make the bundled payload's origin fetch-only ([#54](https://github.com/michaelinghilterra-creator/trajecktory/issues/54)) ([fb9a2ca](https://github.com/michaelinghilterra-creator/trajecktory/commit/fb9a2cae366aedde001b03b770469667205513f7))
+* **installer:** move bundled Node to 24.18.0 LTS off EOL 20.x ([#58](https://github.com/michaelinghilterra-creator/trajecktory/issues/58)) ([1d19b94](https://github.com/michaelinghilterra-creator/trajecktory/commit/1d19b94e30414e1c5ea0dc467ebb032ab2e97d27))
+
 ## [1.17.6](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.5...v1.17.6) (2026-07-21)
 
 
