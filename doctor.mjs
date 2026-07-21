@@ -5,7 +5,7 @@
  * Checks all prerequisites and prints a pass/fail checklist.
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -93,17 +93,42 @@ function checkProfile() {
   };
 }
 
+// portals.yml is gitignored (it is user-layer), so a fresh install ships the
+// template and nothing else. This used to only tell the user to copy it, or
+// wait for a Claude handoff to do it — which meant a user who never ran the CV
+// or scanner handoff had NO scanner config at all, and every scan bailed with
+// nothing to explain why. Create it here instead: preflight is the gate every
+// other onboarding step waits on, so this is the earliest guaranteed-run point.
+//
+// Copy only when absent. Never overwrite: this file is where the user's tuning,
+// tombstones, and auto-disabled companies live, and clobbering it would silently
+// undo weeks of learned config.
 function checkPortals() {
-  if (existsSync(join(projectRoot, 'portals.yml'))) {
+  const dest = join(projectRoot, 'portals.yml');
+  if (existsSync(dest)) {
     return { pass: true, label: 'portals.yml found' };
+  }
+  const template = join(projectRoot, 'templates', 'portals.example.yml');
+  if (existsSync(template)) {
+    try {
+      copyFileSync(template, dest);
+      return { pass: true, label: 'portals.yml created from the starter template' };
+    } catch (e) {
+      return {
+        pass: false,
+        blocking: false,
+        label: `portals.yml missing and could not be created (${e.code || e.message})`,
+        fix: ['Run: cp templates/portals.example.yml portals.yml'],
+      };
+    }
   }
   return {
     pass: false,
     blocking: false,
-    label: 'portals.yml not found',
+    label: 'portals.yml not found, and templates/portals.example.yml is missing too',
     fix: [
-      'Run: cp templates/portals.example.yml portals.yml',
-      'Then customize with your target companies',
+      'Reinstall or restore templates/portals.example.yml',
+      'Then run: cp templates/portals.example.yml portals.yml',
     ],
   };
 }
