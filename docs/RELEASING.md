@@ -46,13 +46,14 @@ one extra step per release.
 ## Each release — checklist
 
 Five steps are done by hand. Steps 2, 3 and 5 all fail **silently with a green
-release run**. `.github/workflows/tag-signature.yml` checks 2 and 3 rather than
-trusting this list, so run it at the end.
+release run**, which is why `.github/workflows/tag-signature.yml` checks all
+three rather than trusting this list. Run it at the end; if it is green, you are
+done.
 
-**A green guard does not mean the release is complete.** It means the tag is
-signed and the notes are written; it says nothing about step 5, which has no
-guard at all. v1.17.7 passed that workflow while shipping no installer, which
-left its headline security fix undelivered. Check step 5 yourself.
+Step 5 was added to that guard only after v1.17.7 shipped without an installer
+and left its headline security fix undelivered — passing the workflow, at the
+time, on the strength of the two checks that existed. If you add a hand step
+here, guard it too, or it will be the next one missed.
 
 - [ ] **1. Merge the Release Please PR with a MERGE COMMIT, not a squash.**
       A squash takes the PR title (`chore(main): release X.Y.Z`) as the commit
@@ -79,7 +80,9 @@ left its headline security fix undelivered. Check step 5 yourself.
 - [ ] **5. Rebuild and upload the installer. MANDATORY when the release changes
       what the bundle *contains*; optional otherwise.**
       *Fails silently:* the release run is green either way, and the changelog
-      claims the fix regardless.
+      claims the fix regardless. Guarded by `tag-signature.yml`, which fails when
+      a release touches the bundle paths below and carries no
+      `trajecktory-setup-*.exe` asset.
 
       Self-update carries code, not runtimes. `update-system.mjs` applies
       `SYSTEM_PATHS` with `git checkout <ref> -- <path>` and then runs
