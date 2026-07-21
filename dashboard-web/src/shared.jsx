@@ -84,6 +84,71 @@ window.ScoreChip = function ScoreChip({ score }) {
   );
 };
 
+// ---------- How the score works ----------
+// "If I don't understand how we arrived at a score, how can I trust the score?"
+// was the sharpest question in a first-install session, and nothing in the app
+// answered it. The score drives every apply-or-skip decision, so a number the
+// user cannot interrogate is a number they are right to distrust.
+//
+// The honest explanation matters more than a tidy one. This is NOT arithmetic:
+// the model reads the posting against the CV and the saved priorities and forms
+// a judgment, then reports the five dimensions as its reasoning. Nothing
+// recomputes the headline from the bars. Both report panels used to print a
+// "total" above those bars anyway, and because they summed differently one
+// showed 14/20 while the other showed 14/25 for the same report whose headline
+// was 3.0/5. Three numbers, no two agreeing, on the one figure the product asks
+// to be trusted. Those totals are gone; this panel replaces them by saying what
+// the bars actually are.
+window.ScoreExplainer = function ScoreExplainer({ open, onClose }) {
+  if (!open) return null;
+  const Dim = ({ name, children }) => (
+    <div style={{ marginBottom: 7 }}>
+      <b style={{ color: 'var(--text)', fontWeight: 500 }}>{name}</b>
+      <span style={{ color: 'var(--text-dim)' }}> {children}</span>
+    </div>
+  );
+  const Band = ({ range, meaning }) => (
+    <div style={{ display: 'flex', gap: 10, marginBottom: 3 }}>
+      <span className="mono" style={{ minWidth: 74, color: 'var(--text)' }}>{range}</span>
+      <span style={{ color: 'var(--text-dim)' }}>{meaning}</span>
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12.5, lineHeight: 1.6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
+        <b style={{ color: 'var(--text)' }}>How this score works</b>
+        <button className="btn ghost sm" onClick={onClose}>Close</button>
+      </div>
+
+      <p style={{ margin: '0 0 10px', color: 'var(--text-dim)' }}>
+        It is a judgment, not a sum. trajecktory reads the whole job posting next to your CV and the priorities you saved, then rates the role out of 5. It weighs five things:
+      </p>
+
+      <Dim name="CV match.">How closely your real experience lines up with what they are asking for.</Dim>
+      <Dim name="Target fit.">Whether this is the kind of role you said you want, at the right level.</Dim>
+      <Dim name="Pay.">How the money compares to the market for this job.</Dim>
+      <Dim name="Company signals.">Culture, stability, growth, and how they treat remote work.</Dim>
+      <Dim name="Red flags.">Anything that counts against the role. This is the only one that subtracts.</Dim>
+
+      <p style={{ margin: '10px 0 6px', color: 'var(--text)' }}>What the number means</p>
+      <Band range="4.5 and up" meaning="Strong match. Apply now." />
+      <Band range="4.0 to 4.4" meaning="Good match. Worth applying." />
+      <Band range="3.5 to 3.9" meaning="Decent but not ideal. Apply if you have a specific reason." />
+      <Band range="Below 3.5" meaning="Recommend against applying." />
+
+      <p style={{ margin: '10px 0 0', color: 'var(--text-dim)' }}>
+        Some things cap the score no matter how good the rest looks. A role that needs you on site somewhere you said you will not work, or that needs visa sponsorship you cannot get, stays low even when everything else fits.
+      </p>
+      <p style={{ margin: '8px 0 0', color: 'var(--text-dim)' }}>
+        Most jobs are not a 4. Roughly one in five is. If everything scored well the score would not be telling you anything.
+      </p>
+      <p style={{ margin: '8px 0 0', color: 'var(--text-mute)' }}>
+        The bars above are the reasoning behind the number, not the maths that produced it, so they will not add up to it.
+      </p>
+    </div>
+  );
+};
+
 // ---------- Sidebar ----------
 window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChanged, version }) {
   // Numeric (1-9) keyboard hotkeys for tab switching removed per user request.

@@ -175,6 +175,7 @@ function BasicBody({ app }) {
 // ---------- OVERVIEW ----------
 function OverviewSection({ app, cs }) {
   const compSnap = cs.compStated || (app.salary != null ? `$${app.salary}k` : null);
+  const [explainScore, setExplainScore] = useStateD(false);
   return (
     <div className="col" style={{ gap: 16 }}>
       {cs.tldr && (
@@ -210,9 +211,13 @@ function OverviewSection({ app, cs }) {
 
       {/* Score breakdown radar/bars */}
       <div className="cs-section">
+        {/* No total here on purpose. The headline score is a judgment, not a sum
+            of these bars, so any total printed beside them invites a comparison
+            that cannot come out right. This one summed positives over positive
+            maxes and read 14/20 where the headline said 3.0/5. */}
         <div className="cs-section-head">
           <span>Global Score Breakdown</span>
-          <span className="mono dim">{cs.globalScore.reduce((s,d)=> s + (d.val > 0 ? d.val : 0), 0).toFixed(2)} / {cs.globalScore.filter(d=>d.val>0).reduce((s,d)=>s+d.max,0)}</span>
+          <button className="btn ghost sm" onClick={() => setExplainScore(v => !v)}>How is this scored?</button>
         </div>
         <div className="score-bars">
           {cs.globalScore.map(d => {
@@ -231,6 +236,7 @@ function OverviewSection({ app, cs }) {
             );
           })}
         </div>
+        {window.ScoreExplainer && <window.ScoreExplainer open={explainScore} onClose={() => setExplainScore(false)} />}
       </div>
 
       {/* Recommendation */}

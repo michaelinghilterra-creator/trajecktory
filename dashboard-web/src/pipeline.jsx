@@ -1020,6 +1020,7 @@ function localToday() {
 
 function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () => false, onFollowupChange = () => {} }) {
   const [tab, setTab] = useStateP('overview');
+  const [explainScore, setExplainScore] = useStateP(false);
   // Structured cheat-sheet object from /api/cheatsheets/:id — exactly the
   // shape Claude Design's prototype consumed (PIPE_CHEATS).
   const [cs, setCs] = useStateP(null);
@@ -1404,9 +1405,14 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
 
               {globalScore.length > 0 && (
                 <div className="rp-section">
+                  {/* Total removed. This one divided by ALL maxes while the
+                      drawer divided by positive maxes only, so the same report
+                      read 14/25 here and 14/20 there, against a headline of
+                      3.0/5. Three numbers, no two agreeing, on the one figure
+                      the product asks the user to trust. */}
                   <div className="rp-section-head">
                     <span>Global Score Breakdown</span>
-                    <span className="meta">{globalScore.filter(d => d.val > 0).reduce((s, d) => s + d.val, 0).toFixed(2)} / {globalScore.reduce((s, d) => s + d.max, 0)}</span>
+                    <button className="btn ghost sm" onClick={() => setExplainScore(v => !v)}>How is this scored?</button>
                   </div>
                   <div className="rp-bars">
                     {globalScore.map(d => {
@@ -1422,6 +1428,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                       );
                     })}
                   </div>
+                  {window.ScoreExplainer && <window.ScoreExplainer open={explainScore} onClose={() => setExplainScore(false)} />}
                 </div>
               )}
 
