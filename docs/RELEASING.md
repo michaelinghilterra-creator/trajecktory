@@ -45,9 +45,14 @@ one extra step per release.
 
 ## Each release — checklist
 
-Four steps are done by hand. Steps 2 and 3 both fail **silently with a green
-release run**, which is why `.github/workflows/tag-signature.yml` checks them
-rather than trusting this list. Run it at the end; if it is green, you are done.
+Five steps are done by hand. Steps 2, 3 and 5 all fail **silently with a green
+release run**. `.github/workflows/tag-signature.yml` checks 2 and 3 rather than
+trusting this list, so run it at the end.
+
+**A green guard does not mean the release is complete.** It means the tag is
+signed and the notes are written; it says nothing about step 5, which has no
+guard at all. v1.17.7 passed that workflow while shipping no installer, which
+left its headline security fix undelivered. Check step 5 yourself.
 
 - [ ] **1. Merge the Release Please PR with a MERGE COMMIT, not a squash.**
       A squash takes the PR title (`chore(main): release X.Y.Z`) as the commit
@@ -71,10 +76,43 @@ rather than trusting this list. Run it at the end; if it is green, you are done.
       Full spec: [Release notes: the house format](#release-notes-the-house-format).
       **Read the previous release before writing this one.**
 - [ ] **4. Run the guard and confirm it is green:** `gh workflow run tag-signature.yml`
-- [ ] **5. (Optional) Rebuild and upload the installer.** Only needed when new
-      installs should land on this version directly. Skipping it is fine:
-      existing installs still self-update, but new ones land on the last release
+- [ ] **5. Rebuild and upload the installer. MANDATORY when the release changes
+      what the bundle *contains*; optional otherwise.**
+      *Fails silently:* the release run is green either way, and the changelog
+      claims the fix regardless.
+
+      Self-update carries code, not runtimes. `update-system.mjs` applies
+      `SYSTEM_PATHS` with `git checkout <ref> -- <path>` and then runs
+      `npm install`, so modes, scripts and npm dependencies reach every existing
+      install. `SYSTEM_PATHS` contains **no runtime paths at all**, so the
+      vendored Node, the Git for Windows installer, the Playwright browsers and
+      `trusted-signers` reach nobody until a new `.exe` is built.
+
+      **Mandatory** when the release touches any of:
+      - `installer/build-bundle.ps1` — runtime pins and bundle construction
+      - `trusted-signers` — see [Rotating or adding a signer](#rotating-or-adding-a-signer)
+      - anything else baked into the bundle rather than checked out by self-update
+
+      **Optional** when the release is code-only. Skipping is then genuinely
+      fine: existing installs self-update, and new ones land on the last release
       that has an `.exe` and update from there.
+
+      This distinction is not hypothetical. v1.17.7 was published, signed and
+      green with a Node upgrade off an end-of-life line as its headline entry,
+      and no installer attached. Every install stayed on the old runtime while
+      the notes said otherwise, and new installs could only download a bundle
+      predating the fix. It read as done from every angle: green release run,
+      signed tag, prose notes, changelog entry. The wording of this step at the
+      time — "(Optional) … Skipping it is fine: existing installs still
+      self-update" — is true of code and false of runtimes, and it did not say
+      which.
+
+      **After shipping one**, two pointers go stale immediately and neither is
+      checked: the `New install?` paragraph in the release body must point at the
+      attached `.exe` instead of an older release (see
+      [The Install (Windows) block](#the-install-windows-block)), and the guides
+      in `docs/onboarding/` name the installer filename, cover version and
+      download size.
 
 ## Each release — the commands
 
