@@ -16,8 +16,10 @@ jobs:
       # Fail the build on a known high-severity advisory in a dependency.
       - run: npm audit --audit-level=high
       - run: npm run lint
-      - run: node test-all.mjs --quick
+      - run: node test-all.mjs
       # Build the dashboard-web app so a broken React/esbuild change fails CI.
+      # This is the "dashboard build" the old test-all.mjs --quick flag claimed
+      # to skip; it has always been a separate step, and the flag was inert.
       - run: npm ci
         working-directory: dashboard-web
       - run: npm audit --audit-level=high

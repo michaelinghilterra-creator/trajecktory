@@ -8,7 +8,14 @@
  *
  * Usage:
  *   node test-all.mjs           # Run all tests
- *   node test-all.mjs --quick   # Skip dashboard build (faster)
+ *
+ * There is deliberately no --quick flag. One was declared in the initial commit
+ * to "skip dashboard build", but this suite has never built the dashboard: that
+ * runs in CI as its own step (.github/workflows/test.yml), which is a required
+ * check on main. The constant was never referenced, so the flag silently did
+ * nothing while the usage line promised a faster run. If a genuinely expensive
+ * optional step is added here later, gate it behind a flag that is actually
+ * read.
  */
 
 import { execSync, execFileSync } from 'child_process';
@@ -18,7 +25,6 @@ import { fileURLToPath, pathToFileURL } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
-const QUICK = process.argv.includes('--quick');
 
 let passed = 0;
 let failed = 0;
