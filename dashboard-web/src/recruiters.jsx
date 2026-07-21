@@ -1311,7 +1311,7 @@ function RecAICompose({ contact, contactId, onSaveDraft, onLogSent, onToast }) {
 
   return (
     <div className="ai-compose">
-      <div className="ai-head"><RecIcon d={REC_I.spark} size={13} /> AI outreach composer · CV voice</div>
+      <div className="ai-head"><RecIcon d={REC_I.spark} size={13} /> AI outreach composer · resume voice</div>
       <div className="ai-tone">
         {REC_TONES.map(t => (
           <button key={t} className={'chip' + (tone === t ? ' on' : '')} onClick={() => setTone(t)}>{t}</button>
