@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.19.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.18.0...v1.19.0) (2026-07-21)
+
+
+### Features
+
+* **dashboard:** explain the score, signpost setup, and close a leak-gate gap ([#67](https://github.com/michaelinghilterra-creator/trajecktory/issues/67)) ([ee974fa](https://github.com/michaelinghilterra-creator/trajecktory/commit/ee974fa7dcb77943d0b5d117554f53a7954a9600))
+
 ## [1.18.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.7...v1.18.0) (2026-07-21)
 
 
