@@ -1,4 +1,4 @@
-name: SBOM Generation
+name: Source SBOM Generation
 on:
   release:
     types: [published]
@@ -13,6 +13,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      # SCOPE, and why the asset says "source": this scans the repo CHECKOUT, so
+      # the result describes the source tree and nothing else. The shipped
+      # installer is NOT covered. The .exe vendors a pinned Node runtime, Git for
+      # Windows, Playwright's Chromium, and a globally-installed
+      # @anthropic-ai/claude-code, none of which appear in any lockfile and none
+      # of which syft can see from here. The npm layer does not match the bundle
+      # either: build-bundle.ps1 installs dashboard-web WITH dev deps (it needs
+      # esbuild) while syft omits dev deps by default, so esbuild ships and is
+      # absent here. An SBOM for the artifact users actually install has to be
+      # generated where that artifact is built, which is build-bundle.ps1 on the
+      # Windows build box, not in CI. See issue #52.
+      #
       # anchore/sbom-action already attaches the generated SBOM to the release
       # that triggered this run (upload-release-assets defaults to true, set
       # explicitly here as the source of truth). A separate `gh release upload`
@@ -20,10 +32,10 @@ jobs:
       # "asset under the same name already exists" on every release from v1.12.0
       # onward — the SBOM was on the release the whole time, the redundant upload
       # just turned the run red. Let the action own the upload.
-      - name: Generate SBOM (SPDX) and attach to release
+      - name: Generate source SBOM (SPDX) and attach to release
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
-          artifact-name: trajecktory-sbom.spdx.json
+          artifact-name: trajecktory-source-sbom.spdx.json
           format: spdx-json
-          output-file: trajecktory-sbom.spdx.json
+          output-file: trajecktory-source-sbom.spdx.json
           upload-release-assets: true
