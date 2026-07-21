@@ -48,6 +48,7 @@ window.Drawer = function Drawer({ app, onClose, onAction }) {
               {cs && section === "interview"  && <InterviewSection cs={cs} />}
               {cs && section === "customize"  && <CustomizeSection cs={cs} />}
               {cs && section === "legit"      && <LegitSection cs={cs} />}
+              {section === "posting"          && window.PostingPanel && <window.PostingPanel app={app} />}
               {!cs && !csLoading && section !== "report" && <BasicBody app={app} />}
               {/* Follow-Up history — visible on EVERY tab. Hidden until at least
                   one touch exists so it doesn't add noise to fresh entries. */}
@@ -100,6 +101,7 @@ function DrawerTabs({ section, setSection, hasCs }) {
       { id: "customize", label: "Customize" },
       { id: "legit",     label: "Legitimacy" },
     ] : []),
+    { id: "posting", label: "Posting" },
     { id: "report", label: "Full Report" },
   ];
   return (

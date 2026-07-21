@@ -287,6 +287,68 @@ Output ONLY a JSON object — no markdown, no code fences, no explanation:
   }
 });
 
+// ── GET /api/jd/:id — the job posting text, kept after the posting is gone ───
+// A posting is taken down the moment it is filled, and the report only ever
+// stored the URL. A tester reached a fifth interview 45 days after the posting
+// had vanished, and only had something to prepare from because they had
+// personally copied the text somewhere else. That is the product losing the one
+// document the whole pipeline is about.
+//
+// Two sources, in order:
+//   1. `jdSnapshot` in the report frontmatter — the reliable path going forward.
+//   2. A filename match in jds/ — a fallback that gives older evaluations, and
+//      anything saved by the paste flow, a link they never had.
+//
+// PATH SAFETY: the path comes from the report, not from the request, but a
+// report is agent-written and therefore not trusted input either. Resolve it and
+// require it to sit inside jds/ before reading, so a crafted `../` in a report
+// cannot turn this into an arbitrary file read.
+router.get('/api/jd/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const row = parseApplicationsMd().find(r => r.id === id);
+    if (!row) return res.status(404).json({ error: 'No such application' });
+
+    const jdsDir = path.resolve(ROOT_DIR, 'jds');
+    const safeRead = (rel) => {
+      if (!rel || typeof rel !== 'string') return null;
+      const abs = path.resolve(ROOT_DIR, rel);
+      if (!abs.startsWith(jdsDir + path.sep)) return null;   // outside jds/ → refuse
+      if (!fs.existsSync(abs)) return null;
+      return { path: path.relative(ROOT_DIR, abs).replace(/\\/g, '/'), text: fs.readFileSync(abs, 'utf8') };
+    };
+
+    // 1. declared snapshot
+    if (row.report) {
+      const rp = path.resolve(ROOT_DIR, row.report);
+      if (fs.existsSync(rp)) {
+        const md = fs.readFileSync(rp, 'utf8');
+        if (hasV1Frontmatter(md)) {
+          const hit = safeRead(parseV1(md).data.jdSnapshot);
+          if (hit) return res.json({ ...hit, source: 'report' });
+        }
+      }
+    }
+
+    // 2. filename fallback for anything evaluated before snapshots existed
+    if (fs.existsSync(jdsDir) && row.company) {
+      const slug = String(row.company).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const match = fs.readdirSync(jdsDir)
+        .filter(f => f.endsWith('.md') && f.toLowerCase().includes(slug))
+        .sort()
+        .pop();
+      if (match) {
+        const hit = safeRead(path.join('jds', match));
+        if (hit) return res.json({ ...hit, source: 'match' });
+      }
+    }
+
+    res.status(404).json({ error: 'no-snapshot' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/cheatsheets/:id — parse report .md for this application id
 router.get('/api/cheatsheets/:id', (req, res) => {
   try {

@@ -41,6 +41,7 @@ converter for the Full Report tab. The structured tabs read **only** from frontm
 | `role` | string | |
 | `date` | string (YYYY-MM-DD) | |
 | `url` | string | JD URL. |
+| `jdSnapshot` | string | Relative path to the saved posting text, e.g. `"jds/912-example-co.md"`. A posting is taken down the day it is filled, so the URL alone is worthless by the time a later interview round comes around. Write it for every evaluation. The dashboard reads it for the Posting tab and refuses any path outside `jds/`. |
 | `score` | number | Overall 0–5 score. |
 | `legitimacy` | object | See **Legitimacy** below. |
 | `domain` | string | E.g. `"AI/ML Observability, B2B SaaS"`. Used by the sector classifier. |

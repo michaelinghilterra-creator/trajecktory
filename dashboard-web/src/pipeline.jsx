@@ -1003,6 +1003,7 @@ const DRAWER_TABS = [
   { id: 'interview', label: 'Interview',  icon: PI.msg },
   { id: 'customize', label: 'Customize',  icon: PI.flag },
   { id: 'legit',     label: 'Legitimacy', icon: PI.check },
+  { id: 'posting',   label: 'Posting',    icon: PI.briefcase },
   { id: 'notes',     label: 'Notes',      icon: PI.pen },
   { id: 'contacts',  label: 'Contacts',   icon: PI.users },
   { id: 'followup',  label: 'Follow-up',  icon: PI.send },
@@ -1726,6 +1727,8 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               )}
             </div>
           )}
+
+          {tab === 'posting' && window.PostingPanel && <window.PostingPanel app={app} />}
 
           {tab === 'notes' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
