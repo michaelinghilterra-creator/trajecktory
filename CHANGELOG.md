@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.17.6](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.5...v1.17.6) (2026-07-21)
+
+
+### Bug Fixes
+
+* **discover:** dedupe tracked companies by name, not ATS slug alone ([#45](https://github.com/michaelinghilterra-creator/trajecktory/issues/45)) ([a489009](https://github.com/michaelinghilterra-creator/trajecktory/commit/a4890095ffcaba37abc8f1f0c21ff9b500351de4))
+* **runsheet:** align documented panic-net answer key with the worked example ([#44](https://github.com/michaelinghilterra-creator/trajecktory/issues/44)) ([caebd8c](https://github.com/michaelinghilterra-creator/trajecktory/commit/caebd8c5bc32c35b2e1f0348fafe3ca71901e932))
+
 ## [1.17.5](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.4...v1.17.5) (2026-07-20)
 
 
