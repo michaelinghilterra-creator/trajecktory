@@ -17,7 +17,17 @@ $ErrorActionPreference = 'Stop'
 # ── Config ────────────────────────────────────────────────────────────────────
 # Pin the Node runtime so the bundle never depends on (or touches) the user's
 # system Node. Bump deliberately; keep it on an active LTS.
-$NodeVersion = '20.18.1'
+#
+# Nothing watches this pin. Dependabot reads package manifests, so a version
+# literal in a PowerShell script is invisible to it, and no workflow builds or
+# scans the installer. The previous value (20.18.1, November 2024) therefore sat
+# here untouched until Node 20 reached EOL on 2026-04-30 and the shipped runtime
+# became permanently unpatchable: post-EOL CVEs are never backported, and
+# update-system.mjs refuses to touch vendored runtimes, so every install stayed
+# on it until a new .exe shipped. Move BEFORE the EOL date, not after. 24.x
+# (Krypton) is supported through April 2028; check the schedule at
+# https://nodejs.org/en/about/previous-releases when touching this line.
+$NodeVersion = '24.18.0'
 $NodeZipName = "node-v$NodeVersion-win-x64"
 $NodeUrl     = "https://nodejs.org/dist/v$NodeVersion/$NodeZipName.zip"
 
@@ -156,7 +166,11 @@ $RepoUrl   = "https://github.com/michaelinghilterra-creator/trajecktory.git"
   & attrib -h (Join-Path $PayloadApp '.git')
   # Heavy-runtime generation marker; update-system.mjs refuses code updates that
   # need a newer bundle than this. Bump when you ship a new .exe with new Node/Chromium.
-  Set-Content -Path (Join-Path $PayloadApp '.bundle-version') -Value '1' -NoNewline
+  # Generation 2 = Node 24.x; generation 1 was Node 20.x. MIN_BUNDLE_VERSION in the
+  # repo deliberately STAYS at 1: the code still runs on the old runtime, and
+  # raising it would cut every existing generation-1 install off from all code
+  # updates, not just from changes that actually need Node 24.
+  Set-Content -Path (Join-Path $PayloadApp '.bundle-version') -Value '2' -NoNewline
   Write-Host "Self-update repo ready (tokenless public origin, baseline committed at v$bundleVer)."
 
 # ── 6.6 interview-prep layout QA: no stray FLAT cheat sheets may ship ─────────
