@@ -287,6 +287,59 @@ Output ONLY a JSON object — no markdown, no code fences, no explanation:
   }
 });
 
+// ── GET /api/artifacts/:id — the files an apply actually produced ────────────
+// The report panels showed the tailored resume as a path taken from the report's
+// `docx` field, and that field is never written: apply.mjs generates the file but
+// records nothing. Across 439 real reports, zero carry it. So the row was not
+// merely unclickable, it almost never rendered at all, and the only working link
+// to a tailored resume lived in the toast shown seconds after an apply.
+//
+// Rather than start writing a path (which fixes nothing already generated), find
+// the files. They are named deterministically by apply.mjs as
+// {Name}_{Kind}_{Company}_{MM-DD-YYYY}.{ext}, so a company match over output/ is
+// reliable and works retroactively for every apply ever made.
+//
+// Directory listing only, and the response carries just basenames, so nothing
+// here can be pointed outside output/.
+router.get('/api/artifacts/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const row = parseApplicationsMd().find(r => r.id === id);
+    if (!row || !row.company) return res.json({ resume: null, cover: null, others: [] });
+
+    const outDir = path.join(ROOT_DIR, 'output');
+    if (!fs.existsSync(outDir)) return res.json({ resume: null, cover: null, others: [] });
+
+    // Same normalisation apply.mjs uses to build the name: drop legal suffixes
+    // and non-word characters, so "Example Co, Inc." and "ExampleCo" both match.
+    const norm = (s) => String(s).toLowerCase()
+      .replace(/,?\s+(inc|llc|corp|corporation|limited|ltd|gmbh|ag|holdings|group|technologies|software|solutions|systems|co|company)\b\.?/g, '')
+      .replace(/[^a-z0-9]/g, '');
+    const want = norm(row.company);
+    if (!want) return res.json({ resume: null, cover: null, others: [] });
+
+    const hits = fs.readdirSync(outDir).filter(f => norm(f).includes(want));
+    // Newest first: the filename carries MM-DD-YYYY, but a lexical sort on that
+    // is wrong (12-01 sorts above 01-15 of the next year), so use mtime.
+    const stamped = hits.map(f => {
+      let mtime = 0;
+      try { mtime = fs.statSync(path.join(outDir, f)).mtimeMs; } catch { /* unreadable → oldest */ }
+      return { f, mtime };
+    }).sort((a, b) => b.mtime - a.mtime).map(x => x.f);
+
+    const pick = (re) => stamped.find(f => re.test(f)) || null;
+    const resume = pick(/_Resume_.*\.docx$/i) || pick(/_Resume_.*\.pdf$/i);
+    const cover  = pick(/_Cover_.*\.docx$/i)  || pick(/_Cover_.*\.pdf$/i);
+    res.json({
+      resume,
+      cover,
+      others: stamped.filter(f => f !== resume && f !== cover).slice(0, 12),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── GET /api/jd/:id — the job posting text, kept after the posting is gone ───
 // A posting is taken down the moment it is filled, and the report only ever
 // stored the URL. A tester reached a fifth interview 45 days after the posting

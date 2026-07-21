@@ -57,6 +57,12 @@ export const LINKEDIN_SSI_DIR = path.join(DATA_DIR, 'linkedin-ssi');
 // line regex rather than a YAML parse so a profile that is mid-edit (and not
 // valid YAML) still boots the server on the default.
 function resolveInterviewPrepDir() {
+  // TJK_INTERVIEW_PREP_DIR mirrors TJK_DATA_DIR and exists for the same reason:
+  // interview-prep/ is gitignored user data, so a test that wrote there would
+  // corrupt real interview notes with no way back. Checked before profile.yml so
+  // a test can redirect regardless of what the user has configured.
+  const override = process.env.TJK_INTERVIEW_PREP_DIR;
+  if (override) return path.isAbsolute(override) ? override : path.join(ROOT_DIR, override);
   try {
     const profile = path.join(ROOT_DIR, 'config', 'profile.yml');
     if (fs.existsSync(profile)) {

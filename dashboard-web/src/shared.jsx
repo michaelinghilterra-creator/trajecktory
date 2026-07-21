@@ -84,6 +84,54 @@ window.ScoreChip = function ScoreChip({ score }) {
   );
 };
 
+// ---------- Where a generated file lives ----------
+// The tailored resume's path was rendered as plain text in the persistent report
+// panel, so the one durable place it appeared was the one place you could not
+// click it. A working link existed only in the toast shown straight after an
+// apply, and dismissing that toast lost it for good — which is exactly backwards,
+// since the file matters most weeks later, not in the ten seconds after it is
+// written.
+//
+// One implementation, shared, because this is the third helper these two report
+// panels both need and the previous two drifted when each grew its own copy.
+window.outputHref = function outputHref(p) {
+  if (!p) return null;
+  const f = String(p).split(/[\\/]/).pop();
+  // .md is rendered rather than downloaded; everything else is served as-is.
+  return f.endsWith('.md') ? `/output-preview/${f}` : `/output/${f}`;
+};
+
+// ---------- Files this application produced ----------
+// Reads /api/artifacts/:id, which FINDS the generated files rather than trusting
+// a recorded path. The report's `docx` field is never written by the apply flow —
+// zero of 439 real reports carry it — so anything keyed on it renders for nobody.
+// Renders nothing at all when there is nothing to show, since an empty "Files"
+// block on a role you have not applied to is just noise.
+window.ApplyArtifacts = function ApplyArtifacts({ app }) {
+  const [a, setA] = React.useState(null);
+  React.useEffect(() => {
+    if (!app) return;
+    const ctrl = new AbortController();
+    fetch(`/api/artifacts/${app.id}`, { signal: ctrl.signal })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setA(d))
+      .catch(err => { if (err.name !== 'AbortError') setA(null); });
+    return () => ctrl.abort();
+  }, [app?.id]);
+
+  if (!a || (!a.resume && !a.cover)) return null;
+  const link = (file, label) => file ? (
+    <a className="btn sm" href={window.outputHref(file)} target="_blank" rel="noreferrer" title={file}>{label} ↗</a>
+  ) : null;
+  return (
+    <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <span style={{ fontSize: 11.5, color: 'var(--text-mute)' }}>Files for this application:</span>
+      {link(a.resume, 'Tailored resume')}
+      {link(a.cover, 'Cover letter')}
+    </div>
+  );
+};
+
 // ---------- How the score works ----------
 // "If I don't understand how we arrived at a score, how can I trust the score?"
 // was the sharpest question in a first-install session, and nothing in the app

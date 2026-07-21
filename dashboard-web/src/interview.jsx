@@ -1422,7 +1422,7 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
           <div className="card" style={{ padding: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>No interviews on deck</div>
             <div className="dim" style={{ fontSize: 12 }}>
-              A row lands here once its tracker status reaches Phone Screen or beyond and it has a folder in <span className="mono">interview-prep/</span>.
+              A row lands here as soon as its status reaches Phone Screen or beyond. Prep does not have to exist yet.
             </div>
           </div>
         ) : activeList.map(s => (
@@ -1435,6 +1435,12 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
             <div className="focus-task-main">
               <div className="focus-task-label">{s.company}</div>
               <div className="dim" style={{ fontSize: 11.5, marginTop: 2 }}>{s.role}</div>
+              {/* A row reaches this list on status alone now, so say plainly when
+                  there is nothing prepared yet. Previously such a row was absent
+                  entirely, which read as the tab being broken. */}
+              {s.needsPrep && (
+                <div style={{ fontSize: 11.5, marginTop: 3, color: 'var(--yellow)' }}>No prep yet. Open it to generate some.</div>
+              )}
             </div>
             <div className="row" style={{ gap: 8 }}>
               {window.StatusPill ? <window.StatusPill status={s.status} size="sm" /> : <span className="pill mono">{s.status}</span>}
@@ -1461,7 +1467,30 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
         )}
       </div>
 
-      {session && (
+      {/* ── A session that exists in the tracker but has nothing on disk ──────
+          This case could not previously reach the screen at all: the list was
+          built from prep FOLDERS, so a role you had just moved to Phone Screen
+          simply did not appear. Now it appears, and opening it hands over the
+          command that creates the prep instead of showing an empty board. */}
+      {session && session.needsPrep && (
+        <div className="card" style={{ padding: 18 }}>
+          <h1 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 600 }}>{session.company}</h1>
+          <div className="dim" style={{ fontSize: 12, marginBottom: 12 }}>
+            {session.role}{session.status ? ' · ' + session.status : ''}
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 12 }}>
+            Nothing has been prepared for this one yet. Run the command below in your Claude Code and it will
+            research the company, build a cheat sheet for this round, and pull the stories worth leading with.
+            Come back here afterwards and it will be waiting.
+          </div>
+          <PromptHandoff
+            prompt={interviewPrepCmd(session.company, 1, '')}
+            note="Creates interview-prep/{company}/ with a round 1 cheat sheet. Change the round number if you are further along."
+          />
+        </div>
+      )}
+
+      {session && !session.needsPrep && (
         <>
           {/* ── Header: BOTH the round and the stage. They agree by coincidence. ── */}
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 10, flexWrap: 'wrap', gap: 10 }}>
