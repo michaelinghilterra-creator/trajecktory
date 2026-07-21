@@ -1,14 +1,16 @@
 name: Release health
 
-# Guards the two steps that are done BY HAND after a release PR merges, and that
-# nothing else can catch:
+# Guards the three steps that are done BY HAND after a release PR merges, and
+# that nothing else can catch:
 #   1. the newest tag is signed by a key in trusted-signers
 #   2. the newest release carries notes written for a reader
+#   3. a release that changes the BUNDLE ships an installer carrying the change
 #
-# Both fail the same way: silently, with a green release run, which is why they
-# need a guard rather than a line in a checklist. Signing was already missed on
-# two releases; the notes were missed on the two releases immediately after the
-# app started rendering them.
+# All three fail the same way: silently, with a green release run, which is why
+# they need a guard rather than a line in a checklist. Signing was already missed
+# on two releases; the notes were missed on the two releases immediately after
+# the app started rendering them; the installer was missed on v1.17.7, which
+# shipped a security fix that reached nobody.
 #
 # Why this exists, and why it is not part of release.yml:
 #
@@ -114,3 +116,68 @@ jobs:
           fi
 
           echo "OK — ${TAG} has a written release body."
+
+      # Step 5 of the release checklist: rebuild and upload the installer. It is
+      # MANDATORY when the release changes what the bundle contains, optional
+      # otherwise, and until now nothing checked which case a release was in.
+      #
+      # update-system.mjs applies SYSTEM_PATHS with `git checkout <ref> -- <path>`
+      # and then runs npm install, so modes, scripts and npm dependencies reach
+      # every existing install. SYSTEM_PATHS contains no runtime paths at all, so
+      # the vendored Node, the Git for Windows installer, the Playwright browsers
+      # and trusted-signers reach NOBODY until a new .exe is built. A release
+      # carrying only those changes delivers nothing while reading as complete.
+      #
+      # v1.17.7 is why this exists. It was published, signed, its notes rewritten
+      # and THIS WORKFLOW GREEN, with a Node upgrade off an end-of-life line as
+      # its headline entry and no installer attached. Every install stayed on the
+      # dead runtime, and new installs could only download a bundle predating the
+      # fix, until one was built and uploaded by hand afterwards. Four signals
+      # said done and the one that mattered was not checked.
+      #
+      # installer/trajecktory.iss is deliberately NOT a trigger. Release Please
+      # rewrites its `#define AppVersion` on every single release, so watching it
+      # would fire this check every time — and a check that always fails is a
+      # check nobody reads, which this file argues elsewhere about release.yml.
+      # .bundle-version needs no entry either: it is written BY build-bundle.ps1
+      # into the payload, so a generation bump is already a change to that script.
+      - name: Verify a bundle-only release ships an installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          # Second-newest version tag. sort -V for the same reason as above.
+          PREV="$(git tag -l 'v*' | sort -V | tail -2 | head -1)"
+          if [ -z "${PREV}" ] || [ "${PREV}" = "${TAG}" ]; then
+            echo "No previous version tag to diff against — skipping."
+            exit 0
+          fi
+
+          CHANGED="$(git diff --name-only "${PREV}..${TAG}" -- installer/build-bundle.ps1 trusted-signers)"
+          if [ -z "${CHANGED}" ]; then
+            echo "OK — ${TAG} changes nothing the bundle carries, so an installer is optional."
+            exit 0
+          fi
+
+          echo "${TAG} changes what the bundle contains:"
+          printf '  %s\n' ${CHANGED}
+
+          if ! gh release view "${TAG}" --json assets > /tmp/assets.json 2>/dev/null; then
+            echo "::warning title=No GitHub release for ${TAG}::Cannot check for an installer asset."
+            exit 0
+          fi
+
+          # startswith/endswith rather than a regex: the pattern would have to
+          # survive YAML block scalar, shell quoting and jq string escaping, and
+          # a mis-escaped `\.` silently matches nothing, which turns this guard
+          # into one that always passes. That is the failure mode worth designing
+          # out, not the one worth testing for.
+          if jq -e '[.assets[].name] | any(startswith("trajecktory-setup-") and endswith(".exe"))' /tmp/assets.json > /dev/null; then
+            echo "OK — ${TAG} ships an installer carrying those changes."
+            exit 0
+          fi
+
+          CHANGED_ONE_LINE="$(printf '%s' "${CHANGED}" | tr '\n' ' ')"
+          echo "::error title=Release ${TAG} changes the bundle but ships no installer::${CHANGED_ONE_LINE}changed since ${PREV}, and changes there reach users ONLY through a newly built .exe — self-update carries code, never the vendored runtimes or trusted-signers. Every install stays on the previous bundle while the release notes claim otherwise. Fix: build and upload per step 5 in docs/RELEASING.md, then re-run this workflow."
+          exit 1
