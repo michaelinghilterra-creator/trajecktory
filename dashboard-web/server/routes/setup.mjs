@@ -206,6 +206,106 @@ router.post('/api/setup/healthcheck', (req, res) => {
 });
 
 // POST /api/setup/handoff/:section — return the prompt to paste into Claude Code.
+// ── POST /api/setup/preview-matches ──────────────────────────────────────────
+// "Would this filter actually find me anything?" — answered in seconds, before
+// the user spends an hour tuning config they cannot evaluate.
+//
+// A beta tester completed the entire setup and only then discovered the filter
+// matched almost nothing (report 2026-07-21). Nothing in the flow gave them a
+// feedback loop: they chose titles, chose companies, and got no signal until the
+// first real scan. This is that loop.
+//
+// Zero LLM cost. It samples a handful of enabled tracked companies, pulls their
+// public ATS JSON, and runs the SAME buildTitleFilter / buildLocationFilter the
+// real scan uses — importing them rather than reimplementing, so the preview can
+// never drift from the thing it is previewing.
+//
+// Deliberately a SAMPLE, not a full scan: this runs synchronously while the user
+// waits, so it trades completeness for an answer in a few seconds. The response
+// says how many companies it sampled so the number is never mistaken for a
+// complete scan result.
+// 20, not 8. The boards are fetched in parallel so the wall-clock cost is nearly
+// flat, and 8 was small enough to mislead: on a mature 600-company portals.yml it
+// covered ~1% and confidently reported "nothing matches" from companies the user
+// never targeted. The client also scales its wording to the coverage ratio, since
+// no sample size makes a 1% slice a verdict.
+const PREVIEW_SAMPLE = 20;
+const PREVIEW_TIMEOUT_MS = 8000;
+
+function previewAtsEndpoint(company) {
+  const url = company.careers_url || '';
+  if (company.api && company.api.includes('greenhouse')) return { type: 'greenhouse', url: company.api };
+  let m = url.match(/jobs\.ashbyhq\.com\/([^/?#]+)/);
+  if (m) return { type: 'ashby', url: `https://api.ashbyhq.com/posting-api/job-board/${m[1]}` };
+  m = url.match(/jobs\.lever\.co\/([^/?#]+)/);
+  if (m) return { type: 'lever', url: `https://api.lever.co/v0/postings/${m[1]}?mode=json` };
+  m = url.match(/job-boards(?:\.eu)?\.greenhouse\.io\/([^/?#]+)/);
+  if (m) return { type: 'greenhouse', url: `https://boards-api.greenhouse.io/v1/boards/${m[1]}/jobs` };
+  return null;
+}
+
+function previewParse(type, json) {
+  if (type === 'greenhouse') return (json.jobs || []).map(j => ({ title: j.title, location: j.location?.name || '' }));
+  if (type === 'lever')      return (json || []).map(j => ({ title: j.text, location: j.categories?.location || '' }));
+  if (type === 'ashby')      return (json.jobs || []).map(j => ({ title: j.title, location: j.location || '' }));
+  return [];
+}
+
+router.post('/api/setup/preview-matches', async (req, res) => {
+  try {
+    const [{ buildTitleFilter, buildLocationFilter }, yaml] = await Promise.all([
+      import('../../../lib/scan-core.mjs'),
+      import('js-yaml'),
+    ]);
+    const portalsPath = path.join(SETUP_ROOT, 'portals.yml');
+    if (!fs.existsSync(portalsPath)) {
+      return res.json({ error: 'No portals.yml yet. Run the preflight check first and it will be created for you.' });
+    }
+    const portals = yaml.default.load(fs.readFileSync(portalsPath, 'utf8')) || {};
+    const titleOk = buildTitleFilter(portals.title_filter);
+    const locOk = buildLocationFilter(portals.title_filter);
+
+    const enabled = (portals.tracked_companies || []).filter(c => c.enabled !== false && c.careers_url);
+    // Spread the sample across the list instead of taking the first N: the file
+    // is grouped by sector, so the head of the list is one sector and would give
+    // a badly skewed answer.
+    const step = Math.max(1, Math.floor(enabled.length / PREVIEW_SAMPLE));
+    const sample = [];
+    for (let i = 0; i < enabled.length && sample.length < PREVIEW_SAMPLE; i += step) sample.push(enabled[i]);
+
+    let seen = 0, titleBlocked = 0, geoBlocked = 0, reached = 0;
+    const examples = [];
+    await Promise.all(sample.map(async (company) => {
+      const ep = previewAtsEndpoint(company);
+      if (!ep) return;
+      try {
+        const r = await fetch(ep.url, { signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS) });
+        if (!r.ok) return;
+        const postings = previewParse(ep.type, await r.json());
+        reached++;
+        for (const p of postings) {
+          if (!p.title) continue;
+          seen++;
+          if (!titleOk(p.title)) { titleBlocked++; continue; }
+          if (!locOk(p.location)) { geoBlocked++; continue; }
+          if (examples.length < 12) examples.push({ title: p.title, location: p.location, company: company.name });
+        }
+      } catch { /* one unreachable board must not fail the whole preview */ }
+    }));
+
+    const matched = seen - titleBlocked - geoBlocked;
+    res.json({
+      sampledCompanies: sample.length,
+      reachedCompanies: reached,
+      totalCompanies: enabled.length,
+      seen, matched, titleBlocked, geoBlocked,
+      examples,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/api/setup/handoff/:section', (req, res) => {
   res.json({ prompt: setupHandoffPrompt(req.params.section) });
 });
