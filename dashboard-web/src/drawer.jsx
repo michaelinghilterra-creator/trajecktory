@@ -94,7 +94,7 @@ function DrawerTabs({ section, setSection, hasCs }) {
   const tabs = [
     ...(hasCs ? [
       { id: "overview",  label: "Overview" },
-      { id: "cv",        label: "CV Match" },
+      { id: "cv",        label: "Resume Match" },
       { id: "comp",      label: "Comp" },
       { id: "interview", label: "Interview" },
       { id: "customize", label: "Customize" },
@@ -175,6 +175,7 @@ function BasicBody({ app }) {
 // ---------- OVERVIEW ----------
 function OverviewSection({ app, cs }) {
   const compSnap = cs.compStated || (app.salary != null ? `$${app.salary}k` : null);
+  const [explainScore, setExplainScore] = useStateD(false);
   return (
     <div className="col" style={{ gap: 16 }}>
       {cs.tldr && (
@@ -210,9 +211,13 @@ function OverviewSection({ app, cs }) {
 
       {/* Score breakdown radar/bars */}
       <div className="cs-section">
+        {/* No total here on purpose. The headline score is a judgment, not a sum
+            of these bars, so any total printed beside them invites a comparison
+            that cannot come out right. This one summed positives over positive
+            maxes and read 14/20 where the headline said 3.0/5. */}
         <div className="cs-section-head">
           <span>Global Score Breakdown</span>
-          <span className="mono dim">{cs.globalScore.reduce((s,d)=> s + (d.val > 0 ? d.val : 0), 0).toFixed(2)} / {cs.globalScore.filter(d=>d.val>0).reduce((s,d)=>s+d.max,0)}</span>
+          <button className="btn ghost sm" onClick={() => setExplainScore(v => !v)}>How is this scored?</button>
         </div>
         <div className="score-bars">
           {cs.globalScore.map(d => {
@@ -231,6 +236,7 @@ function OverviewSection({ app, cs }) {
             );
           })}
         </div>
+        {window.ScoreExplainer && <window.ScoreExplainer open={explainScore} onClose={() => setExplainScore(false)} />}
       </div>
 
       {/* Recommendation */}
@@ -265,7 +271,7 @@ function CVMatchSection({ cs }) {
     <div className="col" style={{ gap: 16 }}>
       <div className="cs-section">
         <div className="cs-section-head">
-          <span>JD Requirements → CV Evidence</span>
+          <span>JD Requirements → Resume Evidence</span>
           <span className="mono dim">
             <span style={{ color: "var(--green)" }}>● {counts.strong||0}</span> strong &nbsp;
             <span style={{ color: "var(--yellow)" }}>● {counts.moderate||0}</span> moderate &nbsp;
@@ -506,8 +512,8 @@ function CustomizeSection({ cs }) {
             <div className="cs-callout">
               <div className="cs-callout-label">No customizations generated</div>
               <div className="cs-callout-body">
-                This report format does not include CV/LinkedIn customization recommendations.
-                Use the CV Match tab to review alignment and gaps, then tailor manually.
+                This report format does not include resume/LinkedIn tailoring notes.
+                Use the Resume Match tab to review alignment and gaps, then tailor manually.
               </div>
             </div>
           )
@@ -582,7 +588,7 @@ function LegitSection({ cs }) {
         <div className="cs-section-head"><span>Source Links</span></div>
         <div className="col" style={{ gap: 6 }}>
           <div className="kv compact"><span className="k">JD URL</span><span className="v"><a className="link" href={cs.url} target="_blank" rel="noreferrer">{cs.url}</a></span></div>
-          <div className="kv compact"><span className="k">Generated CV</span><span className="v mono dim">{cs.docx || cs.pdf}</span></div>
+          <div className="kv compact"><span className="k">Generated resume</span><span className="v mono dim">{cs.docx || cs.pdf}</span></div>
         </div>
       </div>
     </div>
@@ -691,7 +697,7 @@ function DrawerFoot({ app, cs, onAction }) {
             : `✓ Applied to ${app.company}`}
         </span>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {(r.docx || r.pdf) && <a className="btn sm" href={hrefFor(r.docx || r.pdf)} target="_blank" rel="noreferrer">{r.docx ? 'CV DOCX ↗' : 'CV PDF ↗'}</a>}
+          {(r.docx || r.pdf) && <a className="btn sm" href={hrefFor(r.docx || r.pdf)} target="_blank" rel="noreferrer">{r.docx ? 'Resume DOCX ↗' : 'Resume PDF ↗'}</a>}
           {r.cover && <a className="btn sm" href={hrefFor(r.cover)} target="_blank" rel="noreferrer">Cover Letter ↗</a>}
           {r.apply && <a className="btn sm accent" href={hrefFor(r.apply)} target="_blank" rel="noreferrer">Form Responses ↗</a>}
           {cs?.url && <a className="btn sm" href={cs.url} target="_blank" rel="noreferrer">JD ↗</a>}
@@ -706,7 +712,7 @@ function DrawerFoot({ app, cs, onAction }) {
       <div className="drawer-foot">
         {applyJob.status === 'running' && (
           <span className="mono dim" style={{ fontSize: 11 }}>
-            ⟳ {applyJob.mode === 'claude' ? 'Generating CV + form responses…'
+            ⟳ {applyJob.mode === 'claude' ? 'Generating resume + form responses…'
               : applyJob.mode === 'byo'    ? 'Logging application…'
               : applyJob.mode === 'cover'  ? 'Drafting cover letter…'
               :                              'Generating tailored CV…'} {elapsed > 0 && `(${elapsed}s)`}
@@ -726,7 +732,7 @@ function DrawerFoot({ app, cs, onAction }) {
     <div className="drawer-foot">
       {app.status === "Evaluated" && (
         <>
-          <button className="btn primary" onClick={() => startApply('manual')}>Tailor CV</button>
+          <button className="btn primary" onClick={() => startApply('manual')}>Tailor resume</button>
           <button className="btn accent" onClick={() => startApply('claude')}>Claude Apply ✦</button>
           <button
             className="btn"

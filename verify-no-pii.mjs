@@ -122,7 +122,39 @@ const ARCHIVE_ALLOW = new Set([]);
 // the owner's real band and walk-away, they sat here for hours, and they reached a
 // built installer: every check above was blind to them because they were prose, not
 // a key assignment. Describe the shape; never write the values.
-const COMP_KEYS = /\b(targetLow|targetHigh|walkAway|target_low|target_high|walk_away)\b\s*[:=]\s*\{?\s*(\d{2,4})/g;
+//
+// BOTH sides accept quotes, and that is not cosmetic.
+//
+// Value side: an optional quote and currency symbol before the digits. Without
+// them the rule only saw a BARE number, so an unquoted figure stopped the build
+// while the same figure written in quotes with a currency symbol sailed through
+// — and that quoted, currency-marked form is the more natural way to write a
+// salary, so the gap sat exactly where a real value was most likely to land.
+//
+// Key side: an optional closing quote after the key name. Without it the rule
+// required the key to be followed immediately by the colon, which holds in JS
+// and YAML but NEVER in JSON, where the key is itself quoted. The rule could
+// therefore not match a comp figure in any .json file at all, and a JSON config
+// is the single most likely home for a hardcoded default, which is the exact
+// failure this whole rule exists to prevent.
+//
+// Both gaps were found by planting real figures and watching the checker pass
+// them (2026-07-21). The key-side one surfaced only because the value-side fix
+// came with tests; the manual check that prompted it was blind to it.
+//
+// The examples that belong here are in tests/verify-no-pii.test.mjs, not in this
+// comment. A first draft of this block spelled the shapes out as literal
+// key-and-number pairs, and the widened rule immediately flagged its own source
+// file — correctly, since the rule is structural and cannot know an example
+// figure from a real one. That is the warning above proving itself in the space
+// of one edit.
+//
+// Deliberately NOT widened further. Matching a bare number anywhere, or a comp
+// word in prose, would flag ordinary integers across the repo; the invariant is
+// specifically "a comp KEY may hold only a reviewed value", and the key is what
+// makes the match safe. tests/verify-no-pii.test.mjs pins both halves: the shapes
+// that must fail, and the neutral values that must still pass.
+const COMP_KEYS = /\b(targetLow|targetHigh|walkAway|target_low|target_high|walk_away)\b["']?\s*[:=]\s*\{?\s*["']?\s*[$€£]?\s*(\d{2,4})/g;
 const COMP_NEUTRAL = new Set(['100', '140', '90']);
 
 // ── derivation sources (all gitignored) ────────────────────────────────────
