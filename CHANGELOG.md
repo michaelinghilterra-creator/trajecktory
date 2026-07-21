@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.18.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.7...v1.18.0) (2026-07-21)
+
+
+### Features
+
+* **onboarding:** answer "so what?" on every setup step ([#65](https://github.com/michaelinghilterra-creator/trajecktory/issues/65)) ([376c3ac](https://github.com/michaelinghilterra-creator/trajecktory/commit/376c3ac14db139a81214c59a137048ded09803af))
+* **onboarding:** make a new user's first run actually produce results ([#64](https://github.com/michaelinghilterra-creator/trajecktory/issues/64)) ([590c101](https://github.com/michaelinghilterra-creator/trajecktory/commit/590c101227ed569fa5751b29bfa10a36af657bb1))
+
+
+### Bug Fixes
+
+* block agent runs when the workspace is untrusted ([#62](https://github.com/michaelinghilterra-creator/trajecktory/issues/62)) ([e4ef318](https://github.com/michaelinghilterra-creator/trajecktory/commit/e4ef3185778f9c50e7230f51161a982dbba72bf9))
+* **setup:** stop labelling generated search words as titles ([#66](https://github.com/michaelinghilterra-creator/trajecktory/issues/66)) ([bb0a4ed](https://github.com/michaelinghilterra-creator/trajecktory/commit/bb0a4edebc902ebd8492a0bf41d6d3d62a2d2e57))
+
 ## [1.17.7](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.17.6...v1.17.7) (2026-07-21)
 
 
