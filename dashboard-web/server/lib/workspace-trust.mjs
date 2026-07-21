@@ -34,8 +34,13 @@ import { ROOT_DIR } from '../config.mjs';
 // Consequence of (1): normalising ROOT_DIR to forward slashes is the correct
 // lookup, not a convenience. Consequence of (2): absent and false are one case.
 
-const HOME = process.env.USERPROFILE || process.env.HOME || '';
-export const CLAUDE_CONFIG_PATH = path.join(HOME, '.claude.json');
+// Resolved per call rather than frozen at import: the tests point this at a
+// fixture config, and a frozen constant would make them depend on whatever
+// happens to be in the developer's real home directory (which is exactly how the
+// first version of this test passed locally and failed in CI, where no
+// ~/.claude.json exists at all).
+export const claudeConfigPath = () =>
+  path.join(process.env.USERPROFILE || process.env.HOME || '', '.claude.json');
 
 // The exact key Claude Code looks up for a given working directory.
 export const trustKeyFor = (dir) => path.resolve(dir).replace(/\\/g, '/');
@@ -63,17 +68,17 @@ const NOT_COVERED_BY_ACCEPT_EDITS = new Set(['WebSearch', 'WebFetch']);
  * @returns {{ok: boolean, reason: string, trustKey: string, configPath: string,
  *            allow: string[], losing: string[], message: string}}
  */
-export function checkWorkspaceTrust(dir = ROOT_DIR) {
+export function checkWorkspaceTrust(dir = ROOT_DIR, cfgPath = claudeConfigPath()) {
   const trustKey = trustKeyFor(dir);
   const allow = projectAllowList(dir);
   const losing = allow.filter(t => NOT_COVERED_BY_ACCEPT_EDITS.has(t));
-  const base = { trustKey, configPath: CLAUDE_CONFIG_PATH, allow, losing };
+  const base = { trustKey, configPath: cfgPath, allow, losing };
 
   if (!allow.length) return { ...base, ok: true, reason: 'no-allowlist', message: '' };
 
   let config;
   try {
-    config = JSON.parse(fs.readFileSync(CLAUDE_CONFIG_PATH, 'utf8'));
+    config = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
   } catch {
     // No config yet (fresh Claude Code install) or unreadable. Fail OPEN: let the
     // run proceed and let the CLI's own stderr be the source of truth.
@@ -93,7 +98,7 @@ export function checkWorkspaceTrust(dir = ROOT_DIR) {
       `This folder is not marked as trusted for Claude Code, so its ${allow.length} permission ` +
       `settings are ignored and the agent loses ${lost}. Scan and Triage read job descriptions ` +
       `with those tools, so a run would cost money and score almost nothing. Fix it once in ` +
-      `Setup, or set projects["${trustKey}"].hasTrustDialogAccepted to true in ${CLAUDE_CONFIG_PATH}.`,
+      `Setup, or set projects["${trustKey}"].hasTrustDialogAccepted to true in ${cfgPath}.`,
   };
 }
 
@@ -105,13 +110,13 @@ export function checkWorkspaceTrust(dir = ROOT_DIR) {
  * Writes with JSON.stringify(obj, null, 2), which round-trips this file byte for
  * byte (verified before shipping). A .bak copy is left beside it regardless.
  */
-export function trustWorkspace(dir = ROOT_DIR) {
+export function trustWorkspace(dir = ROOT_DIR, cfgPath = claudeConfigPath()) {
   const trustKey = trustKeyFor(dir);
-  const raw = fs.readFileSync(CLAUDE_CONFIG_PATH, 'utf8');
+  const raw = fs.readFileSync(cfgPath, 'utf8');
   const config = JSON.parse(raw);
   config.projects = config.projects || {};
   config.projects[trustKey] = { ...(config.projects[trustKey] || {}), hasTrustDialogAccepted: true };
-  fs.writeFileSync(`${CLAUDE_CONFIG_PATH}.bak`, raw, 'utf8');
-  fs.writeFileSync(CLAUDE_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
-  return { trustKey, backup: `${CLAUDE_CONFIG_PATH}.bak` };
+  fs.writeFileSync(`${cfgPath}.bak`, raw, 'utf8');
+  fs.writeFileSync(cfgPath, JSON.stringify(config, null, 2), 'utf8');
+  return { trustKey, backup: `${cfgPath}.bak` };
 }
