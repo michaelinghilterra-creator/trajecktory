@@ -13,12 +13,21 @@
 //   2. JARGON     the specific words that failed in that session stay out.
 //   3. READING    Flesch-Kincaid grade level stays at or below MAX_GRADE.
 //
-// On (3): the goal stated in the feedback was "5th grade so everyone
-// understands". Literal grade 5 is achievable for a single sentence but not
-// across copy that has to stay specific — "Two jobs can look the same on paper"
-// is about grade 6 and does real work that its grade-5 rewrite does not. So the
-// GATE is 6 and the AIM is 5, which is an honest place to draw the line rather
-// than a promise the copy would quietly break.
+// On (3): the feedback asked for "5th grade so everyone understands". Literal
+// grade 5 is achievable for a single sentence but not across copy that has to
+// stay specific — "Two jobs can look the same on paper" is about grade 6 and
+// does real work that its grade-5 rewrite does not. So the GATE is 6 and the
+// AIM is 5, which is an honest place to draw the line rather than a promise the
+// copy would quietly break.
+//
+// THE GRADE IS A PROXY, NOT THE GOAL. The maintainer's stated intent, verbatim:
+// make sure users understand, and do not feel intimidated by techie talk. So do
+// not game this number. Copy that scores 4.5 while saying nothing useful has
+// failed even though the test is green, and rewriting a clear sentence into a
+// choppier one to shave half a grade makes the product worse. When the metric
+// and the intent disagree, the intent wins and the number is the thing that
+// gives. Note also that FK penalises multi-syllable proper nouns regardless of
+// real readability, which is a known way for it to be wrong.
 //
 // FK is implemented here rather than pulled in, both to keep the repo
 // dependency-free and because the formula is short enough to read.

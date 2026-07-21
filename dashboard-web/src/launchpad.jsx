@@ -269,8 +269,11 @@ function lpSectionSummary(id, cfg) {
   const row = (label, val) => (val != null && val !== '' && !(Array.isArray(val) && !val.length)) ? [label, Array.isArray(val) ? cap(val) : String(val)] : null;
   let rows = [], impact = '';
   if (id === 'roles') {
-    rows = [row('Targeting', cfg.targetRoles), row('Archetypes', (cfg.archetypes || []).length ? cfg.archetypes : null), cfg.scannerTitles != null ? ['Scanner searches', `${cfg.scannerTitles} title${cfg.scannerTitles === 1 ? '' : 's'}`] : null];
-    impact = 'These titles are exactly what the scanner hunts for. Add or remove titles to widen or narrow what shows up in your pipeline.';
+    // "Scanner searches — N titles" was the other half of the same confusion:
+    // N counts generated keywords, so calling them titles invited the reader to
+    // compare it against their own title list and conclude the count was wrong.
+    rows = [row('Targeting', cfg.targetRoles), row('Archetypes', (cfg.archetypes || []).length ? cfg.archetypes : null), cfg.scannerTitles != null ? ['Search words', `${cfg.scannerTitles} word${cfg.scannerTitles === 1 ? '' : 's'}`] : null];
+    impact = 'Your titles are expanded into the different wordings employers use, and the scanner looks for those. Add or remove titles to widen or narrow what shows up in your pipeline.';
   } else if (id === 'edge' && cfg.edge) {
     rows = [row('Headline', cfg.edge.headline), ['Superpowers', `${cfg.edge.superpowers || 0}`], ['Proof points', `${cfg.edge.proofPoints || 0}`]];
     impact = 'This is the biggest lever on evaluation quality. It is how each role is scored against your strengths. Re-run to refine after a few evaluations.';
@@ -957,6 +960,51 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     );
   }
 
+  // ── Titles vs search keywords ───────────────────────────────────────────────
+  // These are two different quantities and they used to share one label, so a
+  // user who picked 8 titles saw a "23" beside them with no way to see the 23.
+  // That reads as a broken counter, and a tester said so plainly: they could not
+  // trust the mechanism because the numbers did not tie off.
+  //
+  // The reported fix was "show all 23 titles". Doing that literally would be
+  // worse: the generated entries are keyword FRAGMENTS, not titles — the
+  // abbreviations and variant spellings employers use for the same job — and a
+  // list of fragments where someone expects job titles reads as more confusing,
+  // not less. So state the RELATIONSHIP, and put the fragments one click away
+  // for anyone who wants to check the arithmetic.
+  function lpKeywordRow(pickedCount, keywordCount, keywords) {
+    if (keywordCount == null) return null;
+    const list = Array.isArray(keywords) ? keywords : [];
+    const generated = pickedCount > 0 && keywordCount !== pickedCount;
+    return (
+      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+            {generated
+              ? <>Your <b style={{ color: 'var(--text)' }}>{pickedCount}</b> {pickedCount === 1 ? 'title' : 'titles'} became <b style={{ color: 'var(--text)' }}>{keywordCount}</b> search {keywordCount === 1 ? 'word' : 'words'}</>
+              : <>Search words the scanner looks for</>}
+          </span>
+          <span className="mono" style={{ fontSize: 18, color: 'var(--accent)' }}>{keywordCount}</span>
+        </div>
+        {generated && (
+          <div style={{ fontSize: 11.5, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.5 }}>
+            One job goes by several names, so each title you picked is expanded into the wordings employers actually post. That is why this number is bigger.
+          </div>
+        )}
+        {list.length > 0 && (
+          <details style={{ marginTop: 8 }}>
+            <summary style={{ fontSize: 11.5, color: 'var(--accent)', cursor: 'pointer' }}>See the {list.length} search {list.length === 1 ? 'word' : 'words'}</summary>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+              {list.map((k, i) => (
+                <span key={i} className="mono" style={{ fontSize: 11, padding: '2px 7px', borderRadius: 999, background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}>{k}</span>
+              ))}
+            </div>
+          </details>
+        )}
+      </div>
+    );
+  }
+
   // ── Filter preview ──────────────────────────────────────────────────────────
   // The feedback loop that setup never had. Samples live postings through the
   // user's CURRENT filter and reports what would survive it, so a filter that
@@ -1100,10 +1148,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             </div>
           ) : <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>Run the generate step below. Claude Code will suggest adjacent roles here.</div>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Titles the scanner will search</span>
-          <span className="mono" style={{ fontSize: 18, color: 'var(--accent)' }}>{scannerTitles}</span>
-        </div>
+        {lpKeywordRow(titles.length, scannerTitles, cfg.scannerKeywords)}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="btn primary" disabled={gated('roles')} onClick={() => startHandoff('roles', 'roles')}>Generate roles + scanner config ⧉</button>
           <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>Saves your picks, then Claude Code builds the title filters, queries, and suggestions.</span>

@@ -302,7 +302,17 @@ function setupComputeState() {
           ...setupGetList(profile, 'target_roles', 'primary'),
           ...setupGetList(profile, 'target_roles', 'secondary'),
         ],
+        // Two DIFFERENT quantities used to share one label, and the mismatch read
+        // as a broken counter: the chip list above shows the titles the user
+        // picked (from data/setup/roles.json), while this counts the keyword
+        // variants the roles handoff generated from them into
+        // portals.yml title_filter.positive. Seeing "8 titles" beside "23" with
+        // no way to inspect the 23 cost a tester their trust in the whole
+        // mechanism ("can't trust this b/c the numbers don't tie off").
+        // Ship the keywords themselves, not just a count, so the relationship is
+        // inspectable rather than asserted.
         scannerTitles: setupGetList(portals, 'title_filter', 'positive').length,
+        scannerKeywords: setupGetList(portals, 'title_filter', 'positive'),
         locationPolicy: !!(lp.home || (Array.isArray(lp.hard_no) && lp.hard_no.length)),
         evalTuning: !!(modeProfile && /evaluation tuning/i.test(modeProfile)),
         // Rich read-backs (best-effort; null when absent/unparseable):
