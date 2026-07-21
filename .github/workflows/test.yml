@@ -9,9 +9,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      # Match the runtime the installer vendors (build-bundle.ps1 $NodeVersion).
+      # CI testing a version users never run is how a runtime regression reaches
+      # a release green. Keep this in step with that pin.
+      #
+      # Deliberately a single version, not a matrix: main-guard requires a status
+      # check literally named "test", and a matrix renames it to "test (20)" /
+      # "test (24)", so the required check would never report and every PR would
+      # deadlock. Widening coverage means adding a separate job, not a matrix.
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: '20'
+          node-version: '24'
       - run: npm ci
       # Fail the build on a known high-severity advisory in a dependency.
       - run: npm audit --audit-level=high
