@@ -5,6 +5,7 @@ import { exec, spawn } from 'child_process';
 import { SETUP_ROOT, SETUP_FILES, setupSetScalar, SETUP_SCALAR_FIELDS, setupComputeState, SETUP_GUARDRAIL, SETUP_CV_FULL, setupHandoffPrompt } from '../lib/setup.mjs';
 import { modelsState, validateSetting } from '../lib/pricing.mjs';
 import { checkWorkspaceTrust, trustWorkspace } from '../lib/workspace-trust.mjs';
+import { APPLICATIONS_TEMPLATE_CSV, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
 
 export const router = express.Router();
 
@@ -206,6 +207,31 @@ router.post('/api/setup/healthcheck', (req, res) => {
 });
 
 // POST /api/setup/handoff/:section — return the prompt to paste into Claude Code.
+// ── GET /api/setup/template/:kind — blank CSVs to fill in ───────────────────
+// The Import step used to be a stub that copied a generic prompt, and the
+// reported reaction to it was that the flow could not be trusted enough to use.
+// A file you fill in and hand back is a contract you can see; a prompt that
+// rewrites your tracker is not.
+//
+// Applications is download-only for now. Turning a filled-in sheet into tracker
+// rows has to go through formatTrackerLine and merge-tracker, because a
+// hand-rolled row is still a valid-looking row and the damage shows up later as
+// a column holding the wrong thing. Shipping the template without the importer
+// is the honest half: a half-working importer that corrupts a tracker is worse
+// than none.
+const SETUP_TEMPLATES = {
+  applications: { file: 'applications-template.csv', body: () => APPLICATIONS_TEMPLATE_CSV },
+  contacts:     { file: 'contacts-template.csv',     body: () => CONTACTS_TEMPLATE_CSV },
+};
+
+router.get('/api/setup/template/:kind', (req, res) => {
+  const t = SETUP_TEMPLATES[req.params.kind];
+  if (!t) return res.status(404).json({ error: 'no such template' });
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${t.file}"`);
+  res.send(t.body());
+});
+
 // ── POST /api/setup/preview-matches ──────────────────────────────────────────
 // "Would this filter actually find me anything?" — answered in seconds, before
 // the user spends an hour tuning config they cannot evaluate.

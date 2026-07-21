@@ -475,6 +475,30 @@ function ModelsCostPanel() {
 }
 
 const LP_SUB = { fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginBottom: 7 };
+
+// Commute in MINUTES, not miles: an hour of city traffic and an hour of highway
+// are the same hour to the person driving it, and wildly different distances.
+// The geocode handoff converts to a radius when it builds the scanner filter.
+const LP_COMMUTE_STEPS = ['', '15 minutes', '30 minutes', '45 minutes', '1 hour', '1.5 hours', '2 hours'];
+
+// Remote is scoped. "Anywhere" is offered but placed last and named honestly,
+// because it is the rare case: most remote postings are country-restricted and
+// plenty are state-restricted.
+const LP_REMOTE_SCOPES = [
+  '', 'Anywhere in my country', 'My state or region only', 'My country or neighbouring countries',
+  'Anywhere in the world (rare, and often not actually true)',
+];
+
+// Salary steps for the compensation dropdowns. 10K increments up to 250K, then
+// 25K, which is roughly where posted bands stop being that precise. Wide enough
+// to cover an early-career floor and an executive ceiling without becoming a
+// scroll of 60 near-identical options.
+const LP_COMP_STEPS = (() => {
+  const out = [''];
+  for (let v = 40; v <= 250; v += 10) out.push(`$${v}K`);
+  for (let v = 275; v <= 500; v += 25) out.push(`$${v}K`);
+  return out;
+})();
 function lpPillStyle(on) {
   return { background: on ? 'var(--accent-bg)' : 'var(--panel-2)', color: on ? 'var(--accent)' : 'var(--text-dim)',
     border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 999, padding: '5px 13px', fontSize: 12, cursor: 'pointer' };
@@ -1082,6 +1106,24 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     );
   }
 
+  // One work-mode row: a toggle, and the setting that only matters once it is on.
+  function lpWorkMode(key, label, blurb, c, detail) {
+    const on = !!c[key];
+    return (
+      <div style={{ border: `1px solid ${on ? 'var(--green)' : 'var(--border)'}`, background: on ? 'rgba(34,197,94,0.06)' : 'var(--panel)', borderRadius: 'var(--r-ctl)', padding: '10px 12px' }}>
+        <button onClick={() => setFormVal('location', key, on ? '' : 'yes')}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', width: '100%' }}>
+          <LpCheck on={on} />
+          <span style={{ flex: 1 }}>
+            <span style={{ display: 'block', fontSize: 13, color: on ? 'var(--green)' : 'var(--text)' }}>{label}</span>
+            <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-mute)' }}>{blurb}</span>
+          </span>
+        </button>
+        {on && <div style={{ marginTop: 10 }}>{detail}</div>}
+      </div>
+    );
+  }
+
   // ── Titles vs search keywords ───────────────────────────────────────────────
   // These are two different quantities and they used to share one label, so a
   // user who picked 8 titles saw a "23" beside them with no way to see the 23.
@@ -1361,11 +1403,23 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       const items = cert.items || [];
       const detected = cert.detected || [];
       const hasItem = (name) => items.some(it => it.name === name);
+      // Certificate number, issue date and expiry are here because application
+      // forms ask for all three and there was nowhere to keep them, so they got
+      // looked up by hand every time. They live in config/profile.yml, which is
+      // gitignored user-layer config and never shipped.
       const addCert = () => {
-        const n = document.getElementById('lp-cert-name'), o = document.getElementById('lp-cert-org');
-        const nm = (n.value || '').trim(); if (!nm) return;
-        saveStage('certs', { ...cert, items: [...items, { name: nm, org: (o.value || '').trim() }] });
-        n.value = ''; o.value = '';
+        const g = (id) => (document.getElementById(id)?.value || '').trim();
+        const nm = g('lp-cert-name'); if (!nm) return;
+        saveStage('certs', { ...cert, items: [...items, {
+          name: nm,
+          org: g('lp-cert-org'),
+          number: g('lp-cert-number'),
+          issued: g('lp-cert-issued'),
+          expires: g('lp-cert-expires'),
+        }] });
+        for (const id of ['lp-cert-name', 'lp-cert-org', 'lp-cert-number', 'lp-cert-issued', 'lp-cert-expires']) {
+          const el = document.getElementById(id); if (el) el.value = '';
+        }
       };
       const removeCert = (i) => saveStage('certs', { ...cert, items: items.filter((_, j) => j !== i) });
       const toggleDetected = (d) => hasItem(d.name)
@@ -1406,11 +1460,23 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             <div style={{ display: 'flex', gap: 8 }}>
               <input id="lp-cert-name" className="inp" placeholder="Certification or course" style={{ flex: 2 }} />
               <input id="lp-cert-org" className="inp" placeholder="Issuer" style={{ flex: 1, minWidth: 0 }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input id="lp-cert-number" className="inp" placeholder="Certificate number (optional)" style={{ flex: 2 }} />
+              <input id="lp-cert-issued" className="inp" placeholder="Issued (MM/YYYY)" style={{ flex: 1, minWidth: 0 }} />
+              <input id="lp-cert-expires" className="inp" placeholder="Expires (MM/YYYY)" style={{ flex: 1, minWidth: 0 }} />
               <button className="btn" onClick={addCert}>Add</button>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-mute)' }}>
+              Application forms ask for the number and dates, so keeping them here means a copy button instead of a hunt. They stay in your own config on this machine.
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {items.length ? items.map((it, i) => (
-                <span key={i} style={lpChipStyle()}>{it.name}{it.org ? ` · ${it.org}` : ''}<span onClick={() => removeCert(i)} style={{ cursor: 'pointer', marginLeft: 6 }}>×</span></span>
+                <span key={i} style={lpChipStyle()}>
+                  {it.name}{it.org ? ` · ${it.org}` : ''}
+                  {it.expires ? <span style={{ color: 'var(--text-mute)' }}> · exp {it.expires}</span> : null}
+                  <span onClick={() => removeCert(i)} style={{ cursor: 'pointer', marginLeft: 6 }}>×</span>
+                </span>
               )) : <span style={{ fontSize: 12, color: 'var(--text-mute)' }}>No certifications added.</span>}
             </div>
             <div style={{ ...LP_SUB, color: 'var(--green)' }}>Detected from your resume. Tap to keep</div>
@@ -1435,11 +1501,38 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     }
     if (section.id === 'comp') {
       const c = forms.compensation || {};
+      // "$160K-210K" -> { min:'$160K', max:'$210K' }. Tolerates an en dash, "to",
+      // and a max written without its own currency mark, which is how people
+      // actually type a band.
+      const compBand = (() => {
+        const raw = String(c.target_range || '').trim();
+        if (!raw) return { min: '', max: '' };
+        const parts = raw.split(/\s*(?:-|–|—|to)\s*/i).filter(Boolean);
+        const norm = (s) => {
+          const n = (s || '').match(/(\d+)/);
+          return n ? `$${n[1]}K` : '';
+        };
+        return { min: norm(parts[0]), max: norm(parts[1]) };
+      })();
+      const setCompBand = (min, max) =>
+        setFormVal('compensation', 'target_range', min && max ? `${min}-${max}` : (min || max || ''));
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
-            <LpField label="Target range" value={c.target_range} onChange={v => setFormVal('compensation', 'target_range', v)} placeholder="$160K-210K" hint="Your ideal pay band. Example: $160K-210K" />
-            <LpField label="Minimum (walk-away)" value={c.minimum} onChange={v => setFormVal('compensation', 'minimum', v)} placeholder="$140K" hint="The floor you would not go below. Example: $140K" />
+          {/* Two numbers with dropdowns, not a free-text band plus a separate
+              minimum. The old form asked for a range like "$160K-210K" and then
+              asked for a minimum again, so the same number was typed twice in
+              two different formats. The stored shape is unchanged: target_range
+              is still written as one string, because modes/cheat-sheet.md and the
+              setup state both read it. The min and max are parsed back out of it
+              on load, so nothing downstream has to know this changed. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+            <LpSelect label="Target minimum" value={compBand.min} options={LP_COMP_STEPS}
+              onChange={v => setCompBand(v, compBand.max)} hint="The bottom of the band you are aiming for." />
+            <LpSelect label="Target maximum" value={compBand.max} options={LP_COMP_STEPS}
+              onChange={v => setCompBand(compBand.min, v)} hint="The top of that band." />
+            <LpSelect label="Walk-away" value={c.minimum || ''} options={LP_COMP_STEPS}
+              onChange={v => setFormVal('compensation', 'minimum', v)}
+              hint="Different from the target minimum: this is the number you would turn down, and it flags roles that can never pay enough." optional />
             <LpField label="Currency" value={c.currency} onChange={v => setFormVal('compensation', 'currency', v)} placeholder="USD" hint="Example: USD" />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -1458,6 +1551,51 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             <LpSelect label="Country" value={c.country} onChange={v => setFormVal('location', 'country', v)} options={COUNTRY_OPTIONS} />
             <LpSelect label="Timezone" value={c.timezone} onChange={v => setFormVal('location', 'timezone', v)} options={TZ_OPTIONS} />
             <LpSelect label="Visa status" value={c.visa_status} onChange={v => setFormVal('location', 'visa_status', v)} options={VISA_OPTIONS} optional />
+          </div>
+
+          {/* ── The three ways a job can be located ───────────────────────────
+              Previously the only way to say any of this was to answer the
+              geocode prompt's questions in chat, every time. Captured here it
+              becomes config the handoff reads.
+
+              Three amendments to how this was reported, each deliberate:
+
+              Hybrid gets its OWN commute number rather than inheriting the
+              on-site one. Hybrid ranges from three days a week to one a month,
+              so collapsing it into the on-site radius silently drops roles that
+              are genuinely reachable, which is the same complaint in reverse.
+
+              Remote is scoped, not "anywhere in the world". Most remote postings
+              are country-restricted and many are state-restricted, so an
+              unscoped remote surfaces roles that cannot legally be taken.
+
+              "Never work in" stays. The radius argument only retires it for
+              on-site; it is a hard exclusion that still bites on hybrid and
+              regional-remote roles. */}
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <div style={LP_SUB}>How you are willing to work</div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-mute)', marginBottom: 9, lineHeight: 1.5 }}>
+              Tick everything you would accept. The scanner drops postings that match none of them.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {lpWorkMode('onsite_ok', 'In office', 'You go in every day.', c, (
+                <LpSelect label="Furthest you would commute" value={c.commute_minutes || ''} options={LP_COMMUTE_STEPS}
+                  onChange={v => setFormVal('location', 'commute_minutes', v)} hint="One way, door to door." />
+              ))}
+              {lpWorkMode('hybrid_ok', 'Hybrid', 'Some days in the office, some at home.', c, (
+                <LpSelect label="Furthest you would commute" value={c.hybrid_commute_minutes || ''} options={LP_COMMUTE_STEPS}
+                  onChange={v => setFormVal('location', 'hybrid_commute_minutes', v)} hint="Usually further than for a daily commute, because you do it less often." />
+              ))}
+              {lpWorkMode('remote_ok', 'Remote', 'You work from home.', c, (
+                <LpSelect label="Where the employer can be" value={c.remote_scope || ''} options={LP_REMOTE_SCOPES}
+                  onChange={v => setFormVal('location', 'remote_scope', v)} hint="Most remote jobs still require you to live in a particular country or state." />
+              ))}
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <LpField label="Never work in" value={c.never_work_in} onChange={v => setFormVal('location', 'never_work_in', v)}
+                placeholder="Chicago, New York" optional
+                hint="Places you would turn down whatever the job. Applies to office and hybrid roles, and to remote roles tied to a location." />
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <button className="btn primary" disabled={state.demo} onClick={() => saveForm('location')}>Save</button>
@@ -1643,6 +1781,37 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             const o = LP_OPTIONAL.find(x => 'opt:' + x.id === active);
             if (o.id === 'models') {
               return <ModelsCostPanel />;
+            }
+            if (o.id === 'import') {
+              // Was a stub: it copied a generic prompt and did nothing, and the
+              // reported reaction was that it could not be trusted enough to
+              // touch. A blank sheet you fill in and hand back is a contract you
+              // can see; a prompt that rewrites your tracker is not.
+              const tpl = (kind, label, note) => (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '9px 11px', border: '1px solid var(--border)', borderRadius: 'var(--r-ctl)', background: 'var(--panel)' }}>
+                  <span style={{ flex: 1, minWidth: 180 }}>
+                    <span style={{ display: 'block', fontSize: 13, color: 'var(--text)' }}>{label}</span>
+                    <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-mute)' }}>{note}</span>
+                  </span>
+                  <a className="btn sm" href={`/api/setup/template/${kind}`}>Download CSV</a>
+                </div>
+              );
+              return (
+                <div>
+                  <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
+                  <LpWhy item={o} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {tpl('applications', 'Applications', 'Jobs you already applied to. Columns match the tracker.')}
+                    {tpl('contacts', 'Recruiters and contacts', 'People you already know. Works for both lists.')}
+                  </div>
+                  <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+                    <b style={{ color: 'var(--text)' }}>Contacts upload is on the Recruiters tab.</b> Fill in the contacts sheet and use the bulk import there.
+                    <div style={{ marginTop: 6, color: 'var(--text-mute)' }}>
+                      Applications is download only for now. Bringing filled-in rows into the tracker has to go through the same merge step everything else uses, and a half-built importer that scrambles a tracker is worse than none. Fill the sheet in and it will be ready when that lands.
+                    </div>
+                  </div>
+                </div>
+              );
             }
             if (o.id === 'apikey') {
               return (

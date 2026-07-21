@@ -619,7 +619,16 @@ function QuickCopyBar() {
   const items = [
     ['Email', m.email], ['Phone', m.phone], ['LinkedIn', m.linkedin],
     ['Portfolio', m.portfolioUrl], ['GitHub', m.github],
-    ...(Array.isArray(m.certifications) ? m.certifications.filter(Boolean).map(c => [trunc(c), c]) : []),
+    // Certifications contribute the name plus whatever an application form is
+    // actually going to ask for. Before this the bar knew only the name, so the
+    // number and dates were looked up by hand on every form.
+    ...(Array.isArray(m.certificationEntries) && m.certificationEntries.length
+      ? m.certificationEntries.flatMap(c => [
+          [trunc(c.name), c.name],
+          c.number  ? [`${trunc(c.name, 14)} no.`, c.number]  : null,
+          c.expires ? [`${trunc(c.name, 14)} exp`, c.expires] : null,
+        ].filter(Boolean))
+      : (Array.isArray(m.certifications) ? m.certifications.filter(Boolean).map(c => [trunc(c), c]) : [])),
   ].filter(([, v]) => v);
   if (!items.length) return null;
   const copy = (label, val) => {
