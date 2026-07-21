@@ -426,6 +426,7 @@ for (const suite of [
   'tests/metrics.test.mjs',
   'tests/release-notes.test.mjs',
   'tests/workspace-trust.test.mjs',
+  'tests/onboarding-copy.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);
