@@ -306,6 +306,111 @@ router.post('/api/setup/preview-matches', async (req, res) => {
   }
 });
 
+// ── Tracked companies: see all of them, and turn any of them off ─────────────
+// The Launchpad only ever showed companies STAGED for the next merge, so once an
+// employer landed in portals.yml the interface had no way to show it or touch
+// it. Removing one meant Claude Desktop or the CLI. The report was blunt about
+// what that costs: users need to see ALL companies and be able to X them off.
+//
+// Two deliberate choices:
+//
+// 1. MATCH ON careers_url, NOT name. A company that migrates ATS keeps its name
+//    and gains a new board, so name matching can hit the wrong row (or two rows)
+//    where the URL is unique. company-audit.mjs matches on name, which is a
+//    known sharp edge, not a pattern to copy.
+//
+// 2. DISABLE, NEVER DELETE. Setting `enabled: false` is what AGENTS.md calls a
+//    tombstone, and it is what stops a dead slug being rediscovered from a stale
+//    pipeline URL and silently re-added. Deleting the row would lose that, and
+//    lose whatever scan tuning and notes it carries. It is also reversible,
+//    which matters a great deal more for a button than for a CLI flag.
+//
+// Edits are line-based, never a js-yaml round trip: this file is 4000+ lines of
+// hand-tuned entries, comments, retest policies and tombstone notes, and
+// re-serialising it would discard all of that while looking like it worked.
+// split('\n') / join('\n') preserves the file's CRLF endings, because the \r
+// stays attached to the end of each line and is never stripped.
+function portalsPath() { return path.join(SETUP_ROOT, 'portals.yml'); }
+
+// One backup per day, not one per click: this is a safety net, not a version
+// store, and a toggle-happy afternoon should not bury the repo in files.
+function backupPortalsOncePerDay() {
+  const src = portalsPath();
+  if (!fs.existsSync(src)) return;
+  const day = new Date().toISOString().slice(0, 10);
+  const dest = `${src}.bak-${day}-dashboard`;
+  if (!fs.existsSync(dest)) fs.copyFileSync(src, dest);
+}
+
+router.get('/api/setup/companies', (req, res) => {
+  try {
+    const p = portalsPath();
+    if (!fs.existsSync(p)) return res.json({ companies: [] });
+    const lines = fs.readFileSync(p, 'utf8').split('\n');
+    const companies = [];
+    let cur = null;
+    for (const raw of lines) {
+      const line = raw.replace(/\r$/, '');
+      const nameM = line.match(/^\s*-\s*name:\s*(.+?)\s*$/);
+      if (nameM) {
+        if (cur) companies.push(cur);
+        cur = { name: nameM[1], careers_url: null, enabled: true, note: null };
+        continue;
+      }
+      if (!cur) continue;
+      const urlM = line.match(/^\s*careers_url:\s*(\S+)/);
+      if (urlM) { cur.careers_url = urlM[1]; continue; }
+      const enM = line.match(/^\s*enabled:\s*(true|false)\s*(?:#\s*(.*))?$/);
+      if (enM) { cur.enabled = enM[1] === 'true'; if (enM[2]) cur.note = enM[2].trim(); }
+    }
+    if (cur) companies.push(cur);
+    // Only rows that actually name a board are addressable.
+    res.json({ companies: companies.filter(c => c.careers_url) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/api/setup/companies/toggle', (req, res) => {
+  try {
+    const { careers_url: url, enabled } = req.body || {};
+    if (!url || typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'careers_url and enabled are required' });
+    }
+    const p = portalsPath();
+    if (!fs.existsSync(p)) return res.status(404).json({ error: 'portals.yml not found' });
+
+    const lines = fs.readFileSync(p, 'utf8').split('\n');
+    const urlIdx = lines.findIndex(l => l.replace(/\r$/, '').match(/^\s*careers_url:\s*(\S+)/)?.[1] === url);
+    if (urlIdx < 0) return res.status(404).json({ error: 'company not found' });
+
+    // Walk out from the URL line to the enabled line of the SAME entry, stopping
+    // at the next "- name:" so a company with no enabled line never steals the
+    // following company's.
+    let target = -1;
+    for (let i = urlIdx + 1; i < lines.length; i++) {
+      const l = lines[i].replace(/\r$/, '');
+      if (/^\s*-\s*name:/.test(l)) break;
+      if (/^\s*enabled:\s*(true|false)/.test(l)) { target = i; break; }
+    }
+    if (target < 0) {
+      for (let i = urlIdx - 1; i >= 0 && i > urlIdx - 12; i--) {
+        const l = lines[i].replace(/\r$/, '');
+        if (/^\s*-\s*name:/.test(l)) break;
+        if (/^\s*enabled:\s*(true|false)/.test(l)) { target = i; break; }
+      }
+    }
+    if (target < 0) return res.status(422).json({ error: 'no enabled: line found for that company' });
+
+    backupPortalsOncePerDay();
+    const cr = lines[target].endsWith('\r') ? '\r' : '';
+    const indent = lines[target].match(/^\s*/)[0];
+    lines[target] = enabled
+      ? `${indent}enabled: true${cr}`
+      : `${indent}enabled: false  # turned off in the dashboard${cr}`;
+    fs.writeFileSync(p, lines.join('\n'));
+    res.json({ ok: true, careers_url: url, enabled });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.post('/api/setup/handoff/:section', (req, res) => {
   res.json({ prompt: setupHandoffPrompt(req.params.section) });
 });

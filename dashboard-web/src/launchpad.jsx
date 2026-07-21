@@ -557,6 +557,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const pendingBaseline = useRef({});                   // sectionId -> status when the handoff started (for empty→complete auto-clear)
   const [checkMsg, setCheckMsg] = useState({});         // sectionId -> 'checking' | {ok:false, text} after a verify attempt
   const [preview, setPreview] = useState(null);         // filter preview result (see runPreview)
+  const [tracked, setTracked] = useState({ list: [], loading: false, q: '', busy: null }); // merged portals.yml companies
   const [health, setHealth] = useState(null);           // {ok, output}
   const [apiKey, setApiKey] = useState({ has: null, input: '', saving: false, msg: '' });
   const [discKeys, setDiscKeys] = useState({ brave: null, muse: null, braveInput: '', museInput: '', saving: false, msg: '' });
@@ -794,6 +795,28 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     refresh(); loadStages();
   };
 
+  // Load the merged company list lazily, the first time the user opens the
+  // Companies step. It reads a 4000-line file, so it is not worth doing on every
+  // Launchpad mount for a step most visits never open.
+  const loadTracked = useCallback(() => {
+    setTracked(t => (t.loading || t.list.length ? t : { ...t, loading: true }));
+    fetch('/api/setup/companies').then(r => r.json())
+      .then(d => setTracked(t => ({ ...t, list: Array.isArray(d.companies) ? d.companies : [], loading: false })))
+      .catch(() => setTracked(t => ({ ...t, loading: false })));
+  }, []);
+  useEffect(() => { if (active === 'companies') loadTracked(); }, [active, loadTracked]);
+
+  const toggleTracked = (url, enabled) => {
+    setTracked(t => ({ ...t, busy: url }));
+    window.tjkMutate('/api/setup/companies/toggle', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ careers_url: url, enabled }),
+    }).then(r => r.json()).then(d => {
+      if (d.error) { toast && toast(d.error, 'error'); setTracked(t => ({ ...t, busy: null })); return; }
+      setTracked(t => ({ ...t, busy: null, list: t.list.map(c => c.careers_url === url ? { ...c, enabled, note: enabled ? null : 'turned off in the dashboard' } : c) }));
+    }).catch(() => { toast && toast('Could not update that company', 'error'); setTracked(t => ({ ...t, busy: null })); });
+  };
+
   // ── 1.7: prove the filter works BEFORE the user invests in tuning it ────────
   const runPreview = () => {
     setPreview({ running: true });
@@ -980,6 +1003,57 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               <button className="btn ghost sm" onClick={() => forceAck(id)}>Dismiss anyway</button>
             </div>
           </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── The companies you are actually tracking ─────────────────────────────────
+  // The panel above this only ever showed companies STAGED for the next merge,
+  // so once an employer landed in portals.yml it became invisible and
+  // untouchable from the dashboard. The report was blunt: users need to see ALL
+  // companies and be able to X them off.
+  //
+  // "X off" is implemented as OFF, not gone. Disabling keeps the row as a
+  // tombstone, which is what stops a dead board being rediscovered and silently
+  // re-added, and it keeps any scan tuning and notes attached to it. It is also
+  // undoable, which matters much more for a button than for a CLI flag.
+  function lpTrackedCompanies() {
+    const { list, loading, q, busy } = tracked;
+    const shown = list.filter(c => !q || c.name.toLowerCase().includes(q.toLowerCase()));
+    const onCount = list.filter(c => c.enabled).length;
+    return (
+      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 3 }}>
+          <div style={LP_SUB}>Companies you are tracking</div>
+          {!loading && <span style={{ fontSize: 11.5, color: 'var(--text-mute)' }}>{onCount} on · {list.length - onCount} off · {list.length} total</span>}
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-mute)', marginBottom: 9, lineHeight: 1.5 }}>
+          Every scan checks the ones that are on. Turning one off stops it being scanned but keeps it on the list, so nothing re-adds it later and you can turn it back on any time.
+        </div>
+
+        {loading ? <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>Loading your list…</div> : list.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>No companies tracked yet. Add some above, then run the merge step.</div>
+        ) : (
+          <>
+            <input id="lp-co-filter" className="inp" placeholder="Filter by name…" value={q}
+              onChange={e => setTracked(t => ({ ...t, q: e.target.value }))} style={{ width: '100%', marginBottom: 8 }} />
+            <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, paddingRight: 4 }}>
+              {shown.slice(0, 400).map((co) => (
+                <div key={co.careers_url} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 9px', borderRadius: 'var(--r-ctl)', border: '1px solid var(--border)', background: co.enabled ? 'var(--panel)' : 'var(--panel-2)', opacity: co.enabled ? 1 : 0.6 }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{co.name}</span>
+                    {co.note && <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-mute)' }}>{co.note}</span>}
+                  </span>
+                  <button className="btn ghost sm" disabled={busy === co.careers_url}
+                    onClick={() => toggleTracked(co.careers_url, !co.enabled)}>
+                    {busy === co.careers_url ? '…' : co.enabled ? 'Turn off' : 'Turn on'}
+                  </button>
+                </div>
+              ))}
+            </div>
+            {shown.length > 400 && <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 6 }}>Showing the first 400 of {shown.length}. Use the filter to narrow it down.</div>}
+          </>
         )}
       </div>
     );
@@ -1274,6 +1348,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>Claude Code resolves careers pages and merges picks without disturbing learned tuning.</span>
         </div>
         {handoffBox('companies')}
+        {lpTrackedCompanies()}
         {lpPreview()}
       </div>
     );
