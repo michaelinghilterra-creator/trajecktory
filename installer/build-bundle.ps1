@@ -55,13 +55,36 @@ $env:Path = "$PayloadNode;$env:Path"
 # lands git on the user's PERSISTENT PATH. Claude Code needs a shell (Git Bash, or
 # PowerShell as the fallback), and Claude Desktop (a separate app) only sees git
 # when it is on the persistent PATH, not a process-scoped one.
-$GitVersion   = '2.47.1'
+# A Git for Windows version has TWO parts: the upstream git version and a
+# Windows-specific release revision, written 2.55.0(3). Both are needed, and the
+# tag and the asset spell them differently:
+#   tag   -> v2.55.0.windows.3
+#   asset -> Git-2.55.0.3-64-bit.exe
+# Revision 1 is the exception: it omits the suffix from the FILENAME but not the
+# tag, so v2.47.1.windows.1 ships Git-2.47.1-64-bit.exe.
+#
+# The previous single-variable form hardcoded ".windows.1" into the tag and built
+# the filename from the version alone. Bumping the version to a release whose
+# current revision is >1 therefore resolved to revision 1, which is a real
+# release with a valid URL: the download succeeds, Test-Path passes, and the
+# wrong build ships without one error anywhere. Bump BOTH values together.
+$GitVersion   = '2.55.0'
+$GitRevision  = '3'
 $GitInstaller = 'Git-for-Windows-installer.exe'
-$GitUrl       = "https://github.com/git-for-windows/git/releases/download/v$GitVersion.windows.1/Git-$GitVersion-64-bit.exe"
+$GitTag       = "v$GitVersion.windows.$GitRevision"
+$GitAsset     = if ($GitRevision -eq '1') { "Git-$GitVersion-64-bit.exe" } else { "Git-$GitVersion.$GitRevision-64-bit.exe" }
+$GitUrl       = "https://github.com/git-for-windows/git/releases/download/$GitTag/$GitAsset"
 $GitOut       = Join-Path $InstallerDir $GitInstaller
-Write-Host "Downloading Git for Windows $GitVersion ..."
+Write-Host "Downloading Git for Windows $GitVersion($GitRevision) ..."
 Invoke-WebRequest -Uri $GitUrl -OutFile $GitOut
 if (-not (Test-Path $GitOut)) { throw "Git installer not downloaded to $GitOut" }
+# Assert the binary is the build we asked for. The failure mode above produces a
+# genuine, correctly-downloaded installer for the wrong version, so no download
+# check can catch it; only reading the version back off the file can.
+$GitFileVer = (Get-Item $GitOut).VersionInfo.ProductVersion
+if ($GitFileVer -notlike "$GitVersion*") {
+  throw "Git installer version mismatch: expected $GitVersion*, got '$GitFileVer' from $GitUrl"
+}
 
 # ── 3. Stage the tracked tree — exactly what the public repo ships ────────────
 # Use `git archive` so ONLY committed files reach the payload. The working tree
