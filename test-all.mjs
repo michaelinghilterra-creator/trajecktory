@@ -414,6 +414,7 @@ for (const suite of [
   'tests/outcome.test.mjs',
   'tests/tracker.test.mjs',
   'tests/tracker-writers.test.mjs',
+  'tests/portals.test.mjs',
   'tests/liveness-workday.test.mjs',
   'tests/sidecars.test.mjs',
   'tests/metrics.test.mjs',

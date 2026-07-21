@@ -501,6 +501,43 @@ Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slu
    with `formatTrackerLine`, both from `lib/tracker.mjs`. Never `line.split('|')`
    with literal indices, and never build a row from a template literal.
 
+### Never re-add a tracked company (RULE)
+
+A company that changes ATS keeps its name and gets a new board slug. Match it on
+the slug alone and it looks brand new, so discovery appends a second
+`tracked_companies` row pointing at the old board — which now 404s and will scan
+forever, returning nothing. This happened on 2026-07-15 to **EliseAI**
+(Greenhouse `meetelise` → Ashby `eliseai`) and **Grow Therapy** (Greenhouse
+`growtherapy` → Ashby `grow-therapy`). Grow Therapy's surviving row even
+documented the migration in its `notes` — but notes are prose, and no code reads
+prose.
+
+**Use `lib/portals.mjs`, never a bare slug comparison.** `buildCompanyIndex()`
+keys every company by its name *and* every slug it is known by;
+`findKnownCompany()` reports whether the hit came from the slug or the name.
+That distinction matters, so do not collapse it:
+
+| matchedOn | Meaning | Do |
+|---|---|---|
+| `slug` | Already tracked, same board | Skip silently — routine |
+| `name` | Same name, different board | Skip the append, but **print it** |
+
+A name match is either a migration (correctly skipped) or two real companies
+sharing a name — Greenhouse `fetch` is Fetch pet insurance and Lever
+`fetchpackage` is Fetch Package delivery, both live, both worth scanning. Only a
+human can tell those apart, so surface every one instead of dropping it. When
+two entries really are different companies, give them distinguishable names.
+
+**When you prune a migrated entry, leave a tombstone** rather than deleting the
+row: `enabled: false` plus a note saying where the company went. The index
+deliberately includes disabled entries, so the tombstone is what stops the dead
+slug from being rediscovered from a stale pipeline URL that no longer resolves
+to a name. See the "Legacy-slug tombstones" block in `portals.yml`.
+
+This applies to the agent-driven merge path too (the Launchpad "companies" step
+in `dashboard-web/server/lib/setup.mjs`), not just `discover.mjs`. Guarded by
+`tests/portals.test.mjs`.
+
 ### Never hand-roll a tracker row (RULE)
 
 `data/applications.md` looks like a table you can slice with `split('|')`. Twice now
