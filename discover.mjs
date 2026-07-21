@@ -25,6 +25,7 @@
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import yaml from 'js-yaml';
+import { buildCompanyIndex, addCompanyToIndex, findKnownCompany } from './lib/portals.mjs';
 
 const DRY_RUN   = process.argv.includes('--dry-run');
 const VERBOSE   = process.argv.includes('--verbose');
@@ -148,25 +149,23 @@ function collectLocalUrls() {
   return found;
 }
 
-// ─── Existing tracked slugs ─────────────────────────────────────────
+// ─── Already-tracked companies ──────────────────────────────────────
+// Identity matching lives in lib/portals.mjs: a company is keyed by its name
+// AND every ATS slug it is known by, so an ATS migration can't disguise it as a
+// new company. See that module for why slug-only matching was not enough.
 
-function loadExistingSlugs(portals) {
-  const slugs = new Set();
-  const patterns = [
-    /(?:job-boards(?:\.eu)?|boards(?:\.eu)?)\.greenhouse\.io\/([^/?#\s]+)/,
-    /boards-api\.greenhouse\.io\/v1\/boards\/([^/?#\s]+)/,
-    /jobs\.ashbyhq\.com\/([^/?#\s]+)/,
-    /jobs\.lever\.co\/([^/?#\s]+)/,
-  ];
-  for (const co of portals.tracked_companies || []) {
-    for (const url of [co.careers_url, co.api].filter(Boolean)) {
-      for (const p of patterns) {
-        const match = url.match(p);
-        if (match) { slugs.add(decodeURIComponent(match[1]).toLowerCase()); break; }
-      }
-    }
+// Decide whether a discovery candidate should become a new portals.yml entry.
+// Returns the matching entry when it should not. `skipped` accumulates the
+// name-only collisions for the end-of-run report — those are the judgement
+// calls (migration vs. two real companies sharing a name), so they are never
+// dropped silently.
+function claimCompany(index, parsed, companyHint, skipped) {
+  const hit = findKnownCompany(index, { slug: parsed.slug, name: companyHint });
+  if (!hit) return null;
+  if (hit.matchedOn === 'name') {
+    skipped.push({ slug: parsed.slug, type: parsed.type, hint: companyHint, existing: hit.entry });
   }
-  return slugs;
+  return hit;
 }
 
 // ─── Seen URLs (dedup for all phases) ──────────────────────────────
@@ -202,20 +201,26 @@ function passesFilter(title, filter) {
 function buildPortalsEntry(parsed, today, companyHint) {
   const { type, slug } = parsed;
   const name = companyHint || slugToName(slug);
-  const lines = [`\n  - name: ${name}`];
+  const company = { name };
 
   if (type === 'greenhouse') {
-    lines.push(`    careers_url: https://job-boards.greenhouse.io/${slug}`);
-    lines.push(`    api: https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`);
+    company.careers_url = `https://job-boards.greenhouse.io/${slug}`;
+    company.api = `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`;
   } else if (type === 'ashby') {
-    lines.push(`    careers_url: https://jobs.ashbyhq.com/${encodeURIComponent(slug)}`);
+    company.careers_url = `https://jobs.ashbyhq.com/${encodeURIComponent(slug)}`;
   } else if (type === 'lever') {
-    lines.push(`    careers_url: https://jobs.lever.co/${slug}`);
+    company.careers_url = `https://jobs.lever.co/${slug}`;
   }
 
+  const lines = [`\n  - name: ${name}`];
+  if (company.careers_url) lines.push(`    careers_url: ${company.careers_url}`);
+  if (company.api)         lines.push(`    api: ${company.api}`);
   lines.push(`    notes: "Discovered ${today} from pipeline/history."`);
   lines.push(`    enabled: true`);
-  return { name, yaml: lines.join('\n') };
+
+  // `company` is the same entry in tracked_companies shape, so it can be folded
+  // straight into the identity index and dedupe the rest of this run.
+  return { name, company, yaml: lines.join('\n') };
 }
 
 // ─── Write helpers ──────────────────────────────────────────────────
@@ -364,11 +369,12 @@ async function main() {
   const portals       = yaml.load(portalsRaw);
   const titleFilter   = portals.title_filter;
   const braveQueries  = buildBraveQueries(portals);
-  const existingSlugs = loadExistingSlugs(portals);
+  const trackedCos    = portals.tracked_companies || [];
+  const companyIndex  = buildCompanyIndex(trackedCos);
   const seenUrls      = loadSeenUrls();
-  const addedThisRun  = new Set();
+  const skipped       = [];
 
-  console.log(`Known: ${existingSlugs.size} companies, ${seenUrls.size} seen URLs`);
+  console.log(`Known: ${trackedCos.length} companies, ${seenUrls.size} seen URLs`);
 
   // ── Phase 1: Register companies from existing pipeline/history ──────
 
@@ -380,11 +386,9 @@ async function main() {
   for (const [rawUrl, companyHint] of localUrls) {
     const parsed = parseAtsUrl(rawUrl);
     if (!parsed) continue;
-    const slugLow = parsed.slug.toLowerCase();
-    if (existingSlugs.has(slugLow) || addedThisRun.has(slugLow)) continue;
-    addedThisRun.add(slugLow);
-    existingSlugs.add(slugLow);
+    if (claimCompany(companyIndex, parsed, companyHint, skipped)) continue;
     const entry = buildPortalsEntry(parsed, today, companyHint);
+    addCompanyToIndex(companyIndex, entry.company);
     phase1Entries.push(entry);
     if (VERBOSE) console.log(`   + ${entry.name} (${parsed.type})`);
   }
@@ -410,10 +414,12 @@ async function main() {
         if (!passesFilter(title, titleFilter)) continue;
         if (seenUrls.has(parsed.url)) continue;
         seenUrls.add(parsed.url);
-        const slugLow = parsed.slug.toLowerCase();
-        if (!existingSlugs.has(slugLow) && !addedThisRun.has(slugLow)) {
-          addedThisRun.add(slugLow); existingSlugs.add(slugLow);
-          phase2Entries.push(buildPortalsEntry(parsed, today, ''));
+        // Brave results carry no company hint, so only the slug is available to
+        // match on here. A known company still contributes its job URL below.
+        if (!claimCompany(companyIndex, parsed, '', skipped)) {
+          const entry = buildPortalsEntry(parsed, today, '');
+          addCompanyToIndex(companyIndex, entry.company);
+          phase2Entries.push(entry);
         }
         phase2Jobs.push({ url: parsed.url, company: slugToName(parsed.slug), title });
         added++;
@@ -446,6 +452,19 @@ async function main() {
   console.log(`\n📊 Results:`);
   console.log(`   New companies (portals.yml): ${totalNewCompanies}`);
   console.log(`   New job URLs (pipeline.md): ${totalNewJobs}${phase3Jobs.length ? ` (${phase3Jobs.length} from Muse)` : ''}`);
+
+  // Never skip a company silently. A name match with a different slug is either
+  // an ATS migration (correctly skipped — the old board is dead) or two real
+  // companies sharing a name (Fetch pet insurance vs. Fetch Package), which
+  // only a human can tell apart. Print both so the call is visible.
+  if (skipped.length) {
+    console.log(`\n⚠️  ${skipped.length} candidate${skipped.length === 1 ? '' : 's'} matched a tracked company by name but with a different board — not registered:`);
+    for (const s of skipped) {
+      console.log(`   • ${s.type}/${s.slug}${s.hint ? ` ("${s.hint}")` : ''} → already tracked as "${s.existing.name}" ${s.existing.careers_url || ''}`);
+    }
+    console.log(`   If any of these is genuinely a different company, add it to portals.yml by hand`);
+    console.log(`   and give the two entries distinguishable names.`);
+  }
 
   if (DRY_RUN) {
     console.log('\n[dry-run — no files written]');
