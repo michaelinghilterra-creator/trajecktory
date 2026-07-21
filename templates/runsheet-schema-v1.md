@@ -268,7 +268,7 @@ no net and you are stranded.
 { "id": "blank", "title": "Blank? Bucket it, grab the default", "style": "panic",
   "cues": [
     { "cue": "The stall line + universal opener",         "answer": "blank" },
-    { "cue": "Failure, or a call you got wrong",          "answer": "badKpi" },
+    { "cue": "Failure, or a call you got wrong",          "answer": "routingRule" },
     { "cue": "People, alignment, or conflict",            "answer": "definition" },
     { "cue": "Influence, driving change, disagreeing up", "answer": "definition" }
   ] }
