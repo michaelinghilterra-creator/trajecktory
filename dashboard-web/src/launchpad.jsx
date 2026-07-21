@@ -41,8 +41,8 @@ const LP_SECTIONS = [
     sowhat: 'Ten seconds now, instead of finishing all of setup and then finding out something was broken the whole time.',
     affectsScore: 'no',
     ifYouSkip: 'You cannot. Everything else stays locked until this passes.' },
-  { id: 'cv',         kind: 'gen', req: 'Required',        icon: 'cv', label: 'Your CV',
-    title: 'Start here: your CV sets up the rest',
+  { id: 'cv',         kind: 'gen', req: 'Required',        icon: 'cv', label: 'Your resume',
+    title: 'Start here: your resume sets up the rest',
     does: 'Reads your resume and fills in most of the rest of this setup for you.',
     sowhat: 'This is the only step you really need. When it finishes you can start scoring real jobs today. Everything below just sharpens the results.',
     affectsScore: 'yes',
@@ -691,6 +691,31 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   // canStart: the honest "you can use the product now" bar. Everything past this
   // improves results; none of it unlocks anything.
   const canStart = LP_REQUIRED.every(id => sectionStatus(id) === 'complete');
+
+  // ── Which step is next ──────────────────────────────────────────────────────
+  // The rail shows eleven steps as a flat list with no order to them. A
+  // first-time user finished the preflight check and had no idea what to do
+  // next, because nothing pointed anywhere: "make going through the onboarding
+  // order a little more obvious".
+  //
+  // Order matters more than completeness here. Preflight gates everything, then
+  // the CV step is the only genuinely required one, and only after those does it
+  // make sense to suggest the refinements. Evaluation tuning is deliberately last
+  // even though it sits mid-rail, because it is the one step that is easier
+  // after you have seen the scorer work (see its ifYouSkip copy).
+  // Built from LP_SECTIONS rather than from LP_REQUIRED + LP_REFINE, because
+  // those two lists deliberately exclude the gate and the verify step, and an
+  // order assembled from them silently drops 'preflight' and 'health'. On a
+  // fully configured install that left the health check, the only outstanding
+  // step, with nothing pointing at it.
+  const nextStepId = (() => {
+    const rank = { preflight: 0, cv: 1, health: 9, evaluation: 8 };
+    const order = [...LP_SECTIONS]
+      .map((s, i) => ({ id: s.id, k: rank[s.id] != null ? rank[s.id] : 2 + i / 100 }))
+      .sort((a, b) => a.k - b.k)
+      .map(s => s.id);
+    return order.find(id => sectionStatus(id) !== 'complete') || null;
+  })();
   const readiness = (() => {
     const done = LP_REFINE.filter(id => sectionStatus(id) === 'complete').length;
     return { done, total: LP_REFINE.length, pct: Math.round(done / LP_REFINE.length * 100) };
@@ -889,14 +914,14 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <div style={{ fontSize: 11.5, color: 'var(--text-mute)', marginTop: 4 }}>.docx, .pdf, .md or .txt · a .docx also seeds your resume master</div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 8, marginTop: 12 }}>
-          <button className="btn" onClick={() => startHandoff('cv', 'cv-paste')}>Paste CV text</button>
+          <button className="btn" onClick={() => startHandoff('cv', 'cv-paste')}>Paste resume text</button>
           <button className="btn" onClick={() => startHandoff('cv', 'cv-linkedin')}>LinkedIn URL</button>
           <button className="btn" onClick={() => startHandoff('cv', 'cv-talk')}>Talk it through</button>
         </div>
         {pendingGen.cv && (
           <div style={{ marginTop: 14, border: '1px solid var(--accent)', borderRadius: 'var(--r-card)', padding: 14, background: 'var(--accent-bg)' }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>One step in Claude Code sets up your whole profile</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.55 }}>The prompt below was copied to your clipboard. Paste it into Claude Code (the same chat you used to start the dashboard) and run it. It reads your CV and drafts your identity, target roles, and your edge, so the steps below fill in for you to review, then you can go straight to the first evaluation. This checks itself off the moment it finishes; you don't have to come back here.</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.55 }}>The prompt below was copied to your clipboard. Paste it into Claude Code (the same chat you used to start the dashboard) and run it. It reads your resume and drafts your identity, target roles, and your edge, so the steps below fill in for you to review, then you can go straight to the first evaluation. This checks itself off the moment it finishes; you don't have to come back here.</div>
             <textarea readOnly value={pendingGen.cv} rows={4} className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
             {lpHandoffCheck("cv")}
           </div>
@@ -956,6 +981,29 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             </div>
           </div>
         )}
+      </div>
+    );
+  }
+
+  // ── "What do I do now?" ─────────────────────────────────────────────────────
+  // Finishing a step used to leave the user on a completed panel with no
+  // indication that anything followed it. The specific report was about the step
+  // after the preflight check: the next move was not obvious at all, and nothing
+  // on screen named it. Every finished step now hands off to the next one by
+  // name, so the rail's ordering is stated rather than left to be inferred.
+  function lpNextStepFooter(currentId) {
+    if (!nextStepId || nextStepId === currentId) return null;
+    const next = LP_SECTIONS.find(s => s.id === nextStepId);
+    if (!next) return null;
+    const done = sectionStatus(currentId) === 'complete';
+    return (
+      <div style={{ marginTop: 16, paddingTop: 13, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>
+          {done ? 'Done here. Next up:' : 'When you are finished here, go to:'}
+        </span>
+        <button className={done ? 'btn primary' : 'btn'} onClick={() => setActive(next.id)}>
+          {next.label} →
+        </button>
       </div>
     );
   }
@@ -1130,7 +1178,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           </div>
         </div>
         <div>
-          <div style={{ ...LP_SUB, color: 'var(--green)' }}>Suggested from your CV. Tap to include</div>
+          <div style={{ ...LP_SUB, color: 'var(--green)' }}>Suggested from your resume. Tap to include</div>
           {suggestions.length ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {suggestions.map((s, i) => {
@@ -1290,7 +1338,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                 <span key={i} style={lpChipStyle()}>{it.name}{it.org ? ` · ${it.org}` : ''}<span onClick={() => removeCert(i)} style={{ cursor: 'pointer', marginLeft: 6 }}>×</span></span>
               )) : <span style={{ fontSize: 12, color: 'var(--text-mute)' }}>No certifications added.</span>}
             </div>
-            <div style={{ ...LP_SUB, color: 'var(--green)' }}>Detected from your CV. Tap to keep</div>
+            <div style={{ ...LP_SUB, color: 'var(--green)' }}>Detected from your resume. Tap to keep</div>
             {detected.length ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {detected.map((d, i) => {
@@ -1303,8 +1351,8 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                   );
                 })}
               </div>
-            ) : <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>Run detect. Claude Code will list certs from your CV here.</div>}
-            <div><button className="btn" disabled={gated('identity')} onClick={() => startHandoff('identity', 'identity-certs')}>Detect certifications from CV ⧉</button></div>
+            ) : <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>Run detect. Claude Code will list certifications from your resume here.</div>}
+            <div><button className="btn" disabled={gated('identity')} onClick={() => startHandoff('identity', 'identity-certs')}>Detect certifications from resume ⧉</button></div>
             {handoffBox('identity')}
           </div>
         </div>
@@ -1448,7 +1496,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           ? <span className="pill" style={{ background: 'var(--accent-bg)', color: 'var(--green)' }}>✓ ready</span>
           : canStart
             ? <span className="pill mono" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>{readiness.done}/{readiness.total} sharpened</span>
-            : <span className="pill mono" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>start with your CV</span>}
+            : <span className="pill mono" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>start with your resume</span>}
       </div>
 
       {/* The activation banner. This is the single highest-value thing on the
@@ -1458,7 +1506,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12, padding: '11px 13px', borderRadius: 'var(--r-card)', background: 'rgba(34,197,94,0.09)', border: '1px solid rgba(34,197,94,0.3)' }}>
           <span style={{ fontSize: 15 }}>✓</span>
           <span style={{ flex: 1, minWidth: 220, fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55 }}>
-            <b style={{ color: 'var(--text)' }}>You are ready to use trajecktory.</b> Your CV is in, so you can start evaluating real jobs right now. The steps below are refinements, not requirements. Most people get more out of them after seeing a few scores, so feel free to come back later.
+            <b style={{ color: 'var(--text)' }}>You are ready to use trajecktory.</b> Your resume is in, so you can start evaluating real jobs right now. The steps below are refinements, not requirements. Most people get more out of them after seeing a few scores, so feel free to come back later.
           </span>
           {setTab && <button className="btn primary" onClick={() => setTab('pipeline')}>Start using it →</button>}
         </div>
@@ -1484,16 +1532,19 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           {LP_SECTIONS.map(s => {
             const isActive = s.id === active;
             const isGated = gated(s.id);
+            const isNext = s.id === nextStepId && !isActive;
             return (
               <button key={s.id} onClick={() => setActive(s.id)} disabled={isGated}
                 style={{ textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
                   borderRadius: 'var(--r-ctl)', cursor: isGated ? 'not-allowed' : 'pointer', opacity: isGated ? 0.5 : 1,
-                  border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
-                  background: isActive ? 'var(--accent-bg)' : 'var(--panel)' }}>
+                  border: `1px solid ${isActive ? 'var(--accent)' : isNext ? 'var(--green)' : 'var(--border)'}`,
+                  background: isActive ? 'var(--accent-bg)' : isNext ? 'rgba(34,197,94,0.07)' : 'var(--panel)' }}>
                 <span style={{ width: 26, height: 26, flexShrink: 0, borderRadius: 'var(--r-ctl)', background: isActive ? 'rgba(var(--accent-rgb),0.18)' : 'var(--panel-2)', color: isActive ? 'var(--accent)' : 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><LpIcon name={s.icon} size={15} /></span>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: isActive ? 'var(--accent)' : 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
-                  <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-mute)' }}>{s.req === 'gate' ? 'Required first' : s.req === 'payoff' ? 'The payoff' : s.req === 'verify' ? 'Verify' : s.req}</span>
+                  <span style={{ display: 'block', fontSize: 10.5, color: isNext ? 'var(--green)' : 'var(--text-mute)' }}>
+                    {isNext ? 'Do this next' : s.req === 'gate' ? 'Required first' : s.req === 'payoff' ? 'The payoff' : s.req === 'verify' ? 'Verify' : s.req}
+                  </span>
                 </span>
                 <LpDot status={sectionStatus(s.id)} />
               </button>
@@ -1601,6 +1652,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                     : sec.id === 'companies' ? renderCompanies()
                       : renderHandoff(sec)
               )}
+              {lpNextStepFooter(sec.id)}
             </div>
           )}
           </LpErrorBoundary>
@@ -1869,7 +1921,7 @@ function AboutPanel() {
       </div>
       <div className="card padded-lg col" style={{ gap: 12 }}>
         <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-          <b>trajecktory</b> turns a messy job hunt into a tracked, scored, AI-assisted pipeline. It reads your CV
+          <b>trajecktory</b> turns a messy job hunt into a tracked, scored, AI-assisted pipeline. It reads your resume
           and goals once, then helps you evaluate roles, tailor materials, time your follow-ups, and see what's
           actually working, without ever sending anything on your behalf.
         </div>

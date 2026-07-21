@@ -998,7 +998,7 @@ function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays
 // ─── Pipeline Drawer (760px) — inline evaluation report ──────────────────
 const DRAWER_TABS = [
   { id: 'overview',  label: 'Overview',   icon: PI.pulse },
-  { id: 'cv',        label: 'CV Match',   icon: PI.briefcase },
+  { id: 'cv',        label: 'Resume Match',   icon: PI.briefcase },
   { id: 'comp',      label: 'Comp',       icon: PI.trend },
   { id: 'interview', label: 'Interview',  icon: PI.msg },
   { id: 'customize', label: 'Customize',  icon: PI.flag },
@@ -1206,7 +1206,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   let primary = [];
   if (st === 'Evaluated') {
     primary = [
-      { id: 'apply_manual', label: 'Tailor CV', cls: 'primary' },
+      { id: 'apply_manual', label: 'Tailor resume', cls: 'primary' },
       { id: 'apply_claude', label: 'Claude Apply', cls: 'claude', spark: true },
       { id: 'already_applied', label: 'Already Applied', check: true },
     ];
@@ -1465,7 +1465,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               {cvMatch.length > 0 && (
                 <div className="rp-section">
                   <div className="rp-section-head">
-                    <span>JD Requirements → CV Evidence</span>
+                    <span>JD Requirements → Resume Evidence</span>
                     <span className="meta">
                       <span style={{ color: 'var(--green)' }}>● {cvMatch.filter(m => m.strength === 'strong').length}</span>
                       {' · '}<span style={{ color: 'var(--yellow)' }}>{cvMatch.filter(m => m.strength === 'moderate').length}</span>
@@ -1536,8 +1536,8 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
 
               {!cvMatch.length && !gaps.length && !levelMatch && !sellSenior.length && (
                 <div className="rp-callout">
-                  <div className="rp-callout-label">No structured CV match data</div>
-                  <div className="rp-callout-body">This report doesn't expose CV match dimensions. Detailed CV breakdown requires structured report data.</div>
+                  <div className="rp-callout-label">No structured resume match data</div>
+                  <div className="rp-callout-body">This report doesn't expose resume match dimensions. A detailed breakdown requires structured report data.</div>
                 </div>
               )}
             </div>
@@ -1661,7 +1661,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               ) : (
                 <div className="rp-callout">
                   <div className="rp-callout-label">No personalization plan</div>
-                  <div className="rp-callout-body">This report doesn't include CV / LinkedIn customization steps.</div>
+                  <div className="rp-callout-body">This report doesn't include resume or LinkedIn tailoring steps.</div>
                 </div>
               )}
             </div>
@@ -1702,7 +1702,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                   )}
                   {app.resume && (
                     <div className="info-row" style={{ gridTemplateColumns: '116px 1fr' }}>
-                      <span className="ik">Generated CV</span>
+                      <span className="ik">Generated resume</span>
                       <span className="iv mono" style={{ fontSize: 11, color: 'var(--text-dim)' }}>{app.resume}</span>
                     </div>
                   )}
@@ -1861,7 +1861,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
         {applyJob && applyJob.status === 'running' && (
           <div className="dr-foot" style={{ borderTop: '1px solid var(--border)' }}>
             <span className="mono dim" style={{ fontSize: 11 }}>
-              ⟳ {applyJob.mode === 'claude' ? 'Generating CV + form responses…'
+              ⟳ {applyJob.mode === 'claude' ? 'Generating resume + form responses…'
                 : applyJob.mode === 'byo'    ? 'Logging application…'
                 : applyJob.mode === 'cover'  ? 'Drafting cover letter…'
                 :                              'Generating tailored CV…'} {elapsed > 0 && `(${elapsed}s)`}
@@ -1891,7 +1891,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                   : isByo ? `✓ Logged as applied to ${app.company} (no assets generated)`
                   : `✓ Applied to ${app.company}`}
               </span>
-              {(r.docx || r.pdf) && <a className="btn sm" href={hrefFor(r.docx || r.pdf)} target="_blank" rel="noreferrer">{r.docx ? 'CV DOCX ↗' : 'CV PDF ↗'}</a>}
+              {(r.docx || r.pdf) && <a className="btn sm" href={hrefFor(r.docx || r.pdf)} target="_blank" rel="noreferrer">{r.docx ? 'Resume DOCX ↗' : 'Resume PDF ↗'}</a>}
               {r.cover && <a className="btn sm" href={hrefFor(r.cover)} target="_blank" rel="noreferrer">Cover Letter ↗</a>}
               {r.apply && <a className="btn sm accent" href={hrefFor(r.apply)} target="_blank" rel="noreferrer">Form Responses ↗</a>}
               {app.url && <a className="btn sm" href={app.url} target="_blank" rel="noreferrer">JD ↗</a>}

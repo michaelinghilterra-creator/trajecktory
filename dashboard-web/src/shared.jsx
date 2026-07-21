@@ -121,10 +121,10 @@ window.ScoreExplainer = function ScoreExplainer({ open, onClose }) {
       </div>
 
       <p style={{ margin: '0 0 10px', color: 'var(--text-dim)' }}>
-        It is a judgment, not a sum. trajecktory reads the whole job posting next to your CV and the priorities you saved, then rates the role out of 5. It weighs five things:
+        It is a judgment, not a sum. trajecktory reads the whole job posting next to your resume and the priorities you saved, then rates the role out of 5. It weighs five things:
       </p>
 
-      <Dim name="CV match.">How closely your real experience lines up with what they are asking for.</Dim>
+      <Dim name="Resume match.">How closely your real experience lines up with what they are asking for.</Dim>
       <Dim name="Target fit.">Whether this is the kind of role you said you want, at the right level.</Dim>
       <Dim name="Pay.">How the money compares to the market for this job.</Dim>
       <Dim name="Company signals.">Culture, stability, growth, and how they treat remote work.</Dim>
@@ -909,7 +909,7 @@ window.Drawer = function Drawer({ app, onClose, onAction }) {
                 return null;
               })()}
               <button className="btn">Open Report ↗</button>
-              <button className="btn">Generate CV ⌘G</button>
+              <button className="btn">Generate resume ⌘G</button>
             </div>
           </>
         )}
