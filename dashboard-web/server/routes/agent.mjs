@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import { ROOT_DIR } from '../config.mjs';
 import { logAgentRun } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
+import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
 
 export const router = express.Router();
 
@@ -186,6 +187,21 @@ function runClaudeAgent(jobId, mode, target) {
   return new Promise((resolve) => {
     const projectRoot = ROOT_DIR;
     const isWin = process.platform === 'win32';
+    // PREFLIGHT: an untrusted workspace makes `claude -p` drop this project's
+    // permissions.allow list. --permission-mode acceptEdits below re-grants Write
+    // and Edit but NOT WebSearch/WebFetch, which every scan/triage/eval prompt
+    // depends on to read a posting. The CLI degrades silently — it warns once on
+    // stderr and then runs to "completion" with nothing to read — so refuse the
+    // run up front rather than bill the user for a job that cannot succeed.
+    // See server/lib/workspace-trust.mjs; fails OPEN on anything undiagnosable.
+    const trust = checkWorkspaceTrust(projectRoot);
+    if (!trust.ok) {
+      const job = agentJobs.get(jobId) || {};
+      agentJobs.set(jobId, { ...job, status: 'error', error: trust.message, needsTrust: true, trustKey: trust.trustKey, finishedAt: Date.now() });
+      schedulePersist();
+      resolve({ ok: false, error: trust.message, needsTrust: true });
+      return;
+    }
     // `claude` is a .cmd shim on Windows; Node 20+/24 refuse to spawn a .cmd
     // without a shell, and passing a full .cmd path under a shell mangles the
     // backslashes. The reliable path is the bare name resolved by the shell.

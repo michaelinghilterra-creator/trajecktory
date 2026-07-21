@@ -157,6 +157,8 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [jobs, setJobs] = useState({});            // { stepId: { status, summary, error, output } }
   const [claudeSignedIn, setClaudeSignedIn] = useState(false);
   const [claudeLoginMsg, setClaudeLoginMsg] = useState('');
+  const [trust, setTrust] = useState({ ok: true, message: '', losing: [] });
+  const [trustBusy, setTrustBusy] = useState(false);
   const [triageCards, setTriageCards] = useState([]);   // [{ url, company, title, score, rationale, date }]
   const [deepJobs, setDeepJobs] = useState({});         // { url: { status, error } }
   // URLs the user dismissed (× control) or that auto-cleared after a completed
@@ -183,7 +185,14 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // that use it (it used to be buried in the Setup First-Evaluation step).
   useEffect(() => {
     const check = () => fetch('/api/claude-status').then(r => r.json())
-      .then(d => setClaudeSignedIn(!!d.signedIn)).catch(() => {});
+      .then(d => {
+        setClaudeSignedIn(!!d.signedIn);
+        // Signed in is not the same as able to work: an untrusted workspace makes
+        // Claude Code drop this project's permissions.allow list, and the agent
+        // loses WebFetch/WebSearch — the only way it can read a posting. Surface
+        // it here so the user sees it before paying for a run that cannot score.
+        setTrust({ ok: d.workspaceTrusted !== false, message: d.trustMessage || '', losing: d.trustLosing || [] });
+      }).catch(() => {});
     check();
     // After the user signs in via the popped console and tabs back, re-check so
     // the button flips to "✓ Signed in to Claude" without a manual reload.
@@ -205,6 +214,16 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     window.addEventListener('trj:models-changed', check);
     return () => { window.removeEventListener('focus', check); window.removeEventListener('trj:models-changed', check); };
   }, []);
+
+  // One-click repair for the trust warning above. Never fires on its own.
+  function fixWorkspaceTrust() {
+    setTrustBusy(true);
+    window.tjkMutate('/api/setup/trust-workspace', { method: 'POST' }).then(r => r.json()).then(res => {
+      if (res.ok) setTrust({ ok: true, message: '', losing: [] });
+      else setTrust(t => ({ ...t, fixMsg: res.error || 'Could not update the Claude Code config. Fix it by hand and reload.' }));
+    }).catch(() => setTrust(t => ({ ...t, fixMsg: 'Could not reach the server.' })))
+      .finally(() => setTrustBusy(false));
+  }
 
   function signInClaude() {
     setClaudeLoginMsg('Opening a sign-in window…');
@@ -483,6 +502,29 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         )}
         {claudeLoginMsg && <div style={{ marginTop: 6, color: 'var(--text-mute)', lineHeight: 1.4 }}>{claudeLoginMsg}</div>}
       </div>
+
+      {/* Workspace trust — Claude Code silently ignores this project's
+          permissions.allow list until the folder is trusted, which costs the
+          agent WebFetch and WebSearch and makes Scan/Triage burn money reading
+          nothing. Agent runs are blocked while this shows, so it is a hard stop
+          rather than advice. The fix flips a security flag, so it stays behind an
+          explicit click. */}
+      {!trust.ok && (
+        <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 11.5, background: 'var(--warn-bg, rgba(255,176,32,0.08))' }}>
+          <div style={{ color: 'var(--warn, #ffb020)', fontWeight: 600 }}>⚠ Folder not trusted by Claude Code</div>
+          <div style={{ marginTop: 4, color: 'var(--text-mute)', lineHeight: 1.45 }}>
+            {trust.losing?.length
+              ? `The agent cannot use ${trust.losing.join(' or ')}, so Scan and Triage cannot read job postings. Runs are blocked until this is fixed.`
+              : 'This project’s permission settings are being ignored. Runs are blocked until this is fixed.'}
+          </div>
+          <button onClick={fixWorkspaceTrust} disabled={trustBusy}
+            title="Marks this folder as trusted in your Claude Code config (a backup is saved first)"
+            style={{ marginTop: 6, background: 'none', border: '1px solid var(--warn, #ffb020)', color: 'var(--warn, #ffb020)', borderRadius: 6, padding: '3px 8px', fontSize: 11.5, cursor: trustBusy ? 'default' : 'pointer', width: '100%', opacity: trustBusy ? 0.6 : 1 }}>
+            {trustBusy ? 'Trusting…' : 'Trust this folder'}
+          </button>
+          {trust.fixMsg && <div style={{ marginTop: 6, color: 'var(--text-mute)', lineHeight: 1.4 }}>{trust.fixMsg}</div>}
+        </div>
+      )}
 
       {/* Which engine the workflow runs on. The evaluate model (incl. Opus deep
           mode) and billing are configured in Setup → Models & cost. */}

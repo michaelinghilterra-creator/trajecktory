@@ -4,6 +4,7 @@ import path from 'path';
 import { exec, spawn } from 'child_process';
 import { SETUP_ROOT, SETUP_FILES, setupSetScalar, SETUP_SCALAR_FIELDS, setupComputeState, SETUP_GUARDRAIL, SETUP_CV_FULL, setupHandoffPrompt } from '../lib/setup.mjs';
 import { modelsState, validateSetting } from '../lib/pricing.mjs';
+import { checkWorkspaceTrust, trustWorkspace } from '../lib/workspace-trust.mjs';
 
 export const router = express.Router();
 
@@ -63,7 +64,36 @@ router.get('/api/claude-status', (req, res) => {
     path.join(home, '.claude', 'credentials.json'),
   ];
   const signedIn = candidates.some(p => { try { return fs.existsSync(p); } catch { return false; } });
-  res.json({ signedIn });
+  // Being signed in is necessary but not sufficient: an untrusted workspace lets
+  // the CLI start and then silently strips WebSearch/WebFetch from the agent, so
+  // report it alongside sign-in and let the sidebar warn BEFORE a run is paid for.
+  const trust = checkWorkspaceTrust();
+  res.json({
+    signedIn,
+    workspaceTrusted: trust.ok,
+    trustReason: trust.reason,
+    trustKey: trust.trustKey,
+    trustMessage: trust.message,
+    trustLosing: trust.losing,
+  });
+});
+
+// POST /api/setup/trust-workspace — mark this install's folder trusted so Claude
+// Code stops discarding its permissions.allow list. Deliberately a user-initiated
+// button and never an automatic repair: this flips a security flag, and the trust
+// dialog exists precisely so a program cannot answer it for you. Backs up
+// .claude.json next to itself before writing.
+router.post('/api/setup/trust-workspace', (req, res) => {
+  try {
+    const before = checkWorkspaceTrust();
+    if (before.ok) return res.json({ ok: true, alreadyTrusted: true, trustKey: before.trustKey });
+    const { trustKey, backup } = trustWorkspace();
+    const after = checkWorkspaceTrust();
+    if (!after.ok) return res.status(500).json({ ok: false, error: 'Trust flag written but still reads untrusted.', trustKey });
+    res.json({ ok: true, trustKey, backup });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // ── Optional .env-backed keys (drafts + web discovery) ────────────────────────
