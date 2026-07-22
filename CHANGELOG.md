@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.23.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.22.0...v1.23.0) (2026-07-22)
+
+
+### Features
+
+* **doctor:** report evaluations that have no tracker row ([#81](https://github.com/michaelinghilterra-creator/trajecktory/issues/81)) ([a822db0](https://github.com/michaelinghilterra-creator/trajecktory/commit/a822db0220956d72a27e07162fc492b3d69c525f))
+* **tracker:** backfill evaluated URLs into the tracker ([#78](https://github.com/michaelinghilterra-creator/trajecktory/issues/78)) ([244715a](https://github.com/michaelinghilterra-creator/trajecktory/commit/244715a674c05f52d2d1823912fcbb8359a1177b))
+
+
+### Bug Fixes
+
+* **merge:** stop dropping distinct postings that share a job title ([#80](https://github.com/michaelinghilterra-creator/trajecktory/issues/80)) ([08520b0](https://github.com/michaelinghilterra-creator/trajecktory/commit/08520b0f90aff78541ebb45b5716ea9030802335))
+
 ## [1.22.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.21.0...v1.22.0) (2026-07-22)
 
 
