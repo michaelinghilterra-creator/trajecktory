@@ -1560,7 +1560,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         <div>
           <div style={LP_SUB}>Your titles</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input id="lp-role-input" className="inp" placeholder="e.g. Director of Revenue Operations" style={{ flex: 1 }} onKeyDown={e => { if (e.key === 'Enter') addTitle(); }} />
+            <input id="lp-role-input" className="inp" placeholder="e.g. Director of Customer Support" style={{ flex: 1 }} onKeyDown={e => { if (e.key === 'Enter') addTitle(); }} />
             <button className="btn" onClick={addTitle}>Add title</button>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
