@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.20.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.19.0...v1.20.0) (2026-07-22)
+
+
+### Features
+
+* **dashboard:** keep the job posting, surface unprepped interviews, and finish the setup forms ([#69](https://github.com/michaelinghilterra-creator/trajecktory/issues/69)) ([065c65a](https://github.com/michaelinghilterra-creator/trajecktory/commit/065c65a2eb29bc7bb68ce2f289ee0566b01e7b7d))
+
 ## [1.19.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.18.0...v1.19.0) (2026-07-21)
 
 
