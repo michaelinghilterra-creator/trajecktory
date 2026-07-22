@@ -553,6 +553,47 @@ This applies to the agent-driven merge path too (the Launchpad "companies" step
 in `dashboard-web/server/lib/setup.mjs`), not just `discover.mjs`. Guarded by
 `tests/portals.test.mjs`.
 
+### Posting identity is the canonical URL (RULE)
+
+Company + role **cannot** distinguish two requisitions. A single employer can post
+three openings with byte-identical titles, different URLs, and different comp, and
+they are three different jobs. This is a routine shape at scaling startups, and it
+has silently eaten evaluations twice: a title-guessing deduper deleted rows, and a
+merge path skipped an addition, wrote no row, then filed its TSV under `merged/`
+exactly as though it had landed. Both were invisible, because a tracker with a
+missing row is still a perfectly valid tracker.
+
+`lib/identity.mjs` is the **only** place that decides whether two things are the
+same posting. Do not write a second one.
+
+| Question | Use | Never |
+|---|---|---|
+| Same posting? | `canonicalUrl(a) === canonicalUrl(b)` | comparing raw URL strings |
+| Same employer? | `normalizeCompany` | `toLowerCase()` and hoping |
+| Same role, no URL available? | `sameRole` | any home-grown title matcher |
+| Already evaluated? | `buildDecidedIndex` / `findDecided` | grepping `applications.md` |
+
+Three rules follow from it, and each one is load-bearing:
+
+1. **A differing canonical URL VETOES a role match.** If both sides resolve to a
+   trustworthy URL and those URLs differ, they are different postings, whatever
+   the titles say.
+2. **`sameRole` is a fallback, not evidence.** It applies only when a URL cannot
+   be resolved at all, and it may **never** justify *deleting* a row.
+3. **An ambiguous canonical is treated as unresolvable.** One URL mapping to
+   several employers with no posting-specific id is not identity, so it neither
+   merges nor vetoes. Guards fail toward doing nothing: a missed suppression
+   costs a check, a wrong one hides a live job.
+
+Anything suppressed or dropped must stay **auditable** — a collapsed count in the
+UI, a line in `data/merge-drops.tsv`, a file under `tracker-additions/dropped/`.
+A suppression the user cannot inspect is the same failure being fixed here.
+
+Guarded by `tests/identity.test.mjs` and the row-count assertions in
+`tests/merge-tracker.test.mjs`. Those assert on **counts**, deliberately: the
+failure mode is a MISSING row, and content assertions do not notice one.
+`node audit-orphan-reports.mjs` reports evaluations that have no row.
+
 ### Never hand-roll a tracker row (RULE)
 
 `data/applications.md` looks like a table you can slice with `split('|')`. Twice now
