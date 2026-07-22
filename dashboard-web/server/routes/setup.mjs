@@ -6,6 +6,7 @@ import { SETUP_ROOT, SETUP_FILES, setupSetScalar, SETUP_SCALAR_FIELDS, setupComp
 import { modelsState, validateSetting } from '../lib/pricing.mjs';
 import { checkWorkspaceTrust, trustWorkspace } from '../lib/workspace-trust.mjs';
 import { APPLICATIONS_TEMPLATE_CSV, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
+import { record as recordActivation, readActivation, summarizeActivation, setActivationEnabled } from '../lib/activation.mjs';
 
 export const router = express.Router();
 
@@ -207,6 +208,36 @@ router.post('/api/setup/healthcheck', (req, res) => {
 });
 
 // POST /api/setup/handoff/:section — return the prompt to paste into Claude Code.
+// ── Activation log ───────────────────────────────────────────────────────────
+// Opt-in, local, shape-only. See lib/activation.mjs for why the fields are a
+// closed set rather than free text.
+router.get('/api/setup/activation', (req, res) => {
+  try { res.json(summarizeActivation()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/api/setup/activation', (req, res) => {
+  const on = !!(req.body && req.body.enabled);
+  res.json(setActivationEnabled(on));
+});
+
+router.post('/api/setup/activation/event', (req, res) => {
+  const { event, step, ms, count, detail } = req.body || {};
+  res.json({ recorded: recordActivation(event, { step, ms, count, detail }) });
+});
+
+// The raw rows, as a download. The point is that the user can read exactly what
+// they would be sending before they send it: a log you cannot inspect is a log
+// nobody should be asked to share.
+router.get('/api/setup/activation/export', (req, res) => {
+  const { rows } = readActivation();
+  const body = 'ts\tevent\tstep\tms\tcount\tdetail\n'
+    + rows.map(r => [r.ts, r.event, r.step, r.ms ?? '', r.count ?? '', r.detail].join('\t')).join('\n');
+  res.setHeader('Content-Type', 'text/tab-separated-values; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="activation-log.tsv"');
+  res.send(body);
+});
+
 // ── GET /api/setup/template/:kind — blank CSVs to fill in ───────────────────
 // The Import step used to be a stub that copied a generic prompt, and the
 // reported reaction to it was that the flow could not be trusted enough to use.

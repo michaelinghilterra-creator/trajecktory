@@ -429,6 +429,7 @@ for (const suite of [
   'tests/onboarding-copy.test.mjs',
   'tests/verify-no-pii.test.mjs',
   'tests/interview-sessions.test.mjs',
+  'tests/activation.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);
