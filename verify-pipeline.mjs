@@ -18,6 +18,7 @@ import { readFileSync, readdirSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTracker } from './lib/tracker.mjs';
+import { canonicalUrl, urlForRow } from './lib/identity.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md (original)
@@ -114,13 +115,33 @@ for (const e of entries) {
   if (!companyRoleMap.has(key)) companyRoleMap.set(key, []);
   companyRoleMap.get(key).push(e);
 }
+// A shared company+role is NOT a duplicate. One employer routinely posts several
+// requisitions with byte-identical titles, and they are different jobs with
+// different URLs and different comp — that is the whole reason posting identity
+// is the canonical URL (see the RULE in AGENTS.md). Warning on title alone made
+// this check fire on ten groups that were all correct, and a check that is wrong
+// ten times out of ten trains you to ignore it.
+//
+// So the title only selects CANDIDATES. The URL decides. Rows that each carry
+// their own distinct posting URL are distinct postings and stay silent; rows
+// sharing one URL, or rows whose URL cannot be resolved at all, still warn,
+// because then the title really is all there is to go on.
 for (const [key, group] of companyRoleMap) {
-  if (group.length > 1) {
-    warn(`Possible duplicates: ${group.map(e => `#${e.num}`).join(', ')} (${group[0].company} — ${group[0].role})`);
-    dupes++;
-  }
+  if (group.length < 2) continue;
+  const keys = group.map(e => {
+    const u = urlForRow(e, CAREER_OPS);
+    return u ? canonicalUrl(u) : null;
+  });
+  const resolved = keys.filter(Boolean);
+  const allDistinct = resolved.length === group.length && new Set(resolved).size === group.length;
+  if (allDistinct) continue;  // separate requisitions, correctly kept apart
+  const why = resolved.length < group.length
+    ? 'no resolvable URL on at least one row'
+    : 'these share a posting URL';
+  warn(`Possible duplicates: ${group.map(e => `#${e.num}`).join(', ')} (${group[0].company} — ${group[0].role}) — ${why}`);
+  dupes++;
 }
-if (dupes === 0) ok('No exact duplicates found');
+if (dupes === 0) ok('No duplicate postings found');
 
 // --- Check 3: Report links ---
 let brokenReports = 0;

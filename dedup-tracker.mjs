@@ -21,7 +21,13 @@
  * no git history behind it). No title heuristic is a safe basis for that, however
  * strict — three requisitions at one employer can carry byte-identical titles and
  * be three genuinely different openings. Only the URL settles it, so only the URL
- * clusters here. `sameRole` from lib/identity.mjs is deliberately NOT used.
+ * clusters here.
+ *
+ * `sameRole` is used in exactly one direction: a role MISMATCH inside a URL
+ * cluster BLOCKS the deletion. A shared URL with clearly different roles means a
+ * report recorded the wrong link, not that one job was evaluated twice, and
+ * deleting either would destroy a real evaluation to tidy up a typo. It is never
+ * used to justify a deletion, only to refuse one.
  *
  * The flags were also inverted: destruction used to be the default and --dry-run
  * was the opt-out. Now writing requires --apply.
@@ -31,7 +37,7 @@ import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
-import { canonicalUrl, urlForRow } from './lib/identity.mjs';
+import { canonicalUrl, normalizeCompany, sameRole, urlForRow } from './lib/identity.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md (original)
@@ -78,13 +84,12 @@ const STATUS_RANK = {
   'oferta': 10,
 };
 
-function normalizeCompany(name) {
-  return name.toLowerCase()
-    .replace(/[()]/g, '')
-    .replace(/\s+/g, ' ')
-    .replace(/[^a-z0-9 ]/g, '')
-    .trim();
-}
+// normalizeCompany comes from lib/identity.mjs. The private copy that used to
+// live here kept spaces where the shared one strips them, so an employer written
+// with and without a space in its name ("Example Co" vs "ExampleCo") was one
+// company everywhere in the system EXCEPT in the one script that deletes rows.
+// It also threw on a null company cell, where the shared one returns ''. Neither
+// difference was deliberate; that is what a second definition does over time.
 
 function parseScore(s) {
   const m = s.replace(/\*\*/g, '').match(/([\d.]+)/);
@@ -136,9 +141,28 @@ if (unresolved) console.log(`   ${unresolved} rows have no resolvable URL — ne
 let removed = 0;
 const linesToRemove = new Set();
 
+let conflicted = 0;
 for (const [, cluster] of groups) {
   {
     if (cluster.length < 2) continue;
+
+    // A shared URL normally means one posting evaluated twice. When the ROLES in
+    // a cluster clearly disagree, that reading is wrong: one of the reports
+    // recorded the wrong link, so these are two real evaluations wearing one URL.
+    // Deleting either would destroy a distinct evaluation to tidy up a typo.
+    //
+    // Note the direction. The doctrine forbids a role match from JUSTIFYING a
+    // deletion; this is the opposite, a role MISMATCH vetoing one. Blocking is
+    // always the safe direction: the cost of a wrong block is a duplicate row
+    // that stays visible, and the cost of a wrong delete is an evaluation gone.
+    const rolesAgree = cluster.every((e) => sameRole(e.role, cluster[0].role));
+    if (!rolesAgree) {
+      conflicted++;
+      console.log(`⚠️  Conflict: ${cluster.map((e) => `#${e.num} "${e.role}"`).join(' vs ')}`);
+      console.log(`     same URL, different roles — one of these reports has the wrong link.`);
+      console.log(`     Neither is touched. Fix the wrong report's URL, then re-run.`);
+      continue;
+    }
 
     // Keep the one with highest score
     cluster.sort((a, b) => parseScore(b.score) - parseScore(a.score));
@@ -185,9 +209,18 @@ for (const idx of sortedRemoveIndices) {
 }
 
 console.log(`\n📊 ${removed} duplicate${removed === 1 ? '' : 's'} ${APPLY ? 'removed' : 'found'}`);
+if (conflicted) {
+  console.log(`⚠️  ${conflicted} cluster${conflicted === 1 ? '' : 's'} left alone: same URL, conflicting roles.`);
+  console.log(`   Those are two real evaluations sharing one link, not duplicates.`);
+}
 
-if (removed === 0) {
+if (removed === 0 && conflicted === 0) {
   console.log('✅ No duplicates found');
+} else if (removed === 0) {
+  // Deliberately NOT the green all-clear. Nothing needed consolidating, but a
+  // conflicting cluster is an open question about the user's data, and printing
+  // a tick under it would bury the only line worth acting on.
+  console.log('Nothing to consolidate. Review the conflict above.');
 } else if (!APPLY) {
   console.log('\nReport only — nothing was written. Re-run with --apply to consolidate.');
 } else {
