@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.24.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.24.0...v1.24.1) (2026-07-22)
+
+
+### Bug Fixes
+
+* **onboarding:** bring the three guides up to the current app ([#89](https://github.com/michaelinghilterra-creator/trajecktory/issues/89)) ([81a28ee](https://github.com/michaelinghilterra-creator/trajecktory/commit/81a28ee4d4aaa4ba907ecef6f1ac079070ae7dc3))
+
 ## [1.24.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.23.1...v1.24.0) (2026-07-22)
 
 
