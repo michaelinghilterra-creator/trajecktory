@@ -11,7 +11,7 @@
 
 #define AppName "trajecktory"
 ; x-release-please-start-version
-#define AppVersion "1.23.1"
+#define AppVersion "1.24.0"
 ; x-release-please-end
 #define AppPublisher "trajecktory"
 

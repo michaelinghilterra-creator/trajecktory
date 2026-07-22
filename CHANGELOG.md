@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.24.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.23.1...v1.24.0) (2026-07-22)
+
+
+### Features
+
+* **release:** check release notes against the house format ([#87](https://github.com/michaelinghilterra-creator/trajecktory/issues/87)) ([163c496](https://github.com/michaelinghilterra-creator/trajecktory/commit/163c496484fae0e8d36e901f487d64f55a30ba4f))
+
 ## [1.23.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.23.0...v1.23.1) (2026-07-22)
 
 
