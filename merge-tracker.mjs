@@ -16,14 +16,19 @@
  * Run: node career-ops/merge-tracker.mjs [--dry-run] [--verify]
  */
 
-import { readFileSync, writeFileSync, readdirSync, mkdirSync, renameSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, readdirSync, mkdirSync, renameSync, existsSync } from 'fs';
 import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
 import yaml from 'js-yaml';
 import { parseScore, shouldAutoDiscard, recommendsAgainst } from './lib/discard.mjs';
 import { parseTrackerLine, formatTrackerLine, TRACKER_HEADER, TRACKER_SEPARATOR } from './lib/tracker.mjs';
-import { normalizeUrl } from './lib/scan-core.mjs';
+// Posting identity comes from ONE module. This file used to carry its own
+// normalizeCompany, roleSignature, setsEqual and roleFuzzyMatch, which is how
+// "is this the same job?" ended up answered differently here than everywhere
+// else. It also imported normalizeUrl from scan-core, a re-export of
+// canonicalUrl, so the same function went by two names inside one file.
+import { canonicalUrl, normalizeCompany, sameRole, urlFromReport, urlForRow, buildDecidedIndex } from './lib/identity.mjs';
 // next-jd.mjs (persistent JD counter) can be one update cycle behind on installs
 // updating from a pre-counter version. Load it defensively so a missing file
 // degrades to max+1 numbering instead of crashing merge-tracker at module load.
@@ -40,6 +45,8 @@ const ROOT_APPS = join(CAREER_OPS, 'applications.md');
 const APPS_FILE = existsSync(DATA_APPS) ? DATA_APPS : (existsSync(ROOT_APPS) ? ROOT_APPS : DATA_APPS);
 const ADDITIONS_DIR = join(CAREER_OPS, 'batch/tracker-additions');
 const MERGED_DIR = join(ADDITIONS_DIR, 'merged');
+const DROPPED_DIR = join(ADDITIONS_DIR, 'dropped');
+const DROPS_LOG = join(CAREER_OPS, 'data/merge-drops.tsv');
 const PIPELINE_FILE = join(CAREER_OPS, 'data/pipeline.md');
 const DRY_RUN = process.argv.includes('--dry-run');
 const VERIFY = process.argv.includes('--verify');
@@ -113,112 +120,8 @@ function validateStatus(status) {
   return 'Evaluated';
 }
 
-function normalizeCompany(name) {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-// Tokens that almost every role shares — must NOT count as signal.
-// Includes seniority, work-mode, contract, and common locations.
-const ROLE_STOPWORDS = new Set([
-  // seniority / level
-  'junior', 'mid', 'middle', 'senior', 'staff', 'principal', 'lead', 'head',
-  'chief', 'associate', 'intern', 'entry', 'level',
-  // contract / mode
-  'remote', 'hybrid', 'onsite', 'contract', 'contractor', 'freelance',
-  'fulltime', 'parttime', 'permanent', 'temporary', 'intern', 'internship',
-  // generic job words
-  'role', 'position', 'opportunity', 'team', 'based',
-  // very common locations (extend in portals.yml later if needed)
-  'bangalore', 'bengaluru', 'mumbai', 'delhi', 'hyderabad', 'pune', 'chennai',
-  'london', 'berlin', 'paris', 'madrid', 'barcelona', 'amsterdam', 'dublin',
-  'york', 'francisco', 'seattle', 'boston', 'austin', 'chicago', 'toronto',
-  'tokyo', 'singapore', 'sydney', 'melbourne', 'lisbon', 'warsaw',
-  // regions / countries
-  'europe', 'emea', 'apac', 'latam', 'americas', 'india', 'spain', 'germany',
-  'france', 'italy', 'canada', 'brazil', 'mexico', 'japan',
-  // prepositions leaking through length filter
-  'with', 'from', 'into', 'over', 'this', 'that',
-]);
-
-// Level / seniority tokens, compared as a SEPARATE axis from the role's core
-// noun phrase. Two roles with DIFFERENT explicit levels are never the same
-// posting even when the rest of the title is identical (Director ≠ VP ≠ Senior
-// Director). Abbreviations fold to a canonical form so "Sr" == "Senior" and
-// "VP" == "vice president".
-const LEVEL_CANON = new Map([
-  ['intern', 'intern'], ['internship', 'intern'],
-  ['jr', 'junior'], ['junior', 'junior'],
-  ['associate', 'associate'],
-  ['mid', 'mid'], ['middle', 'mid'],
-  ['sr', 'senior'], ['snr', 'senior'], ['senior', 'senior'],
-  ['staff', 'staff'],
-  ['principal', 'principal'],
-  ['lead', 'lead'],
-  ['mgr', 'manager'], ['manager', 'manager'],
-  ['dir', 'director'], ['director', 'director'],
-  ['vp', 'vp'], ['svp', 'svp'], ['evp', 'evp'], ['avp', 'avp'],
-  ['head', 'head'],
-  ['chief', 'chief'],
-  ['president', 'president'],
-]);
-
-// Split a role title into a { levels, core } signature:
-//   • levels — seniority/level tokens (canonicalized), compared on their own axis
-//   • core   — the distinguishing content nouns (length > 3, minus stopwords and
-//              level words). This is what actually names the function, e.g.
-//              {sales, strategy} vs {sales, operations} vs {sales, operations,
-//              planning} are three different cores.
-// Multi-word "vice president" collapses to the single level token "vp".
-function roleSignature(s) {
-  const raw = String(s || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
-  const levels = new Set();
-  const core = new Set();
-  for (let i = 0; i < raw.length; i++) {
-    const w = raw[i];
-    if (w === 'vice' && raw[i + 1] === 'president') { levels.add('vp'); i++; continue; }
-    if (LEVEL_CANON.has(w)) { levels.add(LEVEL_CANON.get(w)); continue; }
-    if (ROLE_STOPWORDS.has(w)) continue;
-    if (w.length > 3) core.add(w);
-  }
-  return { levels, core };
-}
-
-function setsEqual(a, b) {
-  if (a.size !== b.size) return false;
-  for (const x of a) if (!b.has(x)) return false;
-  return true;
-}
-
-// Two role titles are the SAME posting only when:
-//   1. their distinguishing core nouns are identical — so "Sales Strategy",
-//      "Sales Operations", and "Sales Operations Planning" are all distinct
-//      (the qualifier that separates them must match, not just the shared
-//      "Sales"/"Operations"/"Director" family tokens); likewise "Revenue
-//      Operations" ≠ "Revenue Enablement"; AND
-//   2. their explicit levels are compatible — equal, or one side unspecified —
-//      so Director ≠ VP ≠ Senior Director, while a bare "X" re-eval that omits
-//      the level still matches "Director X".
-// This is deliberately stricter than the old Jaccard-on-smaller-side ratio,
-// which let a superset ("Sales Operations Planning") and two same-family roles
-// ("Sales Strategy", "Sales Operations") all collapse onto one existing row.
-// Because merge-tracker UPDATES rows in place, a false positive silently
-// clobbers a distinct role's row; a genuine near-duplicate that slips through
-// is consolidated later by dedup-tracker, which is the safe way to err.
-function roleFuzzyMatch(a, b) {
-  const sigA = roleSignature(a);
-  const sigB = roleSignature(b);
-  // Need at least some distinguishing signal on both sides.
-  if (sigA.core.size === 0 && sigA.levels.size === 0) return false;
-  if (sigB.core.size === 0 && sigB.levels.size === 0) return false;
-  // Different explicit levels → different posting.
-  if (sigA.levels.size > 0 && sigB.levels.size > 0 && !setsEqual(sigA.levels, sigB.levels)) return false;
-  // Core nouns must match exactly (no superset/subset collapse).
-  return setsEqual(sigA.core, sigB.core);
-}
+// normalizeCompany, roleSignature and sameRole (formerly roleFuzzyMatch) now live
+// in lib/identity.mjs, unchanged in behavior. See the import at the top.
 
 function extractReportNum(reportStr) {
   const m = reportStr.match(/\[(\d+)\]/);
@@ -335,12 +238,17 @@ const existingApps = [];
 let maxNum = 0;
 
 for (const line of appLines) {
-  if (line.startsWith('|') && !line.includes('---') && !line.includes('Empresa')) {
-    const app = parseAppLine(line);
-    if (app) {
-      existingApps.push(app);
-      if (app.num > maxNum) maxNum = app.num;
-    }
+  // No hand-rolled "is this a row" test. The old guard skipped any line
+  // containing '---', which was a stand-in for "this is the separator" until the
+  // url column landed: Workday encodes spaces as hyphens, so a real posting URL
+  // like /job/Northern-California-USA---Remote/ made SEVEN live rows invisible to
+  // the merge. Invisible rows do not dedup, so a re-eval of one would have been
+  // added as a second row. parseAppLine already returns null for the header, the
+  // separator and anything else that is not a data row.
+  const app = parseAppLine(line);
+  if (app) {
+    existingApps.push(app);
+    if (app.num > maxNum) maxNum = app.num;
   }
 }
 
@@ -359,19 +267,7 @@ const usedNums = new Set(existingApps.map(a => a.num));
 // re-run of Evaluate would re-score the same top-of-list roles. We match by the
 // report's own URL (v1 JSON frontmatter, or the legacy **URL:** header). The
 // Evaluate prompt also marks rows as it goes; this guarantees it even if it didn't.
-function reportUrl(reportLink) {
-  const m = reportLink && reportLink.match(/\(([^)]*reports\/[^)]+\.md)\)/);
-  if (!m) return null;
-  const full = join(CAREER_OPS, m[1]);
-  if (!existsSync(full)) return null;
-  try {
-    const text = readFileSync(full, 'utf-8');
-    const j = text.match(/"url"\s*:\s*"([^"]+)"/);          // v1 JSON frontmatter
-    if (j) return j[1];
-    const h = text.match(/\*\*URL:\*\*\s*(\S+)/);            // legacy header
-    return h ? h[1] : null;
-  } catch { return null; }
-}
+const reportUrl = (reportLink) => urlFromReport(reportLink, CAREER_OPS);
 
 function markPipelineDone(reportLinks) {
   // unresolved = reports we could not turn into a URL (file missing, no url field,
@@ -382,13 +278,13 @@ function markPipelineDone(reportLinks) {
   const done = new Set();
   for (const link of reportLinks) {
     const u = reportUrl(link);
-    if (u) done.add(normalizeUrl(u)); else unresolved++;
+    if (u) done.add(canonicalUrl(u)); else unresolved++;
   }
   if (!done.size) return { flipped: 0, unresolved };
   let flipped = 0;
   const out = readFileSync(PIPELINE_FILE, 'utf-8').split('\n').map(line => {
     const m = line.match(/^(\s*-\s*)\[ \](\s+)(https?:\/\/[^\s|)]+)(.*)$/);
-    if (m && done.has(normalizeUrl(m[3]))) { flipped++; return `${m[1]}[x]${m[2]}${m[3]}${m[4]}`; }
+    if (m && done.has(canonicalUrl(m[3]))) { flipped++; return `${m[1]}[x]${m[2]}${m[3]}${m[4]}`; }
     return line;
   }).join('\n');
   if (flipped > 0) writeFileSync(PIPELINE_FILE, out, 'utf-8');
@@ -435,7 +331,7 @@ console.log(`📥 Found ${tsvFiles.length} pending additions`);
 const scannedUrls = new Set();
 if (existsSync(PIPELINE_FILE)) {
   for (const line of readFileSync(PIPELINE_FILE, 'utf-8').split('\n')) {
-    for (const u of (line.match(/https?:\/\/[^\s|)]+/g) || [])) scannedUrls.add(normalizeUrl(u));
+    for (const u of (line.match(/https?:\/\/[^\s|)]+/g) || [])) scannedUrls.add(canonicalUrl(u));
   }
 }
 // Remove a [self-sourced] tag AND whatever delimiter the agent used to attach
@@ -456,7 +352,7 @@ function stripSourceTag(notes) {
 function enforceSource(reportLink, notes, label) {
   const u = reportUrl(reportLink);
   if (!u) return notes;                                 // unknown origin — don't guess
-  if (scannedUrls.has(normalizeUrl(u))) {
+  if (scannedUrls.has(canonicalUrl(u))) {
     // Scanned: strip a stray [self-sourced] tag.
     if (!notes) return notes;
     const cleaned = stripSourceTag(notes);
@@ -476,40 +372,88 @@ let skipped = 0;
 const newLines = [];
 const processedReports = [];
 
-// Resolve which existing row (if any) an addition is a re-eval of. Three tiers,
-// each requiring the company to match:
+// The decided index, built once. Only its `ambiguous` set is used here: a
+// canonical URL that maps to more than one employer AND carries no
+// posting-specific id is not trustworthy enough to merge or veto on, so those
+// keys are treated as if the URL could not be resolved at all.
+const decided = buildDecidedIndex({ appsPath: APPS_FILE, rootDir: CAREER_OPS });
+
+// A row or addition's canonical URL, or null when it cannot be trusted as an
+// identity. Null means "fall back to the weaker signals", never "no match".
+function canonKey(rawUrl) {
+  if (!rawUrl) return null;
+  const key = canonicalUrl(rawUrl);
+  if (!key || decided.ambiguous.has(key)) return null;
+  return key;
+}
+const rowCanon = (app) => canonKey(urlForRow(app, CAREER_OPS));
+
+// Resolve which existing row (if any) an addition is a re-eval of.
+//
+// Tier 0 is the URL, and it is the only tier that is actually reliable. The
+// tiers below exist for rows whose URL cannot be resolved, and one of them
+// caused real data loss: company+role CANNOT distinguish two requisitions with
+// the same title at the same employer, a routine shape at scaling startups.
+// Three same-titled reqs at one employer produced one row and two silently
+// dropped evaluations.
+//
+// So a differing canonical URL VETOES the weaker tiers. When both sides resolve
+// to trustworthy URLs and those URLs differ, they are different postings, and no
+// amount of title similarity may overrule that.
+//   0. Canonical URL equality (decisive)
 //   1. Exact report number match (number collision across companies ≠ same role)
 //   2. Exact entry number match (guards against ID reuse across companies)
-//   3. Company + role fuzzy match (tightened — see roleFuzzyMatch)
+//   3. Company + role match (fallback only — see sameRole)
 function findExistingMatch(addition) {
   const reportNum = addition._reportNum;
   const normAdditionCompany = addition._normCompany;
+  const additionUrl = addition._canonUrl;
+
+  // Tier 0 — the same posting URL is the same posting, whatever the cells say.
+  if (additionUrl) {
+    const byUrl = existingApps.find(app => rowCanon(app) === additionUrl);
+    if (byUrl) return byUrl;
+  }
+
+  // The veto. Only fires when BOTH sides resolve, so an unresolvable URL on
+  // either side leaves the previous behavior exactly as it was.
+  const vetoed = (app) => {
+    if (!additionUrl) return false;
+    const c = rowCanon(app);
+    return c !== null && c !== additionUrl;
+  };
 
   if (reportNum) {
     const byReport = existingApps.find(app =>
-      extractReportNum(app.report) === reportNum && normalizeCompany(app.company) === normAdditionCompany);
+      extractReportNum(app.report) === reportNum && normalizeCompany(app.company) === normAdditionCompany && !vetoed(app));
     if (byReport) return byReport;
   }
 
   const byNum = existingApps.find(app =>
-    app.num === addition.num && normalizeCompany(app.company) === normAdditionCompany);
+    app.num === addition.num && normalizeCompany(app.company) === normAdditionCompany && !vetoed(app));
   if (byNum) return byNum;
   if (existingApps.find(app => app.num === addition.num)) {
     console.warn(`⚠️  ID #${addition.num} already used by a different company — will assign next available ID to ${addition.company}`);
   }
 
   return existingApps.find(app =>
-    normalizeCompany(app.company) === normAdditionCompany && roleFuzzyMatch(addition.role, app.role)) || null;
+    normalizeCompany(app.company) === normAdditionCompany && sameRole(addition.role, app.role) && !vetoed(app)) || null;
 }
 
-// Do two additions in THIS batch describe the same posting? Same tiers as the
-// existing-row match, so regional re-scans / reposts that got different JD
-// numbers still collapse via the (tightened) role fuzzy match.
+// Do two additions in THIS batch describe the same posting? Same tiers, same
+// veto: two evaluations written in one batch can just as easily be two distinct
+// requisitions that share a title.
+//
+// The company gate stays in front deliberately. Two additions with one URL but
+// differently spelled companies are left as two rows rather than merged, because
+// splitting one posting in two is recoverable by dedup-tracker and merging two
+// distinct ones is not.
 function additionsMatch(a, b) {
   if (a._normCompany !== b._normCompany) return false;
+  if (a._canonUrl && b._canonUrl) return a._canonUrl === b._canonUrl;
   if (a._reportNum && b._reportNum && a._reportNum === b._reportNum) return true;
   if (a.num === b.num) return true;
-  return roleFuzzyMatch(a.role, b.role);
+  return sameRole(a.role, b.role);
 }
 
 // ── Pass 1: parse every addition and resolve its target ───────────────────────
@@ -529,6 +473,11 @@ for (const file of tsvFiles) {
   addition._file = file;
   addition._reportNum = extractReportNum(addition.report);
   addition._normCompany = normalizeCompany(addition.company);
+  // _rawUrl is what gets STORED (the posting URL as the report recorded it);
+  // _canonUrl is only ever used for comparison. Writing the canonical form into
+  // the tracker would strip query parameters the user may need to open the link.
+  addition._rawUrl = reportUrl(addition.report);
+  addition._canonUrl = canonKey(addition._rawUrl);
   processedReports.push(addition.report);
   parsed.push(addition);
 }
@@ -536,9 +485,20 @@ for (const file of tsvFiles) {
 // ── Pass 2: bucket additions into updates-of-existing vs new, deduping both ────
 const updatesByExisting = new Map(); // existing.raw → { addition, existing }
 const pendingNew = [];               // additions that will become new rows
+// Every addition that does NOT become or update a row is recorded here.
+//
+// This exists because the old skip path was indistinguishable from success: it
+// printed a line, wrote no row, and then filed the TSV under merged/ exactly as
+// if it had landed. The evaluation was gone and the audit trail said it worked,
+// which is why the loss went unnoticed long enough to happen twice.
+const drops = [];
+function recordDrop(addition, keptNum, reason) {
+  drops.push({ addition, keptNum, reason });
+  skipped++;
+}
 function consolidate(drop, keep, scope) {
   console.log(`🧹 Consolidated (${scope}): dropped #${drop.num} ${drop.company} — ${drop.role} (${drop.score}) in favor of #${keep.num} ${keep.role} (${keep.score})`);
-  skipped++;
+  recordDrop(drop, keep.num, `consolidated (${scope})`);
 }
 
 for (const addition of parsed) {
@@ -606,13 +566,18 @@ for (const { addition, existing: duplicate } of updatesByExisting.values()) {
         resume: resumeVal,
         report: addition.report,
         notes: `Re-eval ${addition.date} (${oldScore}→${newScore}). ${addition.notes}`,
+        // Without this the update ERASES the url cell: formatTrackerLine writes
+        // the '—' placeholder for any field it is not given, so every re-eval
+        // would silently blank a backfilled URL. Keep what the row already has,
+        // and fill it from the re-eval's report when the cell is empty.
+        url: duplicate.url || addition._rawUrl || '',
       });
       appLines[lineIdx] = updatedLine;
       updated++;
     }
   } else {
     console.log(`⏭️  Skip: ${addition.company} — ${addition.role} (existing #${duplicate.num} ${oldScore} >= new ${newScore})`);
-    skipped++;
+    recordDrop(addition, duplicate.num, `lower score than existing (${newScore} <= ${oldScore})`);
   }
 }
 
@@ -666,6 +631,9 @@ for (const addition of pendingNew) {
     resume: '—',
     report: addition.report,
     notes: finalNotes,
+    // Every new row records the posting URL from the start, so the tracker never
+    // again depends on a report file surviving to remember what it evaluated.
+    url: addition._rawUrl || '',
   });
   newLines.push(newLine);
   added++;
@@ -678,7 +646,9 @@ if (newLines.length > 0) {
   // Find header separator (|---|...) and insert after it
   let insertIdx = -1;
   for (let i = 0; i < appLines.length; i++) {
-    if (appLines[i].includes('---') && appLines[i].startsWith('|')) {
+    // Match the separator ROW (only dashes, spaces and pipes), not any line that
+    // happens to contain '---' — a posting URL can contain it too.
+    if (/^\|[-\s|]+\|$/.test(appLines[i].trim())) {
       insertIdx = i + 1;
       break;
     }
@@ -698,12 +668,32 @@ if (!DRY_RUN) {
   if (flipped > 0) console.log(`✓ Marked ${flipped} pipeline.md row${flipped === 1 ? '' : 's'} done (evaluated this batch)`);
   if (unresolved > 0) console.log(`⚠️  ${unresolved} evaluated report${unresolved === 1 ? '' : 's'} had no resolvable URL — those pipeline rows stay pending and will be re-evaluated next run.`);
 
-  // Move processed files to merged/
+  // Move processed files. A TSV that produced no row goes to dropped/, NOT
+  // merged/, so the folder an evaluation ends up in tells the truth about what
+  // happened to it. Filing a drop under merged/ is what made this class of loss
+  // invisible.
+  const droppedFiles = new Set(drops.map(d => d.addition._file).filter(Boolean));
   if (!existsSync(MERGED_DIR)) mkdirSync(MERGED_DIR, { recursive: true });
+  if (droppedFiles.size && !existsSync(DROPPED_DIR)) mkdirSync(DROPPED_DIR, { recursive: true });
   for (const file of tsvFiles) {
-    renameSync(join(ADDITIONS_DIR, file), join(MERGED_DIR, file));
+    const dest = droppedFiles.has(file) ? DROPPED_DIR : MERGED_DIR;
+    renameSync(join(ADDITIONS_DIR, file), join(dest, file));
   }
-  console.log(`\n✅ Moved ${tsvFiles.length} TSVs to merged/`);
+  console.log(`\n✅ Moved ${tsvFiles.length - droppedFiles.size} TSVs to merged/`);
+
+  if (drops.length) {
+    // Append-only ledger. Nothing may leave this script without a trace, so a
+    // dropped evaluation can be found and reinstated later by a human who
+    // disagrees with the call.
+    const header = 'date\tdroppedNum\tkeptNum\tcompany\trole\treason\tfile\n';
+    const rows = drops.map(d => [
+      d.addition.date, d.addition.num, d.keptNum,
+      d.addition.company, d.addition.role, d.reason, d.addition._file || '',
+    ].map(v => String(v ?? '').replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\n') + '\n';
+    if (!existsSync(DROPS_LOG)) writeFileSync(DROPS_LOG, header, 'utf-8');
+    appendFileSync(DROPS_LOG, rows, 'utf-8');
+    console.log(`📝 Logged ${drops.length} dropped addition${drops.length === 1 ? '' : 's'} to ${basename(DROPS_LOG)} (TSVs in tracker-additions/dropped/)`);
+  }
 }
 
 console.log(`\n📊 Summary: +${added} added, 🔄${updated} updated, ⏭️${skipped} skipped`);
