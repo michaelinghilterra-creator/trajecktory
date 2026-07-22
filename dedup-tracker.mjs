@@ -85,11 +85,11 @@ const STATUS_RANK = {
 };
 
 // normalizeCompany comes from lib/identity.mjs. The private copy that used to
-// live here kept spaces where the shared one strips them, so "DHI Group" and
-// "DHIGroup" were the same employer everywhere in the system EXCEPT in the one
-// script that deletes rows. It also threw on a null company cell, where the
-// shared one returns ''. Neither difference was deliberate; that is what a second
-// definition does over time.
+// live here kept spaces where the shared one strips them, so an employer written
+// with and without a space in its name ("Example Co" vs "ExampleCo") was one
+// company everywhere in the system EXCEPT in the one script that deletes rows.
+// It also threw on a null company cell, where the shared one returns ''. Neither
+// difference was deliberate; that is what a second definition does over time.
 
 function parseScore(s) {
   const m = s.replace(/\*\*/g, '').match(/([\d.]+)/);
