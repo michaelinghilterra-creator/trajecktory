@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.22.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.21.0...v1.22.0) (2026-07-22)
+
+
+### Bug Fixes
+
+* **identity:** make one canonical URL the only answer to "is this the same posting?" ([#75](https://github.com/michaelinghilterra-creator/trajecktory/issues/75)) ([7f11078](https://github.com/michaelinghilterra-creator/trajecktory/commit/7f110785dd2e290c5ecfaef54d2dfe02215e654b))
+
+
+### Documentation
+
+* **agents:** record the squash-title version trap ([#77](https://github.com/michaelinghilterra-creator/trajecktory/issues/77)) ([cb220c0](https://github.com/michaelinghilterra-creator/trajecktory/commit/cb220c0faa37edc19e9bb2ed612a9ee1073a04e3))
+
 ## [1.21.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.20.1...v1.21.0) (2026-07-22)
 
 
