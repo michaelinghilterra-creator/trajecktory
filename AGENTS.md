@@ -134,9 +134,15 @@ If `data/applications.md` doesn't exist, create it:
 ```markdown
 # Applications Tracker
 
-| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes |
-|---|------|---------|------|-------|--------|-----|--------|--------|-------|
+| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes | URL |
+|---|------|---------|------|-------|--------|-----|--------|--------|-------|-----|
 ```
+
+URL is last, so every earlier column keeps its position and 9- and 10-column
+rows written before it existed still parse. `TRACKER_HEADER` and
+`TRACKER_SEPARATOR` in `lib/tracker.mjs` are the source of truth — import them
+instead of retyping the pipes. To populate the cell on rows that predate the
+column, run `node backfill-tracker-urls.mjs` (dry run) then `--apply`.
 
 #### Step 5: Get to know the user (important for quality)
 
