@@ -245,7 +245,7 @@ async function runApplyJob(jobId, row, mode) {
   const profileMd  = readProjectFile(projectRoot, 'modes/_profile.md');
   const reportMd   = row.report ? readProjectFile(projectRoot, row.report) : '';
 
-  // ── Step 2: Tailored CV DOCX (template-swap approach) ────────────────────
+  // ── Step 2: Tailored resume DOCX (template-swap approach) ────────────────────
   // Generates four tailored strings (title, subtitle_secondary, summary,
   // areas_of_expertise), writes them to a swaps.json, then runs
   // generate-docx-from-template.mjs against templates/cv-master.docx. Bullets,
@@ -302,25 +302,32 @@ Output format (raw JSON only, no wrapping):
         };
         fs.writeFileSync(swapsPath, JSON.stringify(swaps, null, 2), 'utf8');
         await new Promise((resolve) => {
-          // --allow-length-drift here keeps page-break warnings non-fatal so a
-          // tight Apply flow still produces a doc; the LLM prompt already
-          // asks for ±15% adherence. Drift warnings still print to stderr.
+          // --allow-length-drift keeps the page-break check non-fatal so a tight
+          // Apply flow still produces a document; the prompt already asks for
+          // ±15% adherence. That trade is deliberate, but it is also why a
+          // tailored resume can quietly spill onto a second page: the guard fires
+          // and the run carries on. So the warning has to be worth reading.
+          //
+          // Note what this is NOT: page margins come from the user's own
+          // cv-master.docx and are preserved byte for byte, so overflow here is a
+          // length problem, not a margin one. Changing margins would mean editing
+          // the user's Word file, which this tool deliberately never does.
           execFile(process.execPath, ['generate-docx-from-template.mjs', '--swaps', swapsPath, '--output', docxRel, '--allow-length-drift'],
             { cwd: projectRoot },
             (err, _stdout, stderr) => {
-              if (err) errors.push(`CV DOCX: ${err.message}`);
+              if (err) errors.push(`Resume DOCX: ${err.message}`);
               if (stderr && /LENGTH WARNING/.test(stderr)) {
-                errors.push(`CV DOCX length drift > 15% — page break may shift`);
+                errors.push('Tailored resume runs more than 15% longer than your master, so it may spill onto an extra page. Open it and check the page count before you send it.');
               }
               resolve();
             }
           );
         });
       } catch (err) {
-        errors.push(`CV DOCX swap write: ${err.message}`);
+        errors.push(`Resume DOCX swap write: ${err.message}`);
       }
     } else if (!errors.some((e) => e.startsWith('CV'))) {
-      errors.push(`CV DOCX: missing keys from subprocess output: ${missingKeys.join(', ')}`);
+      errors.push(`Resume DOCX: missing keys from subprocess output: ${missingKeys.join(', ')}`);
     }
   }
 

@@ -1003,6 +1003,7 @@ const DRAWER_TABS = [
   { id: 'interview', label: 'Interview',  icon: PI.msg },
   { id: 'customize', label: 'Customize',  icon: PI.flag },
   { id: 'legit',     label: 'Legitimacy', icon: PI.check },
+  { id: 'posting',   label: 'Posting',    icon: PI.briefcase },
   { id: 'notes',     label: 'Notes',      icon: PI.pen },
   { id: 'contacts',  label: 'Contacts',   icon: PI.users },
   { id: 'followup',  label: 'Follow-up',  icon: PI.send },
@@ -1364,6 +1365,17 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
             ))}
           </div>
 
+          {/* Durable links to whatever this application produced. Deliberately
+              ABOVE the tab content so it shows on every tab: the pre-existing
+              "Source Links" block sits under Legitimacy, which is not a place
+              anyone looks for their own tailored resume. Renders nothing when
+              there is nothing to link. */}
+          {window.ApplyArtifacts && (
+            <div style={{ margin: '10px 0 2px' }}>
+              <window.ApplyArtifacts app={app} />
+            </div>
+          )}
+
           {/* Tab content — all sourced from structured cheat-sheet (cs) */}
           {tab === 'overview' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1702,7 +1714,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                   )}
                   {app.resume && (
                     <div className="info-row" style={{ gridTemplateColumns: '116px 1fr' }}>
-                      <span className="ik">Generated resume</span>
+                      <span className="ik">Resume engine</span>
                       <span className="iv mono" style={{ fontSize: 11, color: 'var(--text-dim)' }}>{app.resume}</span>
                     </div>
                   )}
@@ -1726,6 +1738,8 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               )}
             </div>
           )}
+
+          {tab === 'posting' && window.PostingPanel && <window.PostingPanel app={app} />}
 
           {tab === 'notes' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

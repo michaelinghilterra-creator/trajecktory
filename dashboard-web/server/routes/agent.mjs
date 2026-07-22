@@ -129,6 +129,20 @@ function dashboardConstraints(mode, opts) {
     'clarifying question, never ask for confirmation, and never stop to wait for input — ' +
     'doing so ends the run with nothing written. When something is ambiguous, choose the ' +
     'most reasonable interpretation, state that assumption in one line, and finish the task.';
+
+  // Snapshot the posting text. A posting disappears the day it is filled, and the
+  // report only ever kept the URL, so preparing for a later interview round meant
+  // hoping the page was still up. It usually is not: a tester reached a fifth
+  // round 45 days after the posting had gone, and only had something to work from
+  // because they had personally copied it elsewhere. Saving the text costs
+  // nothing at the point the agent has already fetched it, and it is the one
+  // document the rest of the pipeline is about.
+  const snapshotJd =
+    ' Before writing each report, save the job posting text you read to jds/{report-number}-{company-slug}.md ' +
+    '(create the jds/ directory if needed) and put that relative path in the report frontmatter as "jdSnapshot". ' +
+    'Save the description, requirements, and any comp or location detail as plain text; skip page furniture. ' +
+    'Postings are taken down as soon as they are filled, and this snapshot is what the user still has to prepare ' +
+    'from weeks later, so do not skip it even when the posting looks permanent.';
   const common = (relax
     ? "Dashboard run, follow these constraints strictly. This run uses the user's Anthropic API key, so you may parallelize work across the batch to go faster, but stay strictly bounded by the batch cap below and never exceed it. Playwright is unavailable in this environment."
     : 'Dashboard run, follow these constraints strictly. Work inline and never spawn subagents or background agents, because this run shares a single Claude subscription and parallel agents trip usage limits. Playwright is unavailable in this environment.'
@@ -147,7 +161,7 @@ function dashboardConstraints(mode, opts) {
       ` Evaluate at most ${evalCap} pending unchecked URLs this run (${capWhy}). They are ordered best-fit first, so take them from the TOP of the pending list; once you have evaluated ${evalCap}, STOP even if more remain and tell me how many pending URLs are left so I can run Evaluate again for the next batch.` +
       ' Do not run gate-pipeline.mjs or any browser tool; just evaluate the pending unchecked URLs as they are. Read each job description with WebFetch first and WebSearch as a fallback, and if a posting cannot be read, mark it skipped in data/pipeline.md and move on.' +
       ' After you have FULLY written a report for a URL (all required sections, not a partial), mark that URL done in data/pipeline.md by switching its leading checkbox from unchecked to checked (- [ ] becomes - [x]), so the next Evaluate run continues with the next batch instead of re-scoring the same roles. Never mark a URL done before its report is complete.' +
-      ' Record every evaluation as a single line nine column TSV in batch/tracker-additions/ and do not edit data/applications.md directly. Always write the report to reports/ even for a low score so the result is visible. Write each report in the trajecktory-report/v1 format (JSON frontmatter then narrative body) and you MUST populate the optional frontmatter sections so the dashboard drawer is complete, not just the score: include customizationCV and customizationLI (the CV and LinkedIn personalization plan), starStories plus a leadStory (interview prep, with the single story to lead with), and a legitimacy object with a tier and signals. Because Playwright is unavailable here, assess legitimacy from the WebFetched page and WebSearch (posting freshness, description quality, reposting, market context, prompt-injection) and set the legitimacy verification to unconfirmed (no live browser) rather than leaving the section empty. Do not abbreviate or skip the personalization, interview, or legitimacy sections. When done, the user will run Merge Tracker to fold your TSVs into the pipeline.';
+      ' Record every evaluation as a single line nine column TSV in batch/tracker-additions/ and do not edit data/applications.md directly. Always write the report to reports/ even for a low score so the result is visible. Write each report in the trajecktory-report/v1 format (JSON frontmatter then narrative body) and you MUST populate the optional frontmatter sections so the dashboard drawer is complete, not just the score: include customizationCV and customizationLI (the CV and LinkedIn personalization plan), starStories plus a leadStory (interview prep, with the single story to lead with), and a legitimacy object with a tier and signals. Because Playwright is unavailable here, assess legitimacy from the WebFetched page and WebSearch (posting freshness, description quality, reposting, market context, prompt-injection) and set the legitimacy verification to unconfirmed (no live browser) rather than leaving the section empty. Do not abbreviate or skip the personalization, interview, or legitimacy sections. When done, the user will run Merge Tracker to fold your TSVs into the pipeline.' + snapshotJd;
   }
   if (mode === 'scan') {
     const cap = limit > 0 ? ` TEST MODE (TJK_TEST_LIMIT=${limit}): add at most ${limit} new postings to data/pipeline.md, then stop.` : '';
@@ -160,7 +174,7 @@ function dashboardConstraints(mode, opts) {
   }
   if (mode === 'deep') {
     const tgt = (opts && opts.url) || '';
-    return ' ' + common + ` Deep evaluation of ONE posting only: ${tgt}. Read its job description with WebFetch first and WebSearch as a fallback (for a local:jds/ path, read that file directly). Produce the FULL A-G evaluation as a report in reports/ using the trajecktory-report/v1 format (JSON frontmatter then narrative) and populate every section: summary, cvMatch, gaps, levelMatch, comp, customizationCV, customizationLI, starStories with a leadStory, and a legitimacy object with a tier and signals (Playwright is unavailable here, so assess legitimacy from the fetched page and set verification to unconfirmed). Record the evaluation as a single nine-column TSV in batch/tracker-additions/. This posting was entered directly by the user (the dashboard paste box), not found by a scan, so set the tracker note to include [self-sourced]. Evaluate ONLY this one posting — do not scan for or evaluate any other URL. If it cannot be read, say so and stop.`;
+    return ' ' + common + ` Deep evaluation of ONE posting only: ${tgt}. Read its job description with WebFetch first and WebSearch as a fallback (for a local:jds/ path, read that file directly). Produce the FULL A-G evaluation as a report in reports/ using the trajecktory-report/v1 format (JSON frontmatter then narrative) and populate every section: summary, cvMatch, gaps, levelMatch, comp, customizationCV, customizationLI, starStories with a leadStory, and a legitimacy object with a tier and signals (Playwright is unavailable here, so assess legitimacy from the fetched page and set verification to unconfirmed). Record the evaluation as a single nine-column TSV in batch/tracker-additions/. This posting was entered directly by the user (the dashboard paste box), not found by a scan, so set the tracker note to include [self-sourced]. Evaluate ONLY this one posting — do not scan for or evaluate any other URL. If it cannot be read, say so and stop.` + snapshotJd;
   }
   return '';
 }
