@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.21.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.20.1...v1.21.0) (2026-07-22)
+
+
+### Features
+
+* **setup:** record where setup time goes, and make a poisoned config recoverable ([#73](https://github.com/michaelinghilterra-creator/trajecktory/issues/73)) ([59f7f95](https://github.com/michaelinghilterra-creator/trajecktory/commit/59f7f95967812f8de4cc33d0f29ca4b0d438f616))
+
 ## [1.20.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.20.0...v1.20.1) (2026-07-22)
 
 
