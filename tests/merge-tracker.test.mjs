@@ -39,6 +39,8 @@ mkdirSync(join(sandbox, 'lib'), { recursive: true });
 copyFileSync(join(ROOT, 'lib/discard.mjs'), join(sandbox, 'lib/discard.mjs'));
 copyFileSync(join(ROOT, 'lib/tracker.mjs'), join(sandbox, 'lib/tracker.mjs'));
 copyFileSync(join(ROOT, 'lib/scan-core.mjs'), join(sandbox, 'lib/scan-core.mjs'));
+// scan-core re-exports canonicalUrl from identity, so the sandbox needs it too.
+copyFileSync(join(ROOT, 'lib/identity.mjs'), join(sandbox, 'lib/identity.mjs'));
 // merge-tracker.mjs loads templates/states.yml at startup for canonical states +
 // aliases, so the sandbox copy needs that file present too.
 mkdirSync(join(sandbox, 'templates'), { recursive: true });
@@ -206,7 +208,7 @@ function runMerge(seedRows, caseMap, extraFiles = {}) {
   }
   copyFileSync(join(ROOT, 'merge-tracker.mjs'), join(sb, 'merge-tracker.mjs'));
   mkdirSync(join(sb, 'lib'), { recursive: true });
-  for (const m of ['discard.mjs', 'tracker.mjs', 'scan-core.mjs']) {
+  for (const m of ['discard.mjs', 'tracker.mjs', 'scan-core.mjs', 'identity.mjs']) {
     copyFileSync(join(ROOT, 'lib', m), join(sb, 'lib', m));
   }
   mkdirSync(join(sb, 'templates'), { recursive: true });
@@ -308,7 +310,7 @@ const C = runMerge(
     // A pipe in notes with no tag involved — the serializer alone must hold.
     '901-beta.tsv': tsv(['901', '2026-07-20', 'Beta', 'Head of Analytics',
       'Evaluated', '4.0/5', '❌', '[901](reports/901-beta-2026-07-20.md)',
-      'strong fit | remote | $180K']),
+      'strong fit | remote | $999K']),
   },
   {
     'reports/900-acme-2026-07-20.md': `---\n{ "schema": "trajecktory-report/v1", "url": "${SCANNED_URL}" }\n---\n`,
@@ -320,7 +322,7 @@ const C = runMerge(
 console.log('\n9. Source-tag strip leaves no orphaned delimiter (row #1125)');
 {
   const a = C.rowsFor('Acme')[0] || '';
-  check(cols(a).length === 10, `row has exactly 10 cells: got ${cols(a).length}`);
+  check(cols(a).length === 11, `row has exactly 11 cells: got ${cols(a).length}`);
   check(!/\[self-sourced\]/.test(a), 'tag stripped (URL is in pipeline.md → scanned)');
   const n = cols(a)[NOTES] || '';
   check(!n.endsWith('|') && !n.includes('|'), `no orphaned delimiter left in notes: "${n}"`);
@@ -331,11 +333,11 @@ console.log('\n9. Source-tag strip leaves no orphaned delimiter (row #1125)');
 console.log('\n10. Unescaped pipe in notes cannot restructure a row');
 {
   const b = C.rowsFor('Beta')[0] || '';
-  check(cols(b).length === 10, `row has exactly 10 cells: got ${cols(b).length}`);
+  check(cols(b).length === 11, `row has exactly 11 cells: got ${cols(b).length}`);
   check(cols(b)[STATUS] === 'Evaluated' && cols(b)[SCORE] === '4.0/5',
     `fields do not shift (${cols(b)[SCORE]} / ${cols(b)[STATUS]})`);
   const n = cols(b)[NOTES] || '';
-  check(n.includes('strong fit') && n.includes('$180K'),
+  check(n.includes('strong fit') && n.includes('$999K'),
     `full note survives rather than being truncated at the first pipe: "${n}"`);
 }
 

@@ -1,25 +1,46 @@
 #!/usr/bin/env node
 /**
- * dedup-tracker.mjs — Remove duplicate entries from applications.md
+ * dedup-tracker.mjs — Consolidate duplicate entries in applications.md
  *
- * Groups by normalized company + fuzzy role match.
- * Keeps entry with highest score. If discarded entry had more advanced status,
- * preserves that status. Merges notes.
+ * Clusters by normalized company + EXACT canonical URL. Keeps the entry with the
+ * highest score, promotes the most advanced status found in the cluster.
  *
- * Run: node career-ops/dedup-tracker.mjs [--dry-run]
+ * Run: node dedup-tracker.mjs            (report only — default)
+ *      node dedup-tracker.mjs --apply    (actually rewrite applications.md)
+ *
+ * WHY THIS SCRIPT NO LONGER GUESSES:
+ * It used to cluster on a loose word-overlap of the role title (>=2 shared words
+ * and a >=0.6 ratio) with "manager" and "director" treated as STOPWORDS, i.e.
+ * seniority was ignored entirely. That is not a dedup rule, it is a collision
+ * generator: two postings at one employer whose titles share a two-word function
+ * name and differ only by a trailing segment qualifier clear that threshold, so
+ * they were declared the same job. Distinct postings were deleted from the
+ * tracker, and because a shorter table is still a valid table, nothing failed.
+ *
+ * Deleting a row is irreversible (data/applications.md is gitignored, so there is
+ * no git history behind it). No title heuristic is a safe basis for that, however
+ * strict — three requisitions at one employer can carry byte-identical titles and
+ * be three genuinely different openings. Only the URL settles it, so only the URL
+ * clusters here. `sameRole` from lib/identity.mjs is deliberately NOT used.
+ *
+ * The flags were also inverted: destruction used to be the default and --dry-run
+ * was the opt-out. Now writing requires --apply.
  */
 
 import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
+import { canonicalUrl, urlForRow } from './lib/identity.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md (original)
 const APPS_FILE = existsSync(join(CAREER_OPS, 'data/applications.md'))
   ? join(CAREER_OPS, 'data/applications.md')
   : join(CAREER_OPS, 'applications.md');
-const DRY_RUN = process.argv.includes('--dry-run');
+// Report-only unless the caller explicitly opts into writing. --dry-run is kept
+// as a no-op alias so existing muscle memory still lands somewhere safe.
+const APPLY = process.argv.includes('--apply');
 
 // Ensure required directories exist (fresh setup)
 mkdirSync(join(CAREER_OPS, 'data'), { recursive: true });
@@ -65,44 +86,6 @@ function normalizeCompany(name) {
     .trim();
 }
 
-function normalizeRole(role) {
-  return role.toLowerCase()
-    .replace(/[()]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/[^a-z0-9 /]/g, '')
-    .trim();
-}
-
-const ROLE_STOPWORDS = new Set([
-  'senior', 'junior', 'lead', 'staff', 'principal', 'head', 'chief',
-  'manager', 'director', 'associate', 'intern', 'contractor',
-  'remote', 'hybrid', 'onsite',
-  'engineer', 'engineering',
-]);
-
-const LOCATION_STOPWORDS = new Set([
-  'tokyo', 'japan', 'london', 'berlin', 'paris', 'singapore',
-  'york', 'francisco', 'angeles', 'seattle', 'austin', 'boston',
-  'chicago', 'denver', 'toronto', 'amsterdam', 'dublin', 'sydney',
-  'remote', 'global', 'emea', 'apac', 'latam',
-]);
-
-function roleMatch(a, b) {
-  const filterStopwords = (words) =>
-    words.filter(w => !ROLE_STOPWORDS.has(w) && !LOCATION_STOPWORDS.has(w));
-
-  const wordsA = filterStopwords(normalizeRole(a).split(/\s+/).filter(w => w.length > 2));
-  const wordsB = filterStopwords(normalizeRole(b).split(/\s+/).filter(w => w.length > 2));
-
-  if (wordsA.length === 0 || wordsB.length === 0) return false;
-
-  const overlap = wordsA.filter(w => wordsB.some(wb => wb === w));
-  const smaller = Math.min(wordsA.length, wordsB.length);
-  const ratio = overlap.length / smaller;
-
-  return overlap.length >= 2 && ratio >= 0.6;
-}
-
 function parseScore(s) {
   const m = s.replace(/\*\*/g, '').match(/([\d.]+)/);
   return m ? parseFloat(m[1]) : 0;
@@ -135,36 +118,26 @@ for (let i = 0; i < lines.length; i++) {
 
 console.log(`📊 ${entries.length} entries loaded`);
 
-// Group by company+role
+// Cluster on company + EXACT canonical URL. A row whose URL cannot be resolved
+// (no report, report missing, report has no url field) is never clustered — an
+// unknown identity must not be grounds for deleting a row.
 const groups = new Map();
+let unresolved = 0;
 for (const entry of entries) {
-  const key = normalizeCompany(entry.company);
+  const raw = urlForRow(entry, CAREER_OPS);
+  if (!raw) { unresolved++; continue; }
+  const key = `${normalizeCompany(entry.company)} ${canonicalUrl(raw)}`;
   if (!groups.has(key)) groups.set(key, []);
   groups.get(key).push(entry);
 }
+if (unresolved) console.log(`   ${unresolved} rows have no resolvable URL — never clustered`);
 
 // Find duplicates
 let removed = 0;
 const linesToRemove = new Set();
 
-for (const [company, companyEntries] of groups) {
-  if (companyEntries.length < 2) continue;
-
-  // Within same company, find role matches
-  const processed = new Set();
-  for (let i = 0; i < companyEntries.length; i++) {
-    if (processed.has(i)) continue;
-    const cluster = [companyEntries[i]];
-    processed.add(i);
-
-    for (let j = i + 1; j < companyEntries.length; j++) {
-      if (processed.has(j)) continue;
-      if (roleMatch(companyEntries[i].role, companyEntries[j].role)) {
-        cluster.push(companyEntries[j]);
-        processed.add(j);
-      }
-    }
-
+for (const [, cluster] of groups) {
+  {
     if (cluster.length < 2) continue;
 
     // Keep the one with highest score
@@ -211,14 +184,20 @@ for (const idx of sortedRemoveIndices) {
   lines.splice(idx, 1);
 }
 
-console.log(`\n📊 ${removed} duplicates removed`);
+console.log(`\n📊 ${removed} duplicate${removed === 1 ? '' : 's'} ${APPLY ? 'removed' : 'found'}`);
 
-if (!DRY_RUN && removed > 0) {
-  copyFileSync(APPS_FILE, APPS_FILE + '.bak');
-  writeFileSync(APPS_FILE, lines.join('\n'));
-  console.log('✅ Written to applications.md (backup: applications.md.bak)');
-} else if (DRY_RUN) {
-  console.log('(dry-run — no changes written)');
-} else {
+if (removed === 0) {
   console.log('✅ No duplicates found');
+} else if (!APPLY) {
+  console.log('\nReport only — nothing was written. Re-run with --apply to consolidate.');
+} else {
+  // Timestamped, never the plain .bak: this script used to overwrite that file
+  // every run, so the one backup a user needed was routinely destroyed by the
+  // next invocation. data/applications.md is gitignored — backups are the ONLY
+  // rollback there is.
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  const backup = `${APPS_FILE}.bak-${stamp}-dedup`;
+  copyFileSync(APPS_FILE, backup);
+  writeFileSync(APPS_FILE, lines.join('\n'));
+  console.log(`✅ Written to applications.md (backup: ${backup.split(/[\\/]/).pop()})`);
 }

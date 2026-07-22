@@ -26,6 +26,7 @@
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import yaml from 'js-yaml';
 import { buildCompanyIndex, addCompanyToIndex, findKnownCompany } from './lib/portals.mjs';
+import { canonicalUrl } from './lib/identity.mjs';
 
 const DRY_RUN   = process.argv.includes('--dry-run');
 const VERBOSE   = process.argv.includes('--verbose');
@@ -170,6 +171,10 @@ function claimCompany(index, parsed, companyHint, skipped) {
 
 // ─── Seen URLs (dedup for all phases) ──────────────────────────────
 
+// Keys are canonicalized through lib/identity.mjs. This used to store raw
+// strings, so the same posting arriving with a ?utm_source, a trailing /apply,
+// or a different tracking param read as brand new — a different answer than
+// scan.mjs gave for the identical URL.
 function loadSeenUrls() {
   const seen = new Set();
   for (const [path, re] of [
@@ -180,7 +185,7 @@ function loadSeenUrls() {
     if (!existsSync(path)) continue;
     for (const line of readFileSync(path, 'utf8').split('\n')) {
       const m = line.match(re);
-      if (m && m[1] !== 'url') seen.add(m[1].trim());
+      if (m && m[1] !== 'url') seen.add(canonicalUrl(m[1].trim()));
     }
   }
   return seen;
@@ -340,9 +345,9 @@ async function searchMuse(level, titleFilter, seenUrls) {
         if (VERBOSE) console.log(`\n    SKIP (filter): "${title}"`);
         continue;
       }
-      if (seenUrls.has(url)) continue;
+      if (seenUrls.has(canonicalUrl(url))) continue;
 
-      seenUrls.add(url);
+      seenUrls.add(canonicalUrl(url));
       results.push({ url, title, company });
     }
 
@@ -412,8 +417,8 @@ async function main() {
         const parsed = parseAtsUrl(url);
         if (!parsed) continue;
         if (!passesFilter(title, titleFilter)) continue;
-        if (seenUrls.has(parsed.url)) continue;
-        seenUrls.add(parsed.url);
+        if (seenUrls.has(canonicalUrl(parsed.url))) continue;
+        seenUrls.add(canonicalUrl(parsed.url));
         // Brave results carry no company hint, so only the slug is available to
         // match on here. A known company still contributes its job URL below.
         if (!claimCompany(companyIndex, parsed, '', skipped)) {
