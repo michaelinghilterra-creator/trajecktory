@@ -6,6 +6,7 @@ import { ROOT_DIR } from '../config.mjs';
 import { logAgentRun } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
+import { record as recordActivation } from '../lib/activation.mjs';
 
 export const router = express.Router();
 
@@ -525,6 +526,17 @@ async function runAgent(jobId, mode, target) {
   // probe for this mode, so fall back to trusting the exit code rather than
   // inventing a failure.
   const wroteSomething = before === null || (probeArtifacts(mode) ?? 0) > before;
+
+  // Activation log: whether a run produced anything is the outcome worth
+  // knowing, and the server already computed it just above. Counts and an enum
+  // only — never what was found. No-ops unless the user opted in.
+  if (mode === 'scan' || mode === 'pipeline' || mode === 'deep') {
+    const job = agentJobs.get(jobId) || {};
+    recordActivation(mode === 'scan' ? 'scan_finished' : 'evaluate_finished', {
+      count: job.evaluationsDone,
+      detail: !res.ok ? 'error' : (wroteSomething ? 'ok' : 'empty'),
+    });
+  }
 
   if (res.ok && !wroteSomething && AGENT_ARTIFACTS[mode]) {
     const job = agentJobs.get(jobId) || {};

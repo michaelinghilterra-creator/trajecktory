@@ -141,6 +141,11 @@ const LP_OPTIONAL = [
     sowhat: 'Sets the pace, so you get a steady trickle instead of a flood you end up ignoring.',
     affectsScore: 'no',
     ifYouSkip: 'The default pace is reasonable.' },
+  { id: 'activation', label: 'Help improve setup',
+    does: 'Keeps a note of how long each setup step takes you, on this computer.',
+    sowhat: 'Setup problems are almost impossible to report, because the moments that cost you time are the ones where nothing looked wrong. This records where the time goes so it can be fixed. Off unless you turn it on, and you can read the whole file before sending it.',
+    affectsScore: 'no',
+    ifYouSkip: 'Nothing at all. It only helps the people who come after you.' },
   { id: 'import',    label: 'Import past applications',
     does: 'Brings jobs you already applied to into the tracker.',
     sowhat: 'Only worth doing if you have been tracking a search somewhere else and want the history in one place. A brand new search has nothing to import.',
@@ -626,6 +631,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   // the top does not yank the page around for no reason.
   const selectStep = useCallback((id) => {
     setActive(id);
+    if (!String(id).startsWith('opt:')) track('step_viewed', { step: id });
     // setTimeout, not requestAnimationFrame: rAF can run before React has
     // committed the new panel, so the measurement lands on the pre-update layout
     // and the scroll is skipped exactly when it is most needed.
@@ -650,6 +656,40 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const [checkMsg, setCheckMsg] = useState({});         // sectionId -> 'checking' | {ok:false, text} after a verify attempt
   const [preview, setPreview] = useState(null);         // filter preview result (see runPreview)
   const [tracked, setTracked] = useState({ list: [], loading: false, q: '', busy: null }); // merged portals.yml companies
+  const [activation, setActivation] = useState(null);   // { enabled, summary } — opt-in setup timing
+  const readyLogged = useRef(false);                    // ready_shown is once per session, not once per render
+  const [reset, setReset] = useState({ arming: false, busy: false, backups: [], counts: null, msg: '', msgOk: false });
+  const [goalEditing, setGoalEditing] = useState(false);
+
+  // ── Activation log ──────────────────────────────────────────────────────────
+  // Fire-and-forget. Instrumentation must never be able to break, slow, or block
+  // the thing it is measuring, so every call is best-effort and unawaited, and a
+  // failure is silent by design. The server drops the event if recording is off.
+  const track = useCallback((event, payload) => {
+    try {
+      fetch('/api/setup/activation/event', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event, ...(payload || {}) }),
+      }).catch(() => {});
+    } catch { /* never throws into a workflow */ }
+  }, []);
+
+  const loadActivation = useCallback(() => {
+    fetch('/api/setup/activation').then(r => r.json()).then(setActivation).catch(() => {});
+  }, []);
+  useEffect(() => { loadActivation(); }, [loadActivation]);
+
+  const toggleActivation = (on) => {
+    window.tjkMutate('/api/setup/activation', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: on }),
+    }).then(r => r.json()).then(() => {
+      loadActivation();
+      if (on) track('setup_opened');
+      toast && toast(on ? 'Recording setup timings on this computer' : 'Stopped, and the file was deleted', 'success');
+    }).catch(() => toast && toast('Could not change that setting', 'error'));
+  };
+
   const [health, setHealth] = useState(null);           // {ok, output}
   const [apiKey, setApiKey] = useState({ has: null, input: '', saving: false, msg: '' });
   const [discKeys, setDiscKeys] = useState({ brave: null, muse: null, braveInput: '', museInput: '', saving: false, msg: '' });
@@ -785,6 +825,14 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   // improves results; none of it unlocks anything.
   const canStart = LP_REQUIRED.every(id => sectionStatus(id) === 'complete');
 
+  // Anchor for the number this log exists to answer: how long someone keeps
+  // working through setup AFTER the product was already usable. Logged in an
+  // effect rather than in render, and guarded, so it records the moment rather
+  // than every re-render that follows it.
+  useEffect(() => {
+    if (canStart && !readyLogged.current) { readyLogged.current = true; track('ready_shown'); }
+  }, [canStart, track]);
+
   // ── Which step is next ──────────────────────────────────────────────────────
   // The rail shows eleven steps as a flat list with no order to them. A
   // first-time user finished the preflight check and had no idea what to do
@@ -840,6 +888,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       .then(({ prompt }) => {
         navigator.clipboard?.writeText(prompt).catch(() => {});
         setPendingGen(p => ({ ...p, [sectionId]: prompt }));
+        track('handoff_started', { step: sectionId });
         toast && toast('Prompt copied. Paste into your Claude Code', 'success');
       })
       .catch(() => toast && toast('Could not load prompt', 'error'));
@@ -865,8 +914,12 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         setPendingGen(p => { const n = { ...p }; delete n[sectionId]; return n; });
         delete pendingBaseline.current[sectionId];
         setCheckMsg(m => { const n = { ...m }; delete n[sectionId]; return n; });
+        track('handoff_verified', { step: sectionId });
         toast && toast('Confirmed — that step is saved', 'success');
       } else {
+        // The single most useful signal in the whole log: a handoff the user
+        // believed they had run, that produced nothing. Invisible from outside.
+        track('handoff_missing', { step: sectionId });
         setCheckMsg(m => ({ ...m, [sectionId]: {
           ok: false,
           // No "Not saved yet." lead-in here: the renderer already supplies it in
@@ -909,9 +962,56 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     }).catch(() => { toast && toast('Could not update that company', 'error'); setTracked(t => ({ ...t, busy: null })); });
   };
 
+  // ── Reset / restore the scanner config ──────────────────────────────────────
+  const loadBackups = useCallback(() => {
+    fetch('/api/setup/portals-backups').then(r => r.json())
+      .then(d => setReset(s => ({ ...s, backups: Array.isArray(d.backups) ? d.backups : [] })))
+      .catch(() => {});
+  }, []);
+
+  // Arming shows the real cost first. The counts come from the file itself, not
+  // from anything cached, so the number shown is the number about to be replaced.
+  const armReset = () => {
+    setReset(s => ({ ...s, arming: true, msg: '' }));
+    fetch('/api/setup/companies').then(r => r.json()).then(d => {
+      const list = Array.isArray(d.companies) ? d.companies : [];
+      setReset(s => ({ ...s, counts: {
+        companies: list.length,
+        disabled: list.filter(c => !c.enabled).length,
+        keywords: (state?.values?.configured?.scannerTitles) ?? 0,
+      } }));
+    }).catch(() => {});
+    loadBackups();
+  };
+
+  const doReset = () => {
+    setReset(s => ({ ...s, busy: true, msg: '' }));
+    window.tjkMutate('/api/setup/reset-portals', { method: 'POST' })
+      .then(r => r.json()).then(d => {
+        if (d.error) { setReset(s => ({ ...s, busy: false, msg: d.error, msgOk: false })); return; }
+        setReset(s => ({ ...s, busy: false, arming: false, counts: null, msgOk: true,
+          msg: `Replaced. Your previous config was saved as ${d.backup}. You now have ${d.now.companies} companies and ${d.now.keywords} search words.` }));
+        loadBackups(); loadTracked(); refresh();
+      })
+      .catch(() => setReset(s => ({ ...s, busy: false, msg: 'That did not work. Nothing was changed.', msgOk: false })));
+  };
+
+  const doRestore = (file) => {
+    setReset(s => ({ ...s, busy: true, msg: '' }));
+    window.tjkMutate('/api/setup/restore-portals', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file }),
+    }).then(r => r.json()).then(d => {
+      if (d.error) { setReset(s => ({ ...s, busy: false, msg: d.error, msgOk: false })); return; }
+      setReset(s => ({ ...s, busy: false, msgOk: true,
+        msg: `Put back. You now have ${d.now.companies} companies and ${d.now.keywords} search words.` }));
+      loadBackups(); loadTracked(); refresh();
+    }).catch(() => setReset(s => ({ ...s, busy: false, msg: 'That did not work. Nothing was changed.', msgOk: false })));
+  };
+
   // ── 1.7: prove the filter works BEFORE the user invests in tuning it ────────
   const runPreview = () => {
     setPreview({ running: true });
+    track('preview_run');
     window.tjkMutate('/api/setup/preview-matches', { method: 'POST' })
       .then(r => r.json())
       .then(d => setPreview(d))
@@ -921,7 +1021,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const saveForm = (sectionId) => {
     if (state?.demo) { toast && toast('Setup is read-only in demo mode', 'warn'); return; }
     const payload = {};
-    const groups = { identity: 'candidate', comp: 'compensation', location: 'location', outputs: 'outputs' };
+    const groups = { identity: 'candidate', comp: 'compensation', location: 'location', outputs: 'outputs', goal: 'goal' };
     const g = groups[sectionId];
     Object.assign(payload, forms[g] || {});
     window.tjkMutate(`/api/setup/save/${sectionId}`, {
@@ -940,7 +1040,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const resetForm = (sectionId) => {
     window.tjkMutate(`/api/setup/reset/${sectionId}`, { method: 'POST' }).then(r => r.json()).then(res => {
       if (res.state) setState(res.state);
-      const groups = { identity: 'candidate', comp: 'compensation', location: 'location', outputs: 'outputs' };
+      const groups = { identity: 'candidate', comp: 'compensation', location: 'location', outputs: 'outputs', goal: 'goal' };
       const g = groups[sectionId];
       for (const key of [...dirty.current]) if (key.startsWith(`${g}.`)) dirty.current.delete(key);
       setForms(f => ({ ...f, [g]: (res.state?.values?.[g]) || {} }));
@@ -1151,6 +1251,114 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     );
   }
 
+  // ── What all of this is for ─────────────────────────────────────────────────
+  // Setup collects five sections of configuration and never asks what any of it
+  // is FOR. That leaves the pieces unrelated to each other, and leaves the
+  // product unable to say how the thing you are actually doing is going.
+  //
+  // Honest caveat for whoever reads this next: unlike everything else added
+  // alongside it, this one has no direct user evidence behind it. Nobody asked
+  // for it. It comes from the observation that the product had no notion of the
+  // user's objective, and it is deliberately three fields and a sentence rather
+  // than a feature, because an unvalidated idea should cost little to remove.
+  function lpGoalBar() {
+    const g = (forms.goal && Object.keys(forms.goal).length ? forms.goal : null)
+      || (state?.values?.configured?.goal) || {};
+    const filled = !!(g.role || g.comp || g.by);
+
+    if (!goalEditing && !filled) {
+      return (
+        <div style={{ marginBottom: 12, padding: '10px 13px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ flex: 1, minWidth: 220, fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55 }}>
+            What are you actually after? One line, and everything below has a point of reference.
+          </span>
+          <button className="btn sm" onClick={() => setGoalEditing(true)}>Set a goal</button>
+        </div>
+      );
+    }
+
+    if (!goalEditing) {
+      return (
+        <div style={{ marginBottom: 12, padding: '10px 13px', borderRadius: 'var(--r-card)', background: 'var(--accent-bg)', border: '1px solid rgba(var(--accent-rgb),0.3)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ flex: 1, minWidth: 220, fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>
+            <span style={{ color: 'var(--text-mute)', fontSize: 11.5 }}>Going for</span><br />
+            {[g.role, g.comp, g.by && `by ${g.by}`].filter(Boolean).join(' · ')}
+          </span>
+          <button className="btn ghost sm" onClick={() => setGoalEditing(true)}>Change</button>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ marginBottom: 12, padding: '12px 14px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+          <LpField label="The job you want" value={g.role} onChange={v => setFormVal('goal', 'role', v)} placeholder="Director of Operations" hint="Roughly is fine." />
+          <LpSelect label="Pay you are aiming for" value={g.comp || ''} options={LP_COMP_STEPS} onChange={v => setFormVal('goal', 'comp', v)} optional />
+          <LpField label="By when" value={g.by} onChange={v => setFormVal('goal', 'by', v)} placeholder="March 2027" optional hint="A rough month is enough." />
+        </div>
+        <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+          <button className="btn primary" disabled={state.demo} onClick={() => { saveForm('goal'); setGoalEditing(false); }}>Save</button>
+          <button className="btn ghost sm" onClick={() => setGoalEditing(false)}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Start the scanner config over ───────────────────────────────────────────
+  // The most destructive button in the product, so it is built to be undone. It
+  // sits behind a disclosure rather than in the open, states the cost in real
+  // numbers BEFORE it is pressed rather than after, and every backup it has ever
+  // taken is listed right underneath with a restore button.
+  //
+  // Someone reaching for this has just discovered their setup produces nothing.
+  // A confirm dialog reading "are you sure?" would be worse than useless to them:
+  // they do not know what they are about to lose, which is the actual question.
+  function lpResetPortals() {
+    const r = reset;
+    return (
+      <details style={{ marginTop: 4, borderTop: '1px solid var(--border)', paddingTop: 12 }}
+        onToggle={e => { if (e.target.open) loadBackups(); }}>
+        <summary style={{ fontSize: 12, color: 'var(--text-mute)', cursor: 'pointer' }}>Start this config over</summary>
+
+        <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+          Replaces your companies, job-title keywords and location rules with the ones a new install gets.
+          Useful if setup left you with a config that finds nothing and you would rather begin again than unpick it.
+          {r.counts && (
+            <div style={{ marginTop: 8, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(234,179,8,0.09)', border: '1px solid rgba(234,179,8,0.3)', color: 'var(--text)' }}>
+              You would be replacing <b>{r.counts.companies} companies</b> ({r.counts.disabled} of them switched off) and <b>{r.counts.keywords} search words</b>.
+              A copy is saved first, and you can put it back from the list below.
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {!r.arming
+            ? <button className="btn" onClick={armReset}>Start over…</button>
+            : <>
+                <button className="btn danger" disabled={r.busy} onClick={doReset}>{r.busy ? 'Replacing…' : 'Yes, replace it'}</button>
+                <button className="btn ghost sm" onClick={() => setReset(s => ({ ...s, arming: false }))}>Cancel</button>
+              </>}
+        </div>
+
+        {r.msg && <div style={{ marginTop: 9, fontSize: 12.5, color: r.msgOk ? 'var(--green)' : 'var(--red)', lineHeight: 1.55 }}>{r.msg}</div>}
+
+        {r.backups.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div style={LP_SUB}>Saved copies</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
+              {r.backups.map(b => (
+                <div key={b.file} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 9px', border: '1px solid var(--border)', borderRadius: 'var(--r-ctl)' }}>
+                  <span className="mono" style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.file}</span>
+                  <button className="btn ghost sm" disabled={r.busy} onClick={() => doRestore(b.file)}>Put this back</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </details>
+    );
+  }
+
   // ── "What do I do now?" ─────────────────────────────────────────────────────
   // Finishing a step used to leave the user on a completed panel with no
   // indication that anything followed it. The specific report was about the step
@@ -1352,7 +1560,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         <div>
           <div style={LP_SUB}>Your titles</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input id="lp-role-input" className="inp" placeholder="e.g. Director of Revenue Operations" style={{ flex: 1 }} onKeyDown={e => { if (e.key === 'Enter') addTitle(); }} />
+            <input id="lp-role-input" className="inp" placeholder="e.g. Director of Customer Support" style={{ flex: 1 }} onKeyDown={e => { if (e.key === 'Enter') addTitle(); }} />
             <button className="btn" onClick={addTitle}>Add title</button>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
@@ -1460,6 +1668,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         {handoffBox('companies')}
         {lpTrackedCompanies()}
         {lpPreview()}
+        {lpResetPortals()}
       </div>
     );
   }
@@ -1780,6 +1989,8 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             : <span className="pill mono" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>start with your resume</span>}
       </div>
 
+      {lpGoalBar()}
+
       {/* The activation banner. This is the single highest-value thing on the
           page: it tells the user the product is usable BEFORE they grind through
           the remaining steps. Its absence cost a beta tester ~2 hours. */}
@@ -1789,7 +2000,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <span style={{ flex: 1, minWidth: 220, fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55 }}>
             <b style={{ color: 'var(--text)' }}>You are ready to use trajecktory.</b> Your resume is in, so you can start evaluating real jobs right now. The steps below are refinements, not requirements. Most people get more out of them after seeing a few scores, so feel free to come back later.
           </span>
-          {setTab && <button className="btn primary" onClick={() => setTab('pipeline')}>Start using it →</button>}
+          {setTab && <button className="btn primary" onClick={() => { track('started_using'); setTab('pipeline'); }}>Start using it →</button>}
         </div>
       )}
 
@@ -1849,6 +2060,55 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             const o = LP_OPTIONAL.find(x => 'opt:' + x.id === active);
             if (o.id === 'models') {
               return <ModelsCostPanel />;
+            }
+            if (o.id === 'activation') {
+              const a = activation;
+              const s = a && a.summary;
+              const stat = (label, v, suffix = '') => v == null ? null : (
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12.5, padding: '4px 0' }}>
+                  <span style={{ color: 'var(--text-dim)' }}>{label}</span>
+                  <span className="mono" style={{ color: 'var(--text)' }}>{v}{suffix}</span>
+                </div>
+              );
+              return (
+                <div>
+                  <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
+                  <LpWhy item={o} />
+
+                  {/* Saying exactly what is and is not recorded is the whole
+                      basis for asking. A privacy promise nobody can check is
+                      worth nothing, so the export below is plain text the user
+                      can read in full before sending it anywhere. */}
+                  <div style={{ padding: '11px 13px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12.5, lineHeight: 1.6, marginBottom: 12 }}>
+                    <div style={{ color: 'var(--text)', marginBottom: 5 }}>What it records</div>
+                    <div style={{ color: 'var(--text-dim)' }}>Which setup step you were on, how long it took, and whether a scan or an application produced anything. Times and counts, nothing else.</div>
+                    <div style={{ color: 'var(--text)', margin: '9px 0 5px' }}>What it never records</div>
+                    <div style={{ color: 'var(--text-dim)' }}>No company names, job titles, pay, locations, or anything from your resume. Not "we try not to": the file can only hold numbers and a fixed list of step names, and there is a test that proves it.</div>
+                    <div style={{ color: 'var(--text-mute)', marginTop: 9 }}>It stays on this computer. Nothing is sent anywhere. Turning it off deletes the file.</div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button className={a && a.enabled ? 'btn' : 'btn primary'} onClick={() => toggleActivation(!(a && a.enabled))}>
+                      {a && a.enabled ? 'Turn off and delete' : 'Turn on'}
+                    </button>
+                    {a && a.enabled && <a className="btn sm" href="/api/setup/activation/export">Download what it has</a>}
+                    {a && a.enabled && <span style={{ fontSize: 11.5, color: 'var(--green)' }}>Recording</span>}
+                  </div>
+
+                  {s && (
+                    <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                      <div style={LP_SUB}>So far</div>
+                      {stat('Minutes until you could start using it', s.minutesToReady)}
+                      {stat('Minutes spent in setup after that point', s.minutesSpentAfterReady)}
+                      {stat('Setup steps finished', s.stepsCompleted)}
+                      {stat('Handoffs that wrote nothing', s.handoffsMissing)}
+                      {stat('Scans that came back empty', s.emptyScans)}
+                      {stat('Results from your first scan', s.firstScanResults)}
+                      {stat('Applications that failed', s.failedApplies)}
+                    </div>
+                  )}
+                </div>
+              );
             }
             if (o.id === 'import') {
               // Was a stub: it copied a generic prompt and did nothing, and the

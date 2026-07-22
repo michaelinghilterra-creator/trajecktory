@@ -21,7 +21,7 @@
  *
  * --swaps points to a JSON file like:
  *   {
- *     "title": "Senior Director of Revenue Operations",
+ *     "title": "Senior Director of Customer Support",
  *     "subtitle_secondary": "Pipeline | Forecasting | Field Enablement",
  *     "summary": "Revenue Operations leader with eight years...",
  *     "areas_of_expertise": "Revenue Forecasting, Pipeline Inspection, ..."

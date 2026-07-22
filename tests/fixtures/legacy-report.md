@@ -137,9 +137,9 @@ No salary on JD. Remote-friendly posture keeps the band national. **Comp Score: 
 | Reposting | First appearance |
 | Company hiring signals | Active careers page, growth-stage vendor |
 | Layoff signals | None |
-| Adjacent posting confirmed | Yes, Acme AI has a Director of Revenue Operations also posted on their main careers site |
+| Adjacent posting confirmed | Yes, Acme AI has a Director of Customer Support also posted on their main careers site |
 
-Cannot confirm full JD content in batch mode. The title variant "Director of Revenue Systems & AI" is distinct from the standard "Director of Revenue Operations" listed on their main careers page, so it could be a re-titled or sibling role. Recommend the user verify the JD live before applying.
+Cannot confirm full JD content in batch mode. The title variant "Director of Revenue Systems & AI" is distinct from the standard "Director of Customer Support" listed on their main careers page, so it could be a re-titled or sibling role. Recommend the user verify the JD live before applying.
 
 ---
 
