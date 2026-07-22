@@ -49,13 +49,13 @@ const LP_SECTIONS = [
     ifYouSkip: 'You cannot. Nothing works without it.',
     extra: 'Paste your resume, share a LinkedIn URL, or upload a .docx or .pdf. A .docx also becomes the master your tailored resumes are built from.',
     handoff: 'cv' },
-  { id: 'identity',   kind: 'form', req: 'Recommended',    icon: 'identity', label: 'Identity & links',
+  { id: 'identity',   kind: 'form', req: 'Recommended',    icon: 'identity', label: 'Identity & Links',
     title: 'Who you are',
     does: 'Your name, email, phone, and profile links.',
     sowhat: 'These get printed on every resume the app makes for you. They also sit behind a copy button, so you are not hunting for your LinkedIn address while you fill out a form.',
     affectsScore: 'no',
     ifYouSkip: 'Your resumes come out with blanks where your contact details go.' },
-  { id: 'roles',      kind: 'gen', req: 'Recommended',     icon: 'roles', label: 'Roles & seniority',
+  { id: 'roles',      kind: 'gen', req: 'Recommended',     icon: 'roles', label: 'Roles & Seniority',
     title: 'What you are targeting',
     does: 'The job titles you want, and how senior.',
     sowhat: 'This is the size of the net. A narrow net brings back a handful of very close jobs. A wide net brings back more to sort through. Most people start far too narrow and then wonder why they see almost nothing.',
@@ -75,7 +75,7 @@ const LP_SECTIONS = [
     sowhat: 'Jobs that could never pay you enough get flagged before you spend an hour on the application.',
     affectsScore: 'yes',
     ifYouSkip: 'You will see roles you would never actually accept.' },
-  { id: 'location',   kind: 'form', req: 'Recommended',    icon: 'location', label: 'Location & policy',
+  { id: 'location',   kind: 'form', req: 'Recommended',    icon: 'location', label: 'Location & Policy',
     title: 'Where you will and will not work',
     does: 'Where you will work, and how far you will travel.',
     sowhat: 'Drops jobs you could never take. Skip it and a chunk of your results sit in cities you are not moving to.',
@@ -279,7 +279,13 @@ function lpSectionSummary(id, cfg) {
     impact = 'This is the biggest lever on evaluation quality. It is how each role is scored against your strengths. Re-run to refine after a few evaluations.';
   } else if (id === 'location' && cfg.location) {
     const l = cfg.location;
-    rows = [row('Home', l.home ? (l.radiusMiles != null ? `${l.home} (${l.radiusMiles} mi radius)` : l.home) : null), row('Will work in', l.allow), row('Hybrid / remote only', l.hybridRemoteOnly), row('Will NOT work in', l.hardNo)];
+    // Place names are STORED lowercase because the scanner's location filter
+    // matches case-insensitively on lowercased strings, and they were being
+    // shown exactly as stored. "san jose" and "phl" in a summary read as a
+    // data-entry mistake rather than as a normalised key, so they are cased for
+    // DISPLAY only. Nothing here writes back: lowercase is correct on disk.
+    const P = (v) => Array.isArray(v) ? v.map(lpProperPlace) : (typeof v === 'string' ? lpProperPlace(v) : v);
+    rows = [row('Home', l.home ? (l.radiusMiles != null ? `${P(l.home)} (${l.radiusMiles} mi radius)` : P(l.home)) : null), row('Will work in', P(l.allow)), row('Hybrid / remote only', P(l.hybridRemoteOnly)), row('Will NOT work in', P(l.hardNo))];
     impact = 'The scanner drops postings outside these rules before you ever see them. Edit to change which locations surface (for example, remove a city you no longer want).';
   } else if (id === 'evaluation' && cfg.evaluation) {
     const ev = cfg.evaluation;
@@ -476,6 +482,38 @@ function ModelsCostPanel() {
 
 const LP_SUB = { fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginBottom: 7 };
 
+// Place names for DISPLAY. The scanner stores them lowercase because its filter
+// lowercases everything before matching, so the stored form is a key, not a
+// label. Showing the key made a configured policy look like sloppy data entry.
+//
+// Title-casing alone is not enough: it turns a metro abbreviation into "Phl",
+// which is worse than leaving it alone. The acronym list is explicit rather than
+// heuristic, because "is this short token an abbreviation" has no reliable rule —
+// "la" is an abbreviation and "el" (El Paso) is not.
+const LP_PLACE_ACRONYMS = new Set(['dfw', 'nyc', 'la', 'sf', 'dc', 'atl', 'phl', 'stl', 'okc', 'us', 'usa', 'uk', 'eu', 'uae']);
+// Words that stay lowercase inside a longer name, as in "Isle of Man".
+const LP_PLACE_MINOR = new Set(['of', 'the', 'and', 'upon', 'de', 'del', 'la', 'las', 'los', 'du', 'sur']);
+
+function lpProperPlace(s) {
+  if (typeof s !== 'string' || !s.trim()) return s;
+  // Stray punctuation survives in real config: a live portals.yml carried an
+  // entry written as " la," (leading space, trailing comma), which title-cased
+  // to "La," and then rendered a doubled comma in the joined list. Strip it for
+  // display. Worth knowing that such an entry is also DEAD as a filter, since
+  // matching is a substring test and no posting location contains "la," — but
+  // that is the user's data to fix, not something to silently rewrite here.
+  const words = s.trim().replace(/[,;]+$/, '').split(/\s+/);
+  return words.map((w, i) => {
+    const bare = w.toLowerCase().replace(/[.,;]+$/, '');
+    if (!bare) return '';
+    if (LP_PLACE_ACRONYMS.has(bare)) return bare.toUpperCase();
+    // A minor word keeps its case only when it is not the first word.
+    if (i > 0 && LP_PLACE_MINOR.has(bare)) return bare;
+    // Hyphenated names capitalise on both sides: "winston-salem".
+    return bare.split('-').map(p => p ? p[0].toUpperCase() + p.slice(1) : p).join('-');
+  }).join(' ');
+}
+
 // Commute in MINUTES, not miles: an hour of city traffic and an hour of highway
 // are the same hour to the person driving it, and wildly different distances.
 // The geocode handoff converts to a radius when it builds the scanner filter.
@@ -576,6 +614,36 @@ class LpErrorBoundary extends React.Component {
 window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const [state, setState] = useState(null);
   const [active, setActive] = useState('preflight');
+  const panelRef = useRef(null);
+
+  // ── Scroll the panel back into view when a step is picked ───────────────────
+  // The step list is a tall left rail and the panel that answers it sits at the
+  // TOP of the page. Picking something from the bottom of the rail therefore
+  // swapped content the user could not see, and the screen appeared to go blank:
+  // "I wasn't sure what to do here. Thought the screen went blank."
+  //
+  // Only scrolls when the panel is actually off screen, so picking a step near
+  // the top does not yank the page around for no reason.
+  const selectStep = useCallback((id) => {
+    setActive(id);
+    // setTimeout, not requestAnimationFrame: rAF can run before React has
+    // committed the new panel, so the measurement lands on the pre-update layout
+    // and the scroll is skipped exactly when it is most needed.
+    //
+    // The scroll container is the app's own .content div, not the window, so
+    // measure against THAT rather than window.innerHeight. Getting this wrong is
+    // silent: the check simply never fires and the panel stays off screen.
+    setTimeout(() => {
+      const el = panelRef.current;
+      if (!el) return;
+      const scroller = el.closest('.content') || document.scrollingElement;
+      if (!scroller) return;
+      const top = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      if (top < 0 || top > scroller.clientHeight * 0.5) {
+        el.scrollIntoView({ block: 'start' });
+      }
+    }, 0);
+  }, []);
   const [preflight, setPreflight] = useState(null);     // {ok, checks}
   const [pendingGen, setPendingGen] = useState({});     // sectionId -> prompt (copied, awaiting ack)
   const pendingBaseline = useRef({});                   // sectionId -> status when the handoff started (for empty→complete auto-clear)
@@ -1099,7 +1167,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>
           {done ? 'Done here. Next up:' : 'When you are finished here, go to:'}
         </span>
-        <button className={done ? 'btn primary' : 'btn'} onClick={() => setActive(next.id)}>
+        <button className={done ? 'btn primary' : 'btn'} onClick={() => selectStep(next.id)}>
           {next.label} →
         </button>
       </div>
@@ -1593,7 +1661,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             </div>
             <div style={{ marginTop: 12 }}>
               <LpField label="Never work in" value={c.never_work_in} onChange={v => setFormVal('location', 'never_work_in', v)}
-                placeholder="Chicago, New York" optional
+                placeholder="Denver, Phoenix" optional
                 hint="Places you would turn down whatever the job. Applies to office and hybrid roles, and to remote roles tied to a location." />
             </div>
           </div>
@@ -1747,7 +1815,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             const isGated = gated(s.id);
             const isNext = s.id === nextStepId && !isActive;
             return (
-              <button key={s.id} onClick={() => setActive(s.id)} disabled={isGated}
+              <button key={s.id} onClick={() => selectStep(s.id)} disabled={isGated}
                 style={{ textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
                   borderRadius: 'var(--r-ctl)', cursor: isGated ? 'not-allowed' : 'pointer', opacity: isGated ? 0.5 : 1,
                   border: `1px solid ${isActive ? 'var(--accent)' : isNext ? 'var(--green)' : 'var(--border)'}`,
@@ -1765,7 +1833,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           })}
           <div style={{ fontSize: 10.5, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: 0.4, margin: '10px 0 2px 4px' }}>Optional boosters</div>
           {LP_OPTIONAL.map(o => (
-            <button key={o.id} onClick={() => setActive('opt:' + o.id)} disabled={!preflightOk}
+            <button key={o.id} onClick={() => selectStep('opt:' + o.id)} disabled={!preflightOk}
               style={{ textAlign: 'left', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px',
                 borderRadius: 'var(--r-ctl)', cursor: 'pointer', opacity: preflightOk ? 1 : 0.5,
                 border: `1px solid ${active === 'opt:' + o.id ? 'var(--accent)' : 'var(--border)'}`, background: 'var(--panel)' }}>
@@ -1775,7 +1843,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           ))}
         </div>
 
-        <div className="card padded-lg" style={{ flex: '1 1 560px', minWidth: 0, minHeight: 280, padding: '22px 26px' }}>
+        <div ref={panelRef} className="card padded-lg" style={{ flex: '1 1 560px', minWidth: 0, minHeight: 280, padding: '22px 26px' }}>
           <LpErrorBoundary resetKey={active}>
           {active.startsWith('opt:') ? (() => {
             const o = LP_OPTIONAL.find(x => 'opt:' + x.id === active);
