@@ -30,7 +30,7 @@
         <span class="chip">No technical experience needed</span>
         <span class="chip">Windows PC</span>
       </div>
-      <div class="ver">for trajecktory v1.17.7</div>
+      <div class="ver">for trajecktory v1.24.0</div>
     </div>
 
     <div class="foot">
@@ -331,6 +331,8 @@
     <li>Inside the Code tab, choose <span class="click">Local</span>. This simply means "use the files on this computer".</li>
     <li>Click <span class="click">Select folder</span> and pick a folder. In Guide 2 you will pick your
         trajecktory folder; for now, just notice where this button is.</li>
+    <li>Claude will ask whether you <b>trust</b> this folder. Say <b>yes</b>. The box below explains why
+        this one matters more than it looks.</li>
     <li>From then on, you type what you want in plain English and Claude does it, showing you each change
         to approve first.</li>
   </ol>
@@ -354,6 +356,17 @@
     </div>
     <figcaption>An illustration of the Code tab's start screen. Pick <b>Local</b>, then <b>Select folder</b>.</figcaption>
   </figure>
+
+  <div class="callout warn">
+    <span class="ic">&#9888;</span>
+    <b>Say yes when Claude asks if you trust this folder.</b> It is one click and it is easy to dismiss, but
+    it decides whether Claude is allowed to read pages on the web. Without it, trajecktory can still search
+    for jobs, it just quietly finds nothing: a scan finishes in seconds and reports no results, with no error
+    and no clue why. <b>A fast, empty search is a symptom of this, not proof that there are no jobs out
+    there.</b> If you clicked past the question, nothing is broken and nothing is lost. trajecktory notices
+    on its own and puts a <span class="click">Trust this folder</span> button in the sidebar, so one click
+    later you are back on track.
+  </div>
 
   <div class="callout ok">
     <span class="ic">&#9829;</span>
@@ -436,6 +449,9 @@
       <div class="stuck"><b>"Windows protected your PC".</b> Click <b>More info</b>, then <b>Run anyway</b>.</div>
       <div class="stuck"><b>Code asks me to upgrade.</b> Your Pro plan is not active yet. Revisit Step 2.</div>
       <div class="stuck"><b>The Code tab will not let me type yet.</b> That is expected in Guide 1. trajecktory installs Git for you in Guide 2, and the Code tab works after you restart your PC once.</div>
+      <div class="stuck"><b>Searches finish fast and find nothing.</b> Almost always the trust question from
+      Step 5. trajecktory spots it and offers a <b>Trust this folder</b> button in the sidebar. Click it and
+      search again.</div>
       <div class="stuck"><b>Asked to sign in again?</b> Harmless. Choose the same Claude account from this guide.</div>
       <div class="stuck"><b>The window disappeared.</b> Look on the taskbar at the bottom for the Claude icon and click it.</div>
     </div>

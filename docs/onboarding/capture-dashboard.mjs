@@ -9,10 +9,16 @@
  *     server's REAL config/profile.yml, tracker, and reports are never read into
  *     a screenshot and nothing is written to disk.
  *   - Captured views: the sidebar Workflow (default Claude-plan flow), the Setup
- *     Launchpad (first-run + ready), the Models & cost booster, and the Tell Me
- *     About Yourself pitch builder. The populated Overview/Pipeline/Insights
- *     "tour" tabs are NOT captured here (they need real data); the existing
- *     dash-overview-full.png is kept.
+ *     Launchpad in all three states (first-run, resume-in, ready), the Models &
+ *     cost booster, the Tell Me About Yourself pitch builder, the Today and
+ *     Interview tabs, and the Guide 3 set (Pipeline, the report drawer including
+ *     the Posting tab and the score explainer, and the outreach tabs).
+ *
+ * A note on adding captures: every data-bearing endpoint a new view touches must
+ * be mocked in installMocks BEFORE it is captured. Routing is opt-in, so an
+ * endpoint nobody thought about falls through to the live server and lands real
+ * data in a PNG. captures/ is gitignored, so neither verify-no-pii.mjs nor
+ * tests/no-real-postings.test.mjs will catch it; the PDF reader would be first.
  *
  * Prereq: the dashboard is running on http://localhost:3333
  *   (cd dashboard-web && npm start)  — builds the UI then serves live data.
@@ -34,9 +40,9 @@ const SCALE = 2;
 
 // ---- synthetic setup state (zero real PII) ---------------------------------
 const SECTION_IDS = ['cv', 'identity', 'roles', 'edge', 'comp', 'location', 'evaluation', 'companies', 'outputs'];
-function sectionsObj(status) {
+function sectionsObj(status, overrides = {}) {
   const o = { preflight: { status: 'complete' }, health: { status: status === 'complete' ? 'complete' : 'empty' } };
-  for (const id of SECTION_IDS) o[id] = { status };
+  for (const id of SECTION_IDS) o[id] = { status: overrides[id] || status };
   return o;
 }
 const STATE_FIRSTRUN = {
@@ -51,14 +57,39 @@ const STATE_READY = {
   sections: sectionsObj('complete'),
   values: { candidate: {}, compensation: {}, location: {}, outputs: {} },
 };
+// Resume in, nothing else done. This is the ONLY state that renders the green
+// "You are ready to use trajecktory." banner and the "N/8 sharpened" meter,
+// because both are gated on canStart && !allReady (launchpad.jsx). Guide 2's
+// whole time-to-value argument rests on that screen, and neither of the two
+// states above can produce it: firstrun has no resume, ready has nothing left
+// to sharpen.
+const STATE_STARTED = {
+  firstRun: false, demo: false,
+  files: { cv: { exists: true }, profile: { exists: true }, portals: { exists: true }, modeProfile: { exists: true }, cvMaster: { exists: true }, pipeline: { exists: false } },
+  sections: sectionsObj('empty', { cv: 'complete' }),
+  values: { candidate: {}, compensation: {}, location: {}, outputs: { resume_dir: 'Documents\\trajecktory resumes', interview_prep_dir: 'Documents\\trajecktory interview prep' } },
+};
+// Preflight passes doctor.mjs --json straight through, so these labels have to be
+// doctor's own words. They previously were not: this fixture invented friendlier
+// ones ("Your CV (cv.md)"), which put text in the guide that appears nowhere in
+// the app. Order and wording follow gatherChecks() in doctor.mjs, in the state a
+// fresh install is actually in: engine ready, config files not written yet, and
+// portals.yml created by preflight itself.
 const PREFLIGHT_OK = {
-  ok: false, engineOk: true, failures: 0, checks: [
-    { label: 'Node.js 20 or newer is installed', pass: true, blocking: true },
-    { label: 'Dashboard dependencies installed', pass: true, blocking: true },
-    { label: 'Playwright Chromium is available', pass: true, blocking: true },
-    { label: 'Data and reports folders are present', pass: true, blocking: true },
-    { label: 'Your CV (cv.md)', pass: false, blocking: false },
-    { label: 'Your profile (config/profile.yml)', pass: false, blocking: false },
+  ok: false, engineOk: true, failures: 2, warnings: 1, checks: [
+    { label: 'Node.js >= 18 (v20.19.0)', pass: true, warn: false, blocking: true, fix: [] },
+    { label: 'Dependencies installed', pass: true, warn: false, blocking: true, fix: [] },
+    { label: 'Playwright chromium installed', pass: true, warn: false, blocking: true, fix: [] },
+    { label: 'cv.md not found', pass: false, warn: false, blocking: false, fix: ['Add your resume in the step below and this turns green.'] },
+    { label: 'config/profile.yml not found', pass: false, warn: false, blocking: false, fix: ['Created for you as you work through the steps below.'] },
+    { label: 'portals.yml created from the starter template', pass: true, warn: false, blocking: false, fix: [] },
+    { label: 'No ANTHROPIC_API_KEY detected', pass: true, warn: true, blocking: false, fix: ['The main /trajecktory pipeline runs on your Claude Code login and needs no key.'] },
+    { label: 'Fonts directory ready', pass: true, warn: false, blocking: true, fix: [] },
+    { label: 'data/ directory ready', pass: true, warn: false, blocking: true, fix: [] },
+    { label: 'output/ directory ready', pass: true, warn: false, blocking: true, fix: [] },
+    { label: 'reports/ directory ready', pass: true, warn: false, blocking: true, fix: [] },
+    { label: 'No evaluations on disk yet', pass: true, warn: false, blocking: false, fix: [] },
+    { label: 'No unused legacy data files', pass: true, warn: false, blocking: false, fix: [] },
   ],
 };
 const HEALTH_OK = { ok: true, output: '✓ verify-pipeline passed\n✓ verify-reports passed\n✓ verify-actionable passed\nAll checks green.' };
@@ -321,6 +352,43 @@ const NOTES = { notes: [
   { id: 'n2', text: 'Asked about equity. Answer was vague, so revisit before any offer conversation.', createdAt: '2026-07-10T09:05:00.000Z' },
 ] };
 
+// The Posting tab, as GET /api/jd/:id returns it. Written to match app 412 so the
+// tab and the report beside it describe the same job. Deliberately short: the
+// guide figure only needs to show that the saved text is there and readable.
+const POSTING = {
+  path: 'jds/412-northwind-analytics.txt',
+  text: [
+    'VP, Revenue Operations',
+    'Northwind Analytics  ·  Remote (United States)',
+    '',
+    'About the role',
+    'Northwind Analytics helps mid-market shippers see where their freight actually',
+    'is. Two acquisitions in the last eighteen months have left us with three CRM',
+    'instances and a reporting layer nobody trusts. We are hiring our first VP of',
+    'Revenue Operations to fix that and to build the function around it.',
+    '',
+    'What you will do',
+    '  - Consolidate three CRM instances onto one, and retire the other two',
+    '  - Own forecasting end to end, from pipeline hygiene to the board deck',
+    '  - Build and lead a team of six across systems, analytics and enablement',
+    '  - Partner with the CRO on territory design and quota setting',
+    '',
+    'What we are looking for',
+    '  - Eight or more years in revenue or sales operations, some of it in logistics',
+    '  - You have run a CRM consolidation before and can talk about what went wrong',
+    '  - Comfortable being the first senior hire in a function you have to define',
+    '',
+    'Compensation: $190,000 - $230,000 plus equity. Fully remote within the US.',
+  ].join('\n'),
+};
+
+// The "Files for this application" row. Filenames follow the shipped convention,
+// with the invented persona's name rather than the real one.
+const ARTIFACTS = {
+  resume: 'Jordan_Avery_Resume_Northwind_07-02-2026.docx',
+  cover: 'Jordan_Avery_Cover_Northwind_07-02-2026.docx',
+};
+
 // ---- Block D: the outreach + follow-up tabs ---------------------------------
 // Same invented search as APPS, seen from each tab's angle. Follow-Ups in
 // particular MUST stay mocked: the real endpoint derives from the user's own
@@ -371,7 +439,7 @@ const SSI_LOG = [
   { date: '2026-07-14', influencer: 'Jane Rivera',  actionType: 'Messaged',  topic: 'Intro',           message: 'Short note after her post.', responseReceived: 'Yes', connectionMade: 'Connected', notes: '', loggedAt: '2026-07-14T09:41:00.000Z' },
 ];
 
-let stateMode = 'firstrun'; // 'firstrun' | 'ready'
+let stateMode = 'firstrun'; // 'firstrun' | 'started' | 'ready'
 // 'empty'      → a genuinely fresh install: no triage results, no to-dos, no
 //                cadence, so no sidebar badges. This is what the first-run
 //                screenshot must show, because the guide says "it starts empty".
@@ -390,7 +458,9 @@ async function installMocks(page) {
     const req = route.request();
     const p = new URL(req.url()).pathname;
     const method = req.method();
-    if (p.endsWith('/api/setup/state')) return json(route, stateMode === 'ready' ? STATE_READY : STATE_FIRSTRUN);
+    if (p.endsWith('/api/setup/state')) {
+      return json(route, stateMode === 'ready' ? STATE_READY : stateMode === 'started' ? STATE_STARTED : STATE_FIRSTRUN);
+    }
     if (p.endsWith('/api/setup/preflight')) return json(route, PREFLIGHT_OK);
     if (p.endsWith('/api/setup/healthcheck')) return json(route, HEALTH_OK);
     if (p.endsWith('/api/setup/models')) return json(route, MODELS_STATE);
@@ -404,7 +474,7 @@ async function installMocks(page) {
     // handoff prompt text is static + read-only; let it hit the server for authenticity
     return route.continue();
   });
-  await page.route('**/api/system/version', route => json(route, { version: '1.16.2' }));
+  await page.route('**/api/system/version', route => json(route, { version: '1.24.0' }));
   await page.route('**/api/claude-status', route => json(route, { signedIn: false }));
   await page.route('**/api/triage/results', route => json(route, (dataMode === 'empty' || !showTriage) ? { cards: [] } : TRIAGE));
   await page.route('**/api/agent/cost-history', route => json(route, []));
@@ -420,6 +490,14 @@ async function installMocks(page) {
   await page.route('**/api/identity', route => json(route, IDENTITY));
   await page.route('**/api/cheatsheets/**', route => json(route, CHEATSHEET));
   await page.route('**/api/notes/**', route => json(route, NOTES));
+  // The Posting tab and the "Files for this application" row. Both are newer than
+  // this script and were falling through to the live server, which on a real
+  // install serves a genuine job advert and filenames carrying a real employer
+  // and the Windows account name. captures/ is gitignored, so neither
+  // verify-no-pii.mjs nor tests/no-real-postings.test.mjs would ever have seen
+  // it — the leak's first reader would have been whoever opened the PDF.
+  await page.route('**/api/jd/**', route => json(route, POSTING));
+  await page.route('**/api/artifacts/**', route => json(route, ARTIFACTS));
   await page.route('**/api/target-talent/by-company/**', route => json(route, []));
   await page.route('**/api/followups/stale', route =>
     json(route, dataMode === 'empty' ? { warm: [], cold: [], snoozed: [] } : FOLLOWUPS_STALE));
@@ -433,6 +511,31 @@ async function installMocks(page) {
   // Insights is left unmocked-but-empty on purpose: a new user genuinely sees
   // "No analysis yet" until they run it, and that is the honest screenshot.
   await page.route('**/api/insights/latest', route => json(route, { generated_at: null }));
+  // These two fire on Pipeline mount and are captured in g3-pipeline-analytics.
+  // Neither returns a company or a role, so neither leaks a name — but both are
+  // computed from the real tracker, so unmocked they would print the maintainer's
+  // genuine search statistics next to ten invented rows that cannot produce them.
+  // Derived from APPS instead: 3 terminal rows (Vertex rejected, Soylent no
+  // response, Stark not a fit), which is what the funnel beside them shows.
+  await page.route('**/api/insights/rejection-timing', route =>
+    json(route, { n: 3, avgDays: 21.3, medianDays: 19, excluded: 0 }));
+  await page.route('**/api/insights/stage-funnel', route => json(route, {
+    funnelOrder: ['Applied', 'Responded', 'Phone Screen', '1st Interview', '2nd Interview', 'Offer'],
+    interviewStages: ['Phone Screen', '1st Interview', '2nd Interview', '3rd Interview', '4th Interview'],
+    reached: { Applied: 8, Responded: 5, 'Phone Screen': 4, '1st Interview': 3, '2nd Interview': 2, Offer: 1 },
+    conversion: [
+      { from: 'Applied', to: 'Responded', fromN: 8, toN: 5, rate: 63 },
+      { from: 'Responded', to: 'Phone Screen', fromN: 5, toN: 4, rate: 80 },
+      { from: 'Phone Screen', to: '1st Interview', fromN: 4, toN: 3, rate: 75 },
+      { from: '1st Interview', to: '2nd Interview', fromN: 3, toN: 2, rate: 67 },
+      { from: '2nd Interview', to: 'Offer', fromN: 2, toN: 1, rate: 50 },
+    ],
+    rejections: {
+      byStage: { 'Phone Screen': 1, '1st Interview': 1, '2nd Interview': 0, '3rd Interview': 0, '4th Interview': 0 },
+      preInterview: 1, unknownStage: 0, total: 3,
+    },
+    eventsTracked: 26,
+  }));
 
   // Today tab. Order matters: '/api/cadence/today' and '/api/cadence/streak' are
   // matched before the bare '/api/cadence' template route.
@@ -512,12 +615,31 @@ async function clickRail(page, label) {
   await page.locator('button', { hasText: label }).first().click();
   await page.waitForTimeout(400);
 }
+// Drawer tabs are plain elements carrying an icon plus a label, so a childless-node
+// match misses them and a class-name match would couple this script to the drawer's
+// markup. Take the DEEPEST element whose trimmed text is exactly the label and click
+// it; the event bubbles to whichever ancestor holds the handler.
+async function clickDrawerTab(page, label) {
+  await page.evaluate((want) => {
+    const d = document.querySelector('.pl-drawer.open');
+    if (!d) return;
+    const nodes = [...d.querySelectorAll('*')].filter(n => n.textContent.trim() === want);
+    const t = nodes[nodes.length - 1];
+    if (t) { t.scrollIntoView({ block: 'nearest', inline: 'center' }); t.click(); }
+  }, label);
+}
 async function waitRailEnabled(page, label) {
   const btn = page.locator('button', { hasText: label }).first();
   for (let i = 0; i < 30; i++) {
-    try { if (!(await btn.isDisabled())) return; } catch {}
-    await page.waitForTimeout(250);
+    // The per-attempt timeout matters. Without it each isDisabled() inherits the
+    // 20s page default, so a rail item that never appears costs 30 x 20s = ten
+    // MINUTES of complete silence rather than failing in a few seconds. That has
+    // now cost two debugging sessions: once when the rail was renamed CV ->
+    // resume, and once when this was called on a screen showing no rail at all.
+    try { if (!(await btn.isDisabled({ timeout: 300 }))) return; } catch {}
+    await page.waitForTimeout(200);
   }
+  console.log(`  note: rail item "${label}" never became enabled, continuing anyway`);
 }
 
 async function main() {
@@ -532,7 +654,7 @@ async function main() {
   stateMode = 'firstrun';
   await page.goto(BASE, { waitUntil: 'networkidle' });   // firstRun -> opens Setup/Launchpad
   await page.waitForSelector('text=Launchpad');
-  await waitRailEnabled(page, 'Your CV');
+  await waitRailEnabled(page, 'Your resume');
   await page.waitForTimeout(700);
 
   // The whole window exactly as a new user first sees it: sidebar (Launchpad
@@ -569,8 +691,12 @@ async function main() {
   await shotContent(page, 'lp-preflight');
 
   // Per-step panels (unchanged layout, refreshed for consistency).
-  await clickRail(page, 'Your CV');          await shotPanel(page, 'lp-cv');
-  await clickRail(page, 'Identity & links'); await shotPanel(page, 'lp-identity');
+  // Rail labels are matched with Playwright's hasText, which is case-insensitive,
+  // so the 2026-07 capitalisation pass ("Identity & links" -> "Identity & Links")
+  // needs no change here. The CV -> resume RENAME did: it silently stalled this
+  // script for ~10 minutes on the wait above, then threw on the click below.
+  await clickRail(page, 'Your resume');      await shotPanel(page, 'lp-cv');
+  await clickRail(page, 'Identity & links'); await shotPanel(page, 'lp-identity', 760);
   await clickRail(page, 'Roles & seniority');await shotPanel(page, 'lp-roles');
   await clickRail(page, 'Your edge');        await shotPanel(page, 'lp-edge');
   try {
@@ -581,9 +707,11 @@ async function main() {
     await shotPanel(page, 'lp-edge-handoff');
   } catch (e) { console.log('  edge handoff skip:', e.message); }
   await clickRail(page, 'Compensation');     await shotPanel(page, 'lp-comp');
-  await clickRail(page, 'Location & policy');await shotPanel(page, 'lp-location');
+  // Location grew a three-mode "How you are willing to work" block, each mode with
+  // its own commute control, so the panel is now taller than the page can take.
+  await clickRail(page, 'Location & policy');await shotPanel(page, 'lp-location', 820);
   await clickRail(page, 'Evaluation tuning');await shotPanel(page, 'lp-evaluation');
-  await clickRail(page, 'Companies to track');await shotPanel(page, 'lp-companies');
+  await clickRail(page, 'Companies to track');await shotPanel(page, 'lp-companies', 820);
   await clickRail(page, 'Output locations'); await shotPanel(page, 'lp-outputs');
 
   // Models & cost booster (NEW in v1.11.0).
@@ -597,7 +725,7 @@ async function main() {
   // Health check — reload fresh, DOM-click the rail item, run it.
   await page.goto(BASE, { waitUntil: 'networkidle' });
   await page.waitForSelector('text=Launchpad');
-  await waitRailEnabled(page, 'Your CV');
+  await waitRailEnabled(page, 'Your resume');
   await page.waitForTimeout(700);
   await page.evaluate(() => {
     const b = [...document.querySelectorAll('button')].find(x => /Health check/.test(x.textContent) && /Verify/.test(x.textContent));
@@ -619,6 +747,31 @@ async function main() {
     await shotContent(page, 'lp-pitch');
   } catch (e) { console.log('  pitch skip:', e.message); }
 
+  // ---- Phase A2: resume in, nothing else done ------------------------------
+  // The single most important screen in Guide 2. It is the moment the product
+  // says "you can stop setting up and go get a score", and until now no capture
+  // could reach it, because the two states above are all-empty and all-complete.
+  // Shows the green "You are ready to use trajecktory." banner, the Start using
+  // it button, and the meter reading N/8 sharpened under "Result quality
+  // (optional)" rather than any count of required steps.
+  console.log('Phase A2 — resume in, refinements outstanding');
+  stateMode = 'started';
+  await page.goto(BASE, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(900);
+  // firstRun is false in this state, so the app lands on the working tabs rather
+  // than opening Setup for you. Navigate there explicitly, exactly as Phase B
+  // does. Skipping this does not fail fast: the rail never renders, so
+  // waitRailEnabled burns its full 30 x 20s retry budget and the run appears to
+  // hang for ten minutes before doing anything.
+  try { await clickNav(page, 'Setup'); } catch { try { await clickNav(page, 'Launchpad'); } catch {} }
+  await waitRailEnabled(page, 'Your resume');
+  await page.waitForTimeout(800);
+  // Cropped to the header, the ready banner and the meter. The rail badges are
+  // already carried by lp-preflight.png, and a full-height shot here is nearly
+  // square, which shrinks to an unreadable strip once the guide fits it to a
+  // page that also has to carry the text explaining it.
+  await shotContentTight(page, 'lp-started', 300);
+
   // ---- Phase B: the "you are ready" finale --------------------------------
   console.log('Phase B — ready state');
   stateMode = 'ready';
@@ -626,7 +779,7 @@ async function main() {
   await page.waitForTimeout(900);
   try { await clickNav(page, 'Setup'); } catch { try { await clickNav(page, 'Launchpad'); } catch {} }
   await page.waitForSelector('text=Setup complete', { timeout: 8000 }).catch(() => {});
-  await waitRailEnabled(page, 'Your CV');
+  await waitRailEnabled(page, 'Your resume');
   await page.waitForTimeout(600);
   await shotContent(page, 'lp-ready');
 
@@ -720,22 +873,51 @@ async function main() {
     await drawer.screenshot({ path: resolve(OUT, 'g3-drawer-overview.png') });
     console.log('  saved g3-drawer-overview.png');
     try {
-      // Tabs are plain elements inside the drawer; match on text via the DOM so we
-      // do not depend on a class name.
-      await page.evaluate(() => {
-        const d = document.querySelector('.pl-drawer.open');
-        if (!d) return;
-        // Tabs contain an icon plus a label, so a childless-node match misses them.
-        // Take the DEEPEST element whose text is exactly "Notes" and click it; the
-        // event bubbles to whichever ancestor carries the handler.
-        const nodes = [...d.querySelectorAll('*')].filter(n => n.textContent.trim() === 'Notes');
-        const t = nodes[nodes.length - 1];
-        if (t) { t.scrollIntoView({ block: 'nearest', inline: 'center' }); t.click(); }
-      });
+      await clickDrawerTab(page, 'Notes');
       await page.waitForTimeout(900);
       await drawer.screenshot({ path: resolve(OUT, 'g3-drawer-notes.png') });
       console.log('  saved g3-drawer-notes.png');
     } catch (e) { console.log('  drawer notes skip:', e.message); }
+
+    // The Posting tab: the saved copy of the job advert. Served from POSTING, so
+    // no real advert can reach the image.
+    try {
+      await clickDrawerTab(page, 'Posting');
+      await page.waitForTimeout(900);
+      await drawer.screenshot({ path: resolve(OUT, 'g3-drawer-posting.png') });
+      console.log('  saved g3-drawer-posting.png');
+    } catch (e) { console.log('  drawer posting skip:', e.message); }
+
+    // "How is this scored?" — the panel that answers the question the whole
+    // product rests on. Back to Overview first, since the button lives in the
+    // Global Score Breakdown section head.
+    try {
+      await clickDrawerTab(page, 'Overview');
+      await page.waitForTimeout(700);
+      await page.evaluate(() => {
+        const d = document.querySelector('.pl-drawer.open');
+        if (!d) return;
+        const b = [...d.querySelectorAll('button')].find(x => /How is this scored\?/i.test(x.textContent));
+        if (b) { b.scrollIntoView({ block: 'center' }); b.click(); }
+      });
+      await page.waitForTimeout(800);
+      // Cropped to the breakdown and the panel it opens. A whole-drawer shot is
+      // half as tall again as it is wide, and shrinking that to fit a page which
+      // also carries the explanation leaves the text unreadable.
+      const bs = await drawer.boundingBox();
+      const top = await page.evaluate(() => {
+        const d = document.querySelector('.pl-drawer.open');
+        const n = [...d.querySelectorAll('*')]
+          .find(x => x.children.length === 0 && /^Global Score Breakdown$/.test(x.textContent.trim()));
+        return n ? n.getBoundingClientRect().top : null;
+      });
+      const y = top != null ? Math.max(bs.y, top - 10) : bs.y + bs.height * 0.42;
+      await page.screenshot({ path: resolve(OUT, 'g3-score-explainer.png'),
+        clip: { x: Math.floor(bs.x), y: Math.floor(y),
+                width: Math.ceil(bs.width),
+                height: Math.min(560, Math.ceil(bs.y + bs.height - y - 60)) } });
+      console.log('  saved g3-score-explainer.png (breakdown + panel)');
+    } catch (e) { console.log('  score explainer skip:', e.message); }
     // The stage track, cropped out of the open drawer: the control that moves a
     // role along. Northwind sits at 2nd Interview, so it shows a part-filled
     // track with both Back and Advance available.
