@@ -658,6 +658,8 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const [tracked, setTracked] = useState({ list: [], loading: false, q: '', busy: null }); // merged portals.yml companies
   const [activation, setActivation] = useState(null);   // { enabled, summary } — opt-in setup timing
   const readyLogged = useRef(false);                    // ready_shown is once per session, not once per render
+  const [reset, setReset] = useState({ arming: false, busy: false, backups: [], counts: null, msg: '', msgOk: false });
+  const [goalEditing, setGoalEditing] = useState(false);
 
   // ── Activation log ──────────────────────────────────────────────────────────
   // Fire-and-forget. Instrumentation must never be able to break, slow, or block
@@ -960,6 +962,52 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     }).catch(() => { toast && toast('Could not update that company', 'error'); setTracked(t => ({ ...t, busy: null })); });
   };
 
+  // ── Reset / restore the scanner config ──────────────────────────────────────
+  const loadBackups = useCallback(() => {
+    fetch('/api/setup/portals-backups').then(r => r.json())
+      .then(d => setReset(s => ({ ...s, backups: Array.isArray(d.backups) ? d.backups : [] })))
+      .catch(() => {});
+  }, []);
+
+  // Arming shows the real cost first. The counts come from the file itself, not
+  // from anything cached, so the number shown is the number about to be replaced.
+  const armReset = () => {
+    setReset(s => ({ ...s, arming: true, msg: '' }));
+    fetch('/api/setup/companies').then(r => r.json()).then(d => {
+      const list = Array.isArray(d.companies) ? d.companies : [];
+      setReset(s => ({ ...s, counts: {
+        companies: list.length,
+        disabled: list.filter(c => !c.enabled).length,
+        keywords: (state?.values?.configured?.scannerTitles) ?? 0,
+      } }));
+    }).catch(() => {});
+    loadBackups();
+  };
+
+  const doReset = () => {
+    setReset(s => ({ ...s, busy: true, msg: '' }));
+    window.tjkMutate('/api/setup/reset-portals', { method: 'POST' })
+      .then(r => r.json()).then(d => {
+        if (d.error) { setReset(s => ({ ...s, busy: false, msg: d.error, msgOk: false })); return; }
+        setReset(s => ({ ...s, busy: false, arming: false, counts: null, msgOk: true,
+          msg: `Replaced. Your previous config was saved as ${d.backup}. You now have ${d.now.companies} companies and ${d.now.keywords} search words.` }));
+        loadBackups(); loadTracked(); refresh();
+      })
+      .catch(() => setReset(s => ({ ...s, busy: false, msg: 'That did not work. Nothing was changed.', msgOk: false })));
+  };
+
+  const doRestore = (file) => {
+    setReset(s => ({ ...s, busy: true, msg: '' }));
+    window.tjkMutate('/api/setup/restore-portals', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file }),
+    }).then(r => r.json()).then(d => {
+      if (d.error) { setReset(s => ({ ...s, busy: false, msg: d.error, msgOk: false })); return; }
+      setReset(s => ({ ...s, busy: false, msgOk: true,
+        msg: `Put back. You now have ${d.now.companies} companies and ${d.now.keywords} search words.` }));
+      loadBackups(); loadTracked(); refresh();
+    }).catch(() => setReset(s => ({ ...s, busy: false, msg: 'That did not work. Nothing was changed.', msgOk: false })));
+  };
+
   // ── 1.7: prove the filter works BEFORE the user invests in tuning it ────────
   const runPreview = () => {
     setPreview({ running: true });
@@ -973,7 +1021,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const saveForm = (sectionId) => {
     if (state?.demo) { toast && toast('Setup is read-only in demo mode', 'warn'); return; }
     const payload = {};
-    const groups = { identity: 'candidate', comp: 'compensation', location: 'location', outputs: 'outputs' };
+    const groups = { identity: 'candidate', comp: 'compensation', location: 'location', outputs: 'outputs', goal: 'goal' };
     const g = groups[sectionId];
     Object.assign(payload, forms[g] || {});
     window.tjkMutate(`/api/setup/save/${sectionId}`, {
@@ -992,7 +1040,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const resetForm = (sectionId) => {
     window.tjkMutate(`/api/setup/reset/${sectionId}`, { method: 'POST' }).then(r => r.json()).then(res => {
       if (res.state) setState(res.state);
-      const groups = { identity: 'candidate', comp: 'compensation', location: 'location', outputs: 'outputs' };
+      const groups = { identity: 'candidate', comp: 'compensation', location: 'location', outputs: 'outputs', goal: 'goal' };
       const g = groups[sectionId];
       for (const key of [...dirty.current]) if (key.startsWith(`${g}.`)) dirty.current.delete(key);
       setForms(f => ({ ...f, [g]: (res.state?.values?.[g]) || {} }));
@@ -1200,6 +1248,114 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           </>
         )}
       </div>
+    );
+  }
+
+  // ── What all of this is for ─────────────────────────────────────────────────
+  // Setup collects five sections of configuration and never asks what any of it
+  // is FOR. That leaves the pieces unrelated to each other, and leaves the
+  // product unable to say how the thing you are actually doing is going.
+  //
+  // Honest caveat for whoever reads this next: unlike everything else added
+  // alongside it, this one has no direct user evidence behind it. Nobody asked
+  // for it. It comes from the observation that the product had no notion of the
+  // user's objective, and it is deliberately three fields and a sentence rather
+  // than a feature, because an unvalidated idea should cost little to remove.
+  function lpGoalBar() {
+    const g = (forms.goal && Object.keys(forms.goal).length ? forms.goal : null)
+      || (state?.values?.configured?.goal) || {};
+    const filled = !!(g.role || g.comp || g.by);
+
+    if (!goalEditing && !filled) {
+      return (
+        <div style={{ marginBottom: 12, padding: '10px 13px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ flex: 1, minWidth: 220, fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55 }}>
+            What are you actually after? One line, and everything below has a point of reference.
+          </span>
+          <button className="btn sm" onClick={() => setGoalEditing(true)}>Set a goal</button>
+        </div>
+      );
+    }
+
+    if (!goalEditing) {
+      return (
+        <div style={{ marginBottom: 12, padding: '10px 13px', borderRadius: 'var(--r-card)', background: 'var(--accent-bg)', border: '1px solid rgba(var(--accent-rgb),0.3)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ flex: 1, minWidth: 220, fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>
+            <span style={{ color: 'var(--text-mute)', fontSize: 11.5 }}>Going for</span><br />
+            {[g.role, g.comp, g.by && `by ${g.by}`].filter(Boolean).join(' · ')}
+          </span>
+          <button className="btn ghost sm" onClick={() => setGoalEditing(true)}>Change</button>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ marginBottom: 12, padding: '12px 14px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+          <LpField label="The job you want" value={g.role} onChange={v => setFormVal('goal', 'role', v)} placeholder="Director of Operations" hint="Roughly is fine." />
+          <LpSelect label="Pay you are aiming for" value={g.comp || ''} options={LP_COMP_STEPS} onChange={v => setFormVal('goal', 'comp', v)} optional />
+          <LpField label="By when" value={g.by} onChange={v => setFormVal('goal', 'by', v)} placeholder="March 2027" optional hint="A rough month is enough." />
+        </div>
+        <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+          <button className="btn primary" disabled={state.demo} onClick={() => { saveForm('goal'); setGoalEditing(false); }}>Save</button>
+          <button className="btn ghost sm" onClick={() => setGoalEditing(false)}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Start the scanner config over ───────────────────────────────────────────
+  // The most destructive button in the product, so it is built to be undone. It
+  // sits behind a disclosure rather than in the open, states the cost in real
+  // numbers BEFORE it is pressed rather than after, and every backup it has ever
+  // taken is listed right underneath with a restore button.
+  //
+  // Someone reaching for this has just discovered their setup produces nothing.
+  // A confirm dialog reading "are you sure?" would be worse than useless to them:
+  // they do not know what they are about to lose, which is the actual question.
+  function lpResetPortals() {
+    const r = reset;
+    return (
+      <details style={{ marginTop: 4, borderTop: '1px solid var(--border)', paddingTop: 12 }}
+        onToggle={e => { if (e.target.open) loadBackups(); }}>
+        <summary style={{ fontSize: 12, color: 'var(--text-mute)', cursor: 'pointer' }}>Start this config over</summary>
+
+        <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+          Replaces your companies, job-title keywords and location rules with the ones a new install gets.
+          Useful if setup left you with a config that finds nothing and you would rather begin again than unpick it.
+          {r.counts && (
+            <div style={{ marginTop: 8, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(234,179,8,0.09)', border: '1px solid rgba(234,179,8,0.3)', color: 'var(--text)' }}>
+              You would be replacing <b>{r.counts.companies} companies</b> ({r.counts.disabled} of them switched off) and <b>{r.counts.keywords} search words</b>.
+              A copy is saved first, and you can put it back from the list below.
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {!r.arming
+            ? <button className="btn" onClick={armReset}>Start over…</button>
+            : <>
+                <button className="btn danger" disabled={r.busy} onClick={doReset}>{r.busy ? 'Replacing…' : 'Yes, replace it'}</button>
+                <button className="btn ghost sm" onClick={() => setReset(s => ({ ...s, arming: false }))}>Cancel</button>
+              </>}
+        </div>
+
+        {r.msg && <div style={{ marginTop: 9, fontSize: 12.5, color: r.msgOk ? 'var(--green)' : 'var(--red)', lineHeight: 1.55 }}>{r.msg}</div>}
+
+        {r.backups.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <div style={LP_SUB}>Saved copies</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
+              {r.backups.map(b => (
+                <div key={b.file} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 9px', border: '1px solid var(--border)', borderRadius: 'var(--r-ctl)' }}>
+                  <span className="mono" style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.file}</span>
+                  <button className="btn ghost sm" disabled={r.busy} onClick={() => doRestore(b.file)}>Put this back</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </details>
     );
   }
 
@@ -1512,6 +1668,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         {handoffBox('companies')}
         {lpTrackedCompanies()}
         {lpPreview()}
+        {lpResetPortals()}
       </div>
     );
   }
@@ -1831,6 +1988,8 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             ? <span className="pill mono" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>{readiness.done}/{readiness.total} sharpened</span>
             : <span className="pill mono" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>start with your resume</span>}
       </div>
+
+      {lpGoalBar()}
 
       {/* The activation banner. This is the single highest-value thing on the
           page: it tells the user the product is usable BEFORE they grind through

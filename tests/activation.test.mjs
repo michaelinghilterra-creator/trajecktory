@@ -61,11 +61,18 @@ check(!/salary_expectations/.test(fileText()), 'but the unknown step id itself n
 console.log('\n4. THE RULE: values never reach the file');
 // Each of these is a plausible thing to want to log while debugging, and each is
 // exactly what must not be recorded. They are passed through every field.
+// Every value here is invented and deliberately unlike anything a maintainer of
+// this repo would plausibly have in their own data. That is not fussiness: the
+// first draft of this list used a job title that turned out to closely paraphrase
+// the maintainer's actual target role, which put a real value into the very file
+// whose purpose is proving values never leak. Third time that trap has caught
+// something in this repo, so: when inventing a fixture, pick a field you do not
+// work in.
 const secrets = [
   ['a company name', 'Northwind Freight'],
-  ['a job title', 'Director of Revenue Operations'],
-  ['a salary', '$185K'],
-  ['a city', 'Columbus, OH'],
+  ['a job title', 'Veterinary Practice Manager'],
+  ['a salary', '$72K'],
+  ['a city', 'Boise, ID'],
   ['an email', 'someone@example.com'],
   ['a file path', 'C:/Users/someone/cv.md'],
 ];
