@@ -22,7 +22,7 @@ import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
 import yaml from 'js-yaml';
 import { parseScore, shouldAutoDiscard, recommendsAgainst } from './lib/discard.mjs';
-import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
+import { parseTrackerLine, formatTrackerLine, TRACKER_HEADER, TRACKER_SEPARATOR } from './lib/tracker.mjs';
 import { normalizeUrl } from './lib/scan-core.mjs';
 // next-jd.mjs (persistent JD counter) can be one update cycle behind on installs
 // updating from a pre-counter version. Load it defensively so a missing file
@@ -326,9 +326,7 @@ function parseTsvContent(content, filename) {
 if (!existsSync(APPS_FILE)) {
   mkdirSync(dirname(APPS_FILE), { recursive: true });
   writeFileSync(APPS_FILE,
-    '# Applications Tracker\n\n' +
-    '| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes |\n' +
-    '|---|------|---------|------|-------|--------|-----|--------|--------|-------|\n');
+    '# Applications Tracker\n\n' + TRACKER_HEADER + '\n' + TRACKER_SEPARATOR + '\n');
   console.log(`Created ${APPS_FILE} (fresh install).`);
 }
 const appContent = readFileSync(APPS_FILE, 'utf-8');

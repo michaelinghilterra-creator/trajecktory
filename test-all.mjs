@@ -450,6 +450,7 @@ for (const suite of [
   'tests/outcome.test.mjs',
   'tests/tracker.test.mjs',
   'tests/tracker-writers.test.mjs',
+  'tests/backfill-tracker-urls.test.mjs',
   'tests/agent-prompts.test.mjs',
   'tests/portals.test.mjs',
   'tests/liveness-workday.test.mjs',
