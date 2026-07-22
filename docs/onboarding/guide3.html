@@ -30,7 +30,7 @@
         <span class="chip">Finish Guide 2 first</span>
         <span class="chip">No commands to type</span>
       </div>
-      <div class="ver">for trajecktory v1.24.0</div>
+      <div class="ver">for trajecktory v1.24.1</div>
     </div>
 
     <div class="foot">
@@ -1287,5 +1287,18 @@
   <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 3, Using trajecktory day to day</span><span>23 / 23</span></div>
 </section>
 
+<script>
+// The INSTALLED guides ship without screenshots. captures/ is a local build
+// artifact (docs/onboarding/.gitignore) and never enters git, so `git archive`
+// leaves it out of the installer payload. Without this, every figure renders as
+// a broken-image icon and the guide looks damaged on a new user's first read.
+//
+// Drop the image and keep the <figcaption>, which already describes what the
+// picture showed. Nothing happens when the images ARE present, which is the
+// case when rendering the illustrated PDFs from this same source.
+document.querySelectorAll('figure img').forEach(function (img) {
+  img.addEventListener('error', function () { img.remove(); }, { once: true });
+});
+</script>
 </body>
 </html>
