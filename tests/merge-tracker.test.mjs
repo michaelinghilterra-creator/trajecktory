@@ -189,7 +189,7 @@ rmSync(sandbox, { recursive: true, force: true });
 // Two bugs surfaced by the 2026-07-15 eval batches, exercised on a FRESH
 // applications.md (independent of Scenario A's carefully-counted assertions):
 //   1. roleFuzzyMatch too loose — two DISTINCT new roles in the same family
-//      ("Director, Sales Strategy", "Director, Sales Operations (Planning)")
+//      ("Director, Sales Strategy", "Director, Sales Operations (Calibration)")
 //      both matched one existing row "Director, Sales Operations" and clobbered
 //      it, losing one top-4 eval.
 //   2. No intra-batch dedup — two same-company+role postings (Northwind
@@ -259,7 +259,7 @@ const B = runMerge(
     // NOT collapse onto existing #71, and must NOT collapse into each other.
     '72-contoso.tsv': tsv(['72', '2026-07-15', 'Contoso', 'Director, Sales Strategy',
       'Evaluated', '4.1/5', '❌', '[72](reports/72-contoso-2026-07-15.md)', 'Sales Strategy']),
-    '73-contoso.tsv': tsv(['73', '2026-07-15', 'Contoso', 'Director, Sales Operations (Planning)',
+    '73-contoso.tsv': tsv(['73', '2026-07-15', 'Contoso', 'Director, Sales Operations (Calibration)',
       'Evaluated', '4.0/5', '❌', '[73](reports/73-contoso-2026-07-15.md)', 'Sales Ops Planning']),
     // Same-company+role postings with different JD numbers — must consolidate to
     // the highest score (4.2), not leave two intra-batch dupes.
@@ -282,7 +282,7 @@ console.log('\n6. Tightened fuzzy match — distinct roles do not collapse (bug 
   check(!!closed && cols(closed)[STATUS] === 'Closed' && cols(closed)[SCORE] === '4.0/5',
     `existing #71 "Director, Sales Operations" NOT clobbered (still Closed / 4.0/5): "${closed ? cols(closed)[SCORE] + ' ' + cols(closed)[STATUS] : 'MISSING'}"`);
   check(z.some(r => r.includes('Sales Strategy')), 'Director, Sales Strategy kept as its own row (not silently lost)');
-  check(z.some(r => r.includes('(Planning)')), 'Director, Sales Operations (Planning) kept as its own row');
+  check(z.some(r => r.includes('(Calibration)')), 'Director, Sales Operations (Calibration) kept as its own row');
 }
 
 console.log('\n7. Level distinction — Director ≠ VP (bug 1)');
