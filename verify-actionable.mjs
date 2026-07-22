@@ -17,6 +17,7 @@ import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
+import { urlForRow } from './lib/identity.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APPS = join(__dirname, 'data/applications.md');
@@ -35,29 +36,28 @@ const lines = readFileSync(APPS, 'utf8').split('\n');
 const targets = [];
 for (let idx = 0; idx < lines.length; idx++) {
   const line = lines[idx];
-  if (!line.startsWith('|') || line.includes('---')) continue;
-  const parts = line.split('|').map(p => p.trim());
-  if (parts.length < 10) continue;
-  const [_, id, date, company, role, scoreStr, status, pdf, reportCell, notes] = parts;
-  if (status !== 'Evaluated') continue;
-  const score = parseFloat((scoreStr.match(/[\d.]+/) || [])[0]) || 0;
+  // Read rows with the canonical parser. The hand-rolled version this replaces
+  // was wrong three ways, all of them silent:
+  //   1. it skipped any line containing '---', which a Workday posting URL can
+  //      contain (/job/Northern-California-USA---Remote/), hiding live rows;
+  //   2. it destructured by position and was never updated for the Resume
+  //      column, so it read Resume as the report link and the report link as
+  //      notes — meaning the [self-sourced] exemption below could never match
+  //      and a JD the user chose themselves could be auto-discarded;
+  //   3. its URL regex only matched the legacy **URL:** header, so it was blind
+  //      to every report written in the v1 JSON frontmatter format.
+  // urlForRow reads the row's own url cell and falls back to the report,
+  // handling both report formats.
+  const row = parseTrackerLine(line);
+  if (!row) continue;
+  if (row.status !== 'Evaluated') continue;
+  const score = parseFloat((String(row.score).match(/[\d.]+/) || [])[0]) || 0;
   if (score < scoreThreshold) continue;
   // Skip self-sourced/referral — user explicitly wants those
-  if (/\[self-sourced\]|\[referral:|\[cowork\]/i.test(notes)) continue;
-  // Extract URL from report file
-  const reportMatch = reportCell.match(/\((reports\/[^)]+)\)/);
-  if (!reportMatch) continue;
-  const reportPath = join(__dirname, reportMatch[1]);
-  let url = null;
-  try {
-    const reportText = readFileSync(reportPath, 'utf8');
-    // Match URL up to first whitespace OR open-paren (some reports append
-    // a parenthetical note like "(JD sourced via WebSearch)" to the URL line)
-    const m = reportText.match(/^\*\*URL:\*\*\s*(https?:\/\/[^\s()]+)/m);
-    if (m) url = m[1];
-  } catch {}
-  if (!url || /^https?:\/\/(www\.)?example\.com/.test(url)) continue;
-  targets.push({ id: parseInt(id), company, role, score, url, lineIdx: idx, line });
+  if (/\[self-sourced\]|\[referral:|\[cowork\]/i.test(row.notes || '')) continue;
+  const url = urlForRow(row, __dirname);
+  if (!url || !/^https?:\/\//.test(url) || /^https?:\/\/(www\.)?example\.com/.test(url)) continue;
+  targets.push({ id: row.num, company: row.company, role: row.role, score, url, lineIdx: idx, line });
 }
 
 if (targets.length === 0) {

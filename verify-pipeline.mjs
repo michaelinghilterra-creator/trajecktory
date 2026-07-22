@@ -150,7 +150,10 @@ if (badScores === 0) ok('All scores valid');
 let badRows = 0;
 for (const line of lines) {
   if (!line.startsWith('|')) continue;
-  if (line.includes('---') || line.includes('Empresa')) continue;
+  // Separator ROW only. '---' can legitimately appear inside a cell now that
+  // rows carry posting URLs (Workday encodes spaces as hyphens), and skipping
+  // those lines meant the format check silently stopped covering them.
+  if (/^\|[-\s|]+\|$/.test(line.trim()) || line.includes('Empresa')) continue;
   const parts = line.split('|');
   if (parts.length < 9) {
     error(`Row with <9 columns: ${line.substring(0, 80)}...`);
