@@ -54,7 +54,7 @@ window.APPS = (() => {
     [50, "2026-04-06", "Rippling",          "VP, Revenue Operations",         "RevOps",        4.4, "Applied",   260, 250, "HR-Tech",     "Late",    "Multi-product"],
     [51, "2026-04-05", "Deel",              "Head of GTM Analytics",          "Analytics",     4.0, "Responded", 225, 230, "HR-Tech",     "Late",    "Global payroll"],
     [52, "2026-04-05", "Brex",              "Director, RevOps",               "RevOps",        3.9, "Applied",   215, 225, "Fintech",     "Late",    "Recruiter pinged"],
-    [53, "2026-05-12", "Contoso Capital",   "Director of Revenue Operations", "RevOps",        4.2, "Evaluated", 250, 240, "Fintech",     "Mid",     "Series B lender; build RevOps from scratch"],
+    [53, "2026-05-12", "Contoso Capital",   "Director of Customer Support", "RevOps",        4.2, "Evaluated", 250, 240, "Fintech",     "Mid",     "Series B lender; build RevOps from scratch"],
   ];
   return rows.map(r => ({
     id: r[0], date: r[1], company: r[2], role: r[3], archetype: r[4],

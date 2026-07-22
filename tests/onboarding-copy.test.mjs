@@ -105,8 +105,12 @@ const all = [...sections, ...optional];
 
 console.log('\n🧪 onboarding copy\n');
 console.log('1. Extraction');
-check(sections.length === 11, `found all 11 sections (got ${sections.length})`);
-check(optional.length === 7, `found all 7 optional boosters (got ${optional.length})`);
+// Lower bounds, not exact counts. An exact count fails the moment a section is
+// legitimately added, which trains whoever hits it to edit the number rather than
+// read the failure. What actually matters is that extraction WORKED (a broken
+// parser returns zero and would otherwise pass every check below vacuously).
+check(sections.length >= 11, `extracted the setup sections (got ${sections.length}, expected at least 11)`);
+check(optional.length >= 7, `extracted the optional boosters (got ${optional.length}, expected at least 7)`);
 
 console.log('\n2. Structure — every entry answers all four questions');
 const VALID_SCORE = ['yes', 'no', 'filter'];

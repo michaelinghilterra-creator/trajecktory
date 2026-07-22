@@ -54,7 +54,7 @@ const HEADER = [
 // Seed rows: one for the skip-lower-score case, one for the update-higher case.
 const seed = [
   HEADER,
-  '| 1 | 2026-06-01 | SeedCo | Director of Revenue Operations | 3.0/5 | Evaluated | ❌ | — | [1](reports/1-seedco-2026-06-01.md) | Seed row |',
+  '| 1 | 2026-06-01 | SeedCo | Director of Customer Support | 3.0/5 | Evaluated | ❌ | — | [1](reports/1-seedco-2026-06-01.md) | Seed row |',
   '| 2 | 2026-06-01 | UpdateCo | VP Sales Strategy | 3.0/5 | Evaluated | ❌ | — | [2](reports/2-updateco-2026-06-01.md) | Seed row |',
   '',
 ].join('\n');
@@ -65,7 +65,7 @@ const T = '\t';
 const tsv = (parts) => parts.join(T) + '\n';
 const cases = {
   // 1. Standard order: status in col4, score in col5
-  '101-acmecorp.tsv': tsv(['101', '2026-06-12', 'AcmeCorp', 'Director of Revenue Operations',
+  '101-acmecorp.tsv': tsv(['101', '2026-06-12', 'AcmeCorp', 'Director of Customer Support',
     'Evaluated', '4.2/5', '❌', '[101](reports/101-acmecorp-2026-06-12.md)', 'Standard column order']),
   // 2. SWAPPED order: score in col4, status in col5 — heuristic must un-swap
   '102-betaworks.tsv': tsv(['102', '2026-06-12', 'BetaWorks', 'VP Sales Operations',
@@ -77,7 +77,7 @@ const cases = {
   '104-deltatech.tsv': tsv(['104', '2026-06-12', 'DeltaTech', 'Head of BizDev',
     'evaluated', '3.8/5', '❌', '[104](reports/104-deltatech-2026-06-12.md)', 'Lowercase status']),
   // 5. Duplicate of seed #1 with LOWER score — must be skipped
-  '105-seedco.tsv': tsv(['105', '2026-06-12', 'SeedCo', 'Director of Revenue Operations',
+  '105-seedco.tsv': tsv(['105', '2026-06-12', 'SeedCo', 'Director of Customer Support',
     'Evaluated', '2.9/5', '❌', '[105](reports/105-seedco-2026-06-12.md)', 'Lower-score duplicate']),
   // 6. Duplicate of seed #2 with HIGHER score — must update in place, not add
   '106-updateco.tsv': tsv(['106', '2026-06-12', 'UpdateCo', 'VP Sales Strategy',

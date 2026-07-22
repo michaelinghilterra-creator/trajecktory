@@ -184,6 +184,14 @@ const SETUP_SCALAR_FIELDS = {
   outputs: [
     ['outputs', 'resume_dir'], ['outputs', 'interview_prep_dir'],
   ],
+  // What the user is actually trying to do. Setup collects five sections of
+  // configuration and never once asks what any of it is FOR, so the product has
+  // no way to say "here is how that is going" and the user has nothing to hold
+  // the pieces together. Three scalars, deliberately: a goal that takes longer to
+  // state than it takes to read is not one anybody fills in.
+  goal: [
+    ['goal', 'role'], ['goal', 'comp'], ['goal', 'by'],
+  ],
 };
 
 // Best-effort YAML parse for the read-back summaries (never throws — a malformed
@@ -306,6 +314,11 @@ function setupComputeState() {
       const cos = Array.isArray(P.tracked_companies) ? P.tracked_companies : [];
       const arr = v => Array.isArray(v) ? v : [];
       return {
+        goal: {
+          role: setupGetScalar(profile, 'goal', 'role'),
+          comp: setupGetScalar(profile, 'goal', 'comp'),
+          by:   setupGetScalar(profile, 'goal', 'by'),
+        },
         targetRoles: [
           ...setupGetList(profile, 'target_roles', 'primary'),
           ...setupGetList(profile, 'target_roles', 'secondary'),

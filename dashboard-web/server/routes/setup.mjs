@@ -6,6 +6,7 @@ import { SETUP_ROOT, SETUP_FILES, setupSetScalar, SETUP_SCALAR_FIELDS, setupComp
 import { modelsState, validateSetting } from '../lib/pricing.mjs';
 import { checkWorkspaceTrust, trustWorkspace } from '../lib/workspace-trust.mjs';
 import { APPLICATIONS_TEMPLATE_CSV, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
+import { record as recordActivation, readActivation, summarizeActivation, setActivationEnabled } from '../lib/activation.mjs';
 
 export const router = express.Router();
 
@@ -207,6 +208,133 @@ router.post('/api/setup/healthcheck', (req, res) => {
 });
 
 // POST /api/setup/handoff/:section — return the prompt to paste into Claude Code.
+// ── Start the scanner config over ────────────────────────────────────────────
+// A first setup can leave portals.yml matching almost nothing, and until now the
+// only way back was Claude Desktop or the command line. Someone who has just
+// discovered their config is wrong is exactly the person least able to hand-edit
+// a 4000-line YAML file, so the escape hatch has to be in the app.
+//
+// Three deliberate constraints, because this is the most destructive button in
+// the product:
+//
+//   1. A BACKUP IS MANDATORY, not an option. It is written before anything is
+//      overwritten, and if the backup fails the reset does not happen.
+//   2. Backups are LISTED AND RESTORABLE. A reset you cannot undo is not a
+//      recovery tool, it is a second way to lose the same work.
+//   3. The response says what was lost, by count. "Your config was replaced" is
+//      not enough when the thing replaced held 600 companies and 70 tombstones.
+function portalsBackupName() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `portals.yml.bak-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+       + `-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-reset`;
+}
+
+function portalsCounts(text) {
+  const companies = (text.match(/^\s*-\s*name:/gm) || []).length;
+  const disabled = (text.match(/^\s*enabled:\s*false/gm) || []).length;
+  const tf = text.indexOf('title_filter:');
+  let keywords = 0;
+  if (tf !== -1) {
+    const after = text.slice(tf + 1);
+    const next = after.search(/\n[a-z_]+:/);
+    keywords = ((next === -1 ? after : after.slice(0, next)).match(/^\s*-\s+/gm) || []).length;
+  }
+  return { companies, disabled, keywords };
+}
+
+router.get('/api/setup/portals-backups', (req, res) => {
+  try {
+    const files = fs.readdirSync(SETUP_ROOT)
+      .filter(f => f.startsWith('portals.yml.bak-'))
+      .map(f => {
+        let mtime = 0, size = 0;
+        try { const st = fs.statSync(path.join(SETUP_ROOT, f)); mtime = st.mtimeMs; size = st.size; } catch { /* skip */ }
+        return { file: f, mtime, size };
+      })
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, 20);
+    res.json({ backups: files });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/api/setup/reset-portals', (req, res) => {
+  try {
+    const dest = portalsPath();
+    const template = path.join(SETUP_ROOT, 'templates', 'portals.example.yml');
+    if (!fs.existsSync(template)) return res.status(500).json({ error: 'The starter template is missing from this install.' });
+
+    let lost = null, backup = null;
+    if (fs.existsSync(dest)) {
+      const current = fs.readFileSync(dest, 'utf8');
+      lost = portalsCounts(current);
+      backup = portalsBackupName();
+      // Backup first. If this throws, nothing is overwritten.
+      fs.copyFileSync(dest, path.join(SETUP_ROOT, backup));
+    }
+    fs.copyFileSync(template, dest);
+    const fresh = portalsCounts(fs.readFileSync(dest, 'utf8'));
+    res.json({ ok: true, backup, lost, now: fresh });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/api/setup/restore-portals', (req, res) => {
+  try {
+    const file = (req.body && req.body.file) || '';
+    // Name only, from our own listing: no path separators, and it must look like
+    // one of our backups. The filename is user-supplied, so it is untrusted.
+    if (!/^portals\.yml\.bak-[A-Za-z0-9._-]+$/.test(file) || file.includes('/') || file.includes('\\')) {
+      return res.status(400).json({ error: 'not a recognised backup name' });
+    }
+    const src = path.join(SETUP_ROOT, file);
+    if (!path.resolve(src).startsWith(path.resolve(SETUP_ROOT) + path.sep)) {
+      return res.status(400).json({ error: 'refused' });
+    }
+    if (!fs.existsSync(src)) return res.status(404).json({ error: 'that backup no longer exists' });
+
+    const dest = portalsPath();
+    // Restoring is itself destructive, so it takes a backup too. Otherwise
+    // restoring the wrong file loses the config you were about to keep.
+    let backup = null;
+    if (fs.existsSync(dest)) {
+      backup = portalsBackupName().replace('-reset', '-before-restore');
+      fs.copyFileSync(dest, path.join(SETUP_ROOT, backup));
+    }
+    fs.copyFileSync(src, dest);
+    res.json({ ok: true, restored: file, backup, now: portalsCounts(fs.readFileSync(dest, 'utf8')) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Activation log ───────────────────────────────────────────────────────────
+// Opt-in, local, shape-only. See lib/activation.mjs for why the fields are a
+// closed set rather than free text.
+router.get('/api/setup/activation', (req, res) => {
+  try { res.json(summarizeActivation()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/api/setup/activation', (req, res) => {
+  const on = !!(req.body && req.body.enabled);
+  res.json(setActivationEnabled(on));
+});
+
+router.post('/api/setup/activation/event', (req, res) => {
+  const { event, step, ms, count, detail } = req.body || {};
+  res.json({ recorded: recordActivation(event, { step, ms, count, detail }) });
+});
+
+// The raw rows, as a download. The point is that the user can read exactly what
+// they would be sending before they send it: a log you cannot inspect is a log
+// nobody should be asked to share.
+router.get('/api/setup/activation/export', (req, res) => {
+  const { rows } = readActivation();
+  const body = 'ts\tevent\tstep\tms\tcount\tdetail\n'
+    + rows.map(r => [r.ts, r.event, r.step, r.ms ?? '', r.count ?? '', r.detail].join('\t')).join('\n');
+  res.setHeader('Content-Type', 'text/tab-separated-values; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="activation-log.tsv"');
+  res.send(body);
+});
+
 // ── GET /api/setup/template/:kind — blank CSVs to fill in ───────────────────
 // The Import step used to be a stub that copied a generic prompt, and the
 // reported reaction to it was that the flow could not be trusted enough to use.

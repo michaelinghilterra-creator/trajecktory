@@ -286,13 +286,42 @@ console.log('\n7. Absolute path check');
 
 // Same git grep approach: only scans tracked files. Untracked AI tool
 // outputs, local debate artifacts, etc. can't false-positive here.
-const absPathResult = run(
-  `git grep -n "/Users/" -- '*.mjs' '*.sh' '*.md' '*.go' '*.yml' 2>/dev/null | grep -v README.md | grep -v LICENSE | grep -v CLAUDE.md | grep -v test-all.mjs`
-);
-if (!absPathResult) {
+//
+// This check was silently DEAD on Windows, which is where the code is written.
+// Two independent reasons, either of which alone was enough:
+//
+//   1. MSYS path conversion. Git Bash rewrites an argument that looks like a
+//      Unix path, so the pattern reaching git grep was not "/Users/" but
+//      "C:/Program Files/Git/Users/", which matches nothing. Ever.
+//   2. The shell pipeline. `run()` shells out through cmd.exe, where `grep`
+//      does not exist, so the whole command errored, returned null, and an
+//      empty result reads as "no absolute paths found".
+//
+// Both failure modes are invisible: the check printed a green tick on every
+// local run for as long as it has existed, and only CI ever enforced it. It was
+// caught when a CI run failed on a file that a local run had just passed.
+//
+// Fixed by doing the work in Node instead of in a shell: no pattern to mangle,
+// no pipeline to break, and identical behaviour on every platform.
+const ABS_PATH_EXEMPT = /^(README\.md|LICENSE|CLAUDE\.md|test-all\.mjs)$/;
+const absPathFiles = (run('git ls-files') || '')
+  .split('\n')
+  .map(f => f.trim())
+  .filter(f => /\.(mjs|sh|md|go|yml)$/.test(f) && !ABS_PATH_EXEMPT.test(f.split('/').pop()));
+
+const absPathHits = [];
+for (const f of absPathFiles) {
+  let text;
+  try { text = readFileSync(join(ROOT, f), 'utf-8'); } catch { continue; }
+  text.split('\n').forEach((line, i) => {
+    if (line.includes('/Users/')) absPathHits.push(`${f}:${i + 1}: ${line.trim()}`);
+  });
+}
+
+if (absPathHits.length === 0) {
   pass('No absolute paths in code files');
 } else {
-  for (const line of absPathResult.split('\n').filter(Boolean)) {
+  for (const line of absPathHits) {
     fail(`Absolute path: ${line.slice(0, 100)}`);
   }
 }
@@ -429,6 +458,7 @@ for (const suite of [
   'tests/onboarding-copy.test.mjs',
   'tests/verify-no-pii.test.mjs',
   'tests/interview-sessions.test.mjs',
+  'tests/activation.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);

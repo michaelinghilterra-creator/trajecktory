@@ -41,6 +41,9 @@ export const APPLY_DATES_PATH = path.join(DATA_DIR, 'apply-dates.json');
 export const MUTE_PATH = path.join(DATA_DIR, 'followup-mute.json');
 export const APP_NOTES_PATH = path.join(DATA_DIR, 'app-notes.json');
 export const STATUS_EVENTS_PATH = path.join(DATA_DIR, 'status-events.tsv');
+// Activation log: how long setup took and whether the first scan and first apply
+// actually produced anything. Opt-in, local, and shape-only (see lib/activation.mjs).
+export const ACTIVATION_PATH = path.join(DATA_DIR, 'activation-log.tsv');
 export const RECRUITERS_MD = path.join(DATA_DIR, 'recruiters.md');
 export const RECRUITER_CORR_DIR = path.join(DATA_DIR, 'recruiter-correspondence');
 export const TARGET_TALENT_MD = path.join(DATA_DIR, 'target-talent.md');
