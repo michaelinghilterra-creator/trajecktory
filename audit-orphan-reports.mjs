@@ -32,7 +32,7 @@ import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join, dirname, basename, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine } from './lib/tracker.mjs';
-import { canonicalUrl, urlFromReport, urlForRow } from './lib/identity.mjs';
+import { canonicalUrl, normalizeCompany, urlFromReport, urlForRow } from './lib/identity.mjs';
 
 /**
  * Classify every report on disk against the tracker. Pure and read-only.
@@ -84,13 +84,47 @@ export function auditOrphanReports(rootDir) {
   }
 
   // ── A TSV under merged/ means the evaluation can be replayed ───────────────
-  const tsvByNum = new Map();
+  //
+  // Matching on the NUMBER ALONE is not safe. Before the persistent JD counter
+  // existed, report numbers were computed as "max existing + 1", which reused
+  // them: on a real archive, 131 numbers are shared by two or three DIFFERENT
+  // companies. Trusting the number would tell the user an evaluation is
+  // recoverable and then hand them a different company's file to restore, which
+  // is worse than saying it cannot be recovered at all.
+  //
+  // So the company has to agree too. A tolerant comparison, because the tracker
+  // and the TSV can spell one employer two ways (with and without a legal
+  // suffix). When nothing agrees, the answer is "cannot confirm", never a guess:
+  // an unnecessary re-evaluation costs tokens, restoring the wrong company's row
+  // corrupts the tracker.
+  const tsvsByNum = new Map();
   if (existsSync(MERGED_DIR)) {
     for (const f of readdirSync(MERGED_DIR).filter(n => n.endsWith('.tsv'))) {
       const m = f.match(/^(\d+)-/);
-      if (m && !tsvByNum.has(Number(m[1]))) tsvByNum.set(Number(m[1]), f);
+      if (!m) continue;
+      const n = Number(m[1]);
+      if (!tsvsByNum.has(n)) tsvsByNum.set(n, []);
+      tsvsByNum.get(n).push(f);
     }
   }
+  const companyAgrees = (a, b) => {
+    const x = normalizeCompany(a), y = normalizeCompany(b);
+    if (!x || !y) return false;
+    return x === y || x.startsWith(y) || y.startsWith(x);
+  };
+  const resolveTsv = (num, company) => {
+    const cands = tsvsByNum.get(num) || [];
+    if (!cands.length) return { tsv: null, tsvAmbiguous: false };
+    const matching = cands.filter((f) => {
+      try {
+        const cols = readFileSync(join(MERGED_DIR, f), 'utf-8').split('\t');
+        return companyAgrees(cols[2] || '', company || '');
+      } catch { return false; }
+    });
+    if (matching.length === 1) return { tsv: matching[0], tsvAmbiguous: false };
+    // Zero matches, or several: the caller must look rather than be told a file.
+    return { tsv: null, tsvAmbiguous: true, tsvCandidates: cands };
+  };
 
   const meta = (file) => {
     try {
@@ -119,7 +153,8 @@ export function auditOrphanReports(rootDir) {
       continue;
     }
 
-    lost.push({ num, file, url, tsv: tsvByNum.get(num) || null, ...meta(file) });
+    const m2 = meta(file);
+    lost.push({ num, file, url, ...m2, ...resolveTsv(num, m2.company) });
   }
 
   return {
@@ -180,7 +215,18 @@ if (isMain) {
   const w = (s, n) => String(s ?? '—').slice(0, n - 1).padEnd(n);
   say(`   ${w('#', 6)}${w('Company', 24)}${w('Role', 38)}${w('Date', 12)}Recoverable`);
   say(`   ${'-'.repeat(79)}`);
-  for (const l of lost) say(`   ${w(l.num, 6)}${w(l.company, 24)}${w(l.role, 38)}${w(l.date, 12)}${l.tsv ? 'yes' : 'report only'}`);
+  for (const l of lost) {
+    const replay = l.tsv ? 'yes' : (l.tsvAmbiguous ? 'CHECK BY HAND' : 'report only');
+    say(`   ${w(l.num, 6)}${w(l.company, 24)}${w(l.role, 38)}${w(l.date, 12)}${replay}`);
+  }
+
+  const unsure = lost.filter(l => l.tsvAmbiguous);
+  if (unsure.length) {
+    say(`\n   ${unsure.length} could not be matched to a working file with confidence, because that`);
+    say(`   report number is shared by more than one company (numbers were reused before`);
+    say(`   the persistent counter existed). Open the candidates and pick the right one:`);
+    for (const u of unsure) say(`      #${u.num} ${u.company} → ${(u.tsvCandidates || []).join('  |  ')}`);
+  }
 
   say(`\n   ${counts.recoverable} of ${lost.length} still have their original TSV under batch/tracker-additions/merged/.`);
   say(`\n   To reinstate one, put it back THROUGH THE MERGE rather than hand-editing the`);
