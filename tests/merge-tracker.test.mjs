@@ -11,7 +11,7 @@
  * Run: node tests/merge-tracker.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, rmSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, copyFileSync, rmSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
@@ -228,9 +228,21 @@ function runMerge(seedRows, caseMap, extraFiles = {}) {
     process.exit(1);
   }
   const res = readFileSync(join(sb, 'data/applications.md'), 'utf8');
+  // Read the audit trail BEFORE the sandbox is removed. A dropped addition must
+  // leave a ledger line and land in dropped/ rather than merged/; that is the
+  // whole point of the drop bookkeeping, so the tests have to be able to see it.
+  const dropsLog = existsSync(join(sb, 'data/merge-drops.tsv'))
+    ? readFileSync(join(sb, 'data/merge-drops.tsv'), 'utf8') : '';
+  const droppedTsvs = existsSync(join(sb, 'batch/tracker-additions/dropped'))
+    ? readdirSync(join(sb, 'batch/tracker-additions/dropped')) : [];
+  const mergedTsvs = existsSync(join(sb, 'batch/tracker-additions/merged'))
+    ? readdirSync(join(sb, 'batch/tracker-additions/merged')) : [];
   rmSync(sb, { recursive: true, force: true });
   const rws = res.split('\n').filter(l => /^\|\s*\d+\s*\|/.test(l));
-  return { output: out, rows: rws, rowsFor: (c) => rws.filter(r => r.includes(c)) };
+  return {
+    output: out, rows: rws, rowsFor: (c) => rws.filter(r => r.includes(c)),
+    dropsLog, droppedTsvs, mergedTsvs,
+  };
 }
 
 const B = runMerge(
@@ -340,6 +352,147 @@ console.log('\n10. Unescaped pipe in notes cannot restructure a row');
   check(n.includes('strong fit') && n.includes('$999K'),
     `full note survives rather than being truncated at the first pipe: "${n}"`);
 }
+
+// ── Scenario D: posting identity is the canonical URL ─────────────────────────
+// This is the layer that would have caught the original data loss. The bug was a
+// MISSING ROW, so these assert on COUNTS. A content assertion does not notice an
+// evaluation that was never written.
+//
+// Report ids are above the live data/jd-counter.txt ceiling on purpose: report
+// numbers are primary keys, and a fixture reusing a real one makes a test file
+// read like a record of a real evaluation.
+const rpt = (url) => `---\n{"schema":"trajecktory-report/v1","url":"${url}"}\n---\n\n# Fixture\n`;
+const seedRow = (n, co, role, score, url) =>
+  `| ${n} | 2026-07-01 | ${co} | ${role} | ${score} | Evaluated | ❌ | — | [${n}](reports/${n}-${co.toLowerCase()}-2026-07-01.md) | Seed | ${url} |`;
+
+// Two requisitions at ONE employer with byte-identical titles and different
+// URLs. This exact shape silently ate evaluations twice.
+const D1 = runMerge([], {
+  '9201-fabrikam.tsv': tsv(['9201', '2026-07-22', 'Fabrikam', 'Director, Revenue Operations',
+    'Evaluated', '4.2/5', '❌', '[9201](reports/9201-fabrikam-2026-07-22.md)', 'Req one']),
+  '9202-fabrikam.tsv': tsv(['9202', '2026-07-22', 'Fabrikam', 'Director, Revenue Operations',
+    'Evaluated', '3.9/5', '❌', '[9202](reports/9202-fabrikam-2026-07-22.md)', 'Req two']),
+}, {
+  'reports/9201-fabrikam-2026-07-22.md': rpt('https://jobs.example.com/fabrikam/aaa111'),
+  'reports/9202-fabrikam-2026-07-22.md': rpt('https://jobs.example.com/fabrikam/bbb222'),
+});
+
+console.log('\n11. Identical titles at one employer, different URLs (the regression pin)');
+check(D1.rowsFor('Fabrikam').length === 2,
+  `two distinct requisitions stay two rows: got ${D1.rowsFor('Fabrikam').length}`);
+check(D1.dropsLog === '', 'nothing was dropped, so no ledger line');
+
+// Same title as an EXISTING row, different URL — must not update it in place.
+const D2 = runMerge(
+  [seedRow(9210, 'Tailwind', 'Director, Revenue Operations', '4.0/5', 'https://jobs.example.com/tailwind/ccc333')],
+  {
+    '9211-tailwind.tsv': tsv(['9211', '2026-07-22', 'Tailwind', 'Director, Revenue Operations',
+      'Evaluated', '4.5/5', '❌', '[9211](reports/9211-tailwind-2026-07-22.md)', 'Different req']),
+  },
+  { 'reports/9211-tailwind-2026-07-22.md': rpt('https://jobs.example.com/tailwind/ddd444') },
+);
+
+console.log('\n12. A differing URL vetoes a title match against an existing row');
+check(D2.rowsFor('Tailwind').length === 2,
+  `existing row survives and the new req is added: got ${D2.rowsFor('Tailwind').length}`);
+check(D2.rows.some(r => r.includes('ccc333')) && D2.rows.some(r => r.includes('ddd444')),
+  'both postings keep their own URL');
+check(D2.rows.some(r => r.includes('4.0/5')), 'the seed row was NOT clobbered by the higher-scoring new one');
+
+// A genuine re-eval: same URL, different report number, and a differently worded
+// title. URL identity must win over all of it and update in place.
+const D3 = runMerge(
+  [seedRow(9220, 'Umbrella', 'Director, Revenue Operations', '3.0/5', 'https://jobs.example.com/umbrella/eee555')],
+  {
+    '9221-umbrella.tsv': tsv(['9221', '2026-07-22', 'Umbrella', 'Senior Director, Rev Ops & Analytics',
+      'Evaluated', '4.6/5', '❌', '[9221](reports/9221-umbrella-2026-07-22.md)', 'Re-eval']),
+  },
+  { 'reports/9221-umbrella-2026-07-22.md': rpt('https://jobs.example.com/umbrella/eee555') },
+);
+
+console.log('\n13. Same URL is the same posting, whatever the title says');
+check(D3.rowsFor('Umbrella').length === 1,
+  `re-eval updates in place rather than adding: got ${D3.rowsFor('Umbrella').length}`);
+check(D3.rows[0].includes('4.6/5'), 'higher score wins');
+check(cols(D3.rows[0])[10] === 'https://jobs.example.com/umbrella/eee555',
+  `the url cell survives the update: got "${cols(D3.rows[0])[10]}"`);
+
+// Cosmetic URL variants are the same posting.
+const D4 = runMerge(
+  [seedRow(9230, 'Initech', 'Head of Analytics', '3.2/5', 'https://jobs.example.com/initech/fff666')],
+  {
+    '9231-initech.tsv': tsv(['9231', '2026-07-22', 'Initech', 'Head of Analytics',
+      'Evaluated', '4.1/5', '❌', '[9231](reports/9231-initech-2026-07-22.md)', 'Same posting, tracked link']),
+  },
+  { 'reports/9231-initech-2026-07-22.md': rpt('https://jobs.example.com/initech/fff666/apply?utm_source=news') },
+);
+
+console.log('\n14. A tracking parameter or /apply suffix is not a new posting');
+check(D4.rowsFor('Initech').length === 1,
+  `url variant collapses onto the existing row: got ${D4.rowsFor('Initech').length}`);
+
+// Neither side resolves to a URL — the role fallback must behave exactly as
+// before, because that is all there is to go on.
+const D5 = runMerge(
+  ['| 9240 | 2026-07-01 | Globex | Director, Sales Operations | 3.0/5 | Evaluated | ❌ | — | [9240](reports/9240-globex-2026-07-01.md) | Seed |'],
+  {
+    '9241-globex.tsv': tsv(['9241', '2026-07-22', 'Globex', 'Director, Sales Operations',
+      'Evaluated', '4.4/5', '❌', '[9241](reports/9241-globex-2026-07-22.md)', 'No report file anywhere']),
+  },
+);
+
+console.log('\n15. With no URL on either side, the role fallback is unchanged');
+check(D5.rowsFor('Globex').length === 1,
+  `same company+role still consolidates: got ${D5.rowsFor('Globex').length}`);
+check(D5.rows[0].includes('4.4/5'), 'higher score still wins on the fallback path');
+
+// A genuinely lower-scoring re-eval of the SAME posting is still skipped, but it
+// may no longer vanish: it must leave a ledger line and land in dropped/.
+const D6 = runMerge(
+  [seedRow(9250, 'Soylent', 'Director, Revenue Operations', '4.5/5', 'https://jobs.example.com/soylent/ggg777')],
+  {
+    '9251-soylent.tsv': tsv(['9251', '2026-07-22', 'Soylent', 'Director, Revenue Operations',
+      'Evaluated', '3.1/5', '❌', '[9251](reports/9251-soylent-2026-07-22.md)', 'Lower re-eval']),
+  },
+  { 'reports/9251-soylent-2026-07-22.md': rpt('https://jobs.example.com/soylent/ggg777') },
+);
+
+console.log('\n16. A dropped evaluation leaves a trace instead of vanishing');
+check(D6.rowsFor('Soylent').length === 1, 'the lower re-eval does not add a row');
+check(D6.rows[0].includes('4.5/5'), 'the existing higher score is kept');
+check(/9251/.test(D6.dropsLog), 'the drop is recorded in data/merge-drops.tsv');
+check(/9250/.test(D6.dropsLog), 'the ledger names the row that was kept instead');
+check(D6.droppedTsvs.includes('9251-soylent.tsv'),
+  `the TSV lands in dropped/: got ${JSON.stringify(D6.droppedTsvs)}`);
+check(!D6.mergedTsvs.includes('9251-soylent.tsv'),
+  'a dropped TSV is NOT filed under merged/ as though it succeeded');
+
+// Regression pin. Workday encodes spaces in a posting URL as hyphens, so a real
+// URL can contain '---'. merge-tracker used to skip any line containing '---' as
+// a stand-in for "this is the separator row", which meant that once URLs were
+// backfilled into the tracker, seven live rows became invisible to the merge.
+// An invisible row does not dedup, so a re-eval of one is added as a SECOND row.
+const D7 = runMerge(
+  [seedRow(9260, 'Vandelay', 'Sr Director GTM Operations', '3.5/5',
+    'https://vandelay.wd108.myworkdayjobs.com/job/Northern-California-USA---Remote/Sr-Director-GTM_R12274-1')],
+  {
+    '9261-vandelay.tsv': tsv(['9261', '2026-07-22', 'Vandelay', 'Sr Director GTM Operations',
+      'Evaluated', '4.3/5', '❌', '[9261](reports/9261-vandelay-2026-07-22.md)', 'Re-eval of the same req']),
+  },
+  {
+    'reports/9261-vandelay-2026-07-22.md':
+      rpt('https://vandelay.wd108.myworkdayjobs.com/job/Northern-California-USA---Remote/Sr-Director-GTM_R12274-1'),
+  },
+);
+
+console.log('\n18. A posting URL containing --- does not hide the row from the merge');
+check(D7.rowsFor('Vandelay').length === 1,
+  `the row is visible and updates in place: got ${D7.rowsFor('Vandelay').length}`);
+check(D7.rows[0].includes('4.3/5'), 're-eval applied to the existing row rather than duplicating it');
+
+console.log('\n17. New rows record their URL from the start');
+check(cols(D1.rowsFor('Fabrikam')[0])[10].startsWith('https://jobs.example.com/fabrikam/'),
+  `new row carries the posting url: got "${cols(D1.rowsFor('Fabrikam')[0])[10]}"`);
 
 console.log(`\n📊 merge-tracker fixtures: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
