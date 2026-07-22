@@ -368,9 +368,9 @@ const seedRow = (n, co, role, score, url) =>
 // Two requisitions at ONE employer with byte-identical titles and different
 // URLs. This exact shape silently ate evaluations twice.
 const D1 = runMerge([], {
-  '9201-fabrikam.tsv': tsv(['9201', '2026-07-22', 'Fabrikam', 'Director, Revenue Operations',
+  '9201-fabrikam.tsv': tsv(['9201', '2026-07-22', 'Fabrikam', 'Director, Glassblowing Standards',
     'Evaluated', '4.2/5', '❌', '[9201](reports/9201-fabrikam-2026-07-22.md)', 'Req one']),
-  '9202-fabrikam.tsv': tsv(['9202', '2026-07-22', 'Fabrikam', 'Director, Revenue Operations',
+  '9202-fabrikam.tsv': tsv(['9202', '2026-07-22', 'Fabrikam', 'Director, Glassblowing Standards',
     'Evaluated', '3.9/5', '❌', '[9202](reports/9202-fabrikam-2026-07-22.md)', 'Req two']),
 }, {
   'reports/9201-fabrikam-2026-07-22.md': rpt('https://jobs.example.com/fabrikam/aaa111'),
@@ -384,9 +384,9 @@ check(D1.dropsLog === '', 'nothing was dropped, so no ledger line');
 
 // Same title as an EXISTING row, different URL — must not update it in place.
 const D2 = runMerge(
-  [seedRow(9210, 'Tailwind', 'Director, Revenue Operations', '4.0/5', 'https://jobs.example.com/tailwind/ccc333')],
+  [seedRow(9210, 'Tailwind', 'Director, Glassblowing Standards', '4.0/5', 'https://jobs.example.com/tailwind/ccc333')],
   {
-    '9211-tailwind.tsv': tsv(['9211', '2026-07-22', 'Tailwind', 'Director, Revenue Operations',
+    '9211-tailwind.tsv': tsv(['9211', '2026-07-22', 'Tailwind', 'Director, Glassblowing Standards',
       'Evaluated', '4.5/5', '❌', '[9211](reports/9211-tailwind-2026-07-22.md)', 'Different req']),
   },
   { 'reports/9211-tailwind-2026-07-22.md': rpt('https://jobs.example.com/tailwind/ddd444') },
@@ -402,9 +402,9 @@ check(D2.rows.some(r => r.includes('4.0/5')), 'the seed row was NOT clobbered by
 // A genuine re-eval: same URL, different report number, and a differently worded
 // title. URL identity must win over all of it and update in place.
 const D3 = runMerge(
-  [seedRow(9220, 'Umbrella', 'Director, Revenue Operations', '3.0/5', 'https://jobs.example.com/umbrella/eee555')],
+  [seedRow(9220, 'Umbrella', 'Director, Glassblowing Standards', '3.0/5', 'https://jobs.example.com/umbrella/eee555')],
   {
-    '9221-umbrella.tsv': tsv(['9221', '2026-07-22', 'Umbrella', 'Senior Director, Rev Ops & Analytics',
+    '9221-umbrella.tsv': tsv(['9221', '2026-07-22', 'Umbrella', 'Senior Director, Cartography & Survey',
       'Evaluated', '4.6/5', '❌', '[9221](reports/9221-umbrella-2026-07-22.md)', 'Re-eval']),
   },
   { 'reports/9221-umbrella-2026-07-22.md': rpt('https://jobs.example.com/umbrella/eee555') },
@@ -419,9 +419,9 @@ check(cols(D3.rows[0])[10] === 'https://jobs.example.com/umbrella/eee555',
 
 // Cosmetic URL variants are the same posting.
 const D4 = runMerge(
-  [seedRow(9230, 'Initech', 'Head of Analytics', '3.2/5', 'https://jobs.example.com/initech/fff666')],
+  [seedRow(9230, 'Initech', 'Head of Herbarium Curation', '3.2/5', 'https://jobs.example.com/initech/fff666')],
   {
-    '9231-initech.tsv': tsv(['9231', '2026-07-22', 'Initech', 'Head of Analytics',
+    '9231-initech.tsv': tsv(['9231', '2026-07-22', 'Initech', 'Head of Herbarium Curation',
       'Evaluated', '4.1/5', '❌', '[9231](reports/9231-initech-2026-07-22.md)', 'Same posting, tracked link']),
   },
   { 'reports/9231-initech-2026-07-22.md': rpt('https://jobs.example.com/initech/fff666/apply?utm_source=news') },
@@ -434,9 +434,9 @@ check(D4.rowsFor('Initech').length === 1,
 // Neither side resolves to a URL — the role fallback must behave exactly as
 // before, because that is all there is to go on.
 const D5 = runMerge(
-  ['| 9240 | 2026-07-01 | Globex | Director, Sales Operations | 3.0/5 | Evaluated | ❌ | — | [9240](reports/9240-globex-2026-07-01.md) | Seed |'],
+  ['| 9240 | 2026-07-01 | Globex | Director, Topiary Logistics | 3.0/5 | Evaluated | ❌ | — | [9240](reports/9240-globex-2026-07-01.md) | Seed |'],
   {
-    '9241-globex.tsv': tsv(['9241', '2026-07-22', 'Globex', 'Director, Sales Operations',
+    '9241-globex.tsv': tsv(['9241', '2026-07-22', 'Globex', 'Director, Topiary Logistics',
       'Evaluated', '4.4/5', '❌', '[9241](reports/9241-globex-2026-07-22.md)', 'No report file anywhere']),
   },
 );
@@ -449,9 +449,9 @@ check(D5.rows[0].includes('4.4/5'), 'higher score still wins on the fallback pat
 // A genuinely lower-scoring re-eval of the SAME posting is still skipped, but it
 // may no longer vanish: it must leave a ledger line and land in dropped/.
 const D6 = runMerge(
-  [seedRow(9250, 'Soylent', 'Director, Revenue Operations', '4.5/5', 'https://jobs.example.com/soylent/ggg777')],
+  [seedRow(9250, 'Soylent', 'Director, Glassblowing Standards', '4.5/5', 'https://jobs.example.com/soylent/ggg777')],
   {
-    '9251-soylent.tsv': tsv(['9251', '2026-07-22', 'Soylent', 'Director, Revenue Operations',
+    '9251-soylent.tsv': tsv(['9251', '2026-07-22', 'Soylent', 'Director, Glassblowing Standards',
       'Evaluated', '3.1/5', '❌', '[9251](reports/9251-soylent-2026-07-22.md)', 'Lower re-eval']),
   },
   { 'reports/9251-soylent-2026-07-22.md': rpt('https://jobs.example.com/soylent/ggg777') },
@@ -473,15 +473,15 @@ check(!D6.mergedTsvs.includes('9251-soylent.tsv'),
 // backfilled into the tracker, seven live rows became invisible to the merge.
 // An invisible row does not dedup, so a re-eval of one is added as a SECOND row.
 const D7 = runMerge(
-  [seedRow(9260, 'Vandelay', 'Sr Director GTM Operations', '3.5/5',
-    'https://vandelay.wd108.myworkdayjobs.com/job/Northern-California-USA---Remote/Sr-Director-GTM_R12274-1')],
+  [seedRow(9260, 'Vandelay', 'Sr Director Herbarium Tooling', '3.5/5',
+    'https://vandelay.wd108.myworkdayjobs.com/job/Northern-California-USA---Remote/Sr-Director-Herbarium_R12274-1')],
   {
-    '9261-vandelay.tsv': tsv(['9261', '2026-07-22', 'Vandelay', 'Sr Director GTM Operations',
+    '9261-vandelay.tsv': tsv(['9261', '2026-07-22', 'Vandelay', 'Sr Director Herbarium Tooling',
       'Evaluated', '4.3/5', '❌', '[9261](reports/9261-vandelay-2026-07-22.md)', 'Re-eval of the same req']),
   },
   {
     'reports/9261-vandelay-2026-07-22.md':
-      rpt('https://vandelay.wd108.myworkdayjobs.com/job/Northern-California-USA---Remote/Sr-Director-GTM_R12274-1'),
+      rpt('https://vandelay.wd108.myworkdayjobs.com/job/Northern-California-USA---Remote/Sr-Director-Herbarium_R12274-1'),
   },
 );
 
