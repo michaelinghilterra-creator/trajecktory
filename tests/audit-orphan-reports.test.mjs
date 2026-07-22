@@ -44,28 +44,28 @@ try {
     `| ${n} | 2026-07-01 | ${co} | ${role} | 4.0/5 | Evaluated | ❌ | — | [${n}](reports/${n}-${co.toLowerCase()}-2026-07-01.md) | Note | ${url} |`;
 
   // 9301 — on the tracker. Not an orphan.
-  rpt(9301, 'Acme', 'Director, RevOps', 'https://jobs.example.com/acme/1');
+  rpt(9301, 'Acme', 'Director, Glassblowing Standards', 'https://jobs.example.com/acme/1');
   // 9302 — deliberately archived. Not a loss.
-  rpt(9302, 'Borealis', 'Head of Analytics', 'https://jobs.example.com/borealis/2');
+  rpt(9302, 'Borealis', 'Head of Herbarium Curation', 'https://jobs.example.com/borealis/2');
   // 9303 — no row, but its URL matches the live row 9301's posting: a second
   // report for the same job. Duplicated, not lost.
-  rpt(9303, 'Acme', 'Director, RevOps', 'https://jobs.example.com/acme/1');
+  rpt(9303, 'Acme', 'Director, Glassblowing Standards', 'https://jobs.example.com/acme/1');
   // 9304 — no row, not archived, distinct URL, TSV survives. A RECOVERABLE loss.
-  rpt(9304, 'Cinder', 'VP Strategy', 'https://jobs.example.com/cinder/4');
+  rpt(9304, 'Cinder', 'VP Lighthouse Maintenance', 'https://jobs.example.com/cinder/4');
   writeFileSync(join(sb, 'batch/tracker-additions/merged/9304-cinder.tsv'),
-    ['9304', '2026-07-01', 'Cinder', 'VP Strategy', 'Evaluated', '4.0/5', '❌', 'x', 'y'].join('\t') + '\n');
+    ['9304', '2026-07-01', 'Cinder', 'VP Lighthouse Maintenance', 'Evaluated', '4.0/5', '❌', 'x', 'y'].join('\t') + '\n');
   // 9305 — same, but no TSV. A loss that cannot be replayed.
-  rpt(9305, 'Dunlin', 'Director, BI', 'https://jobs.example.com/dunlin/5');
+  rpt(9305, 'Dunlin', 'Director, Topiary Logistics', 'https://jobs.example.com/dunlin/5');
   // 9306 — its number is shared by TWO TSVs from different companies. The one
   // that sorts first is the WRONG one, so a first-match-wins lookup fails here.
-  rpt(9306, 'Eider', 'Head of RevOps', 'https://jobs.example.com/eider/6');
+  rpt(9306, 'Eider', 'Head of Falconry Services', 'https://jobs.example.com/eider/6');
   writeFileSync(join(sb, 'batch/tracker-additions/merged/9306-albatross.tsv'),
     ['9306', '2026-07-01', 'Albatross', 'Different Job', 'Evaluated', '3.0/5', '❌', 'x', 'y'].join('\t') + '\n');
   writeFileSync(join(sb, 'batch/tracker-additions/merged/9306-eider.tsv'),
-    ['9306', '2026-07-01', 'Eider', 'Head of RevOps', 'Evaluated', '3.5/5', '❌', 'x', 'y'].join('\t') + '\n');
+    ['9306', '2026-07-01', 'Eider', 'Head of Falconry Services', 'Evaluated', '3.5/5', '❌', 'x', 'y'].join('\t') + '\n');
   // 9307 — a TSV carries its number but belongs to someone else entirely. There
   // is no correct file to offer, so none may be offered.
-  rpt(9307, 'Fulmar', 'Director, Ops', 'https://jobs.example.com/fulmar/7');
+  rpt(9307, 'Fulmar', 'Director, Horology Calibration', 'https://jobs.example.com/fulmar/7');
   writeFileSync(join(sb, 'batch/tracker-additions/merged/9307-grebe.tsv'),
     ['9307', '2026-07-01', 'Grebe', 'Unrelated Role', 'Evaluated', '3.0/5', '❌', 'x', 'y'].join('\t') + '\n');
   // A non-numbered file in reports/ must be ignored entirely, not counted.
@@ -76,14 +76,14 @@ try {
     '',
     '| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes | URL |',
     '|---|------|---------|------|-------|--------|-----|--------|--------|-------|-----|',
-    row(9301, 'Acme', 'Director, RevOps', 'https://jobs.example.com/acme/1'),
+    row(9301, 'Acme', 'Director, Glassblowing Standards', 'https://jobs.example.com/acme/1'),
     '',
   ].join('\n'));
 
   writeFileSync(join(sb, 'data/applications-archive-2026-06-01.md'), [
     '# Applications Archive',
     '',
-    row(9302, 'Borealis', 'Head of Analytics', 'https://jobs.example.com/borealis/2'),
+    row(9302, 'Borealis', 'Head of Herbarium Curation', 'https://jobs.example.com/borealis/2'),
     '',
   ].join('\n'));
 
@@ -141,7 +141,7 @@ try {
 
   console.log('\n5. Metadata for adjudication');
   const c = r.lost.find(l => l.num === 9304);
-  check(c.company === 'Cinder' && c.role === 'VP Strategy',
+  check(c.company === 'Cinder' && c.role === 'VP Lighthouse Maintenance',
     'company and role are surfaced so the user can decide without opening files');
   check(c.url === 'https://jobs.example.com/cinder/4', 'the posting URL is surfaced');
 
