@@ -74,7 +74,10 @@ const secrets = [
   ['a salary', '$72K'],
   ['a city', 'Boise, ID'],
   ['an email', 'someone@example.com'],
-  ['a file path', 'C:/Users/someone/cv.md'],
+  // Relative on purpose. An absolute one here is still a value the log must not
+  // carry, but it also trips the repo's own absolute-path guard, and a fixture
+  // that fails an unrelated check teaches whoever hits it to weaken that check.
+  ['a file path', 'Documents/job-search/resume.md'],
 ];
 for (const [label, value] of secrets) {
   A.record('step_completed', { step: value, detail: value });
