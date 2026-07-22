@@ -52,9 +52,22 @@ try {
   rpt(9303, 'Acme', 'Director, RevOps', 'https://jobs.example.com/acme/1');
   // 9304 — no row, not archived, distinct URL, TSV survives. A RECOVERABLE loss.
   rpt(9304, 'Cinder', 'VP Strategy', 'https://jobs.example.com/cinder/4');
-  writeFileSync(join(sb, 'batch/tracker-additions/merged/9304-cinder.tsv'), 'x\n');
+  writeFileSync(join(sb, 'batch/tracker-additions/merged/9304-cinder.tsv'),
+    ['9304', '2026-07-01', 'Cinder', 'VP Strategy', 'Evaluated', '4.0/5', '❌', 'x', 'y'].join('\t') + '\n');
   // 9305 — same, but no TSV. A loss that cannot be replayed.
   rpt(9305, 'Dunlin', 'Director, BI', 'https://jobs.example.com/dunlin/5');
+  // 9306 — its number is shared by TWO TSVs from different companies. The one
+  // that sorts first is the WRONG one, so a first-match-wins lookup fails here.
+  rpt(9306, 'Eider', 'Head of RevOps', 'https://jobs.example.com/eider/6');
+  writeFileSync(join(sb, 'batch/tracker-additions/merged/9306-albatross.tsv'),
+    ['9306', '2026-07-01', 'Albatross', 'Different Job', 'Evaluated', '3.0/5', '❌', 'x', 'y'].join('\t') + '\n');
+  writeFileSync(join(sb, 'batch/tracker-additions/merged/9306-eider.tsv'),
+    ['9306', '2026-07-01', 'Eider', 'Head of RevOps', 'Evaluated', '3.5/5', '❌', 'x', 'y'].join('\t') + '\n');
+  // 9307 — a TSV carries its number but belongs to someone else entirely. There
+  // is no correct file to offer, so none may be offered.
+  rpt(9307, 'Fulmar', 'Director, Ops', 'https://jobs.example.com/fulmar/7');
+  writeFileSync(join(sb, 'batch/tracker-additions/merged/9307-grebe.tsv'),
+    ['9307', '2026-07-01', 'Grebe', 'Unrelated Role', 'Evaluated', '3.0/5', '❌', 'x', 'y'].join('\t') + '\n');
   // A non-numbered file in reports/ must be ignored entirely, not counted.
   writeFileSync(join(sb, 'reports', 'README.md'), '# not an evaluation\n');
 
@@ -95,32 +108,47 @@ try {
   const lostNums = r.lost.map(l => l.num).sort();
 
   console.log('\n1. Bucketing');
-  check(r.counts.reports === 5, `only numbered reports counted, README ignored: got ${r.counts.reports}`);
+  check(r.counts.reports === 7, `only numbered reports counted, README ignored: got ${r.counts.reports}`);
   check(r.counts.onTracker === 1, `report with a live row is not an orphan: got ${r.counts.onTracker}`);
   check(r.counts.archived === 1, `deliberately archived report is not a loss: got ${r.counts.archived}`);
   check(r.counts.duplicateOfLive === 1, `second report for a live posting is not a loss: got ${r.counts.duplicateOfLive}`);
 
   console.log('\n2. Real losses');
-  check(r.counts.lost === 2, `exactly the two distinct postings with no row: got ${r.counts.lost}`);
-  check(JSON.stringify(lostNums) === JSON.stringify([9304, 9305]), `the right two: got ${JSON.stringify(lostNums)}`);
+  check(r.counts.lost === 4, `exactly the distinct postings with no row: got ${r.counts.lost}`);
+  check(JSON.stringify(lostNums) === JSON.stringify([9304, 9305, 9306, 9307]), `the right ones: got ${JSON.stringify(lostNums)}`);
   check(!lostNums.includes(9302), 'an archived report is NEVER reported as lost');
   check(!lostNums.includes(9303), 'a duplicate of a live posting is NEVER reported as lost');
 
   console.log('\n3. Recoverability');
-  check(r.counts.recoverable === 1, `only the loss with a surviving TSV: got ${r.counts.recoverable}`);
+  check(r.counts.recoverable === 2, `only losses with a confidently-matched TSV: got ${r.counts.recoverable}`);
   check(r.lost.find(l => l.num === 9304).tsv === '9304-cinder.tsv', 'names the TSV that can be replayed');
   check(r.lost.find(l => l.num === 9305).tsv === null, 'a loss with no TSV is marked unreplayable');
 
-  console.log('\n4. Metadata for adjudication');
+  console.log('\n4. Reused report numbers do not mis-route a restore');
+  // Report numbers were computed as "max + 1" before the persistent counter, so
+  // one number can belong to two different companies. Matching a working file on
+  // the number alone would tell the user an evaluation is recoverable and then
+  // hand them a DIFFERENT company's file to restore, corrupting the tracker with
+  // a row for a job they never evaluated. Worse than reporting it unrecoverable.
+  const shared = r.lost.find(l => l.num === 9306);
+  check(shared && shared.tsv === '9306-eider.tsv',
+    `picks the TSV whose company matches the report, not the first by name: got ${shared && shared.tsv}`);
+  const foreign = r.lost.find(l => l.num === 9307);
+  check(foreign && foreign.tsv === null,
+    `a TSV that belongs to another company is NOT offered as the recovery source: got ${foreign && foreign.tsv}`);
+  check(foreign && foreign.tsvAmbiguous === true,
+    'the unmatched case is flagged for manual review rather than silently called unrecoverable');
+
+  console.log('\n5. Metadata for adjudication');
   const c = r.lost.find(l => l.num === 9304);
   check(c.company === 'Cinder' && c.role === 'VP Strategy',
     'company and role are surfaced so the user can decide without opening files');
   check(c.url === 'https://jobs.example.com/cinder/4', 'the posting URL is surfaced');
 
-  console.log('\n5. Read-only');
+  console.log('\n6. Read-only');
   check(snapshot() === before, 'not one byte on disk changed');
 
-  console.log('\n6. Degrades quietly');
+  console.log('\n7. Degrades quietly');
   const bare = mkdtempSync(join(ROOT, 'orphan-audit-empty-'));
   try {
     const e = auditOrphanReports(bare);
