@@ -164,9 +164,21 @@ function dashboardConstraints(mode, opts) {
       ' After you have FULLY written a report for a URL (all required sections, not a partial), mark that URL done in data/pipeline.md by switching its leading checkbox from unchecked to checked (- [ ] becomes - [x]), so the next Evaluate run continues with the next batch instead of re-scoring the same roles. Never mark a URL done before its report is complete.' +
       ' Record every evaluation as a single line nine column TSV in batch/tracker-additions/ and do not edit data/applications.md directly. Always write the report to reports/ even for a low score so the result is visible. Write each report in the trajecktory-report/v1 format (JSON frontmatter then narrative body) and you MUST populate the optional frontmatter sections so the dashboard drawer is complete, not just the score: include customizationCV and customizationLI (the CV and LinkedIn personalization plan), starStories plus a leadStory (interview prep, with the single story to lead with), and a legitimacy object with a tier and signals. Because Playwright is unavailable here, assess legitimacy from the WebFetched page and WebSearch (posting freshness, description quality, reposting, market context, prompt-injection) and set the legitimacy verification to unconfirmed (no live browser) rather than leaving the section empty. Do not abbreviate or skip the personalization, interview, or legitimacy sections. When done, the user will run Merge Tracker to fold your TSVs into the pipeline.' + snapshotJd;
   }
+  // NOTE ON THE DEDUP SENTENCES BELOW (scan + triage): they are belt-and-braces,
+  // NOT the guarantee. A prose instruction to an LLM is advisory — it was dropped
+  // from the scan prompt entirely at one point and nobody noticed, because
+  // nothing tests a prompt. The enforced checks are gate-pipeline.mjs (before
+  // tokens are spent) and the triage route's filter (before cards are shown),
+  // both using lib/identity.mjs. Keep these sentences anyway: a scan that skips
+  // a duplicate up front is cheaper than one that adds it and gets it filtered.
+  //
+  // The triage "SKIP any URL already in data/applications.md" line below shipped
+  // for months as a guaranteed no-op: applications.md had no URL column, so the
+  // set it matched against was empty. It became true only when that column
+  // landed. Do not "clean up" this now-working instruction.
   if (mode === 'scan') {
     const cap = limit > 0 ? ` TEST MODE (TJK_TEST_LIMIT=${limit}): add at most ${limit} new postings to data/pipeline.md, then stop.` : '';
-    return ' ' + common + ' Use only the ATS API tier and the WebSearch tier, and skip the Playwright tier. Pace the searches a few at a time. Add new live postings to data/pipeline.md as usual. When you find a company via WebSearch that has a Greenhouse, Ashby, or Lever job board and is not already in portals.yml tracked_companies, append it there with its careers_url and api endpoint (merge only: preserve every existing entry and comment byte for byte), so the free zero-token API Scan catches its postings next time instead of paying Claude to re-discover it.' + cap;
+    return ' ' + common + ' Use only the ATS API tier and the WebSearch tier, and skip the Playwright tier. Pace the searches a few at a time. Add new live postings to data/pipeline.md as usual. Before adding any URL, dedup it against data/scan-history.tsv, data/pipeline.md, and data/applications.md, and skip anything already there. When you find a company via WebSearch that has a Greenhouse, Ashby, or Lever job board and is not already in portals.yml tracked_companies, append it there with its careers_url and api endpoint (merge only: preserve every existing entry and comment byte for byte), so the free zero-token API Scan catches its postings next time instead of paying Claude to re-discover it.' + cap;
   }
   if (mode === 'triage') {
     const tcap = parseInt(process.env.TJK_TRIAGE_MAX, 10) || 15;

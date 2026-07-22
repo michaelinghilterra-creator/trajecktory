@@ -232,8 +232,13 @@ function parseApplicationsMd() {
       console.warn(`[parse] applications.md row #${base.num} SKIPPED: ${base.cellCount} columns, expected 10 — check for missing/extra pipes in that line`);
       continue;
     }
-    if (base.cellCount > 10) {
-      console.warn(`[parse] applications.md row #${base.num}: ${base.cellCount} columns, expected 10 — extra pipe in a field? Notes may be truncated`);
+    // 11 cells is the current schema (the last one is the posting URL). An 11th
+    // cell that is NOT URL-shaped is still a stray pipe, which parseTrackerLine
+    // reports by leaving `url` null while cellCount stays 11.
+    if (base.cellCount === 11 && !base.url) {
+      console.warn(`[parse] applications.md row #${base.num}: 11 columns but the last is not a URL — extra pipe in a field? Notes may be truncated`);
+    } else if (base.cellCount > 11) {
+      console.warn(`[parse] applications.md row #${base.num}: ${base.cellCount} columns, expected 11 — extra pipe in a field? Notes may be truncated`);
     }
 
     const num = base.num;
@@ -245,7 +250,10 @@ function parseApplicationsMd() {
 
     // Enrich from report header (cached per mtime)
     const header = report && report !== '-' ? readReportHeader(report) : null;
-    const url        = header?.url || null;
+    // Tracker cell first, report header as fallback. The fallback is permanent,
+    // not migration scaffolding: rows predating the url column and rows whose
+    // report was pruned both still resolve.
+    const url        = base.url || header?.url || null;
     const sectorRaw  = header?.domain || null;
     const sector     = normalizeSector(sectorRaw);
     const compStated = header?.compStated || null;

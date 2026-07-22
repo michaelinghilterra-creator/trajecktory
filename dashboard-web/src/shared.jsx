@@ -325,6 +325,10 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [trust, setTrust] = useState({ ok: true, message: '', losing: [] });
   const [trustBusy, setTrustBusy] = useState(false);
   const [triageCards, setTriageCards] = useState([]);   // [{ url, company, title, score, rationale, date }]
+  // Triaged postings that already have a tracker row. Shown as a collapsed count
+  // rather than dropped, so a wrong suppression is visible instead of silent.
+  const [triageSuppressed, setTriageSuppressed] = useState([]);
+  const [showSuppressed, setShowSuppressed] = useState(false);
   const [deepJobs, setDeepJobs] = useState({});         // { url: { status, error } }
   // URLs the user dismissed (× control) or that auto-cleared after a completed
   // deep dive. Persisted so a reload doesn't resurrect a spent card.
@@ -405,6 +409,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const loadTriage = () => fetch('/api/triage/results').then(r => r.json()).then(d => {
     const cards = d.cards || [];
     setTriageCards(cards);
+    setTriageSuppressed(d.suppressed || []);
     // Prune dismissed URLs no longer present in the latest results so storage
     // stays tidy and a posting that cycled out then returns can reappear.
     setDismissed(prev => {
@@ -795,7 +800,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         })}
       </div>
 
-      {!hasKey && visibleTriage.length > 0 && (
+      {!hasKey && (visibleTriage.length > 0 || triageSuppressed.length > 0) && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 4 }}>TRIAGE · {visibleTriage.length} scored</div>
           {visibleTriage.slice(0, 15).map(card => {
@@ -823,6 +828,23 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               </div>
             );
           })}
+
+          {triageSuppressed.length > 0 && (
+            <div style={{ marginTop: visibleTriage.length ? 6 : 0 }}>
+              <button onClick={() => setShowSuppressed(v => !v)}
+                title="These were scored by triage but already have a row in your tracker"
+                style={{ background: 'none', border: 'none', color: 'var(--text-mute)', cursor: 'pointer', fontSize: 10.5, padding: 0, textAlign: 'left' }}>
+                {showSuppressed ? '▾' : '▸'} {triageSuppressed.length} already evaluated (hidden)
+              </button>
+              {showSuppressed && triageSuppressed.map(card => (
+                <div key={card.url} style={{ padding: '4px 0 4px 10px', fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4 }}>
+                  <span style={{ fontFamily: 'var(--mono)' }}>#{card.existingNum}</span>{' '}
+                  <span style={{ opacity: 0.8 }}>{card.existingStatus}</span>{' · '}
+                  <span title={`${card.company}: ${card.title}`}>{card.company} · {card.title}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

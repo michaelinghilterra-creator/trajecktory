@@ -373,33 +373,25 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
 // Triage results live in their own scratch store (data/triage-results.tsv), not
 // applications.md. We surface them as provisional rows in the Table + All views
 // so a scanned-but-unevaluated role is visible where users look, without
-// polluting the tracker or analytics. These helpers dedup a triage card against
-// the real rows so a posting that already has an evaluation never double-shows.
-const normUrl = (u) => (u || '').toLowerCase().replace(/^https?:\/\//, '').replace(/[?#].*$/, '').replace(/\/+$/, '');
-const normCo = (c) => (c || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-const normRole = (r) => (r || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-
-// Build provisional rows from triage cards, dropping any whose posting already
-// exists as a real row. Match by normalized URL FIRST; fall back to
-// company+exact-role ONLY for real rows that have no URL yet (pre-report). This
-// is why two genuinely different roles at one company — e.g. Contoso "Director,
-// GTM Operations" (evaluated, has a URL) vs "Director, GTM Technology" (triage,
-// different URL) — both stay visible: URL-primary dedup keeps them apart, and
-// the exact-role fallback never fires for the URL-bearing evaluated row.
-function buildTriageRows(cards, apps) {
-  const realUrls = new Set();
-  const realCoRole = new Set();
-  for (const a of (apps || [])) {
-    if (a._triage) continue;
-    if (a.url) realUrls.add(normUrl(a.url));
-    else realCoRole.add(normCo(a.company) + '|' + normRole(a.role));
-  }
+// polluting the tracker or analytics.
+//
+// THIS FUNCTION DOES NOT DEDUP. It used to, with its own URL normalizer, and
+// that was the bug: the server, this view, and the workflow sidebar each had a
+// different idea of what "same posting" meant, so the same triage results
+// rendered a different count in each place, and none of them was
+// right. The one that got away most often was a URL ending in /application,
+// which this file stripped the query from but not the trailing segment.
+//
+// /api/triage/results now returns only actionable cards, already filtered
+// against the tracker by lib/identity.mjs (canonical URL, with a role fallback
+// for tracker rows that have no resolvable URL). Client-side esbuild runs with
+// bundle:false, so this file cannot import that module — which is precisely why
+// it must not re-implement it. The server decides; this renders.
+function buildTriageRows(cards) {
   const today = new Date().toISOString().slice(0, 10);
   const rows = [];
   for (const c of (cards || [])) {
     if (!c || !c.url) continue;
-    if (realUrls.has(normUrl(c.url))) continue;                              // already evaluated (same posting)
-    if (realCoRole.has(normCo(c.company) + '|' + normRole(c.title))) continue; // url-less real row, same role
     rows.push({
       id: 'tri-' + c.url, _triage: true,
       date: c.date || today, company: c.company, role: c.title,
@@ -634,7 +626,8 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
   const targetHigh = compTweaks?.targetHigh ?? 140;
   // Furthest rung ever reached, not the live status. STATUS_MAP has no key for
   // Rejected, so the old local rule returned -1 for every closed row: the "Adv"
-  // column and the archetype bars counted 1 where the canonical engine counts 6.
+  // column and the archetype bars counted only the rows still live on the
+  // funnel, silently dropping every closed row that had already advanced.
   // window.appReached reads the server-stamped `reached` field.
   const STAGE_AT = window.FUNNEL_ORDER;
   const reached = (a, s) => window.appReached(a, STAGE_AT[s]);
@@ -658,9 +651,9 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
 
   // Both panels answer historical questions — "which channel produces roles that
   // advance" and "which archetype converts" — so they run over the whole tracker,
-  // not the active subset. Scoped to active roles the advance counts summed to 1
-  // across every channel, because advancing usually ends in a rejection and a
-  // rejection leaves the active pool.
+  // not the active subset. Scoped to active roles the advance counts collapse to
+  // almost nothing across every channel, because advancing usually ends in a
+  // rejection and a rejection leaves the active pool.
   const srcKeys = Object.keys(SOURCE);
   const bySource = srcKeys.map(k => {
     const items = ratePool.filter(a => a.source === k);
@@ -1967,7 +1960,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   useEffectP(() => { loadTriage(); }, [loadTriage]);
   useEffectP(() => () => { Object.values(deepPollers.current).forEach(clearInterval); }, []);
 
-  const triageRows = useMemoP(() => buildTriageRows(triageCards, apps), [triageCards, apps]);
+  const triageRows = useMemoP(() => buildTriageRows(triageCards), [triageCards]);
   // Which triage rows show in the Table subtab: hidden when a status/archetype
   // filter is active (Triage isn't a tracked status), else filtered by score + search.
   const triageInTable = useMemoP(() => {

@@ -50,6 +50,7 @@ function runScript(script, rows, args = []) {
   mkdirSync(join(sb, 'lib'), { recursive: true });
   copyFileSync(join(ROOT, script), join(sb, script));
   copyFileSync(join(ROOT, 'lib/tracker.mjs'), join(sb, 'lib/tracker.mjs'));
+  copyFileSync(join(ROOT, 'lib/identity.mjs'), join(sb, 'lib/identity.mjs'));
   writeFileSync(join(sb, 'data/applications.md'), [HEADER, ...rows, ''].join('\n'));
   let output = '';
   try {
@@ -83,7 +84,7 @@ console.log('\n1. Low score flips, and the reason lands in Notes (not Report)');
   check(r.notes.includes('thin scope'), 'original note preserved after the reason');
   // The regression: index 9 was Report, so the reason used to be written there.
   check(r.report === '[10](reports/10-lowco.md)', `Report cell untouched: "${r.report}"`);
-  check(r.cellCount === 10, `row still has 10 cells (got ${r.cellCount})`);
+  check(r.cellCount === 11, `row still has 11 cells (got ${r.cellCount})`);
 }
 
 console.log('\n2. Notes are actually read — exemptions and verdicts work');
@@ -109,7 +110,12 @@ console.log('\n3. Rows outside the rule are untouched');
   check(applied.status === 'Applied',
     `low-score row already Applied is not downgraded (got "${applied.status}")`);
   check(A.all.length === 5, `no rows lost or duplicated (${A.all.length}/5)`);
-  check(A.all.every(r => r.cellCount === 10), 'every row still has exactly 10 cells');
+  // The fixture is written as legacy 10-column rows. A row the script rewrote
+  // comes back as 11 (formatTrackerLine now emits the url cell); a row it left
+  // alone stays at 10. Both are intact — what would signal the mangling this
+  // suite exists to catch is a row outside that range, or a shifted field.
+  check(A.all.every(r => r.cellCount === 10 || r.cellCount === 11),
+    `every row has 10 (untouched) or 11 (rewritten) cells, none mangled — got ${[...new Set(A.all.map(r => r.cellCount))].join(',')}`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

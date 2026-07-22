@@ -2,8 +2,23 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { ROOT_DIR } from '../config.mjs';
+import { canonicalUrl, buildDecidedIndex, findDecided } from '../../../lib/identity.mjs';
 
 export const router = express.Router();
+
+// Postings already evaluated and recorded in applications.md. Rebuilt only when
+// the tracker's mtime changes — a full scan of the tracker is cheap but this endpoint
+// is polled, and the answer only moves when the tracker does.
+let decidedCache = { mtimeMs: -1, index: null };
+function decidedIndex() {
+  const appsPath = path.join(ROOT_DIR, 'data', 'applications.md');
+  let mtimeMs = 0;
+  try { mtimeMs = fs.statSync(appsPath).mtimeMs; } catch { return { byUrl: new Map(), ambiguous: new Set() }; }
+  if (decidedCache.mtimeMs !== mtimeMs || !decidedCache.index) {
+    decidedCache = { mtimeMs, index: buildDecidedIndex({ appsPath, rootDir: ROOT_DIR }) };
+  }
+  return decidedCache.index;
+}
 
 // ── Triage results reader ─────────────────────────────────────────────────────
 // The triage agent (`/api/agent/triage`, run on Haiku) appends one line per scored
@@ -15,6 +30,8 @@ const DISMISSED_TSV = () => path.join(ROOT_DIR, 'data', 'triage-dismissed.tsv');
 // URLs the user dismissed ("not a match"). Durable so the cards never resurface:
 // GET hides them, and the triage mode is told to skip them on the next scan.
 // One `url\tdate` line per dismissal.
+// Stored canonicalized so a dismissal survives a cosmetic URL variant (a
+// ?utm_source= on the re-scan, /apply vs the bare posting path).
 function loadDismissed() {
   const set = new Set();
   let text = '';
@@ -22,17 +39,24 @@ function loadDismissed() {
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     if (!line || line.startsWith('url\t')) continue; // blank or header
-    set.add(line.split('\t')[0].trim());
+    set.add(canonicalUrl(line.split('\t')[0].trim()));
   }
   return set;
 }
 
 // GET /api/triage/results — parsed cards, best-score first, deduped to the most
 // recent line per URL (a re-triage of the same URL supersedes the older score).
+//
+// Postings that already have a tracker row are split into `suppressed` rather
+// than dropped. Silently hiding them would repeat the mistake this whole fix
+// exists to undo: the user cannot audit a decision they never see, and the same
+// reasoning is why portals.mjs surfaces a name-only company match instead of
+// skipping it. When this landed, most of the scored cards turned out to be
+// postings the tracker had already decided on.
 router.get('/api/triage/results', (req, res) => {
   try {
     let text = '';
-    try { text = fs.readFileSync(TRIAGE_TSV(), 'utf8'); } catch { return res.json({ cards: [] }); }
+    try { text = fs.readFileSync(TRIAGE_TSV(), 'utf8'); } catch { return res.json({ cards: [], suppressed: [] }); }
     const byUrl = new Map();
     const dismissed = loadDismissed();
     for (const raw of text.split('\n')) {
@@ -40,9 +64,9 @@ router.get('/api/triage/results', (req, res) => {
       if (!line) continue;
       const c = line.split('\t');
       if (c[0] === 'url' || c.length < 6) continue; // header or malformed (need all 6 columns)
-      if (dismissed.has(c[0])) continue; // user dismissed this role ("not a match")
+      if (dismissed.has(canonicalUrl(c[0]))) continue; // user dismissed this role ("not a match")
       const score = parseFloat(c[3]);
-      byUrl.set(c[0], { // later lines win → most recent triage of this URL
+      byUrl.set(canonicalUrl(c[0]), { // later lines win → most recent triage of this URL
         url: c[0],
         company: (c[1] || '').trim(),
         title: (c[2] || '').trim(),
@@ -51,8 +75,21 @@ router.get('/api/triage/results', (req, res) => {
         date: (c[5] || '').trim(),
       });
     }
-    const cards = Array.from(byUrl.values()).sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
-    res.json({ cards });
+
+    const index = decidedIndex();
+    const cards = [];
+    const suppressed = [];
+    for (const card of byUrl.values()) {
+      const prior = findDecided(index, card.url, { company: card.company, role: card.title });
+      if (prior) {
+        suppressed.push({ ...card, existingNum: prior.num, existingStatus: prior.status });
+      } else {
+        cards.push(card);
+      }
+    }
+    cards.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+    suppressed.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+    res.json({ cards, suppressed });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -67,7 +104,7 @@ router.post('/api/triage/dismiss', (req, res) => {
     const url = String((req.body && req.body.url) || '').trim();
     if (!url) return res.status(400).json({ error: 'A "url" is required.' });
     if (/[\t\r\n]/.test(url)) return res.status(400).json({ error: 'Invalid url (control characters).' });
-    if (!loadDismissed().has(url)) {
+    if (!loadDismissed().has(canonicalUrl(url))) {
       const file = DISMISSED_TSV();
       const header = fs.existsSync(file) ? '' : 'url\tdate\n';
       const date = new Date().toISOString().slice(0, 10);
@@ -92,7 +129,7 @@ router.post('/api/triage/undismiss', (req, res) => {
       const line = raw.trim();
       if (!line) return false;
       if (line.startsWith('url\t')) return true; // keep header
-      return line.split('\t')[0].trim() !== url;
+      return canonicalUrl(line.split('\t')[0].trim()) !== canonicalUrl(url);
     });
     fs.writeFileSync(file, kept.length ? kept.join('\n') + '\n' : '', 'utf8');
     res.json({ ok: true, restored: url });
