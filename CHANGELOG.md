@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.23.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.23.0...v1.23.1) (2026-07-22)
+
+
+### Bug Fixes
+
+* **audit:** match a lost report to its TSV by company, not just by number ([#82](https://github.com/michaelinghilterra-creator/trajecktory/issues/82)) ([0798ae7](https://github.com/michaelinghilterra-creator/trajecktory/commit/0798ae7869358a9775d369f591d7091c9aa1949f))
+* **identity:** route the last callers through one posting identity ([#84](https://github.com/michaelinghilterra-creator/trajecktory/issues/84)) ([979d01d](https://github.com/michaelinghilterra-creator/trajecktory/commit/979d01d6e9597162d84b719e5a10b3489a2e523a))
+
 ## [1.23.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.22.0...v1.23.0) (2026-07-22)
 
 
