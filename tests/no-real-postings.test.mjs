@@ -12,12 +12,17 @@
  * plausible job title in the user's own field IS one of the user's job titles.
  *
  * WHAT COUNTS AS DISCLOSURE, AND WHAT DOES NOT:
- * A job title on its own usually discloses nothing. "VP, Revenue Operations"
- * appears in this product's mock data, its starter config and its mode docs
- * because that is the KIND of job the tool exists to find; thousands of
- * employers post that exact title. Flagging it would mean flagging the product's
- * own subject matter, and a check that fires on 60 legitimate lines is a check
- * people switch off. Two things do disclose:
+ * A job title on its own usually discloses nothing. The ordinary titles of the
+ * user's field appear throughout this product — in its mock data, its starter
+ * config, its mode docs — because that is the KIND of job the tool exists to
+ * find, and thousands of employers post the same words. Flagging those would
+ * mean flagging the product's own subject matter, and a check that fires on 60
+ * legitimate lines is a check people switch off.
+ *
+ * (No example is quoted here on purpose. The first draft of this comment used a
+ * real title from the tracker as its illustration of a harmless one, inside the
+ * file written to stop exactly that. A rule against quoting a leak will quote
+ * the leak if you let it.) Two things do disclose:
  *
  *   1. A PAIR. One file containing both the employer AND the job title from the
  *      SAME tracker row is that row, restated. Unambiguous.
