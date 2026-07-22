@@ -350,6 +350,15 @@ A vague PR title is not a cosmetic problem here: it becomes the changelog line, 
 the PR title (`chore(main): release X.Y.Z`) as the commit message, which Release Please then
 re-reads on the next cycle. Full release checklist: `docs/RELEASING.md`.
 
+**The PR title's TYPE must match the largest change inside it.** Squashing discards every
+individual commit message, so a branch carrying `feat:` commits under a `fix:` PR title
+releases as a patch and the features never reach the changelog. This is not the same hazard
+as a vague title, and it is easy to miss precisely because the branch's own history looks
+correct: PR #75 held two `feat:` commits under a `fix:` title and cut 1.21.1 instead of
+1.22.0. Before merging, ask what the largest change in the branch is, not what the headline
+bug was. The recovery is `Release-As: X.Y.Z` in a later commit — and under squash that
+footer has to go in the **PR body**, since that is what becomes the commit body.
+
 Why the split, since merge commits used to be the default for everything: GitHub writes the
 PR title into a merge commit's BODY while the subject stays `Merge pull request #n from ...`.
 Release Please unwraps merge commits by reading that body, so it counts the same
