@@ -92,6 +92,18 @@ const run = (args = []) => {
 };
 const rowsOf = (text) => text.split('\n').filter(l => /^\|\s*\d/.test(l));
 
+// Split a row the way parseTrackerLine does: drop the empty cells the outer
+// pipes produce, so cells[0] is the row number and cells[10] is the url.
+//
+// Assertions below compare this cell EXACTLY rather than asking whether the row
+// contains the url somewhere. A substring check would pass if the url landed in
+// the notes cell, which is precisely the column-drift bug this suite exists to
+// catch. (CodeQL also flags `.includes('https://…')` as incomplete URL
+// sanitization, because that shape is normally a security check and a substring
+// test is a poor one. It is not a security check here, but the exact-cell
+// assertion is the stronger test regardless.)
+const cells = (l) => l.split('|').map(c => c.trim()).filter((_, i, a) => i > 0 && i < a.length - 1);
+
 try {
   // ── 1. Dry run writes nothing ──────────────────────────────────────────────
   console.log('\n1. Dry run');
@@ -120,19 +132,20 @@ try {
   check(after.split('\n').length === beforeText.split('\n').length, 'line count unchanged');
 
   const row = (n) => afterRows.find(l => l.startsWith(`| ${n} `));
-  check(row(9001).includes('https://jobs.example.com/acme/9001'), 'v1 frontmatter url written');
-  check(row(9002).includes('https://jobs.example.com/borealis/9002'), 'legacy **URL:** url written');
+  const urlCell = (n) => cells(row(n))[10];
+  check(urlCell(9001) === 'https://jobs.example.com/acme/9001', 'v1 frontmatter url written into the url cell');
+  check(urlCell(9002) === 'https://jobs.example.com/borealis/9002', 'legacy **URL:** url written into the url cell');
 
   // ── 4. Placeholders and gaps are left alone ────────────────────────────────
   console.log('\n4. Rows with no usable url');
-  check(!row(9003).includes('TBD'), 'placeholder "TBD" is NOT written into the url cell');
+  check(cells(row(9003)).length === 10, 'placeholder row gains no 11th cell at all');
+  check(urlCell(9003) === undefined, 'placeholder "TBD" is NOT written into the url cell');
   check(row(9003) === beforeRows.find(l => l.startsWith('| 9003 ')), 'placeholder row is byte-identical');
   check(row(9004) === beforeRows.find(l => l.startsWith('| 9004 ')), 'no-url report row is byte-identical');
   check(row(9005) === beforeRows.find(l => l.startsWith('| 9005 ')), 'missing report row is byte-identical');
 
   // ── 5. Every carried cell survives ─────────────────────────────────────────
   console.log('\n5. Non-url cells');
-  const cells = (l) => l.split('|').map(c => c.trim()).filter((_, i, a) => i > 0 && i < a.length - 1);
   let carried = true;
   for (const b of beforeRows) {
     const n = cells(b)[0];
@@ -155,7 +168,7 @@ try {
   check(second.code === 0, 'second --apply exits 0');
   check(readFileSync(APPS, 'utf-8') === after, 'second --apply changes nothing');
   check(/url to write\s*:\s*0/.test(second.out), 'second run reports 0 to write');
-  check(row(9006).includes('https://jobs.example.com/fulmar/9006'), 'pre-existing url preserved');
+  check(urlCell(9006) === 'https://jobs.example.com/fulmar/9006', 'pre-existing url preserved');
 
   // ── 8. Backup exists ───────────────────────────────────────────────────────
   console.log('\n8. Backup');
