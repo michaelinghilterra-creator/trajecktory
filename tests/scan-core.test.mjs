@@ -119,7 +119,7 @@ const wb = buildTitleFilter({ positive: ['director', 'analyst'], negative: ['hr'
 check(wb('Anthropic Data Analyst') === true, 'negative "hr" does not drop "Anthropic" (ant-hr-opic)');
 check(wb('Threat Intelligence Analyst') === true, 'negative "hr" does not drop "Threat" (t-hr-eat)');
 check(wb('Director of JavaScript Analytics') === true, 'negative "java" does not drop "JavaScript"');
-check(wb('Director, GTM Engineering') === true, 'negative "engineer" does not drop "Engineering"');
+check(wb('Director, Reliability Engineering') === true, 'negative "engineer" does not drop "Engineering"');
 check(wb('HR Director') === false, 'negative "hr" still drops a standalone "HR" token');
 check(wb('Java Director') === false, 'negative "java" still drops a standalone "Java" token');
 
