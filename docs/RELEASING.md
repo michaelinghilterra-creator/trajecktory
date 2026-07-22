@@ -76,7 +76,21 @@ here, guard it too, or it will be the next one missed.
       *Fails silently:* the release run is green either way.
       Full spec: [Release notes: the house format](#release-notes-the-house-format).
       **Read the previous release before writing this one.**
+
+      Draft it into a file and check it before publishing:
+
+      ```bash
+      node verify-release-notes.mjs --file notes.md
+      ```
+
+      Do this **locally**. It is the only place the check against naming a real
+      company, person or figure can run at all: that rule needs
+      `data/applications.md` and `config/profile.yml`, which are gitignored and
+      never reach a CI runner, so in CI it is skipped and says so. Everything
+      else about the format is enforced either way, by the Release health
+      workflow, which now also runs the moment a release is published or edited.
 - [ ] **4. Run the guard and confirm it is green:** `gh workflow run tag-signature.yml`
+      (it also runs on its own when a release is published or edited)
 - [ ] **5. Rebuild and upload the installer. MANDATORY when the release changes
       what the bundle *contains*; optional otherwise.**
       *Fails silently:* the release run is green either way, and the changelog

@@ -40,6 +40,12 @@ on:
   schedule:
     - cron: '17 13 * * *'
   workflow_dispatch:
+  # Fire as soon as a release is published or its body is edited, so a malformed
+  # release is caught in a minute rather than sitting live until the next daily
+  # run. The cron stays: it is what catches a tag that was never signed, which is
+  # a state no event announces.
+  release:
+    types: [published, edited]
 
 permissions:
   contents: read
@@ -116,6 +122,34 @@ jobs:
           fi
 
           echo "OK — ${TAG} has a written release body."
+
+      # The two checks above catch the ways notes fail LOUDLY: an empty body, and
+      # a body still holding the raw changelog. They do not catch the way they
+      # fail quietly, which is a body that was genuinely written and then drifted
+      # from the format — most often into terse bullets, which RELEASING.md names
+      # as "the recurring regression here, and the one thing to check before
+      # publishing". Something a human is asked to check before publishing every
+      # time is exactly what a guard is for.
+      #
+      # NOTE the one rule this cannot enforce here. The check against naming a
+      # real employer or job title from the maintainer's own job search needs
+      # data/applications.md, which is gitignored and never reaches a runner. The
+      # script skips it and says so rather than passing vacuously, because a
+      # check that cannot fail reads as coverage it does not have. Run
+      # `node verify-release-notes.mjs --file <draft>` locally before publishing.
+      - name: Verify the release notes follow the house format
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # On a release event, check the release that fired it. Editing an older
+          # release would otherwise re-check the newest one and report green on a
+          # body nobody just touched. Passed through env rather than interpolated
+          # into the shell.
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          TARGET="${EVENT_TAG:-${TAG}}"
+          echo "Checking release notes for ${TARGET}"
+          node verify-release-notes.mjs --tag "${TARGET}"
 
       # Step 5 of the release checklist: rebuild and upload the installer. It is
       # MANDATORY when the release changes what the bundle contains, optional
