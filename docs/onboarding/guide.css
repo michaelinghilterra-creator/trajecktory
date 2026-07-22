@@ -175,6 +175,30 @@ ul.plain li { margin: 3px 0; color: var(--ink-soft); }
 .tier.plan { background: var(--ok-bg); color: var(--ok); border: 1px solid #a7e8c4; }
 .tier.key  { background: var(--tip-bg); color: var(--tip); border: 1px solid #c7dbff; }
 
+/* ---------- what a setup step actually changes ---------- */
+/* Mirrors the three badges the Launchpad puts on every step, in the app's own
+   words, so the guide and the screen agree. The loudest unasked question a new
+   user has is "am I ruining my results if I skip this?". Leaving it unanswered
+   is what let a tester work through eight optional steps believing all of them
+   were required, so this is a guardrail, not decoration. */
+.impact {
+  display: inline-block; font-family: Consolas, monospace; font-size: 8px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; padding: 1px 5px; border-radius: 4px;
+  vertical-align: 1.5px; white-space: nowrap;
+}
+.impact.score  { background: var(--brand-tint); color: var(--brand-deep); border: 1px solid var(--brand-soft); }
+.impact.filter { background: var(--tip-bg);     color: var(--tip);        border: 1px solid #c7dbff; }
+.impact.none   { background: var(--paper);      color: var(--muted);      border: 1px solid var(--line); }
+
+/* The strip that carries the badge alongside what skipping actually costs.
+   Paired deliberately: a badge saying "does not affect scoring" raises the
+   question of what it DOES do, and the answer belongs on the same line. */
+.impact-row {
+  display: flex; gap: 8px; align-items: baseline; margin: 7px 0 9px;
+  font-size: 10.5px; line-height: 1.5; color: var(--muted);
+}
+.impact-row b { color: var(--ink-soft); }
+
 /* ---------- figures + screenshots ---------- */
 figure { margin: 8px 0 6px; }
 .frame {
