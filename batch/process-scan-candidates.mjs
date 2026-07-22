@@ -1,27 +1,25 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import yaml from 'js-yaml';
+import { canonicalUrl, normalizeCompany, sameRole } from '../lib/identity.mjs';
+import { parseTracker } from '../lib/tracker.mjs';
 
 const candidates = JSON.parse(fs.readFileSync('batch/scan-candidates.json', 'utf8'));
 const portals = yaml.load(fs.readFileSync('portals.yml', 'utf8'));
 const tf = portals.title_filter;
 
 const histRaw = fs.readFileSync('data/scan-history.tsv', 'utf8');
-const histUrls = new Set(histRaw.split('\n').slice(1).map(l => l.split('\t')[0]).filter(Boolean));
+const histUrls = new Set(histRaw.split('\n').slice(1).map(l => canonicalUrl(l.split('\t')[0])).filter(Boolean));
 
 const pipeRaw = fs.readFileSync('data/pipeline.md', 'utf8');
 const pipeUrls = new Set();
-for (const m of pipeRaw.matchAll(/https?:\/\/[^\s|)]+/g)) pipeUrls.add(m[0]);
+for (const m of pipeRaw.matchAll(/https?:\/\/[^\s|)]+/g)) pipeUrls.add(canonicalUrl(m[0]));
 
-const appsRaw = fs.readFileSync('data/applications.md', 'utf8');
-// Build (company, normalized role) set
-const normRole = s => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
-  .replace(/\b(sr|senior|sn)\b/g,'').replace(/\bdir\b/g,'director').trim();
-const appsKeys = new Set();
-for (const line of appsRaw.split('\n')) {
-  const m = line.match(/^\|\s*\d+\s*\|\s*[^|]*\|\s*([^|]+)\|\s*([^|]+)\|/);
-  if (m) appsKeys.add(m[1].trim().toLowerCase() + '||' + normRole(m[2]));
-}
+// Tracker rows, read with the canonical parser. This used to be a hand-rolled
+// regex over the raw line, which the "never hand-roll a tracker row" rule in
+// AGENTS.md exists to prevent: it counted pipes positionally and drifted the
+// moment a column was added.
+const appRows = parseTracker(fs.readFileSync('data/applications.md', 'utf8'));
 
 const passesTitle = title => {
   const t = title.toLowerCase();
@@ -33,14 +31,22 @@ const passesTitle = title => {
 const out = { added: [], dupUrl: [], dupApp: [], filtered: [] };
 const seen = new Set();
 for (const c of candidates) {
-  const url = c.url.replace(/\?.*$/, '');
-  if (seen.has(url)) { out.dupUrl.push(c); continue; }
-  seen.add(url);
-  if (histUrls.has(url) || pipeUrls.has(url) || histUrls.has(c.url) || pipeUrls.has(c.url)) { out.dupUrl.push(c); continue; }
-  const key = c.company.trim().toLowerCase() + '||' + normRole(c.title);
-  if (appsKeys.has(key)) { out.dupApp.push(c); continue; }
+  // Canonical key for comparison; the RAW url is what gets written out. This
+  // previously stripped the entire query string and then stored that stripped
+  // form, which erased the gh_jid that is the only thing distinguishing one
+  // posting from another on boards that reuse one posting path — corrupting
+  // scan-history for every future run, not just this one.
+  const key = canonicalUrl(c.url);
+  if (seen.has(key)) { out.dupUrl.push(c); continue; }
+  seen.add(key);
+  if (histUrls.has(key) || pipeUrls.has(key)) { out.dupUrl.push(c); continue; }
+  // Company+role is the FALLBACK, only for tracker rows with no resolvable URL.
+  const co = normalizeCompany(c.company);
+  if (appRows.some(r => !r.url && normalizeCompany(r.company) === co && sameRole(r.role, c.title))) {
+    out.dupApp.push(c); continue;
+  }
   if (!passesTitle(c.title)) { out.filtered.push(c); continue; }
-  out.added.push({ ...c, url });
+  out.added.push({ ...c });
 }
 
 const today = new Date().toISOString().slice(0,10);
