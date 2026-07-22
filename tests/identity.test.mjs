@@ -45,6 +45,20 @@ check(canonicalUrl('') === '' && canonicalUrl(null) === '' && canonicalUrl(undef
 check(canonicalUrl('https://jobs.lever.co/applyacme/uuid') === 'https://jobs.lever.co/applyacme/uuid',
   'a company slug starting with "apply" is left intact');
 
+// ReDoS pin. The original implementation used a regex whose optional greedy
+// tail was re-scanned to end-of-string from every candidate start position, so
+// a URL repeating the apply segment cost O(n^2). Posting URLs come from scanned
+// job boards, so that input is not ours to trust. Budget is generous enough not
+// to flake on a loaded machine while still failing loudly if quadratic returns:
+// the old code took minutes on this input.
+{
+  const evil = 'https://x.com' + '/apply'.repeat(5000) + '/x';
+  const t0 = Date.now();
+  canonicalUrl(evil);
+  const ms = Date.now() - t0;
+  check(ms < 1000, `pathological repeated-segment URL stays linear (${ms}ms)`);
+}
+
 // gh_jid is the ONLY distinguishing id on some Greenhouse boards. Stripping it
 // once collapsed whole boards' worth of postings onto a single dedup key.
 check(canonicalUrl('https://co.com/careers/job?gh_jid=123') !== canonicalUrl('https://co.com/careers/job?gh_jid=456'),
