@@ -55,8 +55,17 @@ check(canonicalUrl('https://jobs.lever.co/applyacme/uuid') === 'https://jobs.lev
   const evil = 'https://x.com' + '/apply'.repeat(5000) + '/x';
   const t0 = Date.now();
   canonicalUrl(evil);
-  const ms = Date.now() - t0;
-  check(ms < 1000, `pathological repeated-segment URL stays linear (${ms}ms)`);
+  check(Date.now() - t0 < 1000, `pathological repeated-segment URL stays linear (${Date.now() - t0}ms)`);
+
+  // Second pin, for a bug introduced BY the first fix: the trailing-slash strip
+  // was widened from /\/$/ to /\/+$/ in the same edit, which is the same
+  // quadratic shape. Both halves need a pin, not just the one CodeQL named.
+  const slashes = 'https://x.com/' + '/'.repeat(20000) + 'x';
+  const t1 = Date.now();
+  canonicalUrl(slashes);
+  check(Date.now() - t1 < 1000, `pathological slash run stays linear (${Date.now() - t1}ms)`);
+
+  check(canonicalUrl('https://x.com/a///') === 'https://x.com/a', 'strips a run of trailing slashes');
 }
 
 // gh_jid is the ONLY distinguishing id on some Greenhouse boards. Stripping it
