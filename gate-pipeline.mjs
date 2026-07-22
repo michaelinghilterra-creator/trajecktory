@@ -22,13 +22,18 @@ import { dirname, join } from 'path';
 import { chromium } from 'playwright';
 import yaml from 'js-yaml';
 import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness, workdaySiteFromCareersUrl } from './liveness-core.mjs';
+import { buildDecidedIndex, findDecided } from './lib/identity.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(__dirname, 'data/pipeline.md');
 const PORTALS = join(__dirname, 'portals.yml');
+const APPS = join(__dirname, 'data/applications.md');
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
+// Escape hatch: a genuine repost the user wants re-scored despite an existing
+// tracker row for the same posting.
+const allowReeval = args.includes('--allow-reeval');
 const concIdx = args.indexOf('--concurrency');
 const concurrency = concIdx >= 0 ? parseInt(args[concIdx + 1], 10) || 4 : 4;
 
@@ -56,6 +61,42 @@ for (let i = 0; i < lines.length; i++) {
 if (pending.length === 0) {
   console.log('No pending "- [ ]" items in pipeline.md. Nothing to gate.');
   process.exit(0);
+}
+
+// ── Already-decided check, BEFORE the browser launches ───────────────────────
+// This is the deterministic choke point. Agent Scan writes into pipeline.md on
+// a prose instruction, which is advisory: the same posting kept coming back
+// after it had already been evaluated and decided, and each round cost a full
+// Sonnet evaluation to reach a conclusion the tracker already held.
+//
+// Running it here, ahead of chromium.launch(), means a decided URL costs neither
+// a page load nor a token. Ambiguous canonical URLs are never flipped (see the
+// guard in lib/identity.mjs) — they fall through to the normal liveness path,
+// because a wrong suppression hides a real job while a missed one only costs a
+// check. --allow-reeval bypasses this for a genuine repost worth re-scoring.
+let decidedCount = 0;
+if (!allowReeval) {
+  const index = buildDecidedIndex({ appsPath: APPS, rootDir: __dirname });
+  const stillPending = [];
+  for (const p of pending) {
+    const prior = findDecided(index, p.url);
+    if (prior) {
+      lines[p.idx] = `- [!] ${p.url}${p.suffix} — already evaluated as #${prior.num} (${prior.status})`;
+      decidedCount++;
+      console.log(`  ⏭ decided   #${prior.num} (${prior.status}) — ${p.url.slice(0, 78)}`);
+    } else {
+      stillPending.push(p);
+    }
+  }
+  pending.length = 0;
+  pending.push(...stillPending);
+
+  if (decidedCount && pending.length === 0) {
+    if (!dryRun) writeFileSync(PIPELINE, lines.join('\n'), 'utf8');
+    console.log(`\nAlready evaluated: ${decidedCount} (skipped, not browser-checked)`);
+    console.log('Nothing left to liveness-check.');
+    process.exit(0);
+  }
 }
 
 console.log(`Gating ${pending.length} pending URLs (concurrency ${concurrency})...`);
@@ -184,6 +225,7 @@ const dead      = results.filter(r => r.result === 'expired');
 const uncertain = results.filter(r => r.result === 'uncertain');
 
 console.log('');
+if (decidedCount) console.log(`Already evaluated: ${decidedCount} (skipped, not browser-checked)`);
 console.log(`Live:      ${live.length}`);
 console.log(`Dead:      ${dead.length}`);
 console.log(`Uncertain: ${uncertain.length} (kept as live — manual review)`);
