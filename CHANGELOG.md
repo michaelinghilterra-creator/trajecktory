@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.20.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.20.0...v1.20.1) (2026-07-22)
+
+
+### Bug Fixes
+
+* **setup:** scroll the panel into view, case place names, capitalise paired labels ([#71](https://github.com/michaelinghilterra-creator/trajecktory/issues/71)) ([a8741ef](https://github.com/michaelinghilterra-creator/trajecktory/commit/a8741efca97f64821e17ab022bfa7afef3a23593))
+
 ## [1.20.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.19.0...v1.20.0) (2026-07-22)
 
 
