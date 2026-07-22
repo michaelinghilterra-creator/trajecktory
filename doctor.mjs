@@ -8,6 +8,7 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { auditOrphanReports } from './audit-orphan-reports.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = __dirname;
@@ -232,6 +233,50 @@ function checkAutoDir(name) {
   }
 }
 
+// Evaluations that exist as a report but have no tracker row. Advisory, never
+// blocking: a genuine loss is worth knowing about, but it is history, and
+// failing someone's preflight over it would teach them to ignore the preflight.
+// The classifier lives in audit-orphan-reports.mjs so there is one copy of the
+// rules, not a second that can drift.
+function checkOrphanReports() {
+  let counts;
+  try { counts = auditOrphanReports(projectRoot).counts; }
+  catch { return { pass: true, label: 'Orphan-report audit skipped (nothing to read yet)', blocking: false }; }
+  if (!counts.reports) return { pass: true, label: 'No evaluations on disk yet', blocking: false };
+  if (!counts.lost) return { pass: true, label: `All ${counts.reports} evaluations are on the tracker or archived`, blocking: false };
+  return {
+    pass: true,
+    warn: true,
+    blocking: false,
+    label: `${counts.lost} evaluation${counts.lost === 1 ? '' : 's'} have no tracker row`,
+    fix: [
+      `${counts.recoverable} of ${counts.lost} can be replayed from their original TSV.`,
+      'Review them: node audit-orphan-reports.mjs',
+      'Nothing is restored automatically — you decide which are worth keeping.',
+    ],
+  };
+}
+
+// Files nothing reads any more. Reported, never deleted: everything under data/
+// is user-layer, and the system does not remove the user's files. It says what
+// it found and leaves the decision where it belongs.
+function checkUnusedDataFiles() {
+  const stale = [
+    ['data/seen_dedup.txt', 'superseded by data/scan-history.tsv; no code references it'],
+  ].filter(([rel]) => existsSync(join(projectRoot, rel)));
+  if (!stale.length) return { pass: true, label: 'No unused legacy data files', blocking: false };
+  return {
+    pass: true,
+    warn: true,
+    blocking: false,
+    label: `${stale.length} legacy data file${stale.length === 1 ? '' : 's'} nothing reads`,
+    fix: [
+      ...stale.map(([rel, why]) => `${rel} — ${why}`),
+      'Safe to delete, but that is your call: everything under data/ is yours.',
+    ],
+  };
+}
+
 async function gatherChecks() {
   return [
     checkNodeVersion(),
@@ -245,6 +290,8 @@ async function gatherChecks() {
     checkAutoDir('data'),
     checkAutoDir('output'),
     checkAutoDir('reports'),
+    checkOrphanReports(),
+    checkUnusedDataFiles(),
   ];
 }
 
