@@ -189,7 +189,24 @@ writeFileSync(join(sb, 'data/apps3.md'), [
 ].join('\n'));
 const idx3 = buildDecidedIndex({ appsPath: join(sb, 'data/apps3.md'), rootDir: sb });
 check(idx3.ambiguous.size === 0, 'one employer spelled two ways is NOT ambiguous');
-check(findDecided(idx3, 'https://jobs.ashbyhq.com/co/aaa-111')?.num === 9006, 'and it still suppresses, reporting the first row');
+// Reports the MOST RECENT row, not whichever happened to be read first. The row
+// order in applications.md is not ascending and merge-tracker inserts new rows at
+// the top, so a first-writer-wins answer could change as unrelated rows were
+// added. The highest number is the latest evaluation, whose status is the
+// decision that still stands.
+check(findDecided(idx3, 'https://jobs.ashbyhq.com/co/aaa-111')?.num === 9007,
+  'and it still suppresses, reporting the most recent row');
+// Order-independence is the actual property being bought, so assert it directly
+// rather than trusting that one fixture happened to be written in a helpful order.
+writeFileSync(join(sb, 'data/apps3-reversed.md'), [
+  HEADER,
+  '| 9007 | 2020-01-07 | Northwind Inc. | Staff Platform Engineer | 3.0/5 | Closed | ❌ | — | [9007](reports/9007-b.md) | n |',
+  '| 9006 | 2020-01-06 | Northwind | Staff Platform Engineer | 4.0/5 | Discarded | ❌ | — | [9006](reports/9006-a.md) | n |',
+  '',
+].join('\n'));
+const idx3r = buildDecidedIndex({ appsPath: join(sb, 'data/apps3-reversed.md'), rootDir: sb });
+check(findDecided(idx3r, 'https://jobs.ashbyhq.com/co/aaa-111')?.num === 9007,
+  'and gives the SAME answer when the two rows are stored in the opposite order');
 
 rmSync(sb, { recursive: true, force: true });
 
