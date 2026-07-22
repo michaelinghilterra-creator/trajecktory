@@ -31,7 +31,7 @@ import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
-import { canonicalUrl, urlForRow } from './lib/identity.mjs';
+import { canonicalUrl, normalizeCompany, urlForRow } from './lib/identity.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md (original)
@@ -78,13 +78,12 @@ const STATUS_RANK = {
   'oferta': 10,
 };
 
-function normalizeCompany(name) {
-  return name.toLowerCase()
-    .replace(/[()]/g, '')
-    .replace(/\s+/g, ' ')
-    .replace(/[^a-z0-9 ]/g, '')
-    .trim();
-}
+// normalizeCompany comes from lib/identity.mjs. The private copy that used to
+// live here kept spaces where the shared one strips them, so "DHI Group" and
+// "DHIGroup" were the same employer everywhere in the system EXCEPT in the one
+// script that deletes rows. It also threw on a null company cell, where the
+// shared one returns ''. Neither difference was deliberate; that is what a second
+// definition does over time.
 
 function parseScore(s) {
   const m = s.replace(/\*\*/g, '').match(/([\d.]+)/);
