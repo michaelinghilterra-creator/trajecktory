@@ -35,6 +35,20 @@ export function parseCsvContacts(csv) {
   return rows;
 }
 
+// Applications you tracked somewhere else before trajecktory. Columns match the
+// tracker's own, so a filled-in copy maps across without interpretation.
+//
+// Deliberately NOT a direct write into data/applications.md. Rows there are only
+// ever produced by formatTrackerLine and merged by merge-tracker.mjs, because a
+// hand-rolled row is still a syntactically valid row: nothing throws, nothing
+// fails a test, and the damage surfaces later as a column quietly holding the
+// wrong thing. That has happened twice. An importer must go through the same
+// merge path as everything else.
+export const APPLICATIONS_TEMPLATE_CSV =
+  'date,company,role,status,score,url,notes\n'
+  + '2026-05-14,Acme Corp,Director of Operations,Applied,4.2,https://example.com/jobs/123,Referred by a former colleague\n'
+  + '2026-05-28,Globex,Senior Business Analyst,Rejected,3.6,https://example.com/jobs/456,No response after two follow-ups\n';
+
 export const CONTACTS_TEMPLATE_CSV =
   'company,first,last,title,phone,linkedin,website,city,state,notes\n'
   + 'Acme Corp,Sarah,Johnson,Senior Talent Acquisition Partner,415-555-0182,https://www.linkedin.com/in/example,https://acme.com,San Francisco,CA,Found via LinkedIn\n';

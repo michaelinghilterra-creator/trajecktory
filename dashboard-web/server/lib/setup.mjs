@@ -172,6 +172,14 @@ const SETUP_SCALAR_FIELDS = {
   ],
   location: [
     ['location', 'country'], ['location', 'city'], ['location', 'timezone'], ['location', 'visa_status'],
+    // Work-mode answers, captured deterministically in the dashboard so the
+    // geocode handoff has something to build portals.yml location_policy FROM,
+    // instead of having to interview the user for them every time.
+    // onsite/hybrid/remote are stored as "yes"/"" rather than booleans because
+    // setupSetScalar writes scalars and the reader is a line regex.
+    ['location', 'onsite_ok'], ['location', 'hybrid_ok'], ['location', 'remote_ok'],
+    ['location', 'commute_minutes'], ['location', 'hybrid_commute_minutes'],
+    ['location', 'remote_scope'], ['location', 'never_work_in'],
   ],
   outputs: [
     ['outputs', 'resume_dir'], ['outputs', 'interview_prep_dir'],
@@ -393,7 +401,7 @@ function setupHandoffPrompt(section) {
     case 'edge':
       return `Read my cv.md and draft my narrative for config/profile.yml: a one-line headline, my top 3 superpowers, and 3 to 5 proof points (each with a hero metric). Also fill resume_framing summary_lead and aoe_priority per archetype. Show me drafts to confirm.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     case 'location':
-      return `Help me build my scanner geo filter. FIRST, unless config/profile.yml already records my location preferences, ASK me (do not assume): am I after remote, hybrid, or on-site roles (or a mix), how far am I willing to commute, and are there any cities I will not work in? Save my answers to config/profile.yml location.policy. THEN geocode my home city and build portals.yml location_policy from those preferences, using these keys exactly:` +
+      return `Help me build my scanner geo filter. FIRST read config/profile.yml location: I have already answered the work-mode questions in the dashboard, so onsite_ok / hybrid_ok / remote_ok, commute_minutes, hybrid_commute_minutes, remote_scope and never_work_in should be there. Use them and do NOT ask me again. Only ask about whichever of those is genuinely missing. Note that commutes are recorded in MINUTES: convert to a radius in miles for the scanner using a sensible average speed for my area, and treat the hybrid commute as its own number rather than reusing the on-site one, because a commute done twice a week reaches further than one done daily. If remote_scope is set, honour it: most remote postings are restricted to a country or a state, so do not build a filter that accepts remote roles from anywhere unless I actually said anywhere. THEN geocode my home city and build portals.yml location_policy, using these keys exactly:` +
         ' home (lat, lon, commute_radius_miles);' +
         ' home_region — the tokens that mark a posting as being in my home state or region, lowercase, including the abbreviation forms an ATS actually prints (for Ohio: ["ohio", " oh", ", oh"]);' +
         ' home_core — my home city and any city I would commute to without hesitation;' +

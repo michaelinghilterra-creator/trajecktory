@@ -84,6 +84,54 @@ window.ScoreChip = function ScoreChip({ score }) {
   );
 };
 
+// ---------- Where a generated file lives ----------
+// The tailored resume's path was rendered as plain text in the persistent report
+// panel, so the one durable place it appeared was the one place you could not
+// click it. A working link existed only in the toast shown straight after an
+// apply, and dismissing that toast lost it for good — which is exactly backwards,
+// since the file matters most weeks later, not in the ten seconds after it is
+// written.
+//
+// One implementation, shared, because this is the third helper these two report
+// panels both need and the previous two drifted when each grew its own copy.
+window.outputHref = function outputHref(p) {
+  if (!p) return null;
+  const f = String(p).split(/[\\/]/).pop();
+  // .md is rendered rather than downloaded; everything else is served as-is.
+  return f.endsWith('.md') ? `/output-preview/${f}` : `/output/${f}`;
+};
+
+// ---------- Files this application produced ----------
+// Reads /api/artifacts/:id, which FINDS the generated files rather than trusting
+// a recorded path. The report's `docx` field is never written by the apply flow —
+// zero of 439 real reports carry it — so anything keyed on it renders for nobody.
+// Renders nothing at all when there is nothing to show, since an empty "Files"
+// block on a role you have not applied to is just noise.
+window.ApplyArtifacts = function ApplyArtifacts({ app }) {
+  const [a, setA] = React.useState(null);
+  React.useEffect(() => {
+    if (!app) return;
+    const ctrl = new AbortController();
+    fetch(`/api/artifacts/${app.id}`, { signal: ctrl.signal })
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setA(d))
+      .catch(err => { if (err.name !== 'AbortError') setA(null); });
+    return () => ctrl.abort();
+  }, [app?.id]);
+
+  if (!a || (!a.resume && !a.cover)) return null;
+  const link = (file, label) => file ? (
+    <a className="btn sm" href={window.outputHref(file)} target="_blank" rel="noreferrer" title={file}>{label} ↗</a>
+  ) : null;
+  return (
+    <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <span style={{ fontSize: 11.5, color: 'var(--text-mute)' }}>Files for this application:</span>
+      {link(a.resume, 'Tailored resume')}
+      {link(a.cover, 'Cover letter')}
+    </div>
+  );
+};
+
 // ---------- How the score works ----------
 // "If I don't understand how we arrived at a score, how can I trust the score?"
 // was the sharpest question in a first-install session, and nothing in the app
@@ -148,6 +196,58 @@ window.ScoreExplainer = function ScoreExplainer({ open, onClose }) {
     </div>
   );
 };
+
+// ---------- POSTING ----------
+// The job posting text, kept after the posting itself is gone. A posting comes
+// down the day it is filled, and the report only ever stored the URL, so by the
+// time a later interview round arrives the link is usually dead. A tester
+// reached a fifth round 45 days after the posting had vanished and only had
+// something to prepare from because they had personally copied it elsewhere.
+//
+// When there is no snapshot the tab says so plainly rather than showing an empty
+// panel: older evaluations predate this, and a blank tab reads like a bug.
+window.PostingPanel = function PostingPanel({ app }) {
+  const [state, setState] = React.useState({ loading: true });
+
+  React.useEffect(() => {
+    if (!app) return;
+    setState({ loading: true });
+    const ctrl = new AbortController();
+    fetch(`/api/jd/${app.id}`, { signal: ctrl.signal })
+      .then(async r => (r.ok ? { ok: true, ...(await r.json()) } : { ok: false }))
+      .then(d => setState({ loading: false, ...d }))
+      .catch(err => { if (err.name !== 'AbortError') setState({ loading: false, ok: false }); });
+    return () => ctrl.abort();
+  }, [app?.id]);
+
+  if (state.loading) return <div style={{ color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Loading posting…</div>;
+
+  if (!state.ok) {
+    return (
+      <div className="cs-callout">
+        <div className="cs-callout-label">No saved copy of this posting</div>
+        <div className="cs-callout-body" style={{ lineHeight: 1.6 }}>
+          This role was evaluated before trajecktory started keeping the posting text, so only the link survives.
+          {app.url ? <> The original is <a href={app.url} target="_blank" rel="noreferrer">still worth a try</a>, though postings usually come down once they are filled.</> : null}
+          <div style={{ marginTop: 8, color: 'var(--text-mute)' }}>Evaluations from now on save the text automatically, so it is here when you prepare for a later round.</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="col" style={{ gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>
+          Saved when this role was evaluated, so it survives the posting being taken down.
+        </span>
+        {app.url && <a className="btn sm" href={app.url} target="_blank" rel="noreferrer">Original ↗</a>}
+      </div>
+      <div className="mono dim" style={{ fontSize: 10.5 }}>{state.path}</div>
+      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12.5, lineHeight: 1.6, color: 'var(--text)', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 'var(--r-card)', padding: 13, margin: 0, maxHeight: '60vh', overflowY: 'auto' }}>{state.text}</pre>
+    </div>
+  );
+}
 
 // ---------- Sidebar ----------
 window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChanged, version }) {

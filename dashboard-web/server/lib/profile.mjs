@@ -61,24 +61,37 @@ function stripUrl(url) {
   return String(url || '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
 }
 
-// Dependency-free read of credentials.certifications names (a list of {name,
-// issuer} objects, which the scalar reader can't handle). Scans the lines under
-// the `certifications:` key and pulls each `name:` until the block dedents.
-function getCertNames(text) {
+// Dependency-free read of credentials.certifications (a list of objects, which
+// the scalar reader can't handle). Scans the lines under the `certifications:`
+// key and collects each entry until the block dedents.
+//
+// Returns the whole entry, not just the name: application forms ask for the
+// certificate number and the issue/expiry dates as well, and those were being
+// looked up by hand every time because the quick-copy bar only knew names.
+function getCertEntries(text) {
   if (!text) return [];
   const lines = text.split(/\r?\n/);
   const start = lines.findIndex(l => /^\s*certifications:\s*$/.test(l));
   if (start === -1) return [];
   const baseIndent = lines[start].match(/^\s*/)[0].length;
-  const names = [];
+  const unquote = (v) => v.replace(/^["']|["']$/g, '');
+  const entries = [];
+  let cur = null;
   for (let i = start + 1; i < lines.length; i++) {
     const l = lines[i];
     if (l.trim() === '') continue;
     if (l.match(/^\s*/)[0].length <= baseIndent) break; // dedented out of the block
-    const m = l.match(/^\s*-?\s*name:\s*(.+?)\s*$/);
-    if (m) names.push(m[1].replace(/^["']|["']$/g, ''));
+    // A new list item starts an entry; subsequent keys attach to it.
+    const isItem = /^\s*-\s/.test(l);
+    const kv = l.match(/^\s*-?\s*([A-Za-z_]+):\s*(.*?)\s*$/);
+    if (!kv) continue;
+    if (isItem) { if (cur) entries.push(cur); cur = {}; }
+    if (!cur) cur = {};
+    const [, key, rawVal] = kv;
+    if (rawVal !== '') cur[key] = unquote(rawVal);
   }
-  return names;
+  if (cur) entries.push(cur);
+  return entries.filter(e => e.name);
 }
 
 let _cache = null; // { mtimeMs, identity }
@@ -116,7 +129,10 @@ export function getIdentity() {
     portfolioHost,
     github: getScalar(text, 'candidate', 'github'),
     // Reusable application info for the drawer's one-click "Quick copy" bar.
-    certifications: getCertNames(text),
+    // Names only, kept for anything that just wants the list.
+    certifications: getCertEntries(text).map(c => c.name),
+    // Full entries (number, issued, expires) for the quick-copy bar.
+    certificationEntries: getCertEntries(text),
     headline: getScalar(text, 'narrative', 'headline'),
     // Convenience: the user's documented-approach landing page used in outreach.
     trajecktoryUrl: portfolioHost ? `${portfolioHost}/trajecktory` : '',

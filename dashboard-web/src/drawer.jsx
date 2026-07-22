@@ -48,11 +48,20 @@ window.Drawer = function Drawer({ app, onClose, onAction }) {
               {cs && section === "interview"  && <InterviewSection cs={cs} />}
               {cs && section === "customize"  && <CustomizeSection cs={cs} />}
               {cs && section === "legit"      && <LegitSection cs={cs} />}
+              {section === "posting"          && window.PostingPanel && <window.PostingPanel app={app} />}
               {!cs && !csLoading && section !== "report" && <BasicBody app={app} />}
               {/* Follow-Up history — visible on EVERY tab. Hidden until at least
                   one touch exists so it doesn't add noise to fresh entries. */}
               <FollowupHistorySection appId={app.id} />
             </div>
+            {/* Durable links to whatever this application produced. Sits above
+                the quick-copy bar so it is present on every tab, not buried in a
+                post-apply toast that vanishes on dismiss. */}
+            {window.ApplyArtifacts && (
+              <div style={{ padding: '8px 16px', borderTop: '1px solid var(--border)' }}>
+                <window.ApplyArtifacts app={app} />
+              </div>
+            )}
             <QuickCopyBar />
             <DrawerFoot app={app} cs={cs} onAction={onAction} />
           </>
@@ -100,6 +109,7 @@ function DrawerTabs({ section, setSection, hasCs }) {
       { id: "customize", label: "Customize" },
       { id: "legit",     label: "Legitimacy" },
     ] : []),
+    { id: "posting", label: "Posting" },
     { id: "report", label: "Full Report" },
   ];
   return (
@@ -588,7 +598,10 @@ function LegitSection({ cs }) {
         <div className="cs-section-head"><span>Source Links</span></div>
         <div className="col" style={{ gap: 6 }}>
           <div className="kv compact"><span className="k">JD URL</span><span className="v"><a className="link" href={cs.url} target="_blank" rel="noreferrer">{cs.url}</a></span></div>
-          <div className="kv compact"><span className="k">Generated resume</span><span className="v mono dim">{cs.docx || cs.pdf}</span></div>
+          <div className="kv compact">
+            <span className="k">Generated resume</span>
+            <span className="v mono dim">{cs.docx || cs.pdf}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -606,7 +619,16 @@ function QuickCopyBar() {
   const items = [
     ['Email', m.email], ['Phone', m.phone], ['LinkedIn', m.linkedin],
     ['Portfolio', m.portfolioUrl], ['GitHub', m.github],
-    ...(Array.isArray(m.certifications) ? m.certifications.filter(Boolean).map(c => [trunc(c), c]) : []),
+    // Certifications contribute the name plus whatever an application form is
+    // actually going to ask for. Before this the bar knew only the name, so the
+    // number and dates were looked up by hand on every form.
+    ...(Array.isArray(m.certificationEntries) && m.certificationEntries.length
+      ? m.certificationEntries.flatMap(c => [
+          [trunc(c.name), c.name],
+          c.number  ? [`${trunc(c.name, 14)} no.`, c.number]  : null,
+          c.expires ? [`${trunc(c.name, 14)} exp`, c.expires] : null,
+        ].filter(Boolean))
+      : (Array.isArray(m.certifications) ? m.certifications.filter(Boolean).map(c => [trunc(c), c]) : [])),
   ].filter(([, v]) => v);
   if (!items.length) return null;
   const copy = (label, val) => {
@@ -680,11 +702,10 @@ function DrawerFoot({ app, cs, onAction }) {
   if (applyResult) {
     const r = applyResult.result || {};
     const fileName = p => p ? p.replace(/\\/g, '/').split('/').pop() : null;
-    const hrefFor = p => {
-      if (!p) return null;
-      const f = fileName(p);
-      return f.endsWith('.md') ? `/output-preview/${f}` : `/output/${f}`;
-    };
+    // Shared with the persistent "Generated resume" row above; see
+    // window.outputHref. Kept as one implementation deliberately: this panel and
+    // the pipeline one have drifted before, each having grown its own copy.
+    const hrefFor = window.outputHref;
     // BYO mode: no trajecktory-generated assets to link to. Show a logged-only
     // confirmation with just the JD link.
     const isByo = r.byo === true;

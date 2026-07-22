@@ -255,11 +255,43 @@ function listSessions() {
 
   const active = [];
   const archive = [];
+  const seenSlugs = new Set();
   for (const folder of scanPrepFolders()) {
     const row = pickTrackerRow(folder, rowsBySlug);
     const session = buildSession(folder, row);
+    seenSlugs.add(session.id);
     (row && isActiveInterviewStatus(row.status) ? active : archive).push(session);
   }
+
+  // ── Rows that have reached an interview but have no prep folder ─────────────
+  // The loop above walks FOLDERS, so a company only existed here once something
+  // had already been written to disk for it. Move a role to Phone Screen and
+  // nothing appears, at any status, with no explanation — which reads as the tab
+  // being broken rather than as prep not having been generated yet. A tester hit
+  // exactly this on their first interview (2026-07-21).
+  //
+  // These are listed as sessions with no rounds, which the UI renders with the
+  // command to generate prep. Deliberately NOT created on disk: an empty folder
+  // would then satisfy scanPrepFolders forever and hide the fact that there is
+  // still no prep in it.
+  for (const [key, rows] of rowsBySlug) {
+    if (seenSlugs.has(key)) continue;
+    const row = rows.find(r => isActiveInterviewStatus(r.status));
+    if (!row) continue;
+    active.push({
+      id: key,
+      company: cleanCompany(row.company) || row.company,
+      role: row.role || null,
+      status: row.status,
+      round: null,
+      prepDir: null,
+      appId: row.id ?? null,
+      rounds: [],
+      docs: [],
+      needsPrep: true,   // the UI's cue to offer generation instead of a blank
+    });
+  }
+
   active.sort(bySession);
   archive.sort(bySession);
   return { active, archive };
