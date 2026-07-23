@@ -62,6 +62,42 @@ const WOW_TH_L = { ...WOW_TH, textAlign: 'left' };
 const WOW_TD = { textAlign: 'right', padding: '7px 12px', whiteSpace: 'nowrap' };
 const WOW_TD_L = { textAlign: 'left', padding: '7px 12px', fontSize: 13 };
 
+// Debriefs due: interview rounds on file whose current status is an interview
+// stage with no debrief note yet (GET /api/interview/debriefs/pending). This is
+// the ONLY way to capture a debrief for a round that already happened; the
+// on-transition prompt only fires going forward. Clicking a row opens the same
+// window.DebriefModal used elsewhere, so past rounds are captured through one path.
+function DebriefsDue({ pending, onOpen }) {
+  if (pending == null) return null; // still loading — stay quiet, no flicker
+  const n = pending.length;
+  return (
+    <>
+      <h3 style={{ margin: '0 0 4px' }}>Debriefs due{n ? ` (${n})` : ''}</h3>
+      <p className="dim" style={{ fontSize: 12, marginTop: 0, marginBottom: 8 }}>
+        Interview rounds on file with no debrief captured. The objection is the whole point, and it fades fast.
+      </p>
+      {n === 0 ? (
+        <div className="card dim" style={{ marginBottom: 24 }}>No debriefs due. Every interview round on file has one.</div>
+      ) : (
+        <div className="card" style={{ padding: '4px 16px', marginBottom: 24, borderLeft: '3px solid var(--accent)' }}>
+          {pending.map(p => (
+            <div key={`${p.id}:${p.stage}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '9px 2px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{p.company}</span>{' '}
+                <span className="dim" style={{ fontSize: 12 }}>· {p.role || 'role n/a'} · {p.stage}</span>
+              </div>
+              <button className="btn accent sm" style={{ flexShrink: 0 }}
+                onClick={() => onOpen({ appId: p.id, company: p.company, role: p.role, stage: p.stage })}>
+                Add debrief
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function WeekOverWeek({ history }) {
   const weeks = (history || []).slice(-6);
   return (
@@ -120,6 +156,8 @@ window.ReviewTab = function ReviewTab({ toast }) {
   const [err, setErr] = useStateRv(null);
   const [name, setName] = useStateRv('');
   const [running, setRunning] = useStateRv(false);
+  const [pending, setPending] = useStateRv(null); // debriefs due (null = loading)
+  const [debrief, setDebrief] = useStateRv(null);  // open debrief modal, or null
 
   const load = useCallbackRv(() => {
     fetch('/api/metrics/weekly').then(r => r.json())
@@ -127,7 +165,11 @@ window.ReviewTab = function ReviewTab({ toast }) {
       .catch(e => setErr(e.message));
     fetch('/api/review/status').then(r => r.json()).then(setStatus).catch(() => {});
   }, []);
-  useEffectRv(() => { load(); }, [load]);
+  const loadPending = useCallbackRv(() => {
+    fetch('/api/interview/debriefs/pending').then(r => r.json())
+      .then(d => setPending((d && d.pending) || [])).catch(() => setPending([]));
+  }, []);
+  useEffectRv(() => { load(); loadPending(); }, [load, loadPending]);
 
   // Freeze this week into the log and (re)compute the build lock. This is the
   // deliberate snapshot: after it runs, the week is fixed in the history and the
@@ -205,6 +247,8 @@ window.ReviewTab = function ReviewTab({ toast }) {
         <ReviewIndicator label="Unserviced applications (WIP)" m={m.unservicedApplications} />
       </div>
 
+      <DebriefsDue pending={pending} onOpen={setDebrief} />
+
       <h3 style={{ margin: '0 0 4px' }}>Log a LinkedIn connect</h3>
       <p className="dim" style={{ fontSize: 12, marginTop: 0, marginBottom: 8 }}>
         Connections are sent by hand. Log each one so the weekly floor is real, not a guess.
@@ -215,6 +259,11 @@ window.ReviewTab = function ReviewTab({ toast }) {
           style={{ flex: 1, padding: '7px 10px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontSize: 13 }} />
         <button className="btn primary" onClick={logConnect}>+ Log connect</button>
       </div>
+
+      {debrief && window.DebriefModal && (
+        <window.DebriefModal prompt={debrief} toast={toast}
+          onClose={(saved) => { setDebrief(null); if (saved) { loadPending(); load(); } }} />
+      )}
     </div>
   );
 };
