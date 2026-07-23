@@ -2,17 +2,15 @@ import fs from 'fs';
 import path from 'path';
 import { TARGET_TALENT_MD, TT_CORR_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
+import { TALENT_STATUS_LABELS } from './statuses.mjs';
+import { parseVerifyTag } from '../../../lib/email-verify.mjs';
 
-const TT_STATUSES = [
-  'Not Contacted',
-  'Drafted',
-  'Sent',
-  'Replied',
-  'Meeting Scheduled',
-  'Connected',
-  'Dormant',
-  'Archived',  // set by the Reconcile flow when all related apps go closed
-];
+// Derived from templates/states.yml (talent_states) rather than hardcoded here.
+// The previous local array is the exact drift the recruiter side already fixed:
+// a status added to states.yml (Bounced, Blocked) would otherwise be missing from
+// this list, so the UI would not offer it and a ladder metric would skip it — the
+// same way Bounced silently rendered as "Not Contacted" for a month.
+const TT_STATUSES = TALENT_STATUS_LABELS;
 
 function parseTargetTalentMd() {
   if (!fs.existsSync(TARGET_TALENT_MD)) return [];
@@ -27,6 +25,13 @@ function parseTargetTalentMd() {
     if (parts.length < 17) continue;
     const id = parseInt(parts[1], 10);
     if (isNaN(id)) continue;
+    // Read the inline `[v:state:source:date:score]` verification tag AND the
+    // clean address from the Email cell in one pass. `verified.address` strips
+    // every bracket tag (`[pattern-med]`, legacy `[bounced …]`, the new `[v:…]`)
+    // exactly as the old inline replace did, so `email` is byte-identical to
+    // before; `verified` is purely additive. The send gate (isSendable) reads
+    // `verified.state`, so a message can never go to an unverified/dead address.
+    const verified = parseVerifyTag(parts[11]);
     rows.push({
       id,
       company:   parts[2],
@@ -38,17 +43,13 @@ function parseTargetTalentMd() {
       state:     parts[8],
       zip:       parts[9],
       phone:     parts[10],
-      // Strip inline `[pattern-med]`, `[bounced …]`, etc. annotations that
-      // sometimes live alongside the address in the Email column. The
-      // bounce/unverified badges read from `notes`, so dropping the tag here
-      // doesn't lose any UI signal — it just keeps copy/mailto/Gmail-to
-      // clean.
-      email:     parts[11].replace(/\s*\[[^\]]*\]\s*/g, '').trim(),
+      email:     verified.address,
       linkedin:  parts[12],
       status:    parts[13],
       lastTouch: parts[14],
       notes:     parts[15],
       website:   (parts[16] || '').trim(),
+      verified,  // { state, source, date, score, address, hadTag }
       raw: line,
     });
   }
@@ -149,7 +150,7 @@ function appendTTRows(rows) {
 // Target Company (case-insensitive, trimmed). Returns lightweight refs.
 // Match company names across the two CRMs (applications.md vs target-talent.md).
 // Exact normalized match is preferred; if it returns nothing, fall back to a
-// token-subset match so "Kira" ↔ "Kira Learning" and "Apple" ↔ "Apple Inc."
+// token-subset match so "Acme" ↔ "Acme Labs" and "Northwind" ↔ "Northwind Inc."
 // link correctly. Common corporate suffixes are treated as ignorable noise.
 const _COMPANY_STOPWORDS = new Set([
   'inc', 'incorporated', 'corp', 'corporation', 'co', 'company', 'llc', 'ltd',
@@ -164,8 +165,8 @@ function _companyTokens(s) {
 }
 // Shared company matcher across the two CRMs (applications.md <-> target-talent.md).
 // Normalized-exact match preferred; token-subset fallback so corporate suffixes
-// (Inc./LLC/Labs/...) don't break linkage — "ADT" <-> "ADT Inc.", "Kira" <->
-// "Kira Learning". Used by BOTH findRelatedApps() (TA drawer) and the
+// (Inc./LLC/Labs/...) don't break linkage — "Acme" <-> "Acme Inc.", "Northwind" <->
+// "Northwind Labs". Used by BOTH findRelatedApps() (TA drawer) and the
 // /by-company endpoint (Follow-Ups drawer) so the two always agree on what
 // counts as the same company. Previously the endpoint did exact-only matching,
 // so a suffix mismatch silently hid related contacts/apps.

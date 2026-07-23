@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { RECRUITERS_MD, RECRUITER_CORR_DIR } from '../config.mjs';
 import { RECRUITER_STATUS_LABELS, RECRUITER_CONTACTED } from './statuses.mjs';
+import { parseVerifyTag } from '../../../lib/email-verify.mjs';
 
 // Derived from templates/states.yml (recruiter_states) rather than hardcoded
 // here. The previous local array is how `Bounced` came to be live in the data
@@ -20,6 +21,11 @@ function parseRecruitersMd() {
     if (parts.length < 15) continue; // 14 fields + 2 sentinel empties
     const id = parseInt(parts[1], 10);
     if (isNaN(id)) continue;
+    // Read the `[v:…]` verification tag and the clean address in one pass, same
+    // as parseTargetTalentMd. `verified.address` strips every bracket tag exactly
+    // as the old inline replace did, so `email` is unchanged; `verified` is
+    // additive and drives the isSendable gate.
+    const verified = parseVerifyTag(parts[11]);
     rows.push({
       id,
       firm: parts[2],
@@ -31,14 +37,13 @@ function parseRecruitersMd() {
       state: parts[8],
       zip: parts[9],
       phone: parts[10],
-      // Same defensive strip as parseTargetTalentMd — drop trailing
-      // `[pattern-med]` / `[bounced …]` annotations from the Email column.
-      email: parts[11].replace(/\s*\[[^\]]*\]\s*/g, '').trim(),
+      email: verified.address,
       status: parts[12],
       lastTouch: parts[13],
       notes: parts[14],
       linkedin: (parts[15] || '').trim(),
       website: (parts[16] || '').trim(),
+      verified,  // { state, source, date, score, address, hadTag }
       raw: line,
     });
   }

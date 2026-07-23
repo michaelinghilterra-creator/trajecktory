@@ -193,6 +193,23 @@ talent_states:
   - id: dormant
     label: Dormant
     contacted: true
+  - id: bounced
+    label: Bounced
+    description: >-
+      Hard bounce. The message was sent; the address is dead. Mirrors
+      recruiter_states.bounced, whose absence from THIS ladder is why a TA hard
+      bounce had nowhere to go and was parked as Dormant/Archived — making a
+      bounce and an ignore indistinguishable in every reply-rate number.
+    contacted: true
+  - id: blocked
+    label: Blocked
+    description: >-
+      Deliverable person, undeliverable mailbox: multiple valid-pattern addresses
+      bounced while the person is still employed, i.e. the org firewalls external
+      mail to TA/exec inboxes. Reach these people on LinkedIn, not email.
+      contacted:false — no message ever reached a human, so a blocked row is
+      neither a reply numerator nor a delivered denominator.
+    contacted: false
   - id: archived
     label: Archived
     description: >-

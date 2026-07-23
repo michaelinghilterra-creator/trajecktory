@@ -465,6 +465,8 @@ for (const suite of [
   'tests/verify-no-pii.test.mjs',
   'tests/interview-sessions.test.mjs',
   'tests/activation.test.mjs',
+  'tests/email-verify.test.mjs',
+  'tests/bounce-parse.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);
