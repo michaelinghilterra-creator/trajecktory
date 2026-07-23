@@ -470,6 +470,7 @@ for (const suite of [
   'tests/verify-contacts.test.mjs',
   'tests/tt-reconcile.test.mjs',
   'tests/connect-queue.test.mjs',
+  'tests/debrief.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);
