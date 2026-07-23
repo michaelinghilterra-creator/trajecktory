@@ -41,6 +41,11 @@ export const APPLY_DATES_PATH = path.join(DATA_DIR, 'apply-dates.json');
 export const MUTE_PATH = path.join(DATA_DIR, 'followup-mute.json');
 export const APP_NOTES_PATH = path.join(DATA_DIR, 'app-notes.json');
 export const STATUS_EVENTS_PATH = path.join(DATA_DIR, 'status-events.tsv');
+// Google OAuth tokens (refresh/access token, granted scopes, connected email) and
+// the Gmail read-scan cursor (which message ids have already been processed, so a
+// re-scan is idempotent). Both are gitignored personal data under DATA_DIR.
+export const GOOGLE_TOKENS_PATH = path.join(DATA_DIR, 'google-tokens.json');
+export const GOOGLE_SYNC_PATH = path.join(DATA_DIR, 'google-sync.json');
 // Activation log: how long setup took and whether the first scan and first apply
 // actually produced anything. Opt-in, local, and shape-only (see lib/activation.mjs).
 export const ACTIVATION_PATH = path.join(DATA_DIR, 'activation-log.tsv');

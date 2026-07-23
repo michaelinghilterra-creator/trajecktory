@@ -94,6 +94,10 @@ function updateRecruiterLine(id, updates) {
     if (updates.lastTouch  !== undefined) parts[13] = ` ${updates.lastTouch} `;
     if (updates.notes      !== undefined) parts[14] = cell(updates.notes);
     if (updates.phone      !== undefined) parts[10] = cell(updates.phone);
+    // Email cell may carry an inline [v:...] verification tag; cell() keeps it
+    // intact (a tag holds no pipe/newline). Used by the Gmail bounce scan to flip
+    // a recruiter's address to bounced, mirroring updateTTLine's email support.
+    if (updates.email      !== undefined) parts[11] = cell(updates.email);
     if (updates.linkedin !== undefined || updates.website !== undefined) {
       // Older rows lack the LinkedIn + Website cells; pad with empties before the
       // trailing '' so columns line up, then set whichever was provided.

@@ -1,0 +1,247 @@
+/**
+ * lib/google.mjs — the Gmail READ path: OAuth token refresh, message fetch, and
+ * the pure classification/decision core behind /api/google/*.
+ *
+ * WHY THIS EXISTS
+ * Outreach went dark on 2026-06-24 when the Gmail machinery was deleted. The
+ * credentials (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in dashboard-web/.env) and
+ * a live refresh token (data/google-tokens.json, scoped gmail.modify) survived,
+ * so the read path is rebuilt here without re-consenting. This module READS only:
+ * it lists and fetches messages, recognizes bounces (via lib/bounce-parse.mjs)
+ * and replies, and decides what to record. It never sends. Sending stays out, by
+ * design and by scope.
+ *
+ * THE POINT is auto-logging. When a reply or a bounce lands, record it in the
+ * moment (a note, a status flip) instead of reconstructing stage history from
+ * memory weeks later. That reconstruction is what made the search post-mortem
+ * take four passes and is what corrupted status-events.tsv. This is the permanent
+ * fix for the data problem underneath the whole plan.
+ *
+ * SHAPE: the network functions (getAccessToken, listMessages, getMessage) take an
+ * injectable `fetchImpl` so they are testable, and the pure decision core
+ * (parseGmailMessage, classifyReply, matchAddress, scanDecisions) is unit tested
+ * with invented message fixtures. No live inbox is touched by the tests.
+ */
+
+import fs from 'fs';
+import { GOOGLE_TOKENS_PATH, GOOGLE_SYNC_PATH } from '../config.mjs';
+import { classifyBounce } from '../../../lib/bounce-parse.mjs';
+
+const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
+
+// ── Token + sync-cursor storage ──────────────────────────────────────────────
+function readTokens() {
+  try { return JSON.parse(fs.readFileSync(GOOGLE_TOKENS_PATH, 'utf8')); }
+  catch { return null; }
+}
+function writeTokens(t) {
+  fs.writeFileSync(GOOGLE_TOKENS_PATH, JSON.stringify(t, null, 2) + '\n');
+}
+// The Gmail scan cursor: which message ids we have already processed, so a
+// re-scan is idempotent and never double-logs a reply or re-flips a bounce.
+function readSync() {
+  try {
+    const s = JSON.parse(fs.readFileSync(GOOGLE_SYNC_PATH, 'utf8')) || {};
+    return { seenMessageIds: s.seenMessageIds || [], lastCheckedAt: s.lastCheckedAt || null };
+  } catch { return { seenMessageIds: [], lastCheckedAt: null }; }
+}
+function writeSync(s) {
+  fs.writeFileSync(GOOGLE_SYNC_PATH, JSON.stringify(s, null, 2) + '\n');
+}
+
+// Space-separated scope string → array.
+function tokenScopes(tokens) {
+  return String(tokens?.scope || '').split(/\s+/).filter(Boolean);
+}
+
+// ── Connection status (pure given tokens + clock) ────────────────────────────
+// Returns only non-secret facts (no token values) so it is safe to hand a UI.
+function googleStatus(tokens = readTokens(), now = Date.now()) {
+  if (!tokens || !tokens.refresh_token) {
+    return { connected: false, connectedEmail: null, scopes: [], canReadMail: false, expired: true, expiresAt: null };
+  }
+  const scopes = tokenScopes(tokens);
+  const expiresAt = tokens.expiry_date || null;
+  return {
+    connected: true,
+    connectedEmail: tokens.connectedEmail || null,
+    scopes,
+    canReadMail: scopes.some(s => /gmail\.(readonly|modify)/.test(s)),
+    expired: !expiresAt || expiresAt <= now,
+    expiresAt,
+  };
+}
+
+// ── Access token, refreshed when stale ───────────────────────────────────────
+// Injectable fetch + clock for tests. Persists the refreshed access token so the
+// next call reuses it until it expires. Never logs or returns the refresh token.
+async function getAccessToken({
+  tokens = readTokens(), now = Date.now(), fetchImpl = fetch, save = writeTokens, marginMs = 60_000,
+} = {}) {
+  if (!tokens || !tokens.refresh_token) throw new Error('Google is not connected (no refresh token).');
+  // Still valid with margin → reuse.
+  if (tokens.access_token && tokens.expiry_date && tokens.expiry_date - marginMs > now) {
+    return tokens.access_token;
+  }
+  const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
+  if (!clientId || !clientSecret) {
+    throw new Error('Missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in dashboard-web/.env');
+  }
+  const body = new URLSearchParams({
+    client_id: clientId, client_secret: clientSecret,
+    refresh_token: tokens.refresh_token, grant_type: 'refresh_token',
+  });
+  const res = await fetchImpl(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Google token refresh failed (${res.status}). ${String(txt).slice(0, 160)}`);
+  }
+  const j = await res.json();
+  const updated = {
+    ...tokens,
+    access_token: j.access_token || tokens.access_token,
+    token_type: j.token_type || tokens.token_type,
+    // Google returns expires_in seconds; store an absolute epoch ms for the cache.
+    expiry_date: now + ((Number(j.expires_in) || 3600) * 1000),
+  };
+  if (j.id_token) updated.id_token = j.id_token;
+  save(updated);
+  return updated.access_token;
+}
+
+// ── Gmail read wrappers (network; injectable fetch) ──────────────────────────
+async function listMessages({ q = '', accessToken, max = 50, fetchImpl = fetch } = {}) {
+  const url = `${GMAIL_BASE}/messages?q=${encodeURIComponent(q)}&maxResults=${max}`;
+  const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) throw new Error(`Gmail list failed (${res.status})`);
+  const j = await res.json();
+  return j.messages || []; // [{ id, threadId }]
+}
+async function getMessage({ id, accessToken, fetchImpl = fetch } = {}) {
+  const url = `${GMAIL_BASE}/messages/${id}?format=full`;
+  const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) throw new Error(`Gmail get failed (${res.status})`);
+  return res.json();
+}
+
+// ── Pure parsing + classification ────────────────────────────────────────────
+function _b64urlDecode(data) {
+  if (!data) return '';
+  try { return Buffer.from(data, 'base64url').toString('utf8'); } catch { return ''; }
+}
+
+// Flatten a Gmail API message object into the fields we actually reason over.
+// Walks the MIME tree for a text/plain body, falling back to stripped HTML, then
+// to the snippet. Pure.
+function parseGmailMessage(raw) {
+  const payload = raw?.payload || {};
+  const headers = payload.headers || [];
+  const h = (name) => {
+    const found = headers.find(x => (x.name || '').toLowerCase() === name.toLowerCase());
+    return found ? found.value : '';
+  };
+  let text = '';
+  const walk = (part) => {
+    if (!part) return;
+    const mime = part.mimeType || '';
+    if (mime === 'text/plain' && part.body?.data) text += _b64urlDecode(part.body.data) + '\n';
+    else if (mime === 'text/html' && part.body?.data && !text) {
+      text += _b64urlDecode(part.body.data).replace(/<[^>]+>/g, ' ') + '\n';
+    }
+    if (Array.isArray(part.parts)) part.parts.forEach(walk);
+  };
+  walk(payload);
+  if (!text && payload.body?.data) text = _b64urlDecode(payload.body.data);
+  return {
+    id: raw?.id || null,
+    threadId: raw?.threadId || null,
+    from: h('From'),
+    to: h('To'),
+    subject: h('Subject'),
+    date: h('Date'),
+    snippet: raw?.snippet || '',
+    labelIds: raw?.labelIds || [],
+    text: (text.trim() || raw?.snippet || ''),
+  };
+}
+
+// Pull the bare address out of a "Name <alex@example.test>" header value.
+function extractEmail(s) {
+  const m = String(s || '').match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
+  return m ? m[0].toLowerCase() : null;
+}
+
+// Reply intent, keyword-heuristic. Negative is checked first, because a rejection
+// often contains interview-ish words ("we interviewed many strong candidates").
+// Deliberately coarse: this only picks the SUGGESTED action; a human confirms the
+// flip. positive = wants to talk / schedule / advance; negative = a pass; neutral
+// = a human reply that is neither (logs a note, nudges Applied → Responded).
+const REPLY_NEGATIVE_RE = /\b(unfortunately|not (moving|move) forward|decided (to|not) to|move (ahead|forward) with (other|another)|other candidates|will not be (moving|proceeding)|regret to|not (a )?(fit|match)|not the right (fit|match|time)|pursue other|filled the (role|position|seat)|no longer (considering|moving|open)|have to pass|passing on)\b/i;
+const REPLY_POSITIVE_RE = /\b(schedul(e|ing)|set up (a )?(call|time|chat|meeting)|book (a )?time|find (a )?time|calendar|availab(le|ility)|when are you (free|available)|phone screen|screening call|next steps?|move you forward|(would |i'?d )?(love|like|happy) to (talk|chat|speak|meet|connect|learn more)|let'?s (talk|chat|connect|set)|great to connect|interview)\b/i;
+
+function classifyReply({ subject = '', text = '' } = {}) {
+  const hay = `${subject}\n${text}`;
+  if (REPLY_NEGATIVE_RE.test(hay)) return 'negative';
+  if (REPLY_POSITIVE_RE.test(hay)) return 'positive';
+  return 'neutral';
+}
+
+// Match an address to a known contact (target-talent or recruiter) by exact
+// email. Rows are passed in, so this is pure and test-covered. Returns null when
+// the sender is nobody we track (surfaced as "other", never acted on silently).
+function matchAddress(address, { taRows = [], recruiterRows = [] } = {}) {
+  const addr = String(address || '').toLowerCase().trim();
+  if (!addr) return null;
+  const ta = taRows.find(r => (r.email || '').toLowerCase() === addr);
+  if (ta) return { source: 'ta', id: ta.id, company: ta.company, name: `${ta.first || ''} ${ta.last || ''}`.trim() };
+  const rec = recruiterRows.find(r => (r.email || '').toLowerCase() === addr);
+  if (rec) return { source: 'recruiter', id: rec.id, company: rec.firm, name: `${rec.first || ''} ${rec.last || ''}`.trim() };
+  return null;
+}
+
+// The heart: turn a batch of raw Gmail messages into decisions.
+//   bounces[] — DSNs. A HARD bounce for a known contact carries a `flip` to set
+//               that address to `bounced` (and status Bounced). Soft bounces are
+//               transient: recorded, never flipped (never kill an address on a
+//               deferral).
+//   replies[] — human replies FROM a known contact, with a suggested sentiment.
+//   other[]   — everything else (unknown senders, automated mail), surfaced so a
+//               real reply from an unrecognized address is never dropped.
+// Pure: all inputs passed in.
+function scanDecisions({ messages = [], taRows = [], recruiterRows = [] } = {}) {
+  const bounces = [], replies = [], other = [];
+  for (const raw of messages) {
+    const msg = parseGmailMessage(raw);
+    const bounce = classifyBounce(msg.text, { subject: msg.subject, from: msg.from });
+    if (bounce.kind === 'hard' || bounce.kind === 'soft') {
+      const address = bounce.address ? bounce.address.toLowerCase() : null;
+      const contact = address ? matchAddress(address, { taRows, recruiterRows }) : null;
+      bounces.push({
+        msgId: msg.id, kind: bounce.kind, code: bounce.code, address, contact,
+        flip: (bounce.kind === 'hard' && contact) ? { source: contact.source, id: contact.id, state: 'bounced' } : null,
+      });
+      continue;
+    }
+    const fromAddr = extractEmail(msg.from);
+    const contact = fromAddr ? matchAddress(fromAddr, { taRows, recruiterRows }) : null;
+    const entry = {
+      msgId: msg.id, from: fromAddr, subject: msg.subject,
+      sentiment: classifyReply({ subject: msg.subject, text: msg.text }),
+      contact, snippet: msg.snippet,
+    };
+    (contact ? replies : other).push(entry);
+  }
+  return { bounces, replies, other };
+}
+
+export {
+  readTokens, writeTokens, readSync, writeSync, tokenScopes,
+  googleStatus, getAccessToken, listMessages, getMessage,
+  parseGmailMessage, extractEmail, classifyReply, matchAddress, scanDecisions,
+};

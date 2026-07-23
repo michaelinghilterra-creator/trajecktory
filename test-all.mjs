@@ -471,6 +471,7 @@ for (const suite of [
   'tests/tt-reconcile.test.mjs',
   'tests/connect-queue.test.mjs',
   'tests/debrief.test.mjs',
+  'tests/google.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);
