@@ -473,6 +473,7 @@ for (const suite of [
   'tests/debrief.test.mjs',
   'tests/google.test.mjs',
   'tests/google-connect.test.mjs',
+  'tests/google-sync.test.mjs',
   'tests/weekly-review.test.mjs',
   'tests/weekly-run.test.mjs',
 ]) {

@@ -57,6 +57,11 @@ function App() {
   const [tweaks, setTweak] = window.useTweaks ? window.useTweaks(TWEAK_DEFAULTS) : [TWEAK_DEFAULTS, () => {}];
   const [followupCount, setFollowupCount] = useState(0);
   const [focusBadge, setFocusBadge] = useState(0);
+  // Gmail connection attention for the Review nav item: 'reconnect' (the weekly
+  // token died — replies are silently going uncaught), 'stale' (connected but no
+  // email check in a while), or null. Driven by /api/google/health, which probes
+  // the refresh token rather than trusting the ≈1h access-token expiry.
+  const [reviewAttention, setReviewAttention] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateHidden, setUpdateHidden] = useState(false);
   const [version, setVersion] = useState(null);
@@ -131,6 +136,29 @@ function App() {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [refreshFocusBadge]);
+
+  // Gmail health for the Review nav nudge. Polled on mount and on window refocus,
+  // but throttled: /api/google/health may trigger a token refresh, so probe at most
+  // once every few minutes rather than on every focus event.
+  const gmailProbeAt = useRef(0);
+  const refreshGmailAttention = useCallback((force) => {
+    if (!force && Date.now() - gmailProbeAt.current < 5 * 60 * 1000) return;
+    gmailProbeAt.current = Date.now();
+    fetch('/api/google/health')
+      .then(r => r.json())
+      .then(h => {
+        if (!h || !h.connected) { setReviewAttention(null); return; }       // not connected: nothing to nudge
+        if (!h.healthy) { setReviewAttention('reconnect'); return; }        // dead refresh token: the real nudge
+        setReviewAttention(h.daysSinceCheck != null && h.daysSinceCheck >= 7 ? 'stale' : null);
+      })
+      .catch(() => {}); // non-critical — the nudge just stays off
+  }, []);
+  useEffect(() => { refreshGmailAttention(true); }, [refreshGmailAttention]);
+  useEffect(() => {
+    const onFocus = () => refreshGmailAttention(false);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refreshGmailAttention]);
 
   // First-run detection: if core config files are missing, open Launchpad so a
   // brand-new user lands on guided setup instead of an empty dashboard. Also
@@ -313,8 +341,8 @@ function App() {
   // Stats for sidebar nav badges (Pipeline pending-decisions + Follow-Ups count)
   const stats = useMemo(() => {
     const pending = apps.filter(a => a.status === "Evaluated").length;
-    return { pending, followups: followupCount, today: focusBadge };
-  }, [apps, followupCount, focusBadge]);
+    return { pending, followups: followupCount, today: focusBadge, reviewAttention };
+  }, [apps, followupCount, focusBadge, reviewAttention]);
 
   // Commands for palette
   const commands = useMemo(() => {

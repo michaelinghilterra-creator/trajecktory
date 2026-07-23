@@ -1,6 +1,6 @@
 import express from 'express';
 import {
-  readTokens, writeTokens, readSync, writeSync, googleStatus,
+  readTokens, writeTokens, readSync, writeSync, googleStatus, checkHealth,
   getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions,
   buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, candidateAppsFor,
 } from '../lib/google.mjs';
@@ -34,10 +34,26 @@ function replySearchQuery(since, selfEmail) {
   return `(${clause}) after:${since} -from:mailer-daemon -from:postmaster${excludeSelf}`;
 }
 
-// GET /api/google/status — non-secret connection facts for the UI.
+// GET /api/google/status — non-secret connection facts for the UI. Local read
+// only (no network): its `expired` reflects the ≈1h access token, so use it for
+// display, not for deciding whether a reconnect is needed. That is /health's job.
 router.get('/api/google/status', (req, res) => {
   try {
     res.json(googleStatus());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/google/health — is the connection actually USABLE? Unlike /status,
+// this probes whether the weekly refresh token still works (via a token refresh,
+// a no-op when the cached access token is still valid), so the UI nudges for a
+// reconnect only when one is genuinely needed, not every hour the access token
+// lapses. Read-only apart from getAccessToken caching a refreshed access token.
+// Open GET so the app shell can poll it for the app-wide nudge.
+router.get('/api/google/health', async (req, res) => {
+  try {
+    res.json(await checkHealth());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -203,8 +219,13 @@ router.get('/api/google/replies', async (req, res) => {
     // one (a known-contact reply matches on the contact's company, a company-guessed
     // reply on the guessed company; the user picks when there is more than one), plus
     // the handled record so an already-logged reply is hidden on the next sweep.
-    const handled = readSync().handledReplies || {};
+    const sync = readSync();
+    const handled = sync.handledReplies || {};
     const withMeta = (rows, companyOf) => rows.map(r => ({ ...r, candidateApps: candidateAppsFor(companyOf(r), apps), handled: handled[r.msgId] || null }));
+    // Stamp that a preview sweep ran (manual "Check email" or the auto-scan on
+    // Review open), so /health can show "last checked …" and nudge when it has
+    // been a while. Best-effort: a freshness write must never fail the read.
+    try { sync.lastPreviewAt = new Date().toISOString(); writeSync(sync); } catch { /* freshness is best-effort */ }
     res.json({
       replies: withMeta(replies, r => r.contact?.company),
       byCompany: withMeta(byCompany, r => r.companyGuess?.company),

@@ -53,8 +53,12 @@ function readSync() {
     // handledReplies: msgId → { action, appId, date }, so a reply already logged to
     // an application is hidden on the next (full-rescan) sweep instead of showing up
     // again as un-actioned. Keyed by Gmail message id, which is stable across sweeps.
-    return { seenMessageIds: s.seenMessageIds || [], lastCheckedAt: s.lastCheckedAt || null, handledReplies: s.handledReplies || {} };
-  } catch { return { seenMessageIds: [], lastCheckedAt: null, handledReplies: {} }; }
+    // lastPreviewAt: when a read-only reply sweep last ran (manual or auto), so the UI
+    // can show "checked N days ago" and nudge when stale. Surfaced here so every
+    // writeSync round-trip preserves it — a caller that read a stripped object and
+    // wrote it back would otherwise clobber the stamp to absent.
+    return { seenMessageIds: s.seenMessageIds || [], lastCheckedAt: s.lastCheckedAt || null, handledReplies: s.handledReplies || {}, lastPreviewAt: s.lastPreviewAt || null };
+  } catch { return { seenMessageIds: [], lastCheckedAt: null, handledReplies: {}, lastPreviewAt: null }; }
 }
 function writeSync(s) {
   fs.writeFileSync(GOOGLE_SYNC_PATH, JSON.stringify(s, null, 2) + '\n');
@@ -123,6 +127,38 @@ async function getAccessToken({
   if (j.id_token) updated.id_token = j.id_token;
   save(updated);
   return updated.access_token;
+}
+
+// ── Connection health (does the refresh token still work?) ───────────────────
+// googleStatus.expired reflects the ACCESS token (≈1h life), which is stale most
+// of the time and refreshes silently, so it is a poor "should I reconnect?" signal
+// (it screams expired every hour). The only way to know the weekly Testing-mode
+// REFRESH token is still alive is to try a refresh. checkHealth does exactly that,
+// reusing getAccessToken (a no-op network-wise when the cached access token is
+// still valid), and classifies the outcome:
+//   not_connected — no refresh token on file
+//   ok            — a valid access token was obtained (cached or freshly refreshed)
+//   reconnect     — the refresh failed (token expired/revoked): only re-consent fixes it
+// It also reports sweep freshness (days since the last preview) so the UI can nudge
+// when it has been a while. Injectable fetch + clock for tests; returns non-secret
+// facts only (no token values).
+async function checkHealth({ tokens = readTokens(), now = Date.now(), fetchImpl = fetch } = {}) {
+  const sync = readSync();
+  const last = sync.lastPreviewAt || sync.lastCheckedAt || null;
+  const parsed = last ? Date.parse(last) : NaN;
+  const daysSinceCheck = Number.isFinite(parsed) ? Math.floor((now - parsed) / 86_400_000) : null;
+  const base = { connectedEmail: tokens?.connectedEmail || null, lastCheckedAt: last, daysSinceCheck };
+  if (!tokens || !tokens.refresh_token) {
+    return { connected: false, healthy: false, reason: 'not_connected', ...base };
+  }
+  try {
+    await getAccessToken({ tokens, now, fetchImpl });
+    return { connected: true, healthy: true, reason: 'ok', ...base };
+  } catch {
+    // The refresh token is expired or revoked. A silent refresh cannot recover it;
+    // the user has to re-consent. This is the one case worth a proactive nudge.
+    return { connected: true, healthy: false, reason: 'reconnect', ...base };
+  }
 }
 
 // ── OAuth connect (reconnect flow) ───────────────────────────────────────────
@@ -444,7 +480,7 @@ function scanDecisions({ messages = [], taRows = [], recruiterRows = [], apps = 
 
 export {
   readTokens, writeTokens, readSync, writeSync, tokenScopes,
-  googleStatus, getAccessToken, listMessages, getMessage, fetchMessagesConcurrent,
+  googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
   parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions,
   exchangeCode, fetchProfileEmail, candidateAppsFor,
 };

@@ -263,7 +263,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
     { key: "connect",       label: "Connect",            icon: "🤝" },
     { key: "recruiters",    label: "Recruiters",         icon: "☎" },
     { key: "interview",     label: "Interview",          icon: "◈" },
-    { key: "review",        label: "Review",             icon: "⚖" },
+    { key: "review",        label: "Review",             icon: "⚖", attention: stats.reviewAttention || null },
     { key: "analytics",     label: "Insights",           icon: "✦" },
   ];
 
@@ -303,6 +303,12 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
             <span>{it.label}</span>
             {it.badge ? (
               <span className="kbd" style={{ background: "var(--accent)", color: "#0a0a0c", borderColor: "var(--accent)", fontWeight: 700 }}>{it.badge}</span>
+            ) : it.attention === "reconnect" ? (
+              <span className="kbd" title="Gmail connection expired — reconnect to resume catching replies and bounces"
+                style={{ background: "var(--red)", color: "#fff", borderColor: "var(--red)", fontWeight: 700 }}>!</span>
+            ) : it.attention === "stale" ? (
+              <span title="No email check in over a week — open Review to sync"
+                style={{ marginLeft: "auto", width: 7, height: 7, borderRadius: "50%", background: "var(--accent)", flexShrink: 0 }} />
             ) : null}
           </div>
         ))}

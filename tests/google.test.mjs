@@ -15,7 +15,7 @@
  */
 
 import {
-  getAccessToken, googleStatus, parseGmailMessage, extractEmail,
+  getAccessToken, googleStatus, checkHealth, parseGmailMessage, extractEmail,
   classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, tokenScopes,
   candidateAppsFor, fetchMessagesConcurrent,
 } from '../dashboard-web/server/lib/google.mjs';
@@ -80,6 +80,40 @@ check(st.expired === false, 'unexpired token reads not-expired');
 check(!('access_token' in st) && !('refresh_token' in st), 'status leaks no token values');
 check(googleStatus(null, NOW).connected === false, 'no tokens → not connected');
 check(tokenScopes({ scope: SCOPE }).length === 2, 'tokenScopes splits the scope string');
+
+// ── checkHealth ──────────────────────────────────────────────────────────────
+// The reconnect signal. Distinguishes benign access-token staleness (silently
+// refreshed) from a dead refresh token (needs re-consent). fetch + clock injected;
+// tokens injected so readTokens is never hit. (readSync reads the real cursor file
+// read-only for freshness; only connected/healthy/reason are asserted here.)
+await (async () => {
+  // no refresh token → not connected, no network
+  const h = await checkHealth({ tokens: { access_token: 'x' }, now: NOW, fetchImpl: () => { throw new Error('should not fetch'); } });
+  check(h.connected === false && h.healthy === false && h.reason === 'not_connected', 'no refresh token → not_connected');
+})();
+await (async () => {
+  // cached access token still valid → healthy, no network
+  let fetched = false;
+  const h = await checkHealth({
+    tokens: { refresh_token: 'r', access_token: 'GOOD', expiry_date: NOW + 3_600_000, connectedEmail: 'me@example.test' },
+    now: NOW, fetchImpl: () => { fetched = true; throw new Error('should not fetch'); },
+  });
+  check(h.connected === true && h.healthy === true && h.reason === 'ok', 'valid cached access token → ok');
+  check(fetched === false, 'a healthy cached token is not re-refreshed');
+  check(h.connectedEmail === 'me@example.test' && !('access_token' in h) && !('refresh_token' in h), 'health carries the email but leaks no token values');
+})();
+await (async () => {
+  // stale access token but refresh succeeds → healthy
+  const fetchImpl = async () => ({ ok: true, json: async () => ({ access_token: 'FRESH', expires_in: 3600 }) });
+  const h = await checkHealth({ tokens: { refresh_token: 'r', access_token: 'OLD', expiry_date: NOW - 1000 }, now: NOW, fetchImpl });
+  check(h.healthy === true && h.reason === 'ok', 'stale access token + successful refresh → ok');
+})();
+await (async () => {
+  // refresh fails (expired/revoked refresh token) → reconnect
+  const fetchImpl = async () => ({ ok: false, status: 400, text: async () => 'invalid_grant' });
+  const h = await checkHealth({ tokens: { refresh_token: 'dead', access_token: 'OLD', expiry_date: NOW - 1000 }, now: NOW, fetchImpl });
+  check(h.connected === true && h.healthy === false && h.reason === 'reconnect', 'failed refresh → connected but reconnect');
+})();
 
 // ── parseGmailMessage / extractEmail ─────────────────────────────────────────
 const rawReply = {

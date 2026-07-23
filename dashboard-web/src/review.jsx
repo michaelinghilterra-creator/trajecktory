@@ -227,13 +227,30 @@ function GmailSweep({ sweep, onApplyBounces, busy, toast }) {
   );
 }
 
+// How long to wait before auto-running the sweep again on Review open. Flipping
+// between tabs should not re-sweep the whole backlog each time; a fresh open (or a
+// new day) should. Tracked in localStorage so it survives re-mounts within a session.
+const GMAIL_AUTOSCAN_KEY = 'tjk_gmail_autoscan_at';
+const GMAIL_AUTOSCAN_THROTTLE_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+function lastCheckedLabel(days) {
+  if (days == null) return null;
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return `${days} days ago`;
+}
+
 function GmailPanel({ toast }) {
-  const [st, setSt] = useStateRv(undefined);   // undefined = loading; null = error; object = status
+  const [st, setSt] = useStateRv(undefined);   // undefined = loading; null = error; object = health
   const [sweep, setSweep] = useStateRv(null);
   const [busy, setBusy] = useStateRv(false);
 
+  // Health, not status: /status.expired reflects the ≈1h access token (stale most
+  // of the time, refreshes silently), so it cannot tell "reconnect me" apart from
+  // "normal". /health probes the weekly refresh token, so the reconnect prompt only
+  // shows when a reconnect is actually needed.
   useEffectRv(() => {
-    fetch('/api/google/status').then(r => r.json()).then(setSt).catch(() => setSt(null));
+    fetch('/api/google/health').then(r => r.json()).then(setSt).catch(() => setSt(null));
   }, []);
 
   const connect = () => { window.location.href = '/api/google/auth-start'; };
@@ -261,17 +278,33 @@ function GmailPanel({ toast }) {
       .catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(false));
   };
 
+  // Auto-scan on open: when the connection is healthy, run the read-only sweep
+  // automatically the first time Review opens (throttled), so missed replies and
+  // bounces surface without a click. Gated on health so it never fires against a
+  // dead token; the manual "Check email" button still forces a fresh sweep anytime.
+  useEffectRv(() => {
+    if (!st || !st.connected || !st.healthy) return;
+    let lastAuto = 0;
+    try { lastAuto = parseInt(localStorage.getItem(GMAIL_AUTOSCAN_KEY) || '0', 10) || 0; } catch { /* private mode */ }
+    if (Date.now() - lastAuto < GMAIL_AUTOSCAN_THROTTLE_MS) return;
+    // Stamp before firing so a strict-mode double-invoke or a fast re-mount cannot
+    // launch the sweep twice.
+    try { localStorage.setItem(GMAIL_AUTOSCAN_KEY, String(Date.now())); } catch { /* private mode */ }
+    checkEmail();
+  }, [st && st.healthy]);
+
   if (st === undefined) return null; // loading — stay quiet, no flash
-  const connected = !!(st && st.connected && !st.expired);
-  const expired = !!(st && st.connected && st.expired);
+  const connected = !!(st && st.connected && st.healthy);
+  const needsReconnect = !!(st && st.connected && !st.healthy);
+  const lastChecked = connected ? lastCheckedLabel(st.daysSinceCheck) : null;
 
   return (
     <div className="card" style={{ marginBottom: 18 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
           <strong>Gmail sync</strong>{' '}
-          {connected ? <span className="dim" style={{ fontSize: 12 }}>connected as {st.connectedEmail || 'your account'} · read-only</span>
-            : expired ? <span style={{ color: 'var(--red)', fontSize: 12 }}>connection expired, reconnect to resume</span>
+          {connected ? <span className="dim" style={{ fontSize: 12 }}>connected as {st.connectedEmail || 'your account'} · read-only{lastChecked ? ` · checked ${lastChecked}` : ''}</span>
+            : needsReconnect ? <span style={{ color: 'var(--red)', fontSize: 12 }}>connection expired, reconnect to resume</span>
             : <span className="dim" style={{ fontSize: 12 }}>not connected</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -281,15 +314,23 @@ function GmailPanel({ toast }) {
               <button className="btn ghost sm" onClick={connect} disabled={busy}>Reconnect</button>
             </>
           ) : (
-            <button className="btn primary sm" onClick={connect}>{expired ? 'Reconnect Gmail' : 'Connect Gmail'}</button>
+            <button className="btn primary sm" onClick={connect}>{needsReconnect ? 'Reconnect Gmail' : 'Connect Gmail'}</button>
           )}
         </div>
       </div>
-      {!connected ? (
+      {needsReconnect ? (
+        <p style={{ fontSize: 12, marginTop: 8, marginBottom: 0, color: 'var(--red)' }}>
+          Your Gmail connection expired (Testing-mode tokens last about a week), so replies and bounces are not being caught right now. Reconnect to resume. Read-only, and nothing is ever sent.
+        </p>
+      ) : !connected ? (
         <p className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
           Read-only. Scans your inbox for bounces and replies since June, so missed communications are caught and the reply-rate math is honest. It never sends. Testing-mode tokens expire about weekly, so an occasional reconnect is normal.
         </p>
-      ) : null}
+      ) : (
+        <p className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
+          Read-only, checked automatically when you open this tab. It never sends.
+        </p>
+      )}
       {sweep ? <GmailSweep sweep={sweep} onApplyBounces={applyBounces} busy={busy} toast={toast} /> : null}
     </div>
   );
