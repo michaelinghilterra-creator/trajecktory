@@ -165,7 +165,7 @@ const read = (p) => { try { return readFileSync(join(ROOT, p), 'utf8'); } catch 
 // usually built from it (handle + the 12345+handle@users.noreply.github.com commit
 // address), and both are public by design and load-bearing — they appear in the
 // repo origin, trusted-signers, and the self-update channel. Requiring the "@"
-// keeps localpart@elsewhere.com in scope while letting the public handle through.
+// keeps localpart@elsewhere.example in scope while letting the public handle through.
 const identity = [];       // literal substring match
 const identityRx = [];     // regex match
 const profile = read('config/profile.yml');
@@ -217,9 +217,11 @@ const profileScalars = new Map();
 }
 
 // third-party emails: every address the owner has collected about someone else.
-// v1.14.0 shipped a real recruiter's work email in a tracked fixture.
+// v1.14.0 shipped a real recruiter's work email in a tracked fixture, and on
+// 2026-07-23 test fixtures full of real recruiter addresses passed clean because
+// recruiters.md was NOT a source here. It is now.
 const thirdParty = new Set();
-for (const src of ['data/target-talent.md', 'data/follow-ups.md']) {
+for (const src of ['data/target-talent.md', 'data/recruiters.md', 'data/follow-ups.md']) {
   const t = read(src);
   if (!t) continue;
   for (const m of t.matchAll(/[\w.+-]+@[\w.-]+\.\w{2,}/g)) {
@@ -227,6 +229,20 @@ for (const src of ['data/target-talent.md', 'data/follow-ups.md']) {
     thirdParty.add(m[0]);
   }
 }
+
+// Fail-closed email rule (structural, needs no derivation). A tracked file must
+// only ever carry a FAKE address — a reserved TLD (.example / .test / .invalid /
+// .local / .localhost) or example.com/org/net — plus two public, non-personal
+// service addresses. Any OTHER address is a real inbox and is flagged, whether or
+// not the derived third-party set above happens to know it. This is the rule the
+// derived set could never be: a bare recruiter address in a test matched nothing
+// and shipped clean. "No real email in shipped code" is a structural invariant.
+// Attribution files (IDENTITY_ALLOW) are exempt — the maintainer's own contact
+// legitimately appears there.
+const EMAIL_RX = /\b[\w.+-]+@[\w.-]+\.\w{2,}\b/g;
+const EMAIL_FAKE = /@([\w-]+\.)*(example|test|invalid|localhost|local)$|@example\.(com|org|net)$/i;
+const EMAIL_ALLOW = new Set(['git@github.com', 'noreply@anthropic.com']);
+const EMAIL_ALLOW_DOMAIN = /@users\.noreply\.github\.com$/i;
 
 // career figures: the distinctive money amounts in the owner's CV and story bank.
 // A template whose example is written from a real bio (an employer, a tenure, a
@@ -579,6 +595,18 @@ for (const abs of files) {
   //    theirs, and no attribution file has a reason to carry one.
   for (const addr of thirdParty) {
     if (text.includes(addr)) leak(rel, 'THIRD-PARTY EMAIL', addr);
+  }
+
+  // 3f. STRAY EMAIL — any real address at a non-fake domain (see EMAIL_FAKE note).
+  // The fail-closed generalization of rule 3: catches a real inbox the derived set
+  // never learned, which is exactly how real recruiter addresses in test fixtures
+  // shipped clean. Skips attribution files where the maintainer's contact belongs.
+  if (!IDENTITY_ALLOW.has(name)) {
+    for (const m of text.matchAll(EMAIL_RX)) {
+      const addr = m[0];
+      if (EMAIL_FAKE.test(addr) || EMAIL_ALLOW.has(addr.toLowerCase()) || EMAIL_ALLOW_DOMAIN.test(addr)) continue;
+      leak(rel, 'STRAY EMAIL', `${addr} — a real email address in a tracked file. Shipped code and tests must use a fake address (…@example / .test / .invalid). Remove it or use an example domain.`);
+    }
   }
 
   // 3b. career content from the owner's own CV / story bank

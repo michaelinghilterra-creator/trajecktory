@@ -46,7 +46,7 @@ check(daemonNoCode.kind === 'soft', 'a DSN with no classifiable code → soft (n
 
 // ── mineNotesForBounce: a clear, current-address hard bounce ──────────────────
 const clearHard = mineNotesForBounce(
-  'EMAIL BOUNCED 2026-06-10 — do not reach out again', 'jlowe@meridianpartners.example');
+  'EMAIL BOUNCED 2026-06-10 — do not reach out again', 'jlowe@tallanpartners.example');
 check(clearHard.verdict === 'bounced' && clearHard.confidence === 'high',
   'EMAIL BOUNCED + do not reach out → bounced, high confidence');
 check(clearHard.date === '2026-06-10', 'bounce date mined');
@@ -77,7 +77,7 @@ check(correctedB.verdict === 'corrected',
 // ── soft bounce only ─────────────────────────────────────────────────────────
 const softNote = mineNotesForBounce(
   'SOFT BOUNCE 2026-06-13 — deferred (server timeout, 19h retry remaining); revisit if permanent failure',
-  'dpratt@summitadvisors.example');
+  'nsorensen@summitadvisors.example');
 check(softNote.verdict === 'soft', 'SOFT BOUNCE only → soft (address left alone)');
 
 // ── auto-synthesized invalid, matches current ────────────────────────────────
@@ -89,8 +89,8 @@ check(autoInvalid.verdict === 'invalid' && autoInvalid.confidence === 'high',
 
 // ── multi-pattern bounce, likely org wall / left company ─────────────────────
 const multi = mineNotesForBounce(
-  'Bounced on jkim@ and jenna.kim@brightwave.example (both dominant patterns); likely left company — re-verify on LinkedIn before retrying',
-  'jkim@brightwave.example');
+  'Bounced on okafor@ and s.okafor@brightwave.example (both dominant patterns); likely left company — re-verify on LinkedIn before retrying',
+  'okafor@brightwave.example');
 check(multi.verdict === 'blocked', 'two patterns bounced → blocked/left-company candidate');
 check(multi.confidence === 'low', 'multi-pattern → low confidence (human confirms org-wall vs left)');
 
