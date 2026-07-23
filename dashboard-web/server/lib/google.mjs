@@ -219,6 +219,24 @@ async function getMessage({ id, accessToken, fetchImpl = fetch } = {}) {
   return res.json();
 }
 
+// Fetch many messages with bounded concurrency. Once the sweep searches beyond the
+// inbox it can list 150+ ids, and fetching them one at a time is the slow part, so
+// run a small pool instead. Order is not preserved (callers re-derive everything
+// from message content). A single unreadable message is skipped, never aborts the
+// sweep. getImpl is injectable for tests.
+async function fetchMessagesConcurrent(ids = [], { accessToken, concurrency = 10, getImpl = getMessage } = {}) {
+  const out = [];
+  let next = 0;
+  const worker = async () => {
+    while (next < ids.length) {
+      const id = ids[next++]?.id;
+      try { out.push(await getImpl({ id, accessToken })); } catch { /* skip unreadable */ }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, ids.length || 1) }, worker));
+  return out;
+}
+
 // ── Pure parsing + classification ────────────────────────────────────────────
 function _b64urlDecode(data) {
   if (!data) return '';
@@ -423,7 +441,7 @@ function scanDecisions({ messages = [], taRows = [], recruiterRows = [], apps = 
 
 export {
   readTokens, writeTokens, readSync, writeSync, tokenScopes,
-  googleStatus, getAccessToken, listMessages, getMessage,
+  googleStatus, getAccessToken, listMessages, getMessage, fetchMessagesConcurrent,
   parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions,
   exchangeCode, fetchProfileEmail, candidateAppsFor,
 };

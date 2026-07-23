@@ -172,10 +172,16 @@ function ReplyRow({ reply, toast }) {
   );
 }
 
+const SWEEP_SENTIMENT_ORDER = { negative: 0, positive: 1, neutral: 2 };
+const SWEEP_ROW_LIMIT = 100;
+
 function GmailSweep({ sweep, onApplyBounces, busy, toast }) {
   const b = sweep.bounces || {}, r = sweep.replies || {};
   const replies = r.replies || [], byCompany = r.byCompany || [], unknown = r.unknown || [];
-  const rows = [...replies, ...byCompany].slice(0, 20);
+  // Sentiment-first so rejections to mark and advances to log sit at the top, not
+  // buried under neutral auto-mail. Capped so a large backlog stays responsive.
+  const all = [...replies, ...byCompany].sort((x, y) => (SWEEP_SENTIMENT_ORDER[x.sentiment] ?? 3) - (SWEEP_SENTIMENT_ORDER[y.sentiment] ?? 3));
+  const rows = all.slice(0, SWEEP_ROW_LIMIT);
   return (
     <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -185,7 +191,8 @@ function GmailSweep({ sweep, onApplyBounces, busy, toast }) {
         {b.wouldFlip ? <button className="btn sm" onClick={onApplyBounces} disabled={busy}>Apply {b.wouldFlip} bounce flip{b.wouldFlip === 1 ? '' : 's'}</button> : null}
       </div>
       <div className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 4 }}>
-        Replies since June: {replies.length} from known contacts, {byCompany.length} matched to a company by domain, {unknown.length} unknown. Log one to record it on the application, and Responded/Rejected also set its status.
+        Replies since June: {replies.length} from known contacts, {byCompany.length} matched to an application, {unknown.length} unknown. Log one to record it on the application, and Responded/Rejected also set its status.
+        {all.length > SWEEP_ROW_LIMIT ? ` Showing the first ${SWEEP_ROW_LIMIT} (rejections first).` : ''}
       </div>
       {rows.length === 0
         ? <div className="dim" style={{ fontSize: 12 }}>No contact- or company-matched replies in range.</div>

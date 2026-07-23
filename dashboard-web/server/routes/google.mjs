@@ -1,7 +1,7 @@
 import express from 'express';
 import {
   readTokens, writeTokens, readSync, writeSync, googleStatus,
-  getAccessToken, listMessages, getMessage, scanDecisions,
+  getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions,
   buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, candidateAppsFor,
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
@@ -15,6 +15,20 @@ export const router = express.Router();
 
 // Gmail search dates use YYYY/MM/DD.
 const gmailDate = (iso) => String(iso || '2026-06-01').replace(/-/g, '/');
+
+// The reply sweep searches EVERYWHERE, not just the inbox: many people clear the
+// inbox by labeling/archiving read mail, so application updates live outside it
+// (one user labels everything "old" — 400+ messages, only 2 left in the inbox).
+// Searching all mail would fetch hundreds of unrelated messages, so scope to
+// application-signal subjects instead. The whole inbox is still included verbatim
+// (a terse recruiter reply there has no signal word), plus anything anywhere whose
+// subject carries one of these. The matcher then filters to known companies. Tune
+// REPLY_SUBJECT_SIGNALS if updates slip through.
+const REPLY_SUBJECT_SIGNALS = ['application', 'interview', 'offer', 'candidacy', 'recruiter', '"next steps"', 'screening', 'hiring', 'assessment', 'position'];
+function replySearchQuery(since) {
+  const clause = ['in:inbox', ...REPLY_SUBJECT_SIGNALS.map(s => `subject:${s}`)].join(' OR ');
+  return `(${clause}) after:${since} -from:mailer-daemon -from:postmaster`;
+}
 
 // GET /api/google/status — non-secret connection facts for the UI.
 router.get('/api/google/status', (req, res) => {
@@ -109,8 +123,7 @@ router.post('/api/google/scan-bounces', async (req, res) => {
     // so a diagnostic sweep can show the full picture without advancing state.
     const fresh = dryRun ? ids : ids.filter(m => !seen.has(m.id));
 
-    const raws = [];
-    for (const m of fresh) { try { raws.push(await getMessage({ id: m.id, accessToken })); } catch { /* skip unreadable */ } }
+    const raws = await fetchMessagesConcurrent(fresh, { accessToken });
 
     const taRows = parseTargetTalentMd();
     const recruiterRows = parseRecruitersMd();
@@ -169,11 +182,10 @@ router.get('/api/google/replies', async (req, res) => {
     if (!tokens?.refresh_token) return res.status(400).json({ error: 'Google is not connected.' });
     const accessToken = await getAccessToken({ tokens });
     const since = gmailDate(req.query?.since);
-    const q = `in:inbox after:${since} -from:mailer-daemon -from:postmaster`;
+    const q = replySearchQuery(since);
 
-    const ids = await listMessages({ q, accessToken, max: 100 });
-    const raws = [];
-    for (const m of ids) { try { raws.push(await getMessage({ id: m.id, accessToken })); } catch { /* skip */ } }
+    const ids = await listMessages({ q, accessToken, max: 250 });
+    const raws = await fetchMessagesConcurrent(ids, { accessToken });
 
     const taRows = parseTargetTalentMd();
     const recruiterRows = parseRecruitersMd();

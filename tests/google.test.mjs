@@ -17,7 +17,7 @@
 import {
   getAccessToken, googleStatus, parseGmailMessage, extractEmail,
   classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, tokenScopes,
-  candidateAppsFor,
+  candidateAppsFor, fetchMessagesConcurrent,
 } from '../dashboard-web/server/lib/google.mjs';
 
 let passed = 0, failed = 0;
@@ -224,6 +224,21 @@ const atsGuess = decAts.other.find(o => o.msgId === 'm-ats');
 check(atsGuess && atsGuess.companyGuess?.appId === 701, 'scanDecisions subject-matches an ATS-sent email the domain tier cannot');
 check(atsGuess && atsGuess.companyGuess?.confidence === 'subject', 'the subject-tier guess is labeled');
 check(atsGuess && atsGuess.sentiment === 'negative', 'the ATS rejection is still classified negative');
+
+// ── fetchMessagesConcurrent: bounded-concurrency fetch ────────────────────────
+const ids20 = Array.from({ length: 20 }, (_, i) => ({ id: `id-${i}` }));
+let inflight = 0, peak = 0;
+const getImpl = async ({ id }) => {
+  inflight++; peak = Math.max(peak, inflight);
+  await new Promise(r => setTimeout(r, 1));
+  inflight--;
+  if (id === 'id-7') throw new Error('unreadable');
+  return { id };
+};
+const fetched = await fetchMessagesConcurrent(ids20, { accessToken: 'x', concurrency: 5, getImpl });
+check(fetched.length === 19, 'fetches every id, skipping the one that throws (20 → 19)');
+check(peak <= 5, `respects the concurrency cap (peak inflight ${peak} <= 5)`);
+check((await fetchMessagesConcurrent([], { accessToken: 'x', getImpl })).length === 0, 'empty id list → empty result, no throw');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
