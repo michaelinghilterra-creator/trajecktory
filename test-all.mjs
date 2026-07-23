@@ -472,7 +472,9 @@ for (const suite of [
   'tests/connect-queue.test.mjs',
   'tests/debrief.test.mjs',
   'tests/google.test.mjs',
+  'tests/google-connect.test.mjs',
   'tests/weekly-review.test.mjs',
+  'tests/weekly-run.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);

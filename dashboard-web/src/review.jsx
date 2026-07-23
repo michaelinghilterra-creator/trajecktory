@@ -98,6 +98,114 @@ function DebriefsDue({ pending, onOpen }) {
   );
 }
 
+// Gmail sync panel: reconnect + the read-only sweep that catches missed
+// communications. Reconnect (window.location → /api/google/auth-start) is the
+// anchor: the June token died and only re-consent mints a new one. "Check email"
+// runs a READ-ONLY preview (bounce dry-run + replies) so missed bounces and
+// replies are seen before anything is written; only a hard bounce flip is
+// applied here (unambiguous, and it corrects the reply-rate denominator).
+// Logging a reply against a specific application comes next (needs app selection).
+const GMAIL_SINCE = '2026-06-01';
+
+function GmailSweep({ sweep, onApplyBounces, busy }) {
+  const b = sweep.bounces || {}, r = sweep.replies || {};
+  const replies = r.replies || [], byCompany = r.byCompany || [], unknown = r.unknown || [];
+  const rows = [
+    ...replies.map(x => ({ ...x, tag: x.contact ? x.contact.company : '' })),
+    ...byCompany.map(x => ({ ...x, tag: x.companyGuess ? `≈ ${x.companyGuess.company}` : '' })),
+  ].slice(0, 12);
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span className="dim mono" style={{ fontSize: 12 }}>
+          Bounces: {b.hardBounces || 0} hard, {b.softBounces || 0} soft · {b.wouldFlip || 0} would flip a contact to bounced
+        </span>
+        {b.wouldFlip ? <button className="btn sm" onClick={onApplyBounces} disabled={busy}>Apply {b.wouldFlip} bounce flip{b.wouldFlip === 1 ? '' : 's'}</button> : null}
+      </div>
+      <div className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 4 }}>
+        Replies since June: {replies.length} from known contacts, {byCompany.length} matched to a company by domain, {unknown.length} unknown.
+      </div>
+      {rows.map((x, i) => (
+        <div key={x.msgId || i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '5px 2px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{x.from} · {x.subject || '(no subject)'}</span>
+          <span className="dim mono" style={{ flexShrink: 0 }}>{x.sentiment}{x.tag ? ` · ${x.tag}` : ''}</span>
+        </div>
+      ))}
+      <p className="dim" style={{ fontSize: 11, marginTop: 8, marginBottom: 0 }}>
+        Read-only preview. Bounce flips write only the contact's verify tag and status. Logging replies to applications comes next.
+      </p>
+    </div>
+  );
+}
+
+function GmailPanel({ toast }) {
+  const [st, setSt] = useStateRv(undefined);   // undefined = loading; null = error; object = status
+  const [sweep, setSweep] = useStateRv(null);
+  const [busy, setBusy] = useStateRv(false);
+
+  useEffectRv(() => {
+    fetch('/api/google/status').then(r => r.json()).then(setSt).catch(() => setSt(null));
+  }, []);
+
+  const connect = () => { window.location.href = '/api/google/auth-start'; };
+
+  const checkEmail = () => {
+    setBusy(true); setSweep(null);
+    Promise.all([
+      fetch('/api/google/scan-bounces', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dryRun: true, since: GMAIL_SINCE }) }).then(r => r.json()),
+      fetch(`/api/google/replies?since=${GMAIL_SINCE}`).then(r => r.json()),
+    ]).then(([bounces, replies]) => {
+      if (bounces.error || replies.error) { toast && toast(bounces.error || replies.error, 'error'); return; }
+      setSweep({ bounces, replies });
+    }).catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(false));
+  };
+
+  const applyBounces = () => {
+    setBusy(true);
+    fetch('/api/google/scan-bounces', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dryRun: false, since: GMAIL_SINCE }) })
+      .then(r => r.json())
+      .then(res => {
+        if (res.error) { toast && toast(res.error, 'error'); return; }
+        toast && toast(`Applied ${res.flipped} bounce flip${res.flipped === 1 ? '' : 's'}.`, 'success');
+        checkEmail();
+      })
+      .catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(false));
+  };
+
+  if (st === undefined) return null; // loading — stay quiet, no flash
+  const connected = !!(st && st.connected && !st.expired);
+  const expired = !!(st && st.connected && st.expired);
+
+  return (
+    <div className="card" style={{ marginBottom: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <strong>Gmail sync</strong>{' '}
+          {connected ? <span className="dim" style={{ fontSize: 12 }}>connected as {st.connectedEmail || 'your account'} · read-only</span>
+            : expired ? <span style={{ color: 'var(--red)', fontSize: 12 }}>connection expired, reconnect to resume</span>
+            : <span className="dim" style={{ fontSize: 12 }}>not connected</span>}
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          {connected ? (
+            <>
+              <button className="btn accent sm" onClick={checkEmail} disabled={busy}>{busy ? 'Checking…' : 'Check email'}</button>
+              <button className="btn ghost sm" onClick={connect} disabled={busy}>Reconnect</button>
+            </>
+          ) : (
+            <button className="btn primary sm" onClick={connect}>{expired ? 'Reconnect Gmail' : 'Connect Gmail'}</button>
+          )}
+        </div>
+      </div>
+      {!connected ? (
+        <p className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
+          Read-only. Scans your inbox for bounces and replies since June, so missed communications are caught and the reply-rate math is honest. It never sends. Testing-mode tokens expire about weekly, so an occasional reconnect is normal.
+        </p>
+      ) : null}
+      {sweep ? <GmailSweep sweep={sweep} onApplyBounces={applyBounces} busy={busy} /> : null}
+    </div>
+  );
+}
+
 function WeekOverWeek({ history }) {
   const weeks = (history || []).slice(-6);
   return (
@@ -221,6 +329,8 @@ window.ReviewTab = function ReviewTab({ toast }) {
       <p className="dim" style={{ fontSize: 13, marginTop: 4, marginBottom: 18 }}>
         Leading indicators, not applications. A blank source reads "not logged", never zero.
       </p>
+
+      <GmailPanel toast={toast} />
 
       {locked ? (
         <div className="card" style={{ borderLeft: '3px solid var(--red)', marginBottom: 18 }}>

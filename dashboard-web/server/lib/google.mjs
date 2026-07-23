@@ -24,11 +24,17 @@
  */
 
 import fs from 'fs';
+import crypto from 'crypto';
 import { GOOGLE_TOKENS_PATH, GOOGLE_SYNC_PATH } from '../config.mjs';
 import { classifyBounce } from '../../../lib/bounce-parse.mjs';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
+
+// The only scope this integration ever requests. Read-only by design: the whole
+// point is reading bounces and replies, never sending. Least privilege on purpose.
+export const GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 
 // ── Token + sync-cursor storage ──────────────────────────────────────────────
 function readTokens() {
@@ -113,6 +119,88 @@ async function getAccessToken({
   if (j.id_token) updated.id_token = j.id_token;
   save(updated);
   return updated.access_token;
+}
+
+// ── OAuth connect (reconnect flow) ───────────────────────────────────────────
+// The June refresh token died (Testing-mode 7-day expiry), and fixing the console
+// does not revive it: the only way to a fresh token is re-consent. This is the
+// consent-URL + code-exchange half. The client is a DESKTOP OAuth client, which
+// uses the loopback method — the dashboard listens on localhost and Google allows
+// any local port without a pre-registered redirect URI, so redirect_uri is built
+// from the running server's own host and the installed-app random port is a
+// non-issue. PKCE (S256) is used even though the client has a secret, because it
+// is the current best practice for installed apps and costs nothing here.
+
+// PKCE S256 challenge: base64url(sha256(verifier)). Pure; unit-tested against a
+// known vector.
+export function pkceChallenge(verifier) {
+  return crypto.createHash('sha256').update(String(verifier)).digest('base64url');
+}
+// A fresh PKCE verifier + its challenge. Random, so not asserted directly.
+export function newPkce() {
+  const verifier = crypto.randomBytes(32).toString('base64url');
+  return { verifier, challenge: pkceChallenge(verifier) };
+}
+// An opaque CSRF/state token tying a callback back to the request that began it.
+export function randomState() {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+// Build the Google consent URL. Pure given its inputs. access_type=offline plus
+// prompt=consent guarantees a refresh token even on a re-consent (Google withholds
+// one on a silent re-grant otherwise, which is exactly the case here).
+export function buildAuthUrl({ clientId, redirectUri, state, codeChallenge, scope = GMAIL_READONLY_SCOPE }) {
+  const p = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope,
+    access_type: 'offline',
+    prompt: 'consent',
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
+  });
+  return `${AUTH_URL}?${p.toString()}`;
+}
+
+// Exchange an authorization code for tokens (PKCE verifier + client secret).
+// Injectable fetch + clock for tests. Normalizes to the on-disk token shape that
+// getAccessToken/googleStatus read. Never logs a token.
+async function exchangeCode({ code, redirectUri, codeVerifier, clientId, clientSecret, fetchImpl = fetch, now = Date.now() }) {
+  const body = new URLSearchParams({
+    code, client_id: clientId, client_secret: clientSecret,
+    redirect_uri: redirectUri, grant_type: 'authorization_code', code_verifier: codeVerifier,
+  });
+  const res = await fetchImpl(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Google code exchange failed (${res.status}). ${String(txt).slice(0, 160)}`);
+  }
+  const j = await res.json();
+  return {
+    refresh_token: j.refresh_token || null,
+    access_token: j.access_token || null,
+    token_type: j.token_type || 'Bearer',
+    scope: j.scope || GMAIL_READONLY_SCOPE,
+    expiry_date: now + ((Number(j.expires_in) || 3600) * 1000),
+  };
+}
+
+// The connected mailbox address, read from the Gmail profile. Needs only a gmail
+// read scope, so we learn who connected without asking for openid/email. Returns
+// null on any failure (non-fatal: the connection still works without the label).
+async function fetchProfileEmail({ accessToken, fetchImpl = fetch }) {
+  try {
+    const res = await fetchImpl(`${GMAIL_BASE}/profile`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) return null;
+    const j = await res.json();
+    return j.emailAddress || null;
+  } catch { return null; }
 }
 
 // ── Gmail read wrappers (network; injectable fetch) ──────────────────────────
@@ -297,4 +385,5 @@ export {
   readTokens, writeTokens, readSync, writeSync, tokenScopes,
   googleStatus, getAccessToken, listMessages, getMessage,
   parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, scanDecisions,
+  exchangeCode, fetchProfileEmail,
 };

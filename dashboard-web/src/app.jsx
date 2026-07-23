@@ -217,6 +217,20 @@ function App() {
   // (build.mjs runs esbuild with bundle:false), so this matches the house style.
   useEffect(() => { window.tjkToast = toast; }, [toast]);
 
+  // Gmail reconnect lands back here at /?google=connected|error (the OAuth callback
+  // cannot know which tab was open). Surface the result once, open the Review tab
+  // where the Gmail panel lives, and strip the query so a refresh does not re-toast.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const g = params.get("google");
+    if (!g) return;
+    if (g === "connected") { toast("Gmail connected.", "success"); setTab("review"); }
+    else if (g === "error") { toast(`Gmail connect failed: ${params.get("reason") || "unknown"}`, "error"); setTab("review"); }
+    params.delete("google"); params.delete("reason");
+    const qs = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+  }, [toast]);
+
   // Action handler — updates local state + persists to applications.md via API.
   // `reachedStage` (optional): when closing a role that advanced past Applied,
   //   pass the furthest stage reached (e.g. "2nd Interview"). We prefix the notes

@@ -1,7 +1,8 @@
 import express from 'express';
 import {
-  readTokens, readSync, writeSync, googleStatus,
+  readTokens, writeTokens, readSync, writeSync, googleStatus,
   getAccessToken, listMessages, getMessage, scanDecisions,
+  buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState,
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { parseRecruitersMd, updateRecruiterLine } from '../lib/recruiters.mjs';
@@ -21,6 +22,69 @@ router.get('/api/google/status', (req, res) => {
     res.json(googleStatus());
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Reconnect (OAuth consent) ────────────────────────────────────────────────
+// In-flight consent requests: state → { verifier, redirectUri, createdAt }. Kept
+// in memory because the round trip completes in seconds within one server
+// process; a restart mid-flow just means clicking Connect again. Swept on use.
+const pendingAuth = new Map();
+const AUTH_TTL_MS = 10 * 60 * 1000;
+function sweepPending(now) {
+  for (const [k, v] of pendingAuth) if (now - v.createdAt > AUTH_TTL_MS) pendingAuth.delete(k);
+}
+
+// GET /api/google/auth-start — begin consent. Redirects the browser to Google.
+// redirect_uri is derived from THIS request's host, so the loopback port matches
+// whatever port the dashboard is on (Desktop OAuth client: any local port is
+// allowed, nothing to pre-register).
+router.get('/api/google/auth-start', (req, res) => {
+  try {
+    const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
+    if (!clientId) return res.status(400).send('Missing GOOGLE_CLIENT_ID in dashboard-web/.env');
+    const now = Date.now();
+    sweepPending(now);
+    const { verifier, challenge } = newPkce();
+    const state = randomState();
+    const redirectUri = `${req.protocol}://${req.get('host')}/api/google/callback`;
+    pendingAuth.set(state, { verifier, redirectUri, createdAt: now });
+    res.redirect(buildAuthUrl({ clientId, redirectUri, state, codeChallenge: challenge }));
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+// GET /api/google/callback — Google redirects here with ?code&state. Exchange the
+// code for tokens (PKCE), learn the mailbox address, save, and bounce back to the
+// dashboard. Read-only scope: this connection can never send. On any failure we
+// redirect with a reason rather than dumping a stack to the browser.
+router.get('/api/google/callback', async (req, res) => {
+  try {
+    const { code, state, error } = req.query;
+    if (error) return res.redirect(`/?google=error&reason=${encodeURIComponent(String(error))}`);
+    const pending = state ? pendingAuth.get(String(state)) : null;
+    if (!code || !pending) return res.redirect('/?google=error&reason=expired_or_invalid_state');
+    pendingAuth.delete(String(state));
+
+    const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
+    const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
+    const tokens = await exchangeCode({
+      code: String(code), redirectUri: pending.redirectUri, codeVerifier: pending.verifier, clientId, clientSecret,
+    });
+    // prompt=consent should always return a refresh token; if Google withholds it,
+    // keep any existing one rather than saving a connection that cannot refresh.
+    if (!tokens.refresh_token) {
+      const existing = readTokens();
+      if (existing?.refresh_token) tokens.refresh_token = existing.refresh_token;
+      else return res.redirect('/?google=error&reason=no_refresh_token');
+    }
+    let connectedEmail = null;
+    try { connectedEmail = await fetchProfileEmail({ accessToken: tokens.access_token }); } catch { /* label is optional */ }
+    writeTokens({ ...tokens, connectedEmail });
+    res.redirect('/?google=connected');
+  } catch (err) {
+    res.redirect(`/?google=error&reason=${encodeURIComponent(String(err.message).slice(0, 120))}`);
   }
 });
 
