@@ -16,7 +16,7 @@
 
 import {
   getAccessToken, googleStatus, parseGmailMessage, extractEmail,
-  classifyReply, matchAddress, scanDecisions, tokenScopes,
+  classifyReply, matchAddress, matchByCompanyDomain, scanDecisions, tokenScopes,
 } from '../dashboard-web/server/lib/google.mjs';
 
 let passed = 0, failed = 0;
@@ -157,6 +157,33 @@ check(soft && soft.flip === null, 'soft bounce produces no flip (transient, neve
 const rep = dec.replies.find(r => r.msgId === 'm-reply');
 check(rep && rep.contact?.source === 'recruiter' && rep.sentiment === 'positive', 'reply from a known recruiter routed with sentiment');
 check(dec.other.some(o => o.msgId === 'm-other'), 'reply from an unknown sender surfaced as other, not dropped');
+
+// ── matchByCompanyDomain (tier-2: unknown sender, known company) ──────────────
+// The matcher reads the domain's ROOT label (TLD-agnostic), so .example fixtures
+// exercise it exactly like real domains would. Real domains are forbidden in
+// tracked tests (PII gate), and the generic-domain set is by definition real
+// consumer domains, so that specific branch is covered in prod, not here.
+const apps = [
+  { id: 501, company: 'Northwind Robotics' },
+  { id: 502, company: 'Cobalt Systems, Inc.' },
+];
+check(matchByCompanyDomain('careers@northwind.example', apps)?.appId === 501, 'sender domain (substring of company) → app suggested');
+check(matchByCompanyDomain('careers@northwind.example', apps)?.confidence === 'medium', 'a substring match is medium confidence');
+check(matchByCompanyDomain('talent@cobalt.example', apps)?.appId === 502, 'domain root matches despite an Inc./Systems suffix on the company');
+check(matchByCompanyDomain('talent@cobalt.example', apps)?.confidence === 'high', 'an exact root/company-token match is high confidence');
+check(matchByCompanyDomain('noreply@lever.example', apps) === null, 'an ATS mail domain (lever) is not a company match → null');
+check(matchByCompanyDomain('hi@unrelated-vendor.example', apps) === null, 'a domain matching no application → null');
+
+// scanDecisions attaches the guess to an unknown sender at a known company
+const firstContact = {
+  id: 'm-first',
+  payload: { headers: [{ name: 'From', value: 'Talent Team <careers@northwind.example>' }, { name: 'Subject', value: 'Your application' }],
+    parts: [{ mimeType: 'text/plain', body: { data: b64('Thanks for applying. We would love to set up a call.') } }] },
+};
+const dec2 = scanDecisions({ messages: [firstContact], taRows, recruiterRows, apps });
+const guessed = dec2.other.find(o => o.msgId === 'm-first');
+check(guessed && guessed.companyGuess?.appId === 501, 'unknown sender at a known company carries a companyGuess to the right app');
+check(guessed && guessed.sentiment === 'positive', 'the company-guessed first-contact email is still sentiment-classified');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

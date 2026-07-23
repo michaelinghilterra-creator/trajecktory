@@ -5,7 +5,7 @@ import {
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { parseRecruitersMd, updateRecruiterLine } from '../lib/recruiters.mjs';
-import { patchRowInMd } from '../lib/applications.mjs';
+import { patchRowInMd, parseApplicationsMd } from '../lib/applications.mjs';
 import { addNote } from '../lib/notes.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
@@ -35,12 +35,15 @@ router.post('/api/google/scan-bounces', async (req, res) => {
     if (!tokens?.refresh_token) return res.status(400).json({ error: 'Google is not connected.' });
     const accessToken = await getAccessToken({ tokens });
     const since = gmailDate(req.body?.since);
+    const dryRun = !!req.body?.dryRun; // read-only: compute the flips, write nothing
     const q = `(from:mailer-daemon OR from:postmaster OR subject:(delivery status notification) OR subject:(undeliverable) OR subject:(delivery has failed) OR subject:(returned mail)) after:${since}`;
 
     const ids = await listMessages({ q, accessToken, max: 100 });
     const sync = readSync();
     const seen = new Set(sync.seenMessageIds);
-    const fresh = ids.filter(m => !seen.has(m.id));
+    // A dry run re-examines everything since the cutoff (ignores the seen cursor)
+    // so a diagnostic sweep can show the full picture without advancing state.
+    const fresh = dryRun ? ids : ids.filter(m => !seen.has(m.id));
 
     const raws = [];
     for (const m of fresh) { try { raws.push(await getMessage({ id: m.id, accessToken })); } catch { /* skip unreadable */ } }
@@ -53,6 +56,7 @@ router.post('/api/google/scan-bounces', async (req, res) => {
     const applied = [];
     for (const b of bounces) {
       if (!b.flip) continue; // soft, or no matched contact
+      if (dryRun) { applied.push({ source: b.flip.source, id: b.flip.id, dryRun: true }); continue; }
       const rows = b.flip.source === 'ta' ? taRows : recruiterRows;
       const row = rows.find(r => r.id === b.flip.id);
       if (!row) continue;
@@ -67,16 +71,20 @@ router.post('/api/google/scan-bounces', async (req, res) => {
     }
 
     // Advance the cursor over everything fetched (cap the history so the file
-    // cannot grow without bound).
-    sync.seenMessageIds = [...new Set([...sync.seenMessageIds, ...fresh.map(m => m.id)])].slice(-3000);
-    sync.lastCheckedAt = new Date().toISOString();
-    writeSync(sync);
+    // cannot grow without bound). A dry run leaves the cursor untouched.
+    if (!dryRun) {
+      sync.seenMessageIds = [...new Set([...sync.seenMessageIds, ...fresh.map(m => m.id)])].slice(-3000);
+      sync.lastCheckedAt = new Date().toISOString();
+      writeSync(sync);
+    }
 
     res.json({
+      dryRun,
       scanned: fresh.length,
       hardBounces: bounces.filter(b => b.kind === 'hard').length,
       softBounces: bounces.filter(b => b.kind === 'soft').length,
-      flipped: applied.length,
+      [dryRun ? 'wouldFlip' : 'flipped']: applied.length,
+      proposed: dryRun ? applied : undefined,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -100,8 +108,13 @@ router.get('/api/google/replies', async (req, res) => {
 
     const taRows = parseTargetTalentMd();
     const recruiterRows = parseRecruitersMd();
-    const { replies, other } = scanDecisions({ messages: raws, taRows, recruiterRows });
-    res.json({ replies, unmatched: other.length });
+    const apps = (() => { try { return parseApplicationsMd(); } catch { return []; } })();
+    const { replies, other } = scanDecisions({ messages: raws, taRows, recruiterRows, apps });
+    // Unmatched-by-contact senders are split: those the domain tier tied to a known
+    // company (a likely first-contact email) vs. genuinely unknown. Both surfaced.
+    const byCompany = other.filter(o => o.companyGuess);
+    const unknown = other.filter(o => !o.companyGuess);
+    res.json({ replies, byCompany, unknown, unmatched: other.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

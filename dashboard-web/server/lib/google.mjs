@@ -205,6 +205,56 @@ function matchAddress(address, { taRows = [], recruiterRows = [] } = {}) {
   return null;
 }
 
+// Normalize a company name OR a domain root to a comparable token: lowercase,
+// strip common suffixes and all non-alphanumerics, so "XYZ Corp" and "xyzcorp.com"
+// both reduce to "xyz".
+function _normCompanyToken(s) {
+  return String(s || '').toLowerCase()
+    .replace(/\.(com|io|co|net|org|ai|app|xyz|dev|inc)$/i, '')
+    .replace(/\b(inc|corp|corporation|llc|ltd|limited|co|company|group|holdings|technologies|technology|labs|software|systems|solutions|global)\b/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+// Mailbox domains that carry NO company signal: consumer providers and the big
+// ATS / recruiting-mail senders. A reply from these can't be company-matched by
+// domain (an @greenhouse-mail.io note is about SOME company, not "Greenhouse").
+const _GENERIC_DOMAINS = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'yahoo.com', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com']);
+const _ATS_DOMAIN_RE = /greenhouse|lever|ashbyhq|ashby|workday|myworkday|smartrecruiters|jobvite|icims|bamboohr|hire\.lever|greenhouse-mail|us-greenhouse|myworkdayjobs|paylocity|rippling|gem\.com|goodtime|calendly/i;
+
+function _domainRoot(addr) {
+  const at = String(addr || '').split('@')[1] || '';
+  const parts = at.toLowerCase().split('.').filter(Boolean);
+  return parts.length >= 2 ? parts[parts.length - 2] : '';
+}
+
+// Tier-2 match: an unknown SENDER may still be about a known COMPANY. Compare the
+// sender's email domain to each application's company name; a strong token overlap
+// suggests which application the reply belongs to. This is what catches a first
+// email from careers@company.example or a TA person not yet on file. Returns
+// { appId, company, confidence } or null. A SUGGESTION for confirmation, never an
+// auto-link: a company can mail from an unrelated domain, so a wrong guess must
+// cost a glance, not a mis-filed status. Pure.
+function matchByCompanyDomain(fromAddr, apps = []) {
+  const at = String(fromAddr || '').split('@')[1] || '';
+  if (!at || _GENERIC_DOMAINS.has(at.toLowerCase()) || _ATS_DOMAIN_RE.test(at)) return null;
+  const root = _normCompanyToken(_domainRoot(fromAddr));
+  if (!root || root.length < 3) return null;
+  let best = null;
+  for (const a of apps) {
+    const comp = _normCompanyToken(a.company);
+    if (!comp || comp.length < 3) continue;
+    const exact = comp === root;
+    const overlap = exact || comp.includes(root) || root.includes(comp);
+    if (!overlap) continue;
+    const confidence = exact ? 'high' : 'medium';
+    if (!best || (confidence === 'high' && best.confidence !== 'high')) {
+      best = { appId: a.id, company: a.company, confidence };
+    }
+    if (exact) break;
+  }
+  return best;
+}
+
 // The heart: turn a batch of raw Gmail messages into decisions.
 //   bounces[] — DSNs. A HARD bounce for a known contact carries a `flip` to set
 //               that address to `bounced` (and status Bounced). Soft bounces are
@@ -214,7 +264,7 @@ function matchAddress(address, { taRows = [], recruiterRows = [] } = {}) {
 //   other[]   — everything else (unknown senders, automated mail), surfaced so a
 //               real reply from an unrecognized address is never dropped.
 // Pure: all inputs passed in.
-function scanDecisions({ messages = [], taRows = [], recruiterRows = [] } = {}) {
+function scanDecisions({ messages = [], taRows = [], recruiterRows = [], apps = [] } = {}) {
   const bounces = [], replies = [], other = [];
   for (const raw of messages) {
     const msg = parseGmailMessage(raw);
@@ -230,10 +280,13 @@ function scanDecisions({ messages = [], taRows = [], recruiterRows = [] } = {}) 
     }
     const fromAddr = extractEmail(msg.from);
     const contact = fromAddr ? matchAddress(fromAddr, { taRows, recruiterRows }) : null;
+    // Tier-2: an unknown sender may still be about a known company (a first email
+    // from careers@company.example, or a TA person not yet on file). Attach the guess.
+    const companyGuess = (!contact && fromAddr) ? matchByCompanyDomain(fromAddr, apps) : null;
     const entry = {
       msgId: msg.id, from: fromAddr, subject: msg.subject,
       sentiment: classifyReply({ subject: msg.subject, text: msg.text }),
-      contact, snippet: msg.snippet,
+      contact, companyGuess, snippet: msg.snippet,
     };
     (contact ? replies : other).push(entry);
   }
@@ -243,5 +296,5 @@ function scanDecisions({ messages = [], taRows = [], recruiterRows = [] } = {}) 
 export {
   readTokens, writeTokens, readSync, writeSync, tokenScopes,
   googleStatus, getAccessToken, listMessages, getMessage,
-  parseGmailMessage, extractEmail, classifyReply, matchAddress, scanDecisions,
+  parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, scanDecisions,
 };
