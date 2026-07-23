@@ -3,8 +3,10 @@ import path from 'path';
 import { FOLLOWUPS_MD } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, matchByCompany } from './target-talent.mjs';
+import { parseRecruitersMd } from './recruiters.mjs';
 import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
 import { INTERVIEW_STAGES, isInterviewStage } from './statuses.mjs';
+import { isSendable } from '../../../lib/email-verify.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
 // quickly each stage cools: warm Responded threads cool fastest, post-
@@ -26,24 +28,27 @@ const STALE_THRESHOLD_BY_STATUS = {
 // treated as ghosted — a candidate to archive to the "No Response" outcome.
 const GHOST_DAYS = 45;
 
-// Is this TA contact's email actually usable for outreach? Auto-synthesized /
-// unverified / bounced addresses don't count (they read authoritative but fail
-// in practice), so a company whose only contact has such an email is treated as
-// having no usable email channel. Mirrors the bounce/unverified badge logic in
-// the contact drawer.
+// Is this contact's email actually usable for outreach? This defers to the ONE
+// send gate (isSendable in email-verify.mjs): only a verified-deliverable state
+// (ok / risky) with a real address counts. It reads the structured `verified`
+// tag the parsers attach, NOT a free-text notes scan — the old notes-regex
+// version could not see the `[v:…]` verification tag and treated an unverified
+// first.last@company GUESS as usable, which is exactly what sent mail into the
+// void in June. An unverified or observed-dead (invalid / blocked / bounced)
+// address is not a channel, so a company whose only contact is one of those is
+// treated as having no email channel and routes to LinkedIn or nothing instead.
 function _isUsableEmail(row) {
-  const email = (row.email || '').trim();
-  if (!email || !email.includes('@')) return false;
-  const notes = row.notes || '';
-  if (/EMAIL BOUNCED|bounced/i.test(notes)) return false;
-  if (/unverified|auto-synthesized|pattern-med|pattern-low/i.test(notes)) return false;
-  return true;
+  return isSendable(row);
 }
 
 // Best available outreach channel for a company across its non-archived TA
-// contacts: a usable email beats a LinkedIn-only contact (LinkedIn messaging is
-// rate-limited ~15/mo, so it's not a reliable follow-up channel), which beats
-// nothing. Drives the warm/cold split and the per-row channel badge.
+// contacts: a verified email beats a LinkedIn-only contact, which beats nothing.
+// Email ranks first only because it needs no acceptance step, NOT because
+// LinkedIn is unreliable: connection invitations run ~100 per rolling 7-day
+// window and messaging is unlimited once accepted. (The ~15/mo figure older
+// comments cited is the InMail cap for messaging NON-connections, a different
+// mechanism this flow never uses.) A LinkedIn-only contact routes to the connect
+// queue instead. Drives the warm/cold split and the per-row channel badge.
 function channelFor(company, taRows) {
   const matches = matchByCompany(taRows || [], company, r => r.company)
     .filter(r => r.status !== 'Archived');
@@ -194,9 +199,10 @@ function computeStaleApps() {
 
     // Warm vs cold. Responded / any interview round always count as warm (a human
     // engaged, nudging pays off). An Applied app is warm only when there's a
-    // usable EMAIL channel (LinkedIn-only is rate-limited, so it's not reliably
-    // actionable); otherwise it's a cold "application out" that should sit in a
-    // calm ledger rather than nag. A muted app is always cold ("done for now").
+    // usable EMAIL channel; a LinkedIn-only contact routes to the connect queue
+    // (a separate manual motion) rather than the email follow-up nudge here, so
+    // it stays a cold "application out" that sits in a calm ledger rather than
+    // nagging. A muted app is always cold ("done for now").
     const channel = channelFor(a.company, taRows);
     const isMutedApp = !!muted[String(a.id)];
     let klass;
@@ -358,9 +364,60 @@ function computeGhostedCandidates() {
 }
 
 
+// ─── LinkedIn connect queue ───────────────────────────────────────────────
+// The fallback channel for people we cannot email but can still reach: a real
+// LinkedIn handle and no sendable address. This is the home for the contacts
+// whose email bounced, is org-blocked (talent_states `Blocked` literally means
+// "reach on LinkedIn, not email"), or was never verifiable. Connection invites
+// run ~100 per rolling 7-day window, so this is a real, high-capacity channel,
+// not a rate-limited afterthought.
+//
+// Selection: a non-empty LinkedIn handle AND not isSendable (no live email) AND
+// a status that is neither Archived (dead opportunity) nor Connected (already a
+// 1st-degree connection — message directly, no request needed). Spans both
+// target-talent.md and recruiters.md. Rows are injectable so this is unit-tested
+// without reading the real (gitignored) contact files.
+const CONNECT_QUEUE_EXCLUDE_STATUS = new Set(['Archived', 'Connected']);
+
+function _hasLinkedIn(row) {
+  return !!(row && (row.linkedin || '').trim());
+}
+
+function computeConnectQueue({ taRows, recruiterRows } = {}) {
+  const ta  = taRows        ?? (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
+  const rec = recruiterRows ?? (() => { try { return parseRecruitersMd();  } catch { return []; } })();
+  const out = [];
+  const consider = (row, source) => {
+    if (!_hasLinkedIn(row)) return;              // no LinkedIn handle → not reachable here
+    if (isSendable(row)) return;                 // has a live email → belongs to the email motion
+    if (CONNECT_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
+    const company = source === 'recruiter' ? row.firm : row.company;
+    const name = `${row.first || ''} ${row.last || ''}`.trim();
+    out.push({
+      source,                                     // 'ta' | 'recruiter'
+      id: row.id,
+      name,
+      firstName: row.first || '',
+      role: row.title || '',
+      company: company || '',
+      linkedin: (row.linkedin || '').trim(),
+      status: row.status || '',
+      emailState: row.verified?.state || 'unverified', // why they landed here
+      reason: (row.notes || '').replace(/\s+/g, ' ').trim().slice(0, 160),
+    });
+  };
+  for (const r of ta)  consider(r, 'ta');
+  for (const r of rec) consider(r, 'recruiter');
+  // Stable, readable order: by company, then by name.
+  out.sort((a, b) =>
+    (a.company || '').localeCompare(b.company || '') ||
+    (a.name || '').localeCompare(b.name || ''));
+  return out;
+}
+
 export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA,
-  computeGhostedCandidates, channelFor, GHOST_DAYS,
+  computeGhostedCandidates, channelFor, computeConnectQueue, GHOST_DAYS,
   STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 

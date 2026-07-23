@@ -53,9 +53,9 @@ function FUStatusPill({ status }) {
 }
 
 // Whether there's a usable way to actually follow up: a verified email, only a
-// (rate-limited) LinkedIn handle, or no contact at all. Drives the warm/cold
-// split server-side; shown here so the user knows why something is or isn't
-// in the urgent queue.
+// LinkedIn handle (which routes to the separate connect queue), or no contact at
+// all. Drives the warm/cold split server-side; shown here so the user knows why
+// something is or isn't in the urgent queue.
 const CHANNEL_META = {
   email:    { label: '✓ email',      bg: 'rgba(34,197,94,0.14)',   color: '#22c55e' },
   linkedin: { label: 'LinkedIn only', bg: 'rgba(245,158,11,0.14)',  color: '#f59e0b' },
