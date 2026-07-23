@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import { collectWeeklyMetrics } from '../lib/weekly-collect.mjs';
 import { evaluateFloors } from '../lib/review-thresholds.mjs';
+import { runWeeklyReview } from '../lib/weekly-run.mjs';
 import { REVIEW_LOG_PATH, BUILD_LOCK_PATH } from '../config.mjs';
 import { logConnect, readConnects } from '../lib/connects.mjs';
 
@@ -26,6 +27,20 @@ router.get('/api/review/status', (req, res) => {
     let log = [];
     try { log = JSON.parse(fs.readFileSync(REVIEW_LOG_PATH, 'utf8')) || []; } catch { /* none yet */ }
     res.json({ lock, lastReview: log[log.length - 1] || null, history: log.slice(-8) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/review/run — freeze THIS week into the review log and (re)compute the
+// build lock, then return the same status shape GET /api/review/status serves so
+// the caller can update in place. This is the deliberate snapshot: once a week is
+// logged its numbers stop moving, so the week-over-week view reads frozen history
+// rather than a live recompute. Runs the exact engine weekly-review.mjs runs.
+router.post('/api/review/run', (req, res) => {
+  try {
+    const { weekStart, weekEnd, lock, entry, history } = runWeeklyReview({ now: new Date() });
+    res.json({ ok: true, weekStart, weekEnd, lock, lastReview: entry, history: history.slice(-8) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -37,11 +37,89 @@ function ReviewIndicator({ label, m }) {
   );
 }
 
+// Week-over-week trend, read from the FROZEN review log (status.history, which
+// GET /api/review/status already returns). Each row is one floor across recent
+// weeks; the values are the numbers AS THEY WERE at review time, so a past week
+// never moves even as live data (or the cadence template) changes underneath. Δ
+// is the change from the previous logged week, so the direction of travel is the
+// headline. Running the review is what appends a week here.
+const WOW_FLOORS = [
+  { key: 'verifiedTouches',  label: 'Verified touches',  unit: '' },
+  { key: 'linkedinConnects', label: 'LinkedIn connects', unit: '' },
+  { key: 'cadencePct',       label: 'Cadence',           unit: '%' },
+];
+const WOW_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function wowWeekLabel(week) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(week || '');
+  return m ? `${WOW_MONTHS[+m[2] - 1]} ${+m[3]}` : (week || '?');
+}
+function wowCellColor(f) {
+  if (!f || !f.available) return 'var(--text-mute)';
+  return f.met ? 'var(--green)' : 'var(--red)';
+}
+const WOW_TH = { textAlign: 'right', padding: '7px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', whiteSpace: 'nowrap' };
+const WOW_TH_L = { ...WOW_TH, textAlign: 'left' };
+const WOW_TD = { textAlign: 'right', padding: '7px 12px', whiteSpace: 'nowrap' };
+const WOW_TD_L = { textAlign: 'left', padding: '7px 12px', fontSize: 13 };
+
+function WeekOverWeek({ history }) {
+  const weeks = (history || []).slice(-6);
+  return (
+    <>
+      <h3 style={{ margin: '0 0 4px' }}>Week over week</h3>
+      {weeks.length === 0 ? (
+        <div className="card dim" style={{ marginBottom: 24 }}>
+          No weeks logged yet. Run the review to freeze this week and start the trend.
+        </div>
+      ) : (
+        <>
+          <p className="dim" style={{ fontSize: 12, marginTop: 0, marginBottom: 8 }}>
+            Frozen at review time, so past weeks never move. Δ is the change from the previous logged week.
+          </p>
+          <div className="card" style={{ padding: 0, marginBottom: 24, overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr>
+                  <th style={WOW_TH_L}>Floor</th>
+                  {weeks.map(w => <th key={w.week} style={WOW_TH}>{wowWeekLabel(w.week)}</th>)}
+                  <th style={WOW_TH}>Δ wk</th>
+                </tr>
+              </thead>
+              <tbody>
+                {WOW_FLOORS.map(fl => {
+                  const cells = weeks.map(w => (w.floors || []).find(f => f.key === fl.key));
+                  const avail = cells.filter(c => c && c.available).map(c => Number(c.value));
+                  const delta = avail.length >= 2 ? avail[avail.length - 1] - avail[avail.length - 2] : null;
+                  const deltaColor = delta == null ? 'var(--text-mute)' : delta > 0 ? 'var(--green)' : delta < 0 ? 'var(--red)' : 'var(--text-mute)';
+                  return (
+                    <tr key={fl.key} style={{ borderTop: '1px solid var(--border)' }}>
+                      <td style={WOW_TD_L}>{fl.label}</td>
+                      {cells.map((c, i) => (
+                        <td key={i} className="mono" style={{ ...WOW_TD, color: wowCellColor(c) }}>
+                          {c && c.available ? `${c.value}${fl.unit}` : '—'}
+                        </td>
+                      ))}
+                      <td className="mono" style={{ ...WOW_TD, color: deltaColor, fontWeight: 600 }}>
+                        {delta == null ? '—' : `${delta > 0 ? '+' : ''}${delta}${fl.unit}`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 window.ReviewTab = function ReviewTab({ toast }) {
   const [data, setData] = useStateRv(null);
   const [status, setStatus] = useStateRv(null);
   const [err, setErr] = useStateRv(null);
   const [name, setName] = useStateRv('');
+  const [running, setRunning] = useStateRv(false);
 
   const load = useCallbackRv(() => {
     fetch('/api/metrics/weekly').then(r => r.json())
@@ -50,6 +128,24 @@ window.ReviewTab = function ReviewTab({ toast }) {
     fetch('/api/review/status').then(r => r.json()).then(setStatus).catch(() => {});
   }, []);
   useEffectRv(() => { load(); }, [load]);
+
+  // Freeze this week into the log and (re)compute the build lock. This is the
+  // deliberate snapshot: after it runs, the week is fixed in the history and the
+  // week-over-week table below stops moving for it. Same engine the CLI runs.
+  const runReview = () => {
+    setRunning(true);
+    fetch('/api/review/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(r => r.json())
+      .then(res => {
+        if (res.error) { toast && toast(res.error, 'error'); return; }
+        setStatus({ lock: res.lock, lastReview: res.lastReview, history: res.history });
+        load();
+        const nowLocked = res.lock && res.lock.locked;
+        toast && toast(nowLocked ? 'Week logged. Build lock ENGAGED.' : `Weekly review logged (${res.weekStart}).`, nowLocked ? 'warn' : 'success');
+      })
+      .catch(e => toast && toast(e.message, 'error'))
+      .finally(() => setRunning(false));
+  };
 
   const logConnect = () => {
     fetch('/api/linkedin/connects', {
@@ -66,12 +162,19 @@ window.ReviewTab = function ReviewTab({ toast }) {
   const m = data.metrics || {};
   const floors = (data.floors && data.floors.results) || [];
   const locked = status && status.lock && status.lock.locked;
+  const history = (status && status.history) || [];
 
   return (
     <div style={{ padding: 24, maxWidth: 900 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2, gap: 12 }}>
         <h2 style={{ margin: 0 }}>Weekly review</h2>
-        <span className="dim mono" style={{ fontSize: 12 }}>{data.weekStart} → {data.weekEnd}</span>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+          <span className="dim mono" style={{ fontSize: 12 }}>{data.weekStart} → {data.weekEnd}</span>
+          <button className="btn sm" onClick={runReview} disabled={running}
+            title="Freeze this week's numbers into the log and recompute the build lock. Same review the CLI runs.">
+            {running ? 'Running…' : 'Run weekly review'}
+          </button>
+        </div>
       </div>
       <p className="dim" style={{ fontSize: 13, marginTop: 4, marginBottom: 18 }}>
         Leading indicators, not applications. A blank source reads "not logged", never zero.
@@ -90,6 +193,8 @@ window.ReviewTab = function ReviewTab({ toast }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 24 }}>
         {floors.map(r => <ReviewFloor key={r.key} r={r} />)}
       </div>
+
+      <WeekOverWeek history={history} />
 
       <h3 style={{ margin: '0 0 4px' }}>Leading indicators</h3>
       <div className="card" style={{ padding: '4px 16px', marginBottom: 24 }}>

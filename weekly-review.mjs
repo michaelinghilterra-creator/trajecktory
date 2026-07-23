@@ -15,42 +15,20 @@
  * The Friday 12:00 schedule is HANDED to you (the schtasks line below), never
  * registered silently.
  */
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { collectWeeklyMetrics } from './dashboard-web/server/lib/weekly-collect.mjs';
-import { evaluateFloors, lockDecision, KILL, MISS_TO_LOCK, OUTREACH_FLOOR_KEY } from './dashboard-web/server/lib/review-thresholds.mjs';
-import { REVIEW_LOG_PATH, BUILD_LOCK_PATH } from './dashboard-web/server/config.mjs';
+import { runWeeklyReview } from './dashboard-web/server/lib/weekly-run.mjs';
+import { KILL } from './dashboard-web/server/lib/review-thresholds.mjs';
 
 const argv = process.argv.slice(2);
 const JSON_OUT = argv.includes('--json');
 const DRY = argv.includes('--dry-run');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const readLog = () => { try { return JSON.parse(fs.readFileSync(REVIEW_LOG_PATH, 'utf8')) || []; } catch { return []; } };
-
-const { weekStart, weekEnd, metrics } = collectWeeklyMetrics(new Date());
-const floors = evaluateFloors(metrics);
-const outreachMet = floors.results.find(r => r.key === OUTREACH_FLOOR_KEY)?.met ?? null;
-
-// Upsert this week into the history (re-running the same week overwrites it).
-let history = readLog().filter(h => h.week !== weekStart);
-history.push({
-  week: weekStart, weekEnd, outreachMet,
-  floors: floors.results.map(r => ({ key: r.key, value: r.value, floor: r.floor, met: r.met, available: r.available })),
-  metrics: Object.fromEntries(Object.entries(metrics)
-    .filter(([k]) => k !== 'weekStart' && k !== 'weekEnd')
-    .map(([k, v]) => [k, { value: v.value, available: v.available }])),
-});
-history.sort((a, b) => (a.week || '').localeCompare(b.week || ''));
-
-const lock = lockDecision(history.map(h => ({ week: h.week, outreachMet: h.outreachMet })));
-
-if (!DRY) {
-  fs.writeFileSync(REVIEW_LOG_PATH, JSON.stringify(history, null, 2) + '\n');
-  fs.writeFileSync(BUILD_LOCK_PATH, JSON.stringify(
-    { locked: lock.locked, reason: lock.reason, since: lock.locked ? weekStart : null, week: weekStart }, null, 2) + '\n');
-}
+// The write side (collect → evaluate → upsert the log → decide the lock → persist)
+// lives in lib/weekly-run.mjs so this CLI and the dashboard's "Run weekly review"
+// button share ONE engine. --dry-run collects and reports but writes nothing.
+const { weekStart, weekEnd, metrics, floors, lock } = runWeeklyReview({ now: new Date(), write: !DRY });
 
 if (JSON_OUT) {
   console.log(JSON.stringify({ weekStart, weekEnd, floors, lock, metrics }, null, 2));
