@@ -30,6 +30,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState(null);   // ms timestamp of the last apps refetch
   const [tab, setTab] = useState("pipeline");
+  const [debriefPrompt, setDebriefPrompt] = useState(null);
   const [search, setSearch] = useState("");
   const [drawerApp, setDrawerApp] = useState(null);
   // Transient: a Follow-Ups click on a TA row pushes the contact id here and
@@ -261,6 +262,12 @@ function App() {
     }).then(r => {
       if (!r.ok) toast(`Save failed for ${app.company} (${r.status})`, 'error');
     }).catch(() => toast(`Save failed for ${app.company}`, 'error'));
+    // A round just concluded (we transitioned OUT of an interview stage): prompt
+    // for its debrief so the objection is captured now, not reconstructed later.
+    // Gated on !silent so bulk/programmatic changes never pop the modal.
+    if (!silent && window.isInterviewStage(app.status) && canonicalStatus !== app.status) {
+      setDebriefPrompt({ appId: app.id, company: app.company, role: app.role, stage: app.status });
+    }
     if (!silent) {
       const verb = { Applied: "Applied to", SKIP: "Skipped", Discarded: "Discarded", Closed: "Marked closed:", "Not a Fit": "Not a fit:", Rejected: "Marked rejected:", Responded: "Marked responded:", Offer: "Marked offer:" }[newStatus] || (window.isInterviewStage(newStatus) ? `Moved to ${newStatus}:` : "Updated");
       const suffix = reachedStage ? ` (reached ${reachedStage})` : "";
@@ -442,6 +449,10 @@ function App() {
           isStale={() => false}
           onFollowupChange={refreshApps}
         />
+      )}
+      {debriefPrompt && window.DebriefModal && (
+        <window.DebriefModal prompt={debriefPrompt} toast={toast}
+          onClose={(saved) => { setDebriefPrompt(null); if (saved) refreshApps(); }} />
       )}
       <window.CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={commands} />
       <window.ToastStack toasts={toasts} />
