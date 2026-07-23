@@ -344,6 +344,25 @@ function matchByCompanyDomain(fromAddr, apps = []) {
   return best;
 }
 
+// Tier-3 match: the SENDER told us nothing (an ATS or unfamiliar domain), but the
+// SUBJECT often names the company outright ("Update on your Kestrel Application").
+// Match the subject against each application's DISTINCTIVE company token, reusing
+// _normCompanyToken (which drops legal suffixes and generic words like
+// "Technology"/"Systems"), so only a core like "kestrel" remains and a short or
+// generic name cannot match subject noise. A SUGGESTION for confirmation, never an
+// auto-link, exactly like the domain tier. Biased toward recall (a missed
+// application update costs more than an extra row the user can ignore). Pure.
+function matchBySubject(subject, apps = []) {
+  const hay = normalizeCompany(subject); // lowercase, alphanumeric only (spaces dropped)
+  if (hay.length < 4) return null;
+  for (const a of apps) {
+    const core = _normCompanyToken(a.company);
+    if (!core || core.length < 4) continue; // too short/generic to match safely
+    if (hay.includes(core)) return { appId: a.id, company: a.company, confidence: 'subject' };
+  }
+  return null;
+}
+
 // Applications at the same company as a reply, returned as {id, role, status}.
 // The reply logger needs an EXPLICIT appId because one company can have several
 // open roles, so this surfaces the candidates for the user to choose rather than
@@ -386,9 +405,12 @@ function scanDecisions({ messages = [], taRows = [], recruiterRows = [], apps = 
     }
     const fromAddr = extractEmail(msg.from);
     const contact = fromAddr ? matchAddress(fromAddr, { taRows, recruiterRows }) : null;
-    // Tier-2: an unknown sender may still be about a known company (a first email
-    // from careers@company.example, or a TA person not yet on file). Attach the guess.
-    const companyGuess = (!contact && fromAddr) ? matchByCompanyDomain(fromAddr, apps) : null;
+    // For an unknown sender, guess the company two ways: tier-2 from the sender's
+    // domain (a first email from careers@company.example), then tier-3 from the
+    // SUBJECT (an ATS-sent "Update on your <Company> Application", whose sender
+    // domain carries no signal). Either is a suggestion for confirmation.
+    let companyGuess = !contact ? matchByCompanyDomain(fromAddr, apps) : null;
+    if (!contact && !companyGuess) companyGuess = matchBySubject(msg.subject, apps);
     const entry = {
       msgId: msg.id, from: fromAddr, subject: msg.subject,
       sentiment: classifyReply({ subject: msg.subject, text: msg.text }),
@@ -402,6 +424,6 @@ function scanDecisions({ messages = [], taRows = [], recruiterRows = [], apps = 
 export {
   readTokens, writeTokens, readSync, writeSync, tokenScopes,
   googleStatus, getAccessToken, listMessages, getMessage,
-  parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, scanDecisions,
+  parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions,
   exchangeCode, fetchProfileEmail, candidateAppsFor,
 };

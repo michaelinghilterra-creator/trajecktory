@@ -120,10 +120,15 @@ router.post('/api/google/scan-bounces', async (req, res) => {
     const applied = [];
     for (const b of bounces) {
       if (!b.flip) continue; // soft, or no matched contact
-      if (dryRun) { applied.push({ source: b.flip.source, id: b.flip.id, dryRun: true }); continue; }
       const rows = b.flip.source === 'ta' ? taRows : recruiterRows;
       const row = rows.find(r => r.id === b.flip.id);
       if (!row) continue;
+      // Already marked bounced (a prior sweep flipped it) is NOT a pending change,
+      // so it neither counts toward wouldFlip nor gets re-written. Without this the
+      // dry run re-counts every historical bounce every time, so the number never
+      // falls after you apply and re-applying just rewrites the same rows.
+      if (row.verified?.state === 'bounced') continue;
+      if (dryRun) { applied.push({ source: b.flip.source, id: b.flip.id, dryRun: true }); continue; }
       // setVerifyTag on the clean address yields "address [v:bounced:gmail:date]".
       // The single-row updaters preserve every other cell (and each file's line
       // endings) byte for byte.

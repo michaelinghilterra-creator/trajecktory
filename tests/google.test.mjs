@@ -16,7 +16,7 @@
 
 import {
   getAccessToken, googleStatus, parseGmailMessage, extractEmail,
-  classifyReply, matchAddress, matchByCompanyDomain, scanDecisions, tokenScopes,
+  classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, tokenScopes,
   candidateAppsFor,
 } from '../dashboard-web/server/lib/google.mjs';
 
@@ -199,6 +199,31 @@ check(northwind.every(a => a.role && a.status), 'each candidate carries role + s
 check(candidateAppsFor('cobalt systems', appRows).length === 1 && candidateAppsFor('cobalt systems', appRows)[0].id === 603, 'case- and punctuation-insensitive match finds the single Cobalt app');
 check(candidateAppsFor('Nonexistent Co', appRows).length === 0, 'a company with no application yields no candidates');
 check(candidateAppsFor('', appRows).length === 0 && candidateAppsFor(null, appRows).length === 0, 'empty/null company is safe');
+
+// ── matchBySubject: the tier-3 subject matcher (the Kestrel case) ────────────
+const subjApps = [
+  { id: 701, company: 'Kestrel', role: 'Field CTO', status: 'Applied' },
+  { id: 702, company: 'Cobalt Systems', role: 'Analytics Lead', status: 'Applied' },
+  { id: 703, company: 'Bex Systems', role: 'RevOps Director', status: 'Applied' },
+];
+const kestrel = matchBySubject('Update on your Kestrel Application', subjApps);
+check(kestrel && kestrel.appId === 701 && kestrel.confidence === 'subject', 'a subject naming the company resolves to its application (the Kestrel case)');
+check(matchBySubject('Re: your Kestrel, Inc. application', subjApps)?.appId === 701, 'a legal suffix on the app company still matches the distinctive core');
+check(matchBySubject('Following up on your Cobalt Systems role', subjApps)?.appId === 702, 'a multi-word company matches on its distinctive core (generic "Systems" dropped)');
+check(matchBySubject('Weekly newsletter, nothing to see here', subjApps) === null, 'a subject naming no known company matches nothing');
+check(matchBySubject('your Bex Systems update', subjApps) === null, 'a company whose distinctive core is too short (Bex) is not subject-matched, to avoid noise');
+
+// scanDecisions tier-3: an ATS-sent email (no domain signal) falls through to the subject.
+const atsMsg = {
+  id: 'm-ats',
+  payload: { headers: [{ name: 'From', value: 'no-reply@greenhouse-mail.test' }, { name: 'Subject', value: 'Update on your Kestrel application' }],
+    parts: [{ mimeType: 'text/plain', body: { data: b64('We have decided not to move forward at this time.') } }] },
+};
+const decAts = scanDecisions({ messages: [atsMsg], taRows, recruiterRows, apps: subjApps });
+const atsGuess = decAts.other.find(o => o.msgId === 'm-ats');
+check(atsGuess && atsGuess.companyGuess?.appId === 701, 'scanDecisions subject-matches an ATS-sent email the domain tier cannot');
+check(atsGuess && atsGuess.companyGuess?.confidence === 'subject', 'the subject-tier guess is labeled');
+check(atsGuess && atsGuess.sentiment === 'negative', 'the ATS rejection is still classified negative');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
