@@ -3,7 +3,7 @@ import fs from 'fs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { parseTargetTalentMd, appendTTRows, updateTTLine } from '../lib/target-talent.mjs';
 import { generateText, draftModel } from '../lib/anthropic.mjs';
-import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
+import { normCompany, reconcilePreview } from '../lib/tt-reconcile-core.mjs';
 import { TARGET_TALENT_MD } from '../config.mjs';
 import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
 
@@ -20,12 +20,9 @@ export const router = express.Router();
 // CLOSED app statuses (archive related TA contacts when ALL related apps closed):
 //   Rejected, Discarded, SKIP, No Response
 
-const TT_ACTIVE_APP_STATUSES = ACTIVE_STATUSES;
-const TT_CLOSED_APP_STATUSES = ['Rejected','Discarded','SKIP','No Response'];
-
-function _normCompany(s) {
-  return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-}
+// The archive decision + companies-needing-contacts live in
+// lib/tt-reconcile-core.mjs (reconcilePreview), shared with the reconcile-ta.mjs
+// CLI so the two can never drift. normCompany is imported from there too.
 
 // GET /api/tt-reconcile/preview
 // Returns:
@@ -37,57 +34,7 @@ router.get('/api/tt-reconcile/preview', (req, res) => {
   try {
     const apps = parseApplicationsMd();
     const ttRows = parseTargetTalentMd().filter(r => r.status !== 'Archived');
-
-    // Group apps by normalized company name
-    const appsByCompany = new Map();
-    for (const a of apps) {
-      const k = _normCompany(a.company);
-      if (!k) continue;
-      if (!appsByCompany.has(k)) appsByCompany.set(k, []);
-      appsByCompany.get(k).push(a);
-    }
-
-    // For each TA contact, look at their company's apps. If ANY app at that
-    // company is still active, keep the contact. If ALL apps are closed, archive.
-    const toArchive = [];
-    for (const c of ttRows) {
-      const k = _normCompany(c.company);
-      const companyApps = appsByCompany.get(k) || [];
-      if (companyApps.length === 0) continue; // no apps logged for this company — leave alone
-      const hasActive = companyApps.some(a => TT_ACTIVE_APP_STATUSES.includes(a.status));
-      if (hasActive) continue;
-      // All apps at this company are closed — archive
-      toArchive.push({
-        id: c.id,
-        first: c.first,
-        last: c.last,
-        company: c.company,
-        title: c.title,
-        reason: `${companyApps.length} application${companyApps.length === 1 ? '' : 's'} closed (${companyApps.map(a => a.status).slice(0, 3).join(', ')})`,
-        relatedApps: companyApps.map(a => ({ id: a.id, status: a.status, role: a.role, date: a.date })),
-      });
-    }
-
-    // Find ACTIVE companies (≥1 active app) with ZERO TA contacts
-    const ttCompaniesNorm = new Set(ttRows.map(c => _normCompany(c.company)));
-    const companiesNeedingContacts = [];
-    for (const [k, companyApps] of appsByCompany.entries()) {
-      if (ttCompaniesNorm.has(k)) continue; // already has contacts
-      const active = companyApps.filter(a => TT_ACTIVE_APP_STATUSES.includes(a.status));
-      if (active.length === 0) continue; // company has no active apps — skip
-      // Use the most recent active app as the "example role" to anchor the search
-      const mostRecent = active.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
-      companiesNeedingContacts.push({
-        company: mostRecent.company,
-        exampleRole: mostRecent.role,
-        appCount: active.length,
-        mostRecentApp: { id: mostRecent.id, role: mostRecent.role, status: mostRecent.status, date: mostRecent.date },
-      });
-    }
-    // Sort by recency of most recent app
-    companiesNeedingContacts.sort((a, b) => (b.mostRecentApp.date || '').localeCompare(a.mostRecentApp.date || ''));
-
-    res.json({ toArchive, companiesNeedingContacts });
+    res.json(reconcilePreview(apps, ttRows));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -234,9 +181,9 @@ router.post('/api/tt-reconcile/bulk-add', (req, res) => {
     }
     // Dedup by (normalized company + last + first) against existing rows
     const existing = parseTargetTalentMd();
-    const existingKeys = new Set(existing.map(r => `${_normCompany(r.company)}|${(r.last || '').toLowerCase()}|${(r.first || '').toLowerCase()}`));
+    const existingKeys = new Set(existing.map(r => `${normCompany(r.company)}|${(r.last || '').toLowerCase()}|${(r.first || '').toLowerCase()}`));
     const toWrite = contacts.filter(c => {
-      const k = `${_normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`;
+      const k = `${normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`;
       return !existingKeys.has(k);
     });
     const written = appendTTRows(toWrite);
