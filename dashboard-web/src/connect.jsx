@@ -34,7 +34,10 @@ function ConnectRow({ c, toast }) {
             <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
-            {c.company} · <span className="mono">{c.source}</span> · email {c.emailState}
+            {c.company} · <span className="mono">{c.source}</span> ·{' '}
+            {c.hasEmail
+              ? <span title="An address is on file but is not verified deliverable. Verify it to move this contact to the email motion.">email {c.emailState}</span>
+              : <span title="No email address on file. Find one (Hunter/MillionVerifier) to move this contact to the email motion.">no email on file</span>}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>

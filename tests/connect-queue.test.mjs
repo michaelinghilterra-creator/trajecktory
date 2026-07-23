@@ -64,6 +64,10 @@ const taRows = [
   ta({ id: 7, first: 'Morgan', last: 'Yee', title: 'VP People', company: 'Aster Grid',
        email: 'morgan.yee@aster.example', state: 'blocked',
        linkedin: 'linkedin.com/in/morgan-yee-ex', status: 'Blocked' }),
+  // NO email on file at all, only a LinkedIn handle → IN the queue, and the "find
+  // an address" case that must read differently from "address present, unverified"
+  ta({ id: 8, first: 'Tay', last: 'Okonkwo', title: 'Head of People', company: 'Meridian AI',
+       linkedin: 'linkedin.com/in/tay-okonkwo-ex', status: 'Not Contacted' }),
 ];
 
 const recruiterRows = [
@@ -81,10 +85,11 @@ const recruiterRows = [
 const q = computeConnectQueue({ taRows, recruiterRows });
 const ids = q.map(r => `${r.source}:${r.id}`);
 
-check(q.length === 4, `queue holds exactly the 4 reachable-only contacts (got ${q.length})`);
+check(q.length === 5, `queue holds exactly the 5 reachable-only contacts (got ${q.length})`);
 check(ids.includes('ta:2'), 'bounced-email TA contact with LinkedIn is queued');
 check(ids.includes('ta:3'), 'unverified-email TA contact with LinkedIn is queued');
 check(ids.includes('ta:7'), 'org-blocked TA contact with LinkedIn is queued');
+check(ids.includes('ta:8'), 'no-email TA contact with only a LinkedIn handle is queued');
 check(ids.includes('recruiter:102'), 'invalid-email recruiter with LinkedIn is queued');
 check(!ids.includes('ta:1'), 'contact with a verified email is NOT queued (email motion)');
 check(!ids.includes('recruiter:101'), 'recruiter with a risky-but-sendable email is NOT queued');
@@ -98,6 +103,17 @@ check(robin && robin.source === 'recruiter', 'recruiter source tagged');
 check(robin && robin.emailState === 'invalid', 'emailState carries why they landed here');
 const reese = q.find(r => r.id === 2);
 check(reese && reese.name === 'Reese Calder', 'name assembled from first + last');
+
+// hasEmail: the no-email-vs-unverified distinction (#12). An address on file
+// (even a dead one) is hasEmail=true; a contact with only a LinkedIn handle is
+// hasEmail=false, so the UI can say "no email on file" vs "email unverified".
+const tay = q.find(r => r.id === 8);
+check(tay && tay.hasEmail === false, 'no-email contact has hasEmail=false');
+const alex = q.find(r => r.id === 3);
+check(alex && alex.hasEmail === true && alex.emailState === 'unverified',
+  'unverified-email contact has hasEmail=true with emailState "unverified"');
+check(reese && reese.hasEmail === true, 'bounced-email contact still has an address on file (hasEmail=true)');
+check(robin && robin.hasEmail === true, 'invalid-email recruiter still has an address on file (hasEmail=true)');
 
 // sorted by company, then name
 check(q[0].company === 'Aster Grid', `sorted by company first (got "${q[0].company}")`);

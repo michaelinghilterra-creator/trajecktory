@@ -402,6 +402,13 @@ function computeConnectQueue({ taRows, recruiterRows } = {}) {
       company: company || '',
       linkedin: (row.linkedin || '').trim(),
       status: row.status || '',
+      // Two distinct reasons a contact is unsendable, kept apart on purpose:
+      // hasEmail=false means NO address is on file at all; hasEmail=true with a
+      // non-sendable emailState means there IS an address, it just is not verified
+      // deliverable (unverified / bounced / invalid / blocked). The UI labels them
+      // differently so "find an address" and "verify the address" read as the
+      // different next actions they are. `email` mirrors verified.address.
+      hasEmail: !!(row.email || '').trim(),
       emailState: row.verified?.state || 'unverified', // why they landed here
       reason: (row.notes || '').replace(/\s+/g, ' ').trim().slice(0, 160),
     });
