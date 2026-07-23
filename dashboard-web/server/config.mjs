@@ -46,6 +46,12 @@ export const STATUS_EVENTS_PATH = path.join(DATA_DIR, 'status-events.tsv');
 // re-scan is idempotent). Both are gitignored personal data under DATA_DIR.
 export const GOOGLE_TOKENS_PATH = path.join(DATA_DIR, 'google-tokens.json');
 export const GOOGLE_SYNC_PATH = path.join(DATA_DIR, 'google-sync.json');
+// Weekly review with teeth: the append-only review log, the build-lock state it
+// can engage, and a manual LinkedIn-connects tally (connections are sent by hand,
+// so the count is logged here). All gitignored personal data under DATA_DIR.
+export const REVIEW_LOG_PATH = path.join(DATA_DIR, 'review-log.json');
+export const BUILD_LOCK_PATH = path.join(DATA_DIR, 'build-lock.json');
+export const CONNECTS_PATH = path.join(DATA_DIR, 'linkedin-connects.json');
 // Activation log: how long setup took and whether the first scan and first apply
 // actually produced anything. Opt-in, local, and shape-only (see lib/activation.mjs).
 export const ACTIVATION_PATH = path.join(DATA_DIR, 'activation-log.tsv');

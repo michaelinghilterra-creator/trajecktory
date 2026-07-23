@@ -27,6 +27,7 @@ import { router as cadenceRoutes } from './routes/cadence.mjs';
 import { router as todosRoutes } from './routes/todos.mjs';
 import { router as interviewRoutes } from './routes/interview.mjs';
 import { router as googleRoutes } from './routes/google.mjs';
+import { router as reviewRoutes } from './routes/review.mjs';
 import { router as systemRoutes, updateJobs } from './routes/system.mjs';
 import { getIdentity } from './lib/profile.mjs';
 
@@ -158,6 +159,7 @@ app.use(cadenceRoutes);
 app.use(todosRoutes);
 app.use(interviewRoutes);
 app.use(googleRoutes);
+app.use(reviewRoutes);
 app.use(systemRoutes);
 
 // Public identity for the frontend's signature blocks, so no name/email/phone
