@@ -260,6 +260,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
     { key: "followups",     label: "Follow-Ups",         icon: "↻", badge: stats.followups || null },
     { key: "target-talent", label: "TA Outreach",        icon: "◎" },
     { key: "linkedin-ssi",  label: "LinkedIn SSI",       icon: "🔗" },
+    { key: "connect",       label: "Connect",            icon: "🤝" },
     { key: "recruiters",    label: "Recruiters",         icon: "☎" },
     { key: "interview",     label: "Interview",          icon: "◈" },
     { key: "review",        label: "Review",             icon: "⚖" },
