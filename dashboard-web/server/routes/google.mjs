@@ -25,9 +25,13 @@ const gmailDate = (iso) => String(iso || '2026-06-01').replace(/-/g, '/');
 // subject carries one of these. The matcher then filters to known companies. Tune
 // REPLY_SUBJECT_SIGNALS if updates slip through.
 const REPLY_SUBJECT_SIGNALS = ['application', 'interview', 'offer', 'candidacy', 'recruiter', '"next steps"', 'screening', 'hiring', 'assessment', 'position'];
-function replySearchQuery(since) {
+function replySearchQuery(since, selfEmail) {
   const clause = ['in:inbox', ...REPLY_SUBJECT_SIGNALS.map(s => `subject:${s}`)].join(' OR ');
-  return `(${clause}) after:${since} -from:mailer-daemon -from:postmaster`;
+  // Exclude the connected account's own address: those are the user's OUTBOUND mail
+  // (follow-ups, self-test sends), not replies TO them. Left in, they flood the list
+  // and, matched to a self-test contact, carry no application, so they never clear.
+  const excludeSelf = selfEmail ? ` -from:${selfEmail}` : '';
+  return `(${clause}) after:${since} -from:mailer-daemon -from:postmaster${excludeSelf}`;
 }
 
 // GET /api/google/status — non-secret connection facts for the UI.
@@ -182,7 +186,7 @@ router.get('/api/google/replies', async (req, res) => {
     if (!tokens?.refresh_token) return res.status(400).json({ error: 'Google is not connected.' });
     const accessToken = await getAccessToken({ tokens });
     const since = gmailDate(req.query?.since);
-    const q = replySearchQuery(since);
+    const q = replySearchQuery(since, tokens?.connectedEmail);
 
     const ids = await listMessages({ q, accessToken, max: 250 });
     const raws = await fetchMessagesConcurrent(ids, { accessToken });
@@ -222,10 +226,24 @@ router.post('/api/google/replies/:msgId/:action', (req, res) => {
   try {
     const { msgId, action } = req.params;
     const { appId, note, company } = req.body || {};
+    const today = new Date().toISOString().slice(0, 10);
+    // Best-effort: the log/status may already be written, so a sync failure must not 500.
+    const markHandled = (rec) => {
+      try { const s = readSync(); s.handledReplies = s.handledReplies || {}; s.handledReplies[msgId] = rec; writeSync(s); }
+      catch { /* hiding is best-effort */ }
+    };
+
+    // Dismiss: mark handled with no application. For a reply that cannot or need not
+    // be logged (no matching application, or simply not relevant) so it stops
+    // resurfacing on every full-rescan sweep. No note, no status change.
+    if (action === 'dismiss') {
+      markHandled({ action: 'dismiss', appId: null, date: today });
+      return res.json({ ok: true, dismissed: true });
+    }
+
     const id = parseInt(appId, 10);
     if (Number.isNaN(id)) return res.status(400).json({ error: 'appId is required (which application this reply belongs to).' });
 
-    const today = new Date().toISOString().slice(0, 10);
     const text = String(note || '').trim();
     if (text) addNote(id, `### Reply logged (${today})\n${text}`);
 
@@ -237,15 +255,7 @@ router.post('/api/google/replies/:msgId/:action', (req, res) => {
 
     if (statusFlip) patchRowInMd(id, { status: statusFlip }, { company });
 
-    // Remember this message was handled, so the next full-rescan sweep hides it.
-    // Non-fatal: the note/status are already written, so a sync failure must not 500.
-    try {
-      const sync = readSync();
-      sync.handledReplies = sync.handledReplies || {};
-      sync.handledReplies[msgId] = { action, appId: id, date: today };
-      writeSync(sync);
-    } catch { /* the log already landed; hiding is best-effort */ }
-
+    markHandled({ action, appId: id, date: today });
     res.json({ ok: true, appId: id, statusFlip });
   } catch (err) {
     res.status(500).json({ error: err.message });

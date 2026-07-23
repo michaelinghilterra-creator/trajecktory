@@ -132,17 +132,18 @@ function ReplyRow({ reply, toast }) {
   const tag = reply.companyGuess ? `≈ ${reply.companyGuess.company}` : (reply.contact ? reply.contact.company : '');
 
   const act = (action) => {
-    if (!appId) { toast && toast('Pick which application this reply belongs to.', 'error'); return; }
+    if (action !== 'dismiss' && !appId) { toast && toast('Pick which application this reply belongs to.', 'error'); return; }
     setBusy(true);
     const note = `${reply.from} — ${reply.subject || '(no subject)'} [${sentiment}]`;
+    const body = action === 'dismiss' ? {} : { appId, note, company };
     fetch(`/api/google/replies/${encodeURIComponent(reply.msgId)}/${action}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ appId, note, company }),
+      body: JSON.stringify(body),
     }).then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); return; }
-        setDone(res.statusFlip || 'logged');
-        toast && toast(res.statusFlip ? `Marked ${res.statusFlip}` : 'Reply logged', 'success');
+        setDone(action === 'dismiss' ? 'dismissed' : (res.statusFlip || 'logged'));
+        toast && toast(action === 'dismiss' ? 'Dismissed' : (res.statusFlip ? `Marked ${res.statusFlip}` : 'Reply logged'), 'success');
       })
       .catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(false));
   };
@@ -165,9 +166,12 @@ function ReplyRow({ reply, toast }) {
         </div>
       </div>
       {done ? (
-        <div style={{ marginTop: 4, color: 'var(--green)' }}>✓ {done === 'logged' ? 'Logged' : `Marked ${done}`}{picked ? ` · ${picked.role}` : ''}</div>
+        <div style={{ marginTop: 4, color: 'var(--green)' }}>✓ {done === 'logged' ? 'Logged' : done === 'dismissed' ? 'Dismissed' : `Marked ${done}`}{picked ? ` · ${picked.role}` : ''}</div>
       ) : cands.length === 0 ? (
-        <div className="dim" style={{ marginTop: 4 }}>No matching application on file{company ? ` for ${company}` : ''}.</div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="dim">No matching application on file{company ? ` for ${company}` : ''}.</span>
+          <button className="btn ghost sm" onClick={() => act('dismiss')} disabled={busy}>Dismiss</button>
+        </div>
       ) : (
         <div style={{ display: 'flex', gap: 6, marginTop: 5, alignItems: 'center', flexWrap: 'wrap' }}>
           {cands.length > 1 ? (
