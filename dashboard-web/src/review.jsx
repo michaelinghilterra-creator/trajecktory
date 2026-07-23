@@ -178,9 +178,13 @@ const SWEEP_ROW_LIMIT = 100;
 function GmailSweep({ sweep, onApplyBounces, busy, toast }) {
   const b = sweep.bounces || {}, r = sweep.replies || {};
   const replies = r.replies || [], byCompany = r.byCompany || [], unknown = r.unknown || [];
-  // Sentiment-first so rejections to mark and advances to log sit at the top, not
-  // buried under neutral auto-mail. Capped so a large backlog stays responsive.
-  const all = [...replies, ...byCompany].sort((x, y) => (SWEEP_SENTIMENT_ORDER[x.sentiment] ?? 3) - (SWEEP_SENTIMENT_ORDER[y.sentiment] ?? 3));
+  // Hide replies already logged in a prior sweep (server marks them handled by
+  // message id), so the list shrinks as you work the backlog instead of resurfacing
+  // done ones. Then sentiment-first (rejections and advances above neutral auto-mail),
+  // capped so a large backlog stays responsive.
+  const matched = [...replies, ...byCompany];
+  const handledCount = matched.filter(x => x.handled).length;
+  const all = matched.filter(x => !x.handled).sort((x, y) => (SWEEP_SENTIMENT_ORDER[x.sentiment] ?? 3) - (SWEEP_SENTIMENT_ORDER[y.sentiment] ?? 3));
   const rows = all.slice(0, SWEEP_ROW_LIMIT);
   return (
     <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
@@ -191,11 +195,11 @@ function GmailSweep({ sweep, onApplyBounces, busy, toast }) {
         {b.wouldFlip ? <button className="btn sm" onClick={onApplyBounces} disabled={busy}>Apply {b.wouldFlip} bounce flip{b.wouldFlip === 1 ? '' : 's'}</button> : null}
       </div>
       <div className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 4 }}>
-        Replies since June: {replies.length} from known contacts, {byCompany.length} matched to an application, {unknown.length} unknown. Log one to record it on the application, and Responded/Rejected also set its status.
+        Replies since June: {all.length} to handle{handledCount ? `, ${handledCount} already handled` : ''} · {unknown.length} unknown. Log records it on the application; Responded/Rejected also set status.
         {all.length > SWEEP_ROW_LIMIT ? ` Showing the first ${SWEEP_ROW_LIMIT} (rejections first).` : ''}
       </div>
       {rows.length === 0
-        ? <div className="dim" style={{ fontSize: 12 }}>No contact- or company-matched replies in range.</div>
+        ? <div className="dim" style={{ fontSize: 12 }}>{handledCount ? 'All matched replies handled. Nothing left in range.' : 'No contact- or company-matched replies in range.'}</div>
         : rows.map((x, i) => <ReplyRow key={x.msgId || i} reply={x} toast={toast} />)}
       <p className="dim" style={{ fontSize: 11, marginTop: 8, marginBottom: 0 }}>
         Nothing is sent. Bounce flips write the contact's verify tag and status; logging a reply writes a note on the chosen application.

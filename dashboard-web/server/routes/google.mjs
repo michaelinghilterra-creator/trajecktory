@@ -196,12 +196,14 @@ router.get('/api/google/replies', async (req, res) => {
     const byCompany = other.filter(o => o.companyGuess);
     const unknown = other.filter(o => !o.companyGuess);
     // Attach the candidate applications so the UI can log a reply against a specific
-    // one. A known-contact reply matches on the contact's company; a company-guessed
-    // reply on the guessed company. The user picks when there is more than one.
-    const withCandidates = (rows, companyOf) => rows.map(r => ({ ...r, candidateApps: candidateAppsFor(companyOf(r), apps) }));
+    // one (a known-contact reply matches on the contact's company, a company-guessed
+    // reply on the guessed company; the user picks when there is more than one), plus
+    // the handled record so an already-logged reply is hidden on the next sweep.
+    const handled = readSync().handledReplies || {};
+    const withMeta = (rows, companyOf) => rows.map(r => ({ ...r, candidateApps: candidateAppsFor(companyOf(r), apps), handled: handled[r.msgId] || null }));
     res.json({
-      replies: withCandidates(replies, r => r.contact?.company),
-      byCompany: withCandidates(byCompany, r => r.companyGuess?.company),
+      replies: withMeta(replies, r => r.contact?.company),
+      byCompany: withMeta(byCompany, r => r.companyGuess?.company),
       unknown,
       unmatched: other.length,
     });
@@ -218,13 +220,14 @@ router.get('/api/google/replies', async (req, res) => {
 // the wrong application when a company has several.
 router.post('/api/google/replies/:msgId/:action', (req, res) => {
   try {
-    const { action } = req.params;
+    const { msgId, action } = req.params;
     const { appId, note, company } = req.body || {};
     const id = parseInt(appId, 10);
     if (Number.isNaN(id)) return res.status(400).json({ error: 'appId is required (which application this reply belongs to).' });
 
+    const today = new Date().toISOString().slice(0, 10);
     const text = String(note || '').trim();
-    if (text) addNote(id, `### Reply logged (${new Date().toISOString().slice(0, 10)})\n${text}`);
+    if (text) addNote(id, `### Reply logged (${today})\n${text}`);
 
     let statusFlip = null;
     if (action === 'responded') statusFlip = 'Responded';
@@ -233,6 +236,15 @@ router.post('/api/google/replies/:msgId/:action', (req, res) => {
     else if (action !== 'log') return res.status(400).json({ error: `Unknown action: ${action}` });
 
     if (statusFlip) patchRowInMd(id, { status: statusFlip }, { company });
+
+    // Remember this message was handled, so the next full-rescan sweep hides it.
+    // Non-fatal: the note/status are already written, so a sync failure must not 500.
+    try {
+      const sync = readSync();
+      sync.handledReplies = sync.handledReplies || {};
+      sync.handledReplies[msgId] = { action, appId: id, date: today };
+      writeSync(sync);
+    } catch { /* the log already landed; hiding is best-effort */ }
 
     res.json({ ok: true, appId: id, statusFlip });
   } catch (err) {

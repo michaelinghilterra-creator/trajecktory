@@ -50,8 +50,11 @@ function writeTokens(t) {
 function readSync() {
   try {
     const s = JSON.parse(fs.readFileSync(GOOGLE_SYNC_PATH, 'utf8')) || {};
-    return { seenMessageIds: s.seenMessageIds || [], lastCheckedAt: s.lastCheckedAt || null };
-  } catch { return { seenMessageIds: [], lastCheckedAt: null }; }
+    // handledReplies: msgId → { action, appId, date }, so a reply already logged to
+    // an application is hidden on the next (full-rescan) sweep instead of showing up
+    // again as un-actioned. Keyed by Gmail message id, which is stable across sweeps.
+    return { seenMessageIds: s.seenMessageIds || [], lastCheckedAt: s.lastCheckedAt || null, handledReplies: s.handledReplies || {} };
+  } catch { return { seenMessageIds: [], lastCheckedAt: null, handledReplies: {} }; }
 }
 function writeSync(s) {
   fs.writeFileSync(GOOGLE_SYNC_PATH, JSON.stringify(s, null, 2) + '\n');
