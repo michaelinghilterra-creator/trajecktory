@@ -123,6 +123,10 @@ function ReplyRow({ reply, toast }) {
   const [appId, setAppId] = useStateRv(initial);
   const [done, setDone] = useStateRv(null);
   const [busy, setBusy] = useStateRv(false);
+  // The auto-detected sentiment is a coarse keyword guess ("next steps" reads
+  // positive even on a bland info email), so it is an editable override, not a
+  // verdict. Whatever it is set to is what gets written into the logged note.
+  const [sentiment, setSentiment] = useStateRv(reply.sentiment || 'neutral');
   const company = replyCompany(reply);
   const picked = cands.find(a => a.id === appId);
   const tag = reply.companyGuess ? `≈ ${reply.companyGuess.company}` : (reply.contact ? reply.contact.company : '');
@@ -130,7 +134,7 @@ function ReplyRow({ reply, toast }) {
   const act = (action) => {
     if (!appId) { toast && toast('Pick which application this reply belongs to.', 'error'); return; }
     setBusy(true);
-    const note = `${reply.from} — ${reply.subject || '(no subject)'}${reply.sentiment ? ` [${reply.sentiment}]` : ''}`;
+    const note = `${reply.from} — ${reply.subject || '(no subject)'} [${sentiment}]`;
     fetch(`/api/google/replies/${encodeURIComponent(reply.msgId)}/${action}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ appId, note, company }),
@@ -147,7 +151,18 @@ function ReplyRow({ reply, toast }) {
     <div style={{ padding: '7px 2px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{reply.from} · {reply.subject || '(no subject)'}</span>
-        <span className="dim mono" style={{ flexShrink: 0 }}>{reply.sentiment}{tag ? ` · ${tag}` : ''}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <select value={sentiment} onChange={e => setSentiment(e.target.value)}
+            title="Auto-detected sentiment is a rough keyword guess. Override it if wrong; the value you set is recorded with the logged note."
+            className="mono"
+            style={{ fontSize: 12, padding: '1px 4px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
+              color: sentiment === 'negative' ? 'var(--red)' : sentiment === 'positive' ? 'var(--green)' : 'var(--text-mute)' }}>
+            <option value="negative">negative</option>
+            <option value="positive">positive</option>
+            <option value="neutral">neutral</option>
+          </select>
+          {tag ? <span className="dim mono">· {tag}</span> : null}
+        </div>
       </div>
       {done ? (
         <div style={{ marginTop: 4, color: 'var(--green)' }}>✓ {done === 'logged' ? 'Logged' : `Marked ${done}`}{picked ? ` · ${picked.role}` : ''}</div>
