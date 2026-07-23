@@ -17,6 +17,7 @@
 import {
   getAccessToken, googleStatus, parseGmailMessage, extractEmail,
   classifyReply, matchAddress, matchByCompanyDomain, scanDecisions, tokenScopes,
+  candidateAppsFor,
 } from '../dashboard-web/server/lib/google.mjs';
 
 let passed = 0, failed = 0;
@@ -184,6 +185,20 @@ const dec2 = scanDecisions({ messages: [firstContact], taRows, recruiterRows, ap
 const guessed = dec2.other.find(o => o.msgId === 'm-first');
 check(guessed && guessed.companyGuess?.appId === 501, 'unknown sender at a known company carries a companyGuess to the right app');
 check(guessed && guessed.sentiment === 'positive', 'the company-guessed first-contact email is still sentiment-classified');
+
+// ── candidateAppsFor: reply → which application(s) ───────────────────────────
+// Invented applications shaped like parseApplicationsMd output.
+const appRows = [
+  { id: 601, company: 'Northwind Robotics', role: 'RevOps Lead', status: 'Applied' },
+  { id: 602, company: 'Northwind Robotics', role: 'Sales Ops Manager', status: 'Applied' },
+  { id: 603, company: 'Cobalt Systems', role: 'Analytics Lead', status: 'Responded' },
+];
+const northwind = candidateAppsFor('Northwind Robotics', appRows);
+check(northwind.length === 2, 'both roles at the same company are candidates, so the user picks which');
+check(northwind.every(a => a.role && a.status), 'each candidate carries role + status for the picker');
+check(candidateAppsFor('cobalt systems', appRows).length === 1 && candidateAppsFor('cobalt systems', appRows)[0].id === 603, 'case- and punctuation-insensitive match finds the single Cobalt app');
+check(candidateAppsFor('Nonexistent Co', appRows).length === 0, 'a company with no application yields no candidates');
+check(candidateAppsFor('', appRows).length === 0 && candidateAppsFor(null, appRows).length === 0, 'empty/null company is safe');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

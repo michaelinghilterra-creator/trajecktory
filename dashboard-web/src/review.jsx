@@ -107,13 +107,75 @@ function DebriefsDue({ pending, onOpen }) {
 // Logging a reply against a specific application comes next (needs app selection).
 const GMAIL_SINCE = '2026-06-01';
 
-function GmailSweep({ sweep, onApplyBounces, busy }) {
+function replyCompany(reply) {
+  return reply.contact ? reply.contact.company : (reply.companyGuess ? reply.companyGuess.company : '');
+}
+
+// One reply row, made actionable. The reply resolves to one or more candidate
+// applications (server-attached by company); the user picks when there is more
+// than one, then Log (note only), Responded, or Rejected. Each POSTs to the
+// existing /replies/:msgId/:action, which logs a note and (for the status ones)
+// flips the application status. Once acted, the row shows a confirmation.
+function ReplyRow({ reply, toast }) {
+  const cands = reply.candidateApps || [];
+  const guessId = reply.companyGuess ? reply.companyGuess.appId : null;
+  const initial = (guessId && cands.some(a => a.id === guessId)) ? guessId : (cands[0] ? cands[0].id : null);
+  const [appId, setAppId] = useStateRv(initial);
+  const [done, setDone] = useStateRv(null);
+  const [busy, setBusy] = useStateRv(false);
+  const company = replyCompany(reply);
+  const picked = cands.find(a => a.id === appId);
+  const tag = reply.companyGuess ? `≈ ${reply.companyGuess.company}` : (reply.contact ? reply.contact.company : '');
+
+  const act = (action) => {
+    if (!appId) { toast && toast('Pick which application this reply belongs to.', 'error'); return; }
+    setBusy(true);
+    const note = `${reply.from} — ${reply.subject || '(no subject)'}${reply.sentiment ? ` [${reply.sentiment}]` : ''}`;
+    fetch(`/api/google/replies/${encodeURIComponent(reply.msgId)}/${action}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appId, note, company }),
+    }).then(r => r.json())
+      .then(res => {
+        if (res.error) { toast && toast(res.error, 'error'); return; }
+        setDone(res.statusFlip || 'logged');
+        toast && toast(res.statusFlip ? `Marked ${res.statusFlip}` : 'Reply logged', 'success');
+      })
+      .catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(false));
+  };
+
+  return (
+    <div style={{ padding: '7px 2px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{reply.from} · {reply.subject || '(no subject)'}</span>
+        <span className="dim mono" style={{ flexShrink: 0 }}>{reply.sentiment}{tag ? ` · ${tag}` : ''}</span>
+      </div>
+      {done ? (
+        <div style={{ marginTop: 4, color: 'var(--green)' }}>✓ {done === 'logged' ? 'Logged' : `Marked ${done}`}{picked ? ` · ${picked.role}` : ''}</div>
+      ) : cands.length === 0 ? (
+        <div className="dim" style={{ marginTop: 4 }}>No matching application on file{company ? ` for ${company}` : ''}.</div>
+      ) : (
+        <div style={{ display: 'flex', gap: 6, marginTop: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+          {cands.length > 1 ? (
+            <select value={appId || ''} onChange={e => setAppId(parseInt(e.target.value, 10))}
+              style={{ fontSize: 12, padding: '3px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
+              {cands.map(a => <option key={a.id} value={a.id}>{a.role} — {a.status}</option>)}
+            </select>
+          ) : (
+            <span className="dim">{cands[0].role} — {cands[0].status}</span>
+          )}
+          <button className="btn sm" onClick={() => act('log')} disabled={busy}>Log</button>
+          <button className="btn sm" onClick={() => act('responded')} disabled={busy}>Responded</button>
+          <button className="btn ghost sm" onClick={() => act('rejected')} disabled={busy}>Rejected</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GmailSweep({ sweep, onApplyBounces, busy, toast }) {
   const b = sweep.bounces || {}, r = sweep.replies || {};
   const replies = r.replies || [], byCompany = r.byCompany || [], unknown = r.unknown || [];
-  const rows = [
-    ...replies.map(x => ({ ...x, tag: x.contact ? x.contact.company : '' })),
-    ...byCompany.map(x => ({ ...x, tag: x.companyGuess ? `≈ ${x.companyGuess.company}` : '' })),
-  ].slice(0, 12);
+  const rows = [...replies, ...byCompany].slice(0, 20);
   return (
     <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -123,16 +185,13 @@ function GmailSweep({ sweep, onApplyBounces, busy }) {
         {b.wouldFlip ? <button className="btn sm" onClick={onApplyBounces} disabled={busy}>Apply {b.wouldFlip} bounce flip{b.wouldFlip === 1 ? '' : 's'}</button> : null}
       </div>
       <div className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 4 }}>
-        Replies since June: {replies.length} from known contacts, {byCompany.length} matched to a company by domain, {unknown.length} unknown.
+        Replies since June: {replies.length} from known contacts, {byCompany.length} matched to a company by domain, {unknown.length} unknown. Log one to record it on the application, and Responded/Rejected also set its status.
       </div>
-      {rows.map((x, i) => (
-        <div key={x.msgId || i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '5px 2px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{x.from} · {x.subject || '(no subject)'}</span>
-          <span className="dim mono" style={{ flexShrink: 0 }}>{x.sentiment}{x.tag ? ` · ${x.tag}` : ''}</span>
-        </div>
-      ))}
+      {rows.length === 0
+        ? <div className="dim" style={{ fontSize: 12 }}>No contact- or company-matched replies in range.</div>
+        : rows.map((x, i) => <ReplyRow key={x.msgId || i} reply={x} toast={toast} />)}
       <p className="dim" style={{ fontSize: 11, marginTop: 8, marginBottom: 0 }}>
-        Read-only preview. Bounce flips write only the contact's verify tag and status. Logging replies to applications comes next.
+        Nothing is sent. Bounce flips write the contact's verify tag and status; logging a reply writes a note on the chosen application.
       </p>
     </div>
   );
@@ -201,7 +260,7 @@ function GmailPanel({ toast }) {
           Read-only. Scans your inbox for bounces and replies since June, so missed communications are caught and the reply-rate math is honest. It never sends. Testing-mode tokens expire about weekly, so an occasional reconnect is normal.
         </p>
       ) : null}
-      {sweep ? <GmailSweep sweep={sweep} onApplyBounces={applyBounces} busy={busy} /> : null}
+      {sweep ? <GmailSweep sweep={sweep} onApplyBounces={applyBounces} busy={busy} toast={toast} /> : null}
     </div>
   );
 }

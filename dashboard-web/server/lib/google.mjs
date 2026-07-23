@@ -27,6 +27,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { GOOGLE_TOKENS_PATH, GOOGLE_SYNC_PATH } from '../config.mjs';
 import { classifyBounce } from '../../../lib/bounce-parse.mjs';
+import { normalizeCompany } from '../../../lib/identity.mjs';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -343,6 +344,23 @@ function matchByCompanyDomain(fromAddr, apps = []) {
   return best;
 }
 
+// Applications at the same company as a reply, returned as {id, role, status}.
+// The reply logger needs an EXPLICIT appId because one company can have several
+// open roles, so this surfaces the candidates for the user to choose rather than
+// auto-attaching a reply to a guessed one. Match is on the tracker's canonical
+// normalizeCompany (lib/identity.mjs): case- and punctuation-insensitive, so
+// "Cobalt Systems" and "cobalt systems" match. It does NOT strip legal suffixes,
+// so a contact company that differs only by ", Inc." will not collapse — a
+// deliberate miss, since under-matching just shows the reply for manual handling
+// while over-matching would attach it to the wrong company. Pure; unit-tested.
+function candidateAppsFor(company, apps = []) {
+  const token = normalizeCompany(company);
+  if (!token) return [];
+  return apps
+    .filter(a => normalizeCompany(a.company) === token)
+    .map(a => ({ id: a.id, role: a.role, status: a.status }));
+}
+
 // The heart: turn a batch of raw Gmail messages into decisions.
 //   bounces[] — DSNs. A HARD bounce for a known contact carries a `flip` to set
 //               that address to `bounced` (and status Bounced). Soft bounces are
@@ -385,5 +403,5 @@ export {
   readTokens, writeTokens, readSync, writeSync, tokenScopes,
   googleStatus, getAccessToken, listMessages, getMessage,
   parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, scanDecisions,
-  exchangeCode, fetchProfileEmail,
+  exchangeCode, fetchProfileEmail, candidateAppsFor,
 };

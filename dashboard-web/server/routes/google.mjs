@@ -2,7 +2,7 @@ import express from 'express';
 import {
   readTokens, writeTokens, readSync, writeSync, googleStatus,
   getAccessToken, listMessages, getMessage, scanDecisions,
-  buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState,
+  buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, candidateAppsFor,
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { parseRecruitersMd, updateRecruiterLine } from '../lib/recruiters.mjs';
@@ -178,18 +178,27 @@ router.get('/api/google/replies', async (req, res) => {
     // company (a likely first-contact email) vs. genuinely unknown. Both surfaced.
     const byCompany = other.filter(o => o.companyGuess);
     const unknown = other.filter(o => !o.companyGuess);
-    res.json({ replies, byCompany, unknown, unmatched: other.length });
+    // Attach the candidate applications so the UI can log a reply against a specific
+    // one. A known-contact reply matches on the contact's company; a company-guessed
+    // reply on the guessed company. The user picks when there is more than one.
+    const withCandidates = (rows, companyOf) => rows.map(r => ({ ...r, candidateApps: candidateAppsFor(companyOf(r), apps) }));
+    res.json({
+      replies: withCandidates(replies, r => r.contact?.company),
+      byCompany: withCandidates(byCompany, r => r.companyGuess?.company),
+      unknown,
+      unmatched: other.length,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // POST /api/google/replies/:msgId/:action — record a reply against a specific
-// application. `action` is one of: log (note only), responded, or an interview
-// stage label. Always logs the note to app-notes.json; responded/stage also flip
-// the application status (which logs a status event, so the debrief prompt picks
-// it up). The appId is explicit so a reply is never auto-attached to the wrong
-// application when a company has several.
+// application. `action` is one of: log (note only), responded, rejected, or an
+// interview stage label. Always logs the note to app-notes.json; the status ones
+// also flip the application status (which logs a status event, so the debrief
+// prompt picks it up). The appId is explicit so a reply is never auto-attached to
+// the wrong application when a company has several.
 router.post('/api/google/replies/:msgId/:action', (req, res) => {
   try {
     const { action } = req.params;
@@ -202,6 +211,7 @@ router.post('/api/google/replies/:msgId/:action', (req, res) => {
 
     let statusFlip = null;
     if (action === 'responded') statusFlip = 'Responded';
+    else if (action === 'rejected') statusFlip = 'Rejected';
     else if (INTERVIEW_STAGES.includes(action)) statusFlip = action;
     else if (action !== 'log') return res.status(400).json({ error: `Unknown action: ${action}` });
 
