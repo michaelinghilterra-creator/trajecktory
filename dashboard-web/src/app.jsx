@@ -424,6 +424,7 @@ function App() {
           {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} />}
           {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} />}
           {tab === "interview" && <window.InterviewTab apps={apps} toast={toast} />}
+          {tab === "review"    && <window.ReviewTab toast={toast} />}
           {tab === "recruiters"&& <window.RecruitersTab search={search} />}
           {tab === "target-talent" && <window.TargetTalentTab initialOpenId={pendingTaOpen} onInitialOpenConsumed={() => setPendingTaOpen(null)} search={search} />}
           {tab === "linkedin-ssi" && <window.LinkedInSSITab />}

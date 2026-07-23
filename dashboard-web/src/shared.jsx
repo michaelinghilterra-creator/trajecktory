@@ -262,6 +262,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
     { key: "linkedin-ssi",  label: "LinkedIn SSI",       icon: "🔗" },
     { key: "recruiters",    label: "Recruiters",         icon: "☎" },
     { key: "interview",     label: "Interview",          icon: "◈" },
+    { key: "review",        label: "Review",             icon: "⚖" },
     { key: "analytics",     label: "Insights",           icon: "✦" },
   ];
 
