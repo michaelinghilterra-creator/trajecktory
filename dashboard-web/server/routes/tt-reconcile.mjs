@@ -6,6 +6,9 @@ import { generateText, draftModel } from '../lib/anthropic.mjs';
 import { normCompany, reconcilePreview } from '../lib/tt-reconcile-core.mjs';
 import { TARGET_TALENT_MD } from '../config.mjs';
 import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
+import { loadEnvKey } from '../../../verify-contacts.mjs';
+import { findAndVerify } from '../../../find-contacts.mjs';
+import { setVerifyTag } from '../../../lib/email-verify.mjs';
 
 export const router = express.Router();
 
@@ -58,6 +61,45 @@ router.post('/api/tt-reconcile/archive', (req, res) => {
       if (ok) archived++;
     }
     res.json({ ok: true, archived });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/tt-reconcile/find-emails
+// body: { ids?: [taId] }  (default: every active, non-Archived TA contact that has
+// no address). Runs the find-then-verify pipeline — Hunter Email Finder into
+// MillionVerifier — and writes ONLY a verified address. This is the API-feed
+// replacement for the old first.last@company guess: it turns the PEOPLE that
+// discover found on the web into deliverable ADDRESSES. A found address that does
+// not verify is never written (the contact goes to the LinkedIn fallback instead).
+router.post('/api/tt-reconcile/find-emails', async (req, res) => {
+  try {
+    const hkey = loadEnvKey('HUNTER_API_KEY');
+    const mkey = loadEnvKey('MILLIONVERIFIER_API_KEY');
+    if (!hkey || !mkey) {
+      return res.status(400).json({ error: 'HUNTER_API_KEY and MILLIONVERIFIER_API_KEY must both be set in dashboard-web/.env to find + verify emails.' });
+    }
+    const { ids } = req.body || {};
+    const idSet = Array.isArray(ids) && ids.length ? new Set(ids.map(Number)) : null;
+    const rows = parseTargetTalentMd().filter(r =>
+      r.status !== 'Archived' && !(r.email || '').trim() && r.first && r.last && r.company &&
+      (!idSet || idSet.has(r.id)));
+    const results = [];
+    for (const r of rows) {
+      try {
+        const f = await findAndVerify(r.company, r.first, r.last, hkey, mkey);
+        if (f.found && f.verify) {
+          updateTTLine(r.id, { email: setVerifyTag(f.email, f.verify) });
+          results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), company: r.company, email: f.email, state: f.verify.state });
+        } else {
+          results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), company: r.company, email: null, state: f.found ? 'unverifiable' : 'not_found' });
+        }
+      } catch (e) {
+        results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), company: r.company, email: null, state: 'error', error: e.message });
+      }
+    }
+    res.json({ ok: true, checked: rows.length, written: results.filter(x => x.email).length, results });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -173,7 +215,7 @@ If the search returns no reliable matches, return an empty array []. Never fabri
 // POST /api/tt-reconcile/bulk-add
 // body: { contacts: [{ company, first, last, title, linkedin?, city?, state?, notes? }] }
 // Writes confirmed contacts to data/target-talent.md.
-router.post('/api/tt-reconcile/bulk-add', (req, res) => {
+router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
   try {
     const { contacts } = req.body || {};
     if (!Array.isArray(contacts) || contacts.length === 0) {
@@ -186,8 +228,26 @@ router.post('/api/tt-reconcile/bulk-add', (req, res) => {
       const k = `${normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`;
       return !existingKeys.has(k);
     });
-    const written = appendTTRows(toWrite);
-    res.json({ ok: true, requested: contacts.length, written: written.length, skipped: contacts.length - written.length });
+    const written = appendTTRows(toWrite);   // [{id}], in the same order as toWrite
+
+    // Find + verify an email for each newly-added contact via the API feeds
+    // (Hunter Email Finder into MillionVerifier), and write ONLY a verified
+    // address. This replaces the old first.last@company guess: a reconcile add now
+    // yields a deliverable address or none (the contact goes to LinkedIn instead).
+    let emailsFound = 0;
+    const hkey = loadEnvKey('HUNTER_API_KEY');
+    const mkey = loadEnvKey('MILLIONVERIFIER_API_KEY');
+    if (hkey && mkey) {
+      for (let i = 0; i < written.length; i++) {
+        const c = toWrite[i];
+        if ((c.email || '').trim() || !c.first || !c.last || !c.company) continue;
+        try {
+          const f = await findAndVerify(c.company, c.first, c.last, hkey, mkey);
+          if (f.found && f.verify) { updateTTLine(written[i].id, { email: setVerifyTag(f.email, f.verify) }); emailsFound++; }
+        } catch { /* leave without an address; the LinkedIn fallback covers it */ }
+      }
+    }
+    res.json({ ok: true, requested: contacts.length, written: written.length, skipped: contacts.length - written.length, emailsFound, verifierKeys: !!(hkey && mkey) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

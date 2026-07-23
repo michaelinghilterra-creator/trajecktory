@@ -45,6 +45,24 @@ async function hunterFind(company, first, last, key) {
   return mapHunterFind(j);
 }
 
+// The find-then-verify pipeline for ONE contact, shared by the CLI loop below and
+// the dashboard reconcile endpoint. Returns:
+//   { found:false }                                 — Hunter had nothing
+//   { found:true, email, score, verify:null, bad }  — found, but did not verify (do NOT write)
+//   { found:true, email, score, verify:{...} }      — found AND verified (write this)
+export async function findAndVerify(company, first, last, hkey, mkey) {
+  const cand = await hunterFind(company, first, last, hkey);
+  if (!cand) return { found: false };
+  const verdict = await mvVerify(cand.email, mkey);
+  if (!verdict || verdict.state === 'invalid') {
+    return { found: true, email: cand.email, score: cand.score, verify: null, bad: verdict?.state || 'error' };
+  }
+  return {
+    found: true, email: cand.email, score: cand.score,
+    verify: { state: verdict.state, source: 'mv', date: new Date().toISOString().slice(0, 10), score: verdict.score },
+  };
+}
+
 const FILES = {
   tt: { path: join(ROOT, 'data/target-talent.md'), emailIdx: 11, statusIdx: 13, orgIdx: 2, lastIdx: 3, firstIdx: 4 },
   rec: { path: join(ROOT, 'data/recruiters.md'), emailIdx: 11, statusIdx: 12, orgIdx: 2, lastIdx: 3, firstIdx: 4 },
@@ -142,16 +160,13 @@ async function main() {
   const log = [];
   for (const c of capped) {
     try {
-      const cand = await hunterFind(c.company, c.first, c.last, hkey);
-      if (!cand) { tally.not_found++; log.push(`   ✗ #${c.id} ${c.first} ${c.last} @ ${c.company}: no address found`); await sleep(250); continue; }
-      const verdict = await mvVerify(cand.email, mkey);
-      if (!verdict || verdict.state === 'invalid') {
-        tally.found_invalid++;
-        log.push(`   ⚠ #${c.id} ${c.first} ${c.last}: found ${cand.email} but it failed verification — not written`);
-      } else {
-        editsByFile[c.fk].set(c.id, { email: cand.email, verify: { state: verdict.state, source: 'mv', date: new Date().toISOString().slice(0, 10), score: verdict.score } });
-        tally[verdict.state === 'ok' ? 'found_ok' : 'found_risky']++;
-        log.push(`   ✓ #${c.id} ${c.first} ${c.last} @ ${c.company}: ${cand.email} (${verdict.state}, Hunter score ${cand.score ?? '?'})`);
+      const r = await findAndVerify(c.company, c.first, c.last, hkey, mkey);
+      if (!r.found) { tally.not_found++; log.push(`   ✗ #${c.id} ${c.first} ${c.last} @ ${c.company}: no address found`); }
+      else if (!r.verify) { tally.found_invalid++; log.push(`   ⚠ #${c.id} ${c.first} ${c.last}: found ${r.email} but it failed verification — not written`); }
+      else {
+        editsByFile[c.fk].set(c.id, { email: r.email, verify: r.verify });
+        tally[r.verify.state === 'ok' ? 'found_ok' : 'found_risky']++;
+        log.push(`   ✓ #${c.id} ${c.first} ${c.last} @ ${c.company}: ${r.email} (${r.verify.state}, Hunter score ${r.score ?? '?'})`);
       }
     } catch (e) { tally.error++; log.push(`   ! #${c.id} ${c.first} ${c.last}: ${e.message}`); if (/rate limit/i.test(e.message)) break; }
     await sleep(250);

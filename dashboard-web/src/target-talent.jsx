@@ -966,7 +966,7 @@ function ReconcileModal({ onClose, onApplied }) {
   const apply = async () => {
     setStep(2); setLoading(true);
     try {
-      let archived = 0, added = 0;
+      let archived = 0, added = 0, emailsFound = 0, verifierKeys = true;
       if (archSel.size > 0) {
         const r = await window.tjkMutate("/api/tt-reconcile/archive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(archSel) }) });
         const d = await r.json();
@@ -984,8 +984,10 @@ function ReconcileModal({ onClose, onApplied }) {
         const r = await window.tjkMutate("/api/tt-reconcile/bulk-add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: toAdd }) });
         const d = await r.json();
         added = d.written || 0;
+        emailsFound = d.emailsFound || 0;
+        verifierKeys = d.verifierKeys !== false;
       }
-      setOutcome({ archived, added });
+      setOutcome({ archived, added, emailsFound, verifierKeys });
       setLoading(false);
       onApplied?.();
     } catch (e) { setError(e.message); setLoading(false); }
@@ -1071,24 +1073,31 @@ function ReconcileModal({ onClose, onApplied }) {
           )}
           {step === 2 && (
             <div className="fade-up" style={{ textAlign: "center", padding: "12px 0" }}>
-              {loading ? <div className="ai-loading" style={{ justifyContent: "center" }}><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> Applying changes…</div> : <>
+              {loading ? <div className="ai-loading" style={{ justifyContent: "center" }}><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> Applying changes and verifying emails…</div> : <>
                 <div className="apply-done-icon"><TIcon d={TI.check} size={26} stroke={3} /></div>
                 <h2 style={{ fontSize: 17, margin: "0 0 6px" }}>Reconcile complete</h2>
                 <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginBottom: 18 }}>
                   Your TA list is now in sync with the application pipeline.
                 </div>
                 {outcome && (
-                  <div className="apply-grid" style={{ maxWidth: 420, margin: "0 auto" }}>
+                  <div className="apply-grid" style={{ maxWidth: 480, margin: "0 auto" }}>
                     <div className="apply-tile"><div className="at-v" style={{ color: "var(--orange)" }}>{outcome.archived}</div><div className="at-k">Archived</div></div>
                     <div className="apply-tile"><div className="at-v" style={{ color: "var(--green)" }}>{outcome.added}</div><div className="at-k">Contacts added</div></div>
+                    <div className="apply-tile"><div className="at-v" style={{ color: "var(--accent)" }}>{outcome.emailsFound || 0}</div><div className="at-k">Emails verified</div></div>
+                  </div>
+                )}
+                {outcome && outcome.verifierKeys === false && outcome.added > 0 && (
+                  <div style={{ fontSize: 11.5, color: "var(--orange)", maxWidth: 440, margin: "12px auto 0", lineHeight: 1.6 }}>
+                    Email finding was skipped. Set <b>HUNTER_API_KEY</b> and <b>MILLIONVERIFIER_API_KEY</b> in
+                    dashboard-web/.env to auto-find and verify addresses for new contacts.
                   </div>
                 )}
                 {outcome && (outcome.archived > 0 || outcome.added > 0) && (
-                  <div style={{ fontSize: 11.5, color: "var(--text-mute)", maxWidth: 430, margin: "16px auto 0", lineHeight: 1.65 }}>
-                    These changes are already saved, so there is nothing further to confirm. Archived
-                    contacts are not deleted: they stay in your list behind <b>Show archived</b>, and
-                    anything added is live now. To change either one, open the contact and set its
-                    stage.
+                  <div style={{ fontSize: 11.5, color: "var(--text-mute)", maxWidth: 440, margin: "16px auto 0", lineHeight: 1.65 }}>
+                    These changes are saved. New contacts got a <b>verified</b> email wherever one could be
+                    found and confirmed deliverable (Hunter into MillionVerifier); anyone without one goes
+                    to the LinkedIn fallback. Archived contacts are not deleted: they stay behind <b>Show
+                    archived</b>. To change either, open the contact and set its stage.
                   </div>
                 )}
               </>}

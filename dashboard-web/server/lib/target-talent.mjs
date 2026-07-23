@@ -97,6 +97,9 @@ function updateTTLine(id, updates) {
     if (updates.lastTouch  !== undefined) parts[14] = ` ${updates.lastTouch} `;
     if (updates.notes      !== undefined) parts[15] = cell(updates.notes);
     if (updates.phone      !== undefined) parts[10] = cell(updates.phone);
+    // Email cell may carry an inline [v:...] verification tag; cell() keeps it intact
+    // (no pipe/newline in a tag). Used by the reconcile find-emails endpoint.
+    if (updates.email      !== undefined) parts[11] = cell(updates.email);
     if (updates.website    !== undefined) {
       // Older rows have no Website cell; insert one before the trailing '' so the
       // row stays well-formed. Newer rows (length >= 18) just overwrite parts[16].

@@ -115,6 +115,12 @@ const SYSTEM_PATHS = [
   // (Avoid apostrophes in this block: test-all.mjs parses these entries by pairing
   // quote characters, so a stray one in a comment shifts the parse.)
   'verify-no-pii.mjs',
+  // Imported at module scope by dashboard-web/server/routes/tt-reconcile.mjs (the
+  // reconcile find-emails path). find-contacts.mjs imports verify-contacts.mjs in
+  // turn, so BOTH must ship or the dashboard dies at module-resolution time. Same
+  // hazard as render-runsheet.mjs above. Guarded by test-all.mjs section 7b.
+  'verify-contacts.mjs',
+  'find-contacts.mjs',
   'lib/',
   'dashboard-web/',
   'batch/batch-prompt.md',
