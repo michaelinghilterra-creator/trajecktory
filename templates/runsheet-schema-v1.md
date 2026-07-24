@@ -328,9 +328,20 @@ cannot hold them. Use `seconds` to express that intent.
 
 Boards are **stage-tuned**: sections are data, not hardcode. Sizes are measured off
 shipped boards, counted as **chronology cues** (everything except the panic net, which is
-a fixed ~4 and is mandatory everywhere):
+a fixed ~4 and is mandatory everywhere).
 
-| Template | Chronology cues | Hero | Shape |
+> **These per-template sizes are ADVISORY, and deliberately so.** Only the global caps
+> above (48 cues, 8 sections) are enforced; `verify-runsheets.mjs` does not check a board
+> against the range for its own `template`, so a `screen` board carrying 45 cues passes.
+> That is a decision, not an oversight (2026-07-24). Each range was measured off exactly
+> ONE shipped board of that shape, and promoting a sample of one into a blocking check
+> would fail boards for departing from a number that was never load-bearing — the same
+> over-fitting the `spoken` cap already got wrong once. The global caps defend the real
+> constraint, which is that the grid must not scroll. These ranges tell you what a
+> well-shaped board has looked like. If a mis-shaped board ever actually causes a problem,
+> tighten it then, with that board as the evidence.
+
+| Template | Chronology cues (advisory) | Hero | Shape |
 |---|---|---|---|
 | `screen` | ~12-17 (+4 net = ~16-21 total) | **none** — the hero belongs to a later round | comp, location, timing, soft spots, your questions |
 | `hm-round` | ~40-45 (+4 net = ~44-49 total) | exactly one | the behavioral bank, tradeoff probes, the hero |
@@ -356,9 +367,9 @@ no §-sections, and its `inferStage()` would file every one as a legacy warning.
 
 ## Open before this schema can be called frozen
 
-Two gaps remain, both needing a decision rather than a fix. They are written down
-here because an unrecorded blocker is indistinguishable from a resolved one: the
-count of what was outstanding had already been lost once.
+One gap remains. It is written down here because an unrecorded blocker is
+indistinguishable from a resolved one: the count of what was outstanding had
+already been lost once.
 
 1. **`final-loop` is a legal `template` value with no defined shape.** The validator
    accepts it, the shape table says "not yet shipped / TBD", and there is no worked
@@ -367,19 +378,18 @@ count of what was outstanding had already been lost once.
    A shape with no shipped example is a shape whose spec is unverifiable, which is the
    same reasoning that put both current examples in `verify-runsheets.mjs`. Either
    build one and measure it, or drop `final-loop` from the enum until a panel round
-   actually happens.
-2. **The per-template cue budgets are documentation, not validation.** The shape table
-   gives `screen` ~16-21 and `hm-round` ~44-49, but only the global caps (48 cues, 8
-   sections) are enforced. A `screen` board with 45 cues passes while being nothing
-   like the shape it claims. That is defensible as deliberate slack, since the budgets
-   are measured guidance rather than a layout limit. It is only a defect if you expect
-   `template` to mean something enforceable. Decide which, then either tighten the
-   validator or say plainly in the table that these are advisory.
+   actually happens. **Build it the first time a real panel round lands**, then write
+   this row from the board that was actually used, exactly as the other two rows were.
 
-Resolved 2026-07-24: `stage` was typed as "any string", so a board carrying the
-retired generic `Interview`, or a typo, validated clean and was then never found by
-the picker that matches on it. It is now checked against the labels in
-`templates/states.yml`.
+**Resolved 2026-07-24.**
+
+- `stage` was typed as "any string", so a board carrying the retired generic
+  `Interview`, or a typo, validated clean and was then never found by the picker that
+  matches on it. It is now checked against the labels in `templates/states.yml`.
+- The per-template cue budgets stay **advisory** and the shape table now says so. Each
+  was measured off a single board, so enforcing them would fail boards for missing a
+  number that was never load-bearing. The global caps already defend the constraint
+  that matters. Revisit only if a mis-shaped board causes a real problem.
 
 ## Design principle
 
