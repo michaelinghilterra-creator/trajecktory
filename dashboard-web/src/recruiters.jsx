@@ -721,7 +721,12 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
         </div>
       </div>
 
-      <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+      {/* GRID, not a wrapping flex row. With flex:1 children a wrap leaves the last
+          line holding one card that grows to fill the ENTIRE line: between roughly
+          600 and 700px this rendered three cards at 225px and a fourth at 700px.
+          auto-fit + minmax keeps every column equal at every width, and wraps with
+          no orphan to stretch. */}
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
         <RecKpi label="Outreach Rate" value={`${outreachRate}%`}
           sub={outreachRate >= 40 ? 'Steady cadence, keep it up' : 'Below 40%. Draft a few more this week'}
           tone={outreachTone} />

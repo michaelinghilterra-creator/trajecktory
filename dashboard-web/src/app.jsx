@@ -21,6 +21,49 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "walkAway": 90
 }/*EDITMODE-END*/;
 
+// Comp bands for the Pipeline's Comp Positioning card, read from the user's OWN
+// numbers in config/profile.yml (surfaced by /api/setup/state) rather than from
+// TWEAK_DEFAULTS above.
+//
+// Those defaults are placeholders, and the block's own comment says so: "Real
+// targets belong in the gitignored config/profile.yml." Nothing ever read the real
+// ones, so the card drew its bands from the placeholders regardless of what the
+// user had configured. Every role was plotted against thresholds that were not
+// theirs, and the chart looked entirely plausible while doing it.
+//
+// The first draft of THIS comment illustrated the bug by printing the placeholder
+// thresholds beside the user's real ones, in a tracked file, and the PII gate
+// stopped it — which is precisely the trap AGENTS.md documents: writing about a
+// leak tempts you to quote it. Describe the shape, never the values.
+//
+// The mapping follows the comp model settled earlier: `minimum` is the hard floor
+// you will not go under (walk-away), and `target_range` is the aspiration you can
+// miss and still take the job.
+function parseK(s) {
+  if (typeof s === 'number') return s;
+  const m = String(s || '').match(/\$?\s*([\d,.]+)\s*([KkMm])?/);
+  if (!m) return null;
+  const n = parseFloat(m[1].replace(/,/g, ''));
+  if (!Number.isFinite(n)) return null;
+  if (/[Mm]/.test(m[2] || '')) return Math.round(n * 1000);
+  return n > 1000 ? Math.round(n / 1000) : Math.round(n); // accept 180000 or 180
+}
+function compBands(setupState, tweaks) {
+  const c = setupState && setupState.values && setupState.values.compensation;
+  const range = String((c && c.target_range) || '');
+  const parts = range.split(/\s*[-–—to]+\s*/i).filter(Boolean);
+  const low = parts.length ? parseK(parts[0]) : null;
+  const high = parts.length > 1 ? parseK(parts[1]) : null;
+  const floor = c ? parseK(c.minimum) : null;
+  // Fall back to the placeholders only when the profile has nothing usable, and
+  // require the three to be ordered: a half-filled profile must not produce a
+  // chart with inverted bands.
+  if (floor != null && low != null && high != null && floor <= low && low <= high) {
+    return { walkAway: floor, targetLow: low, targetHigh: high, fromProfile: true };
+  }
+  return { walkAway: tweaks.walkAway, targetLow: tweaks.targetLow, targetHigh: tweaks.targetHigh, fromProfile: false };
+}
+
 // Theme cycle order by luminance: dark -> dim -> light -> dark. Used by the ⌘K
 // command palette's quick theme toggle. The six designer palettes are not in
 // this cycle; they are picked from the topbar Theme dropdown. From a designer
@@ -518,7 +561,7 @@ function App() {
         <div className="content" data-screen-label={`trajecktory · ${tab}`} data-tab={tab}>
           {!updateHidden && window.UpdateBanner ? <window.UpdateBanner info={updateInfo} toast={toast} onDismiss={() => setUpdateHidden(true)} /> : null}
           {tab === "focus"     && <window.FocusTab toast={toast} onFocusDataChanged={refreshFocusBadge} />}
-          {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} onQuickAction={handleAction} onDataChanged={refreshApps} search={search} compTweaks={{ walkAway: tweaks.walkAway, targetLow: tweaks.targetLow, targetHigh: tweaks.targetHigh }} />}
+          {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} onQuickAction={handleAction} onDataChanged={refreshApps} search={search} compTweaks={compBands(setupState, tweaks)} />}
           {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} toast={toast} />}
           {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} toast={toast} />}
           {tab === "interview" && <window.InterviewTab apps={apps} toast={toast} />}

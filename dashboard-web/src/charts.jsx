@@ -214,12 +214,36 @@ window.Timeline = function Timeline({ apps, days = 28, height = 160 }) {
         {hover && (
           <line x1={points[hover.i][0]} x2={points[hover.i][0]} y1={padT} y2={padT + innerH} stroke="var(--accent)" strokeWidth="1" strokeDasharray="2 2" opacity="0.5" />
         )}
-        {/* X labels */}
-        {data.filter((_, i) => i % 7 === 0 || i === data.length - 1).map((d, k, arr) => {
-          const idx = data.findIndex(x => x.date === d.date);
-          const x = padL + idx * stepX;
-          return <text key={d.date} x={x} y={H - 8} textAnchor={k === 0 ? "start" : k === arr.length - 1 ? "end" : "middle"} fill="var(--text-mute)" fontSize="9.5" fontFamily="JetBrains Mono, monospace">{d.date.slice(5)}</text>;
-        })}
+        {/* X labels — weekly ticks, plus today, minus any collision.
+            Emitting "every 7th day OR the last day" overlaps whenever today does
+            not land on a multiple of 7: the final label printed straight on top of
+            the previous weekly one (07-21 and 07-24 rendered as "07-2107-24").
+            Today is the more useful of the two, so the weekly tick yields to it.
+            The gap is derived from the labels' own geometry, and the ANCHORS make
+            it bigger than the label width. A MM-DD label at 9.5px mono is ~28
+            viewBox units wide. The final label is end-anchored so it extends 28
+            units LEFT of its x; the one before it is middle-anchored so it extends
+            14 units RIGHT. Clearing both therefore needs 28 + 14 units, not 28.
+            Using the label width alone left ~7 units of overlap that still read as
+            "07-2107-24" on screen, which is how this was reported. */}
+        {(() => {
+          const LABEL_UNITS = 28;          // 5 chars at 9.5px mono, ~0.6em advance
+          const MIN_LABEL_UNITS = LABEL_UNITS + LABEL_UNITS / 2;
+          const minGapDays = Math.max(1, Math.ceil(MIN_LABEL_UNITS / Math.max(stepX, 0.01)));
+          const last = data.length - 1;
+          const idxs = [];
+          for (let i = 0; i < data.length; i += 7) idxs.push(i);
+          // Drop trailing weekly ticks that today would collide with, then add today.
+          while (idxs.length && last - idxs[idxs.length - 1] < minGapDays) idxs.pop();
+          if (last >= 0 && idxs[idxs.length - 1] !== last) idxs.push(last);
+          return idxs.map((idx, k) => (
+            <text key={data[idx].date} x={padL + idx * stepX} y={H - 8}
+              textAnchor={k === 0 ? "start" : k === idxs.length - 1 ? "end" : "middle"}
+              fill="var(--text-mute)" fontSize="9.5" fontFamily="JetBrains Mono, monospace">
+              {data[idx].date.slice(5)}
+            </text>
+          ));
+        })()}
         {/* hover columns — invisible, full height */}
         {data.map((d, i) => (
           <rect key={i} x={padL + (i - 0.5) * stepX} y={0} width={stepX} height={H - 20} className="hover-region"
