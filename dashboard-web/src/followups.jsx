@@ -292,7 +292,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
   );
 }
 
-window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, apps = [] }) {
+window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, apps = [], toast }) {
   const [data, setData]       = useStateF({ thresholds: { Applied: 7, Responded: 5, 'Phone Screen': 3, '1st Interview': 3, '2nd Interview': 3, '3rd Interview': 3, '4th Interview': 3 }, taThreshold: 14, ghostDays: 45, warm: [], cold: [], snoozed: [], ghostedCandidates: [] });
   const [loading, setLoading] = useStateF(true);
   const [selected, setSelected] = useStateF(null); // app id (only for 'app' source rows)
@@ -439,6 +439,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
 
   const SUBTABS = [
     { id: 'overview', label: 'Overview',         n: null,        icon: window.ICON.pulse },
+    { id: 'connect',  label: 'Connect',          n: null,        icon: window.ICON.userPlus },
     { id: 'warm',     label: 'Warm threads',     n: warm.length, icon: window.ICON.send },
     { id: 'cold',     label: 'Applications out',  n: cold.length, icon: window.ICON.briefcase },
   ];
@@ -512,6 +513,9 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
           onJumpSubview={setSubView}
         />
       )}
+
+      {/* ── Connect: the by-hand LinkedIn queue (moved here from the sidebar) ── */}
+      {subView === 'connect' && <window.ConnectTab toast={toast} />}
 
       {/* ── Warm threads: the actionable queue ─────────────────────────────── */}
       {subView === 'warm' && (

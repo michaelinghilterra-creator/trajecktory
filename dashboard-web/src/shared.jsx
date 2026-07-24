@@ -32,6 +32,7 @@ window.ICON = {
   users:     'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
   building:  'M3 21h18M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M19 21V11a1 1 0 0 0-1-1h-3M9 7h2M9 11h2M9 15h2',
   briefcase: 'M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2',
+  userPlus:  'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M20 8v6M23 11h-6',
   // actions / motion
   send:      'M22 2 11 13M22 2l-7 20-4-9-9-4z',
   outbound:  'M12 19V5M5 12l7-7 7 7',
@@ -44,6 +45,7 @@ window.ICON = {
   search:    'M11 11m-8 0a8 8 0 1 0 16 0a8 8 0 1 0-16 0M21 21l-4.3-4.3',
   x:         'M18 6 6 18M6 6l12 12',
   check:     'M20 6 9 17l-5-5',
+  scale:     'M12 3v18M8 21h8M4 7h16M4 7l-2.5 6h5zM20 7l-2.5 6h5z',
   flag:      'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7',
   star:      'M12 2l3 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.9 21l1.2-6.8-5-4.9 6.9-1z',
   zap:       'M13 2 3 14h9l-1 8 10-12h-9z',
@@ -270,11 +272,11 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
     { key: "followups",     label: "Follow-Ups",         icon: "↻", badge: stats.followups || null },
     { key: "target-talent", label: "TA Outreach",        icon: "◎" },
     { key: "linkedin-ssi",  label: "LinkedIn SSI",       icon: "🔗" },
-    { key: "connect",       label: "Connect",            icon: "🤝" },
     { key: "recruiters",    label: "Recruiters",         icon: "☎" },
     { key: "interview",     label: "Interview",          icon: "◈" },
-    { key: "review",        label: "Review",             icon: "⚖", attention: stats.reviewAttention || null },
-    { key: "analytics",     label: "Insights",           icon: "✦" },
+    // Review moved under Insights (first subtab); its Gmail-health nudge rides
+    // the Insights item now. Connect moved under Follow-Ups.
+    { key: "analytics",     label: "Insights",           icon: "✦", attention: stats.reviewAttention || null },
   ];
 
   // Launchpad: front-and-centre with an incomplete-count badge while setup is
@@ -314,10 +316,10 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
             {it.badge ? (
               <span className="kbd" style={{ background: "var(--accent)", color: "#0a0a0c", borderColor: "var(--accent)", fontWeight: 700 }}>{it.badge}</span>
             ) : it.attention === "reconnect" ? (
-              <span className="kbd" title="Gmail connection expired — reconnect to resume catching replies and bounces"
+              <span className="kbd" title="Gmail connection expired. Reconnect to resume catching replies and bounces"
                 style={{ background: "var(--red)", color: "#fff", borderColor: "var(--red)", fontWeight: 700 }}>!</span>
             ) : it.attention === "stale" ? (
-              <span title="No email check in over a week — open Review to sync"
+              <span title="No email check in over a week. Open Insights, then Review, to sync"
                 style={{ marginLeft: "auto", width: 7, height: 7, borderRadius: "50%", background: "var(--accent)", flexShrink: 0 }} />
             ) : null}
           </div>

@@ -66,7 +66,37 @@ const INS_SUBTABS = [
   { id: 'moves',    label: 'Recommended moves', icon: 'moves' },
 ];
 
-window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
+// Outer section switcher: Review (moved from the sidebar) is the first subtab,
+// then the Insights analysis. Both are always reachable. The Insights analysis
+// keeps its own inner subtabs (Overview / What's working / ...) once generated,
+// so on that section you see this switcher above the analysis's own subtab row.
+window.AnalyticsTab = function InsightsSection({ apps, onOpen, toast }) {
+  const [section, setSection] = useStateI('review');
+  const SECTION_TABS = [
+    { id: 'review',   label: 'Review',   icon: window.ICON.scale },
+    { id: 'insights', label: 'Insights', icon: window.ICON.spark },
+  ];
+  return (
+    <div className="col" style={{ gap: 0 }}>
+      <div className="subtabs">
+        {SECTION_TABS.map(s => (
+          <div key={s.id} className={'subtab' + (section === s.id ? ' active' : '')} onClick={() => setSection(s.id)}>
+            <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={s.icon} /></svg>
+            </span>
+            {s.label}
+          </div>
+        ))}
+      </div>
+      <div className="col" style={{ gap: 16, paddingTop: 14 }}>
+        {section === 'review'   && <window.ReviewTab toast={toast} />}
+        {section === 'insights' && <InsightsBody apps={apps} onOpen={onOpen} />}
+      </div>
+    </div>
+  );
+};
+
+function InsightsBody({ apps: rawApps, onOpen }) {
   const [insights, setInsights] = useStateI(null);
   const [loading, setLoading]   = useStateI(false);
   const [error, setError]       = useStateI(null);

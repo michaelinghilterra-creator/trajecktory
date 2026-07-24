@@ -319,14 +319,15 @@ function App() {
   useEffect(() => { window.tjkToast = toast; }, [toast]);
 
   // Gmail reconnect lands back here at /?google=connected|error (the OAuth callback
-  // cannot know which tab was open). Surface the result once, open the Review tab
-  // where the Gmail panel lives, and strip the query so a refresh does not re-toast.
+  // cannot know which tab was open). Surface the result once, open Insights (whose
+  // default subtab is Review, where the Gmail panel lives), and strip the query so
+  // a refresh does not re-toast.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const g = params.get("google");
     if (!g) return;
-    if (g === "connected") { toast("Gmail connected.", "success"); setTab("review"); }
-    else if (g === "error") { toast(`Gmail connect failed: ${params.get("reason") || "unknown"}`, "error"); setTab("review"); }
+    if (g === "connected") { toast("Gmail connected.", "success"); setTab("analytics"); }
+    else if (g === "error") { toast(`Gmail connect failed: ${params.get("reason") || "unknown"}`, "error"); setTab("analytics"); }
     params.delete("google"); params.delete("reason");
     const qs = params.toString();
     window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
@@ -427,7 +428,7 @@ function App() {
       { section: "Navigate", icon: "🔗", label: "Go to LinkedIn SSI", run: () => setTab("linkedin-ssi") },
       { section: "Navigate", icon: "◎", label: "Go to TA Outreach", run: () => setTab("target-talent") },
       { section: "Navigate", icon: "☎", label: "Go to Recruiters",   run: () => setTab("recruiters") },
-      { section: "Navigate", icon: "▤", label: "Go to Analytics",    run: () => setTab("analytics") },
+      { section: "Navigate", icon: "✦", label: "Go to Insights",     run: () => setTab("analytics") },
       { section: "Navigate", icon: "🚀", label: "Go to Launchpad (setup)", run: () => setTab("launchpad") },
     ];
     const viewCmds = [
@@ -518,14 +519,12 @@ function App() {
           {!updateHidden && window.UpdateBanner ? <window.UpdateBanner info={updateInfo} toast={toast} onDismiss={() => setUpdateHidden(true)} /> : null}
           {tab === "focus"     && <window.FocusTab toast={toast} onFocusDataChanged={refreshFocusBadge} />}
           {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} onQuickAction={handleAction} onDataChanged={refreshApps} search={search} compTweaks={{ walkAway: tweaks.walkAway, targetLow: tweaks.targetLow, targetHigh: tweaks.targetHigh }} />}
-          {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} />}
-          {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} />}
+          {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} toast={toast} />}
+          {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} toast={toast} />}
           {tab === "interview" && <window.InterviewTab apps={apps} toast={toast} />}
-          {tab === "review"    && <window.ReviewTab toast={toast} />}
           {tab === "recruiters"&& <window.RecruitersTab search={search} />}
           {tab === "target-talent" && <window.TargetTalentTab initialOpenId={pendingTaOpen} onInitialOpenConsumed={() => setPendingTaOpen(null)} search={search} />}
           {tab === "linkedin-ssi" && <window.LinkedInSSITab />}
-          {tab === "connect"   && <window.ConnectTab toast={toast} />}
           {tab === "launchpad" && <window.SetupTab toast={toast} setTab={setTab} />}
         </div>
       </div>
