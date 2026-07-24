@@ -725,11 +725,14 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
         <RecKpi label="Outreach Rate" value={`${outreachRate}%`}
           sub={outreachRate >= 40 ? 'Steady cadence, keep it up' : 'Below 40%. Draft a few more this week'}
           tone={outreachTone} />
+        {/* These thresholds are working targets you set, not industry benchmarks,
+            and the copy says so. The word "benchmark" used to be here and it made a
+            local rule of thumb sound like an external standard nobody could cite. */}
         <RecKpi label="Response Rate" value={sent ? `${responseRate}%` : '—'}
           sub={sent === 0 ? 'Send your first batch this week'
-             : responseRate >= 10 ? 'At/above benchmark, your hook works'
-             : responseRate >= 5 ? 'Around baseline, sharpen openers'
-             : 'Below 5%. Rewrite hook, lead with the role'}
+             : responseRate >= 10 ? 'Above your 10% target, your hook works'
+             : responseRate >= 5 ? 'Around your 5% floor, sharpen openers'
+             : 'Under your 5% floor. Rewrite hook, lead with the role'}
           tone={responseTone} />
         <RecKpi label="Active Convos" value={activeConvos}
           sub={activeConvos > 0 ? `${replied} replied · ${meeting} meetings. Work the warm pipeline` : 'No live convos. Replies fill this column'}

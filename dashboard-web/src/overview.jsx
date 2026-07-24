@@ -271,9 +271,14 @@ const toggleRow = (id) => setSelected(s => {
         <div className="kpi">
           <span className="kpi-label">Response Rate</span>
           <span className="kpi-value">{responseRate}%</span>
-          <span className={`kpi-delta ${responseRate >= 22 ? "up" : "down"}`}>
-            {responded} of {appliedN} replied · {responseRate >= 22 ? "▲ above" : "▼ below"} 22% benchmark
-          </span>
+          {/* No benchmark, deliberately. A "22% benchmark" was hardcoded here with
+              no source anywhere in the repo, so the card told you every day that you
+              were failing against a number nobody could point at, and coloured itself
+              red to prove it. An uncited comparator is not a measurement. The honest
+              reading is the fraction: the rate, and what it is out of. If a real
+              citable figure ever turns up, put the source in THIS comment before
+              restoring any comparison. */}
+          <span className="kpi-delta">{responded} of {appliedN} replied</span>
         </div>
         <div className="kpi">
           <span className="kpi-label">Avg Score</span>
