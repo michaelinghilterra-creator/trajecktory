@@ -353,7 +353,15 @@ function remoteMinBundleVersion() {
 // it — it is a fixed trust anchor per installed .exe), updates are pinned to
 // SSH-SIGNED release tags: fetch tags, verify each candidate against
 // trusted-signers with `git verify-tag`, and only ever check out from a verified
-// tag. Absent the file (the default today), the updater tracks `main` as before.
+// tag. Absent the file, the updater tracks `main` as before.
+//
+// That fallback is NOT the common case any more. `trusted-signers` is tracked and
+// the installer payload is a `git archive`, so it ships with every bundle: a fresh
+// install has signed updates ON. This comment used to call the absent-file path
+// "the default today", true when written and false once the file was committed. A
+// stale note here invites the mirror image of the usual mistake: not trusting a
+// guard that is not there, but assuming verification was never switched on when it
+// has been. tests/update-signing.test.mjs asserts the file ships and is non-empty.
 // See docs/RELEASING.md for how to generate a key, sign tags, and activate this.
 const TRUSTED_SIGNERS = join(ROOT, 'trusted-signers');
 

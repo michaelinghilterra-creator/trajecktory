@@ -96,6 +96,28 @@ function detectApi(company) {
   return null;
 }
 
+// Which ATS a company sits on when detectApi() could NOT reach it. Used only for
+// the skipped-coverage report, so an unrecognized host is a fine answer: the point
+// is to separate "one parser away" from "bespoke page, nothing to build".
+const SKIP_PLATFORMS = [
+  [/smartrecruiters\.com/i, 'SmartRecruiters'],
+  [/jobvite\.com/i, 'Jobvite'],
+  [/icims\.com/i, 'iCIMS'],
+  [/workable\.com/i, 'Workable'],
+  [/recruitee\.com/i, 'Recruitee'],
+  [/breezy\.hr/i, 'Breezy'],
+  [/rippling(?:ats)?\.com/i, 'Rippling'],
+  [/bamboohr\.com/i, 'BambooHR'],
+  [/teamtailor\.com/i, 'Teamtailor'],
+  [/(?:paylocity|adp|hirebridge|ultipro|dayforce)\./i, 'HR suite'],
+];
+
+function skipPlatform(company) {
+  const u = `${company.careers_url || ''} ${company.api || ''}`;
+  for (const [re, name] of SKIP_PLATFORMS) if (re.test(u)) return name;
+  return 'bespoke/unrecognized';
+}
+
 // ── API parsers ─────────────────────────────────────────────────────
 
 function parseGreenhouse(json, companyName) {
@@ -385,9 +407,26 @@ async function main() {
     .map(c => ({ ...c, _api: detectApi(c) }))
     .filter(c => c._api !== null);
 
-  const skippedCount = companies.filter(c => c.enabled !== false).length - targets.length;
+  const skipped = companies.filter(c => c.enabled !== false && detectApi(c) === null);
+  const skippedCount = skipped.length;
 
   console.log(`Scanning ${targets.length} companies via API (${skippedCount} skipped — no API detected)`);
+  // Name WHY they were skipped, grouped by ATS. A bare count cannot tell you
+  // whether it is 70 bespoke career pages, which nothing can fix, or a handful of
+  // boards on one platform, which is a single parser away. Coverage reported only
+  // as a number never gets closed, because nobody can see what closing it costs.
+  if (skippedCount) {
+    const groups = new Map();
+    for (const c of skipped) {
+      const k = skipPlatform(c);
+      groups.set(k, (groups.get(k) || 0) + 1);
+    }
+    const line = [...groups.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `${k} ${n}`)
+      .join(', ');
+    console.log(`  not scanned by platform: ${line}`);
+  }
   if (dryRun) console.log('(dry run — no files will be written)\n');
 
   // 3. Load dedup sets
