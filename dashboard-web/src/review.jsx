@@ -352,38 +352,8 @@ function GmailPanel({ toast }) {
           Read-only, checked automatically when you open this tab. It never sends.
         </p>
       )}
-      {needsSetup && howTo ? <GmailSetupSteps /> : null}
+      {needsSetup && howTo ? <window.GmailSetupSteps /> : null}
       {sweep ? <GmailSweep sweep={sweep} onApplyBounces={applyBounces} busy={busy} toast={toast} /> : null}
-    </div>
-  );
-}
-
-// The condensed walkthrough, shown in the card rather than behind a link, because
-// the user is stuck here and a link they have to go find is one more place to give
-// up. The full version with screenshots-worth of detail and a troubleshooting table
-// is docs/gmail-setup.md in the trajecktory folder. Only the two steps that are
-// easy to get wrong and annoying to undo are called out in bold.
-function GmailSetupSteps() {
-  const steps = [
-    ['Create a project', 'At console.cloud.google.com. Any name. It is just a container.'],
-    ['Enable the Gmail API', 'APIs & Services, Library, search Gmail API, Enable. Skip this and everything below still looks like it worked, then every mail check fails.'],
-    ['Fill in the consent screen', 'User type External, your own address for the contact fields, and add your own address under Test users. Miss the test user and you get "access blocked" at the last step, with no explanation.'],
-    ['Add two permissions', 'gmail.readonly finds replies and bounces. gmail.compose lets the Draft buttons work. Add both or you will be back here.'],
-    ['Create the credentials', 'OAuth client ID, and set Application type to Desktop app. Not Web application: a desktop client works on any local port, so nothing has to be pre-registered and it keeps working when the port changes.'],
-    ['Paste the two values', 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET into dashboard-web/.env, then restart the dashboard. It reads that file once at startup, so an edit made while it is running does nothing.'],
-  ];
-  return (
-    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-      <ol style={{ margin: 0, paddingLeft: 20, fontSize: 12, lineHeight: 1.7, color: 'var(--text-dim)' }}>
-        {steps.map(([head, body]) => (
-          <li key={head} style={{ marginBottom: 6 }}>
-            <b style={{ color: 'var(--text)', fontWeight: 500 }}>{head}.</b> {body}
-          </li>
-        ))}
-      </ol>
-      <p style={{ fontSize: 11.5, color: 'var(--text-mute)', margin: '10px 0 0', lineHeight: 1.6 }}>
-        Google will warn you that the app is unverified. That is expected: it is your app, in your project, used by you. Click Advanced, then continue. Full walkthrough including what to do when something goes wrong: docs/gmail-setup.md in your trajecktory folder.
-      </p>
     </div>
   );
 }

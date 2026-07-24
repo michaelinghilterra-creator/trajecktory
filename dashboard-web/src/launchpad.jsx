@@ -126,6 +126,12 @@ const LP_OPTIONAL = [
     sowhat: 'Without it, the app only checks the companies on your list. With it, it can go and find new ones.',
     affectsScore: 'no',
     ifYouSkip: 'Scanning still works. You just have to add companies yourself.' },
+  { id: 'gmail',     label: 'Email replies (optional)',
+    does: 'Watches your inbox for replies to the jobs you applied to.',
+    sowhat: 'Replies get logged for you, so none slip past while you are busy. It also spots mail that bounced, which stops a dead address from looking like a firm that ignored you.',
+    affectsScore: 'no',
+    extra: 'This one takes about 15 minutes to set up, in your own Google account. trajecktory ships no shared mail link on purpose, so your inbox can only ever be read with your own key. It reads mail and writes drafts. It can never send.',
+    ifYouSkip: 'You log replies by hand, which is what most people do at first. Nothing else changes.' },
   { id: 'verify',    label: 'Contact email checking (optional)',
     does: 'Finds a work email for a contact, and checks that it is real.',
     sowhat: 'A guessed email that bounces is worse than none. The note goes nowhere, and it reads to you like you were ignored. With this on, you only write to an email that has been checked.',
@@ -754,6 +760,14 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   useEffect(() => {
     fetch('/api/setup/verify-keys').then(r => r.json())
       .then(d => setVfyKeys(k => ({ ...k, hunter: !!d.hunter, millionverifier: !!d.millionverifier }))).catch(() => {});
+  }, []);
+
+  // Gmail connection state for its booster. Health rather than status, so the
+  // three states the booster shows are the same three the Review card shows and
+  // the two surfaces can never disagree about whether something is set up.
+  const [gmail, setGmail] = useState(null);
+  useEffect(() => {
+    fetch('/api/google/health').then(r => r.json()).then(setGmail).catch(() => {});
   }, []);
 
 
@@ -2188,6 +2202,33 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                   <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>
                     Get a key at console.anthropic.com → API keys. Stored locally in dashboard-web/.env; only ever sent to Anthropic.
                   </div>
+                </div>
+              );
+            }
+            if (o.id === 'gmail') {
+              const configured = !!(gmail && gmail.configured);
+              const live = !!(gmail && gmail.connected && gmail.healthy);
+              const expired = !!(gmail && gmail.connected && !gmail.healthy);
+              return (
+                <div>
+                  <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
+                  <LpWhy item={o} />
+                  {live
+                    ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 10 }}>✓ Connected as {gmail.connectedEmail || 'your account'}. Replies are being caught.</div>
+                    : expired
+                    ? <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 10 }}>○ The connection ran out. Nothing is being caught until you connect again.</div>
+                    : configured
+                    ? <div style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 10 }}>○ Set up, but not connected yet. One click and you are done.</div>
+                    : <div style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 10 }}>○ Not set up. The steps below are the 15 minutes; there is nothing to click until they are done.</div>}
+                  {/* The button only exists once there is something to connect TO.
+                      Offering it earlier is the exact thing that made this feature
+                      look broken rather than unstarted. */}
+                  {configured && (
+                    <a className="btn primary" href="/api/google/auth-start">
+                      {expired ? 'Connect again' : live ? 'Reconnect' : 'Connect Gmail'}
+                    </a>
+                  )}
+                  <window.GmailSetupSteps />
                 </div>
               );
             }

@@ -987,6 +987,38 @@ function QuickCopyBar() {
 // Exposed globally so the Pipeline drawer (pipeline.jsx, separate IIFE) can reuse it.
 window.QuickCopyBar = QuickCopyBar;
 
+// The condensed Gmail setup walkthrough, rendered in place rather than behind a
+// link, because a user who is stuck will not go and find one. Lives here, not in
+// review.jsx, because two surfaces show it: the Gmail card on Review, and the
+// Launchpad booster where a new user meets the feature in the first place. The
+// full version, with the troubleshooting table, is docs/gmail-setup.md.
+//
+// Only the steps that are easy to get wrong AND annoying to undo carry a warning.
+window.GmailSetupSteps = function GmailSetupSteps() {
+  const steps = [
+    ['Create a project', 'At console.cloud.google.com. Any name. It is just a container.'],
+    ['Enable the Gmail API', 'APIs & Services, Library, search Gmail API, Enable. Skip this and everything below still looks like it worked, then every mail check fails.'],
+    ['Fill in the consent screen', 'User type External, your own address for the contact fields, and add your own address under Test users. Miss the test user and you get "access blocked" at the last step, with no explanation.'],
+    ['Add two permissions', 'gmail.readonly finds replies and bounces. gmail.compose lets the Draft buttons work. Add both or you will be back here.'],
+    ['Create the credentials', 'OAuth client ID, and set Application type to Desktop app. Not Web application: a desktop client works on any local port, so nothing has to be pre-registered and it keeps working when the port changes.'],
+    ['Paste the two values', 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET into dashboard-web/.env, then restart the dashboard. It reads that file once at startup, so an edit made while it is running does nothing.'],
+  ];
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+      <ol style={{ margin: 0, paddingLeft: 20, fontSize: 12, lineHeight: 1.7, color: 'var(--text-dim)' }}>
+        {steps.map(([head, body]) => (
+          <li key={head} style={{ marginBottom: 6 }}>
+            <b style={{ color: 'var(--text)', fontWeight: 500 }}>{head}.</b> {body}
+          </li>
+        ))}
+      </ol>
+      <p style={{ fontSize: 11.5, color: 'var(--text-mute)', margin: '10px 0 0', lineHeight: 1.6 }}>
+        Google will warn you that the app is unverified. That is expected: it is your app, in your project, used by you. Click Advanced, then continue. Full walkthrough including what to do when something goes wrong: docs/gmail-setup.md in your trajecktory folder.
+      </p>
+    </div>
+  );
+};
+
 // Gmail connection state, fetched ONCE per page load and shared by every draft
 // button. There can be dozens on screen (one per contact), so each fetching for
 // itself would hammer an endpoint that may refresh a token. A single in-flight
