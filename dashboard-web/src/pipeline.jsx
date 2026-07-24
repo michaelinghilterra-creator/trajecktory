@@ -119,8 +119,10 @@ function PIcon({ d, size = 16, stroke = 1.6, style, fill = false }) {
 }
 
 // ─── Primitives ────────────────────────────────────────────────────────────
-// `provisional` marks a Haiku triage score: dashed border, lower opacity, and a
-// "~" prefix so a triage 4.2 never reads like a full Sonnet 4.2.
+// `provisional` marks a Haiku triage PRE-FILTER score: dashed border, lower
+// opacity, and a "~" prefix so a coarse triage 4.2 never reads like a derived
+// evaluation 4.2. The pre-filter only ranks the queue; it is a different, cheaper
+// number than the derived headline and is not comparable to it.
 function ScoreChip({ score, provisional = false }) {
   const b = scoreBucket(score);
   if (b === 'na') return <span className="score-chip na">N/A</span>;
@@ -128,7 +130,7 @@ function ScoreChip({ score, provisional = false }) {
   const rgb = b === 'strong' ? '34,197,94' : b === 'border' ? '234,179,8' : '239,68,68';
   return (
     <span className="score-chip"
-      title={provisional ? 'Provisional Haiku triage score. Run Deep Dive for the full evaluation' : undefined}
+      title={provisional ? 'Pre-filter score: a coarse Haiku pass to rank the queue, NOT the derived evaluation score. Run the full evaluation to replace it with a derived score.' : undefined}
       style={{
         color: c, borderColor: `rgba(${rgb},${provisional ? 0.5 : 0.42})`, background: `rgba(${rgb},${provisional ? 0.06 : 0.12})`,
         borderStyle: provisional ? 'dashed' : 'solid', opacity: provisional ? 0.9 : 1,
@@ -521,7 +523,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
                     {a.role}
                     {a._triage && (
                       <>
-                        <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.04em', color: 'var(--text-mute)', marginTop: 2, textTransform: 'uppercase' }}>initial pass · Haiku triage</div>
+                        <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.04em', color: 'var(--text-mute)', marginTop: 2, textTransform: 'uppercase' }}>pre-filter · Haiku · not yet evaluated</div>
                         {a.rationale && <div className="dim" style={{ fontSize: 10.5, marginTop: 2, whiteSpace: 'normal', lineHeight: 1.35 }}>{a.rationale}</div>}
                         {triage && <TriageRowActions row={a} job={triage.deepJobs[a.id]} onDeep={triage.onDeep} onDismiss={triage.onDismiss} />}
                       </>

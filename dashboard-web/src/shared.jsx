@@ -820,7 +820,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
 
       {!hasKey && (visibleTriage.length > 0 || triageSuppressed.length > 0) && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 4 }}>TRIAGE · {visibleTriage.length} scored</div>
+          <div title="A coarse Haiku pre-filter that ranks the queue. These are NOT derived evaluation scores and are not comparable to one. Run a deep dive to get the real score." style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 4 }}>PRE-FILTER · {visibleTriage.length} ranked</div>
           {visibleTriage.slice(0, 15).map(card => {
             const dj = deepJobs[card.url];
             const sc = card.score;
@@ -829,7 +829,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
             return (
               <div key={card.url} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                  <span style={{ color, fontWeight: 700, fontFamily: 'var(--mono)', fontSize: 12 }}>{sc == null ? '—' : sc.toFixed(1)}</span>
+                  <span title="Pre-filter score (coarse Haiku pass), not comparable to a derived evaluation score" style={{ color, fontWeight: 700, fontFamily: 'var(--mono)', fontSize: 12 }}>{sc == null ? '—' : '~' + sc.toFixed(1)}</span>
                   <span style={{ fontSize: 11.5, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${card.company}: ${card.title}`}>{card.company} · {card.title}</span>
                 </div>
                 {card.rationale && <div style={{ fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4, marginTop: 2 }}>{card.rationale}</div>}
