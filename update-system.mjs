@@ -83,6 +83,13 @@ const SYSTEM_PATHS = [
   'generate-pdf.mjs',
   'generate-latex.mjs',
   'merge-tracker.mjs',
+  // Referenced by the shipped eval prompts (modes/oferta.md, batch/batch-prompt.md):
+  // they instruct `node compute-scores.mjs <report> --apply` to DERIVE the headline
+  // score from the rated dimensions. It is a root script, so the bare lib/ and
+  // dashboard-web/ directory entries do not cover it; without this line an updated
+  // install would call a script that is not there and every evaluation would fail at
+  // the scoring step. Same class as the render-runsheet.mjs / verify-no-pii.mjs hazards.
+  'compute-scores.mjs',
   'next-jd.mjs',
   'verify-pipeline.mjs',
   // Imported at module scope by dashboard-web/server/lib/interview.mjs, which
