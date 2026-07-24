@@ -354,6 +354,33 @@ a fixed ~4 and is mandatory everywhere):
 Run sheets are excluded from `verify-interview-prep.mjs`: they are compiled sidecars with
 no §-sections, and its `inferStage()` would file every one as a legacy warning.
 
+## Open before this schema can be called frozen
+
+Two gaps remain, both needing a decision rather than a fix. They are written down
+here because an unrecorded blocker is indistinguishable from a resolved one: the
+count of what was outstanding had already been lost once.
+
+1. **`final-loop` is a legal `template` value with no defined shape.** The validator
+   accepts it, the shape table says "not yet shipped / TBD", and there is no worked
+   example. So a `final-loop` board would validate against a spec that says nothing
+   about how many cues it may carry, whether it has a hero, or what its sections are.
+   A shape with no shipped example is a shape whose spec is unverifiable, which is the
+   same reasoning that put both current examples in `verify-runsheets.mjs`. Either
+   build one and measure it, or drop `final-loop` from the enum until a panel round
+   actually happens.
+2. **The per-template cue budgets are documentation, not validation.** The shape table
+   gives `screen` ~16-21 and `hm-round` ~44-49, but only the global caps (48 cues, 8
+   sections) are enforced. A `screen` board with 45 cues passes while being nothing
+   like the shape it claims. That is defensible as deliberate slack, since the budgets
+   are measured guidance rather than a layout limit. It is only a defect if you expect
+   `template` to mean something enforceable. Decide which, then either tighten the
+   validator or say plainly in the table that these are advisory.
+
+Resolved 2026-07-24: `stage` was typed as "any string", so a board carrying the
+retired generic `Interview`, or a typo, validated clean and was then never found by
+the picker that matches on it. It is now checked against the labels in
+`templates/states.yml`.
+
 ## Design principle
 
 > **Confidence, not exhaustiveness.**

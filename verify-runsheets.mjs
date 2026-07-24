@@ -38,6 +38,23 @@ const EXAMPLES = [
   path.resolve(__dirname, 'templates', 'runsheet-example-screen.run.md'),
 ];
 
+// `stage` is what the dashboard picker matches a board on, so a value outside the
+// canonical ladder produces a board that validates clean and is then never found.
+// Silent, and invisible until the morning of the call. Read the labels out of
+// templates/states.yml rather than retyping them, so the retired generic "Interview"
+// cannot come back and a new rung is picked up for free. Parsed with a line regex,
+// not js-yaml, to keep this script dependency-free like the rest of the verifiers.
+function canonicalStages() {
+  const file = path.resolve(__dirname, 'templates', 'states.yml');
+  try {
+    const txt = fs.readFileSync(file, 'utf-8');
+    const labels = [...txt.matchAll(/^\s*label:\s*(.+?)\s*$/gm)].map(m => m[1].replace(/^["']|["']$/g, ''));
+    const stages = labels.filter(l => /^(Phone Screen|\dst Interview|\dnd Interview|\drd Interview|\dth Interview)$/.test(l));
+    return stages.length ? stages : null;
+  } catch { return null; }
+}
+const STAGES = canonicalStages();
+
 const CAP_CUES = 48;
 const CAP_SECTIONS = 8;
 // tag must not assert anything the renderer derives
@@ -98,6 +115,9 @@ function check(file, ids) {
   }
   if (d.template && !['screen', 'hm-round', 'final-loop'].includes(d.template))
     errs.push(`template "${d.template}" is not screen|hm-round|final-loop.`);
+  if (STAGES && typeof d.stage === 'string' && !STAGES.includes(d.stage))
+    errs.push(`stage "${d.stage}" is not a canonical status. Expected one of: ${STAGES.join(', ')}. The picker matches on this, so a non-canonical value renders a board nothing can find.`);
+  if (!STAGES) warns.push('templates/states.yml unreadable, so "stage" was not checked against the canonical ladder.');
   if (d.generated && !/^\d{4}-\d{2}-\d{2}$/.test(d.generated))
     errs.push(`generated "${d.generated}" is not YYYY-MM-DD.`);
 
