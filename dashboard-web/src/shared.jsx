@@ -348,7 +348,6 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // Triaged postings that already have a tracker row. Shown as a collapsed count
   // rather than dropped, so a wrong suppression is visible instead of silent.
   const [triageSuppressed, setTriageSuppressed] = useState([]);
-  const [showSuppressed, setShowSuppressed] = useState(false);
   const [deepJobs, setDeepJobs] = useState({});         // { url: { status, error } }
   // URLs the user dismissed (× control) or that auto-cleared after a completed
   // deep dive. Persisted so a reload doesn't resurrect a spent card.
@@ -823,6 +822,11 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
       {!hasKey && (visibleTriage.length > 0 || triageSuppressed.length > 0) && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
           <div title="A coarse Haiku pre-filter that ranks the queue. These are NOT derived evaluation scores and are not comparable to one. Run a deep dive to get the real score." style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 4 }}>PRE-FILTER · {visibleTriage.length} ranked</div>
+          {/* Bounded, and scrolls inside itself. Fifteen ranked cards each carrying
+              a rationale line ran to roughly a thousand pixels, so a good triage run
+              pushed the paste box and everything under it off the bottom of the
+              sidebar. The queue is a queue: it should be reachable, not resident. */}
+          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
           {visibleTriage.slice(0, 15).map(card => {
             const dj = deepJobs[card.url];
             const sc = card.score;
@@ -848,21 +852,19 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               </div>
             );
           })}
+          </div>
 
+          {/* A COUNT, never a list. These were scored by triage and then skipped
+              because each already has a tracker row, so every one of them is
+              already visible in Pipeline with its real status — the expandable
+              list rendered the same rows a second time, in a worse format, and
+              could fill most of the sidebar. The count still earns its line: it
+              is the only signal that triage ran and deduped correctly rather
+              than silently finding nothing. */}
           {triageSuppressed.length > 0 && (
-            <div style={{ marginTop: visibleTriage.length ? 6 : 0 }}>
-              <button onClick={() => setShowSuppressed(v => !v)}
-                title="These were scored by triage but already have a row in your tracker"
-                style={{ background: 'none', border: 'none', color: 'var(--text-mute)', cursor: 'pointer', fontSize: 10.5, padding: 0, textAlign: 'left' }}>
-                {showSuppressed ? '▾' : '▸'} {triageSuppressed.length} already evaluated (hidden)
-              </button>
-              {showSuppressed && triageSuppressed.map(card => (
-                <div key={card.url} style={{ padding: '4px 0 4px 10px', fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4 }}>
-                  <span style={{ fontFamily: 'var(--mono)' }}>#{card.existingNum}</span>{' '}
-                  <span style={{ opacity: 0.8 }}>{card.existingStatus}</span>{' · '}
-                  <span title={`${card.company}: ${card.title}`}>{card.company} · {card.title}</span>
-                </div>
-              ))}
+            <div title="Scored by triage, then skipped: each already has a row in your tracker. Find them in Pipeline (terminal ones are under All)."
+              style={{ marginTop: visibleTriage.length ? 6 : 0, fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4 }}>
+              {triageSuppressed.length} already tracked · skipped
             </div>
           )}
         </div>
