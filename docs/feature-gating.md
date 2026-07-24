@@ -139,5 +139,9 @@ Held by `tests/gating.test.mjs`: the flag, the reason precedence (asserted while
 live-looking token, so it is proven rather than incidental), and both sides of the
 withheld count.
 
-**Still open:** the Launchpad has no Gmail entry, so a user meets the feature only if they
-happen to open Review. Worth adding when the setup steps have a second home.
+7. **The mail connection has an entry in Setup** (`gmail` in `LP_OPTIONAL`), reading the
+   same health endpoint as the card so the two surfaces cannot disagree, and rendering the
+   same steps. Setup is where someone decides what this product will do for them, and a
+   capability absent from that list is one they never chose to skip.
+
+Nothing on the inventory is left unmodeled.
