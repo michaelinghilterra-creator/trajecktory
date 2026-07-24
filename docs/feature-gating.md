@@ -109,28 +109,35 @@ Three rules on top of those, for disabled states specifically:
    result: if the expected path includes something alarming, name it in advance or it
    reads as a failure.
 
-## What this needs in code
+## What this needed in code (shipped)
 
-The doc is the deliverable for the decision. These are the changes that follow from it,
-smallest first. None is large.
+1. **`configured`, reported separately from `connected`.** `clientConfigured()` in
+   `lib/google.mjs` derives it from the client credentials, presence only and never
+   the values. `googleStatus()` carries it in both branches, and `checkHealth()` gained
+   a `not_configured` reason that is checked **before** the token, because a leftover
+   token with no client is still unusable and "reconnect" is the wrong thing to ask for.
+2. **`/api/google/auth-start` no longer dead-ends.** Missing credentials redirect to
+   `/?google=setup`, which the app renders as neutral information rather than a failure;
+   every other error redirects back with a reason. Nothing there answers a full-page
+   navigation with a body any more. The three mail routes share a `connectionProblem()`
+   helper so "not set up" and "not connected" reach the UI as different flags.
+3. **The Gmail card has three states.** The not-configured one has no Connect button,
+   states the 15-minute cost first, and carries the six setup steps inline rather than a
+   link, because a user who is stuck will not go and find one.
+4. **`GmailDraftBtn` disables rather than hides**, with the reason on hover. Connection
+   state is fetched once per page load and shared across every instance; a fetch failure
+   counts as available, so the worst case is the previous behaviour.
+5. **The Testing-mode line is gone** from the card. It described one publishing status,
+   not Gmail, and it now appears only in the reconnect message where it is relevant.
+6. **Contact verification has a booster** (`verify` in `LP_OPTIONAL`, saved via
+   `/api/setup/verify-keys`), and the warm queue says how many contacts are being
+   withheld for want of a checked address. `countWithheldContacts()` excludes contacts
+   with no address and observed-dead addresses, since a key rescues neither and counting
+   them would overstate what turning it on buys.
 
-1. **Report whether a client is configured at all.** `googleStatus()` and `checkHealth()`
-   both return `connected: false` when there is no OAuth client, which is the same answer
-   they give when the user simply has not connected yet. Add a `configured` flag derived
-   from `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, so the UI can tell state 1 from
-   state 2.
-2. **Stop `/api/google/auth-start` from being a dead end.** It currently answers a
-   full-page browser navigation with `res.status(400).send('Missing GOOGLE_CLIENT_ID ...')`,
-   so the user loses the dashboard and lands on unstyled text naming a file. It should
-   redirect back with a reason the UI can render, the same way the callback already does.
-3. **Three-state the Gmail sync card**, per the decision above.
-4. **Disable rather than hide `GmailDraftBtn`** when not connected, with the reason and a
-   link.
-5. **Fix one piece of copy that is only true for the maintainer.** The not-connected card
-   says Testing-mode tokens expire about weekly. That is a property of one publishing
-   status, not of Gmail, and it will confuse anyone who published their app.
-6. **Add the contact-verification booster** to `LP_OPTIONAL`, and surface withheld rows in
-   Follow-Ups.
+Held by `tests/gating.test.mjs`: the flag, the reason precedence (asserted while holding a
+live-looking token, so it is proven rather than incidental), and both sides of the
+withheld count.
 
-Items 1 and 2 are the ones that turn "broken" into "unconfigured". The rest is polish on
-top of that.
+**Still open:** the Launchpad has no Gmail entry, so a user meets the feature only if they
+happen to open Review. Worth adding when the setup steps have a second home.
