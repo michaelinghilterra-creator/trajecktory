@@ -103,8 +103,8 @@
    tests/themes.test.mjs.
    ============================================================ */
 
-/* Amber CRT (dark, warm). Classic amber-phosphor terminal. */
-[data-theme="amber"] {
+/* Ochre CRT (dark, warm). Classic warm-phosphor terminal. */
+[data-theme="ochre"] {
   --bg:#0a0906; --bg-2:#100d07; --panel:#15110a; --panel-2:#1b160c; --panel-3:#221a0d;
   --border:#2a2213; --border-2:#39301b;
   --text:#f2e8d4; --text-dim:#b39c6d; --text-mute:#7d6a44;

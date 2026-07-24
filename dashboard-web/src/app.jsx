@@ -35,7 +35,7 @@ const THEME_OPTIONS = [
   { value: "dark",    label: "Violet Terminal" },
   { value: "dim",     label: "Dim Slate" },
   { value: "light",   label: "Daylight" },
-  { value: "amber",   label: "Amber CRT" },
+  { value: "ochre",   label: "Ochre CRT" },
   { value: "emerald", label: "Emerald Ticker" },
   { value: "cyan",    label: "Cyan Vapor" },
   { value: "rose",    label: "Rose Noir" },
@@ -46,7 +46,7 @@ const THEME_OPTIONS = [
 // The designer palettes own their accent. For them we clear the inline
 // --accent/--accent-bg override so each theme's CSS accent wins; the base three
 // (dark/dim/light) keep the default accent applied inline.
-const DESIGNER_THEMES = new Set(["amber", "emerald", "cyan", "rose", "paper", "arctic"]);
+const DESIGNER_THEMES = new Set(["ochre", "emerald", "cyan", "rose", "paper", "arctic"]);
 
 // Where the user's appearance preferences persist. The pre-paint script in
 // index.html reads the SAME key to set data-theme before first paint, so keep

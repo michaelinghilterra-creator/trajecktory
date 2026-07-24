@@ -3,7 +3,7 @@
  * themes.test.mjs: guards the theme palettes against token drift.
  *
  * The dashboard has one base dark theme (`:root, [data-theme="dark"]`) plus a
- * dim and a light variant, and six drop-in "designer" palettes (amber, emerald,
+ * dim and a light variant, and six drop-in "designer" palettes (ochre, emerald,
  * cyan, rose, paper, arctic). A theme applies by setting `data-theme` on <html>;
  * any token a block omits silently falls back to the dark `:root` value. That
  * fallback is the whole hazard: a light palette that forgets `--shadow` or
@@ -44,7 +44,7 @@ console.log('themes.test.mjs');
 // every real CSS parser, while leaving the token TEXT present. A string-match
 // test misses it; the browser drops the rule. Strip comments the way a parser
 // does (global, non-greedy) and assert nothing dangles. This exact bug ate the
-// amber block on first integration.
+// first designer palette on first integration.
 const deCommented = css.replace(/\/\*[\s\S]*?\*\//g, '');
 check(!deCommented.includes('*/') && !deCommented.includes('/*'),
   'styles.css comments are balanced (no premature */ that would silently drop the next rule)');
@@ -78,7 +78,7 @@ const required = [...darkTokens].filter(t => !EXEMPT.has(t)).sort();
 check(required.includes('shadow') && required.includes('panel-3') && required.includes('accent-rgb'),
   'the required set includes the drift-prone tokens (shadow, panel-3, accent-rgb)');
 
-const DESIGNER = ['amber', 'emerald', 'cyan', 'rose', 'paper', 'arctic'];
+const DESIGNER = ['ochre', 'emerald', 'cyan', 'rose', 'paper', 'arctic'];
 
 // ── 2. Every designer palette covers the full token set ──────────────────────
 for (const theme of DESIGNER) {
