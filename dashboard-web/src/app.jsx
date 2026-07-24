@@ -21,9 +21,34 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "walkAway": 90
 }/*EDITMODE-END*/;
 
-// Theme cycle order by luminance: dark -> dim -> light -> dark
+// Theme cycle order by luminance: dark -> dim -> light -> dark. This is the
+// QUICK toggle (topbar sun/moon + ⌘K). The six designer palettes below are not
+// in the cycle. They carry their own baked-in accent and are picked
+// deliberately from the Tweaks panel. From a designer theme the quick toggle
+// falls back to dark (indexOf === -1 -> 0), which reads as "return to base".
 const THEME_ORDER = ["dark", "dim", "light"];
 const nextThemeAfter = (t) => THEME_ORDER[(THEME_ORDER.indexOf(t) + 1) % THEME_ORDER.length];
+
+// Full theme roster for the Tweaks picker: base three, then the six drop-in
+// designer palettes. Every value MUST have a matching [data-theme="…"] block in
+// styles.css (guarded by tests/themes.test.mjs). Past 3 options TweakRadio
+// renders this as a dropdown automatically.
+const THEME_OPTIONS = [
+  { value: "dark",    label: "Violet Terminal" },
+  { value: "dim",     label: "Dim Slate" },
+  { value: "light",   label: "Daylight" },
+  { value: "amber",   label: "Amber CRT" },
+  { value: "emerald", label: "Emerald Ticker" },
+  { value: "cyan",    label: "Cyan Vapor" },
+  { value: "rose",    label: "Rose Noir" },
+  { value: "paper",   label: "Paper Slate" },
+  { value: "arctic",  label: "Arctic" },
+];
+
+// The designer palettes own their accent. For them we clear the inline
+// --accent/--accent-bg override so each theme's CSS accent wins; the accent
+// picker only drives the base three (dark/dim/light).
+const DESIGNER_THEMES = new Set(["amber", "emerald", "cyan", "rose", "paper", "arctic"]);
 
 function App() {
   const [apps, setApps] = useState([]);
@@ -221,10 +246,18 @@ function App() {
 
   // Apply theme + density + accent
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", tweaks.theme);
-    document.documentElement.style.setProperty("--accent", tweaks.accent);
-    document.documentElement.style.setProperty("--accent-bg", hexToRgba(tweaks.accent, 0.12));
-    document.documentElement.style.setProperty("--sidebar-w", "232px");
+    const root = document.documentElement;
+    root.setAttribute("data-theme", tweaks.theme);
+    if (DESIGNER_THEMES.has(tweaks.theme)) {
+      // Designer palette supplies its own accent. Clear any inline override
+      // (left over from a base theme) so the theme's CSS --accent wins.
+      root.style.removeProperty("--accent");
+      root.style.removeProperty("--accent-bg");
+    } else {
+      root.style.setProperty("--accent", tweaks.accent);
+      root.style.setProperty("--accent-bg", hexToRgba(tweaks.accent, 0.12));
+    }
+    root.style.setProperty("--sidebar-w", "232px");
   }, [tweaks.theme, tweaks.accent]);
 
   function hexToRgba(hex, a) {
@@ -425,14 +458,18 @@ function App() {
   const tweaksUI = window.TweaksPanel && tweaksOpen ? (
     <window.TweaksPanel onClose={() => setTweaksOpen(false)} title="Tweaks">
       <window.TweakSection title="Appearance">
-        <window.TweakRadio label="Theme" value={tweaks.theme} options={["dark", "dim", "light"]} onChange={v => setTweak("theme", v)} />
+        <window.TweakRadio label="Theme" value={tweaks.theme} options={THEME_OPTIONS} onChange={v => setTweak("theme", v)} />
         <window.TweakRadio label="Density" value={tweaks.density} options={["comfortable", "compact"]} onChange={v => setTweak("density", v)} />
-        <window.TweakColor
-          label="Accent color"
-          value={tweaks.accent}
-          options={["#a78bfa", "#5b8def", "#22c55e", "#f97316", "#e5e5e5"]}
-          onChange={v => setTweak("accent", v)}
-        />
+        {DESIGNER_THEMES.has(tweaks.theme) ? (
+          <window.TweakRow label="Accent color" value="set by theme" />
+        ) : (
+          <window.TweakColor
+            label="Accent color"
+            value={tweaks.accent}
+            options={["#a78bfa", "#5b8def", "#22c55e", "#f97316", "#e5e5e5"]}
+            onChange={v => setTweak("accent", v)}
+          />
+        )}
       </window.TweakSection>
       <window.TweakSection title="Defaults">
         <window.TweakRadio

@@ -89,6 +89,92 @@
   --accent-rgb: 167,139,250;
 }
 
+/* ============================================================
+   Designer palettes (drop-in handoff, 2026-07). Six full themes
+   picked from Tweaks, Appearance, Theme. Each carries its own
+   baked-in accent, so the accent picker does not apply to them
+   (see DESIGNER_THEMES in app.jsx). Every block covers the FULL
+   token set the base :root/dark block defines. The tokens shadow,
+   panel-3, accent-rgb, pink and pink-rgb were absent from the
+   original handoff and are filled here (dark shadow and pink for
+   the dark palettes, light for paper and arctic). Structural
+   tokens (mono, sans, r-card, r-ctl, gap, drawer-w) are
+   theme-invariant and fall back to :root by design. Guarded by
+   tests/themes.test.mjs.
+   ============================================================ */
+
+/* Amber CRT (dark, warm). Classic amber-phosphor terminal. */
+[data-theme="amber"] {
+  --bg:#0a0906; --bg-2:#100d07; --panel:#15110a; --panel-2:#1b160c; --panel-3:#221a0d;
+  --border:#2a2213; --border-2:#39301b;
+  --text:#f2e8d4; --text-dim:#b39c6d; --text-mute:#7d6a44;
+  --accent:#f5a623; --accent-2:#fbca4d; --accent-bg:rgba(245,166,35,0.13); --accent-rgb:245,166,35;
+  --green:#9fbe2f; --yellow:#e6b325; --red:#e5615a; --blue:#7fb0c9; --cyan:#22d3ee; --orange:#f59e0b;
+  --grid:rgba(255,255,255,0.04);
+  --shadow:0 1px 0 rgba(255,255,255,0.03) inset, 0 12px 40px -12px rgba(0,0,0,0.6);
+  --pink:#ec4899; --pink-rgb:236,72,153;
+}
+
+/* Emerald Ticker (dark, green). Money-market growth feel. */
+[data-theme="emerald"] {
+  --bg:#05090a; --bg-2:#081211; --panel:#0b1614; --panel-2:#111f1b; --panel-3:#172a24;
+  --border:#152622; --border-2:#1f3830;
+  --text:#e2f0ea; --text-dim:#7fa697; --text-mute:#4f7166;
+  --accent:#34d399; --accent-2:#6ee7b7; --accent-bg:rgba(52,211,153,0.13); --accent-rgb:52,211,153;
+  --green:#4ade80; --yellow:#e3c04a; --red:#f0716a; --blue:#5fb8c4; --cyan:#22d3ee; --orange:#f59e0b;
+  --grid:rgba(255,255,255,0.04);
+  --shadow:0 1px 0 rgba(255,255,255,0.03) inset, 0 12px 40px -12px rgba(0,0,0,0.6);
+  --pink:#ec4899; --pink-rgb:236,72,153;
+}
+
+/* Cyan Vapor (dark, cool). Crisp, technical, high signal. */
+[data-theme="cyan"] {
+  --bg:#050a0f; --bg-2:#081320; --panel:#0b1826; --panel-2:#0f2130; --panel-3:#142a3d;
+  --border:#132738; --border-2:#1d3a52;
+  --text:#dfeef7; --text-dim:#7fa2bb; --text-mute:#4d6e88;
+  --accent:#38bdf8; --accent-2:#7dd3fc; --accent-bg:rgba(56,189,248,0.13); --accent-rgb:56,189,248;
+  --green:#34d399; --yellow:#e6c34a; --red:#f0716a; --blue:#60a5fa; --cyan:#22d3ee; --orange:#f59e0b;
+  --grid:rgba(255,255,255,0.04);
+  --shadow:0 1px 0 rgba(255,255,255,0.03) inset, 0 12px 40px -12px rgba(0,0,0,0.6);
+  --pink:#ec4899; --pink-rgb:236,72,153;
+}
+
+/* Rose Noir (dark, warm). Editorial wine and coral. */
+[data-theme="rose"] {
+  --bg:#0b070a; --bg-2:#130a10; --panel:#180d15; --panel-2:#20111b; --panel-3:#291624;
+  --border:#2c1622; --border-2:#3e2130;
+  --text:#f2e2ea; --text-dim:#b8869e; --text-mute:#7d5468;
+  --accent:#fb7185; --accent-2:#fda4b0; --accent-bg:rgba(251,113,133,0.13); --accent-rgb:251,113,133;
+  --green:#4ade80; --yellow:#e6c34a; --red:#ef4444; --blue:#7dd3fc; --cyan:#22d3ee; --orange:#f59e0b;
+  --grid:rgba(255,255,255,0.04);
+  --shadow:0 1px 0 rgba(255,255,255,0.03) inset, 0 12px 40px -12px rgba(0,0,0,0.6);
+  --pink:#ec4899; --pink-rgb:236,72,153;
+}
+
+/* Paper Slate (light, warm). Daylight work, terracotta accent. */
+[data-theme="paper"] {
+  --bg:#f1ede4; --bg-2:#e7e2d6; --panel:#fffdf8; --panel-2:#faf6ee; --panel-3:#f0e8d8;
+  --border:#ddd6c7; --border-2:#c9c1af;
+  --text:#2b2822; --text-dim:#6b6455; --text-mute:#9c9484;
+  --accent:#b45309; --accent-2:#d97706; --accent-bg:rgba(180,83,9,0.10); --accent-rgb:180,83,9;
+  --green:#4d7c0f; --yellow:#a16207; --red:#b91c1c; --blue:#1d4ed8; --cyan:#0891b2; --orange:#d97706;
+  --grid:rgba(0,0,0,0.05);
+  --shadow:0 1px 0 rgba(255,255,255,0.6) inset, 0 8px 24px -16px rgba(0,0,0,0.18);
+  --pink:#db2777; --pink-rgb:219,39,119;
+}
+
+/* Arctic (light, cool). Bright counterpart to Violet Terminal. */
+[data-theme="arctic"] {
+  --bg:#eef2f6; --bg-2:#e3e9f0; --panel:#ffffff; --panel-2:#f6f8fb; --panel-3:#edf1f6;
+  --border:#d7dfe8; --border-2:#c1ccd9;
+  --text:#1e293b; --text-dim:#5b6b7f; --text-mute:#94a3b3;
+  --accent:#4f46e5; --accent-2:#6366f1; --accent-bg:rgba(79,70,229,0.09); --accent-rgb:79,70,229;
+  --green:#059669; --yellow:#ca8a04; --red:#dc2626; --blue:#2563eb; --cyan:#0891b2; --orange:#d97706;
+  --grid:rgba(0,0,0,0.05);
+  --shadow:0 1px 0 rgba(255,255,255,0.6) inset, 0 8px 24px -16px rgba(0,0,0,0.18);
+  --pink:#db2777; --pink-rgb:219,39,119;
+}
+
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; }
 body {

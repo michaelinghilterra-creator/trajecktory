@@ -464,6 +464,7 @@ for (const suite of [
   'tests/sidecars.test.mjs',
   'tests/metrics.test.mjs',
   'tests/rate-confidence.test.mjs',
+  'tests/themes.test.mjs',
   'tests/release-notes.test.mjs',
   'tests/workspace-trust.test.mjs',
   'tests/onboarding-copy.test.mjs',
