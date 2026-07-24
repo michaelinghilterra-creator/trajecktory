@@ -8,13 +8,30 @@ import { hasV1Frontmatter, parseV1, stripFrontmatter } from '../v1-loader.mjs';
 
 export const router = express.Router();
 
+// PATH SAFETY. The path is not taken from the request, it is read out of
+// applications.md — but that file is AGENT-written, so it is not trusted input
+// either. `/api/jd/:id` already states this rule and enforces it; these two
+// routes resolved the path and read it with no containment check at all, so a
+// tracker row pointing at ..\..\somewhere would be served straight back. One
+// poisoned row is a file-read primitive for anything the server can open.
+//
+// reports/ is the only directory an evaluation report may live in. Resolve, then
+// require the result to sit inside it, and compare with a trailing separator so
+// a sibling like `reports-backup` cannot pass a bare prefix test.
+const REPORTS_ROOT = path.resolve(ROOT_DIR, 'reports');
+function resolveReportPath(rel) {
+  const abs = path.resolve(ROOT_DIR, String(rel || ''));
+  return abs === REPORTS_ROOT || abs.startsWith(REPORTS_ROOT + path.sep) ? abs : null;
+}
+
 router.get('/api/report-body/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const rows = parseApplicationsMd();
     const row = rows.find(r => r.id === id);
     if (!row || !row.report) return res.json({ html: '<p>No report attached.</p>' });
-    const reportPath = path.resolve(ROOT_DIR, row.report);
+    const reportPath = resolveReportPath(row.report);
+    if (!reportPath) return res.json({ html: `<p>Report path is outside reports/ and was refused: ${escapeHtml(row.report)}</p>` });
     if (!fs.existsSync(reportPath)) return res.json({ html: `<p>Report file not found: ${escapeHtml(row.report)}</p>` });
     const raw = fs.readFileSync(reportPath, 'utf8');
     // For v1 reports, strip JSON frontmatter so the Full Report tab shows
@@ -41,7 +58,8 @@ router.get('/api/report-view/:id', (req, res) => {
     const rows = parseApplicationsMd();
     const row = rows.find(r => r.id === id);
     if (!row || !row.report) return res.status(404).send('<p style="font-family:sans-serif;padding:24px">No report for this entry.</p>');
-    const reportPath = path.resolve(ROOT_DIR, row.report);
+    const reportPath = resolveReportPath(row.report);
+    if (!reportPath) return res.status(400).send(`<p style="font-family:sans-serif;padding:24px">Report path is outside reports/ and was refused: ${escapeHtml(row.report)}</p>`);
     if (!fs.existsSync(reportPath)) return res.status(404).send(`<p style="font-family:sans-serif;padding:24px">Report file not found: ${escapeHtml(row.report)}</p>`);
     const raw = fs.readFileSync(reportPath, 'utf8');
     const body = reportMdToHtml(raw);

@@ -111,13 +111,44 @@ function readEnvKey(name) {
     return m && m[1] ? m[1].trim() : '';
   } catch { return ''; }
 }
+// A value written here becomes a LINE in a file that config.mjs parses
+// line-by-line into process.env at startup. A line break in the value therefore
+// writes a SECOND key, and some keys on this file are executable: PANDOC_BIN is
+// spawned directly by the apply flow, and the TJK_* keys decide which model runs
+// and what it costs. So one saved "API key" containing a newline is enough to
+// choose what this machine runs the next time it starts. That is the boundary
+// this check defends, not tidiness.
+//
+// REFUSED, never trimmed. Silently dropping half of a pasted secret leaves the
+// user with a key that does not work and nothing on screen explaining why.
+const ENV_VALUE_MAX = 4096;
+export function assertEnvValue(value) {
+  const v = String(value == null ? '' : value);
+  if (/[\r\n]/.test(v)) {
+    throw new Error('That value contains a line break. Keys never do, so it is refused rather than trimmed. Paste just the key itself.');
+  }
+  if (v.length > ENV_VALUE_MAX) {
+    throw new Error(`That value is longer than ${ENV_VALUE_MAX} characters, which no key is. Paste just the key itself.`);
+  }
+  return v;
+}
+
 function writeEnvKey(name, value) {
+  const v = assertEnvValue(value);
   let text = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, 'utf8') : '';
   const re = new RegExp(`^${name}=.*$`, 'm');
-  if (re.test(text)) text = text.replace(re, `${name}=${value}`);
-  else text = text.replace(/\s*$/, '') + (text ? '\n' : '') + `${name}=${value}\n`;
-  fs.writeFileSync(ENV_PATH, text, 'utf8');
-  process.env[name] = value;   // take effect now, no restart needed
+  // Function replacement, not a string one: String.replace treats $& and $` in a
+  // STRING replacement as references to the match and the text before it, so a
+  // value containing them would splice surrounding file content into itself. A
+  // function replacement is taken literally.
+  if (re.test(text)) text = text.replace(re, () => `${name}=${v}`);
+  else text = text.replace(/\s*$/, '') + (text ? '\n' : '') + `${name}=${v}\n`;
+  // 0600: this file holds every API key the install has. The mode argument only
+  // applies when the file is CREATED, so chmod an existing one too. Best-effort,
+  // because Windows ignores POSIX modes and must not fail the save.
+  fs.writeFileSync(ENV_PATH, text, { encoding: 'utf8', mode: 0o600 });
+  try { fs.chmodSync(ENV_PATH, 0o600); } catch { /* windows, or a filesystem without modes */ }
+  process.env[name] = v;   // take effect now, no restart needed
 }
 const keyPresent = (name) => !!((process.env[name] || '').trim() || readEnvKey(name));
 
@@ -134,6 +165,9 @@ router.post('/api/setup/anthropic-key', (req, res) => {
   const key = ((req.body && req.body.key) || '').trim();
   if (!key) return res.status(400).json({ error: 'Paste your Anthropic API key (it starts with sk-ant-).' });
   if (!key.startsWith('sk-ant-')) return res.status(400).json({ error: 'That does not look like an Anthropic key. Anthropic keys start with "sk-ant-".' });
+  // The prefix check is not a substitute for the value check: "sk-ant-…\nOTHER=…"
+  // satisfies startsWith and still writes a second key.
+  try { assertEnvValue(key); } catch (e) { return res.status(400).json({ error: e.message }); }
   try {
     writeEnvKey('ANTHROPIC_API_KEY', key);
     res.json({ ok: true, hasKey: true });
@@ -195,13 +229,17 @@ router.get('/api/setup/verify-keys', (req, res) => {
 // Read by find-contacts.mjs and the TA reconcile route on their next run.
 router.post('/api/setup/verify-keys', (req, res) => {
   const body = req.body || {};
-  const saved = [];
+  // Validate EVERY value before writing ANY of them, so a bad second key cannot
+  // leave the first one half-applied.
+  const pending = [];
   for (const [field, envName] of [['hunter', 'HUNTER_API_KEY'], ['millionverifier', 'MILLIONVERIFIER_API_KEY']]) {
     if (typeof body[field] === 'string' && body[field].trim()) {
-      writeEnvKey(envName, body[field].trim());
-      saved.push(field);
+      try { pending.push([field, envName, assertEnvValue(body[field].trim())]); }
+      catch (e) { return res.status(400).json({ error: e.message }); }
     }
   }
+  const saved = [];
+  for (const [field, envName, value] of pending) { writeEnvKey(envName, value); saved.push(field); }
   if (!saved.length) return res.status(400).json({ error: 'Paste a Hunter or MillionVerifier API key first.' });
   try { res.json({ ok: true, saved, hunter: keyPresent('HUNTER_API_KEY'), millionverifier: keyPresent('MILLIONVERIFIER_API_KEY') }); }
   catch (err) { res.status(500).json({ error: err.message }); }
@@ -212,13 +250,16 @@ router.post('/api/setup/verify-keys', (req, res) => {
 // Expand Coverage run.
 router.post('/api/setup/discovery-keys', (req, res) => {
   const body = req.body || {};
-  const saved = [];
+  // Same as verify-keys: everything is checked before anything is written.
+  const pending = [];
   for (const [field, envName] of [['brave', 'BRAVE_API_KEY'], ['muse', 'MUSE_API_KEY']]) {
     if (typeof body[field] === 'string' && body[field].trim()) {
-      writeEnvKey(envName, body[field].trim());
-      saved.push(field);
+      try { pending.push([field, envName, assertEnvValue(body[field].trim())]); }
+      catch (e) { return res.status(400).json({ error: e.message }); }
     }
   }
+  const saved = [];
+  for (const [field, envName, value] of pending) { writeEnvKey(envName, value); saved.push(field); }
   if (!saved.length) return res.status(400).json({ error: 'Paste a Brave or Muse API key first.' });
   try { res.json({ ok: true, saved, brave: keyPresent('BRAVE_API_KEY'), muse: keyPresent('MUSE_API_KEY') }); }
   catch (err) { res.status(500).json({ error: err.message }); }

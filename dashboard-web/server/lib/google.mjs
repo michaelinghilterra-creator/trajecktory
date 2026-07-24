@@ -49,8 +49,19 @@ function readTokens() {
   try { return JSON.parse(fs.readFileSync(GOOGLE_TOKENS_PATH, 'utf8')); }
   catch { return null; }
 }
+// 0600. This file holds a refresh token that grants read access to the user's
+// entire mailbox and survives every restart, which makes it the most valuable
+// single artifact on the install. The default write mode is world-readable on
+// POSIX, so any other account on the machine could simply read it.
+//
+// The mode argument only applies when the file is CREATED, so an existing file
+// gets an explicit chmod: an install that predates this fix must not stay
+// permissive just because the file already exists. Both are best-effort, because
+// Windows has no POSIX modes and losing the token write would be far worse than
+// a permissive one.
 function writeTokens(t) {
-  fs.writeFileSync(GOOGLE_TOKENS_PATH, JSON.stringify(t, null, 2) + '\n');
+  fs.writeFileSync(GOOGLE_TOKENS_PATH, JSON.stringify(t, null, 2) + '\n', { mode: 0o600 });
+  try { fs.chmodSync(GOOGLE_TOKENS_PATH, 0o600); } catch { /* windows, or a filesystem without modes */ }
 }
 // The Gmail scan cursor: which message ids we have already processed, so a
 // re-scan is idempotent and never double-logs a reply or re-flips a bounce.
