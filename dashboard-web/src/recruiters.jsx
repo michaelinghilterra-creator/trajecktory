@@ -1348,6 +1348,7 @@ function RecAICompose({ contact, contactId, onSaveDraft, onLogSent, onToast }) {
             <button className="btn sm" onClick={() => onSaveDraft(subject, fullEmail)}>
               <RecIcon d={REC_I.spark} size={12} /> Save as draft only
             </button>
+            <window.GmailDraftBtn to={contact.email} subject={subject} body={fullEmail} />
           </div>
         </>
         );

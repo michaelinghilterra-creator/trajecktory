@@ -661,6 +661,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn primary sm" onClick={() => setLogModal({ direction: "Sent", subject: draftResult.subject, body: fullEmail })}><TIcon d={TI.check} size={12} /> I sent this</button>
                 <button className="btn sm" onClick={() => saveCorrAndClose({ direction: "Draft", subject: draftResult.subject, body: fullEmail })}><TIcon d={TI.pen} size={12} /> Save as draft</button>
+                <window.GmailDraftBtn to={data.email} subject={draftResult.subject} body={fullEmail} />
                 <button className="btn sm" onClick={generateDraft}><TIcon d={TI.refresh} size={12} /> Regen</button>
               </div>
             </div>

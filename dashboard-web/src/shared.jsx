@@ -1002,6 +1002,45 @@ function QuickCopyBar() {
 // Exposed globally so the Pipeline drawer (pipeline.jsx, separate IIFE) can reuse it.
 window.QuickCopyBar = QuickCopyBar;
 
+// Create-a-Gmail-draft button. POSTs the composed email to /api/google/draft,
+// which creates a DRAFT and never sends (the server has no send path). If the
+// connected token predates the compose scope the route returns needsReconnect and
+// we nudge a reconnect. Shared by the TA, recruiter, and follow-up composers.
+// Renders nothing without a recipient address (a draft needs a "to").
+window.GmailDraftBtn = function GmailDraftBtn({ to, subject, body, size = "sm" }) {
+  const [busy, setBusy] = React.useState(false);
+  const [done, setDone] = React.useState(false);
+  if (!to) return null;
+  const create = async () => {
+    if (busy || done) return;
+    setBusy(true);
+    try {
+      const res = await window.tjkMutate('/api/google/draft', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, subject: subject || '', body: body || '' }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.ok) {
+        setDone(true);
+        window.tjkToast?.('Draft created in Gmail. Review and send it there.', 'success');
+        setTimeout(() => setDone(false), 4000);
+      } else if (res.status === 403 && d.needsReconnect) {
+        window.tjkToast?.('Reconnect Gmail to enable drafts (Review tab, then Connect).', 'error');
+      } else {
+        window.tjkToast?.(d.error || 'Could not create the Gmail draft.', 'error');
+      }
+    } catch {
+      window.tjkToast?.('Could not reach Gmail.', 'error');
+    } finally { setBusy(false); }
+  };
+  return (
+    <button className={"btn " + size} onClick={create} disabled={busy || !body}
+      title="Create a draft in your Gmail Drafts folder (never sends)">
+      {busy ? "Drafting…" : done ? "In Gmail Drafts ✓" : "Gmail draft"}
+    </button>
+  );
+};
+
 // ---------- Command Palette ----------
 window.CommandPalette = function CommandPalette({ open, onClose, commands }) {
   const [q, setQ] = useStateS("");
