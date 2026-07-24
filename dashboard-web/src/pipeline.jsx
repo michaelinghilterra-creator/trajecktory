@@ -413,12 +413,12 @@ function TriageRowActions({ row, job, onDeep, onDismiss }) {
   const s = job && job.status;
   if (s === 'running') {
     return <div className="row" style={{ gap: 6, marginTop: 4 }} onClick={e => e.stopPropagation()}>
-      <span className="mono dim" style={{ fontSize: 10 }}>⧖ deep dive running…</span>
+      <span className="mono dim" style={{ fontSize: 10.5 }}>⧖ deep dive running…</span>
     </div>;
   }
   if (s === 'done') {
     return <div className="row" style={{ gap: 6, marginTop: 4 }} onClick={e => e.stopPropagation()}>
-      <span className="mono" style={{ fontSize: 10, color: 'var(--green)' }}>✓ promoted to a full evaluation</span>
+      <span className="mono" style={{ fontSize: 10.5, color: 'var(--green)' }}>✓ promoted to a full evaluation</span>
     </div>;
   }
   return (
@@ -433,7 +433,7 @@ function TriageRowActions({ row, job, onDeep, onDismiss }) {
       )}
       <button className="btn ghost sm" style={{ padding: '2px 7px', fontSize: 10.5 }}
         title="Not a match. Dismiss (it won't come back on the next scan)" onClick={() => onDismiss(row)}>✕ dismiss</button>
-      {s === 'error' && <span className="mono" style={{ fontSize: 10, color: 'var(--red)' }} title={job.error}>failed, retry</span>}
+      {s === 'error' && <span className="mono" style={{ fontSize: 10.5, color: 'var(--red)' }} title={job.error}>failed, retry</span>}
     </div>
   );
 }
@@ -523,7 +523,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
                     {a.role}
                     {a._triage && (
                       <>
-                        <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.04em', color: 'var(--text-mute)', marginTop: 2, textTransform: 'uppercase' }}>pre-filter · Haiku · not yet evaluated</div>
+                        <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.04em', color: 'var(--text-mute)', marginTop: 2, textTransform: 'uppercase' }}>pre-filter · Haiku · not yet evaluated</div>
                         {a.rationale && <div className="dim" style={{ fontSize: 10.5, marginTop: 2, whiteSpace: 'normal', lineHeight: 1.35 }}>{a.rationale}</div>}
                         {triage && <TriageRowActions row={a} job={triage.deepJobs[a.id]} onDeep={triage.onDeep} onDismiss={triage.onDismiss} />}
                       </>
@@ -578,7 +578,7 @@ function CompPositioningCard(props) {
         <span className="card-meta mono">{withComp.length} of {apps.length} active have stated comp</span>
       </div>
       {withComp.length === 0 ? (
-        <div className="empty" style={{ padding: '16px 4px', color: 'var(--text-mute)', fontSize: 12.5 }}>
+        <div className="empty" style={{ padding: '16px 4px', color: 'var(--text-mute)', fontSize: 12 }}>
           No active roles have JD-stated comp yet. Roles without disclosed salary aren't plotted.
         </div>
       ) : (
@@ -592,22 +592,22 @@ function CompPositioningCard(props) {
               </div>
             ))}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 8, fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '.04em' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 8, fontFamily: 'var(--mono)', fontSize: 10.5, letterSpacing: '.04em' }}>
             <div style={{ color: 'var(--red)' }}>
               {'< ' + dollar(walkAway)}
-              <div style={{ color: 'var(--text-mute)', fontSize: 9.5, marginTop: 2 }}>walk-away</div>
+              <div style={{ color: 'var(--text-mute)', fontSize: 10.5, marginTop: 2 }}>walk-away</div>
             </div>
             <div style={{ color: 'var(--yellow)' }}>
               {dollar(walkAway) + '-' + dollar(targetLow)}
-              <div style={{ color: 'var(--text-mute)', fontSize: 9.5, marginTop: 2 }}>stretch</div>
+              <div style={{ color: 'var(--text-mute)', fontSize: 10.5, marginTop: 2 }}>stretch</div>
             </div>
             <div style={{ color: 'var(--green)' }}>
               {dollar(targetLow) + '-' + dollar(targetHigh)}
-              <div style={{ color: 'var(--text-mute)', fontSize: 9.5, marginTop: 2 }}>target band</div>
+              <div style={{ color: 'var(--text-mute)', fontSize: 10.5, marginTop: 2 }}>target band</div>
             </div>
             <div style={{ color: 'var(--accent)' }}>
               {'> ' + dollar(targetHigh)}
-              <div style={{ color: 'var(--text-mute)', fontSize: 9.5, marginTop: 2 }}>above target</div>
+              <div style={{ color: 'var(--text-mute)', fontSize: 10.5, marginTop: 2 }}>above target</div>
             </div>
           </div>
           <Insight kind={inOrAbovePct < 40 ? 'warn' : null}>
@@ -948,7 +948,7 @@ function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays
       {/* Status breakdown — flat row, no inner card */}
       <div className="row" style={{ flexWrap: 'wrap', gap: 14, marginBottom: 10 }}>
         {breakdown.map(({ s, n, meta }) => (
-          <span key={s} className="row mono" style={{ gap: 6, fontSize: 11.5, color: 'var(--text-dim)', cursor: 'pointer' }} onClick={() => toggleStatus(s)}>
+          <span key={s} className="row mono" style={{ gap: 6, fontSize: 11, color: 'var(--text-dim)', cursor: 'pointer' }} onClick={() => toggleStatus(s)}>
             <span style={{ width: 7, height: 7, borderRadius: 50, background: meta.color, display: 'inline-block', flexShrink: 0 }}></span>
             {s}
             <span style={{ color: filters.statuses.includes(s) ? 'var(--accent)' : 'var(--text)' }}>{n}</span>
@@ -1319,7 +1319,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                 {/* Governs every status change made from this drawer: the stage
                     track above and the action buttons in the footer. Quiet and
                     pre-filled, because same-day is the common case. */}
-                <label className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', letterSpacing: '.06em', textTransform: 'uppercase' }}>Booked</label>
+                <label className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', letterSpacing: '.06em', textTransform: 'uppercase' }}>Booked</label>
                 <input
                   type="date"
                   className="dr-todo-due"
@@ -1347,7 +1347,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                 : <>Sourced via <b>{app.source || 'unknown'}</b> · no résumé generated yet</>}
             </span>
             {app.resume && app.resume !== engine && (
-              <span className="mono" style={{ fontSize: 10, color: 'var(--text-mute)' }}>{app.resume}</span>
+              <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)' }}>{app.resume}</span>
             )}
           </div>
 
@@ -1390,8 +1390,8 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                   <div className="rp-snap-sub">
                     {scoreBucket(app.score) === 'na' ? 'unscored' : scoreBucket(app.score) + ' match'}
                     {cs && (cs.scoreSource === 'derived'
-                      ? <span title="Computed from the dimensions below times your saved weights, minus the red-flag penalty." style={{ marginLeft: 6, padding: '0 5px', borderRadius: 4, background: 'var(--accent-bg)', color: 'var(--accent)', fontSize: 10, fontWeight: 600 }}>derived</span>
-                      : <span title="Authored under the older rubric. Kept as-is and not recomputed, so it is not directly comparable to a derived score." style={{ marginLeft: 6, padding: '0 5px', borderRadius: 4, background: 'var(--panel)', color: 'var(--text-mute)', fontSize: 10, fontWeight: 600, border: '1px solid var(--border)' }}>legacy</span>)}
+                      ? <span title="Computed from the dimensions below times your saved weights, minus the red-flag penalty." style={{ marginLeft: 6, padding: '0 5px', borderRadius: 4, background: 'var(--accent-bg)', color: 'var(--accent)', fontSize: 10.5, fontWeight: 600 }}>derived</span>
+                      : <span title="Authored under the older rubric. Kept as-is and not recomputed, so it is not directly comparable to a derived score." style={{ marginLeft: 6, padding: '0 5px', borderRadius: 4, background: 'var(--panel)', color: 'var(--text-mute)', fontSize: 10.5, fontWeight: 600, border: '1px solid var(--border)' }}>legacy</span>)}
                   </div>
                 </div>
                 <div className="rp-snap">
@@ -1432,7 +1432,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                       const col = neg ? 'var(--red)' : pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--yellow)' : 'var(--orange)';
                       return (
                         <div key={d.key || d.dim || i} className="rp-bar-row">
-                          <span className="rp-bar-label" title={d.evidence || undefined} style={d.evidence ? { cursor: 'help' } : undefined}>{d.dim}{d.note && <span style={{ color: 'var(--text-mute)', fontSize: 10 }}> · {d.note}</span>}</span>
+                          <span className="rp-bar-label" title={d.evidence || undefined} style={d.evidence ? { cursor: 'help' } : undefined}>{d.dim}{d.note && <span style={{ color: 'var(--text-mute)', fontSize: 10.5 }}> · {d.note}</span>}</span>
                           <div className="rp-bar-track"><div className="rp-bar-fill" style={{ width: `${pct}%`, background: col }} /></div>
                           <span className="rp-bar-val" style={{ color: neg ? 'var(--red)' : 'var(--text)' }}>{neg ? d.val : `${d.val}/${d.max}`}</span>
                         </div>
@@ -1847,7 +1847,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                           style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', cursor: 'pointer', color: 'inherit' }}>
                           <span className="mono-av sm" style={{ borderRadius: 7 }}>{((c.first || '')[0] || '') + ((c.last || '')[0] || '')}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.first} {c.last}</div>
+                            <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.first} {c.last}</div>
                             <div className="dim" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</div>
                           </div>
                           <span className="dim mono" style={{ fontSize: 10.5 }}>{c.status || 'New'}</span>
@@ -2240,7 +2240,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
                 {a.role}
                 {a._triage && (
                   <>
-                    <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.04em', color: 'var(--text-mute)', marginTop: 2, textTransform: 'uppercase' }}>initial pass · Haiku triage</div>
+                    <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.04em', color: 'var(--text-mute)', marginTop: 2, textTransform: 'uppercase' }}>initial pass · Haiku triage</div>
                     {a.rationale && <div className="dim" style={{ fontSize: 10.5, marginTop: 2, whiteSpace: 'normal', lineHeight: 1.35 }}>{a.rationale}</div>}
                     {triage && <TriageRowActions row={a} job={triage.deepJobs[a.id]} onDeep={triage.onDeep} onDismiss={triage.onDismiss} />}
                   </>

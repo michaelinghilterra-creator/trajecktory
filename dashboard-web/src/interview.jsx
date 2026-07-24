@@ -410,7 +410,7 @@ function ProblemsPanel({ derived }) {
       </div>
       <div className="col" style={{ gap: 6 }}>
         {problems.map((p, i) => (
-          <div key={'p' + i} style={{ fontSize: 12.5, color: 'var(--red)', lineHeight: 1.5 }}>
+          <div key={'p' + i} style={{ fontSize: 12, color: 'var(--red)', lineHeight: 1.5 }}>
             <strong>Blocking:</strong> {p}
           </div>
         ))}
@@ -866,7 +866,7 @@ function DebriefPanel({ debrief }) {
   if (!debrief || !debrief.html) return null;
   return (
     <details className="card ib-debrief" open={!!debrief.hasProse} style={{ padding: 12 }}>
-      <summary style={{ cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>
+      <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>
         Debrief
         <span className="dim" style={{ fontWeight: 400, marginLeft: 8, fontSize: 11 }}>
           {debrief.hasProse ? 'written up after the call' : 'template, not filled in yet'}
@@ -1434,12 +1434,12 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
           >
             <div className="focus-task-main">
               <div className="focus-task-label">{s.company}</div>
-              <div className="dim" style={{ fontSize: 11.5, marginTop: 2 }}>{s.role}</div>
+              <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>{s.role}</div>
               {/* A row reaches this list on status alone now, so say plainly when
                   there is nothing prepared yet. Previously such a row was absent
                   entirely, which read as the tab being broken. */}
               {s.needsPrep && (
-                <div style={{ fontSize: 11.5, marginTop: 3, color: 'var(--yellow)' }}>No prep yet. Open it to generate some.</div>
+                <div style={{ fontSize: 11, marginTop: 3, color: 'var(--yellow)' }}>No prep yet. Open it to generate some.</div>
               )}
             </div>
             <div className="row" style={{ gap: 8 }}>
@@ -1458,7 +1458,7 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
                 style={{ cursor: 'pointer', opacity: 0.75 }} onClick={() => pickSession(s)}>
                 <div className="focus-task-main">
                   <div className="focus-task-label">{s.company}</div>
-                  <div className="dim" style={{ fontSize: 11.5, marginTop: 2 }}>{s.role}</div>
+                  <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>{s.role}</div>
                 </div>
                 <span className="pill mono" style={{ fontSize: 10.5 }}>{s.status || 'archived'}</span>
               </div>
@@ -1540,7 +1540,7 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
                   title={r.descriptor || r.stage || ''}
                 >
                   Round {r.round}
-                  <span className="dim" style={{ marginLeft: 6, fontSize: 10 }}>{live ? 'Live' : 'Prep only'}</span>
+                  <span className="dim" style={{ marginLeft: 6, fontSize: 10.5 }}>{live ? 'Live' : 'Prep only'}</span>
                 </span>
               );
             })}
@@ -1558,7 +1558,7 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
                 title={d.title || d.name}
               >
                 {d.label}
-                <span className="dim" style={{ marginLeft: 6, fontSize: 10 }}>doc</span>
+                <span className="dim" style={{ marginLeft: 6, fontSize: 10.5 }}>doc</span>
               </span>
             ))}
             {/* The only entry point for a round that does not exist yet. Without it
@@ -1698,7 +1698,7 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
                   <div>
                     {overflows && (
                       <div className="card" style={{ padding: 12, marginBottom: 10, borderColor: 'var(--orange)' }}>
-                        <div style={{ fontSize: 12.5, color: 'var(--orange)', lineHeight: 1.5 }}>
+                        <div style={{ fontSize: 12, color: 'var(--orange)', lineHeight: 1.5 }}>
                           ⚠ <strong>This board overruns the screen by {overshoot}px</strong> (~{Math.round(overshoot / 33)} rows,
                           {' '}{fit.scrollHeight}px vs {fit.viewport}px). That is enough scrolling to lose your place mid-call.
                           <strong> Cut cues</strong> — 17px is the floor, the type does not shrink.

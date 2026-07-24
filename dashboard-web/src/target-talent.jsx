@@ -228,7 +228,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
               <TIcon d={TI.x} size={12} /> Clear
             </button>
           )}
-          <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-mute)", letterSpacing: ".06em" }}>
+          <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)", letterSpacing: ".06em" }}>
             sorted by {cols.find(c => c.k === sortKey)?.label.toLowerCase()} &middot; click a row for details
           </span>
         </div>
@@ -259,18 +259,18 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
                         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.first} {c.last}</div>
                       </div>
                     </td>
-                    <td title={c.title || ""}>
-                      <span style={{ fontSize: 12, color: "var(--text-dim)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || "—"}</span>
+                    <td title={c.title || "No job title recorded for this contact"}>
+                      <span style={{ fontSize: 12, color: "var(--text-dim)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} aria-label={c.title || "No job title recorded"}>{c.title || "—"}</span>
                     </td>
                     <td title={c.company || ""}>
-                      <span style={{ fontWeight: 600, fontSize: 12.5, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.company}</span>
+                      <span style={{ fontWeight: 600, fontSize: 12, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.company}</span>
                     </td>
                     <td>
-                      <span style={{ fontSize: 12, color: loc ? "var(--text-dim)" : "var(--text-mute)" }}>{loc || "—"}</span>
+                      <span style={{ fontSize: 12, color: loc ? "var(--text-dim)" : "var(--text-mute)" }} title={loc || "No location recorded for this contact"} aria-label={loc || "No location recorded"}>{loc || "—"}</span>
                     </td>
                     <td><StatusBadge status={c.status} size="sm" /></td>
                     <td>
-                      <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: c.lastTouch ? "var(--text-dim)" : "var(--text-mute)" }}>{c.lastTouch ? relTouch(c.lastTouch) : "—"}</span>
+                      <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: c.lastTouch ? "var(--text-dim)" : "var(--text-mute)" }} title={c.lastTouch ? relTouch(c.lastTouch) : "Never contacted"} aria-label={c.lastTouch ? relTouch(c.lastTouch) : "Never contacted"}>{c.lastTouch ? relTouch(c.lastTouch) : "—"}</span>
                     </td>
                   </tr>
                 );
@@ -302,7 +302,7 @@ function TABar({ label, n, total, color }) {
   const pct = total > 0 ? Math.round((n / total) * 100) : 0;
   return (
     <div className="col" style={{ gap: 4 }}>
-      <div className="row" style={{ justifyContent: 'space-between', fontSize: 11.5 }}>
+      <div className="row" style={{ justifyContent: 'space-between', fontSize: 11 }}>
         <span style={{ color }}>{label}</span>
         <span className="mono dim">{n} · {pct}%</span>
       </div>
@@ -523,8 +523,8 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
           <span className="mono-av" style={{ width: 44, height: 44, fontSize: 14, borderRadius: 10, borderColor: (TT_STATUS_MAP[data.status] || {}).color, color: (TT_STATUS_MAP[data.status] || {}).color }}>{ttInitials(data.first + " " + data.last)}</span>
           <div>
             <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>{data.salute} {data.first} {data.last}</h3>
-            <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginTop: 2 }}>{data.title}</div>
-            <div style={{ fontSize: 12.5, color: "var(--accent)", marginTop: 3, fontWeight: 500 }}>{data.company}</div>
+            <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>{data.title}</div>
+            <div style={{ fontSize: 12, color: "var(--accent)", marginTop: 3, fontWeight: 500 }}>{data.company}</div>
           </div>
         </div>
       </div>
@@ -548,7 +548,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
                 return (
                   <>
                     {href
-                      ? <a className="iv link" href={href} target="_blank" rel="noreferrer">{stored || guess}{!stored && guess ? <span style={{ color: "var(--text-mute)", marginLeft: 5, fontSize: 10 }}>(from email)</span> : null}</a>
+                      ? <a className="iv link" href={href} target="_blank" rel="noreferrer">{stored || guess}{!stored && guess ? <span style={{ color: "var(--text-mute)", marginLeft: 5, fontSize: 10.5 }}>(from email)</span> : null}</a>
                       : <span className="iv" style={{ color: "var(--text-mute)" }}>—</span>}
                     <button className="copy-btn" onClick={() => { setWebsite(stored); setEditingWeb(true); }}><TIcon d={TI.pen} size={11} /> Edit</button>
                   </>
@@ -564,8 +564,8 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
                   const bounced  = /EMAIL BOUNCED|bounced/i.test(n);
                   const unverified = !bounced && /email unverified|pattern-med|pattern-low|auto-synthesized/i.test(n);
                   if (!data.email && !bounced) return null;
-                  if (bounced) return <span style={{ marginLeft: 8, padding: "1px 6px", borderRadius: 4, background: "rgba(239,68,68,0.18)", color: "#fca5a5", fontSize: 10, fontWeight: 600, letterSpacing: 0.4 }} title="See notes for details">BOUNCED</span>;
-                  if (unverified) return <span style={{ marginLeft: 8, padding: "1px 6px", borderRadius: 4, background: "rgba(234,179,8,0.18)", color: "#fde68a", fontSize: 10, fontWeight: 600, letterSpacing: 0.4 }} title="Auto-synthesized. Confirm before sending">UNVERIFIED</span>;
+                  if (bounced) return <span style={{ marginLeft: 8, padding: "1px 6px", borderRadius: 4, background: "rgba(239,68,68,0.18)", color: "#fca5a5", fontSize: 10.5, fontWeight: 600, letterSpacing: 0.4 }} title="See notes for details">BOUNCED</span>;
+                  if (unverified) return <span style={{ marginLeft: 8, padding: "1px 6px", borderRadius: 4, background: "rgba(234,179,8,0.18)", color: "#fde68a", fontSize: 10.5, fontWeight: 600, letterSpacing: 0.4 }} title="Auto-synthesized. Confirm before sending">UNVERIFIED</span>;
                   return null;
                 })()}
               </span>
@@ -628,7 +628,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
           <div className="ds-label">
             <TIcon d={TI.spark} size={12} /> Outreach
             <select value={draftStage} onChange={e => setDraftStage(e.target.value)} title="Tune the draft for where you are in the process"
-              style={{ marginLeft: "auto", fontSize: 11.5, padding: "3px 6px", borderRadius: 5, background: "var(--panel-2)", color: "var(--text-dim)", border: "1px solid var(--border)" }}>
+              style={{ marginLeft: "auto", fontSize: 11, padding: "3px 6px", borderRadius: 5, background: "var(--panel-2)", color: "var(--text-dim)", border: "1px solid var(--border)" }}>
               {TT_STAGE_OPTS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
             </select>
           </div>
@@ -837,7 +837,7 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
         <TIcon d={TI.users} size={12} /> Find contacts at {company}
         {onCancel && phase !== "done" && <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={onCancel}>Cancel</button>}
       </div>
-      {error && <div style={{ padding: 8, background: "rgba(239,68,68,0.12)", color: "var(--red)", borderRadius: 4, marginBottom: 8, fontSize: 11.5 }}>{error}</div>}
+      {error && <div style={{ padding: 8, background: "rgba(239,68,68,0.12)", color: "var(--red)", borderRadius: 4, marginBottom: 8, fontSize: 11 }}>{error}</div>}
 
       {phase === "idle" && (
         <>
@@ -882,7 +882,7 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
 
       {phase === "done" && (
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 12.5, color: "var(--green)" }}><TIcon d={TI.check} size={13} /> Added {addedCount} contact{addedCount === 1 ? "" : "s"}.</span>
+          <span style={{ fontSize: 12, color: "var(--green)" }}><TIcon d={TI.check} size={13} /> Added {addedCount} contact{addedCount === 1 ? "" : "s"}.</span>
           {onCancel && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={onCancel}>Done</button>}
         </div>
       )}
@@ -1077,7 +1077,7 @@ function ReconcileModal({ onClose, onApplied }) {
               {loading ? <div className="ai-loading" style={{ justifyContent: "center" }}><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> Applying changes and verifying emails…</div> : <>
                 <div className="apply-done-icon"><TIcon d={TI.check} size={26} stroke={3} /></div>
                 <h2 style={{ fontSize: 17, margin: "0 0 6px" }}>Reconcile complete</h2>
-                <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginBottom: 18 }}>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 18 }}>
                   Your TA list is now in sync with the application pipeline.
                 </div>
                 {outcome && (
@@ -1088,13 +1088,13 @@ function ReconcileModal({ onClose, onApplied }) {
                   </div>
                 )}
                 {outcome && outcome.verifierKeys === false && outcome.added > 0 && (
-                  <div style={{ fontSize: 11.5, color: "var(--orange)", maxWidth: 440, margin: "12px auto 0", lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 11, color: "var(--orange)", maxWidth: 440, margin: "12px auto 0", lineHeight: 1.6 }}>
                     Email finding was skipped. Set <b>HUNTER_API_KEY</b> and <b>MILLIONVERIFIER_API_KEY</b> in
                     dashboard-web/.env to auto-find and verify addresses for new contacts.
                   </div>
                 )}
                 {outcome && (outcome.archived > 0 || outcome.added > 0) && (
-                  <div style={{ fontSize: 11.5, color: "var(--text-mute)", maxWidth: 440, margin: "16px auto 0", lineHeight: 1.65 }}>
+                  <div style={{ fontSize: 11, color: "var(--text-mute)", maxWidth: 440, margin: "16px auto 0", lineHeight: 1.65 }}>
                     These changes are saved. New contacts got a <b>verified</b> email wherever one could be
                     found and confirmed deliverable (Hunter into MillionVerifier); anyone without one goes
                     to the LinkedIn fallback. Archived contacts are not deleted: they stay behind <b>Show

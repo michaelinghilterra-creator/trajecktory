@@ -127,7 +127,7 @@ window.ApplyArtifacts = function ApplyArtifacts({ app }) {
   ) : null;
   return (
     <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-      <span style={{ fontSize: 11.5, color: 'var(--text-mute)' }}>Files for this application:</span>
+      <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>Files for this application:</span>
       {link(a.resume, 'Tailored resume')}
       {link(a.cover, 'Cover letter')}
     </div>
@@ -165,7 +165,7 @@ window.ScoreExplainer = function ScoreExplainer({ open, onClose, scoreSource }) 
     </div>
   );
   return (
-    <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12.5, lineHeight: 1.6 }}>
+    <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12, lineHeight: 1.6 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
         <b style={{ color: 'var(--text)' }}>How this score works</b>
         <button className="btn ghost sm" onClick={onClose}>Close</button>
@@ -250,13 +250,13 @@ window.PostingPanel = function PostingPanel({ app }) {
   return (
     <div className="col" style={{ gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
           Saved when this role was evaluated, so it survives the posting being taken down.
         </span>
         {app.url && <a className="btn sm" href={app.url} target="_blank" rel="noreferrer">Original ↗</a>}
       </div>
       <div className="mono dim" style={{ fontSize: 10.5 }}>{state.path}</div>
-      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12.5, lineHeight: 1.6, color: 'var(--text)', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 'var(--r-card)', padding: 13, margin: 0, maxHeight: '60vh', overflowY: 'auto' }}>{state.text}</pre>
+      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, lineHeight: 1.6, color: 'var(--text)', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 'var(--r-card)', padding: 13, margin: 0, maxHeight: '60vh', overflowY: 'auto' }}>{state.text}</pre>
     </div>
   );
 }
@@ -271,7 +271,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
     { key: "pipeline",      label: "Pipeline",           icon: "▥", badge: stats.pending },
     { key: "followups",     label: "Follow-Ups",         icon: "↻", badge: stats.followups || null },
     { key: "target-talent", label: "TA Outreach",        icon: "◎" },
-    { key: "linkedin-ssi",  label: "LinkedIn SSI",       icon: "🔗" },
+    { key: "linkedin-ssi",  label: "LinkedIn SSI",       icon: "◍" },
     { key: "recruiters",    label: "Recruiters",         icon: "☎" },
     { key: "interview",     label: "Interview",          icon: "◈" },
     // Review moved under Insights (first subtab); its Gmail-health nudge rides
@@ -285,9 +285,9 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
     const REQ = ["cv","identity","roles","edge","comp","location","evaluation","companies","outputs"];
     const incomplete = REQ.filter(id => (setupState.sections?.[id]?.status || "empty") !== "complete").length;
     if (setupState.firstRun || incomplete > 0) {
-      items.unshift({ key: "launchpad", label: "Launchpad", icon: "🚀", badge: incomplete || null });
+      items.unshift({ key: "launchpad", label: "Launchpad", icon: "◇", badge: incomplete || null });
     } else {
-      items.push({ key: "launchpad", label: "Setup", icon: "🚀" });
+      items.push({ key: "launchpad", label: "Setup", icon: "◇" });
     }
   }
   return (
@@ -679,13 +679,13 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
 
       {/* Sign in to Claude — Agent Scan + Evaluate Pipeline run on the bundled
           CLI's login, so the control lives here next to the steps that use it. */}
-      <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 11.5 }}>
+      <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 11 }}>
         {claudeSignedIn ? (
           <span style={{ color: 'var(--green)' }}>✓ Signed in to Claude</span>
         ) : (
           <button onClick={signInClaude}
             title="One-time sign-in so Agent Scan and Evaluate Pipeline can run"
-            style={{ background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '3px 8px', fontSize: 11.5, cursor: 'pointer', width: '100%' }}>
+            style={{ background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', width: '100%' }}>
             Sign in to Claude ⧉
           </button>
         )}
@@ -699,7 +699,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           rather than advice. The fix flips a security flag, so it stays behind an
           explicit click. */}
       {!trust.ok && (
-        <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 11.5, background: 'var(--warn-bg, rgba(255,176,32,0.08))' }}>
+        <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 11, background: 'var(--warn-bg, rgba(255,176,32,0.08))' }}>
           <div style={{ color: 'var(--warn, #ffb020)', fontWeight: 600 }}>⚠ Folder not trusted by Claude Code</div>
           <div style={{ marginTop: 4, color: 'var(--text-mute)', lineHeight: 1.45 }}>
             {trust.losing?.length
@@ -708,7 +708,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           </div>
           <button onClick={fixWorkspaceTrust} disabled={trustBusy}
             title="Marks this folder as trusted in your Claude Code config (a backup is saved first)"
-            style={{ marginTop: 6, background: 'none', border: '1px solid var(--warn, #ffb020)', color: 'var(--warn, #ffb020)', borderRadius: 6, padding: '3px 8px', fontSize: 11.5, cursor: trustBusy ? 'default' : 'pointer', width: '100%', opacity: trustBusy ? 0.6 : 1 }}>
+            style={{ marginTop: 6, background: 'none', border: '1px solid var(--warn, #ffb020)', color: 'var(--warn, #ffb020)', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: trustBusy ? 'default' : 'pointer', width: '100%', opacity: trustBusy ? 0.6 : 1 }}>
             {trustBusy ? 'Trusting…' : 'Trust this folder'}
           </button>
           {trust.fixMsg && <div style={{ marginTop: 6, color: 'var(--text-mute)', lineHeight: 1.4 }}>{trust.fixMsg}</div>}
@@ -836,7 +836,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               <div key={card.url} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
                   <span title="Pre-filter score (coarse Haiku pass), not comparable to a derived evaluation score" style={{ color, fontWeight: 700, fontFamily: 'var(--mono)', fontSize: 12 }}>{sc == null ? '—' : '~' + sc.toFixed(1)}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${card.company}: ${card.title}`}>{card.company} · {card.title}</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${card.company}: ${card.title}`}>{card.company} · {card.title}</span>
                 </div>
                 {card.rationale && <div style={{ fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4, marginTop: 2 }}>{card.rationale}</div>}
                 <div style={{ display: 'flex', gap: 10, marginTop: 4, alignItems: 'center' }}>
@@ -878,7 +878,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           style={{ width: '100%', marginTop: 6, background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 'not-allowed' : 'pointer', opacity: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 0.5 : 1 }}>
           {pasteBusy ? 'Evaluating…' : 'Evaluate (Sonnet) ⧉'}
         </button>
-        <div style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.4 }}>{pasteMsg || 'Self-sourced → full deep eval, skips triage.'}</div>
+        <div style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.4 }}>{pasteMsg || 'Self-sourced → full deep eval, skips triage.'}</div>
       </div>
     </div>
   );
@@ -900,7 +900,7 @@ window.SyncIndicator = function SyncIndicator({ lastSync }) {
     : secs < 60 ? `${secs}s ago`
     : secs < 3600 ? `${Math.round(secs / 60)}m ago`
     : `${Math.round(secs / 3600)}h ago`;
-  return <span className="muted" style={{ fontSize: 10 }}>· synced {label}</span>;
+  return <span className="muted" style={{ fontSize: 10.5 }}>· synced {label}</span>;
 };
 
 // ---------- Topbar ----------
@@ -977,7 +977,7 @@ function QuickCopyBar() {
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '8px 14px', borderTop: '1px solid var(--border)', background: 'var(--panel-2)' }}>
       <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginRight: 2 }}>Quick copy:</span>
       {items.map(([label, val]) => (
-        <button key={label} className="btn sm" style={{ fontSize: 11.5 }} title={`Copy: ${val}`} onClick={() => copy(label, val)}>
+        <button key={label} className="btn sm" style={{ fontSize: 11 }} title={`Copy: ${val}`} onClick={() => copy(label, val)}>
           {copied === label ? '✓ copied' : label}
         </button>
       ))}
@@ -1244,7 +1244,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
           the fallback keeps the mono block, since commit subjects read as code
           and dressing them up would only disguise what they are. */}
       {showNotes && info.releaseNotes ? (
-        <div style={{ marginTop: 10, maxHeight: 220, overflow: 'auto', fontSize: 12.5, lineHeight: 1.55, color: 'var(--text-dim)' }}>
+        <div style={{ marginTop: 10, maxHeight: 220, overflow: 'auto', fontSize: 12, lineHeight: 1.55, color: 'var(--text-dim)' }}>
           {info.releaseNotes.sections.map((sec, i) => (
             <div key={i} style={{ marginBottom: 8 }}>
               {sec.heading ? (

@@ -36,7 +36,7 @@ function CoachPill({ level }) {
     <span className="mono" style={{
       background: s.bg, color: s.color,
       padding: '2px 7px', borderRadius: 4,
-      fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
+      fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap',
     }}>{s.label}</span>
   );
 }
@@ -47,7 +47,7 @@ function FUStatusPill({ status }) {
     <span className="mono" style={{
       background: s.bg, color: s.color,
       padding: '2px 7px', borderRadius: 4,
-      fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
+      fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap',
     }}>{status}</span>
   );
 }
@@ -67,7 +67,7 @@ function ChannelBadge({ channel }) {
     <span className="mono" style={{
       background: m.bg, color: m.color,
       padding: '2px 7px', borderRadius: 4,
-      fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
+      fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap',
     }}>{m.label}</span>
   );
 }
@@ -108,7 +108,7 @@ function FUBarRow({ label, n, total, color }) {
   const pct = total > 0 ? Math.round((n / total) * 100) : 0;
   return (
     <div className="col" style={{ gap: 4 }}>
-      <div className="row" style={{ justifyContent: 'space-between', fontSize: 11.5 }}>
+      <div className="row" style={{ justifyContent: 'space-between', fontSize: 11 }}>
         <span style={{ color }}>{label}</span>
         <span className="mono dim">{n} · {pct}%</span>
       </div>
@@ -729,7 +729,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <SourcePill source={it.source} />
-                      <span className="mono dim" style={{ fontSize: 10 }}>#{String(it.id).padStart(3, '0')}</span>
+                      <span className="mono dim" style={{ fontSize: 10.5 }}>#{String(it.id).padStart(3, '0')}</span>
                       <span className="action-card-co">{it.company}</span>
                       <FUStatusPill status={it.status} />
                     </div>
@@ -768,7 +768,7 @@ function SourcePill({ source }) {
   return (
     <span className="mono" style={{
       background: bg, color: fg, padding: '2px 7px', borderRadius: 4,
-      fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
+      fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap',
     }}>{label}</span>
   );
 }
@@ -785,17 +785,17 @@ function FollowupRow({ item, onOpen, onSnooze, onMute, onUnmute, onFind }) {
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <SourcePill source={item.source} />
-            <span className="mono dim" style={{ fontSize: 10 }}>#{String(item.id).padStart(3, '0')}</span>
+            <span className="mono dim" style={{ fontSize: 10.5 }}>#{String(item.id).padStart(3, '0')}</span>
             <span className="action-card-co">{item.company}</span>
             <FUStatusPill status={item.status} />
             {!isTA && item.channel && <ChannelBadge channel={item.channel} />}
-            {item.muted && <span className="mono" style={{ background: 'rgba(113,113,122,0.18)', color: '#a1a1aa', padding: '2px 7px', borderRadius: 4, fontSize: 10, fontWeight: 700 }}>AWAITING</span>}
+            {item.muted && <span className="mono" style={{ background: 'rgba(113,113,122,0.18)', color: '#a1a1aa', padding: '2px 7px', borderRadius: 4, fontSize: 10.5, fontWeight: 700 }}>AWAITING</span>}
             <CoachPill level={item.coachLevel} />
             {item.fuCount > 0 && (
-              <span className="mono dim" style={{ fontSize: 10 }}>· {item.fuCount} prior touch{item.fuCount === 1 ? '' : 'es'}</span>
+              <span className="mono dim" style={{ fontSize: 10.5 }}>· {item.fuCount} prior touch{item.fuCount === 1 ? '' : 'es'}</span>
             )}
           </div>
-          <div className="dim" style={{ fontSize: 11.5, marginTop: 3 }}>{subtitle}</div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 3 }}>{subtitle}</div>
           <div className="mono" style={{ fontSize: 11, marginTop: 4, color: coachStyle.color }}>
             {item.coachVerdict}
           </div>
@@ -953,10 +953,10 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
                       <a href={ta.linkedin} target="_blank" rel="noreferrer"
                         onClick={e => e.stopPropagation()}
                         className="mono"
-                        style={{ fontSize: 10, color: 'var(--accent)' }}>LinkedIn ↗</a>
+                        style={{ fontSize: 10.5, color: 'var(--accent)' }}>LinkedIn ↗</a>
                     )}
                   </div>
-                  <span className="mono dim" style={{ fontSize: 10 }}>
+                  <span className="mono dim" style={{ fontSize: 10.5 }}>
                     {ta.status || 'Not Contacted'}{ta.lastTouch ? ` · ${ta.lastTouch}` : ''}
                   </span>
                 </label>
@@ -1014,7 +1014,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
           <div style={{ padding: 10, background: 'var(--panel)', borderRadius: 4, borderLeft: '3px solid var(--accent)' }}>
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
               <span className="mono" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>APPLIED</span>
-              <span className="mono dim" style={{ fontSize: 10 }}>{applyDate}</span>
+              <span className="mono dim" style={{ fontSize: 10.5 }}>{applyDate}</span>
             </div>
             <div className="dim" style={{ fontSize: 11 }}>{app.notes || '(no notes)'}</div>
           </div>
@@ -1025,10 +1025,10 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
               <div key={i} style={{ padding: 10, background: 'var(--panel)', borderRadius: 4, borderLeft: '3px solid #22d3ee' }}>
                 <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
                   <span className="mono" style={{ fontSize: 11, color: '#22d3ee', fontWeight: 700 }}>{(f.channel || 'TOUCH').toUpperCase()}</span>
-                  <span className="mono dim" style={{ fontSize: 10 }}>{f.date}</span>
+                  <span className="mono dim" style={{ fontSize: 10.5 }}>{f.date}</span>
                 </div>
-                <div style={{ fontSize: 11.5 }}>{f.notes || <span className="dim">(no notes)</span>}</div>
-                {f.contact && <div className="dim mono" style={{ fontSize: 10, marginTop: 3 }}>Contact: {f.contact}</div>}
+                <div style={{ fontSize: 11 }}>{f.notes || <span className="dim">(no notes)</span>}</div>
+                {f.contact && <div className="dim mono" style={{ fontSize: 10.5, marginTop: 3 }}>Contact: {f.contact}</div>}
               </div>
             ))
           )}

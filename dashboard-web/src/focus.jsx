@@ -278,7 +278,7 @@ function TodayView({ today, streak, prefs, setPrefs, activeTaskId, setActiveTask
                 <div className="focus-task-main">
                   <div className="focus-task-time mono">{t.start}–{addMinutes(t.start, t.durationMin)}</div>
                   <div className="focus-task-label">{t.label}</div>
-                  {t.notes ? <div className="dim" style={{ fontSize: 11.5, marginTop: 2 }}>{t.notes}</div> : null}
+                  {t.notes ? <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>{t.notes}</div> : null}
                   {t.pomodoros ? (
                     <div className="pomo-dots">
                       {Array.from({ length: t.pomodoros }).map((_, i) => (

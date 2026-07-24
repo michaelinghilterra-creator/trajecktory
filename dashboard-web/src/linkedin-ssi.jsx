@@ -93,7 +93,7 @@ function WeekTrend({ weeks, target, height = 120 }) {
     <div style={{ position: "relative", height }}>
       <div style={{ position: "absolute", left: 0, right: 0, bottom: (target / max) * height,
         borderTop: "1px dashed rgba(139,139,148,.4)", height: 0 }}>
-        <span style={{ position: "absolute", right: 0, top: -16, fontFamily: "var(--mono)", fontSize: 9, color: "var(--text-mute)" }}>
+        <span style={{ position: "absolute", right: 0, top: -16, fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>
           target {target}
         </span>
       </div>
@@ -111,7 +111,7 @@ function WeekTrend({ weeks, target, height = 120 }) {
                   background: "linear-gradient(180deg, var(--accent), rgba(167,139,250,.35))",
                 }} />
               )}
-              <span style={{ fontFamily: "var(--mono)", fontSize: 8.5, color: "var(--text-mute)" }}>{w.wk}</span>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{w.wk}</span>
             </div>
           );
         })}
@@ -291,13 +291,13 @@ function LinkedInSSITab() {
                           </div>
                           {totals.length >= 2 && (
                             <div style={{ textAlign: "right" }}>
-                              <div style={{ fontFamily: "var(--mono)", fontSize: 9, color: "var(--text-mute)", letterSpacing: ".12em", marginBottom: 2 }}>LAST 3 WEEKS</div>
+                              <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)", letterSpacing: ".12em", marginBottom: 2 }}>LAST 3 WEEKS</div>
                               <Sparkline data={totals.slice(-3)} w={130} h={34} />
                             </div>
                           )}
                         </div>
                       ) : (
-                        <div style={{ fontSize: 11.5, color: "var(--text-mute)", lineHeight: 1.7 }}>
+                        <div style={{ fontSize: 11, color: "var(--text-mute)", lineHeight: 1.7 }}>
                           Your SSI is a score LinkedIn calculates, so trajecktory cannot read it for
                           you. Open your SSI page on LinkedIn, then record the four pillar scores under{" "}
                           <b>Weekly Tracker</b>. This gauge starts tracking from your first entry, and
@@ -340,13 +340,13 @@ function LinkedInSSITab() {
                                 <span style={{ color: "var(--text-mute)", fontWeight: 400 }}> / 25</span>
                               </span>
                               {delta !== 0 && (
-                                <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: delta > 0 ? "var(--green)" : "var(--text-mute)", width: 34, textAlign: "right" }}>
+                                <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: delta > 0 ? "var(--green)" : "var(--text-mute)", width: 34, textAlign: "right" }}>
                                   {delta > 0 ? "+" : ""}{delta.toFixed(1)}
                                 </span>
                               )}
                             </div>
                             <div className="bar"><span style={{ width: `${pct}%`, background: p.color, opacity: pct === 0 ? 0 : 1 }} /></div>
-                            <div style={{ fontFamily: "var(--mono)", fontSize: 9.5, color: "var(--text-mute)", marginTop: 6, marginLeft: 16 }}>{p.hint}</div>
+                            <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)", marginTop: 6, marginLeft: 16 }}>{p.hint}</div>
                           </div>
                         );
                       })}
@@ -371,11 +371,11 @@ function LinkedInSSITab() {
                       </div>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
-                          <span style={{ fontSize: 12.5, color: "var(--text)", fontWeight: 500, overflowWrap: "anywhere" }}>{a.influencer}</span>
+                          <span style={{ fontSize: 12, color: "var(--text)", fontWeight: 500, overflowWrap: "anywhere" }}>{a.influencer}</span>
                           <span className="tag accent">{a.actionType}</span>
-                          <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 9.5, color: "var(--text-mute)" }}>{a.date?.slice(5) || ""}</span>
+                          <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{a.date?.slice(5) || ""}</span>
                         </div>
-                        <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 3, lineHeight: 1.45, overflowWrap: "anywhere" }}>{a.message}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 3, lineHeight: 1.45, overflowWrap: "anywhere" }}>{a.message}</div>
                       </div>
                     </div>
                   ))}
@@ -618,7 +618,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
               </button>
             ))}
           </div>
-          <div style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-mute)", letterSpacing: ".06em" }}>
+          <div style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)", letterSpacing: ".06em" }}>
             sorted by {cols.find(c => c.k === sortKey)?.label.toLowerCase()} · click a row for details
           </div>
         </div>
@@ -640,7 +640,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
                   {influencers.length === 0 ? (
                     <>
                       No influencers yet.<br />
-                      <span style={{ fontSize: 11.5, color: "var(--text-mute)" }}>
+                      <span style={{ fontSize: 11, color: "var(--text-mute)" }}>
                         These are the people whose posts you want to show up under. Add a few with
                         <b> + Add influencer</b>, or import a list with <b>Import CSV</b>. Everything
                         else on this tab (your activity log, the AI drafts, your weekly score) is
@@ -667,7 +667,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
                       <span style={{ fontSize: 12, color: "var(--text-dim)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.role || "—"}</span>
                     </td>
                     <td>
-                      <span style={{ fontFamily: "var(--mono)", fontSize: 9, letterSpacing: ".08em", textTransform: "uppercase", color: tm.color, border: `1px solid ${tm.color}`, padding: "2px 7px", borderRadius: 5, opacity: .9, whiteSpace: "nowrap" }}>{tm.label}</span>
+                      <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: tm.color, border: `1px solid ${tm.color}`, padding: "2px 7px", borderRadius: 5, opacity: .9, whiteSpace: "nowrap" }}>{tm.label}</span>
                     </td>
                     <td>{p.track ? <span className="tag">{p.track}</span> : <span style={{ color: "var(--text-mute)" }}>—</span>}</td>
                     <td>
@@ -679,7 +679,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
                         ].map((s) => (
                           <span key={s.ltr} title={s.title + (s.on ? "" : " (not yet)")}
                             style={{ width: 19, height: 19, borderRadius: 5, display: "inline-flex", alignItems: "center", justifyContent: "center",
-                              fontFamily: "var(--mono)", fontSize: 9.5, fontWeight: 700,
+                              fontFamily: "var(--mono)", fontSize: 10.5, fontWeight: 700,
                               color: s.on ? s.c : "var(--text-mute)", border: `1px solid ${s.on ? s.c : "var(--border)"}`,
                               opacity: s.on ? 1 : .5 }}>{s.ltr}</span>
                         ))}
@@ -805,7 +805,7 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
           <div className="field"><label>Notes <span style={{ color: "var(--text-mute)", fontSize: 10.5, fontWeight: 400 }}>(optional)</span></label>
             <input className="inp" placeholder="Follow-up plan, context, etc." value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
-          {error && <div style={{ fontSize: 11.5, color: "var(--red, #e06262)", fontFamily: "var(--mono)" }}>{error}</div>}
+          {error && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)" }}>{error}</div>}
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn primary block" style={{ flex: 1 }} onClick={submit} disabled={busy}>{busy ? "Saving…" : "+ Log Activity"}</button>
             <button className="btn" onClick={reset} disabled={busy}>Reset</button>
@@ -816,7 +816,7 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
       <div className="card">
         <div className="card-head">
           <div className="card-title"><span className="dot" />Recent Activity</div>
-          <span className="mute2 mono" style={{ marginLeft: "auto", fontSize: 10 }}>{(engagementLog || []).length} entries</span>
+          <span className="mute2 mono" style={{ marginLeft: "auto", fontSize: 10.5 }}>{(engagementLog || []).length} entries</span>
         </div>
         <div style={{ position: "relative", paddingLeft: 6 }}>
           <div style={{ position: "absolute", left: 22, top: 8, bottom: 8, width: 1, background: "var(--border)" }} />
@@ -831,11 +831,11 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{a.influencer}</span>
-                    <span style={{ fontFamily: "var(--mono)", fontSize: 9.5, letterSpacing: ".06em", textTransform: "uppercase", color: typeColor(a.actionType), border: `1px solid ${typeColor(a.actionType)}`, opacity: .85, padding: "1px 7px", borderRadius: 5 }}>{a.actionType}</span>
+                    <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".06em", textTransform: "uppercase", color: typeColor(a.actionType), border: `1px solid ${typeColor(a.actionType)}`, opacity: .85, padding: "1px 7px", borderRadius: 5 }}>{a.actionType}</span>
                     <span className="tag">{a.topic}</span>
-                    <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 9.5, color: "var(--text-mute)" }}>{a.date}</span>
+                    <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{a.date}</span>
                   </div>
-                  <div style={{ fontSize: 12.5, color: "var(--text-dim)", margin: "5px 0 7px", lineHeight: 1.55 }}>{a.message}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-dim)", margin: "5px 0 7px", lineHeight: 1.55 }}>{a.message}</div>
                   <div style={{ display: "flex", gap: 14 }}>
                     <span className={"pill " + (a.responseReceived === "Yes" ? "green" : "")} style={{ opacity: a.responseReceived === "Yes" ? 1 : .45 }}><span className="d" />{a.responseReceived === "Yes" ? "Response received" : "No response"}</span>
                     <span className={"pill " + (a.connectionMade === "Connected" ? "accent" : "")} style={{ opacity: a.connectionMade === "Connected" ? 1 : .45 }}><span className="d" />{a.connectionMade === "Connected" ? "Connected" : "Not connected"}</span>
@@ -971,7 +971,7 @@ function WeeklyView({ weeks, target, setSsiData }) {
         <div className="card">
           <div className="card-head">
             <div className="card-title"><span className="dot" />Momentum</div>
-            <span className="mute2 mono" style={{ marginLeft: "auto", fontSize: 10 }}>{recordedCount}/12 weeks logged</span>
+            <span className="mute2 mono" style={{ marginLeft: "auto", fontSize: 10.5 }}>{recordedCount}/12 weeks logged</span>
           </div>
           <WeekTrend weeks={weeks || []} target={target} height={148} />
           <div className="chips" style={{ marginTop: 16, gap: 12 }}>
@@ -1020,10 +1020,10 @@ function WeeklyView({ weeks, target, setSsiData }) {
               />
             </div>
             {saveError && (
-              <div style={{ fontSize: 11.5, color: "var(--red, #e06262)", fontFamily: "var(--mono)" }}>{saveError}</div>
+              <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)" }}>{saveError}</div>
             )}
             {saveOk && (
-              <div style={{ fontSize: 11.5, color: "var(--green)", fontFamily: "var(--mono)" }}>
+              <div style={{ fontSize: 11, color: "var(--green)", fontFamily: "var(--mono)" }}>
                 ✓ Saved · SSI score recalculated
               </div>
             )}
@@ -1042,13 +1042,13 @@ function WeeklyView({ weeks, target, setSsiData }) {
             <div key={w.wk} className="card" style={{ padding: 13, display: "flex", flexDirection: "column", gap: 10, opacity: recorded ? 1 : 0.66 }}>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
                 <span style={{ fontFamily: "var(--mono)", fontSize: 11, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: recorded ? "var(--text)" : "var(--text-dim)" }}>Week {w.wk}</span>
-                <span style={{ fontFamily: "var(--mono)", fontSize: 9.5, color: "var(--text-mute)" }}>{w.date?.slice(5) || ""}</span>
+                <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{w.date?.slice(5) || ""}</span>
               </div>
               {recorded ? (
                 <>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
                     <span style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 22, color: "var(--accent-2)" }}>{total.toFixed(0)}</span>
-                    <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-mute)" }}>/ 100</span>
+                    <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>/ 100</span>
                   </div>
                   <div style={{ display: "flex", height: 6, borderRadius: 99, overflow: "hidden", background: "var(--panel-2)" }}>
                     {PILLAR_FIELDS.map((p) => (
@@ -1139,7 +1139,7 @@ function AIResponseView({ influencers, lockedInfluencer, onLog }) {
               ))}
             </div>
           </div>
-          {error && <div style={{ fontSize: 11.5, color: "var(--red, #e06262)", fontFamily: "var(--mono)" }}>{error}</div>}
+          {error && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)" }}>{error}</div>}
           <div style={{ display: "flex", gap: 10 }}>
             <button className="btn primary" style={{ flex: 1 }} onClick={generate} disabled={busy}>{busy ? "Generating with Claude…" : "Generate Response"}</button>
             <button className="btn" onClick={() => { setPost(""); if (!lockedInfluencer) setWho(""); setOut(""); setError(""); }}>Clear</button>
@@ -1167,12 +1167,12 @@ function AIResponseView({ influencers, lockedInfluencer, onLog }) {
             <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
               <div className="mono-av sm">{who ? who.split(" ").filter(Boolean).map((w,i,a) => i===0||i===a.length-1?w[0]:"").join("") : "??"}</div>
               <div>
-                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{who || "Unspecified"}</div>
-                <div style={{ fontFamily: "var(--mono)", fontSize: 9.5, color: "var(--text-mute)" }}>{tone} · reply draft</div>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>{who || "Unspecified"}</div>
+                <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{tone} · reply draft</div>
               </div>
             </div>
             <div style={{ background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)" }}>{out}</div>
-            {logErr && <div style={{ fontSize: 11.5, color: "var(--red, #e06262)", fontFamily: "var(--mono)", marginTop: 10 }}>{logErr}</div>}
+            {logErr && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)", marginTop: 10 }}>{logErr}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               {onLog && lockedInfluencer && (
                 <button className="btn primary sm" onClick={logIt} disabled={logging}>{logging ? "Logging…" : "✓ Log to timeline"}</button>
@@ -1327,7 +1327,7 @@ function AIConnectView({ influencers, lockedInfluencer, onLog }) {
               ))}
             </div>
           </div>
-          {error && <div style={{ fontSize: 11.5, color: "var(--red, #e06262)", fontFamily: "var(--mono)" }}>{error}</div>}
+          {error && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)" }}>{error}</div>}
           <div style={{ display: "flex", gap: 10 }}>
             <button className="btn primary" style={{ flex: 1 }} onClick={generate} disabled={busy || !who}>{busy ? "Generating with Claude…" : "Generate Request"}</button>
             <button className="btn" onClick={() => { if (!lockedInfluencer) { setWho(""); setTheirRole(""); } setPriorEngagement(""); setOut(""); setError(""); }}>Clear</button>
@@ -1365,12 +1365,12 @@ function AIConnectView({ influencers, lockedInfluencer, onLog }) {
             <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
               <div className="mono-av sm">{who ? who.split(" ").filter(Boolean).map((w,i,a) => i===0||i===a.length-1?w[0]:"").join("") : "??"}</div>
               <div>
-                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{who || "Unspecified"}</div>
-                <div style={{ fontFamily: "var(--mono)", fontSize: 9.5, color: "var(--text-mute)" }}>{angle} · {tone.toLowerCase()}</div>
+                <div style={{ fontSize: 12, fontWeight: 600 }}>{who || "Unspecified"}</div>
+                <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{angle} · {tone.toLowerCase()}</div>
               </div>
             </div>
             <div style={{ background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)" }}>{out}</div>
-            {logErr && <div style={{ fontSize: 11.5, color: "var(--red, #e06262)", fontFamily: "var(--mono)", marginTop: 10 }}>{logErr}</div>}
+            {logErr && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)", marginTop: 10 }}>{logErr}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               {onLog && lockedInfluencer && (
                 <button className="btn primary sm" onClick={logIt} disabled={logging}>{logging ? "Logging…" : "✓ Log to timeline"}</button>
@@ -1493,7 +1493,7 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
         <div className="drawer-head">
           <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
             <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-mute)" }}>#{influencer.id}</span>
-            <span style={{ fontFamily: "var(--mono)", fontSize: 9, letterSpacing: ".08em", textTransform: "uppercase", color: tierColor, border: `1px solid ${tierColor}`, padding: "2px 7px", borderRadius: 5, opacity: .9 }}>{tierLabel}</span>
+            <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: tierColor, border: `1px solid ${tierColor}`, padding: "2px 7px", borderRadius: 5, opacity: .9 }}>{tierLabel}</span>
             {influencer.track && <span className="tag accent">{influencer.track}</span>}
             <button className="icon-btn" onClick={onClose} style={{ marginLeft: "auto" }} title="Close (Esc)">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -1503,9 +1503,9 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
             <span className="mono-av" style={{ width: 44, height: 44, fontSize: 14, borderRadius: 10, borderColor: tierColor, color: tierColor, flex: "none" }}>{initials}</span>
             <div style={{ minWidth: 0 }}>
               <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>{influencer.name}</h3>
-              <div style={{ fontSize: 12.5, color: "var(--text-dim)", marginTop: 2 }}>{influencer.role}</div>
+              <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>{influencer.role}</div>
               {influencer.location && (
-                <div style={{ fontSize: 11.5, color: "var(--text-mute)", marginTop: 3, fontFamily: "var(--mono)" }}>{influencer.location}</div>
+                <div style={{ fontSize: 11, color: "var(--text-mute)", marginTop: 3, fontFamily: "var(--mono)" }}>{influencer.location}</div>
               )}
             </div>
           </div>
@@ -1559,7 +1559,7 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
                     <span className="d" />{influencer.engaged ? "Engaged" : "Not engaged"}
                   </button>
                   {influencer.engagementCount > 0 && (
-                    <span style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-mute)", alignSelf: "center" }}>
+                    <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)", alignSelf: "center" }}>
                       {influencer.engagementCount} touch{influencer.engagementCount !== 1 ? "es" : ""} logged
                     </span>
                   )}
@@ -1637,11 +1637,11 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
                     {myEngagement.map((a, i) => (
                       <div key={i} style={{ padding: "11px 13px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--panel)" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 5 }}>
-                          <span style={{ fontFamily: "var(--mono)", fontSize: 9.5, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--accent-2)", border: "1px solid var(--border)", padding: "1px 7px", borderRadius: 5 }}>{a.actionType}</span>
+                          <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--accent-2)", border: "1px solid var(--border)", padding: "1px 7px", borderRadius: 5 }}>{a.actionType}</span>
                           {a.topic && <span className="tag">{a.topic}</span>}
-                          <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 10, color: "var(--text-mute)" }}>{a.date}</span>
+                          <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{a.date}</span>
                         </div>
-                        {a.message && <div style={{ fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.55, overflowWrap: "anywhere" }}>{a.message}</div>}
+                        {a.message && <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.55, overflowWrap: "anywhere" }}>{a.message}</div>}
                         <div style={{ display: "flex", gap: 12, marginTop: 7 }}>
                           <span className={"pill sm " + (a.responseReceived === "Yes" ? "green" : "")} style={{ opacity: a.responseReceived === "Yes" ? 1 : 0.45 }}><span className="d" />{a.responseReceived === "Yes" ? "Response" : "No response"}</span>
                           <span className={"pill sm " + (a.connectionMade === "Connected" ? "accent" : "")} style={{ opacity: a.connectionMade === "Connected" ? 1 : 0.45 }}><span className="d" />{a.connectionMade === "Connected" ? "Connected" : "Not connected"}</span>

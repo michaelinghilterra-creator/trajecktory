@@ -202,9 +202,9 @@ function LpWhy({ item }) {
       </div>
       <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--text)', lineHeight: 1.6 }}>{item.does}</p>
       <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>{item.sowhat}</p>
-      {item.extra && <p style={{ margin: '0 0 8px', fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.6 }}>{item.extra}</p>}
+      {item.extra && <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6 }}>{item.extra}</p>}
       {item.ifYouSkip && (
-        <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-mute)', lineHeight: 1.6 }}>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-mute)', lineHeight: 1.6 }}>
           <b style={{ color: 'var(--text-dim)', fontWeight: 500 }}>If you skip it:</b> {item.ifYouSkip}
         </p>
       )}
@@ -309,7 +309,7 @@ function LpSummaryBox({ id, configured }) {
   const s = lpSectionSummary(id, configured);
   if (!s) return null;
   return (
-    <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.22)', fontSize: 12.5, lineHeight: 1.5 }}>
+    <div style={{ marginBottom: 14, padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.22)', fontSize: 12, lineHeight: 1.5 }}>
       <div style={{ color: 'var(--green)', fontWeight: 600, marginBottom: 6 }}>✓ How it's configured now</div>
       {s.rows.map(([label, val], i) => (
         <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 3 }}>
@@ -367,7 +367,7 @@ function ModelsCostPanel() {
       <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>
         Choose which Claude model runs each step and see the approximate cost per run. Cheaper defaults are already applied; every step stays overridable.
       </p>
-      <div style={{ fontSize: 12.5, marginBottom: 14, padding: '9px 12px', borderRadius: 'var(--r-ctl)',
+      <div style={{ fontSize: 12, marginBottom: 14, padding: '9px 12px', borderRadius: 'var(--r-ctl)',
         background: showCost ? 'rgba(34,197,94,0.07)' : 'var(--panel-2)', border: `1px solid ${showCost ? 'rgba(34,197,94,0.22)' : 'var(--border)'}`,
         color: 'var(--text-dim)', lineHeight: 1.5 }}>
         {showCost ? '● API key saved. '
@@ -386,7 +386,7 @@ function ModelsCostPanel() {
             ))}
           </div>
           {state.billingMode === 'plan' && (
-            <div style={{ fontSize: 11.5, color: 'var(--text-mute)', marginTop: 5, lineHeight: 1.4 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 5, lineHeight: 1.4 }}>
               Key stays saved. Runs use your Claude subscription (no per-token cost); flip back to API key anytime. The workflow uses the leaner plan flow while this is on.
             </div>
           )}
@@ -419,7 +419,7 @@ function ModelsCostPanel() {
                 <span style={{ color: 'var(--text-mute)' }}> / {s.unitLabel === 'eval' ? `run of ${s.unitsPerRun}` : s.unitLabel}</span>
               </span>
             </div>
-            {warnMsg && <div style={{ fontSize: 11.5, color: 'var(--orange)', marginTop: 4, lineHeight: 1.4 }}>⚠ {warnMsg}</div>}
+            {warnMsg && <div style={{ fontSize: 11, color: 'var(--orange)', marginTop: 4, lineHeight: 1.4 }}>⚠ {warnMsg}</div>}
           </div>
         );
       })}
@@ -434,24 +434,24 @@ function ModelsCostPanel() {
           </div>
         ))}
       </div>
-      <div style={{ fontSize: 11.5, color: 'var(--text-mute)', lineHeight: 1.5, marginBottom: 14 }}>
+      <div style={{ fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5, marginBottom: 14 }}>
         Batch size is the Evaluate throughput/cost trade: fewer per run costs less but clears the backlog slower. The API-key path stays higher so it does more than the plan alone.
       </div>
 
       {/* Full-run total */}
       <div style={{ padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--accent-bg)', border: '1px solid var(--accent)',
         display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
-        <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>Estimated total per full run <span style={{ color: 'var(--text-mute)' }}>(Triage + Evaluate batch)</span></span>
+        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Estimated total per full run <span style={{ color: 'var(--text-mute)' }}>(Triage + Evaluate batch)</span></span>
         <span className="mono" style={{ fontSize: 15, color: 'var(--accent)', fontWeight: 600 }}>{showCost ? `~${lpUsd(state.totalPerRun)}` : 'subscription'}</span>
       </div>
 
       {/* Recent runs — Claude Code's local token-cost estimate, not the API invoice */}
       <div style={LP_SUB}>Recent runs (estimated cost)</div>
       {history.length === 0 ? (
-        <div style={{ fontSize: 12.5, color: 'var(--text-mute)' }}>No runs logged yet. Run Evaluate or Agent Scan and its estimated cost shows here.</div>
+        <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>No runs logged yet. Run Evaluate or Agent Scan and its estimated cost shows here.</div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
-          <table className="mono" style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse' }}>
+          <table className="mono" style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ color: 'var(--text-mute)', textAlign: 'left' }}>
                 <th style={{ padding: '4px 8px 4px 0', fontWeight: 500 }}>When</th>
@@ -485,7 +485,7 @@ function ModelsCostPanel() {
   );
 }
 
-const LP_SUB = { fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginBottom: 7 };
+const LP_SUB = { fontSize: 10.5, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginBottom: 7 };
 
 // Place names for DISPLAY. The scanner stores them lowercase because its filter
 // lowercases everything before matching, so the stored form is a key, not a
@@ -606,7 +606,7 @@ class LpErrorBoundary extends React.Component {
       return (
         <div style={{ padding: 16, border: '1px solid var(--red)', borderRadius: 'var(--r-card)', background: 'rgba(239,68,68,0.06)' }}>
           <div style={{ fontWeight: 600, color: 'var(--red)', marginBottom: 6 }}>This step hit a display problem</div>
-          <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55 }}>
             The rest of the dashboard is fine. This usually means a config file came back in an unexpected shape. Switch to another step and back, or re-run this step in Claude Code.
           </div>
         </div>
@@ -1126,7 +1126,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
             Drag a file here, or <span onClick={() => document.getElementById('lp-cv-file').click()} style={{ color: 'var(--accent)', cursor: 'pointer' }}>browse your desktop</span>
           </div>
-          <div style={{ fontSize: 11.5, color: 'var(--text-mute)', marginTop: 4 }}>.docx, .pdf, .md or .txt · a .docx also seeds your resume master</div>
+          <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 4 }}>.docx, .pdf, .md or .txt · a .docx also seeds your resume master</div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 8, marginTop: 12 }}>
           <button className="btn" onClick={() => startHandoff('cv', 'cv-paste')}>Paste resume text</button>
@@ -1136,7 +1136,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         {pendingGen.cv && (
           <div style={{ marginTop: 14, border: '1px solid var(--accent)', borderRadius: 'var(--r-card)', padding: 14, background: 'var(--accent-bg)' }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>One step in Claude Code sets up your whole profile</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.55 }}>The prompt below was copied to your clipboard. Paste it into Claude Code (the same chat you used to start the dashboard) and run it. It reads your resume and drafts your identity, target roles, and your edge, so the steps below fill in for you to review, then you can go straight to the first evaluation. This checks itself off the moment it finishes; you don't have to come back here.</div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 8, lineHeight: 1.55 }}>The prompt below was copied to your clipboard. Paste it into Claude Code (the same chat you used to start the dashboard) and run it. It reads your resume and drafts your identity, target roles, and your edge, so the steps below fill in for you to review, then you can go straight to the first evaluation. This checks itself off the moment it finishes; you don't have to come back here.</div>
             <textarea readOnly value={pendingGen.cv} rows={4} className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
             {lpHandoffCheck("cv")}
           </div>
@@ -1151,7 +1151,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     return (
       <div>
         {isDone && !prompt && (
-          <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+          <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5 }}>
             <span style={{ color: 'var(--green)', fontWeight: 500 }}>✓ This is set up.</span> Claude Code saved it from your inputs, so nothing more is required here. To see exactly what it set or change it, re-run below, or ask Claude Code in chat to "show me my current {section.label.toLowerCase()}."
           </div>
         )}
@@ -1218,9 +1218,9 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 4 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginBottom: 3 }}>
           <div style={LP_SUB}>Companies you are tracking</div>
-          {!loading && <span style={{ fontSize: 11.5, color: 'var(--text-mute)' }}>{onCount} on · {list.length - onCount} off · {list.length} total</span>}
+          {!loading && <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>{onCount} on · {list.length - onCount} off · {list.length} total</span>}
         </div>
-        <div style={{ fontSize: 11.5, color: 'var(--text-mute)', marginBottom: 9, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-mute)', marginBottom: 9, lineHeight: 1.5 }}>
           Every scan checks the ones that are on. Turning one off stops it being scanned but keeps it on the list, so nothing re-adds it later and you can turn it back on any time.
         </div>
 
@@ -1234,7 +1234,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               {shown.slice(0, 400).map((co) => (
                 <div key={co.careers_url} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 9px', borderRadius: 'var(--r-ctl)', border: '1px solid var(--border)', background: co.enabled ? 'var(--panel)' : 'var(--panel-2)', opacity: co.enabled ? 1 : 0.6 }}>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{co.name}</span>
+                    <span style={{ display: 'block', fontSize: 12, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{co.name}</span>
                     {co.note && <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-mute)' }}>{co.note}</span>}
                   </span>
                   <button className="btn ghost sm" disabled={busy === co.careers_url}
@@ -1269,7 +1269,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     if (!goalEditing && !filled) {
       return (
         <div style={{ marginBottom: 12, padding: '10px 13px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ flex: 1, minWidth: 220, fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55 }}>
+          <span style={{ flex: 1, minWidth: 220, fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55 }}>
             What are you actually after? One line, and everything below has a point of reference.
           </span>
           <button className="btn sm" onClick={() => setGoalEditing(true)}>Set a goal</button>
@@ -1281,7 +1281,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       return (
         <div style={{ marginBottom: 12, padding: '10px 13px', borderRadius: 'var(--r-card)', background: 'var(--accent-bg)', border: '1px solid rgba(var(--accent-rgb),0.3)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ flex: 1, minWidth: 220, fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>
-            <span style={{ color: 'var(--text-mute)', fontSize: 11.5 }}>Going for</span><br />
+            <span style={{ color: 'var(--text-mute)', fontSize: 11 }}>Going for</span><br />
             {[g.role, g.comp, g.by && `by ${g.by}`].filter(Boolean).join(' · ')}
           </span>
           <button className="btn ghost sm" onClick={() => setGoalEditing(true)}>Change</button>
@@ -1320,7 +1320,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         onToggle={e => { if (e.target.open) loadBackups(); }}>
         <summary style={{ fontSize: 12, color: 'var(--text-mute)', cursor: 'pointer' }}>Start this config over</summary>
 
-        <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+        <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6 }}>
           Replaces your companies, job-title keywords and location rules with the ones a new install gets.
           Useful if setup left you with a config that finds nothing and you would rather begin again than unpick it.
           {r.counts && (
@@ -1340,7 +1340,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               </>}
         </div>
 
-        {r.msg && <div style={{ marginTop: 9, fontSize: 12.5, color: r.msgOk ? 'var(--green)' : 'var(--red)', lineHeight: 1.55 }}>{r.msg}</div>}
+        {r.msg && <div style={{ marginTop: 9, fontSize: 12, color: r.msgOk ? 'var(--green)' : 'var(--red)', lineHeight: 1.55 }}>{r.msg}</div>}
 
         {r.backups.length > 0 && (
           <div style={{ marginTop: 12 }}>
@@ -1372,7 +1372,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     const done = sectionStatus(currentId) === 'complete';
     return (
       <div style={{ marginTop: 16, paddingTop: 13, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
           {done ? 'Done here. Next up:' : 'When you are finished here, go to:'}
         </span>
         <button className={done ? 'btn primary' : 'btn'} onClick={() => selectStep(next.id)}>
@@ -1392,7 +1392,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <LpCheck on={on} />
           <span style={{ flex: 1 }}>
             <span style={{ display: 'block', fontSize: 13, color: on ? 'var(--green)' : 'var(--text)' }}>{label}</span>
-            <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-mute)' }}>{blurb}</span>
+            <span style={{ display: 'block', fontSize: 11, color: 'var(--text-mute)' }}>{blurb}</span>
           </span>
         </button>
         {on && <div style={{ marginTop: 10 }}>{detail}</div>}
@@ -1427,13 +1427,13 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <span className="mono" style={{ fontSize: 18, color: 'var(--accent)' }}>{keywordCount}</span>
         </div>
         {generated && (
-          <div style={{ fontSize: 11.5, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.5 }}>
             One job goes by several names, so each title you picked is expanded into the wordings employers actually post. That is why this number is bigger.
           </div>
         )}
         {list.length > 0 && (
           <details style={{ marginTop: 8 }}>
-            <summary style={{ fontSize: 11.5, color: 'var(--accent)', cursor: 'pointer' }}>See the {list.length} search {list.length === 1 ? 'word' : 'words'}</summary>
+            <summary style={{ fontSize: 11, color: 'var(--accent)', cursor: 'pointer' }}>See the {list.length} search {list.length === 1 ? 'word' : 'words'}</summary>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
               {list.map((k, i) => (
                 <span key={i} className="mono" style={{ fontSize: 11, padding: '2px 7px', borderRadius: 999, background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}>{k}</span>
@@ -1457,7 +1457,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <button className="btn" disabled={p?.running} onClick={runPreview}>
             {p?.running ? 'Checking live postings…' : 'Preview what this finds'}
           </button>
-          <span style={{ fontSize: 11.5, color: 'var(--text-mute)' }}>Free. Reads a sample of real job boards, no AI involved.</span>
+          <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>Free. Reads a sample of real job boards, no AI involved.</span>
         </div>
 
         {p && !p.running && p.error && (
@@ -1465,7 +1465,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         )}
 
         {p && !p.running && !p.error && (
-          <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+          <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6 }}>
             {p.seen === 0 ? (
               <div>
                 <b style={{ color: 'var(--yellow)' }}>Could not read any postings.</b> {p.reachedCompanies === 0
@@ -1499,7 +1499,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                 <b style={{ color: 'var(--green)' }}>{p.matched} of {p.seen} sampled postings match.</b> Your title filter dropped {p.titleBlocked}, location dropped {p.geoBlocked}.
               </div>
             )}
-            <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--text-mute)' }}>
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-mute)' }}>
               Sampled {p.sampledCompanies} of your {p.totalCompanies} tracked companies{p.reachedCompanies < p.sampledCompanies ? ` (${p.reachedCompanies} responded)` : ''}. A real scan covers all of them, so treat this as a direction check, not a forecast.
             </div>
             {p.examples?.length > 0 && (
@@ -1612,7 +1612,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     const removePick = (n) => saveStage('companies', { ...c, picks: picks.filter(x => x !== n) });
     const toggleSug = (n) => saveStage('companies', { ...c, picks: picks.includes(n) ? picks.filter(x => x !== n) : [...picks, n] });
     const badge = (api) => (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '3px 8px', borderRadius: 999, whiteSpace: 'nowrap', background: api ? 'rgba(34,197,94,0.14)' : 'rgba(245,158,11,0.14)', color: api ? 'var(--green)' : 'var(--orange)' }}><LpIcon name={api ? 'bolt' : 'globe'} size={11} />{api ? 'free' : 'web'}</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, padding: '3px 8px', borderRadius: 999, whiteSpace: 'nowrap', background: api ? 'rgba(34,197,94,0.14)' : 'rgba(245,158,11,0.14)', color: api ? 'var(--green)' : 'var(--orange)' }}><LpIcon name={api ? 'bolt' : 'globe'} size={11} />{api ? 'free' : 'web'}</span>
     );
     const sugRow = (s, i) => {
       const on = picks.includes(s.name);
@@ -1705,7 +1705,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       const linkRow = (icon, label, key, placeholder, optional) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
           <span style={{ width: 18, display: 'inline-flex', justifyContent: 'center', color: key === 'portfolio_url' ? 'var(--accent)' : 'var(--text-dim)' }}><LpIcon name={icon} size={16} /></span>
-          <span style={{ width: 150, flexShrink: 0, fontSize: 12.5, color: key === 'portfolio_url' ? 'var(--accent)' : 'var(--text)' }}>{label}{optional ? <span style={{ color: 'var(--text-mute)', fontSize: 11 }}> optional</span> : null}</span>
+          <span style={{ width: 150, flexShrink: 0, fontSize: 12, color: key === 'portfolio_url' ? 'var(--accent)' : 'var(--text)' }}>{label}{optional ? <span style={{ color: 'var(--text-mute)', fontSize: 11 }}> optional</span> : null}</span>
           <input className="inp" style={{ flex: 1 }} value={c[key] || ''} placeholder={placeholder} onChange={e => setFormVal('candidate', key, e.target.value)} />
         </div>
       );
@@ -1744,7 +1744,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               <input id="lp-cert-expires" className="inp" placeholder="Expires (MM/YYYY)" style={{ flex: 1, minWidth: 0 }} />
               <button className="btn" onClick={addCert}>Add</button>
             </div>
-            <div style={{ fontSize: 11.5, color: 'var(--text-mute)' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>
               Application forms ask for the number and dates, so keeping them here means a copy button instead of a hunt. They stay in your own config on this machine.
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -1851,7 +1851,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               regional-remote roles. */}
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
             <div style={LP_SUB}>How you are willing to work</div>
-            <div style={{ fontSize: 11.5, color: 'var(--text-mute)', marginBottom: 9, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-mute)', marginBottom: 9, lineHeight: 1.5 }}>
               Tick everything you would accept. The scanner drops postings that match none of them.
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1879,7 +1879,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             <button className="btn" onClick={() => startHandoff('location', 'location')}>Build geo filter (remote/onsite rules) ⧉</button>
             <button className="btn ghost sm" onClick={() => resetForm('location')}>Reset</button>
           </div>
-          <div style={{ fontSize: 11.5, color: 'var(--text-mute)', lineHeight: 1.5 }}>"Build geo filter" first asks whether you want remote, hybrid, or on-site roles (and any cities you'd rule out), then sets your scanner's location rules. It won't assume your preferences.</div>
+          <div style={{ fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>"Build geo filter" first asks whether you want remote, hybrid, or on-site roles (and any cities you'd rule out), then sets your scanner's location rules. It won't assume your preferences.</div>
           {pendingGen.location && (
             <textarea readOnly value={pendingGen.location} rows={3}
               className="ta" style={{ width: '100%', color: 'var(--text-dim)' }} />
@@ -1891,7 +1891,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       const c = forms.outputs || {};
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55 }}>
+          <div style={{ padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55 }}>
             This is where trajecktory saves the files it generates for you: every <b>tailored resume</b> (when you apply to a role) lands in the resume folder, and every <b>interview-prep note</b> lands in the prep folder. Check these folders after you apply or prep for an interview, that is where your documents are. <b>You can leave these as they are;</b> they default to your Documents folder (<span className="mono">Documents\trajecktory resumes</span> and <span className="mono">Documents\trajecktory interview prep</span>) and are created automatically. Only change them if you want the files somewhere specific.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>
@@ -1948,7 +1948,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     if (section.id === 'health') {
       return (
         <div>
-          <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 10 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 10 }}>
             Optional safety net. This double-checks that your saved data is formatted the way the dashboard expects. You don't need to run it to use trajecktory.
           </div>
           <button className="btn primary" disabled={gated('health')} onClick={runHealth}>{health?.running ? 'Running…' : 'Run health check'}</button>
@@ -1956,7 +1956,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             <div style={{ marginTop: 12 }}>
               <div style={{ fontSize: 13, color: health.ok ? 'var(--green)' : 'var(--orange)', marginBottom: 6 }}>{health.ok ? '✓ Everything looks good' : 'Found a few formatting nits'}</div>
               {!health.ok && (
-                <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 8, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.25)' }}>
+                <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 8, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.25)' }}>
                   These are data-formatting issues, not crashes, and they usually clear up once evaluations run through the normal flow. Safe to ignore for now, or paste <span className="mono">fix the trajecktory pipeline health issues</span> into Claude Code and it will read the details below and clean them up.
                 </div>
               )}
@@ -1997,7 +1997,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       {canStart && !allReady && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12, padding: '11px 13px', borderRadius: 'var(--r-card)', background: 'rgba(34,197,94,0.09)', border: '1px solid rgba(34,197,94,0.3)' }}>
           <span style={{ fontSize: 15 }}>✓</span>
-          <span style={{ flex: 1, minWidth: 220, fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.55 }}>
+          <span style={{ flex: 1, minWidth: 220, fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55 }}>
             <b style={{ color: 'var(--text)' }}>You are ready to use trajecktory.</b> Your resume is in, so you can start evaluating real jobs right now. The steps below are refinements, not requirements. Most people get more out of them after seeing a few scores, so feel free to come back later.
           </span>
           {setTab && <button className="btn primary" onClick={() => { track('started_using'); setTab('pipeline'); }}>Start using it →</button>}
@@ -2033,7 +2033,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                   background: isActive ? 'var(--accent-bg)' : isNext ? 'rgba(34,197,94,0.07)' : 'var(--panel)' }}>
                 <span style={{ width: 26, height: 26, flexShrink: 0, borderRadius: 'var(--r-ctl)', background: isActive ? 'rgba(var(--accent-rgb),0.18)' : 'var(--panel-2)', color: isActive ? 'var(--accent)' : 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><LpIcon name={s.icon} size={15} /></span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 500, color: isActive ? 'var(--accent)' : 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 500, color: isActive ? 'var(--accent)' : 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
                   <span style={{ display: 'block', fontSize: 10.5, color: isNext ? 'var(--green)' : 'var(--text-mute)' }}>
                     {isNext ? 'Do this next' : s.req === 'gate' ? 'Required first' : s.req === 'payoff' ? 'The payoff' : s.req === 'verify' ? 'Verify' : s.req}
                   </span>
@@ -2065,7 +2065,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               const a = activation;
               const s = a && a.summary;
               const stat = (label, v, suffix = '') => v == null ? null : (
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12.5, padding: '4px 0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, padding: '4px 0' }}>
                   <span style={{ color: 'var(--text-dim)' }}>{label}</span>
                   <span className="mono" style={{ color: 'var(--text)' }}>{v}{suffix}</span>
                 </div>
@@ -2079,7 +2079,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                       basis for asking. A privacy promise nobody can check is
                       worth nothing, so the export below is plain text the user
                       can read in full before sending it anywhere. */}
-                  <div style={{ padding: '11px 13px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12.5, lineHeight: 1.6, marginBottom: 12 }}>
+                  <div style={{ padding: '11px 13px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12, lineHeight: 1.6, marginBottom: 12 }}>
                     <div style={{ color: 'var(--text)', marginBottom: 5 }}>What it records</div>
                     <div style={{ color: 'var(--text-dim)' }}>Which setup step you were on, how long it took, and whether a scan or an application produced anything. Times and counts, nothing else.</div>
                     <div style={{ color: 'var(--text)', margin: '9px 0 5px' }}>What it never records</div>
@@ -2092,7 +2092,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                       {a && a.enabled ? 'Turn off and delete' : 'Turn on'}
                     </button>
                     {a && a.enabled && <a className="btn sm" href="/api/setup/activation/export">Download what it has</a>}
-                    {a && a.enabled && <span style={{ fontSize: 11.5, color: 'var(--green)' }}>Recording</span>}
+                    {a && a.enabled && <span style={{ fontSize: 11, color: 'var(--green)' }}>Recording</span>}
                   </div>
 
                   {s && (
@@ -2119,7 +2119,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '9px 11px', border: '1px solid var(--border)', borderRadius: 'var(--r-ctl)', background: 'var(--panel)' }}>
                   <span style={{ flex: 1, minWidth: 180 }}>
                     <span style={{ display: 'block', fontSize: 13, color: 'var(--text)' }}>{label}</span>
-                    <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-mute)' }}>{note}</span>
+                    <span style={{ display: 'block', fontSize: 11, color: 'var(--text-mute)' }}>{note}</span>
                   </span>
                   <a className="btn sm" href={`/api/setup/template/${kind}`}>Download CSV</a>
                 </div>
@@ -2132,7 +2132,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                     {tpl('applications', 'Applications', 'Jobs you already applied to. Columns match the tracker.')}
                     {tpl('contacts', 'Recruiters and contacts', 'People you already know. Works for both lists.')}
                   </div>
-                  <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+                  <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6 }}>
                     <b style={{ color: 'var(--text)' }}>Contacts upload is on the Recruiters tab.</b> Fill in the contacts sheet and use the bulk import there.
                     <div style={{ marginTop: 6, color: 'var(--text-mute)' }}>
                       Applications is download only for now. Bringing filled-in rows into the tracker has to go through the same merge step everything else uses, and a half-built importer that scrambles a tracker is worse than none. Fill the sheet in and it will be ready when that lands.
@@ -2155,7 +2155,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                     <button className="btn primary" disabled={apiKey.saving} onClick={saveApiKey}>{apiKey.saving ? 'Saving…' : 'Save key'}</button>
                   </div>
                   {apiKey.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{apiKey.msg}</div>}
-                  <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-mute)', lineHeight: 1.5 }}>
+                  <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>
                     Get a key at console.anthropic.com → API keys. Stored locally in dashboard-web/.env; only ever sent to Anthropic.
                   </div>
                 </div>
@@ -2166,13 +2166,13 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                 <div>
                   <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
                   <LpWhy item={o} />
-                  <div style={{ fontSize: 12.5, color: 'var(--text)', fontWeight: 600, margin: '0 0 4px' }}>Brave Search key</div>
+                  <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, margin: '0 0 4px' }}>Brave Search key</div>
                   {discKeys.brave
                     ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved. Expand Coverage web search is on.</div>
                     : <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 8 }}>○ Not set. Expand Coverage only registers companies already in your pipeline.</div>}
                   <input type="password" value={discKeys.braveInput} onChange={e => setDiscKeys(k => ({ ...k, braveInput: e.target.value }))}
                     placeholder="Brave Search API key" className="inp" style={{ width: '100%' }} autoComplete="off" />
-                  <div style={{ fontSize: 12.5, color: 'var(--text)', fontWeight: 600, margin: '14px 0 4px' }}>Muse key <span style={{ color: 'var(--text-mute)', fontWeight: 400 }}>(optional)</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, margin: '14px 0 4px' }}>Muse key <span style={{ color: 'var(--text-mute)', fontWeight: 400 }}>(optional)</span></div>
                   {discKeys.muse
                     ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved.</div>
                     : <div style={{ fontSize: 13, color: 'var(--text-mute)', marginBottom: 8 }}>○ Not set. Adds Director / VP roles from The Muse.</div>}
@@ -2182,7 +2182,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                     <button className="btn primary" disabled={discKeys.saving} onClick={saveDiscoveryKeys}>{discKeys.saving ? 'Saving…' : 'Save keys'}</button>
                   </div>
                   {discKeys.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{discKeys.msg}</div>}
-                  <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-mute)', lineHeight: 1.5 }}>
+                  <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>
                     Brave: brave.com/search/api (free tier available). Muse: themuse.com/developers/api/v2. Stored locally in dashboard-web/.env; only ever sent to those services. Neither is needed for API Scan, Agent Scan, or Evaluate.
                   </div>
                 </div>
@@ -2212,7 +2212,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               <LpWhy item={sec} />
               <LpSummaryBox id={sec.id} configured={state.values && state.values.configured} />
               {sec.id === 'cv' && state.sections?.cv?.warning === 'no-master-docx' && (
-                <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(234,179,8,0.12)', color: 'var(--yellow)', fontSize: 12.5, lineHeight: 1.5 }}>
+                <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(234,179,8,0.12)', color: 'var(--yellow)', fontSize: 12, lineHeight: 1.5 }}>
                   Your <span className="mono">cv.md</span> exists, but no Word master was found. Upload a <span className="mono">.docx</span> so tailored Word resumes can be generated.
                 </div>
               )}
@@ -2363,7 +2363,7 @@ function TellMeAboutYouPanel() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span className="mono dim" style={{ fontSize: 11, minWidth: 100 }}>Industry</span>
           <input value={industry} onChange={e => setIndustry(e.target.value)} placeholder="blank = from your profile"
-            style={{ flex: 1, minWidth: 160, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '5px 8px', color: 'var(--text)', fontSize: 12.5 }} />
+            style={{ flex: 1, minWidth: 160, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '5px 8px', color: 'var(--text)', fontSize: 12 }} />
         </div>
         <div className="row" style={{ gap: 10 }}>
           <button className="btn primary" onClick={generate} disabled={loading}>{loading ? 'Writing…' : (pitch ? '↻ Regenerate' : 'Generate pitch')}</button>
@@ -2384,7 +2384,7 @@ function TellMeAboutYouPanel() {
         </div>
         <textarea className="notes-ta" value={pitch} onChange={e => { setPitch(e.target.value); setDirty(true); setSaved(false); }}
           placeholder="Click Generate pitch to draft from your profile, then edit freely…"
-          style={{ minHeight: 200, lineHeight: 1.6, fontSize: 13.5 }} />
+          style={{ minHeight: 200, lineHeight: 1.6, fontSize: 13 }} />
         <div className="row" style={{ gap: 10 }}>
           <button className="btn primary sm" onClick={save} disabled={!pitch.trim()}>Save</button>
           {saved && !dirty && <span className="mono" style={{ fontSize: 11, color: 'var(--green)' }}>Saved</span>}
@@ -2402,7 +2402,7 @@ function TwcPanel() {
       <div className="ta-head"><div><h1>TWC</h1><div className="sub">Biweekly unemployment activity log.</div></div></div>
       <div className="card padded-lg">
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Coming soon.</div>
-        <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.55 }}>
+        <div className="dim" style={{ fontSize: 12, lineHeight: 1.55 }}>
           This module will help you assemble the biweekly work-search activity you report when you file
           for unemployment, pulled straight from your applications and outreach. Still collecting the data
           points. Details land soon.
@@ -2443,7 +2443,7 @@ function ChangelogPanel() {
         <div key={i} className="card padded-lg col" style={{ gap: 10 }}>
           <div className="row" style={{ gap: 10, alignItems: 'baseline' }}>
             <span style={{ fontSize: 15, fontWeight: 700 }}>v{e.version}</span>
-            {data.version === e.version && <span className="tag accent" style={{ fontSize: 10 }}>current</span>}
+            {data.version === e.version && <span className="tag accent" style={{ fontSize: 10.5 }}>current</span>}
             <span className="mono dim" style={{ fontSize: 11, marginLeft: 'auto' }}>{e.date}</span>
           </div>
           {e.sections.map((sec, j) => (
@@ -2453,12 +2453,12 @@ function ChangelogPanel() {
                   every sentence into a list item, which is exactly the look the
                   hand-written notes exist to replace. */}
               {sec.items.map((it, k) => it.type === 'bullet' ? (
-                <div key={k} className="row" style={{ gap: 8, alignItems: 'flex-start', fontSize: 12.5, lineHeight: 1.5 }}>
+                <div key={k} className="row" style={{ gap: 8, alignItems: 'flex-start', fontSize: 12, lineHeight: 1.5 }}>
                   <span style={{ color: 'var(--accent)', flexShrink: 0 }}>•</span>
                   <span>{it.text}</span>
                 </div>
               ) : (
-                <div key={k} style={{ fontSize: 12.5, lineHeight: 1.55 }}>{it.text}</div>
+                <div key={k} style={{ fontSize: 12, lineHeight: 1.55 }}>{it.text}</div>
               ))}
             </div>
           ))}
@@ -2506,7 +2506,7 @@ function AboutPanel() {
         {faqs.map((f, i) => (
           <div key={i} style={{ paddingBottom: 10, borderBottom: i < faqs.length - 1 ? '1px solid var(--border)' : 'none' }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>{f.q}</div>
-            <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.55 }}>{f.a}</div>
+            <div className="dim" style={{ fontSize: 12, lineHeight: 1.55 }}>{f.a}</div>
           </div>
         ))}
       </div>

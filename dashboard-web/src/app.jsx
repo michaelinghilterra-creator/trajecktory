@@ -425,11 +425,11 @@ function App() {
       { section: "Navigate", icon: "↻", label: "Go to Follow-Ups",   run: () => setTab("followups") },
       { section: "Navigate", icon: "◈", label: "Go to Interview",    run: () => setTab("interview") },
       { section: "Navigate", icon: "≡", label: "Go to All Entries",  run: () => { setTab("pipeline"); setPipelineView("all"); } },
-      { section: "Navigate", icon: "🔗", label: "Go to LinkedIn SSI", run: () => setTab("linkedin-ssi") },
+      { section: "Navigate", icon: "◍", label: "Go to LinkedIn SSI", run: () => setTab("linkedin-ssi") },
       { section: "Navigate", icon: "◎", label: "Go to TA Outreach", run: () => setTab("target-talent") },
       { section: "Navigate", icon: "☎", label: "Go to Recruiters",   run: () => setTab("recruiters") },
       { section: "Navigate", icon: "✦", label: "Go to Insights",     run: () => setTab("analytics") },
-      { section: "Navigate", icon: "🚀", label: "Go to Launchpad (setup)", run: () => setTab("launchpad") },
+      { section: "Navigate", icon: "◇", label: "Go to Launchpad (setup)", run: () => setTab("launchpad") },
     ];
     const viewCmds = [
       { section: "View", icon: "◐", label: `Theme: ${tweaks.theme} → ${nextThemeAfter(tweaks.theme)}`, run: () => setTweak("theme", nextThemeAfter(tweaks.theme)) },

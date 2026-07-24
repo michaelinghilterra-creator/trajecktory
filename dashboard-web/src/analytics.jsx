@@ -161,7 +161,7 @@ function InsightsBody({ apps: rawApps, onOpen }) {
 
       {snapStale && (
         <div className="card" style={{ padding: '10px 14px', borderLeft: '3px solid var(--amber, #fbbf24)' }}>
-          <div className="mono" style={{ fontSize: 11.5, lineHeight: 1.5 }}>
+          <div className="mono" style={{ fontSize: 11, lineHeight: 1.5 }}>
             <b>Snapshot, not live.</b> Every number on this tab is from the analysis generated{' '}
             <InsAge iso={insights.generated_at} /> across {insights.pipeline_size} entries.
             {insights.pipeline_size !== apps.length && <> Your tracker now holds <b>{apps.length}</b>.</>}
@@ -173,7 +173,7 @@ function InsightsBody({ apps: rawApps, onOpen }) {
       {!insights && !loading && (
         <div className="card padded-lg">
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>No analysis yet.</div>
-          <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.55 }}>
+          <div className="dim" style={{ fontSize: 12, lineHeight: 1.55 }}>
             Click <b>Generate Analysis</b> and Claude will read your full pipeline ({apps.length} entries),
             stale touchpoints, TA Outreach, recruiter rolodex, and engagement data, then return a tight
             synthesis: what's working, what's not, recommended moves, and a focus list for this week.
@@ -326,7 +326,7 @@ function WorkingPanel({ insights, apps, onOpen }) {
   const items = insights.whats_working || [];
   return (
     <div className="col" style={{ gap: 16 }}>
-      <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+      <div className="dim" style={{ fontSize: 12, lineHeight: 1.6 }}>
         This is your signal. The move is to do more of what's already earning replies, not to celebrate and stop.
       </div>
       <StatStrip metrics={insights.metrics} which="working" />
@@ -356,7 +356,7 @@ function NotPanel({ insights, apps, onOpen }) {
     <div className="col" style={{ gap: 16 }}>
       <div className="ins-guardrail">
         <InsIcon name="shield" size={15} />
-        <div style={{ fontSize: 12.5, lineHeight: 1.55, color: 'var(--text-dim)' }}>
+        <div style={{ fontSize: 12, lineHeight: 1.55, color: 'var(--text-dim)' }}>
           This is signal, not a scorecard. Every item below has a concrete fix. You're not behind, you're being shown exactly where to steer.
         </div>
       </div>
@@ -385,7 +385,7 @@ function MovesPanel({ insights, apps, onOpen }) {
   const items = insights.recommended_moves || [];
   return (
     <div className="col" style={{ gap: 16 }}>
-      <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+      <div className="dim" style={{ fontSize: 12, lineHeight: 1.6 }}>
         In priority order. Each one is small enough to finish today.
       </div>
       <div className="col" style={{ gap: 12 }}>
@@ -486,12 +486,12 @@ function CoachLine({ kind, text, apps, onOpen }) {
   return (
     <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
       <span className="mono" style={{
-        fontSize: 9.5, letterSpacing: '0.12em',
+        fontSize: 10.5, letterSpacing: '0.12em',
         color, border: `1px solid ${color}`,
         padding: '2px 7px', borderRadius: 4,
         flexShrink: 0, marginTop: 2,
       }}>{label}</span>
-      <div style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--text)' }}>
+      <div style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--text)' }}>
         <Linkify text={text} apps={apps} onOpen={onOpen} />
       </div>
     </div>
@@ -567,7 +567,7 @@ function Citations({ items, apps, onOpen }) {
             onClick={clickable ? (e) => { e.stopPropagation(); onOpen(app); } : undefined}
             title={clickable ? `Open #${app.id} ${app.company}: ${app.role}` : c}
             style={{
-              fontSize: 10,
+              fontSize: 10.5,
               color: clickable ? 'var(--accent)' : 'var(--text-mute)',
               background: clickable ? 'rgba(167,139,250,0.14)' : 'var(--panel-2)',
               border: '1px solid ' + (clickable ? 'rgba(167,139,250,0.55)' : 'var(--border)'),
@@ -581,7 +581,7 @@ function Citations({ items, apps, onOpen }) {
             }}
           >
             {c}
-            {clickable && <span style={{ fontSize: 9, opacity: 0.8 }}>↗</span>}
+            {clickable && <span style={{ fontSize: 10.5, opacity: 0.8 }}>↗</span>}
           </span>
         );
       })}

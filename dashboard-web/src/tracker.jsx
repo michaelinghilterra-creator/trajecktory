@@ -80,7 +80,7 @@ window.TrackerTab = function TrackerTab({ apps, onOpen, search }) {
       <div className="card" style={{ padding: "10px 14px" }}>
         <div className="row" style={{ flexWrap: "wrap", gap: 14 }}>
           {breakdown.map(({ s, n, meta }) => (
-            <span key={s} className="row mono" style={{ gap: 6, fontSize: 11.5, color: "var(--text-dim)", cursor: "pointer" }}
+            <span key={s} className="row mono" style={{ gap: 6, fontSize: 11, color: "var(--text-dim)", cursor: "pointer" }}
               onClick={() => toggleStatus(s)}>
               <span style={{ width: 7, height: 7, borderRadius: 50, background: meta.color, display: "inline-block", flexShrink: 0 }}></span>
               {s}
