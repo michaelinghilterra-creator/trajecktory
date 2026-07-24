@@ -462,14 +462,20 @@ function matchByCompanyDomain(fromAddr, apps = []) {
 // still matches a subject that says only "Kestrel".
 //
 // Only having pass 2 was a silent hole. The core is what the length guard measures,
-// and the guard rejects anything under 4 characters — so a company whose name is
-// generic-word-plus-a-short-word could NEVER be subject-matched, however plainly the
-// subject named it. "PAR Technology" reduced to "par" and "DHI Group" to "dhi", both
-// 3 characters, both skipped, so real interview mail routed through a scheduling tool
-// landed in "unknown" every time. The guard itself is right: searching for "par"
-// alone would hit "department" and "compare". The mistake was searching ONLY for the
-// stripped core, when the full "partechnology" is both present in the subject and far
+// and the guard rejects anything under 4 characters — so any company named as a
+// three-letter word plus a generic one ("<XYZ> Technology", "<XYZ> Group") could
+// NEVER be subject-matched, however plainly the subject named it. Two such
+// employers sat in the tracker with live interview processes, and their mail
+// landed in "unknown" on every sweep.
+//
+// The guard itself is right: a three-letter needle is a substring of ordinary
+// words and would match subjects naming nobody. The mistake was searching ONLY
+// the stripped core, when the FULL name is both present in the subject and far
 // too distinctive to collide with anything.
+//
+// (Shape, not values. The real company names were written here in the first
+// draft, which put two live interview counterparties into a tracked file in a
+// public repo. See AGENTS.md, "Commit messages are published".)
 function matchBySubject(subject, apps = []) {
   const hay = normalizeCompany(subject); // lowercase, alphanumeric only (spaces dropped)
   if (hay.length < 4) return null;

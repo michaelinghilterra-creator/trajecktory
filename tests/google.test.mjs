@@ -284,17 +284,18 @@ check(matchBySubject('your Bex Systems update', subjApps)?.appId === 703,
   'a company named IN FULL matches even when its distinctive core is too short to search alone');
 
 const shortCore = [
-  { id: 802, company: 'PAR Technology', role: 'RevOps Director', status: '1st Interview' },
-  { id: 1026, company: 'DHI Group, Inc.', role: 'Director', status: 'Rejected' },
+  { id: 901, company: 'Art Systems', role: 'RevOps Director', status: 'Applied' },
+  { id: 902, company: 'Ion Group, Inc.', role: 'Director', status: 'Applied' },
 ];
-check(matchBySubject('Reminder: Your Upcoming Interview with PAR Technology', shortCore)?.appId === 802,
+check(matchBySubject('Reminder: Your Upcoming Interview with Art Systems', shortCore)?.appId === 901,
   'a scheduler-sent interview reminder resolves via the full company name');
-check(matchBySubject('You have an interview with DHI Group, Inc', shortCore)?.appId === 1026,
+check(matchBySubject('You have an interview with Ion Group, Inc', shortCore)?.appId === 902,
   'a company written with its legal suffix still resolves on the full name');
-// The noise protection the guard exists for, proven rather than assumed: "par" is a
-// substring of both these words, and neither may produce a match.
-check(matchBySubject('Your department compare report is ready', shortCore) === null,
-  'a short core is never searched on its own (department/compare do not match PAR)');
+// The noise protection the guard exists for, proven rather than assumed: "art" is a
+// substring of "quarterly" and "ion" of "operations", so this subject contains BOTH
+// three-letter cores and must still match nothing.
+check(matchBySubject('Your quarterly operations report is ready', shortCore) === null,
+  'a short core is never searched on its own (quarterly/operations match neither company)');
 
 // scanDecisions tier-3: an ATS-sent email (no domain signal) falls through to the subject.
 const atsMsg = {
