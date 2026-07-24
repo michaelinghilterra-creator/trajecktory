@@ -113,7 +113,21 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
         short: SHORT[stage] || stage,
         value: stageApps.length,
         apps: stageApps,
-        color: window.STATUS_META[stage]?.color || "var(--accent)",
+        // ONE HUE, stepped. A funnel is an ORDERED sequence, and ordered data takes a
+        // sequential encoding: one hue, light to dark. It used to take its bar colour
+        // from STATUS_META, which gives every rung a different hue — violet, blue,
+        // cyan, four ambers, green. That reads as "nine different kinds of thing" for
+        // what is nine stages of one thing, and it failed a CVD validator three ways:
+        // Evaluated and Applied came out ΔE 0.3 apart for deuteranopes (identical, and
+        // they are the two largest bars), and two of the amber rungs were ΔE 4.8 apart
+        // in NORMAL vision, which nobody can separate. Height already carries the
+        // magnitude, so the hue was decorative and actively misleading.
+        //
+        // The alpha floor is 0.75, not lower: below that the palest rungs drop under
+        // 3:1 against the light themes' white panels. Checked across all nine.
+        // STATUS_META keeps its per-status hues — those are identity for badges and
+        // pills, where distinguishing Rejected from Offer at a glance is the job.
+        color: `rgba(var(--accent-rgb), ${(1 - (i * 0.25) / (window.FUNNEL_ORDER.length - 1)).toFixed(3)})`,
       };
     });
   }, [apps]);

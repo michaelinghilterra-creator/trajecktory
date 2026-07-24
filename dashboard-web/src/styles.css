@@ -8,7 +8,7 @@
   --border-2:  #2a2a33;
   --text:      #e8e8ea;
   --text-dim:  #8b8b94;
-  --text-mute: #5d5d66;
+  --text-mute: #83838f;
   --accent:    #a78bfa;
   --accent-2:  #c4b5fd;
   --accent-bg: rgba(167,139,250,0.12);
@@ -48,11 +48,11 @@
   --border-2:  #d4d4d0;
   --text:      #18181b;
   --text-dim:  #52525b;
-  --text-mute: #a1a1aa;
+  --text-mute: #686872;
   --accent:    #7c3aed;
   --accent-2:  #6d28d9;
   --accent-bg: rgba(124,58,237,0.10);
-  --green:     #16a34a;
+  --green:     #107836;
   --yellow:    #ca8a04;
   --red:       #dc2626;
   --blue:      #2563eb;
@@ -73,7 +73,7 @@
   --border-2:  #48515f;
   --text:      #dfe4ec;
   --text-dim:  #a4adbb;
-  --text-mute: #737d8c;
+  --text-mute: #a2a9b3;
   --accent:    #a78bfa;
   --accent-2:  #c4b5fd;
   --accent-bg: rgba(167,139,250,0.16);
@@ -107,7 +107,7 @@
 [data-theme="ochre"] {
   --bg:#0a0906; --bg-2:#100d07; --panel:#15110a; --panel-2:#1b160c; --panel-3:#221a0d;
   --border:#2a2213; --border-2:#39301b;
-  --text:#f2e8d4; --text-dim:#b39c6d; --text-mute:#7d6a44;
+  --text:#f2e8d4; --text-dim:#b39c6d; --text-mute:#998253;
   --accent:#f5a623; --accent-2:#fbca4d; --accent-bg:rgba(245,166,35,0.13); --accent-rgb:245,166,35;
   --green:#9fbe2f; --yellow:#e6b325; --red:#e5615a; --blue:#7fb0c9; --cyan:#22d3ee; --orange:#f59e0b;
   --grid:rgba(255,255,255,0.04);
@@ -119,7 +119,7 @@
 [data-theme="emerald"] {
   --bg:#05090a; --bg-2:#081211; --panel:#0b1614; --panel-2:#111f1b; --panel-3:#172a24;
   --border:#152622; --border-2:#1f3830;
-  --text:#e2f0ea; --text-dim:#7fa697; --text-mute:#4f7166;
+  --text:#e2f0ea; --text-dim:#7fa697; --text-mute:#6b9889;
   --accent:#34d399; --accent-2:#6ee7b7; --accent-bg:rgba(52,211,153,0.13); --accent-rgb:52,211,153;
   --green:#4ade80; --yellow:#e3c04a; --red:#f0716a; --blue:#5fb8c4; --cyan:#22d3ee; --orange:#f59e0b;
   --grid:rgba(255,255,255,0.04);
@@ -131,7 +131,7 @@
 [data-theme="cyan"] {
   --bg:#050a0f; --bg-2:#081320; --panel:#0b1826; --panel-2:#0f2130; --panel-3:#142a3d;
   --border:#132738; --border-2:#1d3a52;
-  --text:#dfeef7; --text-dim:#7fa2bb; --text-mute:#4d6e88;
+  --text:#dfeef7; --text-dim:#7fa2bb; --text-mute:#7294af;
   --accent:#38bdf8; --accent-2:#7dd3fc; --accent-bg:rgba(56,189,248,0.13); --accent-rgb:56,189,248;
   --green:#34d399; --yellow:#e6c34a; --red:#f0716a; --blue:#60a5fa; --cyan:#22d3ee; --orange:#f59e0b;
   --grid:rgba(255,255,255,0.04);
@@ -143,7 +143,7 @@
 [data-theme="rose"] {
   --bg:#0b070a; --bg-2:#130a10; --panel:#180d15; --panel-2:#20111b; --panel-3:#291624;
   --border:#2c1622; --border-2:#3e2130;
-  --text:#f2e2ea; --text-dim:#b8869e; --text-mute:#7d5468;
+  --text:#f2e2ea; --text-dim:#b8869e; --text-mute:#a5798f;
   --accent:#fb7185; --accent-2:#fda4b0; --accent-bg:rgba(251,113,133,0.13); --accent-rgb:251,113,133;
   --green:#4ade80; --yellow:#e6c34a; --red:#ef4444; --blue:#7dd3fc; --cyan:#22d3ee; --orange:#f59e0b;
   --grid:rgba(255,255,255,0.04);
@@ -155,9 +155,12 @@
 [data-theme="paper"] {
   --bg:#f1ede4; --bg-2:#e7e2d6; --panel:#fffdf8; --panel-2:#faf6ee; --panel-3:#f0e8d8;
   --border:#ddd6c7; --border-2:#c9c1af;
-  --text:#2b2822; --text-dim:#6b6455; --text-mute:#9c9484;
-  --accent:#b45309; --accent-2:#d97706; --accent-bg:rgba(180,83,9,0.10); --accent-rgb:180,83,9;
-  --green:#4d7c0f; --yellow:#a16207; --red:#b91c1c; --blue:#1d4ed8; --cyan:#0891b2; --orange:#d97706;
+  --text:#2b2822; --text-dim:#696254; --text-mute:#6a6355;
+  /* Darkened from #b45309 so accent-coloured TEXT (the brand mark, button labels)
+     clears 4.5:1 on this palette's darkest surface. accent-rgb moves with it or the
+     funnel ramp, which is built from accent-rgb, would drift from the accent. */
+  --accent:#a14a08; --accent-2:#d97706; --accent-bg:rgba(161,74,8,0.10); --accent-rgb:161,74,8;
+  --green:#456e0d; --yellow:#a16207; --red:#b91c1c; --blue:#1d4ed8; --cyan:#0891b2; --orange:#d97706;
   --grid:rgba(0,0,0,0.05);
   --shadow:0 1px 0 rgba(255,255,255,0.6) inset, 0 8px 24px -16px rgba(0,0,0,0.18);
   --pink:#db2777; --pink-rgb:219,39,119;
@@ -167,9 +170,9 @@
 [data-theme="arctic"] {
   --bg:#eef2f6; --bg-2:#e3e9f0; --panel:#ffffff; --panel-2:#f6f8fb; --panel-3:#edf1f6;
   --border:#d7dfe8; --border-2:#c1ccd9;
-  --text:#1e293b; --text-dim:#5b6b7f; --text-mute:#94a3b3;
+  --text:#1e293b; --text-dim:#59697c; --text-mute:#58697c;
   --accent:#4f46e5; --accent-2:#6366f1; --accent-bg:rgba(79,70,229,0.09); --accent-rgb:79,70,229;
-  --green:#059669; --yellow:#ca8a04; --red:#dc2626; --blue:#2563eb; --cyan:#0891b2; --orange:#d97706;
+  --green:#047552; --yellow:#ca8a04; --red:#dc2626; --blue:#2563eb; --cyan:#0891b2; --orange:#d97706;
   --grid:rgba(0,0,0,0.05);
   --shadow:0 1px 0 rgba(255,255,255,0.6) inset, 0 8px 24px -16px rgba(0,0,0,0.18);
   --pink:#db2777; --pink-rgb:219,39,119;
@@ -177,6 +180,25 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; }
+
+/* Form controls do NOT inherit font-family from an ancestor: the user agent gives
+   them its own default, which is Arial on Windows. Without this reset most of the
+   app's controls rendered in Arial while everything around them was Inter — 26 of
+   40 on Today, 26 of 32 on Setup. Subtle enough to read as "slightly off" rather
+   than broken, which is how it survived this long. */
+button, input, select, textarea, optgroup { font: inherit; letter-spacing: inherit; }
+
+/* Keyboard focus. Every interactive element must show where focus is; before this
+   there were seven :focus rules in the file and ALL of them targeted text inputs,
+   so no button or link had any indicator at all and tabbing through the app was
+   invisible. :focus-visible, not :focus, so a mouse click leaves no ring behind.
+   :where() holds specificity at zero so deliberate per-component focus styles below
+   still win. */
+:where(button, a, select, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
 body {
   background: var(--bg);
   color: var(--text);
@@ -384,9 +406,20 @@ body {
   background: var(--bg);
   height: 52px;
   flex-shrink: 0;
+  /* Contain the row below. Without this the topbar's own children could push past
+     it and take the whole page into horizontal scroll, which reads as "the app is
+     broken" rather than "this bar is crowded". */
+  min-width: 0;
+  overflow: hidden;
 }
+/* The flexbox min-width:auto trap. A flex child refuses to shrink below its content
+   size unless min-width is set to 0, so the topbar's right-hand group stayed at its
+   natural width and overflowed the bar by 68px at narrow widths, however small the
+   theme dropdown itself was made. Setting the FLOOR is the fix; capping the dropdown
+   alone was treating the symptom. */
+.topbar > .row { min-width: 0; }
 .search {
-  flex: 1; max-width: 520px;
+  flex: 1 1 0; max-width: 520px; min-width: 0;
   position: relative;
 }
 .search input {
@@ -445,6 +478,14 @@ body {
 .theme-select {
   appearance: none; -webkit-appearance: none; -moz-appearance: none;
   height: 30px;
+  /* Allowed to shrink. At its natural width this control held the topbar 25px
+     wider than a 768px viewport, so the WHOLE PAGE scrolled sideways — the one
+     layout bug users read as "the app is broken" rather than "this control is
+     too wide". min-width:0 is the load-bearing half: a flex/grid child refuses
+     to shrink below its content without it, so max-width alone would not fix it. */
+  min-width: 0;
+  max-width: 142px;
+  text-overflow: ellipsis;
   padding: 0 26px 0 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -2161,7 +2202,7 @@ body {
   background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
   padding: 10px 12px; color: var(--text); font-family: var(--sans); font-size: 13px; line-height: 1.55;
 }
-.pl-drawer .dr-note-input:focus { outline: none; border-color: rgba(var(--accent-rgb),0.5); }
+.pl-drawer .dr-note-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
 .pl-drawer .dr-note { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
 .pl-drawer .dr-note-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .pl-drawer .dr-note-ts { font-family: var(--mono); font-size: 10.5px; color: var(--text-mute); letter-spacing: 0.02em; }
@@ -2856,7 +2897,7 @@ mark.dx-mark { background: rgba(167,139,250,0.22); color: var(--accent-2); paddi
   width: 100%; background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--r-ctl);
   color: var(--text); font-family: inherit; font-size: 13px; padding: 8px 10px;
 }
-.todo-edit-input:focus { border-color: var(--accent); outline: none; }
+.todo-edit-input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-bg); }
 .todo-edit .todo-add-prio { width: 100%; }
 .todo-edit-due { display: flex; align-items: center; gap: 6px; }
 .todo-edit-due .todo-add-due { flex: 1; min-width: 0; }
@@ -2865,5 +2906,5 @@ mark.dx-mark { background: rgba(167,139,250,0.22); color: var(--accent-2); paddi
   background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--r-ctl);
   color: var(--text); font-family: inherit; font-size: 12.5px; line-height: 1.5; padding: 8px 10px;
 }
-.todo-notes:focus { border-color: var(--accent); outline: none; }
+.todo-notes:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-bg); }
 

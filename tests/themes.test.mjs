@@ -61,6 +61,13 @@ function themeBody(theme) {
   return m ? m[1] : null;
 }
 
+// The default dark palette is declared on the combined `:root, [data-theme="dark"]`
+// selector, so themeBody('dark') alone misses it.
+function rootBody() {
+  const m = css.match(/:root,\s*\[data-theme="dark"\]\s*\{([^}]*)\}/);
+  return m ? m[1] : themeBody('dark');
+}
+
 // ── Canonical token set: the union of every [data-theme="dark"] block ─────────
 // The dark palette is split across two regions (the main block + the pipeline
 // module's --pink/--pink-rgb). Union them so "the full dark token set" stays
@@ -141,6 +148,51 @@ check(defaultTheme === htmlDefaultTheme,
   `index.html <html data-theme> (${htmlDefaultTheme}) matches TWEAK_DEFAULTS.theme (${defaultTheme})`);
 check(!!appKey && appKey === htmlKey,
   `persistence key matches across app.jsx (${appKey}) and index.html pre-paint script (${htmlKey})`);
+
+// ── 4. Every palette's text tokens clear WCAG AA on every one of its surfaces ──
+// --text-mute failed 4.5:1 in ALL NINE palettes at once (2.56 to 3.60), and it is
+// the token that paints every KPI label. The numbers were legible at 15:1 while the
+// labels saying what they meant were the hardest thing on screen. A colour fix with
+// no test drifts back the first time someone hand-tweaks a palette, so the ratio is
+// asserted rather than the hex.
+//
+// Checked against EVERY surface the palette defines, not just --panel. The first fix
+// here targeted --panel alone and left three light themes failing, because in a light
+// palette --bg-2 is DARKER than --panel and dark text on it has less contrast, not
+// more. The worst surface is the one that matters.
+const srgb = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+const relLum = ([r, g, b]) => 0.2126 * srgb(r) + 0.7152 * srgb(g) + 0.0722 * srgb(b);
+const parseHex = (hex) => {
+  const h = String(hex || '').trim().replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+  return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+};
+const contrast = (a, b) => {
+  const A = relLum(a), B = relLum(b);
+  return (Math.max(A, B) + 0.05) / (Math.min(A, B) + 0.05);
+};
+const SURFACE_TOKENS = ['bg', 'bg-2', 'panel', 'panel-2', 'panel-3'];
+const TEXT_TOKENS = ['text', 'text-dim', 'text-mute'];
+const AA = 4.5;
+// The three base palettes plus the six designer ones. "dark" lives in :root.
+const CONTRAST_THEMES = ['dark', 'light', 'dim', ...DESIGNER];
+for (const theme of CONTRAST_THEMES) {
+  const body = theme === 'dark' ? rootBody() : themeBody(theme);
+  if (!body) continue;
+  const surfaces = SURFACE_TOKENS.map(t => parseHex(tokenValue(body, t))).filter(Boolean);
+  if (!surfaces.length) { check(false, `${theme}: no parseable surface tokens`); continue; }
+  for (const tok of TEXT_TOKENS) {
+    const fg = parseHex(tokenValue(body, tok));
+    if (!fg) continue; // a theme inheriting the token from :root is covered by that block
+    let worst = Infinity, worstOn = null;
+    for (let i = 0; i < surfaces.length; i++) {
+      const r = contrast(fg, surfaces[i]);
+      if (r < worst) { worst = r; worstOn = SURFACE_TOKENS[i]; }
+    }
+    check(worst >= AA,
+      `${theme}: --${tok} clears AA on its worst surface (--${worstOn}, ${worst.toFixed(2)} >= ${AA})`);
+  }
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
