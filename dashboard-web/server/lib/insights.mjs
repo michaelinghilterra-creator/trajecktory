@@ -7,6 +7,7 @@ import { parseRecruitersMd, RECRUITER_CONTACTED } from './recruiters.mjs';
 import { parseTargetTalentMd } from './target-talent.mjs';
 import { parseStatusEvents } from './sidecars.mjs';
 import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, isInterviewStage, reachedStage, makeFurthestIdx } from './statuses.mjs';
+import { rateStat, MIN_SAMPLE } from './rate-confidence.mjs';
 
 const INSIGHTS_DIR = path.resolve(ROOT_DIR, 'data', 'insights');
 const INSIGHTS_LATEST = path.join(INSIGHTS_DIR, 'latest.json');
@@ -92,6 +93,7 @@ function buildInsightsContext() {
       n: v.count,
       appliedN: v.applied,
       responseRate: v.applied ? Math.round(v.responded / v.applied * 100) : 0,
+      conf: rateStat(v.responded, v.applied),
       avgScore: v.scoreN ? +(v.scoreSum / v.scoreN).toFixed(2) : null,
     }))
     .sort((a, b) => b.responseRate - a.responseRate);
@@ -112,6 +114,7 @@ function buildInsightsContext() {
       n: v.count,
       appliedN: v.applied,
       responseRate: Math.round(v.responded / v.applied * 100),
+      conf: rateStat(v.responded, v.applied),
     }))
     .sort((a, b) => b.responseRate - a.responseRate)
     .slice(0, 10);
@@ -176,6 +179,8 @@ function buildInsightsContext() {
       offer: apps.filter(a => furthestIdx(a) >= OFFER_IDX).length,
       responseRate: applied.length ? Math.round(responded.length / applied.length * 100) : 0,
       interviewRate: applied.length ? Math.round(interview.length / applied.length * 100) : 0,
+      responseConf: rateStat(responded.length, applied.length),
+      interviewConf: rateStat(interview.length, applied.length),
     },
     archetypes: archByPerf,
     sectors: sectorByPerf,
@@ -183,8 +188,10 @@ function buildInsightsContext() {
     // previously meant "active" for talent and "all" for recruiters, one line apart.
     talent:     { total: taContacts.length, active: taActive.length, sent: taSent, replied: taReplied,
                   responseRate: taSent ? Math.round(taReplied / taSent * 100) : 0,
+                  conf: rateStat(taReplied, taSent),
                   repliedIsFloor: taTouchedArchive.length > 0, archivedTouched: taTouchedArchive.length },
-    recruiters: { total: recruiters.length, sent: recSent,   replied: recReplied,   responseRate: recSent ? Math.round(recReplied / recSent * 100) : 0 },
+    recruiters: { total: recruiters.length, sent: recSent,   replied: recReplied,   responseRate: recSent ? Math.round(recReplied / recSent * 100) : 0,
+                  conf: rateStat(recReplied, recSent) },
     staleTotal: staleApps.length + staleTA.length,
     topStale,
     pendingHot,
@@ -203,9 +210,10 @@ function buildInsightsMetrics(ctx) {
   // "Overweight and underperforming": the cohort soaking up the most volume while
   // converting below the overall response rate. That's where to pull spend from.
   const worstArchetype = arch
-    .filter(a => a.appliedN >= 5 && a.responseRate < overall)
+    .filter(a => a.conf?.sufficient && a.responseRate < overall)
     .sort((a, b) => b.appliedN - a.appliedN)[0] || null;
   return {
+    minSample: MIN_SAMPLE,
     pipeline: {
       applied: ctx.pipeline?.applied ?? 0,
       responseRate: ctx.pipeline?.responseRate ?? 0,
@@ -215,16 +223,21 @@ function buildInsightsMetrics(ctx) {
       sent: ctx.recruiters?.sent ?? 0,
       replied: ctx.recruiters?.replied ?? 0,
       responseRate: ctx.recruiters?.responseRate ?? 0,
+      conf: ctx.recruiters?.conf ?? null,
     },
     talent: {
       sent: ctx.talent?.sent ?? 0,
       replied: ctx.talent?.replied ?? 0,
       responseRate: ctx.talent?.responseRate ?? 0,
+      conf: ctx.talent?.conf ?? null,
     },
     staleTotal: ctx.staleTotal ?? 0,
-    // archetypes/sectors arrive pre-sorted by responseRate desc.
-    topArchetypes: arch.filter(a => a.appliedN >= 3).slice(0, 3),
-    topSectors: sectors.slice(0, 3),
+    // archetypes/sectors arrive pre-sorted by responseRate desc. Only cohorts that
+    // clear the sample gate (conf.sufficient, n >= MIN_SAMPLE) are surfaced as a
+    // "top" or "worst" claim: a rate off fewer than 10 applications is noise, not a
+    // winner, and featuring it is the exact false-confidence this work removes.
+    topArchetypes: arch.filter(a => a.conf?.sufficient).slice(0, 3),
+    topSectors: sectors.filter(s => s.conf?.sufficient).slice(0, 3),
     worstArchetype,
   };
 }

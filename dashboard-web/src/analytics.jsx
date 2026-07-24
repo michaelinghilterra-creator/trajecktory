@@ -381,30 +381,42 @@ function MovesPanel({ insights, apps, onOpen }) {
 // the server persists alongside the analysis. Returns null on older payloads.
 function StatStrip({ metrics, which }) {
   if (!metrics) return null;
+  const need = metrics.minSample || 10;
+  // Render a rate honestly against the server's sample gate (lib/rate-confidence).
+  // Below the gate we refuse the percent and show the raw fraction ("3/7, too few");
+  // at or above it we show the rate WITH its 95% band, so a wide band on a passing-
+  // but-thin cohort reads as uncertainty, not a hard number. No conf (an old cached
+  // payload) means no card; regenerating insights repopulates it.
+  const rateCard = ({ label, conf, prefix = '', color, subExtra = '' }) => {
+    if (!conf) return null;
+    if (!conf.sufficient) return { label, value: conf.k + '/' + conf.n, sub: `too few to rate (need ${need}+)` + subExtra };
+    return { label, value: prefix + conf.rate + '%', sub: `${conf.k} of ${conf.n} · ${conf.lo}-${conf.hi}%` + subExtra, color };
+  };
   const cards = [];
   if (which === 'working') {
     const ta = (metrics.topArchetypes || [])[0];
     const ts = (metrics.topSectors || [])[0];
-    if (ta) cards.push({ label: ta.archetype + ' response', value: ta.responseRate + '%', sub: ta.appliedN + ' applied', color: 'var(--green)' });
-    if (metrics.recruiter && metrics.recruiter.sent) cards.push({ label: 'Recruiter channel', value: metrics.recruiter.responseRate + '%', sub: metrics.recruiter.replied + ' of ' + metrics.recruiter.sent, color: 'var(--green)' });
-    if (ts) cards.push({ label: ts.sector + ' sector', value: ts.responseRate + '%', sub: ts.appliedN + ' applied', color: 'var(--green)' });
+    if (ta) cards.push(rateCard({ label: ta.archetype + ' response', conf: ta.conf, color: 'var(--green)' }));
+    if (metrics.recruiter && metrics.recruiter.sent) cards.push(rateCard({ label: 'Recruiter channel', conf: metrics.recruiter.conf, color: 'var(--green)' }));
+    if (ts) cards.push(rateCard({ label: ts.sector + ' sector', conf: ts.conf, color: 'var(--green)' }));
   } else if (which === 'not') {
     if (metrics.staleTotal != null) cards.push({ label: 'Stale touchpoints', value: String(metrics.staleTotal), sub: 'awaiting follow-up', color: 'var(--yellow)' });
-    if (metrics.worstArchetype) cards.push({ label: metrics.worstArchetype.archetype + ' (overweight)', value: metrics.worstArchetype.responseRate + '%', sub: metrics.worstArchetype.appliedN + ' applied', color: 'var(--red)' });
+    if (metrics.worstArchetype) cards.push(rateCard({ label: metrics.worstArchetype.archetype + ' (overweight)', conf: metrics.worstArchetype.conf, color: 'var(--red)' }));
     // Archiving overwrote the prior status on {archivedTouched} contacts, so their
     // replies are unrecoverable and this rate is a lower bound, not a measurement.
-    if (metrics.talent && metrics.talent.sent) cards.push({
+    if (metrics.talent && metrics.talent.sent) cards.push(rateCard({
       label: 'TA outreach',
-      value: (metrics.talent.repliedIsFloor ? '≥' : '') + metrics.talent.responseRate + '%',
-      sub: metrics.talent.replied + ' of ' + metrics.talent.sent
-        + (metrics.talent.repliedIsFloor ? ` · floor, ${metrics.talent.archivedTouched} archived replies not preserved` : ''),
+      conf: metrics.talent.conf,
+      prefix: metrics.talent.repliedIsFloor ? '≥' : '',
       color: 'var(--red)',
-    });
+      subExtra: metrics.talent.repliedIsFloor ? ` · floor, ${metrics.talent.archivedTouched} archived replies not preserved` : '',
+    }));
   }
-  if (!cards.length) return null;
+  const shown = cards.filter(Boolean);
+  if (!shown.length) return null;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-      {cards.map((c, i) => (
+      {shown.map((c, i) => (
         <div key={i} className="ins-stat">
           <div className="dim" style={{ fontSize: 11, marginBottom: 5 }}>{c.label}</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: c.color || 'var(--text)' }}>{c.value}</div>
