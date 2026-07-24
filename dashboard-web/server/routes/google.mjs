@@ -2,7 +2,7 @@ import express from 'express';
 import {
   readTokens, writeTokens, readSync, writeSync, googleStatus, checkHealth,
   getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions,
-  buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, candidateAppsFor,
+  buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, candidateAppsFor, createDraft,
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { parseRecruitersMd, updateRecruiterLine } from '../lib/recruiters.mjs';
@@ -278,6 +278,28 @@ router.post('/api/google/replies/:msgId/:action', (req, res) => {
 
     markHandled({ action, appId: id, date: today });
     res.json({ ok: true, appId: id, statusFlip });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/google/draft { to, subject, body } — create a Gmail DRAFT. Never
+// sends: the lib has no send wrapper, this only calls drafts.create. Requires the
+// compose scope; a read-only token (from before this shipped) gets a clear
+// needsReconnect signal instead of a raw 403 so the UI can prompt a re-consent.
+// The user reviews and sends every draft by hand in Gmail.
+router.post('/api/google/draft', async (req, res) => {
+  try {
+    const tokens = readTokens();
+    if (!tokens?.refresh_token) return res.status(400).json({ error: 'Google is not connected.' });
+    if (!googleStatus(tokens).canDraft) {
+      return res.status(403).json({ error: 'This Gmail connection is read-only. Reconnect to grant draft access.', needsReconnect: true });
+    }
+    const { to, subject, body } = req.body || {};
+    if (!to || !/@/.test(String(to))) return res.status(400).json({ error: 'A valid "to" address is required.' });
+    const accessToken = await getAccessToken({ tokens });
+    const draft = await createDraft({ to: String(to), subject: String(subject || ''), body: String(body || ''), accessToken });
+    res.json({ ok: true, draftId: draft.id, messageId: draft.messageId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

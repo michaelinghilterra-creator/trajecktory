@@ -37,6 +37,13 @@ const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
 // point is reading bounces and replies, never sending. Least privilege on purpose.
 export const GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 
+// Draft-writing needs a send-capable scope (Google has no draft-only scope). We
+// request gmail.compose and NEVER call send: this module implements drafts.create
+// and nothing else — grep this file, there is no send wrapper. The read scope
+// stays too so the reply/bounce sweep keeps working. The user re-consents to both.
+export const GMAIL_COMPOSE_SCOPE = 'https://www.googleapis.com/auth/gmail.compose';
+export const GMAIL_SCOPES = `${GMAIL_READONLY_SCOPE} ${GMAIL_COMPOSE_SCOPE}`;
+
 // ── Token + sync-cursor storage ──────────────────────────────────────────────
 function readTokens() {
   try { return JSON.parse(fs.readFileSync(GOOGLE_TOKENS_PATH, 'utf8')); }
@@ -73,7 +80,7 @@ function tokenScopes(tokens) {
 // Returns only non-secret facts (no token values) so it is safe to hand a UI.
 function googleStatus(tokens = readTokens(), now = Date.now()) {
   if (!tokens || !tokens.refresh_token) {
-    return { connected: false, connectedEmail: null, scopes: [], canReadMail: false, expired: true, expiresAt: null };
+    return { connected: false, connectedEmail: null, scopes: [], canReadMail: false, canDraft: false, expired: true, expiresAt: null };
   }
   const scopes = tokenScopes(tokens);
   const expiresAt = tokens.expiry_date || null;
@@ -82,6 +89,7 @@ function googleStatus(tokens = readTokens(), now = Date.now()) {
     connectedEmail: tokens.connectedEmail || null,
     scopes,
     canReadMail: scopes.some(s => /gmail\.(readonly|modify)/.test(s)),
+    canDraft: scopes.some(s => /gmail\.(compose|modify)/.test(s)),
     expired: !expiresAt || expiresAt <= now,
     expiresAt,
   };
@@ -189,7 +197,7 @@ export function randomState() {
 // Build the Google consent URL. Pure given its inputs. access_type=offline plus
 // prompt=consent guarantees a refresh token even on a re-consent (Google withholds
 // one on a silent re-grant otherwise, which is exactly the case here).
-export function buildAuthUrl({ clientId, redirectUri, state, codeChallenge, scope = GMAIL_READONLY_SCOPE }) {
+export function buildAuthUrl({ clientId, redirectUri, state, codeChallenge, scope = GMAIL_SCOPES }) {
   const p = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -256,6 +264,46 @@ async function getMessage({ id, accessToken, fetchImpl = fetch } = {}) {
   const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) throw new Error(`Gmail get failed (${res.status})`);
   return res.json();
+}
+
+// ── Draft creation (network; injectable fetch) — CREATE ONLY, NEVER SEND ───────
+// The one write this integration performs. It calls drafts.create and nothing
+// else: there is deliberately no send wrapper anywhere in this module, so the most
+// this code can do with the compose scope is leave an UNSENT draft in Gmail. The
+// user reviews and sends every draft by hand.
+
+// Build an RFC 2822 message and base64url-encode it for the Gmail API. Pure. UTF-8
+// body; a non-ASCII subject is RFC 2047 encoded so it survives transport.
+export function buildRawEmail({ to, subject = '', body = '' }) {
+  if (!to || !/@/.test(String(to))) throw new Error('createDraft: a valid "to" address is required');
+  const encSubject = /[^\x00-\x7F]/.test(subject)
+    ? `=?UTF-8?B?${Buffer.from(String(subject), 'utf8').toString('base64')}?=`
+    : String(subject);
+  const headers = [
+    `To: ${to}`,
+    `Subject: ${encSubject}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Transfer-Encoding: 8bit',
+  ];
+  const mime = `${headers.join('\r\n')}\r\n\r\n${String(body)}`;
+  return Buffer.from(mime, 'utf8').toString('base64url');
+}
+
+// Create a Gmail DRAFT (never sends). Returns { id, messageId }. Injectable fetch.
+async function createDraft({ to, subject, body, accessToken, fetchImpl = fetch } = {}) {
+  const raw = buildRawEmail({ to, subject, body });
+  const res = await fetchImpl(`${GMAIL_BASE}/drafts`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: { raw } }),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Gmail draft create failed (${res.status}). ${String(txt).slice(0, 160)}`);
+  }
+  const j = await res.json();
+  return { id: j.id || null, messageId: j.message?.id || null };
 }
 
 // Fetch many messages with bounded concurrency. Once the sweep searches beyond the
@@ -482,5 +530,5 @@ export {
   readTokens, writeTokens, readSync, writeSync, tokenScopes,
   googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
   parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions,
-  exchangeCode, fetchProfileEmail, candidateAppsFor,
+  exchangeCode, fetchProfileEmail, candidateAppsFor, createDraft,
 };

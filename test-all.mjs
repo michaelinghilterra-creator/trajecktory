@@ -479,6 +479,7 @@ for (const suite of [
   'tests/google.test.mjs',
   'tests/google-connect.test.mjs',
   'tests/google-sync.test.mjs',
+  'tests/google-draft.test.mjs',
   'tests/v1-loader.test.mjs',
   'tests/weekly-review.test.mjs',
   'tests/weekly-run.test.mjs',

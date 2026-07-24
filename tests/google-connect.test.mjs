@@ -11,7 +11,7 @@
  * Run: node tests/google-connect.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { pkceChallenge, buildAuthUrl, exchangeCode, fetchProfileEmail, GMAIL_READONLY_SCOPE } from '../dashboard-web/server/lib/google.mjs';
+import { pkceChallenge, buildAuthUrl, exchangeCode, fetchProfileEmail, GMAIL_READONLY_SCOPE, GMAIL_COMPOSE_SCOPE, GMAIL_SCOPES } from '../dashboard-web/server/lib/google.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -39,7 +39,8 @@ check(u.origin + u.pathname === 'https://accounts.google.com/o/oauth2/v2/auth', 
 check(u.searchParams.get('client_id') === '78999004600-example.apps.googleusercontent.com', 'client_id set');
 check(u.searchParams.get('redirect_uri') === 'http://localhost:3333/api/google/callback', 'redirect_uri round-trips exactly');
 check(u.searchParams.get('response_type') === 'code', 'response_type=code');
-check(u.searchParams.get('scope') === GMAIL_READONLY_SCOPE, 'scope is gmail.readonly and nothing more');
+check(u.searchParams.get('scope') === GMAIL_SCOPES, 'scope requests readonly + compose (drafts, never send)');
+check(u.searchParams.get('scope').includes(GMAIL_READONLY_SCOPE) && u.searchParams.get('scope').includes(GMAIL_COMPOSE_SCOPE), 'both the read and the compose scopes are present');
 check(u.searchParams.get('access_type') === 'offline', 'access_type=offline (so a refresh token is issued)');
 check(u.searchParams.get('prompt') === 'consent', 'prompt=consent (so re-consent still yields a refresh token)');
 check(u.searchParams.get('state') === 'st_abc123', 'state carried through');
