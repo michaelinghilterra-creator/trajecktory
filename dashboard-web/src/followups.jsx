@@ -314,6 +314,17 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   };
   useEffectF(() => { load(); }, []);
 
+  // Contacts the send gate is withholding because their address was never checked.
+  // A short queue is ambiguous on its own: it can mean a quiet week or a missing
+  // setting, and the user cannot tell which. Saying the number turns the second
+  // case into something they can act on.
+  const [withheld, setWithheld] = useStateF(null);
+  useEffectF(() => {
+    fetch('/api/followups/withheld').then(r => r.json())
+      .then(d => setWithheld(d && !d.error ? d : null)).catch(() => {});
+  }, []);
+  const withholding = !!(withheld && withheld.withheld > 0 && !withheld.hasVerifierKeys);
+
   const warm = data.warm || [];
   const cold = data.cold || [];
   const ghosted = data.ghostedCandidates || [];
@@ -528,6 +539,11 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
               ? <>No warm threads right now. A reply, an interview, or a contact who engaged shows up here.</>
               : <>{warm.length} warm {warm.length === 1 ? 'thread' : 'threads'} worth a nudge · thresholds App {data.thresholds?.Applied || 7}/{data.thresholds?.Responded || 5}/{data.thresholds?.['1st Interview'] || 3}d · TA {data.taThreshold || 14}d</>}
           </div>
+          {withholding && (
+            <div style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.6, maxWidth: 620 }}>
+              {withheld.withheld} {withheld.withheld === 1 ? 'contact is' : 'contacts are'} not shown here because their email address has never been checked, and nothing is sent to an address that might not exist. Turn on contact email checking in Launchpad, under Optional boosters, to bring them back.
+            </div>
+          )}
         </div>
         <div className="act">
           <button className="btn sm" onClick={load} title="Reload">⟳ Refresh</button>

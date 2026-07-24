@@ -1,6 +1,6 @@
 import express from 'express';
 import {
-  readTokens, writeTokens, readSync, writeSync, googleStatus, checkHealth,
+  readTokens, writeTokens, readSync, writeSync, googleStatus, checkHealth, clientConfigured,
   getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions,
   buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, candidateAppsFor, createDraft,
 } from '../lib/google.mjs';
@@ -32,6 +32,21 @@ function replySearchQuery(since, selfEmail) {
   // and, matched to a self-test contact, carry no application, so they never clear.
   const excludeSelf = selfEmail ? ` -from:${selfEmail}` : '';
   return `(${clause}) after:${since} -from:mailer-daemon -from:postmaster${excludeSelf}`;
+}
+
+// One place that decides why a mail call cannot run, because "not set up" and "not
+// connected" are different problems with different fixes. Answering both with
+// "Google is not connected" sends a user who has never provisioned an OAuth client
+// hunting for a Connect button that cannot help them. The flags let the UI offer
+// the right next step instead of a generic error.
+function connectionProblem(tokens) {
+  if (!clientConfigured()) {
+    return { error: 'Gmail is not set up on this install yet. It needs a one-time setup in your own Google account.', needsSetup: true };
+  }
+  if (!tokens || !tokens.refresh_token) {
+    return { error: 'Google is not connected.', needsConnect: true };
+  }
+  return null;
 }
 
 // GET /api/google/status — non-secret connection facts for the UI. Local read
@@ -73,10 +88,16 @@ function sweepPending(now) {
 // redirect_uri is derived from THIS request's host, so the loopback port matches
 // whatever port the dashboard is on (Desktop OAuth client: any local port is
 // allowed, nothing to pre-register).
+// Never answers with a bare error page. This endpoint is reached by a FULL-PAGE
+// navigation, so a 400 body replaces the whole dashboard with unstyled text naming
+// an env var: the user loses their place and is told to go edit a file they have
+// never heard of. Every failure here redirects back with a reason the app renders,
+// exactly as the callback below already does. Missing credentials get their own
+// reason because they are not a failure at all, just a setup step not done yet.
 router.get('/api/google/auth-start', (req, res) => {
   try {
     const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
-    if (!clientId) return res.status(400).send('Missing GOOGLE_CLIENT_ID in dashboard-web/.env');
+    if (!clientConfigured()) return res.redirect('/?google=setup');
     const now = Date.now();
     sweepPending(now);
     const { verifier, challenge } = newPkce();
@@ -85,7 +106,7 @@ router.get('/api/google/auth-start', (req, res) => {
     pendingAuth.set(state, { verifier, redirectUri, createdAt: now });
     res.redirect(buildAuthUrl({ clientId, redirectUri, state, codeChallenge: challenge }));
   } catch (err) {
-    res.status(500).send(err.message);
+    res.redirect(`/?google=error&reason=${encodeURIComponent(String(err.message).slice(0, 120))}`);
   }
 });
 
@@ -130,7 +151,8 @@ router.get('/api/google/callback', async (req, res) => {
 router.post('/api/google/scan-bounces', async (req, res) => {
   try {
     const tokens = readTokens();
-    if (!tokens?.refresh_token) return res.status(400).json({ error: 'Google is not connected.' });
+    const problem = connectionProblem(tokens);
+    if (problem) return res.status(400).json(problem);
     const accessToken = await getAccessToken({ tokens });
     const since = gmailDate(req.body?.since);
     const dryRun = !!req.body?.dryRun; // read-only: compute the flips, write nothing
@@ -199,7 +221,8 @@ router.post('/api/google/scan-bounces', async (req, res) => {
 router.get('/api/google/replies', async (req, res) => {
   try {
     const tokens = readTokens();
-    if (!tokens?.refresh_token) return res.status(400).json({ error: 'Google is not connected.' });
+    const problem = connectionProblem(tokens);
+    if (problem) return res.status(400).json(problem);
     const accessToken = await getAccessToken({ tokens });
     const since = gmailDate(req.query?.since);
     const q = replySearchQuery(since, tokens?.connectedEmail);
@@ -291,7 +314,8 @@ router.post('/api/google/replies/:msgId/:action', (req, res) => {
 router.post('/api/google/draft', async (req, res) => {
   try {
     const tokens = readTokens();
-    if (!tokens?.refresh_token) return res.status(400).json({ error: 'Google is not connected.' });
+    const problem = connectionProblem(tokens);
+    if (problem) return res.status(400).json(problem);
     if (!googleStatus(tokens).canDraft) {
       return res.status(403).json({ error: 'This Gmail connection is read-only. Reconnect to grant draft access.', needsReconnect: true });
     }

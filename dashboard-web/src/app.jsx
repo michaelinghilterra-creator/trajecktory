@@ -361,15 +361,20 @@ function App() {
   // (build.mjs runs esbuild with bundle:false), so this matches the house style.
   useEffect(() => { window.tjkToast = toast; }, [toast]);
 
-  // Gmail reconnect lands back here at /?google=connected|error (the OAuth callback
-  // cannot know which tab was open). Surface the result once, open Insights (whose
-  // default subtab is Review, where the Gmail panel lives), and strip the query so
-  // a refresh does not re-toast.
+  // Gmail reconnect lands back here at /?google=connected|error|setup (the OAuth
+  // callback cannot know which tab was open). Surface the result once, open Insights
+  // (whose default subtab is Review, where the Gmail panel lives), and strip the
+  // query so a refresh does not re-toast. `setup` is not a failure: it means no
+  // OAuth client exists on this install yet, so it gets its own wording and sends
+  // the user to the card that explains what to do rather than reporting an error.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const g = params.get("google");
     if (!g) return;
     if (g === "connected") { toast("Gmail connected.", "success"); setTab("analytics"); }
+    // No kind: this is neutral information, not a success and not a failure. The
+    // stack's default styling is exactly that.
+    else if (g === "setup") { toast("Gmail needs a one-time setup before it can connect. See the Gmail sync card."); setTab("analytics"); }
     else if (g === "error") { toast(`Gmail connect failed: ${params.get("reason") || "unknown"}`, "error"); setTab("analytics"); }
     params.delete("google"); params.delete("reason");
     const qs = params.toString();

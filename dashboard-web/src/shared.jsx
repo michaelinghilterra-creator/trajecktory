@@ -987,15 +987,59 @@ function QuickCopyBar() {
 // Exposed globally so the Pipeline drawer (pipeline.jsx, separate IIFE) can reuse it.
 window.QuickCopyBar = QuickCopyBar;
 
+// Gmail connection state, fetched ONCE per page load and shared by every draft
+// button. There can be dozens on screen (one per contact), so each fetching for
+// itself would hammer an endpoint that may refresh a token. A single in-flight
+// promise is reused, and subscribers are notified when it lands.
+let _gmailState = null;          // null = not fetched; object = the health payload
+let _gmailPending = null;        // the in-flight fetch, shared
+const _gmailSubs = new Set();
+function useGmailState() {
+  const [s, setS] = useStateS(_gmailState);
+  useEffectS(() => {
+    if (_gmailState) return;
+    _gmailSubs.add(setS);
+    if (!_gmailPending) {
+      _gmailPending = fetch('/api/google/health').then(r => r.json())
+        // A failure must not disable the button: unknown is treated as available,
+        // so the worst case is the old behaviour (click, get told what is wrong)
+        // rather than a control the user cannot press for no visible reason.
+        .catch(() => ({ configured: true, connected: true, healthy: true, reason: 'unknown' }))
+        .then(j => { _gmailState = j; _gmailSubs.forEach(fn => fn(j)); _gmailSubs.clear(); return j; });
+    }
+    return () => _gmailSubs.delete(setS);
+  }, []);
+  return s;
+}
+
 // Create-a-Gmail-draft button. POSTs the composed email to /api/google/draft,
 // which creates a DRAFT and never sends (the server has no send path). If the
 // connected token predates the compose scope the route returns needsReconnect and
 // we nudge a reconnect. Shared by the TA, recruiter, and follow-up composers.
 // Renders nothing without a recipient address (a draft needs a "to").
+//
+// When Gmail is not usable the button is DISABLED, never hidden. Hiding it means a
+// user never learns the capability exists; disabling it with the reason on hover
+// makes the feature discoverable at the exact place they would have used it, which
+// is the only place the explanation is worth anything.
 window.GmailDraftBtn = function GmailDraftBtn({ to, subject, body, size = "sm" }) {
   const [busy, setBusy] = React.useState(false);
   const [done, setDone] = React.useState(false);
+  const gmail = useGmailState();
   if (!to) return null;
+  // Undefined state (still loading) counts as usable: the button is enabled for a
+  // moment before the answer arrives, which is better than flickering disabled.
+  const blocked = gmail && gmail.configured === false ? 'setup'
+    : gmail && !gmail.connected ? 'connect'
+    : gmail && !gmail.healthy ? 'reconnect'
+    : null;
+  const blockedWhy = blocked === 'setup'
+    ? 'Gmail drafts need a one-time Gmail setup first. Insights, then Review, then "How to set this up".'
+    : blocked === 'connect'
+    ? 'Connect Gmail to draft from here. Insights, then Review.'
+    : blocked === 'reconnect'
+    ? 'Your Gmail connection expired. Reconnect on Insights, then Review.'
+    : null;
   const create = async () => {
     if (busy || done) return;
     setBusy(true);
@@ -1019,8 +1063,8 @@ window.GmailDraftBtn = function GmailDraftBtn({ to, subject, body, size = "sm" }
     } finally { setBusy(false); }
   };
   return (
-    <button className={"btn " + size} onClick={create} disabled={busy || !body}
-      title="Create a draft in your Gmail Drafts folder (never sends)">
+    <button className={"btn " + size} onClick={create} disabled={busy || !body || !!blocked}
+      title={blockedWhy || "Create a draft in your Gmail Drafts folder (never sends)"}>
       {busy ? "Drafting…" : done ? "In Gmail Drafts ✓" : "Gmail draft"}
     </button>
   );

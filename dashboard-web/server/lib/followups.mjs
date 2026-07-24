@@ -422,9 +422,34 @@ function computeConnectQueue({ taRows, recruiterRows } = {}) {
   return out;
 }
 
+// How many contacts are being held back purely because their address could not be
+// checked. The send gate refusing an unverified address is correct, but its effect
+// is INVISIBLE: the row simply does not appear, and fewer rows looks like a quiet
+// week rather than a missing setting. This counts what the gate is withholding so
+// the number can be shown instead of implied.
+//
+// Counted: a non-archived contact WITH an address on file that isSendable rejects.
+// Not counted: contacts with no address at all (nothing is being withheld there,
+// there is simply nothing to send to) and observed-dead states (bounced / invalid /
+// blocked), where the address was checked and really is unusable. A key would not
+// rescue either group, so including them would overstate what turning it on buys.
+const _WITHHELD_STATES = new Set(['unverified', '', undefined, null]);
+function countWithheldContacts({ taRows, recruiterRows } = {}) {
+  const ta  = taRows        ?? (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
+  const rec = recruiterRows ?? (() => { try { return parseRecruitersMd();  } catch { return []; } })();
+  let withheld = 0;
+  for (const row of [...ta, ...rec]) {
+    if (!row || row.status === 'Archived') continue;
+    if (!(row.email || '').trim()) continue;
+    if (isSendable(row)) continue;
+    if (_WITHHELD_STATES.has(row.verified?.state)) withheld++;
+  }
+  return withheld;
+}
+
 export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA,
-  computeGhostedCandidates, channelFor, computeConnectQueue, GHOST_DAYS,
-  STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, _daysAgo,
+  computeGhostedCandidates, channelFor, computeConnectQueue, countWithheldContacts,
+  GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 

@@ -126,6 +126,11 @@ const LP_OPTIONAL = [
     sowhat: 'Without it, the app only checks the companies on your list. With it, it can go and find new ones.',
     affectsScore: 'no',
     ifYouSkip: 'Scanning still works. You just have to add companies yourself.' },
+  { id: 'verify',    label: 'Contact email checking (optional)',
+    does: 'Finds a work email for a contact, and checks that it is real.',
+    sowhat: 'A guessed email that bounces is worse than none. The note goes nowhere, and it reads to you like you were ignored. With this on, you only write to an email that has been checked.',
+    affectsScore: 'no',
+    ifYouSkip: 'You cannot reach those people by email, so follow-ups skip them. The rest still works, and you can still use LinkedIn.' },
   { id: 'obsidian',  label: 'Obsidian vault',
     does: 'Copies notes about jobs you applied to into your Obsidian vault.',
     sowhat: 'Useful only if you already keep your notes there.',
@@ -693,6 +698,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   const [health, setHealth] = useState(null);           // {ok, output}
   const [apiKey, setApiKey] = useState({ has: null, input: '', saving: false, msg: '' });
   const [discKeys, setDiscKeys] = useState({ brave: null, muse: null, braveInput: '', museInput: '', saving: false, msg: '' });
+  const [vfyKeys, setVfyKeys] = useState({ hunter: null, millionverifier: null, hunterInput: '', mvInput: '', saving: false, msg: '' });
   const [forms, setForms] = useState({});               // local form drafts
   const dirty = useRef(new Set());                       // "group.key" the user has actually edited
 
@@ -741,6 +747,13 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   useEffect(() => {
     fetch('/api/setup/discovery-keys').then(r => r.json())
       .then(d => setDiscKeys(k => ({ ...k, brave: !!d.brave, muse: !!d.muse }))).catch(() => {});
+  }, []);
+
+  // Which contact-verification keys are set, for that booster's status line.
+  // Booleans only, never the keys.
+  useEffect(() => {
+    fetch('/api/setup/verify-keys').then(r => r.json())
+      .then(d => setVfyKeys(k => ({ ...k, hunter: !!d.hunter, millionverifier: !!d.millionverifier }))).catch(() => {});
   }, []);
 
 
@@ -1084,6 +1097,23 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       setDiscKeys(k => ({ ...k, brave: !!res.brave, muse: !!res.muse, braveInput: '', museInput: '', saving: false, msg: 'Saved. Expand Coverage will use it on the next run.' }));
       toast && toast('Discovery keys saved', 'success');
     }).catch(() => { setDiscKeys(k => ({ ...k, saving: false, msg: 'Save failed' })); toast && toast('Save failed', 'error'); });
+  };
+
+  // Save the contact-verification keys (Hunter / MillionVerifier). Server writes
+  // them to dashboard-web/.env; contact finding and the send gate read them next run.
+  const saveVerifyKeys = () => {
+    const hunter = (vfyKeys.hunterInput || '').trim();
+    const millionverifier = (vfyKeys.mvInput || '').trim();
+    if (!hunter && !millionverifier) { toast && toast('Paste a Hunter or MillionVerifier key first', 'warn'); return; }
+    setVfyKeys(k => ({ ...k, saving: true, msg: '' }));
+    window.tjkMutate('/api/setup/verify-keys', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...(hunter ? { hunter } : {}), ...(millionverifier ? { millionverifier } : {}) }),
+    }).then(r => r.json()).then(res => {
+      if (res.error) { setVfyKeys(k => ({ ...k, saving: false, msg: res.error })); toast && toast(res.error, 'error'); return; }
+      setVfyKeys(k => ({ ...k, hunter: !!res.hunter, millionverifier: !!res.millionverifier, hunterInput: '', mvInput: '', saving: false, msg: 'Saved. New contacts will be checked from now on.' }));
+      toast && toast('Verification keys saved', 'success');
+    }).catch(() => { setVfyKeys(k => ({ ...k, saving: false, msg: 'Save failed' })); toast && toast('Save failed', 'error'); });
   };
 
   if (!state) {
@@ -2157,6 +2187,33 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                   {apiKey.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{apiKey.msg}</div>}
                   <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>
                     Get a key at console.anthropic.com → API keys. Stored locally in dashboard-web/.env; only ever sent to Anthropic.
+                  </div>
+                </div>
+              );
+            }
+            if (o.id === 'verify') {
+              return (
+                <div>
+                  <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
+                  <LpWhy item={o} />
+                  <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, margin: '0 0 4px' }}>Hunter key</div>
+                  {vfyKeys.hunter
+                    ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved. Addresses are looked up for new contacts.</div>
+                    : <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 8 }}>○ Not set. No address is looked up, so a new contact arrives with none.</div>}
+                  <input type="password" value={vfyKeys.hunterInput} onChange={e => setVfyKeys(k => ({ ...k, hunterInput: e.target.value }))}
+                    placeholder="Hunter API key" className="inp" style={{ width: '100%' }} autoComplete="off" />
+                  <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, margin: '14px 0 4px' }}>MillionVerifier key</div>
+                  {vfyKeys.millionverifier
+                    ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved. Addresses are checked before anything is sent to them.</div>
+                    : <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 8 }}>○ Not set. Nothing can be checked, so contacts stay unverified and follow-ups skip them.</div>}
+                  <input type="password" value={vfyKeys.mvInput} onChange={e => setVfyKeys(k => ({ ...k, mvInput: e.target.value }))}
+                    placeholder="MillionVerifier API key" className="inp" style={{ width: '100%' }} autoComplete="off" />
+                  <div style={{ marginTop: 12 }}>
+                    <button className="btn primary" disabled={vfyKeys.saving} onClick={saveVerifyKeys}>{vfyKeys.saving ? 'Saving…' : 'Save keys'}</button>
+                  </div>
+                  {vfyKeys.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{vfyKeys.msg}</div>}
+                  <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>
+                    Hunter: hunter.io/api-keys (free tier covers roughly 50 lookups and 100 checks a month). MillionVerifier: app.millionverifier.com/api (a few dollars once, credits that do not expire). Stored locally in dashboard-web/.env; only ever sent to those services. Neither is needed for scanning, evaluating, or applying.
                   </div>
                 </div>
               );

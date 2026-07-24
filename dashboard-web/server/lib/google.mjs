@@ -76,15 +76,29 @@ function tokenScopes(tokens) {
   return String(tokens?.scope || '').split(/\s+/).filter(Boolean);
 }
 
+// ── Is an OAuth client set up at all? ────────────────────────────────────────
+// Distinct from "connected", and the distinction is the whole point. Without it
+// the UI cannot tell a user who has never provisioned a client from one who has
+// and simply has not clicked Connect, so it offers Connect to both. The first
+// user then clicks it and gets an error naming a file they have never heard of,
+// which reads as a broken product rather than an unconfigured one. Every user
+// brings their own client (docs/gmail-setup.md), so "absent" is the normal
+// starting state, not a fault. Reports presence only, never the values.
+function clientConfigured() {
+  return !!((process.env.GOOGLE_CLIENT_ID || '').trim() && (process.env.GOOGLE_CLIENT_SECRET || '').trim());
+}
+
 // ── Connection status (pure given tokens + clock) ────────────────────────────
 // Returns only non-secret facts (no token values) so it is safe to hand a UI.
 function googleStatus(tokens = readTokens(), now = Date.now()) {
+  const configured = clientConfigured();
   if (!tokens || !tokens.refresh_token) {
-    return { connected: false, connectedEmail: null, scopes: [], canReadMail: false, canDraft: false, expired: true, expiresAt: null };
+    return { configured, connected: false, connectedEmail: null, scopes: [], canReadMail: false, canDraft: false, expired: true, expiresAt: null };
   }
   const scopes = tokenScopes(tokens);
   const expiresAt = tokens.expiry_date || null;
   return {
+    configured,
     connected: true,
     connectedEmail: tokens.connectedEmail || null,
     scopes,
@@ -144,9 +158,11 @@ async function getAccessToken({
 // REFRESH token is still alive is to try a refresh. checkHealth does exactly that,
 // reusing getAccessToken (a no-op network-wise when the cached access token is
 // still valid), and classifies the outcome:
-//   not_connected — no refresh token on file
-//   ok            — a valid access token was obtained (cached or freshly refreshed)
-//   reconnect     — the refresh failed (token expired/revoked): only re-consent fixes it
+//   not_configured — no OAuth client on this install: there is nothing to connect
+//                    TO yet, so the UI must teach rather than offer a button
+//   not_connected  — a client exists, but no refresh token on file
+//   ok             — a valid access token was obtained (cached or freshly refreshed)
+//   reconnect      — the refresh failed (token expired/revoked): only re-consent fixes it
 // It also reports sweep freshness (days since the last preview) so the UI can nudge
 // when it has been a while. Injectable fetch + clock for tests; returns non-secret
 // facts only (no token values).
@@ -155,7 +171,14 @@ async function checkHealth({ tokens = readTokens(), now = Date.now(), fetchImpl 
   const last = sync.lastPreviewAt || sync.lastCheckedAt || null;
   const parsed = last ? Date.parse(last) : NaN;
   const daysSinceCheck = Number.isFinite(parsed) ? Math.floor((now - parsed) / 86_400_000) : null;
-  const base = { connectedEmail: tokens?.connectedEmail || null, lastCheckedAt: last, daysSinceCheck };
+  const configured = clientConfigured();
+  const base = { configured, connectedEmail: tokens?.connectedEmail || null, lastCheckedAt: last, daysSinceCheck };
+  // No client means no connection is even possible, and that is reported ahead of
+  // the token check: a leftover token file without a client is still unusable, and
+  // "connect" is the wrong thing to ask for in either case.
+  if (!configured) {
+    return { connected: false, healthy: false, reason: 'not_configured', ...base };
+  }
   if (!tokens || !tokens.refresh_token) {
     return { connected: false, healthy: false, reason: 'not_connected', ...base };
   }
@@ -555,7 +578,7 @@ function scanDecisions({ messages = [], taRows = [], recruiterRows = [], apps = 
 
 export {
   readTokens, writeTokens, readSync, writeSync, tokenScopes,
-  googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
+  clientConfigured, googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
   parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions,
   exchangeCode, fetchProfileEmail, candidateAppsFor, createDraft,
 };

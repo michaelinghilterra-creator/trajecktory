@@ -181,6 +181,32 @@ router.get('/api/setup/discovery-keys', (req, res) => {
   res.json({ brave: keyPresent('BRAVE_API_KEY'), muse: keyPresent('MUSE_API_KEY') });
 });
 
+// GET /api/setup/verify-keys — which contact-verification keys are set (never the
+// keys). Without them no address can be checked, so a found contact stays
+// unverified and the send gate refuses to use it. That gate is correct, but its
+// effect is invisible: the contact simply never appears as a reachable channel. A
+// booster entry is what makes the cause visible before the user wonders where
+// their follow-ups went.
+router.get('/api/setup/verify-keys', (req, res) => {
+  res.json({ hunter: keyPresent('HUNTER_API_KEY'), millionverifier: keyPresent('MILLIONVERIFIER_API_KEY') });
+});
+
+// POST /api/setup/verify-keys { hunter?, millionverifier? } — save either or both.
+// Read by find-contacts.mjs and the TA reconcile route on their next run.
+router.post('/api/setup/verify-keys', (req, res) => {
+  const body = req.body || {};
+  const saved = [];
+  for (const [field, envName] of [['hunter', 'HUNTER_API_KEY'], ['millionverifier', 'MILLIONVERIFIER_API_KEY']]) {
+    if (typeof body[field] === 'string' && body[field].trim()) {
+      writeEnvKey(envName, body[field].trim());
+      saved.push(field);
+    }
+  }
+  if (!saved.length) return res.status(400).json({ error: 'Paste a Hunter or MillionVerifier API key first.' });
+  try { res.json({ ok: true, saved, hunter: keyPresent('HUNTER_API_KEY'), millionverifier: keyPresent('MILLIONVERIFIER_API_KEY') }); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // POST /api/setup/discovery-keys { brave?, muse? } — save either or both optional
 // web-discovery keys to dashboard-web/.env. discover.mjs reads them on the next
 // Expand Coverage run.

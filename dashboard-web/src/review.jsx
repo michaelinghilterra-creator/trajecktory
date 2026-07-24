@@ -244,6 +244,7 @@ function GmailPanel({ toast }) {
   const [st, setSt] = useStateRv(undefined);   // undefined = loading; null = error; object = health
   const [sweep, setSweep] = useStateRv(null);
   const [busy, setBusy] = useStateRv(false);
+  const [howTo, setHowTo] = useStateRv(false);
 
   // Health, not status: /status.expired reflects the ≈1h access token (stale most
   // of the time, refreshes silently), so it cannot tell "reconnect me" apart from
@@ -294,6 +295,13 @@ function GmailPanel({ toast }) {
   }, [st && st.healthy]);
 
   if (st === undefined) return null; // loading — stay quiet, no flash
+  // THREE states, not two. "No Google client on this install" and "client exists,
+  // not connected yet" both used to render as "not connected" with a Connect
+  // button, so the first kind of user clicked it and got an error page naming an
+  // env var. That reads as a broken feature when it is an unstarted one. Anything
+  // older or unreachable (st === null, or a server that predates `configured`)
+  // falls through to the connect state, which is the previous behaviour.
+  const needsSetup = !!(st && st.configured === false);
   const connected = !!(st && st.connected && st.healthy);
   const needsReconnect = !!(st && st.connected && !st.healthy);
   const lastChecked = connected ? lastCheckedLabel(st.daysSinceCheck) : null;
@@ -305,6 +313,7 @@ function GmailPanel({ toast }) {
           <strong>Gmail sync</strong>{' '}
           {connected ? <span className="dim" style={{ fontSize: 12 }}>connected as {st.connectedEmail || 'your account'} · read-only{lastChecked ? ` · checked ${lastChecked}` : ''}</span>
             : needsReconnect ? <span style={{ color: 'var(--red)', fontSize: 12 }}>connection expired, reconnect to resume</span>
+            : needsSetup ? <span className="dim" style={{ fontSize: 12 }}>not set up · optional</span>
             : <span className="dim" style={{ fontSize: 12 }}>not connected</span>}
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
@@ -313,6 +322,12 @@ function GmailPanel({ toast }) {
               <button className="btn accent sm" onClick={checkEmail} disabled={busy}>{busy ? 'Checking…' : 'Check email'}</button>
               <button className="btn ghost sm" onClick={connect} disabled={busy}>Reconnect</button>
             </>
+          ) : needsSetup ? (
+            // No Connect button here on purpose: there is nothing to connect to yet,
+            // and offering one is what made this look broken.
+            <button className="btn ghost sm" onClick={() => setHowTo(v => !v)} aria-expanded={howTo}>
+              {howTo ? 'Hide the steps' : 'How to set this up'}
+            </button>
           ) : (
             <button className="btn primary sm" onClick={connect}>{needsReconnect ? 'Reconnect Gmail' : 'Connect Gmail'}</button>
           )}
@@ -320,18 +335,55 @@ function GmailPanel({ toast }) {
       </div>
       {needsReconnect ? (
         <p style={{ fontSize: 12, marginTop: 8, marginBottom: 0, color: 'var(--red)' }}>
-          Your Gmail connection expired (Testing-mode tokens last about a week), so replies and bounces are not being caught right now. Reconnect to resume. Read-only, and nothing is ever sent.
+          Your Gmail connection expired, so replies and bounces are not being caught right now. Reconnect to resume. If your Google app is still in Testing, Google expires the connection about weekly and this is normal; setting the app to In production stops it. Read-only, and nothing is ever sent.
+        </p>
+      ) : needsSetup ? (
+        <p className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 0, lineHeight: 1.6 }}>
+          Nothing is wrong here. This one needs about 15 minutes of one-time setup in your own Google account before it can be connected, because trajecktory deliberately does not ship a shared mail connection: your mailbox stays reachable only by your own key.
+          {' '}<b style={{ fontWeight: 500, color: 'var(--text-dim)' }}>What you would get:</b> replies to your applications and bounced outreach get caught automatically, so nothing slips past and the reply rate stops counting a dead address as a company ignoring you.
+          {' '}<b style={{ fontWeight: 500, color: 'var(--text-dim)' }}>If you skip it:</b> everything else works the same and you log replies by hand on this tab.
         </p>
       ) : !connected ? (
         <p className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
-          Read-only. Scans your inbox for bounces and replies since June, so missed communications are caught and the reply-rate math is honest. It never sends. Testing-mode tokens expire about weekly, so an occasional reconnect is normal.
+          Read-only. Scans your inbox for bounces and replies, so missed communications are caught and the reply-rate math is honest. It never sends.
         </p>
       ) : (
         <p className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
           Read-only, checked automatically when you open this tab. It never sends.
         </p>
       )}
+      {needsSetup && howTo ? <GmailSetupSteps /> : null}
       {sweep ? <GmailSweep sweep={sweep} onApplyBounces={applyBounces} busy={busy} toast={toast} /> : null}
+    </div>
+  );
+}
+
+// The condensed walkthrough, shown in the card rather than behind a link, because
+// the user is stuck here and a link they have to go find is one more place to give
+// up. The full version with screenshots-worth of detail and a troubleshooting table
+// is docs/gmail-setup.md in the trajecktory folder. Only the two steps that are
+// easy to get wrong and annoying to undo are called out in bold.
+function GmailSetupSteps() {
+  const steps = [
+    ['Create a project', 'At console.cloud.google.com. Any name. It is just a container.'],
+    ['Enable the Gmail API', 'APIs & Services, Library, search Gmail API, Enable. Skip this and everything below still looks like it worked, then every mail check fails.'],
+    ['Fill in the consent screen', 'User type External, your own address for the contact fields, and add your own address under Test users. Miss the test user and you get "access blocked" at the last step, with no explanation.'],
+    ['Add two permissions', 'gmail.readonly finds replies and bounces. gmail.compose lets the Draft buttons work. Add both or you will be back here.'],
+    ['Create the credentials', 'OAuth client ID, and set Application type to Desktop app. Not Web application: a desktop client works on any local port, so nothing has to be pre-registered and it keeps working when the port changes.'],
+    ['Paste the two values', 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET into dashboard-web/.env, then restart the dashboard. It reads that file once at startup, so an edit made while it is running does nothing.'],
+  ];
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+      <ol style={{ margin: 0, paddingLeft: 20, fontSize: 12, lineHeight: 1.7, color: 'var(--text-dim)' }}>
+        {steps.map(([head, body]) => (
+          <li key={head} style={{ marginBottom: 6 }}>
+            <b style={{ color: 'var(--text)', fontWeight: 500 }}>{head}.</b> {body}
+          </li>
+        ))}
+      </ol>
+      <p style={{ fontSize: 11.5, color: 'var(--text-mute)', margin: '10px 0 0', lineHeight: 1.6 }}>
+        Google will warn you that the app is unverified. That is expected: it is your app, in your project, used by you. Click Advanced, then continue. Full walkthrough including what to do when something goes wrong: docs/gmail-setup.md in your trajecktory folder.
+      </p>
     </div>
   );
 }
