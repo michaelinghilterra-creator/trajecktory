@@ -116,9 +116,9 @@ try {
   // it was ever sent), on the rule "the rung counts rows that reached Evaluated".
   // That rule reads correctly on THIS fixture only because row 7 sits at status
   // `Evaluated`. On the real tracker nothing does — every evaluated row has since
-  // moved to a terminal status — so the rung collapsed onto Applied (165 and 165)
-  // and the chart published a 100% evaluate-to-apply conversion, hiding the single
-  // largest drop in the pipeline.
+  // moved to a terminal status — so the rung collapsed onto Applied (both reporting
+  // the same count) and the chart published a 100% evaluate-to-apply conversion,
+  // hiding the single largest drop in the pipeline.
   //
   // The first rung is membership, not progression: an evaluation is what creates
   // the row, so every row was evaluated, including the ones later declined. Only

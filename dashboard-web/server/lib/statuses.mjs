@@ -53,9 +53,9 @@ export const CLOSED_STATUSES = ALL_STATUSES.filter(s => !FUNNEL_ORDER.includes(s
 //
 // Asking `reached >= Evaluated` instead gets this exactly backwards, because none
 // of those statuses sit on FUNNEL_ORDER: every evaluated-then-declined row scored
-// as never-evaluated, the first rung collapsed onto the second (165 and 165), and
-// the chart reported a 100% evaluate-to-apply conversion while hiding the largest
-// drop in the whole pipeline.
+// as never-evaluated, the first rung collapsed onto the second (both reporting the
+// same count), and the chart reported a 100% evaluate-to-apply conversion while
+// hiding the largest drop in the whole pipeline.
 //
 // `Closed` is the one exclusion, consistent with every other denominator in the
 // app: the posting closed before the user could act, so counting it as a role

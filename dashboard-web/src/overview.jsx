@@ -71,11 +71,16 @@ const DAILY_QUOTES = [
 ];
 
 // WARM vs COLD. The relaunch plan's central finding is that these two channels
-// convert very differently (roughly 3-4 warm touches produced 3-4 screens against
-// ~161 cold applications producing 4; at equal rates that warm result is about a
-// 1-in-64,000 coincidence). A pooled funnel cannot show that, and pooling is not
-// harmless: dividing all screens by all applications yields a flattering ~4% that
-// hides a ~2.5% cold rate sitting slightly BELOW the 3.6-4.7% market median.
+// convert very differently: a handful of warm touches produced almost as many
+// screens as two orders of magnitude more cold applications. At equal rates that
+// warm result would be a roughly 1-in-64,000 coincidence.
+//
+// A pooled funnel cannot show that, and pooling is not harmless. Dividing all
+// screens by all applications yields a flattering blended figure that hides a
+// cold rate sitting BELOW the market median, so the pooled number reads as
+// "performing fine" when the channel carrying nearly all the volume is not.
+// (Rates described, not printed: this is a tracked file in a public repo and the
+// user's conversion performance is his, not the product's.)
 //
 // Warm = contact with a PERSON existed before or alongside the application, in
 // either direction. Three sub-types, and the split between them is the most
@@ -128,8 +133,8 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
     // evaluated: an evaluation is what creates the row. Asking
     // appReached(a, "Evaluated") scored every evaluated-then-declined row
     // (Discarded, SKIP, Not a Fit) as never-evaluated, because none of those sit
-    // on FUNNEL_ORDER. The rung collapsed onto Applied, both read 165, and the
-    // chart reported a 100% evaluate-to-apply conversion while hiding the single
+    // on FUNNEL_ORDER. The rung collapsed onto Applied, both reading the same count,
+    // and the chart reported a 100% evaluate-to-apply conversion while hiding the single
     // largest drop in the pipeline. An earlier pass swung the other way and
     // counted every row including Closed. window.enteredFunnel is the one rule
     // now, mirroring enteredFunnel() on the server so the two cannot disagree.
