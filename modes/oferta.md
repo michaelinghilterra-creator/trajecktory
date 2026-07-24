@@ -19,12 +19,13 @@ The report file is **JSON frontmatter + a narrative markdown body**, not freefor
   "role": "...",
   "date": "YYYY-MM-DD",
   "url": "...",
-  "score": <number 0-5>,
+  "score": <DERIVED — do NOT author this; compute-scores.mjs computes it from globalScore>,
+  "scoreCeiling": <optional 0-5 hard cap; set ONLY when a blocker must keep the score low>,
   "domain": "...",
   "summary":          { ... },     // Block A → see "summary" in schema
   "recommendation":   "...",
   "keywords":         [ ... ],
-  "globalScore":      [ ... ],
+  "globalScore":      [ ... ],     // keyed dims WITH evidence — you rate these; see below + schema
   "cvMatch":          [ ... ],     // Block B
   "gaps":             [ ... ],     // Block B gap table
   "levelMatch":       { ... },     // Block C
@@ -54,6 +55,42 @@ is what the user reads in the "Full Report" drawer tab.
 - Below the closing `---`, write only narrative prose. Do NOT repeat the structured data as markdown tables — the drawer already has it.
 
 **The analytical guidance for Blocks A–G below describes what to *think about* for each field.** When the legacy guidance below says "produce a table" or "write a `## A)` heading," that's obsolete — translate the same thinking into the corresponding frontmatter field.
+
+## ⚡ Scoring — rate the dimensions, do NOT author the headline
+
+The headline `score` is **derived by code, not written by you.** You rate each dimension
+0–5 with its evidence in `globalScore[]`; `compute-scores.mjs` computes the weighted
+headline from those ratings and the user's weights in `config/profile.yml`. That is what
+makes the number defensible: it is the average of your ratings, not a separate hunch.
+
+Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a weight):
+
+```json
+"globalScore": [
+  { "key": "fit",       "dim": "Fit / CV Match",      "val": <0-5>, "max": 5, "evidence": "one concrete phrase" },
+  { "key": "northStar", "dim": "North Star Alignment", "val": <0-5>, "max": 5, "evidence": "..." },
+  { "key": "level",     "dim": "Level Match",          "val": <0-5>, "max": 5, "evidence": "..." },
+  { "key": "comp",      "dim": "Comp",                 "val": <0-5>, "max": 5, "evidence": "..." },
+  { "key": "location",  "dim": "Location / Logistics", "val": <0-5>, "max": 5, "evidence": "..." },
+  { "key": "redFlags",  "dim": "Red Flags",            "val": <0-5>, "max": 5, "evidence": "..." }
+]
+```
+
+- Each dimension maps to a block you already reason through: **fit** ← Block B (CV match),
+  **northStar** ← archetype / target fit (Step 0 + profile), **level** ← Block C,
+  **comp** ← Block D, **location** ← remote/logistics vs the user's stated policy,
+  **redFlags** ← Block G + any hard gaps.
+- **`redFlags` is cleanliness on 0–5 where 5 = clean, 0 = severe.** It is NOT a negative
+  number. A low rating subtracts up to `scoring.redFlagPenalty` points from the average.
+- **Hard blockers → `scoreCeiling`, not a faked rating.** When a blocker must keep the
+  score low no matter how well the rest fits (a location the user will not work, a visa
+  they cannot get, a hard requirement they plainly lack), set `scoreCeiling` (e.g. `1.5`).
+  This replaces the old "cap the Global score" rule. Do not distort the dimension ratings
+  to force a low number.
+- Give **`evidence` for every rating** (one phrase). The drawer shows it; it is what makes
+  a rating auditable.
+- **Do NOT write a headline `score` yourself.** Leave a placeholder; the post-eval step
+  below overwrites it.
 
 ---
 
@@ -254,6 +291,20 @@ Save the complete evaluation to `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 
 **Report format:** **v1 JSON frontmatter + narrative body.** See the Output Contract at the top of this file and the full spec in [`templates/report-schema-v1.md`](../templates/report-schema-v1.md). A worked example is [`reports/000-example-co-2026-01-15.md`](../reports/000-example-co-2026-01-15.md).
 
+### 1b. Compute the score (REQUIRED)
+
+The report's `globalScore` holds your dimension ratings; the headline is derived from
+them by code, not authored. After saving the report, run:
+
+```bash
+node compute-scores.mjs reports/{###}-{company-slug}-{YYYY-MM-DD}.md --apply
+```
+
+This writes `score`, `scoreSource: "derived"`, and `scoreBasis` into the report and
+prints the derived headline (e.g. `4.2`). **Use that printed number as the score in the
+tracker row below** — do not invent one. If it prints `left as-is`, your `globalScore`
+entries are missing the `key` fields; fix them and re-run.
+
 **Field mapping from Blocks A–G to the v1 frontmatter:**
 
 | Block | Frontmatter field(s) |
@@ -266,7 +317,7 @@ Save the complete evaluation to `reports/{###}-{company-slug}-{YYYY-MM-DD}.md`.
 | F (Interview Plan) | `starStories[]`, `leadStory`, `redFlagQs[]` |
 | G (Posting Legitimacy) | `legitimacy.{tier, conclusion, signals[]}` |
 | Keywords | `keywords[]` (15–20 strings) |
-| Global Score | `score` (number), `globalScore[]` (dim/val/max breakdown) |
+| Global Score | `globalScore[]` (keyed dims + evidence — you rate these). `score` is **derived** by `compute-scores.mjs`, never authored. `scoreCeiling` for a hard blocker. See the Scoring section above. |
 | Recommendation | `recommendation` (one sentence) |
 
 If the role is a hard mismatch and a section doesn't apply (e.g., no customization plan), omit the key entirely. Do not emit empty arrays as placeholders.
@@ -280,7 +331,7 @@ The narrative body below the closing `---` is freeform markdown. Use it for: why
 - Current date
 - Company
 - Role
-- Score: average match (1-5)
+- Score: the **derived** headline that `compute-scores.mjs` printed in step 1b (do NOT author your own)
 - Status: `Evaluated`
 - PDF: ❌ (always ❌ at evaluation time — CV generated only when user applies)
 - Report: relative link to the report .md (e.g., `[001](reports/001-company-2026-01-01.md)`)

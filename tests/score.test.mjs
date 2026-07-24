@@ -77,6 +77,16 @@ check(over.score === 5, 'a rating above scale is clamped to 5');
 const under = deriveScore([{ key: 'fit', val: 0 }, { key: 'redFlags', val: 0 }]);
 check(under.score === 0, 'weighted average minus penalty is clamped at 0, never negative');
 
+// ── hard ceiling (blockers that must cap the score) ─────────────────────────
+// A strong-on-paper role (weighted average 4.3) with a hard location blocker must
+// not read as a good match. A 10%-weighted Location dimension cannot cap it; the
+// ceiling can.
+const capped = deriveScore(allClean, { ceiling: 1.5 });
+check(capped.score === 1.5 && capped.ceilingApplied === true, `a hard ceiling caps the headline (4.3 → 1.5, got ${capped.score})`);
+const noCap = deriveScore(allClean, { ceiling: 5 });
+check(noCap.score === 4.3 && noCap.ceilingApplied === false, 'a ceiling above the average does not change the score');
+check(deriveScore(allClean).ceiling === null, 'no ceiling by default');
+
 // ── loadScoringWeights ───────────────────────────────────────────────────────
 check(Object.keys(DEFAULT_WEIGHTS).length === SCORE_DIMENSIONS.length, 'a default weight exists for every canonical dimension');
 check(near(Object.values(DEFAULT_WEIGHTS).reduce((a, b) => a + b, 0), 1.0), 'default weights sum to 1.0');

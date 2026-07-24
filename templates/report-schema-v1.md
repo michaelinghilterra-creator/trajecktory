@@ -127,6 +127,16 @@ re-derived — see **Derived vs legacy score** below.
 - `score` (top-level, required): for a derived report this is what `deriveScore`
   produced; for a legacy report it is the authored number. The drawer marks legacy
   scores so the two are never mistaken for the same thing.
+- `scoreCeiling` (optional, 0–5): a HARD cap. Some blockers must keep the headline
+  low no matter how well the rest fits (a location the user will not work, visa they
+  cannot get, a hard requirement they plainly lack). A 10%-weighted Location
+  dimension cannot enforce that, so the eval sets `scoreCeiling` and `compute-scores`
+  applies `min(derived, ceiling)`. When it bites, `scoreBasis.ceilingApplied` is true.
+
+The derived fields are written by **`compute-scores.mjs`**, not by the eval model:
+the model emits the keyed `globalScore` dimensions (with evidence) and an optional
+`scoreCeiling`; running `node compute-scores.mjs <report> --apply` computes `score`,
+`scoreSource`, and `scoreBasis`. The model never authors the headline.
 
 ### CV match
 ```json
