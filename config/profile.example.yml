@@ -100,8 +100,18 @@ scoring:
     fit: 0.35         # skills, experience, and proof-point alignment with the JD
     northStar: 0.25   # fit with your target archetypes (the work you actually want)
     level: 0.15       # seniority match: title vs real scope
-    comp: 0.15        # pay vs market
+    # comp is deliberately 0: an aspiration informs, a floor gates. compensation.
+    # target_range is what you are aiming for, and you can miss it and still want
+    # the job, so it must not lower a score that decides whether you apply at all.
+    # compensation.minimum is the hard floor, which is binary, so it sets a
+    # scoreCeiling instead (a weighted average can be outvoted by a strong fit;
+    # a ceiling cannot). The dimension is still rated and shown, just not scored.
+    # Raise it if you want pay to move the headline, but expect well-paid roles
+    # that are a poor fit to rise with it.
+    comp: 0
     location: 0.10    # location, remote policy, and logistics fit
+  # With comp at 0 the four remaining weights renormalize to fit 0.41,
+  # northStar 0.29, level 0.18, location 0.12.
   # Most points subtracted when red flags are severe. The model rates red-flag
   # cleanliness 0-5 (5 = clean); a 0 subtracts this whole amount from the average.
   redFlagPenalty: 1.5

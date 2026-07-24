@@ -82,11 +82,27 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
   **redFlags** ← Block G + any hard gaps.
 - **`redFlags` is cleanliness on 0–5 where 5 = clean, 0 = severe.** It is NOT a negative
   number. A low rating subtracts up to `scoring.redFlagPenalty` points from the average.
+- **`comp` is rated but NOT scored.** Its weight is 0 in `config/profile.yml`, so it
+  contributes no points. Rate it against the user's own band (`compensation.target_range`),
+  not against the market, and add `"note": "recorded, not scored"` to the entry so the
+  drawer says so. Pay is information here, not a score input: an aspiration is a number the
+  user can miss and still want the job, so it must not lower a score that decides whether
+  they apply at all. The hard floor is handled by the ceiling rule below.
 - **Hard blockers → `scoreCeiling`, not a faked rating.** When a blocker must keep the
   score low no matter how well the rest fits (a location the user will not work, a visa
   they cannot get, a hard requirement they plainly lack), set `scoreCeiling` (e.g. `1.5`).
   This replaces the old "cap the Global score" rule. Do not distort the dimension ratings
-  to force a low number.
+  to force a low number. Two comp/level cases belong here:
+  - **Stated pay below the hard floor.** `comp.walkaway` is the user's
+    `compensation.minimum` from `config/profile.yml`. **Read it, never invent it** — when
+    nothing defined it, evaluations improvised a different floor each time and rejected
+    roles for missing an *aspiration*. If the JD states a figure whose TOP is below that
+    floor, set `scoreCeiling` (e.g. `2.0`). Below `target_range` but above the floor is a
+    negotiation note, NOT a ceiling and NOT a penalty. No stated figure means no ceiling.
+  - **Scope clearly above the target level.** Pay far above the user's band is usually
+    evidence the job is bigger than its title (a wider multi-level band, heavy variable
+    comp, or a genuinely more senior role), not a bonus. If the role really sits two rungs
+    up, that is a ceiling, the same as any requirement they plainly lack.
 - Give **`evidence` for every rating** (one phrase). The drawer shows it; it is what makes
   a rating auditable.
 - **Do NOT write a headline `score` yourself.** Leave a placeholder; the post-eval step
@@ -161,6 +177,11 @@ Read `cv.md`. Create a table mapping each JD requirement to exact lines from the
 3. **"If they downlevel me" plan**: accept if comp is fair, negotiate a 6-month review, define clear promotion criteria
 
 ## Block D — Comp & Demand
+
+`comp.walkaway` is NOT yours to estimate: it is `compensation.minimum` from
+`config/profile.yml`, the user's hard floor. `compensation.target_range` is the
+aspiration and is a different number. Stated pay topping out below the floor sets a
+`scoreCeiling` (see the Scoring section); missing the aspiration does not.
 
 Use WebSearch for:
 - Current salaries for the role (Glassdoor, Levels.fyi, Blind)

@@ -35,8 +35,13 @@ ${JSON.stringify({
 Narrative body that must be preserved exactly.
 `;
 
+// Explicit weights for the arithmetic assertions, so they test the stamping and the
+// round-trip rather than the current policy. DEFAULT_WEIGHTS is policy (comp is 0)
+// and is asserted separately below. See the same split in score.test.mjs.
+const BALANCED = Object.freeze({ fit: 0.35, northStar: 0.25, level: 0.15, comp: 0.15, location: 0.10 });
+
 // ── a keyed report derives + stamps the fields ───────────────────────────────
-const r = deriveReportScore(keyedReport(0));   // authored placeholder 0 → should be replaced
+const r = deriveReportScore(keyedReport(0), { weights: BALANCED });   // authored placeholder 0 → should be replaced
 check(r.ok && r.reason === 'ok', 'a report with keyed dimensions is derivable');
 check(r.score === 4.2, `headline derived from the dimensions (got ${r.score}, want 4.2)`);
 check(/"scoreSource": "derived"/.test(r.newMd), 'scoreSource "derived" is written into the frontmatter');
@@ -45,14 +50,22 @@ check(r.newMd.includes('Narrative body that must be preserved exactly.'), 'the n
 check(r.prevScore === 0 && r.changed === true, 'the authored placeholder is reported as changed');
 
 // round-trips: feeding the output back in is stable (idempotent)
-const r2 = deriveReportScore(r.newMd);
+const r2 = deriveReportScore(r.newMd, { weights: BALANCED });
 check(r2.ok && r2.score === 4.2, 'derivation is idempotent (re-running yields the same score)');
 
 // ── a hard ceiling in the report caps the derived score ──────────────────────
 const ceilingReport = keyedReport(0).replace('"score": 0,', '"score": 0,\n  "scoreCeiling": 1.5,');
-const rc = deriveReportScore(ceilingReport);
+const rc = deriveReportScore(ceilingReport, { weights: BALANCED });
 check(rc.ok && rc.score === 1.5, `a scoreCeiling in the report caps the derived headline (4.2 → 1.5, got ${rc.score})`);
 check(rc.scoreBasis.ceiling === 1.5 && rc.scoreBasis.ceilingApplied === true, 'the ceiling is recorded in scoreBasis for the audit trail');
+
+// ── POLICY: the shipped defaults leave comp out of the arithmetic ────────────
+// A report still carries its comp rating (the drawer shows it); it just earns no
+// points. This is what makes pay information rather than a score input.
+const rd = deriveReportScore(keyedReport(0));   // no weights → the shipped defaults
+check(rd.ok && rd.scoreBasis.contributions.length === 4, 'the default derivation scores four dimensions, not five');
+check(!rd.scoreBasis.contributions.some(c => c.key === 'comp'), 'comp earns no points under the shipped defaults');
+check(/"key": "comp"/.test(rd.newMd), 'the comp rating itself survives in the report, unscored but visible');
 
 // ── custom weights are honored ───────────────────────────────────────────────
 const rw = deriveReportScore(keyedReport(0), { weights: { fit: 1, northStar: 0, level: 0, comp: 0, location: 0 } });

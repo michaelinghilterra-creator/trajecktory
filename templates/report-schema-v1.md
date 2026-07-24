@@ -195,12 +195,20 @@ the model emits the keyed `globalScore` dimensions (with evidence) and an option
     { "src": "Salary.com (SF, 2026)", "data": "VP RevOps ~$346K avg", "note": "SF premium baked in" }
   ],
   "score": 5,
-  "walkaway": 200,
+  "note": "recorded, not scored",
+  "walkaway": 111,
   "verdict": "Meets target at floor, exceeds at ceiling",
   "market": "VP RevOps at AI-native Series C is high-demand, low-supply"
 }
 ```
-`walkaway` is an integer (thousands USD).
+`walkaway` is an integer (thousands USD). It is **copied from
+`compensation.minimum` in `config/profile.yml`, never estimated** — the 111 above is a
+deliberately implausible placeholder so this example is never mistaken for a real floor.
+`compensation.target_range` is the aspiration and is a different number: pay below the
+floor sets a `scoreCeiling`, pay merely below the aspiration does not.
+
+The comp dimension carries weight 0, so it is rated and displayed but contributes no
+points to the headline. `note` is rendered beside the dimension label in the drawer.
 
 ### Customization
 ```json

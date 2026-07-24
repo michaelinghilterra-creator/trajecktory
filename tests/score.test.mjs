@@ -25,13 +25,20 @@ const near = (a, b, eps = 0.05) => Math.abs(a - b) <= eps;
 
 console.log('score.test.mjs');
 
+// The arithmetic assertions below pass an EXPLICIT weight set rather than relying
+// on DEFAULT_WEIGHTS, because the two are different things: the maths is a contract,
+// the weights are policy the user retunes in config/profile.yml. When these shared a
+// number, zeroing the comp weight broke nine assertions about addition. The current
+// policy is asserted on its own terms in the POLICY section at the bottom.
+const BALANCED = Object.freeze({ fit: 0.35, northStar: 0.25, level: 0.15, comp: 0.15, location: 0.10 });
+
 // ── the balanced default, all dimensions present, clean ──────────────────────
 // weightedAvg = 5*.35 + 4*.25 + 4*.15 + 3*.15 + 5*.10 = 1.75+1.0+0.6+0.45+0.5 = 4.30
 const allClean = [
   { key: 'fit', val: 5 }, { key: 'northStar', val: 4 }, { key: 'level', val: 4 },
   { key: 'comp', val: 3 }, { key: 'location', val: 5 }, { key: 'redFlags', val: 5 },
 ];
-const r1 = deriveScore(allClean);
+const r1 = deriveScore(allClean, { weights: BALANCED });
 check(r1.derivable === true, 'all dimensions present → derivable');
 check(near(r1.score, 4.3), `headline is the weighted average (got ${r1.score}, want 4.3)`);
 check(r1.penalty === 0, 'a clean red-flags rating (5) applies no penalty');
@@ -40,18 +47,18 @@ check(near(r1.contributions.reduce((a, c) => a + c.points, 0), 4.3), 'contributi
 check(r1.contributions.find(c => c.key === 'fit').weight === 0.35, 'weight is exposed per contribution (traceable)');
 
 // ── red-flag penalty ─────────────────────────────────────────────────────────
-const severe = deriveScore(allClean.map(d => d.key === 'redFlags' ? { key: 'redFlags', val: 0 } : d));
+const severe = deriveScore(allClean.map(d => d.key === 'redFlags' ? { key: 'redFlags', val: 0 } : d), { weights: BALANCED });
 check(near(severe.penalty, 1.5) && near(severe.score, 2.8), `severe red flags subtract the full penalty (4.3 - 1.5 = 2.8, got ${severe.score})`);
-const partial = deriveScore(allClean.map(d => d.key === 'redFlags' ? { key: 'redFlags', val: 3 } : d));
+const partial = deriveScore(allClean.map(d => d.key === 'redFlags' ? { key: 'redFlags', val: 3 } : d), { weights: BALANCED });
 check(near(partial.penalty, 0.6), `a partial red-flags rating scales the penalty ((5-3)/5*1.5=0.6, got ${partial.penalty})`);
-const customCap = deriveScore(allClean.map(d => d.key === 'redFlags' ? { key: 'redFlags', val: 0 } : d), { redFlagPenalty: 2 });
+const customCap = deriveScore(allClean.map(d => d.key === 'redFlags' ? { key: 'redFlags', val: 0 } : d), { weights: BALANCED, redFlagPenalty: 2 });
 check(near(customCap.score, 2.3), `a custom penalty cap is honored (4.3 - 2.0 = 2.3, got ${customCap.score})`);
 
 // ── renormalization when a dimension is missing ──────────────────────────────
 // Drop Location: present weights .35/.25/.15/.15 sum .90; renorm → 4.2222
 const noLoc = deriveScore([
   { key: 'fit', val: 5 }, { key: 'northStar', val: 4 }, { key: 'level', val: 4 }, { key: 'comp', val: 3 },
-]);
+], { weights: BALANCED });
 check(near(noLoc.score, 4.2), `a missing dimension renormalizes the rest, not deflates (got ${noLoc.score})`);
 check(near(noLoc.contributions.reduce((a, c) => a + c.weight, 0), 1.0, 0.02), 'present weights renormalize to sum ~1.0');
 
@@ -81,15 +88,38 @@ check(under.score === 0, 'weighted average minus penalty is clamped at 0, never 
 // A strong-on-paper role (weighted average 4.3) with a hard location blocker must
 // not read as a good match. A 10%-weighted Location dimension cannot cap it; the
 // ceiling can.
-const capped = deriveScore(allClean, { ceiling: 1.5 });
+const capped = deriveScore(allClean, { weights: BALANCED, ceiling: 1.5 });
 check(capped.score === 1.5 && capped.ceilingApplied === true, `a hard ceiling caps the headline (4.3 → 1.5, got ${capped.score})`);
-const noCap = deriveScore(allClean, { ceiling: 5 });
+const noCap = deriveScore(allClean, { weights: BALANCED, ceiling: 5 });
 check(noCap.score === 4.3 && noCap.ceilingApplied === false, 'a ceiling above the average does not change the score');
-check(deriveScore(allClean).ceiling === null, 'no ceiling by default');
+check(deriveScore(allClean, { weights: BALANCED }).ceiling === null, 'no ceiling by default');
+
+// ── POLICY: comp is rated but not scored (2026-07-24) ────────────────────────
+// An aspiration informs, a floor gates. A pay target is a number the user can miss
+// and still want the job, so it must not lower a score that decides whether they
+// apply at all. Weighted, it did the opposite at both ends: a role paying under the
+// user's floor still cleared the apply threshold on fit alone, and a role paying far
+// above the band scored highest of all. The hard floor is a scoreCeiling instead,
+// which a strong fit cannot outvote. These lock that decision so a future retune is
+// a deliberate act, not a silent drift.
+check(DEFAULT_WEIGHTS.comp === 0, 'comp carries no weight by default (rated and shown, never scored)');
+const policy = deriveScore(allClean);
+check(!policy.contributions.some(c => c.key === 'comp'), 'a zero-weight comp contributes no points and no contribution row');
+check(policy.dimsPresent.length === 4, 'the four scored dimensions are fit, northStar, level, location');
+const w = policy.weightsUsed;
+check(near(w.fit, 0.41, 0.01) && near(w.northStar, 0.29, 0.01) && near(w.level, 0.18, 0.01) && near(w.location, 0.12, 0.01),
+  `dropping comp renormalizes the rest to .41/.29/.18/.12 (got ${JSON.stringify(w)})`);
+// A rated-but-unweighted dimension must not be mistaken for a derivable report:
+// falling back to the authored number is right, fabricating a 0 is not.
+const compOnly = deriveScore([{ key: 'comp', val: 5 }]);
+check(compOnly.derivable === false && compOnly.score === null, 'comp alone is not derivable (no fabricated headline from an unscored dimension)');
+// The floor still bites, because it is a ceiling rather than a weight.
+const belowFloor = deriveScore(allClean, { ceiling: 2.0 });
+check(belowFloor.score === 2.0 && belowFloor.ceilingApplied === true, 'pay below the hard floor caps the headline regardless of fit');
 
 // ── loadScoringWeights ───────────────────────────────────────────────────────
 check(Object.keys(DEFAULT_WEIGHTS).length === SCORE_DIMENSIONS.length, 'a default weight exists for every canonical dimension');
-check(near(Object.values(DEFAULT_WEIGHTS).reduce((a, b) => a + b, 0), 1.0), 'default weights sum to 1.0');
+check(near(Object.values(DEFAULT_WEIGHTS).reduce((a, b) => a + b, 0), 0.85), 'the scored default weights sum to 0.85 (comp is 0), renormalized at derive time');
 check(dimensionLabel('fit') === 'Fit / CV Match' && dimensionLabel('nope') === 'nope', 'dimensionLabel maps known keys and passes through unknown');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-score-'));
