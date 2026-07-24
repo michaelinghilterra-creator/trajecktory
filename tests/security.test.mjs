@@ -83,16 +83,18 @@ check(/chmodSync\([^)]*0o600/.test(writeEnvFn), 'an existing .env is chmodded to
 check(/replace\(re,\s*\(\)\s*=>/.test(writeEnvFn), 'the in-place rewrite uses a function replacement, so $-sequences stay literal');
 
 // ── 3. a report path outside reports/ is refused ─────────────────────────────
-// The resolver is duplicated here rather than exported, because exporting it would
-// mean importing the route module, which builds an express router and pulls in the
-// whole server graph. The assertion that matters is that the SHIPPED file contains
-// this shape, checked below.
-const REPORTS_ROOT = path.resolve(ROOT, 'reports');
-const resolveReportPath = (rel) => {
-  const abs = path.resolve(ROOT, String(rel || ''));
-  return abs === REPORTS_ROOT || abs.startsWith(REPORTS_ROOT + path.sep) ? abs : null;
-};
-check(resolveReportPath('reports/0001-example.md') !== null, 'an ordinary report path resolves');
+// The real implementation, imported. It started life as a local helper inside the
+// reports route, and that is precisely how the gap survived a first pass: four
+// MORE call sites in the apply flow read the same field through a different
+// helper with no check at all. One implementation, tested once, used everywhere.
+const { resolveReportPath, resolveInside } = await import('../dashboard-web/server/lib/safe-path.mjs');
+// Assert the RESOLVED PATH, not merely that something came back. A containment
+// helper that resolves from the wrong base still returns a contained-looking path
+// while pointing at a file that does not exist, so a non-null check passes while
+// every real read breaks. That is exactly what the first version of this helper
+// did, and only this assertion caught it.
+check(resolveReportPath('reports/0001-example.md') === path.join(ROOT, 'reports', '0001-example.md'),
+  'an ordinary report path resolves to the file it actually names');
 check(resolveReportPath('../../../etc/passwd') === null, 'a traversal out of the repo is refused');
 check(resolveReportPath('reports/../config/profile.yml') === null, 'a traversal that re-enters elsewhere is refused');
 check(resolveReportPath('config/profile.yml') === null, 'another repo directory is refused, not just paths outside the repo');
@@ -100,12 +102,32 @@ check(resolveReportPath('reports-backup/x.md') === null,
   'a SIBLING with the same prefix is refused (a bare startsWith would have allowed it)');
 check(resolveReportPath('') === null, 'an empty path is refused rather than resolving to the repo root');
 
+// resolveInside is the general form; reports/ is one caller of it.
+check(resolveInside(path.join(ROOT, 'jds'), 'x.md') === path.join(ROOT, 'jds', 'x.md'),
+  'the general helper resolves an ordinary path from its containment root');
+check(resolveInside(path.join(ROOT, 'jds'), '../reports/x.md') === null, 'the general helper refuses an escape');
+// The two-base form: resolve from one place, require landing in another.
+check(resolveInside(path.join(ROOT, 'jds'), 'jds/x.md', { resolveFrom: ROOT }) === path.join(ROOT, 'jds', 'x.md'),
+  'a repo-relative path resolves from the repo root and still lands inside its containment root');
+check(resolveInside(path.join(ROOT, 'jds'), 'reports/x.md', { resolveFrom: ROOT }) === null,
+  'and a repo-relative path aimed elsewhere is still refused');
+
 const reportsSrc = fs.readFileSync(path.join(ROOT, 'dashboard-web/server/routes/reports.mjs'), 'utf8');
-check(/function resolveReportPath/.test(reportsSrc), 'reports.mjs defines the containment helper');
+check(/from '\.\.\/lib\/safe-path\.mjs'/.test(reportsSrc), 'the reports routes import the shared helper rather than rolling their own');
 check(!/path\.resolve\(ROOT_DIR,\s*row\.report\)/.test(reportsSrc),
   'no route resolves a tracker-supplied report path without containment');
 check((reportsSrc.match(/resolveReportPath\(row\.report\)/g) || []).length >= 2,
   'both report routes go through it');
+
+// The apply flow matters MORE than the read routes: what it reads goes into a
+// model prompt, so an uncontained read is exfiltration, not just disclosure.
+const applySrc = fs.readFileSync(path.join(ROOT, 'dashboard-web/server/lib/apply.mjs'), 'utf8');
+check(!/readProjectFile\(projectRoot,\s*row\.report\)/.test(applySrc),
+  'the apply flow no longer reads a tracker-supplied path through the uncontained reader');
+check(/function readReport\(row\)/.test(applySrc) && /resolveReportPath\(rel\)/.test(applySrc),
+  'it goes through a contained reader instead');
+check((applySrc.match(/readReport\(row\)/g) || []).length >= 4,
+  'every one of the call sites was converted, not just the first');
 
 // ── 4. credentials are stripped from subprocess output ───────────────────────
 const { redactSecrets } = await import('../dashboard-web/server/routes/system.mjs');

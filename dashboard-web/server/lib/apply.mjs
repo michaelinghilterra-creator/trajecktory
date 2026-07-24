@@ -7,8 +7,26 @@ import { ROOT_DIR } from '../config.mjs';
 import { generateText, readProjectFile, draftModel } from './anthropic.mjs';
 import { renderObsidianNote, warnObsidianPushFailed } from './obsidian.mjs';
 import { getIdentity, getObsidianAppliedFolder } from './profile.mjs';
+import { resolveReportPath } from './safe-path.mjs';
 
 const applyJobs = new Map();
+
+// Read a row's report, refusing any path that does not sit under reports/.
+// applications.md is agent-written, so the path in it is not trusted input. This
+// matters more here than on the read routes: the text goes into a model prompt,
+// so an uncontained read is not just disclosure, it is exfiltration to a third
+// party. Returns '' on refusal, which every caller already handles as "no
+// report" — a missing report degrades the draft, it does not break the run.
+function readReport(row) {
+  const rel = row && row.report;
+  if (!rel) return '';
+  const abs = resolveReportPath(rel);
+  if (!abs) {
+    console.error(`[apply] refused a report path outside reports/: ${rel}`);
+    return '';
+  }
+  try { return fs.readFileSync(abs, 'utf8'); } catch { return ''; }
+}
 // Hybrid generation: the Anthropic API when a key is present (fast), otherwise
 // the user's Claude plan via the bundled CLI (no key). See lib/anthropic.mjs.
 async function runClaudeSubprocess(prompt) {
@@ -61,7 +79,7 @@ async function runByoApplyJob(jobId, row) {
     const notePath = `${getObsidianAppliedFolder()}/${noteName}.md`;
 
     const byoFallbackHeader = `# ${row.company} — ${row.role}\n\n**Applied:** ${todayFormal}\n**Score:** ${row.scoreRaw || 'N/A'}\n**Status:** Applied\n**Assets:** Bring-your-own (no trajecktory-generated CV or cover letter)\n`;
-    const reportText = row.report ? readProjectFile(projectRoot, row.report) : '';
+    const reportText = readReport(row);
     const noteContent = renderObsidianNote({ row, reportText, todayFormal, fallbackHeader: byoFallbackHeader });
 
     const encoded = encodeURIComponent(notePath);
@@ -124,7 +142,7 @@ async function runCoverLetterJob(jobId, row) {
   // Pre-load files in Node.js — subprocess gets content inline, no file I/O needed
   const cvMd      = readProjectFile(projectRoot, 'cv.md');
   const profileMd = readProjectFile(projectRoot, 'modes/_profile.md');
-  const reportMd  = row.report ? readProjectFile(projectRoot, row.report) : '';
+  const reportMd  = readReport(row);
 
   const errors = [];
 
@@ -243,7 +261,7 @@ async function runApplyJob(jobId, row, mode) {
   // Pre-load files in Node.js — subprocess gets content inline, no file I/O needed
   const cvMd       = readProjectFile(projectRoot, 'cv.md');
   const profileMd  = readProjectFile(projectRoot, 'modes/_profile.md');
-  const reportMd   = row.report ? readProjectFile(projectRoot, row.report) : '';
+  const reportMd   = readReport(row);
 
   // ── Step 2: Tailored resume DOCX (template-swap approach) ────────────────────
   // Generates four tailored strings (title, subtitle_secondary, summary,
@@ -368,7 +386,7 @@ ${STYLE_RULES}`;
 
     // Build note content from report (or minimal fallback)
     const fallbackHeader = `# ${row.company} — ${row.role}\n\n**Applied:** ${todayFormal}\n**Score:** ${row.scoreRaw || 'N/A'}\n**Status:** Applied\n`;
-    const reportText = row.report ? readProjectFile(projectRoot, row.report) : '';
+    const reportText = readReport(row);
     const noteContent = renderObsidianNote({ row, reportText, todayFormal, fallbackHeader });
 
     // PUT to Obsidian REST API (creates or overwrites) via https.request (handles self-signed cert)

@@ -5,25 +5,13 @@ import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { reportMdToHtml, escapeHtml, v1ToFallbackHtml } from '../lib/html.mjs';
 import { hasV1Frontmatter, parseV1, stripFrontmatter } from '../v1-loader.mjs';
+import { resolveReportPath } from '../lib/safe-path.mjs';
 
 export const router = express.Router();
 
-// PATH SAFETY. The path is not taken from the request, it is read out of
-// applications.md — but that file is AGENT-written, so it is not trusted input
-// either. `/api/jd/:id` already states this rule and enforces it; these two
-// routes resolved the path and read it with no containment check at all, so a
-// tracker row pointing at ..\..\somewhere would be served straight back. One
-// poisoned row is a file-read primitive for anything the server can open.
-//
-// reports/ is the only directory an evaluation report may live in. Resolve, then
-// require the result to sit inside it, and compare with a trailing separator so
-// a sibling like `reports-backup` cannot pass a bare prefix test.
-const REPORTS_ROOT = path.resolve(ROOT_DIR, 'reports');
-function resolveReportPath(rel) {
-  const abs = path.resolve(ROOT_DIR, String(rel || ''));
-  return abs === REPORTS_ROOT || abs.startsWith(REPORTS_ROOT + path.sep) ? abs : null;
-}
-
+// PATH SAFETY: see lib/safe-path.mjs. The path comes from applications.md, which
+// is agent-written and therefore untrusted, and these two routes used to resolve
+// and read it with no containment check at all.
 router.get('/api/report-body/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
