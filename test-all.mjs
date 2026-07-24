@@ -445,6 +445,7 @@ for (const suite of [
   'tests/parser-fixtures.test.mjs',
   'tests/merge-tracker.test.mjs',
   'tests/discard.test.mjs',
+  'tests/auto-close-stale.test.mjs',
   'tests/scan-core.test.mjs',
   'tests/identity.test.mjs',
   'tests/identity-single-source.test.mjs',
