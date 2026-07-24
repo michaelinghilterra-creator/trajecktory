@@ -6,6 +6,7 @@ import {
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { parseRecruitersMd, updateRecruiterLine } from '../lib/recruiters.mjs';
+import { PORT } from '../config.mjs';
 import { patchRowInMd, parseApplicationsMd } from '../lib/applications.mjs';
 import { addNote } from '../lib/notes.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
@@ -94,6 +95,24 @@ function sweepPending(now) {
 // never heard of. Every failure here redirects back with a reason the app renders,
 // exactly as the callback below already does. Missing credentials get their own
 // reason because they are not a failure at all, just a setup step not done yet.
+// The redirect target is derived from the request's own Host header, which any
+// client can set to anything. The practical risk is small — Google only accepts a
+// loopback host for a desktop client, so a forged Host produces a rejected consent
+// rather than a code delivered somewhere else — but "redirect_uri built from the
+// Host header" is a known-bad shape and does not deserve a paragraph of reasoning
+// every time someone reads it.
+//
+// So the header is ALLOWED, not trusted: keep it when it is a loopback host (which
+// preserves whether the user is on localhost or 127.0.0.1, and whatever port the
+// launcher picked), and otherwise fall back to this server's configured address.
+// Validating rather than replacing keeps the existing behaviour exactly.
+const LOOPBACK_HOST = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d{1,5})?$/i;
+export function callbackUri(req) {
+  const host = String(req.get('host') || '');
+  const safeHost = LOOPBACK_HOST.test(host) ? host : `127.0.0.1:${PORT}`;
+  return `http://${safeHost}/api/google/callback`;
+}
+
 router.get('/api/google/auth-start', (req, res) => {
   try {
     const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
@@ -102,7 +121,7 @@ router.get('/api/google/auth-start', (req, res) => {
     sweepPending(now);
     const { verifier, challenge } = newPkce();
     const state = randomState();
-    const redirectUri = `${req.protocol}://${req.get('host')}/api/google/callback`;
+    const redirectUri = callbackUri(req);
     pendingAuth.set(state, { verifier, redirectUri, createdAt: now });
     res.redirect(buildAuthUrl({ clientId, redirectUri, state, codeChallenge: challenge }));
   } catch (err) {

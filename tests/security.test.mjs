@@ -149,5 +149,30 @@ const workflowSrc = fs.readFileSync(path.join(ROOT, 'dashboard-web/server/routes
 check(/Object\.hasOwn\(WORKFLOW_STEPS/.test(workflowSrc), 'the route uses hasOwn rather than a bare lookup');
 check(/typeof def\.cmd !== 'string'/.test(workflowSrc), 'and still refuses anything without a string command');
 
+// ── 6. the OAuth redirect target is not taken on trust from the Host header ──
+// Google only accepts a loopback host for a desktop client, so a forged Host
+// yields a rejected consent rather than a code delivered elsewhere. The guard is
+// here because "redirect_uri built from the Host header" is a known-bad shape,
+// and because the fallback has to keep working when the launcher picks a port.
+const { callbackUri } = await import('../dashboard-web/server/routes/google.mjs');
+const reqWithHost = (host) => ({ get: (h) => (h.toLowerCase() === 'host' ? host : undefined) });
+
+check(callbackUri(reqWithHost('localhost:3333')) === 'http://localhost:3333/api/google/callback',
+  'a localhost Host is kept, so the user stays on the origin their tab is already on');
+check(callbackUri(reqWithHost('127.0.0.1:51234')) === 'http://127.0.0.1:51234/api/google/callback',
+  'a loopback IP on a launcher-picked port is kept');
+check(callbackUri(reqWithHost('localhost')) === 'http://localhost/api/google/callback',
+  'a loopback host with no port is kept');
+for (const bad of ['evil.invalid', 'localhost.evil.invalid', 'evil.invalid:3333', '127.0.0.1.evil.invalid', '']) {
+  check(callbackUri(reqWithHost(bad)) === 'http://127.0.0.1:3333/api/google/callback',
+    `a non-loopback Host (${bad || 'empty'}) falls back to this server's own address`);
+}
+check(callbackUri({ get: () => undefined }).startsWith('http://127.0.0.1:'),
+  'a missing Host header does not throw');
+// The subdomain cases above are the ones a naive check misses: `startsWith` or a
+// bare `includes('localhost')` would accept every one of them.
+check(!/localhost/.test(callbackUri(reqWithHost('localhost.evil.invalid'))),
+  'a host that merely CONTAINS localhost is not treated as loopback');
+
 console.log(`\n  ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
