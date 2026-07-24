@@ -1,6 +1,6 @@
 // Pipeline Module — Console redesign with sub-tabs.
 // Overview (default) · Table · All · Analytics.
-// Reuses the existing window.Drawer for the application drawer.
+// The application drawer is PipelineDrawer, defined in this file.
 //
 // NOTE: wrapped in an IIFE so locals don't collide with other modules
 // (target-talent.jsx declares ContactsView/AnalyticsView etc; the IIFE
@@ -2066,7 +2066,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   const staleDays = (a) => staleMeta.get(a.id)?.days ?? null;
 
   const selId = drawerApp && drawerApp.id;
-  // Local drawer: don't bubble up to the shared window.Drawer for Pipeline rows.
+  // Pipeline rows open PipelineDrawer (this file), not a shared drawer.
   // Triage rows have no report and a synthetic id, so they never open the heavy
   // report drawer — their Deep Dive / dismiss / open-JD actions live in the row.
   const handleOpen = (a) => { if (a && a._triage) return; setDrawerApp(a); };

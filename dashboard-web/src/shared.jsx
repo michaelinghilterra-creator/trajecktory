@@ -960,103 +960,47 @@ window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, density,
   );
 };
 
-// ---------- Drawer (Pipeline row detail) ----------
-window.Drawer = function Drawer({ app, onClose, onAction }) {
-  useEffectS(() => {
-    const onKey = e => { if (e.key === "Escape") onClose(); };
-    if (app) window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [app, onClose]);
-
+// ---------- Quick Copy Bar (relocated from the removed dead window.Drawer) ----------
+// One-tap copy strip for what an external application form asks for (email, phone,
+// links, certifications), sourced from window.myIdentity() so nothing personal is
+// hardcoded. Global so the Pipeline drawer (pipeline.jsx, a separate IIFE) reuses it.
+function QuickCopyBar() {
+  const m = (window.myIdentity && window.myIdentity()) || {};
+  const [copied, setCopied] = React.useState(null);
+  const trunc = (s, n = 22) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+  const items = [
+    ['Email', m.email], ['Phone', m.phone], ['LinkedIn', m.linkedin],
+    ['Portfolio', m.portfolioUrl], ['GitHub', m.github],
+    // Certifications contribute the name plus whatever an application form is
+    // actually going to ask for. Before this the bar knew only the name, so the
+    // number and dates were looked up by hand on every form.
+    ...(Array.isArray(m.certificationEntries) && m.certificationEntries.length
+      ? m.certificationEntries.flatMap(c => [
+          [trunc(c.name), c.name],
+          c.number  ? [`${trunc(c.name, 14)} no.`, c.number]  : null,
+          c.expires ? [`${trunc(c.name, 14)} exp`, c.expires] : null,
+        ].filter(Boolean))
+      : (Array.isArray(m.certifications) ? m.certifications.filter(Boolean).map(c => [trunc(c), c]) : [])),
+  ].filter(([, v]) => v);
+  if (!items.length) return null;
+  const copy = (label, val) => {
+    try { navigator.clipboard.writeText(val); } catch { /* clipboard blocked */ }
+    setCopied(label);
+    setTimeout(() => setCopied(c => (c === label ? null : c)), 1200);
+  };
   return (
-    <>
-      <div className={`drawer-backdrop ${app ? "open" : ""}`} onClick={onClose}></div>
-      <div className={`drawer ${app ? "open" : ""}`}>
-        {app && (
-          <>
-            <div className="drawer-head">
-              <div>
-                <div className="row" style={{ gap: 10, marginBottom: 4 }}>
-                  <span className="mono dim" style={{ fontSize: 11 }}>#{String(app.id).padStart(3, "0")}</span>
-                  <window.StatusPill status={app.status} />
-                </div>
-                <h3>{app.company}</h3>
-                <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>{app.role}</div>
-              </div>
-              <button className="icon-btn" onClick={onClose} title="Close (Esc)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
-              </button>
-            </div>
-
-            <div className="drawer-body">
-              <div className="kv">
-                <span className="k">Score</span>
-                <span className="v"><window.ScoreChip score={app.score} /> <span className="dim mono" style={{ marginLeft: 8, fontSize: 11 }}>{window.scoreBucket(app.score) === "strong" ? "strong match" : window.scoreBucket(app.score) === "borderline" ? "borderline" : "weak"}</span></span>
-
-                <span className="k">Archetype</span>
-                <span className="v mono">{app.archetype}</span>
-
-                <span className="k">Sector</span>
-                <span className="v">{app.sector} <span className="dim">· {app.size}-stage</span></span>
-
-                <span className="k">Comp posted</span>
-                <span className="v mono">${app.salary}k <span className={app.salary >= app.target ? "" : ""} style={{ color: app.salary >= app.target ? "var(--green)" : "var(--red)", marginLeft: 8 }}>{app.salary >= app.target ? `+${app.salary - app.target}k` : `−${app.target - app.salary}k`} vs target</span></span>
-
-                <span className="k">Date logged</span>
-                <span className="v mono">{app.date} <span className="dim">· {window.daysAgo(app.date)}d ago</span></span>
-
-                <span className="k">Notes</span>
-                <span className="v">{app.notes}</span>
-              </div>
-
-              <div className="report-preview">
-                <h4>Evaluation Report (Auto-generated)</h4>
-                <p style={{ marginTop: 0 }}><strong style={{ color: "var(--text)" }}>Verdict:</strong> {app.score == null ? "Score unavailable." : app.score >= 4.0 ? "Strong fit. Apply within 48h." : app.score >= 3.0 ? "Borderline. Review JD detail before applying." : "Weak fit. Consider skipping."}</p>
-                <h4 style={{ marginTop: 12 }}>Why this scored {app.score != null ? app.score.toFixed(1) : "N/A"}</h4>
-                <ul>
-                  <li>Role archetype <span className="mono" style={{ color: "var(--accent)" }}>{app.archetype}</span> matches your profile</li>
-                  <li>Posted comp <span className="mono">${app.salary}k</span> {app.salary >= app.target ? "meets" : "is below"} your target band</li>
-                  <li>Sector exposure to <span className="mono">{app.sector}</span> aligns with stated preferences</li>
-                  <li>{app.size === "Late" ? "Late-stage growth: proven motion, lower equity upside" : app.size === "Mid" ? "Mid-stage: fastest learning curve" : "Early-stage: high equity, high risk"}</li>
-                </ul>
-                <h4>Risks</h4>
-                <ul>
-                  <li>{app.score >= 4.0 ? "Competitive process: recruiter may already have a shortlist" : "Comp gap may surface in screen"}</li>
-                  <li>JD emphasis on tooling not yet validated against your stack</li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="drawer-foot">
-              {app.status === "Evaluated" && (
-                <>
-                  <button className="btn primary" onClick={() => onAction(app, "Applied")}>Mark Applied</button>
-                  <button className="btn" onClick={() => onAction(app, "SKIP")}>Skip</button>
-                </>
-              )}
-              {app.status === "Applied" && (
-                <>
-                  <button className="btn success" onClick={() => onAction(app, "Responded")}>Mark Responded</button>
-                  <button className="btn danger" onClick={() => onAction(app, "Rejected")}>Mark Rejected</button>
-                </>
-              )}
-              {(() => {
-                const idx = window.FUNNEL_ORDER.indexOf(app.status);
-                if (idx >= window.FUNNEL_ORDER.indexOf("Responded") && idx < window.FUNNEL_ORDER.length - 1) {
-                  const next = window.FUNNEL_ORDER[idx + 1];
-                  return <button className="btn success" onClick={() => onAction(app, next)}>{next === "Offer" ? "Mark Offer" : `Move to ${next}`}</button>;
-                }
-                return null;
-              })()}
-              <button className="btn">Open Report ↗</button>
-              <button className="btn">Generate resume ⌘G</button>
-            </div>
-          </>
-        )}
-      </div>
-    </>
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '8px 14px', borderTop: '1px solid var(--border)', background: 'var(--panel-2)' }}>
+      <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginRight: 2 }}>Quick copy:</span>
+      {items.map(([label, val]) => (
+        <button key={label} className="btn sm" style={{ fontSize: 11.5 }} title={`Copy: ${val}`} onClick={() => copy(label, val)}>
+          {copied === label ? '✓ copied' : label}
+        </button>
+      ))}
+    </div>
   );
-};
+}
+// Exposed globally so the Pipeline drawer (pipeline.jsx, separate IIFE) can reuse it.
+window.QuickCopyBar = QuickCopyBar;
 
 // ---------- Command Palette ----------
 window.CommandPalette = function CommandPalette({ open, onClose, commands }) {
