@@ -19,13 +19,13 @@ The report file is **JSON frontmatter + a narrative markdown body**, not freefor
   "role": "...",
   "date": "YYYY-MM-DD",
   "url": "...",
-  "score": <DERIVED — do NOT author this; compute-scores.mjs computes it from globalScore>,
+  "score": <DERIVED, do NOT author this; compute-scores.mjs computes it from globalScore>,
   "scoreCeiling": <optional 0-5 hard cap; set ONLY when a blocker must keep the score low>,
   "domain": "...",
   "summary":          { ... },     // Block A → see "summary" in schema
   "recommendation":   "...",
   "keywords":         [ ... ],
-  "globalScore":      [ ... ],     // keyed dims WITH evidence — you rate these; see below + schema
+  "globalScore":      [ ... ],     // keyed dims WITH evidence (you rate these); see below + schema
   "cvMatch":          [ ... ],     // Block B
   "gaps":             [ ... ],     // Block B gap table
   "levelMatch":       { ... },     // Block C
@@ -56,7 +56,7 @@ is what the user reads in the "Full Report" drawer tab.
 
 **The analytical guidance for Blocks A–G below describes what to *think about* for each field.** When the legacy guidance below says "produce a table" or "write a `## A)` heading," that's obsolete — translate the same thinking into the corresponding frontmatter field.
 
-## ⚡ Scoring — rate the dimensions, do NOT author the headline
+## ⚡ Scoring: rate the dimensions, do NOT author the headline
 
 The headline `score` is **derived by code, not written by you.** You rate each dimension
 0–5 with its evidence in `globalScore[]`; `compute-scores.mjs` computes the weighted
@@ -302,7 +302,7 @@ node compute-scores.mjs reports/{###}-{company-slug}-{YYYY-MM-DD}.md --apply
 
 This writes `score`, `scoreSource: "derived"`, and `scoreBasis` into the report and
 prints the derived headline (e.g. `4.2`). **Use that printed number as the score in the
-tracker row below** — do not invent one. If it prints `left as-is`, your `globalScore`
+tracker row below**. Do not invent one. If it prints `left as-is`, your `globalScore`
 entries are missing the `key` fields; fix them and re-run.
 
 **Field mapping from Blocks A–G to the v1 frontmatter:**
@@ -317,7 +317,7 @@ entries are missing the `key` fields; fix them and re-run.
 | F (Interview Plan) | `starStories[]`, `leadStory`, `redFlagQs[]` |
 | G (Posting Legitimacy) | `legitimacy.{tier, conclusion, signals[]}` |
 | Keywords | `keywords[]` (15–20 strings) |
-| Global Score | `globalScore[]` (keyed dims + evidence — you rate these). `score` is **derived** by `compute-scores.mjs`, never authored. `scoreCeiling` for a hard blocker. See the Scoring section above. |
+| Global Score | `globalScore[]` (keyed dims + evidence, you rate these). `score` is **derived** by `compute-scores.mjs`, never authored. `scoreCeiling` for a hard blocker. See the Scoring section above. |
 | Recommendation | `recommendation` (one sentence) |
 
 If the role is a hard mismatch and a section doesn't apply (e.g., no customization plan), omit the key entirely. Do not emit empty arrays as placeholders.

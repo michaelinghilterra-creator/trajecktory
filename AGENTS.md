@@ -444,7 +444,7 @@ node gate-pipeline.mjs
 # 3b. Derive each new report's headline score from its dimension ratings (code
 #     computes it, the model does not author it). Safety net: stamps any report
 #     whose worker could not run compute-scores itself. Legacy reports (no keyed
-#     dimensions) are left untouched — verified: --all touches zero of them.
+#     dimensions) are left untouched. Verified: --all touches zero of them.
 node compute-scores.mjs --all --apply
 
 # 4. Merge results into applications.md

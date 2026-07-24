@@ -28,13 +28,13 @@ The `.md` report file you produce is **JSON frontmatter + a narrative markdown b
   "date": "{{DATE}}",
   "url": "{{URL}}",
   "batchId": "{{ID}}",
-  "score": <DERIVED by compute-scores.mjs — leave a placeholder, do NOT author it>,
+  "score": <DERIVED by compute-scores.mjs; leave a placeholder, do NOT author it>,
   "scoreCeiling": <optional 0-5 hard cap; set ONLY for a blocker that must keep the score low>,
   "domain": "...",
   "summary":          { ... },     // Bloque A
   "recommendation":   "...",
   "keywords":         [ ... ],     // 15–20 strings
-  "globalScore":      [ ... ],     // keyed dims WITH evidence: [{key, dim, val, max, evidence}, ...] — see Scoring below
+  "globalScore":      [ ... ],     // keyed dims WITH evidence: [{key, dim, val, max, evidence}, ...]; see Scoring below
   "cvMatch":          [ ... ],     // Bloque B; strength: "strong"|"moderate"|"weak"
   "gaps":             [ ... ],     // Bloque B gap table → array of {gap, blocker, mitigation}
   "levelMatch":       { ... },     // Bloque C: {jdLevel, naturalLevel, verdict}
@@ -220,7 +220,7 @@ Analyze posting signals to assess whether this is a real, active opening.
 
 **Assessment:** Apply the same three tiers (High Confidence / Proceed with Caution / Suspicious), weighting available signals more heavily. If insufficient signals are available to make a determination, default to "Proceed with Caution" with a note about limited data.
 
-#### Puntuación — rate the dimensions, do NOT author the headline
+#### Puntuación: rate the dimensions, do NOT author the headline
 
 The headline `score` is **derived by `compute-scores.mjs`, not written by you.** Rate each
 dimension 0–5 WITH its evidence in `globalScore[]` as **keyed** entries:
@@ -244,11 +244,11 @@ dimension 0–5 WITH its evidence in `globalScore[]` as **keyed** entries:
 
 When any condition below is present, set `scoreCeiling` to the value shown. The code caps
 the derived headline there regardless of role fit. This replaces the old "cap the Global
-score" rule — set the field, do not fudge the dimension ratings.
+score" rule. Set the field, do not fudge the dimension ratings.
 
 | Condition detected in JD | scoreCeiling | Why |
 |--------------------------|--------------|-----|
-| Required physical presence in a `hard_no` city (see `portals.yml` location_policy — includes London, Barcelona, NYC, SF, Bay Area, Chicago, LA, Boston, Seattle, Amsterdam, Paris, Berlin, Madrid, Dublin, Toronto, Singapore, Sydney, Melbourne, Tokyo, Warsaw, Krakow, Vilnius, Tallinn) | **1.5** | International relocation or domestic hard-no — not viable regardless of role fit |
+| Required physical presence in a `hard_no` city (see `portals.yml` location_policy: includes London, Barcelona, NYC, SF, Bay Area, Chicago, LA, Boston, Seattle, Amsterdam, Paris, Berlin, Madrid, Dublin, Toronto, Singapore, Sydney, Melbourne, Tokyo, Warsaw, Krakow, Vilnius, Tallinn) | **1.5** | International relocation or domestic hard-no, not viable regardless of role fit |
 | Visa sponsorship explicitly NOT offered AND candidate would need it (non-US JDs) | **1.5** | Hard blocker |
 | Role requires expertise candidate verifiably lacks (e.g., Xactly admin for a Sales Comp role, FedRAMP for federal sales, specific industry certifications) AND has no adjacent experience | **2.0** | Structural skill gap |
 | Title regression (e.g., evaluating a Manager role when candidate is already Director+) | **2.0** | Career step backward |
@@ -269,7 +269,7 @@ Donde `{company-slug}` es el nombre de empresa en lowercase, sin espacios, con g
 
 **Formato del report:** **v1 JSON frontmatter + narrative body.** See the Output Contract at the top of this prompt and the full spec in [`templates/report-schema-v1.md`](../templates/report-schema-v1.md). The Bloques A–G map onto frontmatter fields as documented in the Output Contract — do NOT produce `## A)`, `## B)` etc. headings in the file. The drawer renders structured tabs from frontmatter; the narrative body below `---` is what the Full Report tab displays.
 
-### Paso 3b — Compute the score (REQUIRED)
+### Paso 3b: Compute the score (REQUIRED)
 
 The headline is derived from your `globalScore` ratings by code, not authored. After
 saving the report, run:
@@ -279,7 +279,7 @@ node compute-scores.mjs reports/{{REPORT_NUM}}-{company-slug}-{{DATE}}.md --appl
 ```
 
 It writes `score` / `scoreSource` / `scoreBasis` into the report and prints the derived
-headline. **Use that printed number as `{score}` in the TSV line below** — do not invent
+headline. **Use that printed number as `{score}` in the TSV line below**. Do not invent
 one. `left as-is` means your `globalScore` entries lack the `key` fields; fix and re-run.
 (If your worker cannot run node, leave the placeholder: the batch workflow runs
 `node compute-scores.mjs --all --apply` in the parent process before merge, which stamps
