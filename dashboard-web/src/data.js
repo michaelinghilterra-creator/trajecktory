@@ -142,6 +142,15 @@ window.reachedStage = (app) => {
   return m ? m[1].trim() : null;
 };
 
+// Did this row enter the funnel at all? Browser mirror of enteredFunnel() in
+// server/lib/statuses.mjs — keep the two identical. Every tracked row was
+// evaluated, so the first rung counts membership, not progression; `Closed` is
+// excluded because the posting closed before the user could act, matching every
+// other denominator in the app. Asking appReached(a, "Evaluated") instead scored
+// every evaluated-then-declined row as never-evaluated and printed a 100%
+// evaluate-to-apply conversion.
+window.enteredFunnel = (app) => app && app.status !== "Closed";
+
 // Did this app reach `stage` (either currently at it, advanced past it,
 // or got tagged `[reached: <stage-or-later>]` after closure)?
 //

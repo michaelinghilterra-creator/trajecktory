@@ -44,6 +44,27 @@ export const FUNNEL_ORDER = _states
 export const ACTIVE_STATUSES = FUNNEL_ORDER.slice();
 export const CLOSED_STATUSES = ALL_STATUSES.filter(s => !FUNNEL_ORDER.includes(s));
 
+// Did this row enter the funnel at all, i.e. reach the FIRST rung?
+//
+// Every row in applications.md was evaluated: an evaluation is what creates the
+// row and its report. So the Evaluated rung is not a stage a row can fail to
+// reach by having a terminal status — Discarded, SKIP and Not a Fit are all
+// decisions taken AFTER an evaluation, and they belong in the first rung's count.
+//
+// Asking `reached >= Evaluated` instead gets this exactly backwards, because none
+// of those statuses sit on FUNNEL_ORDER: every evaluated-then-declined row scored
+// as never-evaluated, the first rung collapsed onto the second (165 and 165), and
+// the chart reported a 100% evaluate-to-apply conversion while hiding the largest
+// drop in the whole pipeline.
+//
+// `Closed` is the one exclusion, consistent with every other denominator in the
+// app: the posting closed before the user could act, so counting it as a role
+// they chose not to apply to blames them for someone else's timing. It is
+// surfaced as its own count instead, never silently folded in.
+export function enteredFunnel(app) {
+  return app?.status !== 'Closed';
+}
+
 // ─── Outreach ladders (recruiters + target talent) ──────────────────────────
 // Separate vocabularies from the application funnel, but loaded from the SAME
 // file so they cannot drift the way the hardcoded arrays did. `contacted` is

@@ -112,7 +112,19 @@ try {
 
   // ── stageFunnelStats: cumulative rungs + conversion ──────────────────────
   const f = stageFunnelStats();
-  eq(f.reached['Evaluated'], 7, 'Evaluated counts rows that ENTERED the funnel, not every row (511-vs-177 bug)');
+  // REVISED 2026-07-24. This asserted 7, excluding row 5 (Discarded, no evidence
+  // it was ever sent), on the rule "the rung counts rows that reached Evaluated".
+  // That rule reads correctly on THIS fixture only because row 7 sits at status
+  // `Evaluated`. On the real tracker nothing does — every evaluated row has since
+  // moved to a terminal status — so the rung collapsed onto Applied (165 and 165)
+  // and the chart published a 100% evaluate-to-apply conversion, hiding the single
+  // largest drop in the pipeline.
+  //
+  // The first rung is membership, not progression: an evaluation is what creates
+  // the row, so every row was evaluated, including the ones later declined. Only
+  // `Closed` is excluded, matching every other denominator in the app. See
+  // enteredFunnel() in statuses.mjs.
+  eq(f.reached['Evaluated'], 8, 'the first rung counts every evaluated row, including ones later declined');
   eq(f.reached['Applied'], 6, 'Applied rung');
   eq(f.reached['Responded'], 3, 'Responded rung');
   eq(f.reached['Phone Screen'], 3, 'Phone Screen rung');
@@ -122,7 +134,9 @@ try {
     'rungs are monotonically non-increasing (a funnel cannot widen)');
 
   const evalToApplied = f.conversion.find(c => c.from === 'Evaluated');
-  eq(evalToApplied.rate, 86, 'Evaluated→Applied conversion is 6/7, not diluted by off-funnel rows');
+  eq(evalToApplied.rate, 75, 'Evaluated→Applied conversion is 6/8: the declined row belongs in the denominator');
+  check(f.reached['Evaluated'] > f.reached['Applied'],
+    'the first rung is strictly wider than the second whenever a row was declined (the 100%-conversion regression)');
 
   // ── rejection attribution ────────────────────────────────────────────────
   eq(f.rejections.total, 3, 'terminal rows are Rejected + No Response');

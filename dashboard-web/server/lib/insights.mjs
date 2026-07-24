@@ -6,7 +6,7 @@ import { computeStaleApps, computeStaleTA } from './followups.mjs';
 import { parseRecruitersMd, RECRUITER_CONTACTED } from './recruiters.mjs';
 import { parseTargetTalentMd } from './target-talent.mjs';
 import { parseStatusEvents } from './sidecars.mjs';
-import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, isInterviewStage, reachedStage, makeFurthestIdx } from './statuses.mjs';
+import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, isInterviewStage, reachedStage, makeFurthestIdx, enteredFunnel } from './statuses.mjs';
 import { rateStat, MIN_SAMPLE } from './rate-confidence.mjs';
 
 const INSIGHTS_DIR = path.resolve(ROOT_DIR, 'data', 'insights');
@@ -257,7 +257,13 @@ export function stageFunnelStats() {
   const reached = {};
   for (const stage of FUNNEL_ORDER) {
     const si = idxOf(stage);
-    reached[stage] = apps.filter(a => furthestIdx(a) >= si).length;
+    // The first rung is membership, not progression: every tracked row was
+    // evaluated. See enteredFunnel() in statuses.mjs for why asking
+    // `furthestIdx >= Evaluated` here collapsed rung 1 onto rung 2 and printed a
+    // 100% first conversion.
+    reached[stage] = stage === FUNNEL_ORDER[0]
+      ? apps.filter(enteredFunnel).length
+      : apps.filter(a => furthestIdx(a) >= si).length;
   }
 
   const conversion = [];

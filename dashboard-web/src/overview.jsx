@@ -84,19 +84,26 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
       "Phone Screen": "Screen", "1st Interview": "1st", "2nd Interview": "2nd",
       "3rd Interview": "3rd", "4th Interview": "4th", "Offer": "Offer",
     };
-    // Every rung, Evaluated included, counts rows that actually REACHED it.
-    // Evaluated previously counted every row in the tracker, folding in every row
-    // that never entered the funnel at all (Discarded, Closed, SKIP, Not a Fit).
-    // That understates the first conversion by the ratio of tracked rows to
-    // evaluated ones, which on a well-filtered tracker is several-fold. It also
-    // skewed every downstream "% of entry" in the chart tooltip, which divides by
-    // this bar. The server's stageFunnelStats has always computed it this way;
-    // this makes the two agree.
+    // The FIRST rung is membership, not progression. Every tracked row was
+    // evaluated: an evaluation is what creates the row. Asking
+    // appReached(a, "Evaluated") scored every evaluated-then-declined row
+    // (Discarded, SKIP, Not a Fit) as never-evaluated, because none of those sit
+    // on FUNNEL_ORDER. The rung collapsed onto Applied, both read 165, and the
+    // chart reported a 100% evaluate-to-apply conversion while hiding the single
+    // largest drop in the pipeline. An earlier pass swung the other way and
+    // counted every row including Closed. window.enteredFunnel is the one rule
+    // now, mirroring enteredFunnel() on the server so the two cannot disagree.
+    // Every LATER rung still counts rows that actually reached it. This
+    // reconciles with the Sankey rather than contradicting it: that diagram
+    // partitions the same rows into progressed + dismissed + aged-out, and this
+    // rung is the first two of those three added together.
     // Applied additionally credits Rejected / No Response, since either implies
     // an application was sent.
-    return window.FUNNEL_ORDER.map(stage => {
+    return window.FUNNEL_ORDER.map((stage, i) => {
       let stageApps;
-      if (stage === "Applied") {
+      if (i === 0) {
+        stageApps = apps.filter(a => window.enteredFunnel(a));
+      } else if (stage === "Applied") {
         stageApps = apps.filter(a => window.appReached(a, "Applied") || a.status === "Rejected" || a.status === "No Response");
       } else {
         stageApps = apps.filter(a => window.appReached(a, stage));
