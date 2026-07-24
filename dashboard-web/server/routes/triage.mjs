@@ -1,7 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { ROOT_DIR } from '../config.mjs';
+import { ROOT_DIR, DATA_DIR, APPS_MD } from '../config.mjs';
 import { canonicalUrl, buildDecidedIndex, findDecided } from '../../../lib/identity.mjs';
 
 export const router = express.Router();
@@ -11,7 +11,7 @@ export const router = express.Router();
 // is polled, and the answer only moves when the tracker does.
 let decidedCache = { mtimeMs: -1, index: null };
 function decidedIndex() {
-  const appsPath = path.join(ROOT_DIR, 'data', 'applications.md');
+  const appsPath = APPS_MD;
   let mtimeMs = 0;
   try { mtimeMs = fs.statSync(appsPath).mtimeMs; } catch { return { byUrl: new Map(), ambiguous: new Set() }; }
   if (decidedCache.mtimeMs !== mtimeMs || !decidedCache.index) {
@@ -24,8 +24,10 @@ function decidedIndex() {
 // The triage agent (`/api/agent/triage`, run on Haiku) appends one line per scored
 // posting to data/triage-results.tsv. The dashboard's triage cards read them here.
 // Columns: url, company, title, score, rationale, date.
-const TRIAGE_TSV = () => path.join(ROOT_DIR, 'data', 'triage-results.tsv');
-const DISMISSED_TSV = () => path.join(ROOT_DIR, 'data', 'triage-dismissed.tsv');
+// Resolved under DATA_DIR (which honors TJK_DATA_DIR) so triage isolates in tests
+// like every other route; in production DATA_DIR is the repo's own data/ dir.
+const TRIAGE_TSV = () => path.join(DATA_DIR, 'triage-results.tsv');
+const DISMISSED_TSV = () => path.join(DATA_DIR, 'triage-dismissed.tsv');
 
 // URLs the user dismissed ("not a match"). Durable so the cards never resurface:
 // GET hides them, and the triage mode is told to skip them on the next scan.
