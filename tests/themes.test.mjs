@@ -125,5 +125,22 @@ const setValues = setBlock ? [...setBlock[1].matchAll(/"([^"]+)"/g)].map(m => m[
 check(JSON.stringify(setValues) === JSON.stringify([...DESIGNER].sort()),
   `DESIGNER_THEMES matches the six palettes (got ${setValues.join(', ')})`);
 
+// ── 4. Default theme + persistence key stay in sync with index.html ──────────
+// index.html applies the default (and the saved) theme before first paint, so
+// its hardcoded default and localStorage key MUST match app.jsx. Drift here
+// means a flash of the wrong theme or a persisted pick that never loads.
+const html = readFileSync(join(SRC, 'index.html'), 'utf-8');
+const defaultsBlock = appJsx.match(/EDITMODE-BEGIN\*\/\s*\{([\s\S]*?)\}\s*\/\*EDITMODE-END/);
+const defaultTheme = defaultsBlock ? (defaultsBlock[1].match(/"theme":\s*"([^"]+)"/) || [])[1] : undefined;
+const htmlDefaultTheme = (html.match(/<html[^>]*\bdata-theme="([^"]+)"/) || [])[1];
+const appKey = (appJsx.match(/TWEAKS_STORAGE_KEY\s*=\s*'([^']+)'/) || [])[1];
+const htmlKey = (html.match(/localStorage\.getItem\('([^']+)'\)/) || [])[1];
+
+check(optionValues.includes(defaultTheme), `TWEAK_DEFAULTS.theme "${defaultTheme}" is a real palette`);
+check(defaultTheme === htmlDefaultTheme,
+  `index.html <html data-theme> (${htmlDefaultTheme}) matches TWEAK_DEFAULTS.theme (${defaultTheme})`);
+check(!!appKey && appKey === htmlKey,
+  `persistence key matches across app.jsx (${appKey}) and index.html pre-paint script (${htmlKey})`);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

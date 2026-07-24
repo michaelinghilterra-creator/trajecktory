@@ -14,7 +14,7 @@ const { useState, useEffect, useMemo, useCallback, useRef } = React;
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "accent": "#a78bfa",
   "density": "compact",
-  "theme": "dark",
+  "theme": "cyan",
   "defaultPipelineView": "table",
   "targetLow": 100,
   "targetHigh": 140,
@@ -48,18 +48,45 @@ const THEME_OPTIONS = [
 // (dark/dim/light) keep the default accent applied inline.
 const DESIGNER_THEMES = new Set(["amber", "emerald", "cyan", "rose", "paper", "arctic"]);
 
-// Local tweak store (theme, density, and the comp knobs). This used to come from
-// tweaks-panel.jsx's useTweaks, which also posted to an edit-mode host to persist
-// edits. The standalone dashboard has no such host and nothing listens for those
-// messages, so this is a plain in-memory store: changes apply live and reset to
-// TWEAK_DEFAULTS on reload, exactly as before. setTweak accepts either
+// Where the user's appearance preferences persist. The pre-paint script in
+// index.html reads the SAME key to set data-theme before first paint, so keep
+// the string in sync (guarded by tests/themes.test.mjs).
+const TWEAKS_STORAGE_KEY = 'trajecktory.tweaks';
+
+// Only theme + density persist (the only preferences the UI changes). Everything
+// else in TWEAK_DEFAULTS (comp knobs, etc.) always comes from code, so changing a
+// default later is never frozen by a stale saved value. Anything invalid or from
+// a retired theme is ignored, so a bad saved value can never wedge the UI.
+function loadPersistedTweaks() {
+  try {
+    const o = JSON.parse(localStorage.getItem(TWEAKS_STORAGE_KEY) || '{}') || {};
+    const out = {};
+    if (THEME_OPTIONS.some(t => t.value === o.theme)) out.theme = o.theme;
+    if (o.density === 'comfortable' || o.density === 'compact') out.density = o.density;
+    return out;
+  } catch (e) { return {}; }
+}
+
+function savePersistedTweaks(values) {
+  try {
+    localStorage.setItem(TWEAKS_STORAGE_KEY, JSON.stringify({ theme: values.theme, density: values.density }));
+  } catch (e) { /* storage unavailable (private mode, quota); stays session-only */ }
+}
+
+// Tweak store for theme, density, and the comp knobs. Seeds from TWEAK_DEFAULTS
+// overlaid with the persisted preferences, and writes theme/density back on every
+// change so the choice survives a reload. setTweak accepts either
 // setTweak('key', value) or setTweak({ key: value, ... }).
 function useTweaks(defaults) {
-  const [values, setValues] = useState(defaults);
+  const [values, setValues] = useState(() => ({ ...defaults, ...loadPersistedTweaks() }));
   const setTweak = useCallback((keyOrEdits, val) => {
     const edits = (typeof keyOrEdits === 'object' && keyOrEdits !== null)
       ? keyOrEdits : { [keyOrEdits]: val };
-    setValues((prev) => ({ ...prev, ...edits }));
+    setValues((prev) => {
+      const next = { ...prev, ...edits };
+      savePersistedTweaks(next);
+      return next;
+    });
   }, []);
   return [values, setTweak];
 }

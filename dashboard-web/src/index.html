@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="cyan">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,6 +7,24 @@
 <link rel="icon" type="image/svg+xml" href="brand/trajecktory-favicon.svg" />
 <link rel="stylesheet" href="fonts.css" />
 <link rel="stylesheet" href="styles.css" />
+<script>
+  // Apply the saved color theme before first paint so a persisted (or non-dark
+  // default) theme never flashes the base theme. Mirrors the useTweaks store in
+  // app.jsx and reads the SAME localStorage key. The default is the data-theme
+  // on <html> above; keep it equal to TWEAK_DEFAULTS.theme (guarded by
+  // tests/themes.test.mjs).
+  (function () {
+    try {
+      var raw = localStorage.getItem('trajecktory.tweaks');
+      if (raw) {
+        var o = JSON.parse(raw);
+        if (o && typeof o.theme === 'string') {
+          document.documentElement.setAttribute('data-theme', o.theme);
+        }
+      }
+    } catch (e) {}
+  })();
+</script>
 </head>
 <body>
 <div id="root"></div>
