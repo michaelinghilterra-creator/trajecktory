@@ -74,8 +74,8 @@ converter for the Full Report tab. The structured tabs read **only** from frontm
 
 ### Global score breakdown (the dimensions the headline is derived from)
 
-The model rates each dimension 0–5 **with the evidence for that rating** — judgment,
-which is what the model is good at. It does **not** author the headline `score`; the
+The model rates each dimension 0–5 **with the evidence for that rating** (judgment is
+what the model is good at). It does **not** author the headline `score`; the
 headline is DERIVED by `lib/score.mjs` (`deriveScore`) as the weighted average of
 these dimensions minus a red-flag penalty. Weights live in `config/profile.yml`
 (`scoring.weights`). Give each entry a stable `key` so the code can match it to a
@@ -83,26 +83,26 @@ weight; a `dim` label and `evidence` string are for display.
 
 ```json
 "globalScore": [
-  { "key": "fit",       "dim": "Fit / CV Match",        "val": 4, "max": 5, "evidence": "8 yrs RevOps in B2B SaaS; owned the exact stack named" },
-  { "key": "northStar", "dim": "North Star Alignment",  "val": 5, "max": 5, "evidence": "Directly the Director/VP RevOps archetype" },
-  { "key": "level",     "dim": "Level Match",           "val": 4, "max": 5, "evidence": "JD is VP; natural level is Director/Sr Director — title stretch, scope fits" },
-  { "key": "comp",      "dim": "Comp",                  "val": 3, "max": 5, "evidence": "Band meets target at floor, below at ceiling" },
-  { "key": "location",  "dim": "Location / Logistics",  "val": 5, "max": 5, "evidence": "Fully remote, US" },
-  { "key": "redFlags",  "dim": "Red Flags",             "val": 5, "max": 5, "evidence": "None: fresh posting, funded, clear scope" }
+  { "key": "fit",       "dim": "Fit / CV Match",        "val": 4, "max": 5, "evidence": "Ran carrier scorecards across EMEA + LATAM at Northwind; the JD's BI stack lines up" },
+  { "key": "northStar", "dim": "North Star Alignment",  "val": 5, "max": 5, "evidence": "Matches the candidate's top target archetype" },
+  { "key": "level",     "dim": "Level Match",           "val": 4, "max": 5, "evidence": "JD asks VP; the candidate sits Director/Senior Director. Title stretch, scope fits" },
+  { "key": "comp",      "dim": "Comp",                  "val": 3, "max": 5, "evidence": "Band clears the floor, trails the ceiling" },
+  { "key": "location",  "dim": "Location / Logistics",  "val": 5, "max": 5, "evidence": "Remote, US time zones" },
+  { "key": "redFlags",  "dim": "Red Flags",             "val": 5, "max": 5, "evidence": "Clean: fresh posting, funded round, scoped mandate" }
 ]
 ```
 
 **Canonical keys** (match `SCORE_DIMENSIONS` / `RED_FLAGS_KEY` in `lib/score.mjs`):
 `fit`, `northStar`, `level`, `comp`, `location` are the weighted positive
 dimensions; `redFlags` is a **penalty** rated 0–5 where **5 = clean, 0 = severe**
-(NOT a negative value — it subtracts up to `scoring.redFlagPenalty` points after the
+(NOT a negative value; it subtracts up to `scoring.redFlagPenalty` points after the
 average). `max` is per-dimension (usually 5). Weights renormalize over whichever
 dimensions are present, so omitting one (e.g. `location` for a remote-anywhere role)
 is fine.
 
 Legacy reports predate this: their entries have no `key` (labels like
 `"Cultural Signals"`, and `Red Flags` stored as a negative `val`). Those are NOT
-re-derived — see **Derived vs legacy score** below.
+re-derived. See **Derived vs legacy score** below.
 
 ### Derived vs legacy score
 ```json
@@ -119,7 +119,7 @@ re-derived — see **Derived vs legacy score** below.
 ```
 - `scoreSource`: `"derived"` (headline computed by `deriveScore` from the keyed
   dimensions above) or `"legacy"` (authored under the old rubric). **Absent means
-  legacy** — old reports are read as legacy without being rewritten, and their
+  legacy**: old reports are read as legacy without being rewritten, and their
   authored number is preserved, never silently recomputed.
 - `scoreBasis`: the derivation snapshot written by the compute step, so a derived
   headline stays traceable to the exact weights and per-dimension points it used
