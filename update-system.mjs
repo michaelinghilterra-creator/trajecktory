@@ -18,7 +18,7 @@
 import { execFileSync, execSync } from 'child_process';
 import { readFileSync, writeFileSync, existsSync, unlinkSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = __dirname;
@@ -38,8 +38,11 @@ const REMOTE_BRANCH = 'main';
 // origins with no embedded token) are left untouched.
 const PUBLIC_ORIGIN = 'https://github.com/michaelinghilterra-creator/trajecktory.git';
 
-// System layer paths — ONLY these files get updated
-const SYSTEM_PATHS = [
+// System layer paths — ONLY these files get updated.
+// `trusted-signers` is deliberately absent: it is the trust anchor, so an update
+// must never be able to replace the key that authorizes updates. Asserted by
+// tests/update-signing.test.mjs.
+export const SYSTEM_PATHS = [
   'modes/_shared.md',
   'modes/_profile.template.md',
   'modes/oferta.md',
@@ -284,12 +287,22 @@ function addPaths(paths) {
   git('add', '--', ...paths);
 }
 
-function gitQuiet(...args) {
+// cwd is a parameter only so the signing tests can run git against a throwaway
+// repo. Production always goes through gitQuiet() below, which pins it to ROOT.
+function gitQuietIn(cwd, ...args) {
   try {
-    return execFileSync(resolveGit(), ['-c', 'credential.helper=', ...args], { cwd: ROOT, encoding: 'utf-8', timeout: 30000, env: GIT_ENV }).trim();
+    // stderr is piped, not inherited: this helper's whole contract is "tell me
+    // yes or no", and a failed probe (an unsigned tag, an absent ref) is an
+    // expected answer, not something to print at the user mid-update-check.
+    return execFileSync(resolveGit(), ['-c', 'credential.helper=', ...args],
+      { cwd, encoding: 'utf-8', timeout: 30000, env: GIT_ENV, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   } catch {
     return null;
   }
+}
+
+function gitQuiet(...args) {
+  return gitQuietIn(ROOT, ...args);
 }
 
 function hasGitRepo() {
@@ -344,20 +357,20 @@ function remoteMinBundleVersion() {
 // See docs/RELEASING.md for how to generate a key, sign tags, and activate this.
 const TRUSTED_SIGNERS = join(ROOT, 'trusted-signers');
 
-function signedUpdatesEnabled() {
-  if (!existsSync(TRUSTED_SIGNERS)) return false;
-  return readFileSync(TRUSTED_SIGNERS, 'utf-8')
+export function signedUpdatesEnabled(file = TRUSTED_SIGNERS) {
+  if (!existsSync(file)) return false;
+  return readFileSync(file, 'utf-8')
     .split('\n').some(l => l.trim() && !l.trim().startsWith('#'));
 }
 
 // True iff annotated tag `tag` carries a valid signature from a key in
 // trusted-signers. gitQuiet returns null on non-zero exit (bad/missing sig or
 // untrusted signer), so a non-null result means the signature verified.
-function verifyTag(tag) {
+export function verifyTag(tag, { signers = TRUSTED_SIGNERS, cwd = ROOT } = {}) {
   // Forward slashes: git config VALUES treat backslashes as escapes, so a Windows
   // path (C:\...\trusted-signers) must be normalized or the file is not found.
-  const signers = TRUSTED_SIGNERS.replace(/\\/g, '/');
-  return gitQuiet('-c', `gpg.ssh.allowedSignersFile=${signers}`, 'verify-tag', tag) !== null;
+  const file = signers.replace(/\\/g, '/');
+  return gitQuietIn(cwd, '-c', `gpg.ssh.allowedSignersFile=${file}`, 'verify-tag', tag) !== null;
 }
 
 // Fetch tags (anonymous, with the tokenless self-heal), then return the highest
@@ -771,14 +784,25 @@ function dismiss() {
 
 // ── MAIN ────────────────────────────────────────────────────────
 
-const cmd = process.argv[2] || 'check';
+// Only run the CLI when invoked as a script. Without this guard, importing the
+// module to test the signature gate would fire a live `check()` (network, and a
+// write to .update-dismissed on some paths). The guard is load-bearing in the
+// other direction too: if it ever stops matching, `node update-system.mjs check`
+// silently does nothing and updates quietly stop being offered, with no error to
+// notice. tests/update-signing.test.mjs spawns the real CLI to prove it still runs.
+const invokedDirectly = process.argv[1]
+  && import.meta.url === pathToFileURL(process.argv[1]).href;
 
-switch (cmd) {
-  case 'check': await check(); break;
-  case 'apply': await apply(); break;
-  case 'rollback': rollback(); break;
-  case 'dismiss': dismiss(); break;
-  default:
-    console.log('Usage: node update-system.mjs [check|apply|rollback|dismiss]');
-    process.exit(1);
+if (invokedDirectly) {
+  const cmd = process.argv[2] || 'check';
+
+  switch (cmd) {
+    case 'check': await check(); break;
+    case 'apply': await apply(); break;
+    case 'rollback': rollback(); break;
+    case 'dismiss': dismiss(); break;
+    default:
+      console.log('Usage: node update-system.mjs [check|apply|rollback|dismiss]');
+      process.exit(1);
+  }
 }
