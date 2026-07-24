@@ -485,6 +485,7 @@ for (const suite of [
   'tests/google-sync.test.mjs',
   'tests/google-draft.test.mjs',
   'tests/gating.test.mjs',
+  'tests/board-theme.test.mjs',
   'tests/v1-loader.test.mjs',
   'tests/weekly-review.test.mjs',
   'tests/weekly-run.test.mjs',

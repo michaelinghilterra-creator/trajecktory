@@ -31,22 +31,37 @@
 const { useState: useStateI, useEffect: useEffectI, useMemo: useMemoI, useRef: useRefI, useCallback: useCallbackI } = React;
 
 // ── The board stylesheet ─────────────────────────────────────────────────────
-// Ported from render-runsheet.mjs. Values are
-// verbatim; only the selectors are namespaced. 17px rows are the floor — the fit
-// preflight tells you to cut cues, it never shrinks the type.
+// Ported from render-runsheet.mjs; only the selectors are namespaced. 17px rows
+// are the floor — the fit preflight tells you to cut cues, it never shrinks the
+// type.
+//
+// THE PALETTE IS NOT ITS OWN. It used to be: this block declared a full second
+// set of colours and switched on prefers-color-scheme, which meant the board
+// ignored all nine dashboard themes and rendered a green board on a cyan app, in
+// the system font while everything around it was Inter. A surface inside the app
+// that does not look like the app reads as a different product.
+//
+// So the board keeps its own VOCABULARY (--ink, --muted, --line, --hero,
+// --danger, --tint, --hi) because those names carry meaning the dashboard's do
+// not, but every one of them is now an alias onto a dashboard token. Nothing here
+// invents a colour, and --accent, --bg and --panel are deliberately NOT
+// redeclared so they inherit whatever theme is live. The standalone board
+// (render-runsheet.mjs) writes the same vocabulary against the same tokens, with
+// a copy inlined because it cannot link a stylesheet.
 const BOARD_CSS = `
 .ib{
   /* Camera calibration. Bigger --box-top = answer box sits lower. */
   --box-top: 34vh;
   --camera-gap: 80px;
-  --bg:#f4f5f7; --panel:#fff; --ink:#16181d; --muted:#6b7280; --line:#e0e2e7;
-  --accent:#0a7d46; --hero:#8a4b00; --danger:#b0182b; --tint:#eef7f2; --hi:#fff6e0;
+  --ink:var(--text); --muted:var(--text-dim); --line:var(--border);
+  --hero:var(--orange); --danger:var(--red); --tint:var(--accent-bg);
+  /* Two declarations on purpose: a browser without color-mix keeps the first, so
+     the active row loses its warm wash but never its background. Its orange
+     outline carries the signal either way. */
+  --hi:var(--panel-2);
+  --hi:color-mix(in srgb, var(--orange) 16%, transparent);
   background:var(--bg); color:var(--ink); border-radius:10px; padding:16px;
-  font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; line-height:1.4;
-}
-@media (prefers-color-scheme: dark){
-  .ib{ --bg:#12141a; --panel:#1b1e26; --ink:#e8eaee; --muted:#9aa3b2; --line:#2c313c;
-       --accent:#4ade9a; --hero:#f0b866; --danger:#ff7b8a; --tint:#16241d; --hi:#2a2417; }
+  font-family:var(--sans); line-height:1.4;
 }
 .ib *{box-sizing:border-box;}
 .ib .bhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
@@ -106,7 +121,14 @@ const BOARD_CSS = `
 .ib .cue{flex:1 1 52%;color:var(--muted);}
 .ib .to{flex:1 1 48%;font-weight:700;}
 .ib .arw{color:var(--accent);font-weight:800;}
-.ib .panel.hero{border-color:var(--hero);}
+/* Hero is marked by WEIGHT as well as hue, deliberately. --hero is the theme's
+   orange, and on the two warm themes the accent is itself an amber, so the hue
+   alone separates hero from a normal panel by almost nothing (measured: a colour
+   distance of ~14 on one of them, against ~250 on the cool themes). A heavier
+   border survives that, and no per-theme colour has to be invented. Reaching for
+   the theme's red instead would only trade the collision for a worse one: red is
+   --danger here, and hero means say this while danger means do not. */
+.ib .panel.hero{border-color:var(--hero);border-width:2px;}
 .ib .panel.hero h2{color:var(--hero);}
 .ib .panel.panic{border-color:var(--accent);border-width:2px;background:var(--tint);}
 .ib .panel.rules h2{color:var(--danger);}
@@ -117,11 +139,10 @@ const BOARD_CSS = `
 .ib .panel.rules .norow.derived::before{content:"⚠ ";}
 
 /* ===== present mode: over ALL app chrome ===== */
-.ib-present{position:fixed;inset:0;z-index:1000;overflow:auto;background:#f4f5f7;}
-@media (prefers-color-scheme: dark){ .ib-present{background:#12141a;} }
+.ib-present{position:fixed;inset:0;z-index:1000;overflow:auto;background:var(--bg);}
 .ib-present .ib{border-radius:0;min-height:100%;}
 .ib-exit{position:fixed;top:8px;right:12px;z-index:1060;font-size:11px;opacity:.25;
-     background:none;border:none;color:#888;cursor:pointer;font-family:inherit;}
+     background:none;border:none;color:var(--text-mute);cursor:pointer;font-family:inherit;}
 .ib-exit:hover{opacity:1;}
 `;
 
