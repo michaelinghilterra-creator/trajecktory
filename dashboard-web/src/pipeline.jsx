@@ -1385,7 +1385,12 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                   <div className="rp-snap-value" style={{ color: scoreColor(app.score) }}>
                     {fmtScore(app.score)}<span style={{ color: 'var(--text-mute)', fontSize: 11, marginLeft: 3 }}>{app.score != null ? '/5' : ''}</span>
                   </div>
-                  <div className="rp-snap-sub">{scoreBucket(app.score) === 'na' ? 'unscored' : scoreBucket(app.score) + ' match'}</div>
+                  <div className="rp-snap-sub">
+                    {scoreBucket(app.score) === 'na' ? 'unscored' : scoreBucket(app.score) + ' match'}
+                    {cs && (cs.scoreSource === 'derived'
+                      ? <span title="Computed from the dimensions below times your saved weights, minus the red-flag penalty." style={{ marginLeft: 6, padding: '0 5px', borderRadius: 4, background: 'var(--accent-bg)', color: 'var(--accent)', fontSize: 10, fontWeight: 600 }}>derived</span>
+                      : <span title="Authored under the older rubric. Kept as-is and not recomputed, so it is not directly comparable to a derived score." style={{ marginLeft: 6, padding: '0 5px', borderRadius: 4, background: 'var(--panel)', color: 'var(--text-mute)', fontSize: 10, fontWeight: 600, border: '1px solid var(--border)' }}>legacy</span>)}
+                  </div>
                 </div>
                 <div className="rp-snap">
                   <div className="rp-snap-label">Comp</div>
@@ -1410,30 +1415,41 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
 
               {globalScore.length > 0 && (
                 <div className="rp-section">
-                  {/* Total removed. This one divided by ALL maxes while the
-                      drawer divided by positive maxes only, so the same report
-                      read 14/25 here and 14/20 there, against a headline of
-                      3.0/5. Three numbers, no two agreeing, on the one figure
-                      the product asks the user to trust. */}
+                  {/* For a DERIVED report the headline is the weighted sum of these
+                      dimensions minus the red-flag penalty, so the formula is shown.
+                      For a LEGACY report the headline was authored separately, so the
+                      bars are the reasoning, not the maths. */}
                   <div className="rp-section-head">
-                    <span>Global Score Breakdown</span>
+                    <span>Score Breakdown</span>
                     <button className="btn ghost sm" onClick={() => setExplainScore(v => !v)}>How is this scored?</button>
                   </div>
                   <div className="rp-bars">
-                    {globalScore.map(d => {
+                    {globalScore.map((d, i) => {
                       const neg = d.val < 0;
                       const pct = neg ? 18 : (d.val / d.max) * 100;
                       const col = neg ? 'var(--red)' : pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--yellow)' : 'var(--orange)';
                       return (
-                        <div key={d.dim} className="rp-bar-row">
-                          <span className="rp-bar-label">{d.dim}{d.note && <span style={{ color: 'var(--text-mute)', fontSize: 10 }}> · {d.note}</span>}</span>
+                        <div key={d.key || d.dim || i} className="rp-bar-row">
+                          <span className="rp-bar-label" title={d.evidence || undefined} style={d.evidence ? { cursor: 'help' } : undefined}>{d.dim}{d.note && <span style={{ color: 'var(--text-mute)', fontSize: 10 }}> · {d.note}</span>}</span>
                           <div className="rp-bar-track"><div className="rp-bar-fill" style={{ width: `${pct}%`, background: col }} /></div>
                           <span className="rp-bar-val" style={{ color: neg ? 'var(--red)' : 'var(--text)' }}>{neg ? d.val : `${d.val}/${d.max}`}</span>
                         </div>
                       );
                     })}
                   </div>
-                  {window.ScoreExplainer && <window.ScoreExplainer open={explainScore} onClose={() => setExplainScore(false)} />}
+                  {cs && cs.scoreSource === 'derived' && cs.scoreBasis ? (
+                    <div className="mono" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.7, color: 'var(--text-dim)' }}>
+                      {fmtScore(app.score)} = {(cs.scoreBasis.contributions || []).map(c => {
+                        const label = (globalScore.find(d => d.key === c.key) || {}).dim || c.key;
+                        return `${label} ${c.val}×${c.weight}`;
+                      }).join(' + ')}{cs.scoreBasis.penalty ? ` − ${cs.scoreBasis.penalty} red flags` : ''}
+                    </div>
+                  ) : (
+                    <div className="dim" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>
+                      Legacy score, authored under the older rubric. The bars are the reasoning, not the maths, so they will not add up to it.
+                    </div>
+                  )}
+                  {window.ScoreExplainer && <window.ScoreExplainer open={explainScore} onClose={() => setExplainScore(false)} scoreSource={cs && cs.scoreSource} />}
                 </div>
               )}
 

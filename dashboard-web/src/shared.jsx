@@ -147,8 +147,9 @@ window.ApplyArtifacts = function ApplyArtifacts({ app }) {
 // was 3.0/5. Three numbers, no two agreeing, on the one figure the product asks
 // to be trusted. Those totals are gone; this panel replaces them by saying what
 // the bars actually are.
-window.ScoreExplainer = function ScoreExplainer({ open, onClose }) {
+window.ScoreExplainer = function ScoreExplainer({ open, onClose, scoreSource }) {
   if (!open) return null;
+  const derived = scoreSource === 'derived';
   const Dim = ({ name, children }) => (
     <div style={{ marginBottom: 7 }}>
       <b style={{ color: 'var(--text)', fontWeight: 500 }}>{name}</b>
@@ -168,14 +169,21 @@ window.ScoreExplainer = function ScoreExplainer({ open, onClose }) {
         <button className="btn ghost sm" onClick={onClose}>Close</button>
       </div>
 
-      <p style={{ margin: '0 0 10px', color: 'var(--text-dim)' }}>
-        It is a judgment, not a sum. trajecktory reads the whole job posting next to your resume and the priorities you saved, then rates the role out of 5. It weighs five things:
-      </p>
+      {derived ? (
+        <p style={{ margin: '0 0 10px', color: 'var(--text-dim)' }}>
+          The number is computed, not guessed. trajecktory rates the role out of 5 on each dimension below, with the evidence for each rating, then takes the weighted average and subtracts for red flags. You own the weights in your profile, so the score reflects <i>your</i> priorities. It weighs:
+        </p>
+      ) : (
+        <p style={{ margin: '0 0 10px', color: 'var(--text-dim)' }}>
+          This is a <b style={{ color: 'var(--text)', fontWeight: 500 }}>legacy score</b>, rated by judgment under an older rubric before scores were computed. It is kept as it was, not recomputed. Newer roles are scored by the weighted method below. It weighs:
+        </p>
+      )}
 
       <Dim name="Resume match.">How closely your real experience lines up with what they are asking for.</Dim>
-      <Dim name="Target fit.">Whether this is the kind of role you said you want, at the right level.</Dim>
+      <Dim name="Target fit.">Whether this is the kind of role you said you want.</Dim>
+      <Dim name="Level.">Whether the seniority matches: title versus real scope.</Dim>
       <Dim name="Pay.">How the money compares to the market for this job.</Dim>
-      <Dim name="Company signals.">Culture, stability, growth, and how they treat remote work.</Dim>
+      <Dim name="Location.">Whether the location, remote policy, and logistics work for you.</Dim>
       <Dim name="Red flags.">Anything that counts against the role. This is the only one that subtracts.</Dim>
 
       <p style={{ margin: '10px 0 6px', color: 'var(--text)' }}>What the number means</p>
@@ -191,7 +199,9 @@ window.ScoreExplainer = function ScoreExplainer({ open, onClose }) {
         Most jobs are not a 4. Roughly one in five is. If everything scored well the score would not be telling you anything.
       </p>
       <p style={{ margin: '8px 0 0', color: 'var(--text-mute)' }}>
-        The bars above are the reasoning behind the number, not the maths that produced it, so they will not add up to it.
+        {derived
+          ? 'The bars above are those dimensions. With your weights they add up to the number, minus the red-flag penalty.'
+          : 'The bars above are the reasoning behind the number, not the maths that produced it, so they will not add up to it.'}
       </p>
     </div>
   );
