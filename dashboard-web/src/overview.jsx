@@ -77,11 +77,20 @@ const DAILY_QUOTES = [
 // harmless: dividing all screens by all applications yields a flattering ~4% that
 // hides a ~2.5% cold rate sitting slightly BELOW the 3.6-4.7% market median.
 //
-// Warm = the contact existed before the application: an inbound approach or a
-// referral. Everything else is cold. Deliberately strict, because a row is only
-// warm if it was TAGGED warm, and an untagged row must read as "unknown" rather
-// than be silently counted as cold.
-const isWarmApp = (a) => a && (a.inbound === true || a.source === 'Referral');
+// Warm = contact with a PERSON existed before or alongside the application, in
+// either direction. Three sub-types, and the split between them is the most
+// strategically loaded distinction in the tracker:
+//   inbound   — they found him. Real, but not scalable: you cannot make it happen.
+//   outbound  — he reached them. The ONLY scalable warm channel, and the one the
+//               40-touch test is measuring.
+//   referral  — introduced. Highest yield in the market data, currently zero rows.
+// Everything else is cold. Deliberately strict: a row is warm only if TAGGED warm,
+// so an untagged row is under-counted rather than silently counted as cold.
+const isWarmApp = (a) => a && (a.inbound === true || a.outbound === true || a.source === 'Referral');
+const warmKind = (a) => !a ? null
+  : a.source === 'Referral' ? 'referral'
+  : a.outbound === true ? 'outbound'
+  : a.inbound === true ? 'inbound' : null;
 
 // Cold apply to screen, median, from Ashby's ~100M-application dataset (carried in
 // the relaunch plan). Used as the ONLY benchmark on this page: it is sourced, and
@@ -374,6 +383,13 @@ const toggleRow = (id) => setSelected(s => {
           // difference between a split funnel and a fabricated one.
           const warmTagged = apps.filter(isWarmApp).length;
           const undercounted = warmTagged < 4;
+          // Break warm into its sub-types for the tooltip. Inbound and outbound
+          // are both "warm" for the rate, but only outbound answers the question
+          // the next three weeks are asking.
+          const kinds = sent.filter(isWarmApp).reduce((m, a) => {
+            const k = warmKind(a); if (k) m[k] = (m[k] || 0) + 1; return m;
+          }, {});
+          const kindLabel = Object.entries(kinds).map(([k, n]) => `${n} ${k}`).join(', ') || 'none tagged';
           return [
             <div className="kpi" key="cold" title="Applications with no prior contact. Benchmark is Ashby's cold-apply-to-screen median across ~100M applications.">
               <span className="kpi-label">Cold reply rate</span>
@@ -382,13 +398,13 @@ const toggleRow = (id) => setSelected(s => {
               </span>
               <span className="kpi-delta">{cold.k} of {cold.n} · {COLD_APPLY_BENCHMARK.label}</span>
             </div>,
-            <div className="kpi" key="warm" title="Inbound approaches and referrals: the contact existed before the application.">
+            <div className="kpi" key="warm" title={`Contact with a person existed before the application, either direction. Tagged: ${kindLabel}. Only the outbound share is scalable.`}>
               <span className="kpi-label">Warm reply rate</span>
               <span className="kpi-value" style={{ color: undercounted ? 'var(--text-mute)' : 'var(--green)' }}>
                 {warm.n ? `${warm.pct}%` : '—'}
               </span>
-              <span className="kpi-delta" style={undercounted ? { color: 'var(--orange)' } : undefined}>
-                {warm.k} of {warm.n}{undercounted ? ' · under-tagged' : ''}
+              <span className="kpi-delta">
+                {warm.k} of {warm.n} · {kindLabel}
               </span>
             </div>,
             <div className="kpi" key="stale" title="Postings that closed before you could act. Evaluation effort spent on roles that expired.">

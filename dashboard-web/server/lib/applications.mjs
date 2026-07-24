@@ -4,7 +4,7 @@ import { APPS_MD, ROOT_DIR, STATUS_EVENTS_PATH } from '../config.mjs';
 import { parseTrackerLine, formatTrackerLine } from '../../../lib/tracker.mjs';
 import { hasV1Frontmatter, parseV1, v1Header } from '../v1-loader.mjs';
 import { logStatusEvent, parseStatusEvents } from './sidecars.mjs';
-import { FUNNEL_ORDER, makeFurthestIdx, isInbound } from './statuses.mjs';
+import { FUNNEL_ORDER, makeFurthestIdx, isInbound, isOutbound } from './statuses.mjs';
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
@@ -295,6 +295,9 @@ function parseApplicationsMd() {
     // Recruiter-inbound: the approach came before the application, so this row's
     // reply is not evidence that the user's outbound applications are working.
     r.inbound = isInbound(r.notes);
+    // The other half of warm: the user reached a person first. Kept separate from
+    // inbound because only this half is scalable to a weekly floor.
+    r.outbound = isOutbound(r.notes);
   }
 
   _appsCache = { mtimeMs, evMtimeMs, rows };

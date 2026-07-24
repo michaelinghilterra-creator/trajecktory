@@ -15,7 +15,7 @@
  *
  * Run: node tests/funnel-entry.test.mjs   (exit 0 = pass, 1 = fail)
  */
-import { enteredFunnel, FUNNEL_ORDER, appReached } from '../dashboard-web/server/lib/statuses.mjs';
+import { enteredFunnel, FUNNEL_ORDER, appReached, isInbound, isOutbound } from '../dashboard-web/server/lib/statuses.mjs';
 
 let passed = 0, failed = 0;
 const check = (c, m) => { if (c) { console.log(`  ✅ ${m}`); passed++; } else { console.log(`  ❌ ${m}`); failed++; } };
@@ -62,6 +62,22 @@ check(oldRule < entered, `asking appReached(a,'Evaluated') still undercounts (${
 // ── guards on the shape of the ladder itself ─────────────────────────────────
 check(FUNNEL_ORDER[0] === 'Evaluated', 'Evaluated is the first rung; enteredFunnel is written for the first rung only');
 check(enteredFunnel(undefined) === true || enteredFunnel(undefined) === false, 'enteredFunnel does not throw on a missing row');
+
+// ── Warm channel tags: inbound vs outbound must not collapse ─────────────────
+// Both are "warm", but only outbound is scalable: you cannot make people find you
+// on demand, and the relaunch plan rests the scalable half of its case on a single
+// outbound data point. Collapsing the two would erase the exact signal the 40-touch
+// test exists to grow, which is why they are separate tags rather than one "warm".
+check(isInbound('[inbound] recruiter reached out') === true, 'an [inbound] tag is detected');
+check(isOutbound('[outbound] I messaged the hiring manager') === true, 'an [outbound] tag is detected');
+check(isInbound('[outbound] note') === false, 'an outbound row is not read as inbound');
+check(isOutbound('[inbound] note') === false, 'an inbound row is not read as outbound');
+// Prose must never be mistaken for a tag. This row exists in the real tracker:
+// its note says "Recruiter-inbound" in prose and it went untagged for months, so a
+// substring match would have silently classified it while the split stayed wrong.
+check(isInbound('[self-sourced] Recruiter-inbound — exempt from auto-discard') === false,
+  'the word "inbound" in prose is not a tag (only the bracketed form counts)');
+check(isOutbound('') === false && isInbound(undefined) === false, 'empty and undefined notes are not warm');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

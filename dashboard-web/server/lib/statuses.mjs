@@ -111,6 +111,22 @@ export function isInbound(notes) {
   return /\[inbound\]/i.test(notes || '');
 }
 
+// The user reached a PERSON before or alongside the application, rather than
+// posting into a portal and waiting. The mirror of isInbound: same warm channel,
+// opposite direction.
+//
+// This distinction is the most load-bearing one in the tracker, because the two
+// halves of "warm" have completely different strategic value. Inbound cannot be
+// manufactured: you cannot make people find you on demand. Outbound can be run to
+// a weekly floor, which is exactly what the 40-touch test measures. The relaunch
+// plan rests the scalable half of its case on a single outbound data point, so
+// pooling it with inbound would erase the only evidence the test is designed to
+// grow. A cold portal application is NOT outbound in this sense and stays
+// untagged: the tag marks contact with a person, not who initiated the paperwork.
+export function isOutbound(notes) {
+  return /\[outbound\]/i.test(notes || '');
+}
+
 // Furthest funnel rung an app EVER reached: the max of its live status, any
 // dated status-event, and the [reached:] notes tag. Terminal rows (Rejected /
 // No Response) imply they at least Applied. Credits history rather than only
