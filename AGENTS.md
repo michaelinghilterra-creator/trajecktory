@@ -455,6 +455,9 @@ node verify-actionable.mjs --apply
 
 # 6. Health check the dashboard data — MANDATORY, read output before declaring done
 node verify-reports.mjs
+
+# 7. Scoring drift guard: a derived report's headline must equal its tracker Score
+node verify-score-drift.mjs
 ```
 
 **RULE: `node verify-reports.mjs` MUST show ✅ before the batch is declared complete.** If it shows ⚠️ or reports with drift, the drawer will be broken for those entries — fix before moving on. Root cause is always format drift: reports written with `## Block A —` or `## A.` instead of the required `## A)` format.

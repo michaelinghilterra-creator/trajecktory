@@ -450,6 +450,7 @@ for (const suite of [
   'tests/identity-single-source.test.mjs',
   'tests/score.test.mjs',
   'tests/compute-scores.test.mjs',
+  'tests/verify-score-drift.test.mjs',
   'tests/no-real-postings.test.mjs',
   'tests/outcome.test.mjs',
   'tests/tracker.test.mjs',
