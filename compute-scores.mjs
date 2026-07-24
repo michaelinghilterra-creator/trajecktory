@@ -58,7 +58,10 @@ export function deriveReportScore(md, { weights, redFlagPenalty } = {}) {
     contributions: res.contributions,  // { key, val, weight, points } — points reconstruct the average
     penalty: res.penalty,
     weightedAverage,
-    ...(res.ceiling !== null ? { ceiling: res.ceiling, ceilingApplied: res.ceilingApplied } : {}),
+    // `uncapped` rides along only when a ceiling exists, because that is the only
+    // time it differs from the headline. Without it the drawer prints a formula
+    // summing to one number under a headline showing another.
+    ...(res.ceiling !== null ? { ceiling: res.ceiling, ceilingApplied: res.ceilingApplied, uncapped: res.uncapped } : {}),
   };
   // Preserve key order: keep score in place, append the two new keys. The body is
   // re-emitted byte-for-byte; only the frontmatter JSON is rewritten.

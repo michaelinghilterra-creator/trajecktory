@@ -1439,14 +1439,34 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                       );
                     })}
                   </div>
-                  {cs && cs.scoreSource === 'derived' && cs.scoreBasis ? (
-                    <div className="mono" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.7, color: 'var(--text-dim)' }}>
-                      {fmtScore(app.score)} = {(cs.scoreBasis.contributions || []).map(c => {
-                        const label = (globalScore.find(d => d.key === c.key) || {}).dim || c.key;
-                        return `${label} ${c.val}×${c.weight}`;
-                      }).join(' + ')}{cs.scoreBasis.penalty ? ` − ${cs.scoreBasis.penalty} red flags` : ''}
-                    </div>
-                  ) : (
+                  {cs && cs.scoreSource === 'derived' && cs.scoreBasis ? (() => {
+                    const b = cs.scoreBasis;
+                    // When a hard blocker caps the headline, the arithmetic below does
+                    // NOT add up to it, and printing the capped number on the left of an
+                    // equals sign is simply false. Show what the dimensions came to, then
+                    // show the cap as the separate step it is. `uncapped` is written by
+                    // compute-scores; older reports predate it, so fall back to the
+                    // subtraction (rounded intermediates, hence only a fallback).
+                    const capped = !!b.ceilingApplied;
+                    const before = b.uncapped != null ? b.uncapped
+                      : Math.round(((b.weightedAverage || 0) - (b.penalty || 0)) * 10) / 10;
+                    return (
+                      <div style={{ marginTop: 8 }}>
+                        <div className="mono" style={{ fontSize: 11, lineHeight: 1.7, color: 'var(--text-dim)' }}>
+                          {fmtScore(capped ? before : app.score)} = {(b.contributions || []).map(c => {
+                            const label = (globalScore.find(d => d.key === c.key) || {}).dim || c.key;
+                            return `${label} ${c.val}×${c.weight}`;
+                          }).join(' + ')}{b.penalty ? ` − ${b.penalty} red flags` : ''}
+                        </div>
+                        {capped && (
+                          <div style={{ fontSize: 11, lineHeight: 1.7, marginTop: 4, color: 'var(--orange)' }}>
+                            <span className="mono">Capped at {fmtScore(b.ceiling)}</span>
+                            {' '}by a hard blocker, so the headline is {fmtScore(app.score)} rather than {fmtScore(before)}. A ceiling is applied when something disqualifying has to keep the score low however well the rest fits, and a strong fit must not be able to outvote it.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })() : (
                     <div className="dim" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>
                       Legacy score, authored under the older rubric. The bars are the reasoning, not the maths, so they will not add up to it.
                     </div>

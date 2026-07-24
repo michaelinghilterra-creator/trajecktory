@@ -184,7 +184,12 @@ window.ScoreExplainer = function ScoreExplainer({ open, onClose, scoreSource }) 
       <Dim name="Resume match.">How closely your real experience lines up with what they are asking for.</Dim>
       <Dim name="Target fit.">Whether this is the kind of role you said you want.</Dim>
       <Dim name="Level.">Whether the seniority matches: title versus real scope.</Dim>
-      <Dim name="Pay.">How the money compares to the market for this job.</Dim>
+      {/* Pay is listed here because it IS rated and shown, but the old wording said
+          it was compared to the market and implied it counted. Neither is true: it is
+          rated against the band the user set, and it carries no weight. Leaving that
+          uncorrected means the bar shows a 5 while adding nothing, with the explainer
+          insisting it was weighed. */}
+      <Dim name="Pay.">Rated against the band you set, not the market. Shown but not counted: missing a target you could still live with should not lower a number that decides whether you apply. Pay below your hard floor caps the score instead.</Dim>
       <Dim name="Location.">Whether the location, remote policy, and logistics work for you.</Dim>
       <Dim name="Red flags.">Anything that counts against the role. This is the only one that subtracts.</Dim>
 
@@ -202,7 +207,7 @@ window.ScoreExplainer = function ScoreExplainer({ open, onClose, scoreSource }) 
       </p>
       <p style={{ margin: '8px 0 0', color: 'var(--text-mute)' }}>
         {derived
-          ? 'The bars above are those dimensions. With your weights they add up to the number, minus the red-flag penalty.'
+          ? 'The bars above are those dimensions. With your weights they add up to the number, minus the red-flag penalty. Pay is shown but not counted, and a cap overrides the total when one applies.'
           : 'The bars above are the reasoning behind the number, not the maths that produced it, so they will not add up to it.'}
       </p>
     </div>

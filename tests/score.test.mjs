@@ -94,6 +94,15 @@ const noCap = deriveScore(allClean, { weights: BALANCED, ceiling: 5 });
 check(noCap.score === 4.3 && noCap.ceilingApplied === false, 'a ceiling above the average does not change the score');
 check(deriveScore(allClean, { weights: BALANCED }).ceiling === null, 'no ceiling by default');
 
+// The score BEFORE the cap has to come back too. A drawer that prints the
+// arithmetic under a capped headline otherwise shows a sum that does not equal its
+// own total, with nothing saying why, which is the exact dishonesty this module
+// exists to remove. Reconstructing it by subtracting rounded intermediates is not
+// good enough, so it is returned rather than inferred.
+check(capped.uncapped === 4.3, `the pre-cap score is returned alongside the capped one (got ${capped.uncapped})`);
+check(noCap.uncapped === noCap.score, 'with no cap in play, uncapped equals the headline');
+check(deriveScore(allClean, { weights: BALANCED }).uncapped === 4.3, 'uncapped is present even when no ceiling was passed');
+
 // ── POLICY: comp is rated but not scored (2026-07-24) ────────────────────────
 // An aspiration informs, a floor gates. A pay target is a number the user can miss
 // and still want the job, so it must not lower a score that decides whether they
