@@ -172,7 +172,13 @@ const contrast = (a, b) => {
   return (Math.max(A, B) + 0.05) / (Math.min(A, B) + 0.05);
 };
 const SURFACE_TOKENS = ['bg', 'bg-2', 'panel', 'panel-2', 'panel-3'];
-const TEXT_TOKENS = ['text', 'text-dim', 'text-mute'];
+// Status colours belong here too, because they are used as TEXT, not only as
+// chart marks. --green paints "37% adv" and "✓ Signed in to Claude"; --orange
+// paints "below floor" and "under-tagged". A mark needs 3:1, but the moment the
+// same token renders an 11px label it needs 4.5:1, and both failed on the light
+// palettes' white panels until this pass. Checking only text/text-dim/text-mute
+// let that through twice.
+const TEXT_TOKENS = ['text', 'text-dim', 'text-mute', 'green', 'orange'];
 const AA = 4.5;
 // The three base palettes plus the six designer ones. "dark" lives in :root.
 const CONTRAST_THEMES = ['dark', 'light', 'dim', ...DESIGNER];

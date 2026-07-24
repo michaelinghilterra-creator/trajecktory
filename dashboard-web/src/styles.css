@@ -57,7 +57,7 @@
   --red:       #dc2626;
   --blue:      #2563eb;
   --cyan:      #0891b2;
-  --orange:    #d97706;
+  --orange:    #9d5604;
   --grid:      rgba(0,0,0,0.05);
   --shadow:    0 1px 0 rgba(255,255,255,0.6) inset, 0 8px 24px -16px rgba(0,0,0,0.18);
   --panel-3:   #f0f0ec;
@@ -160,7 +160,7 @@
      clears 4.5:1 on this palette's darkest surface. accent-rgb moves with it or the
      funnel ramp, which is built from accent-rgb, would drift from the accent. */
   --accent:#a14a08; --accent-2:#d97706; --accent-bg:rgba(161,74,8,0.10); --accent-rgb:161,74,8;
-  --green:#456e0d; --yellow:#a16207; --red:#b91c1c; --blue:#1d4ed8; --cyan:#0891b2; --orange:#d97706;
+  --green:#456e0d; --yellow:#a16207; --red:#b91c1c; --blue:#1d4ed8; --cyan:#0891b2; --orange:#965204;
   --grid:rgba(0,0,0,0.05);
   --shadow:0 1px 0 rgba(255,255,255,0.6) inset, 0 8px 24px -16px rgba(0,0,0,0.18);
   --pink:#db2777; --pink-rgb:219,39,119;
@@ -172,7 +172,7 @@
   --border:#d7dfe8; --border-2:#c1ccd9;
   --text:#1e293b; --text-dim:#59697c; --text-mute:#58697c;
   --accent:#4f46e5; --accent-2:#6366f1; --accent-bg:rgba(79,70,229,0.09); --accent-rgb:79,70,229;
-  --green:#047552; --yellow:#ca8a04; --red:#dc2626; --blue:#2563eb; --cyan:#0891b2; --orange:#d97706;
+  --green:#047552; --yellow:#ca8a04; --red:#dc2626; --blue:#2563eb; --cyan:#0891b2; --orange:#9c5604;
   --grid:rgba(0,0,0,0.05);
   --shadow:0 1px 0 rgba(255,255,255,0.6) inset, 0 8px 24px -16px rgba(0,0,0,0.18);
   --pink:#db2777; --pink-rgb:219,39,119;
