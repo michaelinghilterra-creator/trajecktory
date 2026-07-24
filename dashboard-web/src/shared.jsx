@@ -900,9 +900,8 @@ window.SyncIndicator = function SyncIndicator({ lastSync }) {
 };
 
 // ---------- Topbar ----------
-window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, density, setDensity, theme, setTheme, openCmd, openTweaks, lastSync }) {
-  const THEME_ORDER = ["dark", "dim", "light"];
-  const nextTheme = THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length];
+window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, theme, setTheme, themeOptions, openCmd, lastSync }) {
+  const opts = themeOptions && themeOptions.length ? themeOptions : [{ value: theme, label: theme }];
   return (
     <div className="topbar">
       <div className="search">
@@ -928,33 +927,15 @@ window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, density,
           <window.SyncIndicator lastSync={lastSync} />
         </div>
 
-        <button
-          className="icon-btn"
-          title={density === "compact" ? "Comfortable density" : "Compact density"}
-          onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}
+        <select
+          className="theme-select"
+          value={theme}
+          onChange={e => setTheme(e.target.value)}
+          title="Color theme"
+          aria-label="Color theme"
         >
-          {density === "compact"
-            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 5h18M3 12h18M3 19h18"/></svg>
-          }
-        </button>
-
-        <button
-          className="icon-btn"
-          title={`Switch to ${nextTheme} theme`}
-          onClick={() => setTheme(nextTheme)}
-        >
-          {theme === "dark"
-            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-            : theme === "dim"
-            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>
-            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-          }
-        </button>
-
-        <button className="icon-btn" title="Tweaks" onClick={openTweaks}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </button>
+          {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
       </div>
     </div>
   );

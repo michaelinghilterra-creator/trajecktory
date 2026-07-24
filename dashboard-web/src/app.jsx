@@ -13,7 +13,7 @@ const { useState, useEffect, useMemo, useCallback, useRef } = React;
 // this exact block once shipped a real user's floor and OTE target.
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "accent": "#a78bfa",
-  "density": "comfortable",
+  "density": "compact",
   "theme": "dark",
   "defaultPipelineView": "table",
   "targetLow": 100,
@@ -21,18 +21,16 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "walkAway": 90
 }/*EDITMODE-END*/;
 
-// Theme cycle order by luminance: dark -> dim -> light -> dark. This is the
-// QUICK toggle (topbar sun/moon + ⌘K). The six designer palettes below are not
-// in the cycle. They carry their own baked-in accent and are picked
-// deliberately from the Tweaks panel. From a designer theme the quick toggle
-// falls back to dark (indexOf === -1 -> 0), which reads as "return to base".
+// Theme cycle order by luminance: dark -> dim -> light -> dark. Used by the ⌘K
+// command palette's quick theme toggle. The six designer palettes are not in
+// this cycle; they are picked from the topbar Theme dropdown. From a designer
+// theme the cycle falls back to dark (indexOf === -1 -> 0).
 const THEME_ORDER = ["dark", "dim", "light"];
 const nextThemeAfter = (t) => THEME_ORDER[(THEME_ORDER.indexOf(t) + 1) % THEME_ORDER.length];
 
-// Full theme roster for the Tweaks picker: base three, then the six drop-in
-// designer palettes. Every value MUST have a matching [data-theme="…"] block in
-// styles.css (guarded by tests/themes.test.mjs). Past 3 options TweakRadio
-// renders this as a dropdown automatically.
+// Full theme roster for the topbar Theme dropdown: base three, then the six
+// drop-in designer palettes. Every value MUST have a matching [data-theme="…"]
+// block in styles.css (guarded by tests/themes.test.mjs).
 const THEME_OPTIONS = [
   { value: "dark",    label: "Violet Terminal" },
   { value: "dim",     label: "Dim Slate" },
@@ -46,8 +44,8 @@ const THEME_OPTIONS = [
 ];
 
 // The designer palettes own their accent. For them we clear the inline
-// --accent/--accent-bg override so each theme's CSS accent wins; the accent
-// picker only drives the base three (dark/dim/light).
+// --accent/--accent-bg override so each theme's CSS accent wins; the base three
+// (dark/dim/light) keep the default accent applied inline.
 const DESIGNER_THEMES = new Set(["amber", "emerald", "cyan", "rose", "paper", "arctic"]);
 
 function App() {
@@ -77,7 +75,6 @@ function App() {
   const [filters, setFilters] = useState({ statuses: [], archetypes: [], scoreMin: 0 });
   const [cmdOpen, setCmdOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
-  const [tweaksOpen, setTweaksOpen] = useState(false);
 
   const [tweaks, setTweak] = window.useTweaks ? window.useTweaks(TWEAK_DEFAULTS) : [TWEAK_DEFAULTS, () => {}];
   const [followupCount, setFollowupCount] = useState(0);
@@ -454,34 +451,6 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Tweaks panel content
-  const tweaksUI = window.TweaksPanel && tweaksOpen ? (
-    <window.TweaksPanel onClose={() => setTweaksOpen(false)} title="Tweaks">
-      <window.TweakSection title="Appearance">
-        <window.TweakRadio label="Theme" value={tweaks.theme} options={THEME_OPTIONS} onChange={v => setTweak("theme", v)} />
-        <window.TweakRadio label="Density" value={tweaks.density} options={["comfortable", "compact"]} onChange={v => setTweak("density", v)} />
-        {DESIGNER_THEMES.has(tweaks.theme) ? (
-          <window.TweakRow label="Accent color" value="set by theme" />
-        ) : (
-          <window.TweakColor
-            label="Accent color"
-            value={tweaks.accent}
-            options={["#a78bfa", "#5b8def", "#22c55e", "#f97316", "#e5e5e5"]}
-            onChange={v => setTweak("accent", v)}
-          />
-        )}
-      </window.TweakSection>
-      <window.TweakSection title="Defaults">
-        <window.TweakRadio
-          label="Default Pipeline view"
-          value={tweaks.defaultPipelineView}
-          options={["overview", "table"]}
-          onChange={v => { setTweak("defaultPipelineView", v); setPipelineView(v); }}
-        />
-      </window.TweakSection>
-    </window.TweaksPanel>
-  ) : null;
-
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', color:'var(--text-muted)', fontFamily:'var(--font-mono)', fontSize:13 }}>
       Loading trajecktory data…
@@ -497,10 +466,9 @@ function App() {
           search={search} setSearch={setSearch}
           searchPlaceholder={searchPlaceholder}
           lastSync={lastSync}
-          density={tweaks.density} setDensity={(d) => setTweak("density", d)}
           theme={tweaks.theme} setTheme={(t) => setTweak("theme", t)}
+          themeOptions={THEME_OPTIONS}
           openCmd={() => setCmdOpen(true)}
-          openTweaks={() => setTweaksOpen(o => !o)}
         />
 
         <div className="content" data-screen-label={`trajecktory · ${tab}`} data-tab={tab}>
@@ -535,7 +503,6 @@ function App() {
       )}
       <window.CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={commands} />
       <window.ToastStack toasts={toasts} />
-      {tweaksUI}
     </div>
   );
 }

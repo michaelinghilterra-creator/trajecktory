@@ -440,6 +440,29 @@ body {
 .icon-btn:hover { color: var(--text); background: var(--panel); border-color: var(--border-2); }
 .icon-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
 
+/* Topbar color-theme dropdown (replaces the old sun/moon quick toggle). Lists
+   every palette in THEME_OPTIONS; native <select> so the OS renders the list. */
+.theme-select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  height: 30px;
+  padding: 0 26px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background-color: var(--panel);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  cursor: pointer;
+  outline: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path fill='%238b8b94' d='M0 0h10L5 6z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  transition: border-color .15s, color .15s;
+}
+.theme-select:hover { color: var(--text); border-color: var(--border-2); }
+.theme-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.theme-select option { background: var(--panel); color: var(--text); }
+
 /* ---- Content area ---- */
 .content {
   flex: 1; overflow: auto; min-height: 0;
