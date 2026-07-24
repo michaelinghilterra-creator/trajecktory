@@ -421,10 +421,20 @@ const toggleRow = (id) => setSelected(s => {
         })()}
       </div>
 
+      {/* ── ACTIONS: what YOU did, and cohorts by send-week ──────────────────
+          The band below still plots tracker entries, which is scanner output: it
+          rises on a day you did nothing because a scheduled scan added rows, and
+          stays flat on a day you sent ten applications by hand. This card counts
+          actions instead. Touches and connects are DECLARED with available:false
+          rather than omitted, because "you sent none" and "nothing logs this yet"
+          are different facts and only one of them is your fault. Both series
+          start filling with the outreach motion. */}
+      <window.ActionsCard />
+
       {/* Activity · last N days — full-width band on top */}
       <div className="card padded-lg" style={{ display: "flex", flexDirection: "column" }}>
         <div className="card-head">
-          <span className="card-title">Activity · last {ACTIVITY_WINDOW} days</span>
+          <span className="card-title">Tracker intake · last {ACTIVITY_WINDOW} days</span>
           <span className="card-meta mono">
             {apps.filter(a => window.daysAgo(a.date) <= ACTIVITY_WINDOW - 1).length} entries &nbsp;·&nbsp;
             Last 7d <span style={{ color: "var(--accent)" }}>{activityInsights.last7}</span>&nbsp;·&nbsp;

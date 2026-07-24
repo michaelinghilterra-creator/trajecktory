@@ -5,6 +5,7 @@ import { evaluateFloors } from '../lib/review-thresholds.mjs';
 import { runWeeklyReview } from '../lib/weekly-run.mjs';
 import { REVIEW_LOG_PATH, BUILD_LOCK_PATH } from '../config.mjs';
 import { logConnect, readConnects } from '../lib/connects.mjs';
+import { actionSeries, applicationCohorts } from '../lib/activity.mjs';
 
 export const router = express.Router();
 
@@ -14,6 +15,29 @@ router.get('/api/metrics/weekly', (req, res) => {
   try {
     const { weekStart, weekEnd, metrics } = collectWeeklyMetrics(new Date());
     res.json({ weekStart, weekEnd, metrics, floors: evaluateFloors(metrics) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/activity/actions — daily counts of things the USER did, not rows the
+// scanner produced. See lib/activity.mjs for why that distinction is the point.
+router.get('/api/activity/actions', (req, res) => {
+  try {
+    const days = Math.min(180, Math.max(7, parseInt(req.query.days, 10) || 60));
+    res.json(actionSeries({ days }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/activity/cohorts — applications grouped by the week they were SENT,
+// with what became of each week. The only view here that can compare one week's
+// approach against another's; everything else is a snapshot.
+router.get('/api/activity/cohorts', (req, res) => {
+  try {
+    const weeks = Math.min(26, Math.max(2, parseInt(req.query.weeks, 10) || 8));
+    res.json(applicationCohorts({ weeks }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
