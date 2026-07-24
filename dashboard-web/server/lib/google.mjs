@@ -451,19 +451,40 @@ function matchByCompanyDomain(fromAddr, apps = []) {
 
 // Tier-3 match: the SENDER told us nothing (an ATS or unfamiliar domain), but the
 // SUBJECT often names the company outright ("Update on your Kestrel Application").
-// Match the subject against each application's DISTINCTIVE company token, reusing
-// _normCompanyToken (which drops legal suffixes and generic words like
-// "Technology"/"Systems"), so only a core like "kestrel" remains and a short or
-// generic name cannot match subject noise. A SUGGESTION for confirmation, never an
-// auto-link, exactly like the domain tier. Biased toward recall (a missed
-// application update costs more than an extra row the user can ignore). Pure.
+// A SUGGESTION for confirmation, never an auto-link, exactly like the domain tier.
+// Biased toward recall (a missed application update costs more than an extra row
+// the user can ignore). Pure.
+//
+// TWO passes, and the order matters.
+//
+// Pass 1 searches the FULL company name. Pass 2 searches the DISTINCTIVE core from
+// _normCompanyToken, which drops legal suffixes and generic words so "Kestrel, Inc."
+// still matches a subject that says only "Kestrel".
+//
+// Only having pass 2 was a silent hole. The core is what the length guard measures,
+// and the guard rejects anything under 4 characters — so a company whose name is
+// generic-word-plus-a-short-word could NEVER be subject-matched, however plainly the
+// subject named it. "PAR Technology" reduced to "par" and "DHI Group" to "dhi", both
+// 3 characters, both skipped, so real interview mail routed through a scheduling tool
+// landed in "unknown" every time. The guard itself is right: searching for "par"
+// alone would hit "department" and "compare". The mistake was searching ONLY for the
+// stripped core, when the full "partechnology" is both present in the subject and far
+// too distinctive to collide with anything.
 function matchBySubject(subject, apps = []) {
   const hay = normalizeCompany(subject); // lowercase, alphanumeric only (spaces dropped)
   if (hay.length < 4) return null;
+  const hit = (a) => ({ appId: a.id, company: a.company, confidence: 'subject' });
+  // Pass 1 — full name. Long and specific, so it is safe even when the core is not.
+  for (const a of apps) {
+    const full = normalizeCompany(a.company);
+    if (full && full.length >= 4 && hay.includes(full)) return hit(a);
+  }
+  // Pass 2 — distinctive core, for subjects naming the company without its generic
+  // word. Still guarded at 4 characters: a shorter needle matches subject noise.
   for (const a of apps) {
     const core = _normCompanyToken(a.company);
-    if (!core || core.length < 4) continue; // too short/generic to match safely
-    if (hay.includes(core)) return { appId: a.id, company: a.company, confidence: 'subject' };
+    if (!core || core.length < 4) continue;
+    if (hay.includes(core)) return hit(a);
   }
   return null;
 }

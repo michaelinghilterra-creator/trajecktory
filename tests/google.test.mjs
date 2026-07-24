@@ -14,11 +14,30 @@
  * Run: node tests/google.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import {
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+// SANDBOX FIRST. getAccessToken persists a refreshed token through writeTokens()
+// unless the caller passes its own `save`, and one health-check case here does not.
+// With no TJK_DATA_DIR that write lands on the REAL data/google-tokens.json, so a
+// plain `node test-all.mjs` silently replaced a live Gmail refresh token with the
+// fixture's 'r' and logged the user out of their own mailbox. It fails as an
+// authentication error hours later, nowhere near the test run, and the credential
+// cannot be recovered — only re-granted by hand.
+//
+// config.mjs resolves DATA_DIR at import time, so the env var MUST be set before
+// google.mjs loads. Static imports are hoisted above assignments, which is why the
+// module is imported dynamically below. Same pattern as google-sync.test.mjs.
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-google-'));
+process.env.TJK_DATA_DIR = tmp;
+
+const {
   getAccessToken, googleStatus, checkHealth, parseGmailMessage, extractEmail,
   classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, tokenScopes,
   candidateAppsFor, fetchMessagesConcurrent,
-} from '../dashboard-web/server/lib/google.mjs';
+} = await import('../dashboard-web/server/lib/google.mjs');
+const { GOOGLE_TOKENS_PATH } = await import('../dashboard-web/server/config.mjs');
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -32,6 +51,13 @@ async function checkThrows(fn, msg) {
 const b64 = s => Buffer.from(s, 'utf8').toString('base64url');
 
 console.log('google.test.mjs');
+
+// The sandbox is load-bearing, so assert it rather than trusting it. If someone
+// restores a static import, DATA_DIR resolves to the real data/ before this file
+// can redirect it, and this suite goes back to destroying a live credential while
+// every assertion still passes. That is precisely the failure this catches.
+check(GOOGLE_TOKENS_PATH.startsWith(tmp),
+  'token writes are sandboxed to a temp dir, never the real data/google-tokens.json');
 
 // ── getAccessToken ───────────────────────────────────────────────────────────
 const NOW = 1_800_000_000_000;
@@ -245,7 +271,30 @@ check(kestrel && kestrel.appId === 701 && kestrel.confidence === 'subject', 'a s
 check(matchBySubject('Re: your Kestrel, Inc. application', subjApps)?.appId === 701, 'a legal suffix on the app company still matches the distinctive core');
 check(matchBySubject('Following up on your Cobalt Systems role', subjApps)?.appId === 702, 'a multi-word company matches on its distinctive core (generic "Systems" dropped)');
 check(matchBySubject('Weekly newsletter, nothing to see here', subjApps) === null, 'a subject naming no known company matches nothing');
-check(matchBySubject('your Bex Systems update', subjApps) === null, 'a company whose distinctive core is too short (Bex) is not subject-matched, to avoid noise');
+
+// REVISED 2026-07-24. This asserted that "your Bex Systems update" matched NOTHING,
+// because the distinctive core ("bex") is under the 4-character guard. But that
+// subject names the company in full, so refusing it was the bug, not the protection.
+// The guard is about the NEEDLE, not the company: searching for "bex" alone would
+// hit "bexley"; searching for "bexsystems" cannot. Real cost of the old behaviour:
+// companies whose core is 3 characters after the generic word is stripped could
+// never be subject-matched at all, so interview mail sent via a scheduling tool went
+// to "unknown" every time.
+check(matchBySubject('your Bex Systems update', subjApps)?.appId === 703,
+  'a company named IN FULL matches even when its distinctive core is too short to search alone');
+
+const shortCore = [
+  { id: 802, company: 'PAR Technology', role: 'RevOps Director', status: '1st Interview' },
+  { id: 1026, company: 'DHI Group, Inc.', role: 'Director', status: 'Rejected' },
+];
+check(matchBySubject('Reminder: Your Upcoming Interview with PAR Technology', shortCore)?.appId === 802,
+  'a scheduler-sent interview reminder resolves via the full company name');
+check(matchBySubject('You have an interview with DHI Group, Inc', shortCore)?.appId === 1026,
+  'a company written with its legal suffix still resolves on the full name');
+// The noise protection the guard exists for, proven rather than assumed: "par" is a
+// substring of both these words, and neither may produce a match.
+check(matchBySubject('Your department compare report is ready', shortCore) === null,
+  'a short core is never searched on its own (department/compare do not match PAR)');
 
 // scanDecisions tier-3: an ATS-sent email (no domain signal) falls through to the subject.
 const atsMsg = {
