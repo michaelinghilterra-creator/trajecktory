@@ -48,6 +48,22 @@ const THEME_OPTIONS = [
 // (dark/dim/light) keep the default accent applied inline.
 const DESIGNER_THEMES = new Set(["amber", "emerald", "cyan", "rose", "paper", "arctic"]);
 
+// Local tweak store (theme, density, and the comp knobs). This used to come from
+// tweaks-panel.jsx's useTweaks, which also posted to an edit-mode host to persist
+// edits. The standalone dashboard has no such host and nothing listens for those
+// messages, so this is a plain in-memory store: changes apply live and reset to
+// TWEAK_DEFAULTS on reload, exactly as before. setTweak accepts either
+// setTweak('key', value) or setTweak({ key: value, ... }).
+function useTweaks(defaults) {
+  const [values, setValues] = useState(defaults);
+  const setTweak = useCallback((keyOrEdits, val) => {
+    const edits = (typeof keyOrEdits === 'object' && keyOrEdits !== null)
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+  }, []);
+  return [values, setTweak];
+}
+
 function App() {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +92,7 @@ function App() {
   const [cmdOpen, setCmdOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
 
-  const [tweaks, setTweak] = window.useTweaks ? window.useTweaks(TWEAK_DEFAULTS) : [TWEAK_DEFAULTS, () => {}];
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [followupCount, setFollowupCount] = useState(0);
   const [focusBadge, setFocusBadge] = useState(0);
   // Gmail connection attention for the Review nav item: 'reconnect' (the weekly
