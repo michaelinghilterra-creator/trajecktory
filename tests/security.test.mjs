@@ -196,5 +196,36 @@ check(callbackUri({ get: () => undefined }).startsWith('http://127.0.0.1:'),
 check(!/localhost/.test(callbackUri(reqWithHost('localhost.evil.invalid'))),
   'a host that merely CONTAINS localhost is not treated as loopback');
 
+// ── 7. the API client follows the key, instead of freezing the one at boot ───
+// Not a vulnerability, a correctness bug found in the same pass. The SDK captures
+// the key at construction, so a client built at module load holds whatever
+// existed then. Setup promises a saved key works with no restart; that was true
+// for the CLI path (which reads the environment per spawn) and false here, so the
+// first draft after saving a key failed with an auth error pointing at nothing
+// the user could see.
+const { anthropicClient } = await import('../dashboard-web/server/lib/anthropic.mjs');
+const savedKey = process.env.ANTHROPIC_API_KEY;
+
+process.env.ANTHROPIC_API_KEY = 'sk-ant-first';
+const c1 = anthropicClient();
+check(anthropicClient() === c1, 'the client is reused while the key is unchanged (not rebuilt per call)');
+
+process.env.ANTHROPIC_API_KEY = 'sk-ant-second';
+const c2 = anthropicClient();
+check(c2 !== c1, 'a key saved mid-session produces a NEW client rather than the stale one');
+check(c2.apiKey === 'sk-ant-second', 'and the new client actually carries the new key');
+
+delete process.env.ANTHROPIC_API_KEY;
+const c3 = anthropicClient();
+check(c3 !== c2, 'a key removed mid-session is picked up too (billing switched to the plan, or deleted by hand)');
+
+// The starting state that made this a real bug: no key at load, key saved after.
+process.env.ANTHROPIC_API_KEY = 'sk-ant-saved-later';
+check(anthropicClient().apiKey === 'sk-ant-saved-later',
+  'the boot-with-no-key then save-a-key sequence works, which is the exact path Setup promises');
+
+if (savedKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+else process.env.ANTHROPIC_API_KEY = savedKey;
+
 console.log(`\n  ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
