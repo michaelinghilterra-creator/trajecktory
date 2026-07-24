@@ -39,13 +39,36 @@ const check = (cond, label) => {
 
 console.log('board-theme.test.mjs');
 
-// The board stylesheet inside the dashboard bundle, and the <style> block of the
-// standalone renderer. PRINT_CSS is deliberately excluded from the colour rule
-// below: printing forces black on white on purpose, and it says so.
-const boardCss = interviewSrc.slice(interviewSrc.indexOf('const BOARD_CSS'), interviewSrc.indexOf('const RAIL_CSS'));
-const runsheetCss = runsheetSrc.slice(runsheetSrc.indexOf('<style>'), runsheetSrc.indexOf('</style>'));
+// The board's section of the dashboard stylesheet, and the <style> block of the
+// standalone renderer. Sliced by section marker: the interview print styles sit
+// further down the same file and are deliberately out of scope for the colour
+// rule below, because printing forces black on white on purpose and says so.
+// The marker sits INSIDE the section's header comment, so the slice starts after
+// that comment closes. Otherwise the header's own text arrives with no opening
+// delimiter, survives comment-stripping, and gets read as if it were CSS.
+const section = (css, from, to) => {
+  const a = css.indexOf(from);
+  if (a < 0) return '';
+  const afterHeader = css.indexOf('*/', a);
+  const b = css.indexOf(to, a + 1);
+  return css.slice(afterHeader < 0 ? a : afterHeader + 2, b < 0 ? css.length : b);
+};
+// Comments out before every check below. They are prose, not rules, and the prose
+// here necessarily NAMES the things it forbids: the note explaining why the board
+// no longer switches on prefers-color-scheme contains that phrase, and a checker
+// that reads comments would fail on its own explanation.
+const rulesOnly = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+const boardCss = rulesOnly(section(stylesSrc, 'INTERVIEW: THE LIVE BOARD', 'INTERVIEW: THE RAIL'));
+const runsheetCss = rulesOnly(runsheetSrc.slice(runsheetSrc.indexOf('<style>'), runsheetSrc.indexOf('</style>')));
 check(boardCss.length > 500, 'located the in-app board stylesheet');
 check(runsheetCss.length > 500, 'located the standalone board stylesheet');
+// The rules must live in the stylesheet, not in a template literal injected from
+// a component. That is what let them drift into a parallel design system in the
+// first place: CSS nobody reads when they open styles.css.
+check(!/const\s+(BOARD|RAIL|PREP|PRINT|HANDOFF)_CSS/.test(interviewSrc),
+  'interview.jsx carries no inline stylesheet');
+check(!/dangerouslySetInnerHTML=\{\{\s*__html:\s*BOARD_CSS/.test(interviewSrc),
+  'interview.jsx injects no <style> tag of its own');
 
 // ── 1. No literal colours ────────────────────────────────────────────────────
 // A hex here is a colour that cannot follow the theme, which is the whole bug.

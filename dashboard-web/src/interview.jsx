@@ -30,122 +30,6 @@
 //     server restart; a 403 mid-interview would be a catastrophe.
 const { useState: useStateI, useEffect: useEffectI, useMemo: useMemoI, useRef: useRefI, useCallback: useCallbackI } = React;
 
-// ── The board stylesheet ─────────────────────────────────────────────────────
-// Ported from render-runsheet.mjs; only the selectors are namespaced. 17px rows
-// are the floor — the fit preflight tells you to cut cues, it never shrinks the
-// type.
-//
-// THE PALETTE IS NOT ITS OWN. It used to be: this block declared a full second
-// set of colours and switched on prefers-color-scheme, which meant the board
-// ignored all nine dashboard themes and rendered a green board on a cyan app, in
-// the system font while everything around it was Inter. A surface inside the app
-// that does not look like the app reads as a different product.
-//
-// So the board keeps its own VOCABULARY (--ink, --muted, --line, --hero,
-// --danger, --tint, --hi) because those names carry meaning the dashboard's do
-// not, but every one of them is now an alias onto a dashboard token. Nothing here
-// invents a colour, and --accent, --bg and --panel are deliberately NOT
-// redeclared so they inherit whatever theme is live. The standalone board
-// (render-runsheet.mjs) writes the same vocabulary against the same tokens, with
-// a copy inlined because it cannot link a stylesheet.
-const BOARD_CSS = `
-.ib{
-  /* Camera calibration. Bigger --box-top = answer box sits lower. */
-  --box-top: 34vh;
-  --camera-gap: 80px;
-  --ink:var(--text); --muted:var(--text-dim); --line:var(--border);
-  --hero:var(--orange); --danger:var(--red); --tint:var(--accent-bg);
-  /* Two declarations on purpose: a browser without color-mix keeps the first, so
-     the active row loses its warm wash but never its background. Its orange
-     outline carries the signal either way. */
-  --hi:var(--panel-2);
-  --hi:color-mix(in srgb, var(--orange) 16%, transparent);
-  background:var(--bg); color:var(--ink); border-radius:10px; padding:16px;
-  font-family:var(--sans); line-height:1.4;
-}
-.ib *{box-sizing:border-box;}
-.ib .bhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
-           padding:0 4px 10px;flex-wrap:wrap;}
-.ib .bhead h1{font-size:20px;margin:0;font-weight:700;}
-.ib .bhead .when{font-size:15.5px;color:var(--muted);}
-.ib .bhead .rule{font-size:15.5px;color:var(--accent);font-weight:700;}
-
-/* ===== the answer box: floats under the camera, only while open ===== */
-.ib .detail{position:fixed;top:var(--box-top);left:16px;right:16px;z-index:1050;
-        background:var(--panel);border:2px solid var(--accent);border-radius:12px;
-        padding:14px 20px 16px;box-shadow:0 14px 50px rgba(0,0,0,.5);
-        max-height:56vh;display:none;flex-direction:column;}
-.ib .detail.on{display:flex;}
-.ib .detail .dhead{display:flex;justify-content:space-between;align-items:baseline;gap:14px;
-               margin-bottom:9px;padding-bottom:7px;border-bottom:1px solid var(--line);}
-.ib .detail h3{margin:0;font-size:21px;color:var(--accent);}
-/* Namespacing under .ib stops OUTBOUND leaks; nothing defends inbound. The global
-   .tag (styles.css) paints a bordered, padded, mono chip — and it lands on the one
-   element carrying the USE ONCE signal. Reset the box, then restyle. */
-.ib .detail .tag{display:inline;border:none;padding:0;border-radius:0;background:none;
-             font-family:inherit;
-             font-size:12.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
-             color:var(--hero);white-space:nowrap;margin-left:auto;}
-.ib .detail .close{font-size:13.5px;color:var(--muted);cursor:pointer;user-select:none;
-                   background:none;border:none;font-family:inherit;padding:0;}
-.ib .detail .close:hover{color:var(--danger);}
-.ib .dbody{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:26px;overflow-y:auto;}
-@media (max-width:1100px){ .ib .dbody{grid-template-columns:1fr;} }
-.ib .spoken p{font-size:17.5px;line-height:1.56;margin:0 0 11px;}
-.ib .spoken p:last-child{margin-bottom:0;}
-.ib .spoken b{color:var(--accent);}
-.ib .dnotes{border-left:2px solid var(--line);padding-left:18px;}
-.ib .dnotes h4{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--hero);
-           margin:0 0 7px;font-weight:800;}
-.ib .dnotes ul{margin:0;padding-left:16px;}
-.ib .dnotes li{font-size:14px;color:var(--muted);margin:5px 0;}
-.ib .dnotes li b{color:var(--danger);}
-
-/* ===== panels ===== */
-.ib .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;}
-.ib .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
-       padding:11px 15px 12px;margin:0 0 13px;}
-.ib .panel:last-child{margin-bottom:0;}
-.ib .camgap{margin-top:var(--camera-gap);}
-.ib .panel h2{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);
-          margin:0 0 7px;font-weight:800;}
-.ib .row{display:flex;align-items:stretch;gap:9px;padding:4px 7px;font-size:17px;
-     border-bottom:1px dotted var(--line);cursor:pointer;border-radius:5px;
-     transition:background .08s;text-align:left;width:100%;background:none;
-     border-left:none;border-right:none;border-top:none;color:inherit;font-family:inherit;}
-.ib .row:last-child{border-bottom:none;}
-.ib .row:hover{background:var(--tint);}
-.ib .row.active{background:var(--hi);outline:2px solid var(--hero);}
-.ib .row.spent{opacity:.4;}
-.ib .row.spent .to::after{content:" ✓ told";color:var(--danger);font-size:12px;}
-.ib .cue{flex:1 1 52%;color:var(--muted);}
-.ib .to{flex:1 1 48%;font-weight:700;}
-.ib .arw{color:var(--accent);font-weight:800;}
-/* Hero is marked by WEIGHT as well as hue, deliberately. --hero is the theme's
-   orange, and on the two warm themes the accent is itself an amber, so the hue
-   alone separates hero from a normal panel by almost nothing (measured: a colour
-   distance of ~14 on one of them, against ~250 on the cool themes). A heavier
-   border survives that, and no per-theme colour has to be invented. Reaching for
-   the theme's red instead would only trade the collision for a worse one: red is
-   --danger here, and hero means say this while danger means do not. */
-.ib .panel.hero{border-color:var(--hero);border-width:2px;}
-.ib .panel.hero h2{color:var(--hero);}
-.ib .panel.panic{border-color:var(--accent);border-width:2px;background:var(--tint);}
-.ib .panel.rules h2{color:var(--danger);}
-.ib .panel.rules .norow{color:var(--danger);font-size:16px;font-weight:600;
-                    padding:5px 0;border-bottom:1px dotted var(--line);}
-.ib .panel.rules .norow:last-child{border-bottom:none;}
-.ib .panel.rules .norow.derived{color:var(--hero);}
-.ib .panel.rules .norow.derived::before{content:"⚠ ";}
-
-/* ===== present mode: over ALL app chrome ===== */
-.ib-present{position:fixed;inset:0;z-index:1000;overflow:auto;background:var(--bg);}
-.ib-present .ib{border-radius:0;min-height:100%;}
-.ib-exit{position:fixed;top:8px;right:12px;z-index:1060;font-size:11px;opacity:.25;
-     background:none;border:none;color:var(--text-mute);cursor:pointer;font-family:inherit;}
-.ib-exit:hover{opacity:1;}
-`;
-
 // ── **bold** -> <b>, as React nodes ──────────────────────────────────────────
 // Never dangerouslySetInnerHTML: the runsheet is authored text and the board is
 // the one surface where a stray angle bracket cannot be allowed to become markup.
@@ -159,15 +43,6 @@ function mdBold(s) {
 // Keyed by DISPLAY, not by person: the laptop panel and the docked monitor put the
 // webcam in completely different places, so they get their own numbers.
 const CAM_DEFAULT = { boxTopVh: 34, camGapPx: 80 };
-
-// The rail sits UNDER the board so the board itself gets the full width. It carries
-// only pre-call material you would never touch mid-answer: camera calibration and the
-// counts. Collapses to a stack when there isn't width for two.
-const RAIL_CSS = `
-.ib-rail{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,320px);
-         gap:12px;align-items:start;}
-@media (max-width:1200px){ .ib-rail{grid-template-columns:1fr;} }
-`;
 
 // How far the board may overrun the viewport before the fit banner fires. Rows are
 // ~33px, so this is ~9 rows of scroll. Deliberately not zero: the banner tells you to
@@ -490,106 +365,6 @@ function CalibrationPanel({ cam, setCam }) {
 // as React nodes — preferring `html` if the API ever supplies it, which is the
 // one-line reuse of the existing converter. See the notes returned with this change.
 // ════════════════════════════════════════════════════════════════════════════
-const PREP_CSS = `
-.ib-prep h1{font-size:16px;font-weight:700;margin:0 0 6px;color:var(--text)}
-.ib-prep h2{font-size:12px;font-weight:600;margin:22px 0 7px;padding-bottom:5px;border-bottom:1px solid var(--border);color:var(--text-mute);text-transform:uppercase;letter-spacing:.06em}
-.ib-prep h3{font-size:12.5px;font-weight:600;margin:14px 0 5px;color:var(--text)}
-.ib-prep p{margin:4px 0;font-size:13px;color:var(--text);line-height:1.6}
-.ib-prep hr{border:none;border-top:1px solid var(--border);margin:16px 0}
-.ib-prep blockquote{border-left:3px solid var(--accent);margin:8px 0;padding:5px 12px;color:var(--text-mute)}
-.ib-prep ul{margin:5px 0 9px;padding-left:18px}
-.ib-prep li{margin:3px 0;font-size:13px;color:var(--text);line-height:1.55}
-.ib-prep b{font-weight:600;color:var(--text)}
-
-/* reportMdToHtml also emits table/thead/tbody/th/td/ol/code/a. Without these the
-   prep sheets rendered them at UA defaults — th/td at padding:1px, no borders,
-   border-collapse:separate — which turned every table into run-together text.
-   The prep files are table-dense (question/anchor grids, gap tables, fact packs). */
-.ib-prep table{border-collapse:collapse;width:100%;margin:9px 0;font-size:12.5px}
-.ib-prep th{text-align:left;padding:6px 10px;background:var(--panel-2);border-bottom:1px solid var(--border-2);
-            color:var(--text-dim);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em}
-.ib-prep td{padding:6px 10px;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.5;color:var(--text)}
-.ib-prep tbody tr:last-child td{border-bottom:none}
-.ib-prep tbody tr:hover td{background:var(--panel-2)}
-.ib-prep ol{margin:5px 0 9px;padding-left:20px}
-.ib-prep ol li{margin:3px 0;font-size:13px;color:var(--text);line-height:1.55}
-.ib-prep code{font-family:var(--mono);font-size:11.5px;background:var(--panel-3);border:1px solid var(--border);border-radius:4px;padding:1px 5px}
-.ib-prep a{color:var(--accent-2);text-decoration:none;border-bottom:1px solid rgba(var(--accent-rgb),.35)}
-.ib-prep a:hover{border-bottom-color:var(--accent-2)}
-
-/* ── Sectioned layout: rail + document ─────────────────────────────────────── */
-.ib-prepwrap{display:grid;grid-template-columns:184px minmax(0,1fr);gap:22px;align-items:start}
-/* .content is the scroll container (body is overflow:hidden), and it is the
-   nearest scrolling ancestor, so sticky resolves against it. */
-.ib-preprail{position:sticky;top:0;align-self:start;max-height:calc(100vh - 150px);
-             overflow-y:auto;padding:2px 10px 8px 0;border-right:1px solid var(--border)}
-/* MUST come after the base rule: same specificity, so order decides. With this
-   block above it the rail kept position:sticky when stacked, pinning the whole
-   section list to the top of a one-column layout. */
-@media (max-width:1100px){
-  .ib-prepwrap{grid-template-columns:1fr;gap:12px}
-  .ib-preprail{position:static;max-height:none;overflow-y:visible;
-               border-right:none;border-bottom:1px solid var(--border);padding:0 0 8px}
-  .ib-preprail .ib-railttl{margin-left:0}
-}
-.ib-preprail .ib-railttl{font-size:9.5px;text-transform:uppercase;letter-spacing:.14em;
-             color:var(--text-mute);font-family:var(--mono);margin:0 0 7px 8px}
-.ib-navitem{display:flex;align-items:baseline;gap:7px;padding:4px 8px;border-radius:6px;
-            cursor:pointer;border-left:2px solid transparent;margin-bottom:1px}
-.ib-navitem:hover{background:var(--panel-2)}
-.ib-navitem.on{background:var(--accent-bg);border-left-color:var(--accent)}
-.ib-navitem .mk{font-family:var(--mono);font-size:9.5px;color:var(--text-mute);min-width:24px;flex:none}
-.ib-navitem.on .mk{color:var(--accent-2)}
-.ib-navitem .lb{font-size:11.5px;color:var(--text-dim);line-height:1.35}
-.ib-navitem.on .lb{color:var(--text);font-weight:500}
-
-.ib-sec{scroll-margin-top:14px;padding:20px 0 2px;border-top:1px solid var(--border)}
-.ib-sec:first-of-type{border-top:none;padding-top:2px}
-.ib-sechead{display:flex;align-items:center;gap:9px;margin-bottom:10px}
-.ib-secmk{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:99px;
-          background:var(--panel-3);color:var(--text-dim);border:1px solid var(--border);flex:none}
-.ib-sectitle{font-size:13.5px;font-weight:600;color:var(--text);letter-spacing:-.01em}
-.ib-sec .ib-secbody > :first-child{margin-top:0}
-
-/* Role treatments. Roles come from the heading TEXT, never the § number — see
-   prepRole(). The point is that a line you deliver verbatim must not look like a
-   line you merely need to know. */
-.ib-sec[data-role="strip"] .ib-secbody,
-.ib-sec[data-role="open"] .ib-secbody,
-.ib-sec[data-role="hero"] .ib-secbody{
-  border-left:3px solid var(--accent);background:var(--accent-bg);
-  border-radius:0 8px 8px 0;padding:12px 15px}
-.ib-sec[data-role="strip"] .ib-secbody p,
-.ib-sec[data-role="open"] .ib-secbody p{font-size:14px;line-height:1.7}
-.ib-sec[data-role="probes"] .ib-secbody,
-.ib-sec[data-role="behavioral"] .ib-secbody{
-  border-left:3px solid var(--orange);border-radius:0 8px 8px 0;padding:12px 15px;
-  background:color-mix(in srgb, var(--orange) 7%, transparent)}
-.ib-sec[data-role="ask"] .ib-secbody ul{list-style:none;padding-left:2px}
-.ib-sec[data-role="ask"] .ib-secbody ul li{position:relative;padding-left:22px;margin:5px 0}
-.ib-sec[data-role="ask"] .ib-secbody ul li::before{content:"☐";position:absolute;left:2px;top:-1px;
-  color:var(--accent-2);font-size:13px}
-.ib-sec[data-role="debrief"],.ib-sec[data-role="after"],.ib-sec[data-role="logistics"]{opacity:.82}
-
-/* Preamble: 11 bolded key/value paragraphs that rendered as undifferentiated prose. */
-.ib-meta{display:grid;grid-template-columns:minmax(96px,auto) minmax(0,1fr);gap:5px 14px;
-         padding:13px 15px;margin-bottom:6px;background:var(--panel-2);
-         border:1px solid var(--border);border-radius:var(--r-card)}
-.ib-metak{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-mute);
-          font-family:var(--mono);text-align:right;padding-top:3px;line-height:1.5}
-.ib-metav{font-size:12.5px;color:var(--text);line-height:1.55}
-.ib-metav a{color:var(--accent-2);text-decoration:none}
-.ib-metav b{font-weight:600}
-.ib-prephead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
-.ib-prepttl{font-size:15px;font-weight:600;color:var(--text);line-height:1.35;margin:0}
-
-/* The debrief reuses .ib-prep typography but is a panel, not a document: its own
-   h1 ("# Debrief") is redundant next to the <summary> label. */
-.ib-debrief > summary::marker{color:var(--text-mute)}
-.ib-debrief .ib-prep h1{display:none}
-.ib-debrief .ib-prep h2{margin-top:14px}
-`;
-
 // Prose prep sheets are headings + paragraphs + bullets. Bold is the only inline
 // form that carries meaning in them, and it reuses the board's mdBold.
 function PrepProse({ markdown }) {
@@ -911,73 +686,6 @@ function DebriefPanel({ debrief }) {
 // It also forces black-on-white. The default theme is --bg:#08080b; printing that
 // wastes a cartridge and reads badly on paper.
 // ════════════════════════════════════════════════════════════════════════════
-const PRINT_CSS = `
-.tjk-print-root{display:none}
-@media print{
-  @page{size:Letter;margin:.55in}
-  html,body{overflow:visible!important;height:auto!important;background:#fff!important}
-  body > *:not(.tjk-print-root){display:none!important}
-  .tjk-print-root{display:block!important;position:static!important;color:#111;background:#fff;
-    font-family:var(--sans);font-size:10pt;line-height:1.5;
-    -webkit-print-color-adjust:exact;print-color-adjust:exact}
-
-  .tjk-print-root .p-head{border-bottom:1.5pt solid #111;padding-bottom:6pt;margin-bottom:11pt}
-  .tjk-print-root h1{font-size:17pt;font-weight:700;letter-spacing:-.01em;margin:0 0 3pt}
-  .tjk-print-root .p-sub{font-size:9.5pt;color:#444;margin:1pt 0}
-  .tjk-print-root .p-sub b{color:#111}
-
-  .tjk-print-root h2{font-size:10.5pt;font-weight:700;margin:13pt 0 5pt;text-transform:uppercase;
-    letter-spacing:.07em;border-bottom:.5pt solid #bbb;padding-bottom:2pt;
-    break-after:avoid;page-break-after:avoid}
-  .tjk-print-root h3{font-size:10.5pt;font-weight:700;margin:9pt 0 3pt;break-after:avoid;page-break-after:avoid}
-  .tjk-print-root p{margin:3pt 0}
-  .tjk-print-root ul,.tjk-print-root ol{margin:3pt 0 6pt;padding-left:15pt}
-  .tjk-print-root li{margin:2pt 0;break-inside:avoid;page-break-inside:avoid}
-  .tjk-print-root blockquote{margin:4pt 0;padding-left:8pt;border-left:2pt solid #999;color:#333}
-  .tjk-print-root code{font-family:var(--mono);font-size:8.5pt;background:#f0f0f0!important;
-    padding:.5pt 2.5pt;border-radius:2pt}
-  .tjk-print-root hr{border:none;border-top:.5pt solid #ccc;margin:7pt 0}
-  .tjk-print-root b,.tjk-print-root strong{font-weight:700;color:#000}
-
-  .tjk-print-root table{border-collapse:collapse;width:100%;margin:5pt 0;font-size:8.5pt}
-  .tjk-print-root th,.tjk-print-root td{border:.5pt solid #bbb;padding:3pt 5pt;text-align:left;vertical-align:top}
-  .tjk-print-root th{background:#ededed!important;font-weight:700}
-  /* Rows, not tables: a table long enough to need a break should get one. */
-  .tjk-print-root tr{break-inside:avoid;page-break-inside:avoid}
-
-  .tjk-print-root a{color:#111;text-decoration:none;border:none}
-  .tjk-print-root[data-mode="full"] a[href^="http"]::after{content:" (" attr(href) ")";
-    font-size:7.5pt;color:#666;word-break:break-all}
-
-  .tjk-print-root .p-toc{margin-bottom:9pt}
-  .tjk-print-root .p-toc ol{columns:2;column-gap:20pt;font-size:9pt;margin-top:2pt}
-
-  .tjk-print-root .p-meta{border-bottom:.5pt solid #ccc;padding-bottom:7pt;margin-bottom:2pt}
-  .tjk-print-root .p-metarow{display:grid;grid-template-columns:82pt minmax(0,1fr);gap:8pt;margin:2.5pt 0;
-    break-inside:avoid;page-break-inside:avoid}
-  .tjk-print-root .p-metak{font-size:7.5pt;text-transform:uppercase;letter-spacing:.06em;color:#666;
-    text-align:right;padding-top:1.5pt}
-  .tjk-print-root .p-metav{font-size:9pt}
-
-  /* A section must be allowed to break, or a 1,100px fact pack starts its own page
-     and the full document doubles in length. Only the cards below avoid breaking. */
-  .tjk-print-root .p-sec{break-inside:auto;page-break-inside:auto}
-  .tjk-print-root .p-sec[data-role="strip"] > .p-body,
-  .tjk-print-root .p-sec[data-role="open"] > .p-body,
-  .tjk-print-root .p-sec[data-role="hero"] > .p-body{border-left:2pt solid #111;padding-left:9pt}
-
-  /* ── Cram sheet ─────────────────────────────────────────────────────────── */
-  .tjk-print-root[data-mode="cram"]{font-size:9pt;line-height:1.4}
-  .tjk-print-root[data-mode="cram"] .p-card{break-inside:avoid;page-break-inside:avoid;
-    border:.75pt solid #888;border-radius:3pt;padding:6pt 9pt 7pt;margin:0 0 7pt}
-  .tjk-print-root[data-mode="cram"] .p-card > h2{margin:0 0 4pt;border:none;padding:0;font-size:8.5pt;color:#000}
-  .tjk-print-root[data-mode="cram"] .p-card h3{font-size:9pt;margin:5pt 0 2pt}
-  .tjk-print-root[data-mode="cram"] .p-card p{margin:2pt 0}
-  .tjk-print-root[data-mode="cram"] .p-warn{border-width:1.5pt;border-color:#111}
-  .tjk-print-root[data-mode="cram"] hr{display:none}
-}
-`;
-
 // Ordered exactly as the cram sheet reads: what you say, the story you land, what
 // you must not do, what you ask. Selection is by ROLE, which is what lets one
 // composition serve a screen, an hm-round and a final loop.
@@ -1144,10 +852,6 @@ const interviewPrepCmd = (company, round, descriptor) =>
 // prose at min-height:80px, which drops a single command into an 80px void that
 // reads as a broken editor. Override the height only; the field keeps its .ta
 // border, mono type, and focus ring.
-const HANDOFF_CSS = `
-.ib-cmd{min-height:0;height:auto;resize:none;width:100%;white-space:pre;overflow-x:auto;}
-`;
-
 // Same idiom as launchpad.jsx's handoff box: an explanatory line, the prompt in a
 // readOnly .ta, and a control that puts it on the clipboard.
 //
@@ -1435,7 +1139,6 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
 
   return (
     <div className="col" style={{ gap: 0 }}>
-      <style dangerouslySetInnerHTML={{ __html: BOARD_CSS + PREP_CSS + RAIL_CSS + HANDOFF_CSS + PRINT_CSS }} />
 
       {/* ── Picker: it is a 2-item list. No search, no table. ───────────────── */}
       <div className="col" style={{ gap: 8, marginBottom: 14 }}>
