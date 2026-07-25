@@ -487,6 +487,7 @@ for (const suite of [
   'tests/gating.test.mjs',
   'tests/board-theme.test.mjs',
   'tests/security.test.mjs',
+  'tests/security-review.test.mjs',
   'tests/v1-loader.test.mjs',
   'tests/weekly-review.test.mjs',
   'tests/weekly-run.test.mjs',

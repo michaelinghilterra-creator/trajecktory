@@ -24,6 +24,7 @@
 import { chromium } from 'playwright';
 import { readFile } from 'fs/promises';
 import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness } from './liveness-core.mjs';
+import { isSafeLivenessUrl } from './lib/safe-url.mjs';
 
 // Navigate to a URL and classify it. Shared by both the reused-page and
 // isolated (fresh-page) modes so the detection logic exists in one place.
@@ -73,30 +74,9 @@ async function probePage(page, url) {
 }
 
 // Check one URL. In isolated mode, use a fresh page (closed afterwards);
-// otherwise reuse the shared page.
-// Reject non-public targets before any navigation or API probe. An attacker-
-// influenced job URL (written into pipeline.md by scan.mjs from board JSON) could
-// point at loopback / private / link-local / cloud-metadata addresses and turn
-// this liveness probe into an SSRF (security: CWE-918). Best-effort literal check;
-// hostnames that DNS-resolve to private space are out of scope for a job-URL probe.
-function isSafeLivenessUrl(url) {
-  let u;
-  try { u = new URL(String(url == null ? '' : url)); } catch (e) { return false; }
-  if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-  const h = u.hostname.toLowerCase();
-  if (h === 'localhost' || h.endsWith('.localhost') || h.includes(':')) return false;
-  const parts = h.split('.');
-  if (parts.length === 4 && parts.every(p => p.length > 0 && Number.isInteger(Number(p)) && Number(p) >= 0 && Number(p) <= 255)) {
-    const a = Number(parts[0]);
-    const b = Number(parts[1]);
-    if (a === 0 || a === 127 || a === 10) return false;
-    if (a === 169 && b === 254) return false;
-    if (a === 192 && b === 168) return false;
-    if (a === 172 && b >= 16 && b <= 31) return false;
-  }
-  return true;
-}
-
+// otherwise reuse the shared page. The SSRF guard (isSafeLivenessUrl) lives in
+// lib/safe-url.mjs so the actual shipped function is unit tested; this file pulls
+// in Playwright and cannot be imported by a test.
 async function checkUrl(browser, sharedPage, url, isolated) {
   if (!isSafeLivenessUrl(url)) {
     return { result: 'expired', reason: 'refused: non-public / loopback / metadata URL' };

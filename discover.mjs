@@ -27,6 +27,7 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } fr
 import yaml from 'js-yaml';
 import { buildCompanyIndex, addCompanyToIndex, findKnownCompany } from './lib/portals.mjs';
 import { canonicalUrl } from './lib/identity.mjs';
+import { sanitizeCell } from './lib/sanitize-cell.mjs';
 
 const DRY_RUN   = process.argv.includes('--dry-run');
 const VERBOSE   = process.argv.includes('--verbose');
@@ -250,13 +251,6 @@ function writePortals(portalsRaw, newEntries) {
     text = text.trimEnd() + eol + eol + HEADER + block;
   }
   writeFileSync(PORTALS_PATH, text, 'utf8');
-}
-
-// Neutralize table/TSV delimiters and newlines so attacker-controlled discovered
-// job fields (Brave/Muse results) cannot forge pipeline/history rows or inject
-// text the evaluator reads (security: CWE-20).
-function sanitizeCell(s) {
-  return String(s ?? '').split('').map(ch => [9, 10, 13, 124].includes(ch.charCodeAt(0)) ? ' ' : ch).join('').trim();
 }
 
 function writePipeline(newJobs, today) {

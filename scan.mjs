@@ -20,6 +20,7 @@
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import yaml from 'js-yaml';
 import { buildTitleFilter, buildLocationFilter, normalizeUrl, scoreOffer } from './lib/scan-core.mjs';
+import { sanitizeCell } from './lib/sanitize-cell.mjs';
 const parseYaml = yaml.load;
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -341,13 +342,6 @@ function appendToPipeline(offers) {
   }
 
   writeFileSync(PIPELINE_PATH, text, 'utf-8');
-}
-
-// Neutralize table/TSV delimiters and newlines so an attacker-controlled job
-// title/company/url from a board cannot forge extra pipeline/history rows or
-// inject text the batch evaluator reads (security: CWE-20 / CWE-117).
-function sanitizeCell(s) {
-  return String(s ?? '').split('').map(ch => [9, 10, 13, 124].includes(ch.charCodeAt(0)) ? ' ' : ch).join('').trim();
 }
 
 function appendToScanHistory(offers, date) {

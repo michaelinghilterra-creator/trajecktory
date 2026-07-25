@@ -428,7 +428,7 @@ function TriageRowActions({ row, job, onDeep, onDismiss }) {
         <PIcon d={PI.zap} size={11} /> Deep dive
       </button>
       {row.url && /^https?:\/\//i.test(row.url) && (
-        <a className="btn ghost sm" style={{ padding: '2px 8px', fontSize: 10.5 }} href={row.url} target="_blank" rel="noreferrer"
+        <a className="btn ghost sm" style={{ padding: '2px 8px', fontSize: 10.5 }} href={window.safeHref(row.url)} target="_blank" rel="noreferrer"
           onClick={e => e.stopPropagation()}>open JD <PIcon d={PI.arrowR} size={10} /></a>
       )}
       <button className="btn ghost sm" style={{ padding: '2px 7px', fontSize: 10.5 }}
