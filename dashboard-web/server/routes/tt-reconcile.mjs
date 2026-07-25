@@ -268,8 +268,8 @@ router.post('/api/tt-reconcile/bulk-import', (req, res) => {
     if (!rows.length) return res.status(400).json({ error: 'No valid rows found (need a header row plus rows with company, first, last, title).' });
     if (!fs.existsSync(TARGET_TALENT_MD)) fs.writeFileSync(TARGET_TALENT_MD, TT_HEADER, 'utf8');
     const existing = parseTargetTalentMd();
-    const existingKeys = new Set(existing.map(r => `${_normCompany(r.company)}|${(r.last || '').toLowerCase()}|${(r.first || '').toLowerCase()}`));
-    const toWrite = rows.filter(c => !existingKeys.has(`${_normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`));
+    const existingKeys = new Set(existing.map(r => `${normCompany(r.company)}|${(r.last || '').toLowerCase()}|${(r.first || '').toLowerCase()}`));
+    const toWrite = rows.filter(c => !existingKeys.has(`${normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`));
     const written = appendTTRows(toWrite);
     res.json({ ok: true, parsed: rows.length, imported: written.length, duplicates: rows.length - written.length });
   } catch (err) {
