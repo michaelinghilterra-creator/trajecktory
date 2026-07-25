@@ -328,19 +328,20 @@ function runClaudeAgent(jobId, mode, target) {
     const modelFlag = modelPref ? ['--model', modelPref] : [];
     // SECURITY (CWE-94): this eval agent WebFetches attacker-controlled job postings,
     // so a booby-trapped posting can attempt prompt injection. Constrain the blast
-    // radius — drop Bash entirely (no arbitrary command execution) and load a deny
-    // list (eval-agent-sandbox.settings.json) that blocks editing server code /
-    // config / .env / .claude and reading the OAuth tokens. An injected instruction
-    // then cannot rewrite a server module (persist / RCE on the one-click restart)
-    // or read secrets to exfiltrate. The eval only WebFetches the JD and writes
-    // reports / TSVs / pipeline.md, none of which these rules block. --settings
-    // MERGES with (does not replace) the project allow list, and deny wins.
+    // radius via a deny list (eval-agent-sandbox.settings.json): it blocks editing
+    // server code / config / .env / .claude / installer and reading the OAuth tokens
+    // and other secrets, enforced by a file-permission hook even when the agent tries
+    // it through Bash (verified). An injected instruction then cannot rewrite a server
+    // module (persist / RCE on the one-click restart) or read secrets to exfiltrate.
+    // Bash is NOT blanket-dropped: the eval needs `node next-jd.mjs` for report
+    // numbering, which the settings file explicitly allows; on a shipped install any
+    // other Bash command is denied for want of an allow entry. --settings merges with
+    // the project allow list, and deny wins.
     const evalSandboxSettings = fileURLToPath(new URL('../eval-agent-sandbox.settings.json', import.meta.url));
     const args = ['-p', isWin ? `"${prompt}"` : prompt,
                   ...modelFlag,
                   '--output-format', 'stream-json', '--verbose',
                   '--permission-mode', 'acceptEdits',
-                  '--disallowedTools', 'Bash',
                   '--settings', isWin ? `"${evalSandboxSettings}"` : evalSandboxSettings];
 
     const update = (patch) => {
