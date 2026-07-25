@@ -32,7 +32,7 @@ The evaluation uses 6 blocks (A-F) with a global score of 1-5:
 |-----------|-----------------|
 | Match con CV | Skills, experience, proof points alignment |
 | North Star alignment | How well the role fits the user's target archetypes (from _profile.md) |
-| Comp | Salary vs market (5=top quartile, 1=well below) |
+| Comp | Pay vs the user's own band (`compensation.target_range`), not vs market. **Rated and shown, but NOT scored** (weight 0): an aspiration is a number you can miss and still want the job. Pay below `compensation.minimum`, the hard floor, sets a `scoreCeiling` instead. |
 | Cultural signals | Company culture, growth, stability, remote policy |
 | Red flags | Blockers, warnings (negative adjustments) |
 | **Global** | Weighted average of above |

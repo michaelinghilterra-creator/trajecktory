@@ -1,10 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { APPS_MD, ROOT_DIR, STATUS_EVENTS_PATH } from '../config.mjs';
+import { resolveReportPath } from './safe-path.mjs';
 import { parseTrackerLine, formatTrackerLine } from '../../../lib/tracker.mjs';
 import { hasV1Frontmatter, parseV1, v1Header } from '../v1-loader.mjs';
 import { logStatusEvent, parseStatusEvents } from './sidecars.mjs';
-import { FUNNEL_ORDER, makeFurthestIdx, isInbound } from './statuses.mjs';
+import { FUNNEL_ORDER, makeFurthestIdx, isInbound, isOutbound } from './statuses.mjs';
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
@@ -42,7 +43,12 @@ const _reportHeaderCache = new Map(); // key: reportPath, value: { mtimeMs, data
 
 function readReportHeader(reportPath) {
   if (!reportPath) return null;
-  const abs = path.resolve(ROOT_DIR, reportPath);
+  // Route the untrusted (agent-written) report-path cell through the shared
+  // containment guard instead of a bare path.resolve, so a poisoned cell such as
+  // `reports/../../secret.md` cannot read a file outside reports/ and leak it via
+  // /api/applications (security: CWE-22).
+  const abs = resolveReportPath(reportPath);
+  if (!abs) return null;
   let stat;
   try { stat = fs.statSync(abs); } catch { return null; }
   const cached = _reportHeaderCache.get(reportPath);
@@ -295,6 +301,9 @@ function parseApplicationsMd() {
     // Recruiter-inbound: the approach came before the application, so this row's
     // reply is not evidence that the user's outbound applications are working.
     r.inbound = isInbound(r.notes);
+    // The other half of warm: the user reached a person first. Kept separate from
+    // inbound because only this half is scalable to a weekly floor.
+    r.outbound = isOutbound(r.notes);
   }
 
   _appsCache = { mtimeMs, evMtimeMs, rows };

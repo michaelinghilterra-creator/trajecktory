@@ -7,7 +7,7 @@ import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute } from '../lib/sidecars.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeGhostedCandidates, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeGhostedCandidates, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
@@ -27,6 +27,24 @@ export const router = express.Router();
 router.get('/api/followups', (req, res) => {
   try { res.json(parseFollowupsMd()); }
   catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/followups/withheld — how many contacts the send gate is holding back
+// for want of a checked address, and whether the keys that would check them are
+// set. Kept off /stale deliberately: this reads the contact files, which /stale
+// does not need, and a parse failure there must not take the whole action queue
+// down for a line of explanatory text.
+//
+// This exists so a short queue can be read correctly. Without it, a user with no
+// verification keys sees fewer rows and no reason, which is the same failure as an
+// unreachable feature: the product looks broken when it is merely unconfigured.
+router.get('/api/followups/withheld', (req, res) => {
+  try {
+    const hasKeys = !!((process.env.HUNTER_API_KEY || '').trim() && (process.env.MILLIONVERIFIER_API_KEY || '').trim());
+    res.json({ withheld: countWithheldContacts(), hasVerifierKeys: hasKeys });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // GET /api/followups/stale — computed stale list with coaching.

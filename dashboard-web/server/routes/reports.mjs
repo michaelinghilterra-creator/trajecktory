@@ -5,16 +5,21 @@ import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { reportMdToHtml, escapeHtml, v1ToFallbackHtml } from '../lib/html.mjs';
 import { hasV1Frontmatter, parseV1, stripFrontmatter } from '../v1-loader.mjs';
+import { resolveReportPath } from '../lib/safe-path.mjs';
 
 export const router = express.Router();
 
+// PATH SAFETY: see lib/safe-path.mjs. The path comes from applications.md, which
+// is agent-written and therefore untrusted, and these two routes used to resolve
+// and read it with no containment check at all.
 router.get('/api/report-body/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const rows = parseApplicationsMd();
     const row = rows.find(r => r.id === id);
     if (!row || !row.report) return res.json({ html: '<p>No report attached.</p>' });
-    const reportPath = path.resolve(ROOT_DIR, row.report);
+    const reportPath = resolveReportPath(row.report);
+    if (!reportPath) return res.json({ html: `<p>Report path is outside reports/ and was refused: ${escapeHtml(row.report)}</p>` });
     if (!fs.existsSync(reportPath)) return res.json({ html: `<p>Report file not found: ${escapeHtml(row.report)}</p>` });
     const raw = fs.readFileSync(reportPath, 'utf8');
     // For v1 reports, strip JSON frontmatter so the Full Report tab shows
@@ -41,7 +46,8 @@ router.get('/api/report-view/:id', (req, res) => {
     const rows = parseApplicationsMd();
     const row = rows.find(r => r.id === id);
     if (!row || !row.report) return res.status(404).send('<p style="font-family:sans-serif;padding:24px">No report for this entry.</p>');
-    const reportPath = path.resolve(ROOT_DIR, row.report);
+    const reportPath = resolveReportPath(row.report);
+    if (!reportPath) return res.status(400).send(`<p style="font-family:sans-serif;padding:24px">Report path is outside reports/ and was refused: ${escapeHtml(row.report)}</p>`);
     if (!fs.existsSync(reportPath)) return res.status(404).send(`<p style="font-family:sans-serif;padding:24px">Report file not found: ${escapeHtml(row.report)}</p>`);
     const raw = fs.readFileSync(reportPath, 'utf8');
     const body = reportMdToHtml(raw);

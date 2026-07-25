@@ -32,6 +32,7 @@ window.ICON = {
   users:     'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
   building:  'M3 21h18M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M19 21V11a1 1 0 0 0-1-1h-3M9 7h2M9 11h2M9 15h2',
   briefcase: 'M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2zM16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2',
+  userPlus:  'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M20 8v6M23 11h-6',
   // actions / motion
   send:      'M22 2 11 13M22 2l-7 20-4-9-9-4z',
   outbound:  'M12 19V5M5 12l7-7 7 7',
@@ -44,6 +45,7 @@ window.ICON = {
   search:    'M11 11m-8 0a8 8 0 1 0 16 0a8 8 0 1 0-16 0M21 21l-4.3-4.3',
   x:         'M18 6 6 18M6 6l12 12',
   check:     'M20 6 9 17l-5-5',
+  scale:     'M12 3v18M8 21h8M4 7h16M4 7l-2.5 6h5zM20 7l-2.5 6h5z',
   flag:      'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7',
   star:      'M12 2l3 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.9 21l1.2-6.8-5-4.9 6.9-1z',
   zap:       'M13 2 3 14h9l-1 8 10-12h-9z',
@@ -94,6 +96,16 @@ window.ScoreChip = function ScoreChip({ score }) {
 //
 // One implementation, shared, because this is the third helper these two report
 // panels both need and the previous two drifted when each grew its own copy.
+// Allow only http/https/mailto in data-derived hrefs; collapse anything else
+// (javascript:, data:, vbscript:, ...) to '#'. React does not block javascript:
+// URLs, so an unsanitized href built from imported/agent-written data is a
+// stored-XSS sink (security: CWE-79). Wrap every data-derived href in this.
+window.safeHref = function safeHref(u) {
+  const s = String(u == null ? '' : u).trim();
+  const lc = s.toLowerCase();
+  return (lc.startsWith('http://') || lc.startsWith('https://') || lc.startsWith('mailto:')) ? s : '#';
+};
+
 window.outputHref = function outputHref(p) {
   if (!p) return null;
   const f = String(p).split(/[\\/]/).pop();
@@ -125,7 +137,7 @@ window.ApplyArtifacts = function ApplyArtifacts({ app }) {
   ) : null;
   return (
     <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-      <span style={{ fontSize: 11.5, color: 'var(--text-mute)' }}>Files for this application:</span>
+      <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>Files for this application:</span>
       {link(a.resume, 'Tailored resume')}
       {link(a.cover, 'Cover letter')}
     </div>
@@ -147,8 +159,9 @@ window.ApplyArtifacts = function ApplyArtifacts({ app }) {
 // was 3.0/5. Three numbers, no two agreeing, on the one figure the product asks
 // to be trusted. Those totals are gone; this panel replaces them by saying what
 // the bars actually are.
-window.ScoreExplainer = function ScoreExplainer({ open, onClose }) {
+window.ScoreExplainer = function ScoreExplainer({ open, onClose, scoreSource }) {
   if (!open) return null;
+  const derived = scoreSource === 'derived';
   const Dim = ({ name, children }) => (
     <div style={{ marginBottom: 7 }}>
       <b style={{ color: 'var(--text)', fontWeight: 500 }}>{name}</b>
@@ -162,20 +175,32 @@ window.ScoreExplainer = function ScoreExplainer({ open, onClose }) {
     </div>
   );
   return (
-    <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12.5, lineHeight: 1.6 }}>
+    <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12, lineHeight: 1.6 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 }}>
         <b style={{ color: 'var(--text)' }}>How this score works</b>
         <button className="btn ghost sm" onClick={onClose}>Close</button>
       </div>
 
-      <p style={{ margin: '0 0 10px', color: 'var(--text-dim)' }}>
-        It is a judgment, not a sum. trajecktory reads the whole job posting next to your resume and the priorities you saved, then rates the role out of 5. It weighs five things:
-      </p>
+      {derived ? (
+        <p style={{ margin: '0 0 10px', color: 'var(--text-dim)' }}>
+          The number is computed, not guessed. trajecktory rates the role out of 5 on each dimension below, with the evidence for each rating, then takes the weighted average and subtracts for red flags. You own the weights in your profile, so the score reflects <i>your</i> priorities. It weighs:
+        </p>
+      ) : (
+        <p style={{ margin: '0 0 10px', color: 'var(--text-dim)' }}>
+          This is a <b style={{ color: 'var(--text)', fontWeight: 500 }}>legacy score</b>, rated by judgment under an older rubric before scores were computed. It is kept as it was, not recomputed. Newer roles are scored by the weighted method below. It weighs:
+        </p>
+      )}
 
       <Dim name="Resume match.">How closely your real experience lines up with what they are asking for.</Dim>
-      <Dim name="Target fit.">Whether this is the kind of role you said you want, at the right level.</Dim>
-      <Dim name="Pay.">How the money compares to the market for this job.</Dim>
-      <Dim name="Company signals.">Culture, stability, growth, and how they treat remote work.</Dim>
+      <Dim name="Target fit.">Whether this is the kind of role you said you want.</Dim>
+      <Dim name="Level.">Whether the seniority matches: title versus real scope.</Dim>
+      {/* Pay is listed here because it IS rated and shown, but the old wording said
+          it was compared to the market and implied it counted. Neither is true: it is
+          rated against the band the user set, and it carries no weight. Leaving that
+          uncorrected means the bar shows a 5 while adding nothing, with the explainer
+          insisting it was weighed. */}
+      <Dim name="Pay.">Rated against the band you set, not the market. Shown but not counted: missing a target you could still live with should not lower a number that decides whether you apply. Pay below your hard floor caps the score instead.</Dim>
+      <Dim name="Location.">Whether the location, remote policy, and logistics work for you.</Dim>
       <Dim name="Red flags.">Anything that counts against the role. This is the only one that subtracts.</Dim>
 
       <p style={{ margin: '10px 0 6px', color: 'var(--text)' }}>What the number means</p>
@@ -191,7 +216,9 @@ window.ScoreExplainer = function ScoreExplainer({ open, onClose }) {
         Most jobs are not a 4. Roughly one in five is. If everything scored well the score would not be telling you anything.
       </p>
       <p style={{ margin: '8px 0 0', color: 'var(--text-mute)' }}>
-        The bars above are the reasoning behind the number, not the maths that produced it, so they will not add up to it.
+        {derived
+          ? 'The bars above are those dimensions. With your weights they add up to the number, minus the red-flag penalty. Pay is shown but not counted, and a cap overrides the total when one applies.'
+          : 'The bars above are the reasoning behind the number, not the maths that produced it, so they will not add up to it.'}
       </p>
     </div>
   );
@@ -228,7 +255,7 @@ window.PostingPanel = function PostingPanel({ app }) {
         <div className="cs-callout-label">No saved copy of this posting</div>
         <div className="cs-callout-body" style={{ lineHeight: 1.6 }}>
           This role was evaluated before trajecktory started keeping the posting text, so only the link survives.
-          {app.url ? <> The original is <a href={app.url} target="_blank" rel="noreferrer">still worth a try</a>, though postings usually come down once they are filled.</> : null}
+          {app.url ? <> The original is <a href={window.safeHref(app.url)} target="_blank" rel="noreferrer">still worth a try</a>, though postings usually come down once they are filled.</> : null}
           <div style={{ marginTop: 8, color: 'var(--text-mute)' }}>Evaluations from now on save the text automatically, so it is here when you prepare for a later round.</div>
         </div>
       </div>
@@ -238,13 +265,13 @@ window.PostingPanel = function PostingPanel({ app }) {
   return (
     <div className="col" style={{ gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
           Saved when this role was evaluated, so it survives the posting being taken down.
         </span>
-        {app.url && <a className="btn sm" href={app.url} target="_blank" rel="noreferrer">Original ↗</a>}
+        {app.url && <a className="btn sm" href={window.safeHref(app.url)} target="_blank" rel="noreferrer">Original ↗</a>}
       </div>
       <div className="mono dim" style={{ fontSize: 10.5 }}>{state.path}</div>
-      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12.5, lineHeight: 1.6, color: 'var(--text)', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 'var(--r-card)', padding: 13, margin: 0, maxHeight: '60vh', overflowY: 'auto' }}>{state.text}</pre>
+      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, lineHeight: 1.6, color: 'var(--text)', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 'var(--r-card)', padding: 13, margin: 0, maxHeight: '60vh', overflowY: 'auto' }}>{state.text}</pre>
     </div>
   );
 }
@@ -259,10 +286,12 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
     { key: "pipeline",      label: "Pipeline",           icon: "▥", badge: stats.pending },
     { key: "followups",     label: "Follow-Ups",         icon: "↻", badge: stats.followups || null },
     { key: "target-talent", label: "TA Outreach",        icon: "◎" },
-    { key: "linkedin-ssi",  label: "LinkedIn SSI",       icon: "🔗" },
+    { key: "linkedin-ssi",  label: "LinkedIn SSI",       icon: "◍" },
     { key: "recruiters",    label: "Recruiters",         icon: "☎" },
     { key: "interview",     label: "Interview",          icon: "◈" },
-    { key: "analytics",     label: "Insights",           icon: "✦" },
+    // Review moved under Insights (first subtab); its Gmail-health nudge rides
+    // the Insights item now. Connect moved under Follow-Ups.
+    { key: "analytics",     label: "Insights",           icon: "✦", attention: stats.reviewAttention || null },
   ];
 
   // Launchpad: front-and-centre with an incomplete-count badge while setup is
@@ -271,9 +300,9 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
     const REQ = ["cv","identity","roles","edge","comp","location","evaluation","companies","outputs"];
     const incomplete = REQ.filter(id => (setupState.sections?.[id]?.status || "empty") !== "complete").length;
     if (setupState.firstRun || incomplete > 0) {
-      items.unshift({ key: "launchpad", label: "Launchpad", icon: "🚀", badge: incomplete || null });
+      items.unshift({ key: "launchpad", label: "Launchpad", icon: "◇", badge: incomplete || null });
     } else {
-      items.push({ key: "launchpad", label: "Setup", icon: "🚀" });
+      items.push({ key: "launchpad", label: "Setup", icon: "◇" });
     }
   }
   return (
@@ -301,6 +330,12 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
             <span>{it.label}</span>
             {it.badge ? (
               <span className="kbd" style={{ background: "var(--accent)", color: "#0a0a0c", borderColor: "var(--accent)", fontWeight: 700 }}>{it.badge}</span>
+            ) : it.attention === "reconnect" ? (
+              <span className="kbd" title="Gmail connection expired. Reconnect to resume catching replies and bounces"
+                style={{ background: "var(--red)", color: "#fff", borderColor: "var(--red)", fontWeight: 700 }}>!</span>
+            ) : it.attention === "stale" ? (
+              <span title="No email check in over a week. Open Insights, then Review, to sync"
+                style={{ marginLeft: "auto", width: 7, height: 7, borderRadius: "50%", background: "var(--accent)", flexShrink: 0 }} />
             ) : null}
           </div>
         ))}
@@ -328,7 +363,6 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // Triaged postings that already have a tracker row. Shown as a collapsed count
   // rather than dropped, so a wrong suppression is visible instead of silent.
   const [triageSuppressed, setTriageSuppressed] = useState([]);
-  const [showSuppressed, setShowSuppressed] = useState(false);
   const [deepJobs, setDeepJobs] = useState({});         // { url: { status, error } }
   // URLs the user dismissed (× control) or that auto-cleared after a completed
   // deep dive. Persisted so a reload doesn't resurrect a spent card.
@@ -660,13 +694,13 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
 
       {/* Sign in to Claude — Agent Scan + Evaluate Pipeline run on the bundled
           CLI's login, so the control lives here next to the steps that use it. */}
-      <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 11.5 }}>
+      <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 11 }}>
         {claudeSignedIn ? (
           <span style={{ color: 'var(--green)' }}>✓ Signed in to Claude</span>
         ) : (
           <button onClick={signInClaude}
             title="One-time sign-in so Agent Scan and Evaluate Pipeline can run"
-            style={{ background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '3px 8px', fontSize: 11.5, cursor: 'pointer', width: '100%' }}>
+            style={{ background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', width: '100%' }}>
             Sign in to Claude ⧉
           </button>
         )}
@@ -680,7 +714,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           rather than advice. The fix flips a security flag, so it stays behind an
           explicit click. */}
       {!trust.ok && (
-        <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 11.5, background: 'var(--warn-bg, rgba(255,176,32,0.08))' }}>
+        <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 11, background: 'var(--warn-bg, rgba(255,176,32,0.08))' }}>
           <div style={{ color: 'var(--warn, #ffb020)', fontWeight: 600 }}>⚠ Folder not trusted by Claude Code</div>
           <div style={{ marginTop: 4, color: 'var(--text-mute)', lineHeight: 1.45 }}>
             {trust.losing?.length
@@ -689,7 +723,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           </div>
           <button onClick={fixWorkspaceTrust} disabled={trustBusy}
             title="Marks this folder as trusted in your Claude Code config (a backup is saved first)"
-            style={{ marginTop: 6, background: 'none', border: '1px solid var(--warn, #ffb020)', color: 'var(--warn, #ffb020)', borderRadius: 6, padding: '3px 8px', fontSize: 11.5, cursor: trustBusy ? 'default' : 'pointer', width: '100%', opacity: trustBusy ? 0.6 : 1 }}>
+            style={{ marginTop: 6, background: 'none', border: '1px solid var(--warn, #ffb020)', color: 'var(--warn, #ffb020)', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: trustBusy ? 'default' : 'pointer', width: '100%', opacity: trustBusy ? 0.6 : 1 }}>
             {trustBusy ? 'Trusting…' : 'Trust this folder'}
           </button>
           {trust.fixMsg && <div style={{ marginTop: 6, color: 'var(--text-mute)', lineHeight: 1.4 }}>{trust.fixMsg}</div>}
@@ -802,7 +836,12 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
 
       {!hasKey && (visibleTriage.length > 0 || triageSuppressed.length > 0) && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 4 }}>TRIAGE · {visibleTriage.length} scored</div>
+          <div title="A coarse Haiku pre-filter that ranks the queue. These are NOT derived evaluation scores and are not comparable to one. Run a deep dive to get the real score." style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 4 }}>PRE-FILTER · {visibleTriage.length} ranked</div>
+          {/* Bounded, and scrolls inside itself. Fifteen ranked cards each carrying
+              a rationale line ran to roughly a thousand pixels, so a good triage run
+              pushed the paste box and everything under it off the bottom of the
+              sidebar. The queue is a queue: it should be reachable, not resident. */}
+          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
           {visibleTriage.slice(0, 15).map(card => {
             const dj = deepJobs[card.url];
             const sc = card.score;
@@ -811,8 +850,8 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
             return (
               <div key={card.url} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                  <span style={{ color, fontWeight: 700, fontFamily: 'var(--mono)', fontSize: 12 }}>{sc == null ? '—' : sc.toFixed(1)}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${card.company}: ${card.title}`}>{card.company} · {card.title}</span>
+                  <span title="Pre-filter score (coarse Haiku pass), not comparable to a derived evaluation score" style={{ color, fontWeight: 700, fontFamily: 'var(--mono)', fontSize: 12 }}>{sc == null ? '—' : '~' + sc.toFixed(1)}</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${card.company}: ${card.title}`}>{card.company} · {card.title}</span>
                 </div>
                 {card.rationale && <div style={{ fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4, marginTop: 2 }}>{card.rationale}</div>}
                 <div style={{ display: 'flex', gap: 10, marginTop: 4, alignItems: 'center' }}>
@@ -821,28 +860,26 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                     : dj?.status === 'error' ? <span style={{ fontSize: 10.5, color: 'var(--red)' }} title={dj.error}>✕ failed</span>
                     : <button onClick={() => triggerDeep(card)} disabled={agentBusy2}
                         style={{ background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 5, padding: '2px 8px', fontSize: 10.5, cursor: agentBusy2 ? 'not-allowed' : 'pointer', opacity: agentBusy2 ? 0.5 : 1 }}>Deep dive ⧉</button>}
-                  {!isLocal && card.url && <a href={card.url} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>open JD ↗</a>}
+                  {!isLocal && card.url && <a href={window.safeHref(card.url)} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>open JD ↗</a>}
                   <button onClick={() => dismissCard(card.url)} title="Dismiss this card"
                     style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-mute)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>×</button>
                 </div>
               </div>
             );
           })}
+          </div>
 
+          {/* A COUNT, never a list. These were scored by triage and then skipped
+              because each already has a tracker row, so every one of them is
+              already visible in Pipeline with its real status — the expandable
+              list rendered the same rows a second time, in a worse format, and
+              could fill most of the sidebar. The count still earns its line: it
+              is the only signal that triage ran and deduped correctly rather
+              than silently finding nothing. */}
           {triageSuppressed.length > 0 && (
-            <div style={{ marginTop: visibleTriage.length ? 6 : 0 }}>
-              <button onClick={() => setShowSuppressed(v => !v)}
-                title="These were scored by triage but already have a row in your tracker"
-                style={{ background: 'none', border: 'none', color: 'var(--text-mute)', cursor: 'pointer', fontSize: 10.5, padding: 0, textAlign: 'left' }}>
-                {showSuppressed ? '▾' : '▸'} {triageSuppressed.length} already evaluated (hidden)
-              </button>
-              {showSuppressed && triageSuppressed.map(card => (
-                <div key={card.url} style={{ padding: '4px 0 4px 10px', fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4 }}>
-                  <span style={{ fontFamily: 'var(--mono)' }}>#{card.existingNum}</span>{' '}
-                  <span style={{ opacity: 0.8 }}>{card.existingStatus}</span>{' · '}
-                  <span title={`${card.company}: ${card.title}`}>{card.company} · {card.title}</span>
-                </div>
-              ))}
+            <div title="Scored by triage, then skipped: each already has a row in your tracker. Find them in Pipeline (terminal ones are under All)."
+              style={{ marginTop: visibleTriage.length ? 6 : 0, fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4 }}>
+              {triageSuppressed.length} already tracked · skipped
             </div>
           )}
         </div>
@@ -856,7 +893,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           style={{ width: '100%', marginTop: 6, background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 'not-allowed' : 'pointer', opacity: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 0.5 : 1 }}>
           {pasteBusy ? 'Evaluating…' : 'Evaluate (Sonnet) ⧉'}
         </button>
-        <div style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.4 }}>{pasteMsg || 'Self-sourced → full deep eval, skips triage.'}</div>
+        <div style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.4 }}>{pasteMsg || 'Self-sourced → full deep eval, skips triage.'}</div>
       </div>
     </div>
   );
@@ -878,13 +915,12 @@ window.SyncIndicator = function SyncIndicator({ lastSync }) {
     : secs < 60 ? `${secs}s ago`
     : secs < 3600 ? `${Math.round(secs / 60)}m ago`
     : `${Math.round(secs / 3600)}h ago`;
-  return <span className="muted" style={{ fontSize: 10 }}>· synced {label}</span>;
+  return <span className="muted" style={{ fontSize: 10.5 }}>· synced {label}</span>;
 };
 
 // ---------- Topbar ----------
-window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, density, setDensity, theme, setTheme, openCmd, openTweaks, lastSync }) {
-  const THEME_ORDER = ["dark", "dim", "light"];
-  const nextTheme = THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length];
+window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, theme, setTheme, themeOptions, openCmd, lastSync }) {
+  const opts = themeOptions && themeOptions.length ? themeOptions : [{ value: theme, label: theme }];
   return (
     <div className="topbar">
       <div className="search">
@@ -910,133 +946,174 @@ window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, density,
           <window.SyncIndicator lastSync={lastSync} />
         </div>
 
-        <button
-          className="icon-btn"
-          title={density === "compact" ? "Comfortable density" : "Compact density"}
-          onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}
+        <select
+          className="theme-select"
+          value={theme}
+          onChange={e => setTheme(e.target.value)}
+          title="Color theme"
+          aria-label="Color theme"
         >
-          {density === "compact"
-            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 5h18M3 12h18M3 19h18"/></svg>
-          }
-        </button>
-
-        <button
-          className="icon-btn"
-          title={`Switch to ${nextTheme} theme`}
-          onClick={() => setTheme(nextTheme)}
-        >
-          {theme === "dark"
-            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-            : theme === "dim"
-            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>
-            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-          }
-        </button>
-
-        <button className="icon-btn" title="Tweaks" onClick={openTweaks}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </button>
+          {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
       </div>
     </div>
   );
 };
 
-// ---------- Drawer (Pipeline row detail) ----------
-window.Drawer = function Drawer({ app, onClose, onAction }) {
-  useEffectS(() => {
-    const onKey = e => { if (e.key === "Escape") onClose(); };
-    if (app) window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [app, onClose]);
-
+// ---------- Quick Copy Bar (relocated from the removed dead window.Drawer) ----------
+// One-tap copy strip for what an external application form asks for (email, phone,
+// links, certifications), sourced from window.myIdentity() so nothing personal is
+// hardcoded. Global so the Pipeline drawer (pipeline.jsx, a separate IIFE) reuses it.
+function QuickCopyBar() {
+  const m = (window.myIdentity && window.myIdentity()) || {};
+  const [copied, setCopied] = React.useState(null);
+  const trunc = (s, n = 22) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+  const items = [
+    ['Email', m.email], ['Phone', m.phone], ['LinkedIn', m.linkedin],
+    ['Portfolio', m.portfolioUrl], ['GitHub', m.github],
+    // Certifications contribute the name plus whatever an application form is
+    // actually going to ask for. Before this the bar knew only the name, so the
+    // number and dates were looked up by hand on every form.
+    ...(Array.isArray(m.certificationEntries) && m.certificationEntries.length
+      ? m.certificationEntries.flatMap(c => [
+          [trunc(c.name), c.name],
+          c.number  ? [`${trunc(c.name, 14)} no.`, c.number]  : null,
+          c.expires ? [`${trunc(c.name, 14)} exp`, c.expires] : null,
+        ].filter(Boolean))
+      : (Array.isArray(m.certifications) ? m.certifications.filter(Boolean).map(c => [trunc(c), c]) : [])),
+  ].filter(([, v]) => v);
+  if (!items.length) return null;
+  const copy = (label, val) => {
+    try { navigator.clipboard.writeText(val); } catch { /* clipboard blocked */ }
+    setCopied(label);
+    setTimeout(() => setCopied(c => (c === label ? null : c)), 1200);
+  };
   return (
-    <>
-      <div className={`drawer-backdrop ${app ? "open" : ""}`} onClick={onClose}></div>
-      <div className={`drawer ${app ? "open" : ""}`}>
-        {app && (
-          <>
-            <div className="drawer-head">
-              <div>
-                <div className="row" style={{ gap: 10, marginBottom: 4 }}>
-                  <span className="mono dim" style={{ fontSize: 11 }}>#{String(app.id).padStart(3, "0")}</span>
-                  <window.StatusPill status={app.status} />
-                </div>
-                <h3>{app.company}</h3>
-                <div className="dim" style={{ fontSize: 13, marginTop: 2 }}>{app.role}</div>
-              </div>
-              <button className="icon-btn" onClick={onClose} title="Close (Esc)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
-              </button>
-            </div>
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '8px 14px', borderTop: '1px solid var(--border)', background: 'var(--panel-2)' }}>
+      <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginRight: 2 }}>Quick copy:</span>
+      {items.map(([label, val]) => (
+        <button key={label} className="btn sm" style={{ fontSize: 11 }} title={`Copy: ${val}`} onClick={() => copy(label, val)}>
+          {copied === label ? '✓ copied' : label}
+        </button>
+      ))}
+    </div>
+  );
+}
+// Exposed globally so the Pipeline drawer (pipeline.jsx, separate IIFE) can reuse it.
+window.QuickCopyBar = QuickCopyBar;
 
-            <div className="drawer-body">
-              <div className="kv">
-                <span className="k">Score</span>
-                <span className="v"><window.ScoreChip score={app.score} /> <span className="dim mono" style={{ marginLeft: 8, fontSize: 11 }}>{window.scoreBucket(app.score) === "strong" ? "strong match" : window.scoreBucket(app.score) === "borderline" ? "borderline" : "weak"}</span></span>
+// The condensed Gmail setup walkthrough, rendered in place rather than behind a
+// link, because a user who is stuck will not go and find one. Lives here, not in
+// review.jsx, because two surfaces show it: the Gmail card on Review, and the
+// Launchpad booster where a new user meets the feature in the first place. The
+// full version, with the troubleshooting table, is docs/gmail-setup.md.
+//
+// Only the steps that are easy to get wrong AND annoying to undo carry a warning.
+window.GmailSetupSteps = function GmailSetupSteps() {
+  const steps = [
+    ['Create a project', 'At console.cloud.google.com. Any name. It is just a container.'],
+    ['Enable the Gmail API', 'APIs & Services, Library, search Gmail API, Enable. Skip this and everything below still looks like it worked, then every mail check fails.'],
+    ['Fill in the consent screen', 'User type External, your own address for the contact fields, and add your own address under Test users. Miss the test user and you get "access blocked" at the last step, with no explanation.'],
+    ['Add two permissions', 'gmail.readonly finds replies and bounces. gmail.compose lets the Draft buttons work. Add both or you will be back here.'],
+    ['Create the credentials', 'OAuth client ID, and set Application type to Desktop app. Not Web application: a desktop client works on any local port, so nothing has to be pre-registered and it keeps working when the port changes.'],
+    ['Paste the two values', 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET into dashboard-web/.env, then restart the dashboard. It reads that file once at startup, so an edit made while it is running does nothing.'],
+  ];
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+      <ol style={{ margin: 0, paddingLeft: 20, fontSize: 12, lineHeight: 1.7, color: 'var(--text-dim)' }}>
+        {steps.map(([head, body]) => (
+          <li key={head} style={{ marginBottom: 6 }}>
+            <b style={{ color: 'var(--text)', fontWeight: 500 }}>{head}.</b> {body}
+          </li>
+        ))}
+      </ol>
+      <p style={{ fontSize: 11.5, color: 'var(--text-mute)', margin: '10px 0 0', lineHeight: 1.6 }}>
+        Google will warn you that the app is unverified. That is expected: it is your app, in your project, used by you. Click Advanced, then continue. Full walkthrough including what to do when something goes wrong: docs/gmail-setup.md in your trajecktory folder.
+      </p>
+    </div>
+  );
+};
 
-                <span className="k">Archetype</span>
-                <span className="v mono">{app.archetype}</span>
+// Gmail connection state, fetched ONCE per page load and shared by every draft
+// button. There can be dozens on screen (one per contact), so each fetching for
+// itself would hammer an endpoint that may refresh a token. A single in-flight
+// promise is reused, and subscribers are notified when it lands.
+let _gmailState = null;          // null = not fetched; object = the health payload
+let _gmailPending = null;        // the in-flight fetch, shared
+const _gmailSubs = new Set();
+function useGmailState() {
+  const [s, setS] = useStateS(_gmailState);
+  useEffectS(() => {
+    if (_gmailState) return;
+    _gmailSubs.add(setS);
+    if (!_gmailPending) {
+      _gmailPending = fetch('/api/google/health').then(r => r.json())
+        // A failure must not disable the button: unknown is treated as available,
+        // so the worst case is the old behaviour (click, get told what is wrong)
+        // rather than a control the user cannot press for no visible reason.
+        .catch(() => ({ configured: true, connected: true, healthy: true, reason: 'unknown' }))
+        .then(j => { _gmailState = j; _gmailSubs.forEach(fn => fn(j)); _gmailSubs.clear(); return j; });
+    }
+    return () => _gmailSubs.delete(setS);
+  }, []);
+  return s;
+}
 
-                <span className="k">Sector</span>
-                <span className="v">{app.sector} <span className="dim">· {app.size}-stage</span></span>
-
-                <span className="k">Comp posted</span>
-                <span className="v mono">${app.salary}k <span className={app.salary >= app.target ? "" : ""} style={{ color: app.salary >= app.target ? "var(--green)" : "var(--red)", marginLeft: 8 }}>{app.salary >= app.target ? `+${app.salary - app.target}k` : `−${app.target - app.salary}k`} vs target</span></span>
-
-                <span className="k">Date logged</span>
-                <span className="v mono">{app.date} <span className="dim">· {window.daysAgo(app.date)}d ago</span></span>
-
-                <span className="k">Notes</span>
-                <span className="v">{app.notes}</span>
-              </div>
-
-              <div className="report-preview">
-                <h4>Evaluation Report (Auto-generated)</h4>
-                <p style={{ marginTop: 0 }}><strong style={{ color: "var(--text)" }}>Verdict:</strong> {app.score == null ? "Score unavailable." : app.score >= 4.0 ? "Strong fit. Apply within 48h." : app.score >= 3.0 ? "Borderline. Review JD detail before applying." : "Weak fit. Consider skipping."}</p>
-                <h4 style={{ marginTop: 12 }}>Why this scored {app.score != null ? app.score.toFixed(1) : "N/A"}</h4>
-                <ul>
-                  <li>Role archetype <span className="mono" style={{ color: "var(--accent)" }}>{app.archetype}</span> matches your profile</li>
-                  <li>Posted comp <span className="mono">${app.salary}k</span> {app.salary >= app.target ? "meets" : "is below"} your target band</li>
-                  <li>Sector exposure to <span className="mono">{app.sector}</span> aligns with stated preferences</li>
-                  <li>{app.size === "Late" ? "Late-stage growth: proven motion, lower equity upside" : app.size === "Mid" ? "Mid-stage: fastest learning curve" : "Early-stage: high equity, high risk"}</li>
-                </ul>
-                <h4>Risks</h4>
-                <ul>
-                  <li>{app.score >= 4.0 ? "Competitive process: recruiter may already have a shortlist" : "Comp gap may surface in screen"}</li>
-                  <li>JD emphasis on tooling not yet validated against your stack</li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="drawer-foot">
-              {app.status === "Evaluated" && (
-                <>
-                  <button className="btn primary" onClick={() => onAction(app, "Applied")}>Mark Applied</button>
-                  <button className="btn" onClick={() => onAction(app, "SKIP")}>Skip</button>
-                </>
-              )}
-              {app.status === "Applied" && (
-                <>
-                  <button className="btn success" onClick={() => onAction(app, "Responded")}>Mark Responded</button>
-                  <button className="btn danger" onClick={() => onAction(app, "Rejected")}>Mark Rejected</button>
-                </>
-              )}
-              {(() => {
-                const idx = window.FUNNEL_ORDER.indexOf(app.status);
-                if (idx >= window.FUNNEL_ORDER.indexOf("Responded") && idx < window.FUNNEL_ORDER.length - 1) {
-                  const next = window.FUNNEL_ORDER[idx + 1];
-                  return <button className="btn success" onClick={() => onAction(app, next)}>{next === "Offer" ? "Mark Offer" : `Move to ${next}`}</button>;
-                }
-                return null;
-              })()}
-              <button className="btn">Open Report ↗</button>
-              <button className="btn">Generate resume ⌘G</button>
-            </div>
-          </>
-        )}
-      </div>
-    </>
+// Create-a-Gmail-draft button. POSTs the composed email to /api/google/draft,
+// which creates a DRAFT and never sends (the server has no send path). If the
+// connected token predates the compose scope the route returns needsReconnect and
+// we nudge a reconnect. Shared by the TA, recruiter, and follow-up composers.
+// Renders nothing without a recipient address (a draft needs a "to").
+//
+// When Gmail is not usable the button is DISABLED, never hidden. Hiding it means a
+// user never learns the capability exists; disabling it with the reason on hover
+// makes the feature discoverable at the exact place they would have used it, which
+// is the only place the explanation is worth anything.
+window.GmailDraftBtn = function GmailDraftBtn({ to, subject, body, size = "sm" }) {
+  const [busy, setBusy] = React.useState(false);
+  const [done, setDone] = React.useState(false);
+  const gmail = useGmailState();
+  if (!to) return null;
+  // Undefined state (still loading) counts as usable: the button is enabled for a
+  // moment before the answer arrives, which is better than flickering disabled.
+  const blocked = gmail && gmail.configured === false ? 'setup'
+    : gmail && !gmail.connected ? 'connect'
+    : gmail && !gmail.healthy ? 'reconnect'
+    : null;
+  const blockedWhy = blocked === 'setup'
+    ? 'Gmail drafts need a one-time Gmail setup first. Insights, then Review, then "How to set this up".'
+    : blocked === 'connect'
+    ? 'Connect Gmail to draft from here. Insights, then Review.'
+    : blocked === 'reconnect'
+    ? 'Your Gmail connection expired. Reconnect on Insights, then Review.'
+    : null;
+  const create = async () => {
+    if (busy || done) return;
+    setBusy(true);
+    try {
+      const res = await window.tjkMutate('/api/google/draft', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, subject: subject || '', body: body || '' }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.ok) {
+        setDone(true);
+        window.tjkToast?.('Draft created in Gmail. Review and send it there.', 'success');
+        setTimeout(() => setDone(false), 4000);
+      } else if (res.status === 403 && d.needsReconnect) {
+        window.tjkToast?.('Reconnect Gmail to enable drafts (Review tab, then Connect).', 'error');
+      } else {
+        window.tjkToast?.(d.error || 'Could not create the Gmail draft.', 'error');
+      }
+    } catch {
+      window.tjkToast?.('Could not reach Gmail.', 'error');
+    } finally { setBusy(false); }
+  };
+  return (
+    <button className={"btn " + size} onClick={create} disabled={busy || !body || !!blocked}
+      title={blockedWhy || "Create a draft in your Gmail Drafts folder (never sends)"}>
+      {busy ? "Drafting…" : done ? "In Gmail Drafts ✓" : "Gmail draft"}
+    </button>
   );
 };
 
@@ -1258,7 +1335,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
           the fallback keeps the mono block, since commit subjects read as code
           and dressing them up would only disguise what they are. */}
       {showNotes && info.releaseNotes ? (
-        <div style={{ marginTop: 10, maxHeight: 220, overflow: 'auto', fontSize: 12.5, lineHeight: 1.55, color: 'var(--text-dim)' }}>
+        <div style={{ marginTop: 10, maxHeight: 220, overflow: 'auto', fontSize: 12, lineHeight: 1.55, color: 'var(--text-dim)' }}>
           {info.releaseNotes.sections.map((sec, i) => (
             <div key={i} style={{ marginBottom: 8 }}>
               {sec.heading ? (

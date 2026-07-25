@@ -20,6 +20,7 @@
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import yaml from 'js-yaml';
 import { buildTitleFilter, buildLocationFilter, normalizeUrl, scoreOffer } from './lib/scan-core.mjs';
+import { sanitizeCell } from './lib/sanitize-cell.mjs';
 const parseYaml = yaml.load;
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -94,6 +95,28 @@ function detectApi(company) {
   }
 
   return null;
+}
+
+// Which ATS a company sits on when detectApi() could NOT reach it. Used only for
+// the skipped-coverage report, so an unrecognized host is a fine answer: the point
+// is to separate "one parser away" from "bespoke page, nothing to build".
+const SKIP_PLATFORMS = [
+  [/smartrecruiters\.com/i, 'SmartRecruiters'],
+  [/jobvite\.com/i, 'Jobvite'],
+  [/icims\.com/i, 'iCIMS'],
+  [/workable\.com/i, 'Workable'],
+  [/recruitee\.com/i, 'Recruitee'],
+  [/breezy\.hr/i, 'Breezy'],
+  [/rippling(?:ats)?\.com/i, 'Rippling'],
+  [/bamboohr\.com/i, 'BambooHR'],
+  [/teamtailor\.com/i, 'Teamtailor'],
+  [/(?:paylocity|adp|hirebridge|ultipro|dayforce)\./i, 'HR suite'],
+];
+
+function skipPlatform(company) {
+  const u = `${company.careers_url || ''} ${company.api || ''}`;
+  for (const [re, name] of SKIP_PLATFORMS) if (re.test(u)) return name;
+  return 'bespoke/unrecognized';
 }
 
 // ── API parsers ─────────────────────────────────────────────────────
@@ -303,7 +326,7 @@ function appendToPipeline(offers) {
     const procIdx = text.indexOf('## Procesadas');
     const insertAt = procIdx === -1 ? text.length : procIdx;
     const block = `\n${marker}\n\n` + offers.map(o =>
-      `- [ ] ${o.url} | ${o.company} | ${o.title}`
+      `- [ ] ${sanitizeCell(o.url)} | ${sanitizeCell(o.company)} | ${sanitizeCell(o.title)}`
     ).join('\n') + '\n\n';
     text = text.slice(0, insertAt) + block + text.slice(insertAt);
   } else {
@@ -313,7 +336,7 @@ function appendToPipeline(offers) {
     const insertAt = nextSection === -1 ? text.length : nextSection;
 
     const block = '\n' + offers.map(o =>
-      `- [ ] ${o.url} | ${o.company} | ${o.title}`
+      `- [ ] ${sanitizeCell(o.url)} | ${sanitizeCell(o.company)} | ${sanitizeCell(o.title)}`
     ).join('\n') + '\n';
     text = text.slice(0, insertAt) + block + text.slice(insertAt);
   }
@@ -327,7 +350,8 @@ function appendToScanHistory(offers, date) {
     writeFileSync(SCAN_HISTORY_PATH, 'url\tfirst_seen\tportal\ttitle\tcompany\tstatus\n', 'utf-8');
   }
 
-  const lines = offers.map(o =>
+  const clean = offers.map(o => ({ ...o, url: sanitizeCell(o.url), title: sanitizeCell(o.title), company: sanitizeCell(o.company) }));
+  const lines = clean.map(o =>
     `${o.url}\t${date}\t${o.source}\t${o.title}\t${o.company}\tadded`
   ).join('\n') + '\n';
 
@@ -385,9 +409,26 @@ async function main() {
     .map(c => ({ ...c, _api: detectApi(c) }))
     .filter(c => c._api !== null);
 
-  const skippedCount = companies.filter(c => c.enabled !== false).length - targets.length;
+  const skipped = companies.filter(c => c.enabled !== false && detectApi(c) === null);
+  const skippedCount = skipped.length;
 
   console.log(`Scanning ${targets.length} companies via API (${skippedCount} skipped — no API detected)`);
+  // Name WHY they were skipped, grouped by ATS. A bare count cannot tell you
+  // whether it is 70 bespoke career pages, which nothing can fix, or a handful of
+  // boards on one platform, which is a single parser away. Coverage reported only
+  // as a number never gets closed, because nobody can see what closing it costs.
+  if (skippedCount) {
+    const groups = new Map();
+    for (const c of skipped) {
+      const k = skipPlatform(c);
+      groups.set(k, (groups.get(k) || 0) + 1);
+    }
+    const line = [...groups.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `${k} ${n}`)
+      .join(', ');
+    console.log(`  not scanned by platform: ${line}`);
+  }
   if (dryRun) console.log('(dry run — no files will be written)\n');
 
   // 3. Load dedup sets

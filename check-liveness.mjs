@@ -24,6 +24,7 @@
 import { chromium } from 'playwright';
 import { readFile } from 'fs/promises';
 import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness } from './liveness-core.mjs';
+import { isSafeLivenessUrl } from './lib/safe-url.mjs';
 
 // Navigate to a URL and classify it. Shared by both the reused-page and
 // isolated (fresh-page) modes so the detection logic exists in one place.
@@ -73,8 +74,13 @@ async function probePage(page, url) {
 }
 
 // Check one URL. In isolated mode, use a fresh page (closed afterwards);
-// otherwise reuse the shared page.
+// otherwise reuse the shared page. The SSRF guard (isSafeLivenessUrl) lives in
+// lib/safe-url.mjs so the actual shipped function is unit tested; this file pulls
+// in Playwright and cannot be imported by a test.
 async function checkUrl(browser, sharedPage, url, isolated) {
+  if (!isSafeLivenessUrl(url)) {
+    return { result: 'expired', reason: 'refused: non-public / loopback / metadata URL' };
+  }
   // Workday job pages 404 / time out on a raw Playwright load even when live, so
   // resolve them via the CXS JSON API first. Only a definitive verdict short-
   // circuits; an inconclusive API result (null) falls through to Playwright.

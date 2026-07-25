@@ -70,9 +70,54 @@ const DAILY_QUOTES = [
   { text: "Act as if what you do makes a difference. It does.", author: "William James" },
 ];
 
+// WARM vs COLD. The relaunch plan's central finding is that these two channels
+// convert very differently: a handful of warm touches produced almost as many
+// screens as two orders of magnitude more cold applications. At equal rates that
+// warm result would be a roughly 1-in-64,000 coincidence.
+//
+// A pooled funnel cannot show that, and pooling is not harmless. Dividing all
+// screens by all applications yields a flattering blended figure that hides a
+// cold rate sitting BELOW the market median, so the pooled number reads as
+// "performing fine" when the channel carrying nearly all the volume is not.
+// (Rates described, not printed: this is a tracked file in a public repo and the
+// user's conversion performance is his, not the product's.)
+//
+// Warm = contact with a PERSON existed before or alongside the application, in
+// either direction. Three sub-types, and the split between them is the most
+// strategically loaded distinction in the tracker:
+//   inbound   — they found him. Real, but not scalable: you cannot make it happen.
+//   outbound  — he reached them. The ONLY scalable warm channel, and the one the
+//               40-touch test is measuring.
+//   referral  — introduced. Highest yield in the market data, currently zero rows.
+// Everything else is cold. Deliberately strict: a row is warm only if TAGGED warm,
+// so an untagged row is under-counted rather than silently counted as cold.
+const isWarmApp = (a) => a && (a.inbound === true || a.outbound === true || a.source === 'Referral');
+const warmKind = (a) => !a ? null
+  : a.source === 'Referral' ? 'referral'
+  : a.outbound === true ? 'outbound'
+  : a.inbound === true ? 'inbound' : null;
+
+// Cold apply to screen, median, from Ashby's ~100M-application dataset (carried in
+// the relaunch plan). Used as the ONLY benchmark on this page: it is sourced, and
+// it is channel-specific, which the retired "22% benchmark" was neither.
+const COLD_APPLY_BENCHMARK = { lo: 3.6, hi: 4.7, label: '3.6-4.7% market median' };
+
 window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, search }) {
   const [selected, setSelected] = useStateO(new Set());
   const [scoreFilter, setScoreFilter] = useStateO(0);
+  // The weekly scorecard: the seven metrics the relaunch plan says to manage to.
+  // They already existed, two clicks deep on Insights -> Review, while this page
+  // led with counts of what the SCANNER produced. The plan decided what to look
+  // at; this makes the landing page agree with it.
+  const [weekly, setWeekly] = useStateO(null);
+  React.useEffect(() => {
+    let live = true;
+    fetch('/api/metrics/weekly', { headers: { accept: 'application/json' } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (live && d) setWeekly(d); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
   // Funnel data — cumulative-ish (Applied = applied + responded + interview + offer, etc.)
   // Actually the brief says Evaluated → Applied → Responded → Interview → Offer
   // Treat as a count of items that have at least reached that stage.
@@ -84,19 +129,26 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
       "Phone Screen": "Screen", "1st Interview": "1st", "2nd Interview": "2nd",
       "3rd Interview": "3rd", "4th Interview": "4th", "Offer": "Offer",
     };
-    // Every rung, Evaluated included, counts rows that actually REACHED it.
-    // Evaluated previously counted every row in the tracker, folding in every row
-    // that never entered the funnel at all (Discarded, Closed, SKIP, Not a Fit).
-    // That understates the first conversion by the ratio of tracked rows to
-    // evaluated ones, which on a well-filtered tracker is several-fold. It also
-    // skewed every downstream "% of entry" in the chart tooltip, which divides by
-    // this bar. The server's stageFunnelStats has always computed it this way;
-    // this makes the two agree.
+    // The FIRST rung is membership, not progression. Every tracked row was
+    // evaluated: an evaluation is what creates the row. Asking
+    // appReached(a, "Evaluated") scored every evaluated-then-declined row
+    // (Discarded, SKIP, Not a Fit) as never-evaluated, because none of those sit
+    // on FUNNEL_ORDER. The rung collapsed onto Applied, both reading the same count,
+    // and the chart reported a 100% evaluate-to-apply conversion while hiding the single
+    // largest drop in the pipeline. An earlier pass swung the other way and
+    // counted every row including Closed. window.enteredFunnel is the one rule
+    // now, mirroring enteredFunnel() on the server so the two cannot disagree.
+    // Every LATER rung still counts rows that actually reached it. This
+    // reconciles with the Sankey rather than contradicting it: that diagram
+    // partitions the same rows into progressed + dismissed + aged-out, and this
+    // rung is the first two of those three added together.
     // Applied additionally credits Rejected / No Response, since either implies
     // an application was sent.
-    return window.FUNNEL_ORDER.map(stage => {
+    return window.FUNNEL_ORDER.map((stage, i) => {
       let stageApps;
-      if (stage === "Applied") {
+      if (i === 0) {
+        stageApps = apps.filter(a => window.enteredFunnel(a));
+      } else if (stage === "Applied") {
         stageApps = apps.filter(a => window.appReached(a, "Applied") || a.status === "Rejected" || a.status === "No Response");
       } else {
         stageApps = apps.filter(a => window.appReached(a, stage));
@@ -106,7 +158,21 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
         short: SHORT[stage] || stage,
         value: stageApps.length,
         apps: stageApps,
-        color: window.STATUS_META[stage]?.color || "var(--accent)",
+        // ONE HUE, stepped. A funnel is an ORDERED sequence, and ordered data takes a
+        // sequential encoding: one hue, light to dark. It used to take its bar colour
+        // from STATUS_META, which gives every rung a different hue — violet, blue,
+        // cyan, four ambers, green. That reads as "nine different kinds of thing" for
+        // what is nine stages of one thing, and it failed a CVD validator three ways:
+        // Evaluated and Applied came out ΔE 0.3 apart for deuteranopes (identical, and
+        // they are the two largest bars), and two of the amber rungs were ΔE 4.8 apart
+        // in NORMAL vision, which nobody can separate. Height already carries the
+        // magnitude, so the hue was decorative and actively misleading.
+        //
+        // The alpha floor is 0.75, not lower: below that the palest rungs drop under
+        // 3:1 against the light themes' white panels. Checked across all nine.
+        // STATUS_META keeps its per-status hues — those are identity for badges and
+        // pills, where distinguishing Rejected from Offer at a glance is the job.
+        color: `rgba(var(--accent-rgb), ${(1 - (i * 0.25) / (window.FUNNEL_ORDER.length - 1)).toFixed(3)})`,
       };
     });
   }, [apps]);
@@ -252,40 +318,128 @@ const toggleRow = (id) => setSelected(s => {
         <span style={{ color: "var(--text-mute)", fontSize: 11 }}>· {dailyQuote.author}</span>
       </div>
 
-      {/* KPIs */}
+      {/* ── THIS WEEK: the plan's floors, the controllable inputs ──────────────
+          These four replaced Total Tracked / Pending Decision / Response Rate /
+          Avg Score. Three of those four counted what the SCANNER produced, which
+          rises whether or not you do anything, so the page reported progress from
+          a machine running unattended while the behaviours that actually produce
+          offers were invisible. The relaunch plan names seven metrics to manage
+          to; they lived two clicks deep on Insights -> Review. A landing page
+          should answer "am I on pace" first, and it now does. */}
       <div className="grid cols-4">
-        <div className="kpi">
-          {/* Counts every tracked row, matching the header and the funnel's base.
-              This card used to exclude Closed while both of those included it,
-              so the page showed two different totals with nothing explaining the
-              gap. Closed stays visible as a sub-note instead of a silent subtraction. */}
-          <span className="kpi-label">Total Tracked</span>
-          <span className="kpi-value">{apps.length}</span>
-          <span className="kpi-delta">{recent} added in last 14d · {apps.filter(a => a.status === "Closed").length} closed before you could act</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">Pending Decision</span>
-          <span className="kpi-value" style={{ color: "var(--accent)" }}>{apps.filter(a => a.status === "Evaluated").length}</span>
-          <span className="kpi-delta">{actionRequired.length} marked hot (≥4.0)</span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">Response Rate</span>
-          <span className="kpi-value">{responseRate}%</span>
-          <span className={`kpi-delta ${responseRate >= 22 ? "up" : "down"}`}>
-            {responded} of {appliedN} replied · {responseRate >= 22 ? "▲ above" : "▼ below"} 22% benchmark
-          </span>
-        </div>
-        <div className="kpi">
-          <span className="kpi-label">Avg Score</span>
-          <span className="kpi-value">{avgScore}</span>
-          <span className="kpi-delta">across all logged roles</span>
-        </div>
+        {(() => {
+          const m = weekly && weekly.metrics ? weekly.metrics : null;
+          const floors = (weekly && weekly.floors) || {};
+          const cell = (key, label, floor, fmt = (v) => v) => {
+            const d = m ? m[key] : null;
+            // "not logged" is NOT zero. A blank source must never read as a miss,
+            // which is the whole reason collectWeeklyMetrics carries `available`.
+            const unlogged = d && d.available === false;
+            const v = d ? d.value : null;
+            const under = !unlogged && floor != null && typeof v === 'number' && v < floor;
+            // A metric with NO floor is neither met nor missed, so it stays neutral.
+            // Colouring it green because it failed a comparison it never had made
+            // "Screens booked 0" render as a success in green, which is the exact
+            // false-confidence this dashboard is being cleaned of.
+            const hasVerdict = floor != null && !unlogged;
+            const color = unlogged ? 'var(--text-mute)'
+              : !hasVerdict ? 'var(--text)'
+              : under ? 'var(--orange)' : 'var(--green)';
+            return (
+              <div className="kpi" key={key} title={d ? d.source : 'loading'}>
+                <span className="kpi-label">{label}</span>
+                <span className="kpi-value" style={{ color }}>
+                  {!m ? '·' : unlogged ? '—' : fmt(v)}
+                </span>
+                <span className="kpi-delta">
+                  {floor != null ? `floor ${fmt(floor)}` : 'this week'}
+                  {!m ? '' : unlogged ? ' · not logged' : !hasVerdict ? '' : under ? ' · below floor' : ' · met'}
+                </span>
+              </div>
+            );
+          };
+          return [
+            cell('verifiedTouches', 'Verified touches', floors.verifiedTouches ?? 13),
+            cell('linkedinConnects', 'LinkedIn connects', floors.linkedinConnects ?? 50),
+            cell('cadencePct', 'Cadence adherence', floors.cadencePct ?? 70, v => `${v}%`),
+            cell('screensBooked', 'Screens booked', null),
+          ];
+        })()}
       </div>
+
+      {/* ── OUTCOMES: lagging, and honest about which channel produced them ──── */}
+      <div className="grid cols-4" style={{ marginTop: 12 }}>
+        {(() => {
+          const iApplied = window.FUNNEL_ORDER.indexOf('Applied');
+          const iResp = window.FUNNEL_ORDER.indexOf('Responded');
+          const sent = apps.filter(a => window.FUNNEL_ORDER.indexOf(a.reached) >= iApplied);
+          const rate = (rows) => {
+            const n = rows.length;
+            const k = rows.filter(a => window.FUNNEL_ORDER.indexOf(a.reached) >= iResp).length;
+            return { n, k, pct: n ? Math.round((k / n) * 1000) / 10 : null };
+          };
+          const warm = rate(sent.filter(isWarmApp));
+          const cold = rate(sent.filter(a => !isWarmApp(a)));
+          const closed = apps.filter(a => a.status === 'Closed').length;
+          const stalePct = apps.length ? Math.round((closed / apps.length) * 100) : 0;
+          // Coverage guard. Only 2 rows in the tracker carry an [inbound] tag and
+          // none carry [referral:], while the plan reconstructs 3-4 real warm
+          // touches. So the warm column is UNDER-COUNTED, and saying so is the
+          // difference between a split funnel and a fabricated one.
+          const warmTagged = apps.filter(isWarmApp).length;
+          const undercounted = warmTagged < 4;
+          // Break warm into its sub-types for the tooltip. Inbound and outbound
+          // are both "warm" for the rate, but only outbound answers the question
+          // the next three weeks are asking.
+          const kinds = sent.filter(isWarmApp).reduce((m, a) => {
+            const k = warmKind(a); if (k) m[k] = (m[k] || 0) + 1; return m;
+          }, {});
+          const kindLabel = Object.entries(kinds).map(([k, n]) => `${n} ${k}`).join(', ') || 'none tagged';
+          return [
+            <div className="kpi" key="cold" title="Applications with no prior contact. Benchmark is Ashby's cold-apply-to-screen median across ~100M applications.">
+              <span className="kpi-label">Cold reply rate</span>
+              <span className="kpi-value" style={{ color: cold.pct != null && cold.pct >= COLD_APPLY_BENCHMARK.lo ? 'var(--green)' : 'var(--orange)' }}>
+                {cold.pct == null ? '—' : `${cold.pct}%`}
+              </span>
+              <span className="kpi-delta">{cold.k} of {cold.n} · {COLD_APPLY_BENCHMARK.label}</span>
+            </div>,
+            <div className="kpi" key="warm" title={`Contact with a person existed before the application, either direction. Tagged: ${kindLabel}. Only the outbound share is scalable.`}>
+              <span className="kpi-label">Warm reply rate</span>
+              <span className="kpi-value" style={{ color: undercounted ? 'var(--text-mute)' : 'var(--green)' }}>
+                {warm.n ? `${warm.pct}%` : '—'}
+              </span>
+              <span className="kpi-delta">
+                {warm.k} of {warm.n} · {kindLabel}
+              </span>
+            </div>,
+            <div className="kpi" key="stale" title="Postings that closed before you could act. Evaluation effort spent on roles that expired.">
+              <span className="kpi-label">Expired before action</span>
+              <span className="kpi-value" style={{ color: stalePct > 10 ? 'var(--orange)' : 'var(--green)' }}>{stalePct}%</span>
+              <span className="kpi-delta">{closed} of {apps.length} · target under 10%</span>
+            </div>,
+            <div className="kpi" key="wip" title="Applications sent but not serviced. The plan's WIP limit, which governs volume in place of a cap.">
+              <span className="kpi-label">Unserviced (WIP)</span>
+              <span className="kpi-value">{weekly && weekly.metrics && weekly.metrics.unservicedApplications ? weekly.metrics.unservicedApplications.value : '·'}</span>
+              <span className="kpi-delta">{apps.filter(a => a.status === 'Evaluated').length} pending decision</span>
+            </div>,
+          ];
+        })()}
+      </div>
+
+      {/* ── ACTIONS: what YOU did, and cohorts by send-week ──────────────────
+          The band below still plots tracker entries, which is scanner output: it
+          rises on a day you did nothing because a scheduled scan added rows, and
+          stays flat on a day you sent ten applications by hand. This card counts
+          actions instead. Touches and connects are DECLARED with available:false
+          rather than omitted, because "you sent none" and "nothing logs this yet"
+          are different facts and only one of them is your fault. Both series
+          start filling with the outreach motion. */}
+      <window.ActionsCard />
 
       {/* Activity · last N days — full-width band on top */}
       <div className="card padded-lg" style={{ display: "flex", flexDirection: "column" }}>
         <div className="card-head">
-          <span className="card-title">Activity · last {ACTIVITY_WINDOW} days</span>
+          <span className="card-title">Tracker intake · last {ACTIVITY_WINDOW} days</span>
           <span className="card-meta mono">
             {apps.filter(a => window.daysAgo(a.date) <= ACTIVITY_WINDOW - 1).length} entries &nbsp;·&nbsp;
             Last 7d <span style={{ color: "var(--accent)" }}>{activityInsights.last7}</span>&nbsp;·&nbsp;

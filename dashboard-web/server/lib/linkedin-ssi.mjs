@@ -145,9 +145,85 @@ function toneInstruction(tone) {
 
 // POST /api/linkedin-ssi/generate-response — Claude-generated LinkedIn comment reply
 
+// ── Connection-note helpers (shared across the influencer and TA/recruiter
+//    draft paths) ───────────────────────────────────────────────────────────
+// These are PURE (no fs, no network) so the draft routes can reuse one prompt
+// shape and one trimmer, and so both are unit-tested directly. The note
+// generator started life influencer-only; generalizing it to draft for any
+// contact (a target-talent lead or a recruiter reachable only on LinkedIn)
+// meant lifting the character-fit and prompt-assembly logic out of the route.
+
+// Trim a drafted note to LinkedIn's hard 300-char cap while KEEPING the
+// "Thanks, <first>" sign-off. Prefer cutting at a sentence end, then a word
+// boundary. Returns { text, length }. A note already within the cap is returned
+// untouched. This is verbatim the trimming the influencer route used inline; it
+// lives here now so the generic path gets the same guarantees.
+function fitConnectNote(text, firstName, limit = 300) {
+  const response = String(text ?? '').trim();
+  if (response.length <= limit) return { text: response, length: response.length };
+  const first = String(firstName ?? '').trim();
+  const SIGNOFF = `Thanks, ${first}`;
+  const budget = limit - SIGNOFF.length - 1; // 1 for the space before the sign-off
+  const escFirst = first.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let body = response.replace(new RegExp('\\s*Thanks,?\\s*' + escFirst + '\\.?\\s*$', 'i'), '').trim();
+  if (body.length > budget) {
+    const slice = body.slice(0, budget);
+    // Prefer the last sentence end (. ! ?) in the slice, if it is not too early.
+    const lastSentence = Math.max(slice.lastIndexOf('. '), slice.lastIndexOf('! '), slice.lastIndexOf('? '));
+    if (lastSentence > budget * 0.5) {
+      body = slice.slice(0, lastSentence + 1);
+    } else {
+      const lastSpace = slice.lastIndexOf(' ');
+      body = (lastSpace > 0 ? slice.slice(0, lastSpace) : slice).replace(/[,;:]+$/, '') + '.';
+    }
+  }
+  const out = `${body} ${SIGNOFF}`;
+  return { text: out, length: out.length };
+}
+
+// Assemble the LLM prompt for a connection note to a GENERIC recipient (a
+// target-talent or recruiter contact, not only a tracked influencer). The
+// caller composes `guidance` (the source-specific anchor: why this connection
+// makes sense) so the source judgment stays in the route and this stays a dumb,
+// testable assembler. Hard rules mirror the influencer path: 300-char cap, no em
+// dashes, one grounded reason, a "Thanks, <first>" sign-off, no desperation.
+function buildConnectPrompt({
+  senderName, senderFirst, senderHeadline = '',
+  recipientName, recipientFirst = '', recipientRole = '', recipientCompany = '',
+  guidance = '', cvExcerpt = '', tone = 'Warm', toneText = '', targetMax = 280,
+} = {}) {
+  const first = String(senderFirst ?? '').trim();
+  const openExample = String(recipientFirst || 'Alex').trim();
+  return `You are drafting a LinkedIn CONNECTION REQUEST note from ${senderName}${senderHeadline ? ` (${senderHeadline})` : ''} to a contact.
+
+THE RECIPIENT:
+- Name: ${recipientName}
+- Role: ${recipientRole || '(unknown)'}${recipientCompany ? `\n- Company: ${recipientCompany}` : ''}
+
+ABOUT ${first.toUpperCase()} (for grounding, do not copy verbatim):
+${cvExcerpt || '(CV not available)'}
+
+WHY CONNECT: ${guidance || `Anchor on shared focus in the GTM / RevOps / analytics space. Signal ${first} is a fellow operator, not a job seeker.`}
+
+TONE DIRECTIVE (${tone}): ${toneText}
+
+HARD RULES:
+- ABSOLUTE MAXIMUM ${targetMax} characters TOTAL (including the "Thanks, ${first}" sign-off). LinkedIn caps connection notes at 300 characters and will reject anything longer. Count characters before responding. Aim for ${targetMax - 20} to leave safety margin.
+- Open with their first name + comma. Example: "Hi ${openExample},"
+- NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
+- One reason to connect that is grounded in the context above. Be specific, not generic.
+- End with a sign-off: "Thanks, ${first}" (with the comma).
+- No "I'd love to pick your brain". No "I hope this finds you well". No "Quick question for you".
+- Do NOT sound desperate and do NOT lead with being in market or looking for a job.
+- Do NOT include emojis.
+
+Return ONLY the body of the connection note, ready to paste into LinkedIn. No quotes, no preface, no character count, no explanation.`;
+}
+
 export {
   ensureLikedinSsiDir, loadInfluencer, toneInstruction,
   readInfluencers, writeInfluencers, nextInfluencerId, normalizeInfluencer,
   parseCsvInfluencers, INFLUENCERS_TEMPLATE_CSV,
+  fitConnectNote, buildConnectPrompt,
 };
 

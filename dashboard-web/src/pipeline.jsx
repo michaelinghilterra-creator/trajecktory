@@ -1,6 +1,6 @@
 // Pipeline Module — Console redesign with sub-tabs.
 // Overview (default) · Table · All · Analytics.
-// Reuses the existing window.Drawer for the application drawer.
+// The application drawer is PipelineDrawer, defined in this file.
 //
 // NOTE: wrapped in an IIFE so locals don't collide with other modules
 // (target-talent.jsx declares ContactsView/AnalyticsView etc; the IIFE
@@ -119,8 +119,10 @@ function PIcon({ d, size = 16, stroke = 1.6, style, fill = false }) {
 }
 
 // ─── Primitives ────────────────────────────────────────────────────────────
-// `provisional` marks a Haiku triage score: dashed border, lower opacity, and a
-// "~" prefix so a triage 4.2 never reads like a full Sonnet 4.2.
+// `provisional` marks a Haiku triage PRE-FILTER score: dashed border, lower
+// opacity, and a "~" prefix so a coarse triage 4.2 never reads like a derived
+// evaluation 4.2. The pre-filter only ranks the queue; it is a different, cheaper
+// number than the derived headline and is not comparable to it.
 function ScoreChip({ score, provisional = false }) {
   const b = scoreBucket(score);
   if (b === 'na') return <span className="score-chip na">N/A</span>;
@@ -128,7 +130,7 @@ function ScoreChip({ score, provisional = false }) {
   const rgb = b === 'strong' ? '34,197,94' : b === 'border' ? '234,179,8' : '239,68,68';
   return (
     <span className="score-chip"
-      title={provisional ? 'Provisional Haiku triage score. Run Deep Dive for the full evaluation' : undefined}
+      title={provisional ? 'Pre-filter score: a coarse Haiku pass to rank the queue, NOT the derived evaluation score. Run the full evaluation to replace it with a derived score.' : undefined}
       style={{
         color: c, borderColor: `rgba(${rgb},${provisional ? 0.5 : 0.42})`, background: `rgba(${rgb},${provisional ? 0.06 : 0.12})`,
         borderStyle: provisional ? 'dashed' : 'solid', opacity: provisional ? 0.9 : 1,
@@ -411,12 +413,12 @@ function TriageRowActions({ row, job, onDeep, onDismiss }) {
   const s = job && job.status;
   if (s === 'running') {
     return <div className="row" style={{ gap: 6, marginTop: 4 }} onClick={e => e.stopPropagation()}>
-      <span className="mono dim" style={{ fontSize: 10 }}>⧖ deep dive running…</span>
+      <span className="mono dim" style={{ fontSize: 10.5 }}>⧖ deep dive running…</span>
     </div>;
   }
   if (s === 'done') {
     return <div className="row" style={{ gap: 6, marginTop: 4 }} onClick={e => e.stopPropagation()}>
-      <span className="mono" style={{ fontSize: 10, color: 'var(--green)' }}>✓ promoted to a full evaluation</span>
+      <span className="mono" style={{ fontSize: 10.5, color: 'var(--green)' }}>✓ promoted to a full evaluation</span>
     </div>;
   }
   return (
@@ -426,12 +428,12 @@ function TriageRowActions({ row, job, onDeep, onDismiss }) {
         <PIcon d={PI.zap} size={11} /> Deep dive
       </button>
       {row.url && /^https?:\/\//i.test(row.url) && (
-        <a className="btn ghost sm" style={{ padding: '2px 8px', fontSize: 10.5 }} href={row.url} target="_blank" rel="noreferrer"
+        <a className="btn ghost sm" style={{ padding: '2px 8px', fontSize: 10.5 }} href={window.safeHref(row.url)} target="_blank" rel="noreferrer"
           onClick={e => e.stopPropagation()}>open JD <PIcon d={PI.arrowR} size={10} /></a>
       )}
       <button className="btn ghost sm" style={{ padding: '2px 7px', fontSize: 10.5 }}
         title="Not a match. Dismiss (it won't come back on the next scan)" onClick={() => onDismiss(row)}>✕ dismiss</button>
-      {s === 'error' && <span className="mono" style={{ fontSize: 10, color: 'var(--red)' }} title={job.error}>failed, retry</span>}
+      {s === 'error' && <span className="mono" style={{ fontSize: 10.5, color: 'var(--red)' }} title={job.error}>failed, retry</span>}
     </div>
   );
 }
@@ -521,7 +523,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
                     {a.role}
                     {a._triage && (
                       <>
-                        <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.04em', color: 'var(--text-mute)', marginTop: 2, textTransform: 'uppercase' }}>initial pass · Haiku triage</div>
+                        <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.04em', color: 'var(--text-mute)', marginTop: 2, textTransform: 'uppercase' }}>pre-filter · Haiku · not yet evaluated</div>
                         {a.rationale && <div className="dim" style={{ fontSize: 10.5, marginTop: 2, whiteSpace: 'normal', lineHeight: 1.35 }}>{a.rationale}</div>}
                         {triage && <TriageRowActions row={a} job={triage.deepJobs[a.id]} onDeep={triage.onDeep} onDismiss={triage.onDismiss} />}
                       </>
@@ -576,7 +578,7 @@ function CompPositioningCard(props) {
         <span className="card-meta mono">{withComp.length} of {apps.length} active have stated comp</span>
       </div>
       {withComp.length === 0 ? (
-        <div className="empty" style={{ padding: '16px 4px', color: 'var(--text-mute)', fontSize: 12.5 }}>
+        <div className="empty" style={{ padding: '16px 4px', color: 'var(--text-mute)', fontSize: 12 }}>
           No active roles have JD-stated comp yet. Roles without disclosed salary aren't plotted.
         </div>
       ) : (
@@ -590,22 +592,22 @@ function CompPositioningCard(props) {
               </div>
             ))}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 8, fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '.04em' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 8, fontFamily: 'var(--mono)', fontSize: 10.5, letterSpacing: '.04em' }}>
             <div style={{ color: 'var(--red)' }}>
               {'< ' + dollar(walkAway)}
-              <div style={{ color: 'var(--text-mute)', fontSize: 9.5, marginTop: 2 }}>walk-away</div>
+              <div style={{ color: 'var(--text-mute)', fontSize: 10.5, marginTop: 2 }}>walk-away</div>
             </div>
             <div style={{ color: 'var(--yellow)' }}>
               {dollar(walkAway) + '-' + dollar(targetLow)}
-              <div style={{ color: 'var(--text-mute)', fontSize: 9.5, marginTop: 2 }}>stretch</div>
+              <div style={{ color: 'var(--text-mute)', fontSize: 10.5, marginTop: 2 }}>stretch</div>
             </div>
             <div style={{ color: 'var(--green)' }}>
               {dollar(targetLow) + '-' + dollar(targetHigh)}
-              <div style={{ color: 'var(--text-mute)', fontSize: 9.5, marginTop: 2 }}>target band</div>
+              <div style={{ color: 'var(--text-mute)', fontSize: 10.5, marginTop: 2 }}>target band</div>
             </div>
             <div style={{ color: 'var(--accent)' }}>
               {'> ' + dollar(targetHigh)}
-              <div style={{ color: 'var(--text-mute)', fontSize: 9.5, marginTop: 2 }}>above target</div>
+              <div style={{ color: 'var(--text-mute)', fontSize: 10.5, marginTop: 2 }}>above target</div>
             </div>
           </div>
           <Insight kind={inOrAbovePct < 40 ? 'warn' : null}>
@@ -946,7 +948,7 @@ function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays
       {/* Status breakdown — flat row, no inner card */}
       <div className="row" style={{ flexWrap: 'wrap', gap: 14, marginBottom: 10 }}>
         {breakdown.map(({ s, n, meta }) => (
-          <span key={s} className="row mono" style={{ gap: 6, fontSize: 11.5, color: 'var(--text-dim)', cursor: 'pointer' }} onClick={() => toggleStatus(s)}>
+          <span key={s} className="row mono" style={{ gap: 6, fontSize: 11, color: 'var(--text-dim)', cursor: 'pointer' }} onClick={() => toggleStatus(s)}>
             <span style={{ width: 7, height: 7, borderRadius: 50, background: meta.color, display: 'inline-block', flexShrink: 0 }}></span>
             {s}
             <span style={{ color: filters.statuses.includes(s) ? 'var(--accent)' : 'var(--text)' }}>{n}</span>
@@ -1262,7 +1264,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               {(cs && cs.remote) && <span className="meta-chip">{cs.remote}</span>}
               {sectorRaw && <span className="meta-chip">{sectorRaw}</span>}
               {(cs && cs.seniority) && <span className="meta-chip">{cs.seniority.split('(')[0].trim()}</span>}
-              {app.url && <a className="meta-chip link" href={app.url} target="_blank" rel="noreferrer">JD ↗</a>}
+              {app.url && <a className="meta-chip link" href={window.safeHref(app.url)} target="_blank" rel="noreferrer">JD ↗</a>}
             </div>
           </div>
           <button className="icon-btn" onClick={onClose} title="Close (Esc)">
@@ -1317,7 +1319,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                 {/* Governs every status change made from this drawer: the stage
                     track above and the action buttons in the footer. Quiet and
                     pre-filled, because same-day is the common case. */}
-                <label className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', letterSpacing: '.06em', textTransform: 'uppercase' }}>Booked</label>
+                <label className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', letterSpacing: '.06em', textTransform: 'uppercase' }}>Booked</label>
                 <input
                   type="date"
                   className="dr-todo-due"
@@ -1345,7 +1347,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                 : <>Sourced via <b>{app.source || 'unknown'}</b> · no résumé generated yet</>}
             </span>
             {app.resume && app.resume !== engine && (
-              <span className="mono" style={{ fontSize: 10, color: 'var(--text-mute)' }}>{app.resume}</span>
+              <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)' }}>{app.resume}</span>
             )}
           </div>
 
@@ -1385,7 +1387,12 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                   <div className="rp-snap-value" style={{ color: scoreColor(app.score) }}>
                     {fmtScore(app.score)}<span style={{ color: 'var(--text-mute)', fontSize: 11, marginLeft: 3 }}>{app.score != null ? '/5' : ''}</span>
                   </div>
-                  <div className="rp-snap-sub">{scoreBucket(app.score) === 'na' ? 'unscored' : scoreBucket(app.score) + ' match'}</div>
+                  <div className="rp-snap-sub">
+                    {scoreBucket(app.score) === 'na' ? 'unscored' : scoreBucket(app.score) + ' match'}
+                    {cs && (cs.scoreSource === 'derived'
+                      ? <span title="Computed from the dimensions below times your saved weights, minus the red-flag penalty." style={{ marginLeft: 6, padding: '0 5px', borderRadius: 4, background: 'var(--accent-bg)', color: 'var(--accent)', fontSize: 10.5, fontWeight: 600 }}>derived</span>
+                      : <span title="Authored under the older rubric. Kept as-is and not recomputed, so it is not directly comparable to a derived score." style={{ marginLeft: 6, padding: '0 5px', borderRadius: 4, background: 'var(--panel)', color: 'var(--text-mute)', fontSize: 10.5, fontWeight: 600, border: '1px solid var(--border)' }}>legacy</span>)}
+                  </div>
                 </div>
                 <div className="rp-snap">
                   <div className="rp-snap-label">Comp</div>
@@ -1410,30 +1417,61 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
 
               {globalScore.length > 0 && (
                 <div className="rp-section">
-                  {/* Total removed. This one divided by ALL maxes while the
-                      drawer divided by positive maxes only, so the same report
-                      read 14/25 here and 14/20 there, against a headline of
-                      3.0/5. Three numbers, no two agreeing, on the one figure
-                      the product asks the user to trust. */}
+                  {/* For a DERIVED report the headline is the weighted sum of these
+                      dimensions minus the red-flag penalty, so the formula is shown.
+                      For a LEGACY report the headline was authored separately, so the
+                      bars are the reasoning, not the maths. */}
                   <div className="rp-section-head">
-                    <span>Global Score Breakdown</span>
+                    <span>Score Breakdown</span>
                     <button className="btn ghost sm" onClick={() => setExplainScore(v => !v)}>How is this scored?</button>
                   </div>
                   <div className="rp-bars">
-                    {globalScore.map(d => {
+                    {globalScore.map((d, i) => {
                       const neg = d.val < 0;
                       const pct = neg ? 18 : (d.val / d.max) * 100;
                       const col = neg ? 'var(--red)' : pct >= 80 ? 'var(--green)' : pct >= 60 ? 'var(--yellow)' : 'var(--orange)';
                       return (
-                        <div key={d.dim} className="rp-bar-row">
-                          <span className="rp-bar-label">{d.dim}{d.note && <span style={{ color: 'var(--text-mute)', fontSize: 10 }}> · {d.note}</span>}</span>
+                        <div key={d.key || d.dim || i} className="rp-bar-row">
+                          <span className="rp-bar-label" title={d.evidence || undefined} style={d.evidence ? { cursor: 'help' } : undefined}>{d.dim}{d.note && <span style={{ color: 'var(--text-mute)', fontSize: 10.5 }}> · {d.note}</span>}</span>
                           <div className="rp-bar-track"><div className="rp-bar-fill" style={{ width: `${pct}%`, background: col }} /></div>
                           <span className="rp-bar-val" style={{ color: neg ? 'var(--red)' : 'var(--text)' }}>{neg ? d.val : `${d.val}/${d.max}`}</span>
                         </div>
                       );
                     })}
                   </div>
-                  {window.ScoreExplainer && <window.ScoreExplainer open={explainScore} onClose={() => setExplainScore(false)} />}
+                  {cs && cs.scoreSource === 'derived' && cs.scoreBasis ? (() => {
+                    const b = cs.scoreBasis;
+                    // When a hard blocker caps the headline, the arithmetic below does
+                    // NOT add up to it, and printing the capped number on the left of an
+                    // equals sign is simply false. Show what the dimensions came to, then
+                    // show the cap as the separate step it is. `uncapped` is written by
+                    // compute-scores; older reports predate it, so fall back to the
+                    // subtraction (rounded intermediates, hence only a fallback).
+                    const capped = !!b.ceilingApplied;
+                    const before = b.uncapped != null ? b.uncapped
+                      : Math.round(((b.weightedAverage || 0) - (b.penalty || 0)) * 10) / 10;
+                    return (
+                      <div style={{ marginTop: 8 }}>
+                        <div className="mono" style={{ fontSize: 11, lineHeight: 1.7, color: 'var(--text-dim)' }}>
+                          {fmtScore(capped ? before : app.score)} = {(b.contributions || []).map(c => {
+                            const label = (globalScore.find(d => d.key === c.key) || {}).dim || c.key;
+                            return `${label} ${c.val}×${c.weight}`;
+                          }).join(' + ')}{b.penalty ? ` − ${b.penalty} red flags` : ''}
+                        </div>
+                        {capped && (
+                          <div style={{ fontSize: 11, lineHeight: 1.7, marginTop: 4, color: 'var(--orange)' }}>
+                            <span className="mono">Capped at {fmtScore(b.ceiling)}</span>
+                            {' '}by a hard blocker, so the headline is {fmtScore(app.score)} rather than {fmtScore(before)}. A ceiling is applied when something disqualifying has to keep the score low however well the rest fits, and a strong fit must not be able to outvote it.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })() : (
+                    <div className="dim" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.6 }}>
+                      Legacy score, authored under the older rubric. The bars are the reasoning, not the maths, so they will not add up to it.
+                    </div>
+                  )}
+                  {window.ScoreExplainer && <window.ScoreExplainer open={explainScore} onClose={() => setExplainScore(false)} scoreSource={cs && cs.scoreSource} />}
                 </div>
               )}
 
@@ -1702,7 +1740,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                   {app.url && (
                     <div className="info-row" style={{ gridTemplateColumns: '116px 1fr' }}>
                       <span className="ik">JD URL</span>
-                      <a className="iv link" href={app.url} target="_blank" rel="noreferrer" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.url}</a>
+                      <a className="iv link" href={window.safeHref(app.url)} target="_blank" rel="noreferrer" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.url}</a>
                     </div>
                   )}
                   {app.resume && (
@@ -1829,7 +1867,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                           style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', cursor: 'pointer', color: 'inherit' }}>
                           <span className="mono-av sm" style={{ borderRadius: 7 }}>{((c.first || '')[0] || '') + ((c.last || '')[0] || '')}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.first} {c.last}</div>
+                            <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.first} {c.last}</div>
                             <div className="dim" style={{ fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</div>
                           </div>
                           <span className="dim mono" style={{ fontSize: 10.5 }}>{c.status || 'New'}</span>
@@ -1901,7 +1939,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               {(r.docx || r.pdf) && <a className="btn sm" href={hrefFor(r.docx || r.pdf)} target="_blank" rel="noreferrer">{r.docx ? 'Resume DOCX ↗' : 'Resume PDF ↗'}</a>}
               {r.cover && <a className="btn sm" href={hrefFor(r.cover)} target="_blank" rel="noreferrer">Cover Letter ↗</a>}
               {r.apply && <a className="btn sm accent" href={hrefFor(r.apply)} target="_blank" rel="noreferrer">Form Responses ↗</a>}
-              {app.url && <a className="btn sm" href={app.url} target="_blank" rel="noreferrer">JD ↗</a>}
+              {app.url && <a className="btn sm" href={window.safeHref(app.url)} target="_blank" rel="noreferrer">JD ↗</a>}
               <button className="btn sm ghost" onClick={() => setApplyResult(null)}>✕</button>
             </div>
           );
@@ -1923,7 +1961,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               {b.label}
             </button>
           ))}
-          {app.url && <a className="btn ghost jd" href={app.url} target="_blank" rel="noreferrer">Open JD <PIcon d={PI.arrowR} size={12} /></a>}
+          {app.url && <a className="btn ghost jd" href={window.safeHref(app.url)} target="_blank" rel="noreferrer">Open JD <PIcon d={PI.arrowR} size={12} /></a>}
         </div>
       </div>
     </div>
@@ -2048,7 +2086,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   const staleDays = (a) => staleMeta.get(a.id)?.days ?? null;
 
   const selId = drawerApp && drawerApp.id;
-  // Local drawer: don't bubble up to the shared window.Drawer for Pipeline rows.
+  // Pipeline rows open PipelineDrawer (this file), not a shared drawer.
   // Triage rows have no report and a synthetic id, so they never open the heavy
   // report drawer — their Deep Dive / dismiss / open-JD actions live in the row.
   const handleOpen = (a) => { if (a && a._triage) return; setDrawerApp(a); };
@@ -2222,7 +2260,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
                 {a.role}
                 {a._triage && (
                   <>
-                    <div className="mono" style={{ fontSize: 9.5, letterSpacing: '0.04em', color: 'var(--text-mute)', marginTop: 2, textTransform: 'uppercase' }}>initial pass · Haiku triage</div>
+                    <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.04em', color: 'var(--text-mute)', marginTop: 2, textTransform: 'uppercase' }}>initial pass · Haiku triage</div>
                     {a.rationale && <div className="dim" style={{ fontSize: 10.5, marginTop: 2, whiteSpace: 'normal', lineHeight: 1.35 }}>{a.rationale}</div>}
                     {triage && <TriageRowActions row={a} job={triage.deepJobs[a.id]} onDeep={triage.onDeep} onDismiss={triage.onDismiss} />}
                   </>

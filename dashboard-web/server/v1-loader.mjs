@@ -91,8 +91,16 @@ export function v1ToCheatsheet(data) {
     tldr:              s.tldr || null,
     companyBrief:      s.companyBrief || null,
 
-    // Scoring + recommendation
+    // Scoring + recommendation.
+    // scoreSource distinguishes a DERIVED headline (computed by lib/score.mjs from
+    // the keyed globalScore dimensions + the user's weights) from a LEGACY one
+    // (authored under the old rubric). Absent means legacy: existing reports are read
+    // as legacy without being rewritten, and their authored number is never silently
+    // recomputed. scoreBasis is the derivation snapshot (weights + per-dim points +
+    // penalty) so a derived headline stays traceable even if the weights change later.
     globalScore:    Array.isArray(data.globalScore) ? data.globalScore : [],
+    scoreSource:    data.scoreSource === 'derived' ? 'derived' : 'legacy',
+    scoreBasis:     data.scoreBasis && typeof data.scoreBasis === 'object' ? data.scoreBasis : null,
     recommendation: data.recommendation || null,
     keywords:       Array.isArray(data.keywords) ? data.keywords : [],
 

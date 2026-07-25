@@ -2,7 +2,7 @@
 // render-runsheet.mjs - compile a runsheet-v1 sidecar into the standalone live board.
 //
 //   node render-runsheet.mjs "interview-prep/Example Co/example-co-round-1-screen.run.md"
-//   node render-runsheet.mjs <in.run.md> -o <out.html>
+//   node render-runsheet.mjs <in.run.md> [-o <out.html>] [--theme <name>]
 //
 // The board is the proven artifact: two columns, no scroll, a fixed answer overlay
 // parked under the webcam. Spec: templates/runsheet-schema-v1.md
@@ -12,8 +12,114 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const SCHEMA_ID = 'trajecktory-runsheet/v1';
+
+// ── The board must look like the app ─────────────────────────────────────────
+// This file used to carry its own palette: its own colour VALUES under its own
+// names, switched on prefers-color-scheme. So the board ignored all nine
+// dashboard themes and rendered in the system font, and someone on a cyan app got
+// a green board. A surface that does not look like the product reads as a
+// different product, and this one is opened on a second screen mid-interview,
+// which is the worst possible moment to feel like you are in the wrong window.
+//
+// It cannot link the stylesheet: this is a standalone file, often opened from
+// disk. So it INLINES a copy, generated from the real one at render time rather
+// than transcribed. The board keeps its own vocabulary (--ink, --muted, --line,
+// --hero, --danger, --tint, --hi) because those names carry meaning the
+// dashboard's do not, but each is an alias onto a dashboard token and no colour
+// is invented here.
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const STYLES_CSS = path.join(HERE, 'dashboard-web', 'src', 'styles.css');
+const FONTS_DIR = path.join(HERE, 'dashboard-web', 'src', 'fonts');
+// The dashboard's own default, so an unspecified board matches a fresh install.
+const DEFAULT_THEME = 'cyan';
+
+// Extract every theme's custom properties from the dashboard stylesheet.
+// Deliberately selector-driven rather than line-range based: it keeps blocks whose
+// selector is ONLY :root and/or [data-theme="x"], which picks up the token blocks
+// wherever they sit in the file and skips rules like `[data-theme="light"] .x`
+// that merely happen to be theme-scoped. Declarations that are not custom
+// properties are dropped, so this can never drag layout rules along with it.
+// No leading anchor on purpose. Requiring a `}` before each block consumes the
+// separator, so the next block has nothing left to match against and only the
+// FIRST rule in the file is ever found. Everything since the previous brace IS
+// the selector, which is what this needs anyway. An at-rule's opening line lands
+// in the selector slot and simply fails the theme test below.
+const TOKEN_BLOCK_RE = /([^{}]+)\{([^{}]*)\}/g;
+const THEME_SELECTOR_RE = /^(?::root|\[data-theme="[a-z0-9-]+"\])(?:\s*,\s*(?::root|\[data-theme="[a-z0-9-]+"\]))*$/;
+export function themeTokensCss(cssPath = STYLES_CSS) {
+  let css = '';
+  try { css = fs.readFileSync(cssPath, 'utf8'); } catch { return ''; }
+  // Comments first. The selector capture is everything since the previous brace,
+  // so a comment sitting above a rule becomes part of its selector and the rule
+  // stops matching. The file opens with one, which is exactly how the base :root
+  // block went missing on the first attempt at this.
+  css = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const blocks = [];
+  for (const m of css.matchAll(TOKEN_BLOCK_RE)) {
+    const selector = m[1].replace(/\s+/g, ' ').trim();
+    if (!THEME_SELECTOR_RE.test(selector)) continue;
+    const decls = m[2].split(';').map(d => d.trim()).filter(d => d.startsWith('--'));
+    if (decls.length) blocks.push(`${selector} {\n  ${decls.join(';\n  ')};\n}`);
+  }
+  return blocks.join('\n');
+}
+
+// Inline the app's typeface so the board renders in it with no network and no
+// assumption that it is installed anywhere.
+//
+// Generated from the dashboard's own fonts.css rather than hand-written, for the
+// same reason the colours are: a transcribed copy drifts. That also carries the
+// unicode-range declarations across, so an accented name in a run sheet still
+// draws in Inter instead of dropping to a fallback face mid-interview. Only the
+// sans faces are taken; the board uses no monospace.
+//
+// Missing font files are not an error. They mean the stack falls through to
+// system-ui, which is what every board did before this.
+const FONTS_CSS = path.join(FONTS_DIR, '..', 'fonts.css');
+export function embeddedFontCss(dir = FONTS_DIR, cssPath = FONTS_CSS) {
+  let css = '';
+  try { css = fs.readFileSync(cssPath, 'utf8'); } catch { return ''; }
+  const cache = new Map();
+  const b64 = (file) => {
+    if (!cache.has(file)) {
+      try { cache.set(file, fs.readFileSync(path.join(dir, path.basename(file))).toString('base64')); }
+      catch { cache.set(file, null); }
+    }
+    return cache.get(file);
+  };
+  // Group by FILE, not by declaration. fonts.css points four weights at each
+  // subset file, which is right when the browser can fetch it once and cache it,
+  // and very wrong when the bytes are inlined: it would embed the same font four
+  // times and turn a 200KB board into most of a megabyte. One face per file, with
+  // its weight widened to the range that file was serving, is the same result at a
+  // quarter of the size.
+  const byFile = new Map();
+  for (const m of css.matchAll(/@font-face\s*\{[^}]*\}/g)) {
+    const block = m[0];
+    if (!/font-family:\s*'Inter'/.test(block)) continue;
+    const url = block.match(/url\(([^)]+)\)/);
+    if (!url) continue;
+    const file = url[1].trim().replace(/['"]/g, '');
+    const weight = parseInt((block.match(/font-weight:\s*(\d+)/) || [])[1] || '400', 10);
+    const entry = byFile.get(file) || { block, min: weight, max: weight };
+    entry.min = Math.min(entry.min, weight);
+    entry.max = Math.max(entry.max, weight);
+    byFile.set(file, entry);
+  }
+  const out = [];
+  for (const [file, { block, min, max }] of byFile) {
+    const data = b64(file);
+    if (!data) continue;
+    out.push(block
+      .replace(/font-weight:\s*\d+/, `font-weight: ${min} ${max}`)
+      .replace(/url\([^)]+\)/, `url(data:font/woff2;base64,${data})`)
+      .replace(/\s+/g, ' '));
+  }
+  return out.join('\n');
+}
 
 // ---------------------------------------------------------------- load + parse
 export function parseRunsheet(raw) {
@@ -162,32 +268,38 @@ function buildBoard(d, der) {
   return { col1, col2, secHtml, rulesPanel, S, whenTxt, heroKey };
 }
 
-export function render(d, der) {
+export function render(d, der, { theme = DEFAULT_THEME } = {}) {
   const { col1, col2, secHtml, rulesPanel, S, whenTxt } = buildBoard(d, der);
   const s = d.session || {};
   const head = [d.company, s.who ? s.who : null, d.role].filter(Boolean).join(' &middot; ');
 
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="${esc(theme)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(d.company)} &middot; Live Board</title>
 <style>
+${embeddedFontCss()}
+/* Every theme the dashboard has, generated from its stylesheet. The board picks
+   one via data-theme on <html> above; the rest ride along so the file can be
+   re-themed by editing one attribute, with no re-render. */
+${themeTokensCss()}
   :root{
     /* Camera calibration. Bigger --box-top = answer box sits lower. */
     --box-top: 34vh;
     --camera-gap: 80px;
-    --bg:#f4f5f7; --panel:#fff; --ink:#16181d; --muted:#6b7280; --line:#e0e2e7;
-    --accent:#0a7d46; --hero:#8a4b00; --danger:#b0182b; --tint:#eef7f2; --hi:#fff6e0;
-  }
-  @media (prefers-color-scheme: dark){
-    :root{ --bg:#12141a; --panel:#1b1e26; --ink:#e8eaee; --muted:#9aa3b2; --line:#2c313c;
-           --accent:#4ade9a; --hero:#f0b866; --danger:#ff7b8a; --tint:#16241d; --hi:#2a2417; }
+    /* The board vocabulary, aliased onto the tokens above. Nothing new invented. */
+    --ink:var(--text); --muted:var(--text-dim); --line:var(--border);
+    --hero:var(--orange); --danger:var(--red); --tint:var(--accent-bg);
+    /* Two declarations: a browser without color-mix keeps the first, so the active
+       row loses its warm wash but never its background. Its outline still marks it. */
+    --hi:var(--panel-2);
+    --hi:color-mix(in srgb, var(--orange) 16%, transparent);
   }
   *{box-sizing:border-box;}
   body{margin:0;padding:16px;background:var(--bg);color:var(--ink);
-       font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.4;}
+       font-family:var(--sans);line-height:1.4;}
   header{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
          padding:0 4px 10px;flex-wrap:wrap;}
   h1{font-size:20px;margin:0;}
@@ -233,7 +345,12 @@ export function render(d, der) {
   .cue{flex:1 1 52%;color:var(--muted);}
   .to{flex:1 1 48%;font-weight:700;}
   .arw{color:var(--accent);font-weight:800;}
-  .panel.hero{border-color:var(--hero);}
+  /* Weight as well as hue: on the two warm themes the accent is itself an amber,
+     so --hero separates a hero panel from a normal one by almost no colour at all.
+     A heavier border survives that without inventing a per-theme colour, and the
+     obvious alternative is worse: the theme red is --danger here, and hero means
+     say this while danger means do not. */
+  .panel.hero{border-color:var(--hero);border-width:2px;}
   .panel.hero h2{color:var(--hero);}
   .panel.panic{border-color:var(--accent);border-width:2px;background:var(--tint);}
   .panel.rules h2{color:var(--danger);}
@@ -314,13 +431,18 @@ document.addEventListener('click', e => {
 const isMain = process.argv[1] && import.meta.url.endsWith(path.basename(process.argv[1]));
 if (isMain) {
   const args = process.argv.slice(2);
-  const src = args.find(a => !a.startsWith('-'));
+  const oIdx = args.indexOf('-o');
+  const tIdx = args.indexOf('--theme');
+  // Skip the VALUES of known flags when hunting for the source path, so
+  // `-o out.html file.run.md` does not treat the output name as the input.
+  const flagValues = new Set([oIdx, tIdx].filter(i => i >= 0).map(i => i + 1));
+  const src = args.find((a, i) => !a.startsWith('-') && !flagValues.has(i));
   if (!src) {
-    console.error('usage: node render-runsheet.mjs <file.run.md> [-o out.html]');
+    console.error('usage: node render-runsheet.mjs <file.run.md> [-o out.html] [--theme <name>]');
     process.exit(1);
   }
-  const oIdx = args.indexOf('-o');
   const out = oIdx >= 0 ? args[oIdx + 1] : src.replace(/\.run\.md$/, '.board.html');
+  const theme = tIdx >= 0 ? args[tIdx + 1] : DEFAULT_THEME;
 
   const { data } = parseRunsheet(fs.readFileSync(src, 'utf8'));
   const der = derive(data);
@@ -331,7 +453,7 @@ if (isMain) {
     process.exit(1);
   }
 
-  fs.writeFileSync(out, render(data, der));
+  fs.writeFileSync(out, render(data, der, { theme }));
 
   const cueCount = der.cues.length;
   console.log(`${data.company} · ${data.stage} · round ${data.round} · template ${data.template}`);

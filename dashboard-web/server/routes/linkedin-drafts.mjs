@@ -3,7 +3,8 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { loadInfluencer, toneInstruction } from '../lib/linkedin-ssi.mjs';
+import { loadInfluencer, toneInstruction, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
+import { computeConnectQueue } from '../lib/followups.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
 export const router = express.Router();
@@ -124,29 +125,86 @@ Return ONLY the body of the connection note, ready to paste into LinkedIn. No qu
     if (response.length > 300) {
       response = await callClaude(250);
     }
-    // Smart trim: if still over 300, cut at last sentence boundary before 285 and reattach sign-off
+    // Still over? Deterministically trim to the 300-char cap, keeping the sign-off.
     if (response.length > 300) {
-      const SIGNOFF = `Thanks, ${id.firstName}`;
-      const budget = 300 - SIGNOFF.length - 1; // 1 for the space/newline before sign-off
-      const escFirst = id.firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      let body = response.replace(new RegExp('\\s*Thanks,?\\s*' + escFirst + '\\.?\\s*$', 'i'), '').trim();
-      if (body.length > budget) {
-        const slice = body.slice(0, budget);
-        // Prefer last sentence end (. ! ?) within the slice
-        const lastSentence = Math.max(slice.lastIndexOf('. '), slice.lastIndexOf('! '), slice.lastIndexOf('? '));
-        if (lastSentence > budget * 0.5) {
-          body = slice.slice(0, lastSentence + 1);
-        } else {
-          // Fall back to last word boundary
-          const lastSpace = slice.lastIndexOf(' ');
-          body = (lastSpace > 0 ? slice.slice(0, lastSpace) : slice).replace(/[,;:]+$/, '') + '.';
-        }
-      }
-      response = `${body} ${SIGNOFF}`;
+      response = fitConnectNote(response, id.firstName).text;
     }
     res.json({ response, length: response.length });
   } catch (err) {
     console.error('Error generating connect request:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/linkedin-drafts/connect-queue — contacts reachable only via LinkedIn
+// (a real handle, no sendable email): the fallback outreach lane for people whose
+// address bounced, is org-blocked, or was never verifiable. Spans TA + recruiters.
+router.get('/api/linkedin-drafts/connect-queue', (req, res) => {
+  try {
+    res.json({ queue: computeConnectQueue() });
+  } catch (err) {
+    console.error('connect-queue error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/linkedin-drafts/connect-note — draft a <=300-char LinkedIn connection
+// note for a GENERIC recipient. Pass { source, id } to draft for a queue member
+// (TA or recruiter), or raw { name, role, company, reason, firstName } for an
+// ad-hoc contact. Raw fields override the resolved row. The note is always the
+// user's to review and send; nothing is sent from here.
+router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const { source, id, tone = 'Warm', angle = '' } = body;
+
+    // Resolve from the queue when given a source+id, so we reuse the same
+    // normalization and never draft for someone who has a live email channel.
+    let resolved = null;
+    if (source && id != null) {
+      const queue = computeConnectQueue();
+      resolved = queue.find(r => r.source === source && String(r.id) === String(id)) || null;
+    }
+    const name            = (body.name    || resolved?.name    || '').trim();
+    const recipientRole   = (body.role    || resolved?.role    || '').trim();
+    const recipientCompany= (body.company || resolved?.company || '').trim();
+    const reason          = (body.reason  || resolved?.reason  || '').trim();
+    const recipientFirst  = (body.firstName || resolved?.firstName || name.split(/\s+/)[0] || '').trim();
+    const src             = source || resolved?.source || 'ta';
+    if (!name) {
+      return res.status(400).json({ error: 'Provide a recipient: source+id from the connect queue, or a name.' });
+    }
+
+    let cvMd = '';
+    try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
+    const cvExcerpt = cvMd ? cvMd.slice(0, 3500) : '(CV not available)';
+    const idn = getIdentity();
+
+    // Source-specific "why connect" anchor. External recruiters place GTM / RevOps
+    // leaders, so a credible-operator signal is appropriate; TA leads are peers.
+    const angleHint = angle ? ` (${angle})` : '';
+    const guidance = reason
+      ? `Anchor on this specific context${angleHint}: ${reason}`
+      : src === 'recruiter'
+        ? `${idn.firstName} is a Director / Senior Director Revenue Operations and analytics leader. ${name}${recipientCompany ? ` at ${recipientCompany}` : ''} places GTM / RevOps leaders. Connect as a credible operator worth knowing for current and future searches${angleHint}; professional, not desperate.`
+        : `Anchor on ${name}'s work${recipientRole ? ` as ${recipientRole}` : ''}${recipientCompany ? ` at ${recipientCompany}` : ''} and on ${idn.firstName} being a fellow operator in the GTM / RevOps / analytics space, not a job seeker${angleHint}.`;
+
+    const buildPrompt = (targetMax) => buildConnectPrompt({
+      senderName: idn.fullName, senderFirst: idn.firstName, senderHeadline: idn.headline,
+      recipientName: name, recipientFirst, recipientRole, recipientCompany,
+      guidance, cvExcerpt, tone, toneText: toneInstruction(tone), targetMax,
+    });
+
+    let response = (await generateText(buildPrompt(280), { model: draftModel(), maxTokens: 220 })).trim();
+    if (response.length > 300) {
+      response = (await generateText(buildPrompt(250), { model: draftModel(), maxTokens: 220 })).trim();
+    }
+    if (response.length > 300) {
+      response = fitConnectNote(response, idn.firstName).text;
+    }
+    res.json({ response, length: response.length, recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
+  } catch (err) {
+    console.error('Error generating connect note:', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -66,7 +66,37 @@ const INS_SUBTABS = [
   { id: 'moves',    label: 'Recommended moves', icon: 'moves' },
 ];
 
-window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
+// Outer section switcher: Review (moved from the sidebar) is the first subtab,
+// then the Insights analysis. Both are always reachable. The Insights analysis
+// keeps its own inner subtabs (Overview / What's working / ...) once generated,
+// so on that section you see this switcher above the analysis's own subtab row.
+window.AnalyticsTab = function InsightsSection({ apps, onOpen, toast }) {
+  const [section, setSection] = useStateI('review');
+  const SECTION_TABS = [
+    { id: 'review',   label: 'Review',   icon: window.ICON.scale },
+    { id: 'insights', label: 'Insights', icon: window.ICON.spark },
+  ];
+  return (
+    <div className="col" style={{ gap: 0 }}>
+      <div className="subtabs">
+        {SECTION_TABS.map(s => (
+          <div key={s.id} className={'subtab' + (section === s.id ? ' active' : '')} onClick={() => setSection(s.id)}>
+            <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={s.icon} /></svg>
+            </span>
+            {s.label}
+          </div>
+        ))}
+      </div>
+      <div className="col" style={{ gap: 16, paddingTop: 14 }}>
+        {section === 'review'   && <window.ReviewTab toast={toast} />}
+        {section === 'insights' && <InsightsBody apps={apps} onOpen={onOpen} />}
+      </div>
+    </div>
+  );
+};
+
+function InsightsBody({ apps: rawApps, onOpen }) {
   const [insights, setInsights] = useStateI(null);
   const [loading, setLoading]   = useStateI(false);
   const [error, setError]       = useStateI(null);
@@ -131,7 +161,7 @@ window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
 
       {snapStale && (
         <div className="card" style={{ padding: '10px 14px', borderLeft: '3px solid var(--amber, #fbbf24)' }}>
-          <div className="mono" style={{ fontSize: 11.5, lineHeight: 1.5 }}>
+          <div className="mono" style={{ fontSize: 11, lineHeight: 1.5 }}>
             <b>Snapshot, not live.</b> Every number on this tab is from the analysis generated{' '}
             <InsAge iso={insights.generated_at} /> across {insights.pipeline_size} entries.
             {insights.pipeline_size !== apps.length && <> Your tracker now holds <b>{apps.length}</b>.</>}
@@ -143,7 +173,7 @@ window.AnalyticsTab = function InsightsTab({ apps: rawApps, onOpen }) {
       {!insights && !loading && (
         <div className="card padded-lg">
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>No analysis yet.</div>
-          <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.55 }}>
+          <div className="dim" style={{ fontSize: 12, lineHeight: 1.55 }}>
             Click <b>Generate Analysis</b> and Claude will read your full pipeline ({apps.length} entries),
             stale touchpoints, TA Outreach, recruiter rolodex, and engagement data, then return a tight
             synthesis: what's working, what's not, recommended moves, and a focus list for this week.
@@ -296,7 +326,7 @@ function WorkingPanel({ insights, apps, onOpen }) {
   const items = insights.whats_working || [];
   return (
     <div className="col" style={{ gap: 16 }}>
-      <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+      <div className="dim" style={{ fontSize: 12, lineHeight: 1.6 }}>
         This is your signal. The move is to do more of what's already earning replies, not to celebrate and stop.
       </div>
       <StatStrip metrics={insights.metrics} which="working" />
@@ -326,7 +356,7 @@ function NotPanel({ insights, apps, onOpen }) {
     <div className="col" style={{ gap: 16 }}>
       <div className="ins-guardrail">
         <InsIcon name="shield" size={15} />
-        <div style={{ fontSize: 12.5, lineHeight: 1.55, color: 'var(--text-dim)' }}>
+        <div style={{ fontSize: 12, lineHeight: 1.55, color: 'var(--text-dim)' }}>
           This is signal, not a scorecard. Every item below has a concrete fix. You're not behind, you're being shown exactly where to steer.
         </div>
       </div>
@@ -355,7 +385,7 @@ function MovesPanel({ insights, apps, onOpen }) {
   const items = insights.recommended_moves || [];
   return (
     <div className="col" style={{ gap: 16 }}>
-      <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+      <div className="dim" style={{ fontSize: 12, lineHeight: 1.6 }}>
         In priority order. Each one is small enough to finish today.
       </div>
       <div className="col" style={{ gap: 12 }}>
@@ -381,30 +411,42 @@ function MovesPanel({ insights, apps, onOpen }) {
 // the server persists alongside the analysis. Returns null on older payloads.
 function StatStrip({ metrics, which }) {
   if (!metrics) return null;
+  const need = metrics.minSample || 10;
+  // Render a rate honestly against the server's sample gate (lib/rate-confidence).
+  // Below the gate we refuse the percent and show the raw fraction ("3/7, too few");
+  // at or above it we show the rate WITH its 95% band, so a wide band on a passing-
+  // but-thin cohort reads as uncertainty, not a hard number. No conf (an old cached
+  // payload) means no card; regenerating insights repopulates it.
+  const rateCard = ({ label, conf, prefix = '', color, subExtra = '' }) => {
+    if (!conf) return null;
+    if (!conf.sufficient) return { label, value: conf.k + '/' + conf.n, sub: `too few to rate (need ${need}+)` + subExtra };
+    return { label, value: prefix + conf.rate + '%', sub: `${conf.k} of ${conf.n} · ${conf.lo}-${conf.hi}%` + subExtra, color };
+  };
   const cards = [];
   if (which === 'working') {
     const ta = (metrics.topArchetypes || [])[0];
     const ts = (metrics.topSectors || [])[0];
-    if (ta) cards.push({ label: ta.archetype + ' response', value: ta.responseRate + '%', sub: ta.appliedN + ' applied', color: 'var(--green)' });
-    if (metrics.recruiter && metrics.recruiter.sent) cards.push({ label: 'Recruiter channel', value: metrics.recruiter.responseRate + '%', sub: metrics.recruiter.replied + ' of ' + metrics.recruiter.sent, color: 'var(--green)' });
-    if (ts) cards.push({ label: ts.sector + ' sector', value: ts.responseRate + '%', sub: ts.appliedN + ' applied', color: 'var(--green)' });
+    if (ta) cards.push(rateCard({ label: ta.archetype + ' response', conf: ta.conf, color: 'var(--green)' }));
+    if (metrics.recruiter && metrics.recruiter.sent) cards.push(rateCard({ label: 'Recruiter channel', conf: metrics.recruiter.conf, color: 'var(--green)' }));
+    if (ts) cards.push(rateCard({ label: ts.sector + ' sector', conf: ts.conf, color: 'var(--green)' }));
   } else if (which === 'not') {
     if (metrics.staleTotal != null) cards.push({ label: 'Stale touchpoints', value: String(metrics.staleTotal), sub: 'awaiting follow-up', color: 'var(--yellow)' });
-    if (metrics.worstArchetype) cards.push({ label: metrics.worstArchetype.archetype + ' (overweight)', value: metrics.worstArchetype.responseRate + '%', sub: metrics.worstArchetype.appliedN + ' applied', color: 'var(--red)' });
+    if (metrics.worstArchetype) cards.push(rateCard({ label: metrics.worstArchetype.archetype + ' (overweight)', conf: metrics.worstArchetype.conf, color: 'var(--red)' }));
     // Archiving overwrote the prior status on {archivedTouched} contacts, so their
     // replies are unrecoverable and this rate is a lower bound, not a measurement.
-    if (metrics.talent && metrics.talent.sent) cards.push({
+    if (metrics.talent && metrics.talent.sent) cards.push(rateCard({
       label: 'TA outreach',
-      value: (metrics.talent.repliedIsFloor ? '≥' : '') + metrics.talent.responseRate + '%',
-      sub: metrics.talent.replied + ' of ' + metrics.talent.sent
-        + (metrics.talent.repliedIsFloor ? ` · floor, ${metrics.talent.archivedTouched} archived replies not preserved` : ''),
+      conf: metrics.talent.conf,
+      prefix: metrics.talent.repliedIsFloor ? '≥' : '',
       color: 'var(--red)',
-    });
+      subExtra: metrics.talent.repliedIsFloor ? ` · floor, ${metrics.talent.archivedTouched} archived replies not preserved` : '',
+    }));
   }
-  if (!cards.length) return null;
+  const shown = cards.filter(Boolean);
+  if (!shown.length) return null;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-      {cards.map((c, i) => (
+      {shown.map((c, i) => (
         <div key={i} className="ins-stat">
           <div className="dim" style={{ fontSize: 11, marginBottom: 5 }}>{c.label}</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: c.color || 'var(--text)' }}>{c.value}</div>
@@ -444,12 +486,12 @@ function CoachLine({ kind, text, apps, onOpen }) {
   return (
     <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
       <span className="mono" style={{
-        fontSize: 9.5, letterSpacing: '0.12em',
+        fontSize: 10.5, letterSpacing: '0.12em',
         color, border: `1px solid ${color}`,
         padding: '2px 7px', borderRadius: 4,
         flexShrink: 0, marginTop: 2,
       }}>{label}</span>
-      <div style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--text)' }}>
+      <div style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--text)' }}>
         <Linkify text={text} apps={apps} onOpen={onOpen} />
       </div>
     </div>
@@ -525,7 +567,7 @@ function Citations({ items, apps, onOpen }) {
             onClick={clickable ? (e) => { e.stopPropagation(); onOpen(app); } : undefined}
             title={clickable ? `Open #${app.id} ${app.company}: ${app.role}` : c}
             style={{
-              fontSize: 10,
+              fontSize: 10.5,
               color: clickable ? 'var(--accent)' : 'var(--text-mute)',
               background: clickable ? 'rgba(167,139,250,0.14)' : 'var(--panel-2)',
               border: '1px solid ' + (clickable ? 'rgba(167,139,250,0.55)' : 'var(--border)'),
@@ -539,7 +581,7 @@ function Citations({ items, apps, onOpen }) {
             }}
           >
             {c}
-            {clickable && <span style={{ fontSize: 9, opacity: 0.8 }}>↗</span>}
+            {clickable && <span style={{ fontSize: 10.5, opacity: 0.8 }}>↗</span>}
           </span>
         );
       })}

@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node next-jd.mjs)",
+      "Bash(node next-jd.mjs --pad)"
+    ],
+    "deny": [
+      "Edit(**/*.mjs)",
+      "Edit(**/*.ps1)",
+      "Edit(**/.env)",
+      "Edit(**/.env.*)",
+      "Edit(**/.claude/**)",
+      "Edit(**/config/**)",
+      "Edit(**/portals.yml)",
+      "Edit(**/package.json)",
+      "Edit(**/package-lock.json)",
+      "Edit(**/installer/**)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/.claude/**)",
+      "Read(**/google-tokens.json)",
+      "Read(**/*.pem)"
+    ]
+  }
+}

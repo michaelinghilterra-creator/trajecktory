@@ -127,5 +127,17 @@ const dirty = scan({ 'a.mjs': `const c = { ${KEY.walk}: ${N.real} };\n` });
 check(dirty.code === 1, 'a finding exits 1 (not 2, which means "could not derive terms")');
 check(/Refusing to pass/.test(dirty.out), 'a finding says it is refusing to pass');
 
+console.log('\n6. A real email in a tracked file must stop the build');
+// Assembled at runtime so this source never literally holds a non-example address
+// (the gate scans this file too — the same reason the comp fixtures are split).
+const stray = 'recruiter@' + 'harborsearch' + '.io';
+const blocksEmail = (files) => { const r = scan(files); return r.code !== 0 && /STRAY EMAIL/.test(r.out); };
+check(blocksEmail({ 'x.mjs': `const to = '${stray}';\n` }), 'a non-example email in code is flagged');
+check(blocksEmail({ 'x.md': `Contact: ${stray}\n` }), 'a non-example email in prose is flagged');
+check(allows({ 'x.mjs': "const to = 'someone@acme.example';\n" }), '.example address is allowed');
+check(allows({ 'x.mjs': "const to = 'someone@acme.test';\n" }), '.test address is allowed');
+check(allows({ 'x.mjs': "const ssh = 'git@github.com';\n" }), 'git@github.com (SSH protocol) is allowed');
+check(allows({ 'x.mjs': '// commit 12345+user@users.noreply.github.com\n' }), 'GitHub noreply address is allowed');
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
