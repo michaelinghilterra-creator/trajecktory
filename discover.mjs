@@ -252,12 +252,19 @@ function writePortals(portalsRaw, newEntries) {
   writeFileSync(PORTALS_PATH, text, 'utf8');
 }
 
+// Neutralize table/TSV delimiters and newlines so attacker-controlled discovered
+// job fields (Brave/Muse results) cannot forge pipeline/history rows or inject
+// text the evaluator reads (security: CWE-20).
+function sanitizeCell(s) {
+  return String(s ?? '').split('').map(ch => [9, 10, 13, 124].includes(ch.charCodeAt(0)) ? ' ' : ch).join('').trim();
+}
+
 function writePipeline(newJobs, today) {
   // Fresh install has no pipeline.md yet — start empty and let the section be
   // created below. data/ is ensured at startup so the writeFileSync succeeds.
   let text = existsSync(PIPELINE_PATH) ? readFileSync(PIPELINE_PATH, 'utf8') : '';
   const sectionTitle = `## Discovered — ${today}`;
-  const jobBlock = newJobs.map(j => `- [ ] ${j.url} | ${j.company} | ${j.title}`).join('\n');
+  const jobBlock = newJobs.map(j => `- [ ] ${sanitizeCell(j.url)} | ${sanitizeCell(j.company)} | ${sanitizeCell(j.title)}`).join('\n');
 
   if (text.includes(sectionTitle)) {
     const secStart = text.indexOf(sectionTitle);
@@ -276,7 +283,8 @@ function writePipeline(newJobs, today) {
 
 function appendHistory(jobs, today, source) {
   const needsHeader = !existsSync(HISTORY_PATH);
-  const lines = jobs.map(j => {
+  const lines = jobs.map(j0 => {
+    const j = { ...j0, url: sanitizeCell(j0.url), title: sanitizeCell(j0.title), company: sanitizeCell(j0.company) };
     const p = parseAtsUrl(j.url);
     const portalTag = p ? `${source}_${p.type}` : source;
     return `${j.url}\t${today}\t${portalTag}\t${j.title || 'unknown'}\t${j.company}\tadded`;

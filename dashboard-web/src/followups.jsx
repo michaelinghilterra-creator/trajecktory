@@ -966,7 +966,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
                     <div style={{ fontSize: 12, fontWeight: 600 }}>{ta.first} {ta.last}</div>
                     <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>{ta.title}</div>
                     {ta.linkedin && (
-                      <a href={ta.linkedin} target="_blank" rel="noreferrer"
+                      <a href={window.safeHref(ta.linkedin)} target="_blank" rel="noreferrer"
                         onClick={e => e.stopPropagation()}
                         className="mono"
                         style={{ fontSize: 10.5, color: 'var(--accent)' }}>LinkedIn ↗</a>

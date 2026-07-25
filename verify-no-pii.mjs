@@ -544,6 +544,23 @@ if (health.length) {
 }
 
 // ── the sweep ──────────────────────────────────────────────────────────────
+// Secret / credential patterns — mirrors installer/build-bundle.ps1 §7. A tracked
+// file must carry NO real key: the repo is public and the git-archive payload ships
+// tracked files verbatim, so a committed credential is published AND distributed.
+// build-bundle.ps1 scanned only the built payload and CI never runs it, so the same
+// regex set now runs here at the tracked-tree gate (security: CWE-540). Each pattern
+// requires a realistic key body, so these definition strings never match themselves.
+const SECRET_PATTERNS = [
+  [/sk-ant-api[0-9]{2}-[A-Za-z0-9_-]{20,}/, 'Anthropic API key'],
+  [/sk-proj-[A-Za-z0-9_-]{20,}/, 'OpenAI project key'],
+  [/GOCSPX-[A-Za-z0-9_-]{10,}/, 'Google OAuth client secret'],
+  [/ya29[.][A-Za-z0-9_-]{20,}/, 'Google OAuth access token'],
+  [/gh[pousr]_[A-Za-z0-9]{36,}/, 'GitHub token'],
+  [/github_pat_[A-Za-z0-9_]{50,}/, 'GitHub fine-grained PAT'],
+  [/AKIA[0-9A-Z]{16}/, 'AWS access key id'],
+  [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, 'PEM private key'],
+];
+
 const files = targets();
 for (const abs of files) {
   const name = basename(abs);
@@ -574,6 +591,13 @@ for (const abs of files) {
   // is a human review item, called out in docs/ rather than pretended away here.
   if (buf.subarray(0, 8192).includes(0)) continue;
   const text = buf.toString('utf8');
+
+  // 1b. secret / credential scan — applies to EVERY file (a key is a leak wherever
+  // it lands, so this is not allowlisted). Binaries are already skipped by the
+  // null-byte check above, which avoids the PEM-header-in-a-binary false positive.
+  for (const [re, label] of SECRET_PATTERNS) {
+    if (re.test(text)) leak(rel, 'SECRET/CREDENTIAL', `${label} — a real credential in a tracked (public + git-archive-shipped) file. Remove it and rotate the key.`);
+  }
 
   // 2. owner identity (skips attribution files)
   if (!IDENTITY_ALLOW.has(name)) {

@@ -325,7 +325,7 @@ function appendToPipeline(offers) {
     const procIdx = text.indexOf('## Procesadas');
     const insertAt = procIdx === -1 ? text.length : procIdx;
     const block = `\n${marker}\n\n` + offers.map(o =>
-      `- [ ] ${o.url} | ${o.company} | ${o.title}`
+      `- [ ] ${sanitizeCell(o.url)} | ${sanitizeCell(o.company)} | ${sanitizeCell(o.title)}`
     ).join('\n') + '\n\n';
     text = text.slice(0, insertAt) + block + text.slice(insertAt);
   } else {
@@ -335,12 +335,19 @@ function appendToPipeline(offers) {
     const insertAt = nextSection === -1 ? text.length : nextSection;
 
     const block = '\n' + offers.map(o =>
-      `- [ ] ${o.url} | ${o.company} | ${o.title}`
+      `- [ ] ${sanitizeCell(o.url)} | ${sanitizeCell(o.company)} | ${sanitizeCell(o.title)}`
     ).join('\n') + '\n';
     text = text.slice(0, insertAt) + block + text.slice(insertAt);
   }
 
   writeFileSync(PIPELINE_PATH, text, 'utf-8');
+}
+
+// Neutralize table/TSV delimiters and newlines so an attacker-controlled job
+// title/company/url from a board cannot forge extra pipeline/history rows or
+// inject text the batch evaluator reads (security: CWE-20 / CWE-117).
+function sanitizeCell(s) {
+  return String(s ?? '').split('').map(ch => [9, 10, 13, 124].includes(ch.charCodeAt(0)) ? ' ' : ch).join('').trim();
 }
 
 function appendToScanHistory(offers, date) {
@@ -349,7 +356,8 @@ function appendToScanHistory(offers, date) {
     writeFileSync(SCAN_HISTORY_PATH, 'url\tfirst_seen\tportal\ttitle\tcompany\tstatus\n', 'utf-8');
   }
 
-  const lines = offers.map(o =>
+  const clean = offers.map(o => ({ ...o, url: sanitizeCell(o.url), title: sanitizeCell(o.title), company: sanitizeCell(o.company) }));
+  const lines = clean.map(o =>
     `${o.url}\t${date}\t${o.source}\t${o.title}\t${o.company}\tadded`
   ).join('\n') + '\n';
 

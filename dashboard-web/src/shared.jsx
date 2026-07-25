@@ -96,6 +96,16 @@ window.ScoreChip = function ScoreChip({ score }) {
 //
 // One implementation, shared, because this is the third helper these two report
 // panels both need and the previous two drifted when each grew its own copy.
+// Allow only http/https/mailto in data-derived hrefs; collapse anything else
+// (javascript:, data:, vbscript:, ...) to '#'. React does not block javascript:
+// URLs, so an unsanitized href built from imported/agent-written data is a
+// stored-XSS sink (security: CWE-79). Wrap every data-derived href in this.
+window.safeHref = function safeHref(u) {
+  const s = String(u == null ? '' : u).trim();
+  const lc = s.toLowerCase();
+  return (lc.startsWith('http://') || lc.startsWith('https://') || lc.startsWith('mailto:')) ? s : '#';
+};
+
 window.outputHref = function outputHref(p) {
   if (!p) return null;
   const f = String(p).split(/[\\/]/).pop();
@@ -245,7 +255,7 @@ window.PostingPanel = function PostingPanel({ app }) {
         <div className="cs-callout-label">No saved copy of this posting</div>
         <div className="cs-callout-body" style={{ lineHeight: 1.6 }}>
           This role was evaluated before trajecktory started keeping the posting text, so only the link survives.
-          {app.url ? <> The original is <a href={app.url} target="_blank" rel="noreferrer">still worth a try</a>, though postings usually come down once they are filled.</> : null}
+          {app.url ? <> The original is <a href={window.safeHref(app.url)} target="_blank" rel="noreferrer">still worth a try</a>, though postings usually come down once they are filled.</> : null}
           <div style={{ marginTop: 8, color: 'var(--text-mute)' }}>Evaluations from now on save the text automatically, so it is here when you prepare for a later round.</div>
         </div>
       </div>
@@ -258,7 +268,7 @@ window.PostingPanel = function PostingPanel({ app }) {
         <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
           Saved when this role was evaluated, so it survives the posting being taken down.
         </span>
-        {app.url && <a className="btn sm" href={app.url} target="_blank" rel="noreferrer">Original ↗</a>}
+        {app.url && <a className="btn sm" href={window.safeHref(app.url)} target="_blank" rel="noreferrer">Original ↗</a>}
       </div>
       <div className="mono dim" style={{ fontSize: 10.5 }}>{state.path}</div>
       <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, lineHeight: 1.6, color: 'var(--text)', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 'var(--r-card)', padding: 13, margin: 0, maxHeight: '60vh', overflowY: 'auto' }}>{state.text}</pre>
@@ -850,7 +860,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                     : dj?.status === 'error' ? <span style={{ fontSize: 10.5, color: 'var(--red)' }} title={dj.error}>✕ failed</span>
                     : <button onClick={() => triggerDeep(card)} disabled={agentBusy2}
                         style={{ background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 5, padding: '2px 8px', fontSize: 10.5, cursor: agentBusy2 ? 'not-allowed' : 'pointer', opacity: agentBusy2 ? 0.5 : 1 }}>Deep dive ⧉</button>}
-                  {!isLocal && card.url && <a href={card.url} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>open JD ↗</a>}
+                  {!isLocal && card.url && <a href={window.safeHref(card.url)} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>open JD ↗</a>}
                   <button onClick={() => dismissCard(card.url)} title="Dismiss this card"
                     style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-mute)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>×</button>
                 </div>

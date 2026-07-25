@@ -1615,7 +1615,7 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
                   </>
                 ) : data.linkedin ? (
                   <>
-                    <a className="iv link" href={data.linkedin} target="_blank" rel="noreferrer">View profile</a>
+                    <a className="iv link" href={window.safeHref(data.linkedin)} target="_blank" rel="noreferrer">View profile</a>
                     <button className="copy-btn" onClick={() => { setLinkedin(data.linkedin || ''); setEditingLi(true); }}><RecIcon d={REC_I.pen} size={11} /> Edit</button>
                   </>
                 ) : (

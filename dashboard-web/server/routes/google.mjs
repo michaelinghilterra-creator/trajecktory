@@ -1,4 +1,6 @@
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
 import {
   readTokens, writeTokens, readSync, writeSync, googleStatus, checkHealth, clientConfigured,
   getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions,
@@ -6,7 +8,7 @@ import {
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { parseRecruitersMd, updateRecruiterLine } from '../lib/recruiters.mjs';
-import { PORT } from '../config.mjs';
+import { PORT, RECRUITER_CORR_DIR, TT_CORR_DIR } from '../config.mjs';
 import { patchRowInMd, parseApplicationsMd } from '../lib/applications.mjs';
 import { addNote } from '../lib/notes.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
@@ -191,6 +193,24 @@ router.post('/api/google/scan-bounces', async (req, res) => {
     const { bounces } = scanDecisions({ messages: raws, taRows, recruiterRows });
 
     const today = new Date().toISOString().slice(0, 10);
+    // SECURITY (CWE-345): a bounce is classified purely from attacker-controllable
+    // email content, so a spoofed "undeliverable" naming a real contact must not
+    // silently mark them dead. On apply, flip ONLY the contacts the user explicitly
+    // confirmed by key; surface whether we even have a record of emailing that
+    // address (sentHistory) so the UI can warn.
+    const confirmSet = new Set(
+      Array.isArray(req.body?.confirm)
+        ? req.body.confirm.map(c => (typeof c === 'string' ? c : `${c.source}:${c.id}`))
+        : []
+    );
+    const hasSentHistory = (source, id) => {
+      try {
+        const dir = source === 'ta' ? TT_CORR_DIR : RECRUITER_CORR_DIR;
+        const f = path.join(dir, `${id}.md`);
+        return fs.existsSync(f) && fs.readFileSync(f, 'utf8').includes('| Sent |');
+      } catch { return false; }
+    };
+    const proposals = [];
     const applied = [];
     for (const b of bounces) {
       if (!b.flip) continue; // soft, or no matched contact
@@ -202,7 +222,19 @@ router.post('/api/google/scan-bounces', async (req, res) => {
       // dry run re-counts every historical bounce every time, so the number never
       // falls after you apply and re-applying just rewrites the same rows.
       if (row.verified?.state === 'bounced') continue;
-      if (dryRun) { applied.push({ source: b.flip.source, id: b.flip.id, dryRun: true }); continue; }
+      const key = `${b.flip.source}:${b.flip.id}`;
+      const c = b.contact || {};
+      proposals.push({
+        source: b.flip.source, id: b.flip.id, key,
+        address: b.address || row.email || '',
+        name: c.name || '', company: c.company || '',
+        sentHistory: hasSentHistory(b.flip.source, b.flip.id),
+      });
+      if (dryRun) continue;
+      // Per-contact confirmation is mandatory on apply: absent from the confirm list
+      // = not flipped, so one click can no longer mark every proposed contact bounced
+      // sight-unseen (the forged-bounce vector).
+      if (!confirmSet.has(key)) continue;
       // setVerifyTag on the clean address yields "address [v:bounced:gmail:date]".
       // The single-row updaters preserve every other cell (and each file's line
       // endings) byte for byte.
@@ -226,8 +258,8 @@ router.post('/api/google/scan-bounces', async (req, res) => {
       scanned: fresh.length,
       hardBounces: bounces.filter(b => b.kind === 'hard').length,
       softBounces: bounces.filter(b => b.kind === 'soft').length,
-      [dryRun ? 'wouldFlip' : 'flipped']: applied.length,
-      proposed: dryRun ? applied : undefined,
+      [dryRun ? 'wouldFlip' : 'flipped']: dryRun ? proposals.length : applied.length,
+      proposed: proposals,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

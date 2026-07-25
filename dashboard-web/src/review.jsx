@@ -209,10 +209,26 @@ function GmailSweep({ sweep, onApplyBounces, busy, toast }) {
     <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span className="dim mono" style={{ fontSize: 12 }}>
-          Bounces: {b.hardBounces || 0} hard, {b.softBounces || 0} soft · {b.wouldFlip || 0} would flip a contact to bounced
+          Bounces: {b.hardBounces || 0} hard, {b.softBounces || 0} soft · {(b.proposed || []).length} would flip a contact to bounced
         </span>
-        {b.wouldFlip ? <button className="btn sm" onClick={onApplyBounces} disabled={busy}>Apply {b.wouldFlip} bounce flip{b.wouldFlip === 1 ? '' : 's'}</button> : null}
       </div>
+      {(b.proposed || []).length > 0 && (
+        <div style={{ marginTop: 6, marginBottom: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div className="dim" style={{ fontSize: 11 }}>
+            Confirm each one. A bounce is read from the email itself, which can be spoofed, so check the address before marking a contact dead.
+          </div>
+          {(b.proposed || []).map(p => (
+            <div key={p.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12 }}>
+              <span>
+                <b>{p.name || p.address}</b>{p.company ? <span className="dim"> · {p.company}</span> : null}{' '}
+                <span className="mono dim">{p.address}</span>
+                {!p.sentHistory ? <span className="mono" style={{ color: 'var(--red)', marginLeft: 6 }}>⚠ no record you emailed this</span> : null}
+              </span>
+              <button className="btn sm" onClick={() => onApplyBounces([p.key])} disabled={busy}>Mark bounced</button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 4 }}>
         Replies since June: {all.length} to handle{handledCount ? `, ${handledCount} already handled` : ''} · {unknown.length} unknown. Log records it on the application; Responded/Rejected also set status.
         {all.length > SWEEP_ROW_LIMIT ? ` Showing the first ${SWEEP_ROW_LIMIT} (rejections first).` : ''}
@@ -267,9 +283,10 @@ function GmailPanel({ toast }) {
     }).catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(false));
   };
 
-  const applyBounces = () => {
+  const applyBounces = (confirm = []) => {
+    if (!Array.isArray(confirm) || confirm.length === 0) return;
     setBusy(true);
-    fetch('/api/google/scan-bounces', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dryRun: false, since: GMAIL_SINCE }) })
+    fetch('/api/google/scan-bounces', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dryRun: false, since: GMAIL_SINCE, confirm }) })
       .then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); return; }

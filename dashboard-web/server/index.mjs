@@ -62,6 +62,25 @@ const AUTH_TOKEN = randomBytes(24).toString('hex');
 const AUTH_COOKIE = 'tjk_token';
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+// Host-header allow-list — the DNS-rebinding defense (security: CWE-346). The
+// CORS/token guards below key on Origin, but a rebound domain becomes same-origin
+// and carries no Origin header on reads, slipping past them; rejecting any Host
+// that is not a loopback host here (before routing) makes a rebound hostname fail
+// even when the browser treats it as same-origin.
+// Loopback ONLY: if you ever bind HOST=0.0.0.0 to expose this on your LAN, add
+// that host here AND require a real out-of-band auth secret — the per-start cookie
+// token is CSRF protection, not access control for a non-loopback bind.
+app.use((req, res, next) => {
+  const host = (req.headers.host || '').toLowerCase().trim();
+  let bare = host;
+  if (host.startsWith('[')) bare = host.slice(0, host.indexOf(']') + 1);
+  else if (host.includes(':')) bare = host.slice(0, host.indexOf(':'));
+  if (bare !== 'localhost' && bare !== '127.0.0.1' && bare !== '[::1]') {
+    return res.status(403).json({ error: 'Forbidden: unexpected Host header (dashboard is loopback-only).' });
+  }
+  next();
+});
+
 app.use(cors({
   origin(origin, cb) {
     // No Origin header = same-origin / non-browser client (curl, the CLI).

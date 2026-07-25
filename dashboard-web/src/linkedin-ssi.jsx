@@ -1608,7 +1608,7 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
                   {influencer.linkedinUrl && (
                     <div className="info-row">
                       <span className="ik">LinkedIn</span>
-                      <a className="iv link" href={influencer.linkedinUrl} target="_blank" rel="noreferrer">Open profile ↗</a>
+                      <a className="iv link" href={window.safeHref(influencer.linkedinUrl)} target="_blank" rel="noreferrer">Open profile ↗</a>
                       <span />
                     </div>
                   )}

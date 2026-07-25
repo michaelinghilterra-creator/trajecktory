@@ -586,9 +586,9 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
             <div className="info-row">
               <span className="ik">LinkedIn</span>
               {data.linkedin
-                ? <a className="iv link" href={data.linkedin} target="_blank" rel="noreferrer">View profile</a>
+                ? <a className="iv link" href={window.safeHref(data.linkedin)} target="_blank" rel="noreferrer">View profile</a>
                 : <span className="iv" style={{ color: "var(--text-mute)" }}>—</span>}
-              {data.linkedin && <a className="copy-btn" href={data.linkedin} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}><TIcon d={TI.ext} size={11} /> Open</a>}
+              {data.linkedin && <a className="copy-btn" href={window.safeHref(data.linkedin)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}><TIcon d={TI.ext} size={11} /> Open</a>}
             </div>
             <div className="info-row">
               <span className="ik">Last touch</span>
@@ -867,7 +867,7 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
               <RecRow key={k + i} checked={sel.has(k)} onToggle={() => toggle(k)}
                 av={ttInitials((s.first || "?") + " " + (s.last || "?"))} name={`${s.first} ${s.last}`}
                 meta={s.title}
-                reason={s.linkedin ? <a className="link" href={s.linkedin} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: "var(--accent)", fontSize: 11 }}>LinkedIn ↗</a> : null}
+                reason={s.linkedin ? <a className="link" href={window.safeHref(s.linkedin)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: "var(--accent)", fontSize: 11 }}>LinkedIn ↗</a> : null}
                 right={<span className={"conf " + conf}>{conf}</span>} />
             );
           })}
@@ -1064,7 +1064,7 @@ function ReconcileModal({ onClose, onApplied }) {
                       <RecRow key={key} checked={discSel.has(key)} onToggle={() => toggleSet(setDiscSel, key)}
                         av={ttInitials((s.first || "?") + " " + (s.last || "?"))} name={`${s.first} ${s.last}`}
                         meta={`${s.title} · ${r.company}`}
-                        reason={s.linkedin ? <a className="link" href={s.linkedin} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: "var(--accent)", fontSize: 11 }}>LinkedIn ↗</a> : null}
+                        reason={s.linkedin ? <a className="link" href={window.safeHref(s.linkedin)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: "var(--accent)", fontSize: 11 }}>LinkedIn ↗</a> : null}
                         right={<span className={"conf " + conf}>{conf}</span>} />
                     );
                   }))}
