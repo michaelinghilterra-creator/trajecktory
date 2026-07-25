@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.0.0...v2.0.1) (2026-07-25)
+
+
+### Bug Fixes
+
+* **update:** clean installs no longer silently fail to self-update ([#93](https://github.com/michaelinghilterra-creator/trajecktory/issues/93)) ([fd0fe9b](https://github.com/michaelinghilterra-creator/trajecktory/commit/fd0fe9bcbbf025f3d893870806d9ae2a9fa0eacc))
+
 ## [2.0.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.24.1...v2.0.0) (2026-07-25)
 
 
