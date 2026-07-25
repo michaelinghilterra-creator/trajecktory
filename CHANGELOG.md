@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.24.1...v2.0.0) (2026-07-25)
+
+
+### Features
+
+* the 2.0 relaunch (scoring, Gmail, weekly review, gating, security hardening) ([bd9a601](https://github.com/michaelinghilterra-creator/trajecktory/commit/bd9a60118a168fc0f29c3b0098d584cf59451a86))
+
 ## [1.24.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v1.24.0...v1.24.1) (2026-07-22)
 
 
