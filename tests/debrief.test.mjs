@@ -33,6 +33,19 @@ check(!isDebriefFor('### Debrief: Phone Screen (2026-07-23)', '1st Interview'),
 check(!isDebriefFor('Just some notes about the call', 'Phone Screen'),
   'a plain note is not a debrief');
 
+// ReDoS regression (CodeQL js/polynomial-redos). The header detector used to
+// backtrack polynomially on a header prefix followed by many spaces and no "(",
+// and the note text is user-provided. Feed exactly that shape and require it to
+// return promptly: a linear matcher is sub-millisecond, so a generous ceiling
+// still fails loudly if the backtracking pattern ever comes back.
+{
+  const evil = '### Debrief:' + ' '.repeat(200000);
+  const t0 = Date.now();
+  const r = isDebriefFor(evil, 'anything');
+  const ms = Date.now() - t0;
+  check(r === false && ms < 1000, `a pathological header does not hang (${ms}ms)`);
+}
+
 // ── pendingDebriefs ──────────────────────────────────────────────────────────
 const apps = [
   { id: 10, company: 'Northwind Robotics', role: 'Director RevOps', status: 'Phone Screen' },

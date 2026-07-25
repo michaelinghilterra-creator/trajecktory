@@ -23,8 +23,23 @@ import { INTERVIEW_STAGES } from './statuses.mjs';
 // any stage), so nothing here depends on the corrupt log.
 
 // Header written at the top of every saved debrief; also the detection anchor.
-// Captures the stage inside the parens-prefixed title so one regex reads it back.
-const DEBRIEF_HEADER_RE = /^###\s+Debrief:\s*(.+?)\s*\(/m;
+// Reads the WHOLE header line; the stage is pulled out of it in code below.
+//
+// This used to capture the stage with `\s*(.+?)\s*\(`, which is a polynomial-ReDoS
+// pattern (CodeQL js/polynomial-redos): `.` and the two surrounding `\s*` all match
+// a space, so a header like "### Debrief:" followed by many spaces and no "(" makes
+// the engine backtrack through every way of splitting those spaces. The note text
+// is user-provided, so that input is reachable. The line match is now linear (no
+// quantifier overlaps a character class that also matches whitespace), and the
+// stage is split out with plain string ops, which cannot backtrack.
+const DEBRIEF_HEADER_RE = /^###\s+Debrief:(.*)$/m;
+
+// The stage is the header text before the first "(", trimmed. Empty when there is
+// no header line.
+function stageFromHeader(text) {
+  const m = String(text || '').match(DEBRIEF_HEADER_RE);
+  return m ? m[1].split('(')[0].trim() : '';
+}
 
 // The exact question that every prep template now ends on. Kept here as the one
 // source of truth so the templates and the debrief prompt cannot drift apart.
@@ -33,8 +48,8 @@ const OBJECTION_QUESTION =
 
 // Does this note text look like a saved debrief for `stage`?
 function isDebriefFor(text, stage) {
-  const m = String(text || '').match(DEBRIEF_HEADER_RE);
-  return !!m && m[1].trim().toLowerCase() === String(stage || '').trim().toLowerCase();
+  const s = stageFromHeader(text);
+  return s !== '' && s.toLowerCase() === String(stage || '').trim().toLowerCase();
 }
 
 // The fill-in skeleton shown to the user. The objection leads, because it is the
