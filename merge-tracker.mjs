@@ -23,6 +23,9 @@ import { execFileSync } from 'child_process';
 import yaml from 'js-yaml';
 import { parseScore, shouldAutoDiscard, recommendsAgainst } from './lib/discard.mjs';
 import { parseTrackerLine, formatTrackerLine, TRACKER_HEADER, TRACKER_SEPARATOR } from './lib/tracker.mjs';
+// Read a report's DERIVED headline (see lib/score.mjs). Same v1 frontmatter reader
+// compute-scores.mjs uses, so the tracker score comes from the one source of truth.
+import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs';
 // Posting identity comes from ONE module. This file used to carry its own
 // normalizeCompany, roleSignature, setsEqual and roleFuzzyMatch, which is how
 // "is this the same job?" ended up answered differently here than everywhere
@@ -269,6 +272,27 @@ const usedNums = new Set(existingApps.map(a => a.num));
 // Evaluate prompt also marks rows as it goes; this guarantees it even if it didn't.
 const reportUrl = (reportLink) => urlFromReport(reportLink, CAREER_OPS);
 
+// The DERIVED headline stored in a report, or null. Resolves the report the same
+// way urlFromReport does. Returns a number ONLY when the report was scored the new
+// way (scoreSource:"derived"); a legacy report (authored score, or no frontmatter)
+// returns null so its TSV score stands and is never silently overridden. The
+// frontmatter is JSON-parsed, not regex-scraped, so a nested comp.score cannot be
+// mistaken for the top-level headline.
+function derivedScoreFromReport(reportLink) {
+  const m = String(reportLink || '').match(/\(([^)]*reports\/[^)]+\.md)\)/);
+  const rel = m ? m[1] : (/reports\/.+\.md$/.test(reportLink) ? reportLink : null);
+  if (!rel) return null;
+  const full = join(CAREER_OPS, rel);
+  if (!existsSync(full)) return null;
+  try {
+    const text = readFileSync(full, 'utf-8');
+    if (!hasV1Frontmatter(text)) return null;
+    const { data } = parseV1(text);
+    if (data.scoreSource === 'derived' && typeof data.score === 'number' && Number.isFinite(data.score)) return data.score;
+    return null;
+  } catch { return null; }
+}
+
 function markPipelineDone(reportLinks) {
   // unresolved = reports we could not turn into a URL (file missing, no url field,
   // unreadable). Those rows stay "- [ ]" and get re-evaluated next run, which is
@@ -478,6 +502,13 @@ for (const file of tsvFiles) {
   // the tracker would strip query parameters the user may need to open the link.
   addition._rawUrl = reportUrl(addition.report);
   addition._canonUrl = canonKey(addition._rawUrl);
+  // The report is the single source of the derived headline. When it was scored the
+  // new way, use its derived score for the row AND the dedup, so a batch worker that
+  // could not run compute-scores can never leave a stale/placeholder TSV score in the
+  // pipeline. A legacy report returns null and the TSV score stands. Idempotent: a
+  // TSV that already carries the derived score is unchanged.
+  const derivedScore = derivedScoreFromReport(addition.report);
+  if (derivedScore != null) addition.score = `${derivedScore.toFixed(1)}/5`;
   processedReports.push(addition.report);
   parsed.push(addition);
 }

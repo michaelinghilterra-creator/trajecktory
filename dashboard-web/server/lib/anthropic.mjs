@@ -8,7 +8,29 @@ import { getIdentity } from './profile.mjs';
 import { runClaudePrompt } from './claude-cli.mjs';
 import { resolveModelId, currentModel, currentBilling } from './pricing.mjs';
 
-export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// The SDK captures the key at CONSTRUCTION, so a client built when this module
+// first loads holds whatever key existed then, forever. That broke the promise
+// the Setup screen makes: saving a key writes .env AND updates process.env "so it
+// works immediately, no restart". It does for the CLI path, which reads the
+// environment per spawn. It did not for this path — hasAnthropicKey() would start
+// returning true, apiKeyActive() would route here, and the client underneath
+// still had no key, so the very first draft after saving a key failed with an
+// auth error that pointed at nothing the user could see.
+//
+// Rebuilt when the key CHANGES rather than per call: constructing a client is
+// cheap but not free, and this also picks up a key that was rotated or removed
+// mid-session (billing switched to the plan, key deleted from .env by hand).
+// Keyed on the value, so the comparison is the whole test.
+let _client = null;
+let _clientKey = null;
+export function anthropicClient() {
+  const key = (process.env.ANTHROPIC_API_KEY || '').trim();
+  if (!_client || _clientKey !== key) {
+    _client = new Anthropic({ apiKey: key });
+    _clientKey = key;
+  }
+  return _client;
+}
 
 // The model the draft/outreach features should use, from the user's per-section
 // choice (TJK_DRAFT_MODEL, default haiku). Returned as a full model id for the
@@ -46,7 +68,7 @@ export function apiKeyActive() { return hasAnthropicKey() && !planForced(); }
 export async function generateText(prompt, opts = {}) {
   const { system, model, maxTokens = 1024, tools, ...rest } = opts;
   if (apiKeyActive()) {
-    const msg = await anthropic.messages.create({
+    const msg = await anthropicClient().messages.create({
       // Callers may pass a bare alias (haiku/sonnet/opus) or a full id; the SDK
       // needs a full id, so resolve. Falls back to Haiku when unset.
       model: resolveModelId(model) || 'claude-haiku-4-5',

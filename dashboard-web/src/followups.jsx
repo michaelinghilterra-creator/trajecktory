@@ -36,7 +36,7 @@ function CoachPill({ level }) {
     <span className="mono" style={{
       background: s.bg, color: s.color,
       padding: '2px 7px', borderRadius: 4,
-      fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
+      fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap',
     }}>{s.label}</span>
   );
 }
@@ -47,15 +47,15 @@ function FUStatusPill({ status }) {
     <span className="mono" style={{
       background: s.bg, color: s.color,
       padding: '2px 7px', borderRadius: 4,
-      fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
+      fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap',
     }}>{status}</span>
   );
 }
 
 // Whether there's a usable way to actually follow up: a verified email, only a
-// (rate-limited) LinkedIn handle, or no contact at all. Drives the warm/cold
-// split server-side; shown here so the user knows why something is or isn't
-// in the urgent queue.
+// LinkedIn handle (which routes to the separate connect queue), or no contact at
+// all. Drives the warm/cold split server-side; shown here so the user knows why
+// something is or isn't in the urgent queue.
 const CHANNEL_META = {
   email:    { label: '✓ email',      bg: 'rgba(34,197,94,0.14)',   color: '#22c55e' },
   linkedin: { label: 'LinkedIn only', bg: 'rgba(245,158,11,0.14)',  color: '#f59e0b' },
@@ -67,7 +67,7 @@ function ChannelBadge({ channel }) {
     <span className="mono" style={{
       background: m.bg, color: m.color,
       padding: '2px 7px', borderRadius: 4,
-      fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
+      fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap',
     }}>{m.label}</span>
   );
 }
@@ -108,7 +108,7 @@ function FUBarRow({ label, n, total, color }) {
   const pct = total > 0 ? Math.round((n / total) * 100) : 0;
   return (
     <div className="col" style={{ gap: 4 }}>
-      <div className="row" style={{ justifyContent: 'space-between', fontSize: 11.5 }}>
+      <div className="row" style={{ justifyContent: 'space-between', fontSize: 11 }}>
         <span style={{ color }}>{label}</span>
         <span className="mono dim">{n} · {pct}%</span>
       </div>
@@ -292,7 +292,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
   );
 }
 
-window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, apps = [] }) {
+window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, apps = [], toast }) {
   const [data, setData]       = useStateF({ thresholds: { Applied: 7, Responded: 5, 'Phone Screen': 3, '1st Interview': 3, '2nd Interview': 3, '3rd Interview': 3, '4th Interview': 3 }, taThreshold: 14, ghostDays: 45, warm: [], cold: [], snoozed: [], ghostedCandidates: [] });
   const [loading, setLoading] = useStateF(true);
   const [selected, setSelected] = useStateF(null); // app id (only for 'app' source rows)
@@ -313,6 +313,17 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
       .catch(() => setLoading(false));
   };
   useEffectF(() => { load(); }, []);
+
+  // Contacts the send gate is withholding because their address was never checked.
+  // A short queue is ambiguous on its own: it can mean a quiet week or a missing
+  // setting, and the user cannot tell which. Saying the number turns the second
+  // case into something they can act on.
+  const [withheld, setWithheld] = useStateF(null);
+  useEffectF(() => {
+    fetch('/api/followups/withheld').then(r => r.json())
+      .then(d => setWithheld(d && !d.error ? d : null)).catch(() => {});
+  }, []);
+  const withholding = !!(withheld && withheld.withheld > 0 && !withheld.hasVerifierKeys);
 
   const warm = data.warm || [];
   const cold = data.cold || [];
@@ -439,6 +450,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
 
   const SUBTABS = [
     { id: 'overview', label: 'Overview',         n: null,        icon: window.ICON.pulse },
+    { id: 'connect',  label: 'Connect',          n: null,        icon: window.ICON.userPlus },
     { id: 'warm',     label: 'Warm threads',     n: warm.length, icon: window.ICON.send },
     { id: 'cold',     label: 'Applications out',  n: cold.length, icon: window.ICON.briefcase },
   ];
@@ -513,6 +525,9 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
         />
       )}
 
+      {/* ── Connect: the by-hand LinkedIn queue (moved here from the sidebar) ── */}
+      {subView === 'connect' && <window.ConnectTab toast={toast} />}
+
       {/* ── Warm threads: the actionable queue ─────────────────────────────── */}
       {subView === 'warm' && (
         <>
@@ -524,6 +539,11 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
               ? <>No warm threads right now. A reply, an interview, or a contact who engaged shows up here.</>
               : <>{warm.length} warm {warm.length === 1 ? 'thread' : 'threads'} worth a nudge · thresholds App {data.thresholds?.Applied || 7}/{data.thresholds?.Responded || 5}/{data.thresholds?.['1st Interview'] || 3}d · TA {data.taThreshold || 14}d</>}
           </div>
+          {withholding && (
+            <div style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.6, maxWidth: 620 }}>
+              {withheld.withheld} {withheld.withheld === 1 ? 'contact is' : 'contacts are'} not shown here because their email address has never been checked, and nothing is sent to an address that might not exist. Turn on contact email checking in Launchpad, under Optional boosters, to bring them back.
+            </div>
+          )}
         </div>
         <div className="act">
           <button className="btn sm" onClick={load} title="Reload">⟳ Refresh</button>
@@ -725,7 +745,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <SourcePill source={it.source} />
-                      <span className="mono dim" style={{ fontSize: 10 }}>#{String(it.id).padStart(3, '0')}</span>
+                      <span className="mono dim" style={{ fontSize: 10.5 }}>#{String(it.id).padStart(3, '0')}</span>
                       <span className="action-card-co">{it.company}</span>
                       <FUStatusPill status={it.status} />
                     </div>
@@ -764,7 +784,7 @@ function SourcePill({ source }) {
   return (
     <span className="mono" style={{
       background: bg, color: fg, padding: '2px 7px', borderRadius: 4,
-      fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
+      fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap',
     }}>{label}</span>
   );
 }
@@ -781,17 +801,17 @@ function FollowupRow({ item, onOpen, onSnooze, onMute, onUnmute, onFind }) {
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <SourcePill source={item.source} />
-            <span className="mono dim" style={{ fontSize: 10 }}>#{String(item.id).padStart(3, '0')}</span>
+            <span className="mono dim" style={{ fontSize: 10.5 }}>#{String(item.id).padStart(3, '0')}</span>
             <span className="action-card-co">{item.company}</span>
             <FUStatusPill status={item.status} />
             {!isTA && item.channel && <ChannelBadge channel={item.channel} />}
-            {item.muted && <span className="mono" style={{ background: 'rgba(113,113,122,0.18)', color: '#a1a1aa', padding: '2px 7px', borderRadius: 4, fontSize: 10, fontWeight: 700 }}>AWAITING</span>}
+            {item.muted && <span className="mono" style={{ background: 'rgba(113,113,122,0.18)', color: '#a1a1aa', padding: '2px 7px', borderRadius: 4, fontSize: 10.5, fontWeight: 700 }}>AWAITING</span>}
             <CoachPill level={item.coachLevel} />
             {item.fuCount > 0 && (
-              <span className="mono dim" style={{ fontSize: 10 }}>· {item.fuCount} prior touch{item.fuCount === 1 ? '' : 'es'}</span>
+              <span className="mono dim" style={{ fontSize: 10.5 }}>· {item.fuCount} prior touch{item.fuCount === 1 ? '' : 'es'}</span>
             )}
           </div>
-          <div className="dim" style={{ fontSize: 11.5, marginTop: 3 }}>{subtitle}</div>
+          <div className="dim" style={{ fontSize: 11, marginTop: 3 }}>{subtitle}</div>
           <div className="mono" style={{ fontSize: 11, marginTop: 4, color: coachStyle.color }}>
             {item.coachVerdict}
           </div>
@@ -946,13 +966,13 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
                     <div style={{ fontSize: 12, fontWeight: 600 }}>{ta.first} {ta.last}</div>
                     <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>{ta.title}</div>
                     {ta.linkedin && (
-                      <a href={ta.linkedin} target="_blank" rel="noreferrer"
+                      <a href={window.safeHref(ta.linkedin)} target="_blank" rel="noreferrer"
                         onClick={e => e.stopPropagation()}
                         className="mono"
-                        style={{ fontSize: 10, color: 'var(--accent)' }}>LinkedIn ↗</a>
+                        style={{ fontSize: 10.5, color: 'var(--accent)' }}>LinkedIn ↗</a>
                     )}
                   </div>
-                  <span className="mono dim" style={{ fontSize: 10 }}>
+                  <span className="mono dim" style={{ fontSize: 10.5 }}>
                     {ta.status || 'Not Contacted'}{ta.lastTouch ? ` · ${ta.lastTouch}` : ''}
                   </span>
                 </label>
@@ -1010,7 +1030,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
           <div style={{ padding: 10, background: 'var(--panel)', borderRadius: 4, borderLeft: '3px solid var(--accent)' }}>
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
               <span className="mono" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>APPLIED</span>
-              <span className="mono dim" style={{ fontSize: 10 }}>{applyDate}</span>
+              <span className="mono dim" style={{ fontSize: 10.5 }}>{applyDate}</span>
             </div>
             <div className="dim" style={{ fontSize: 11 }}>{app.notes || '(no notes)'}</div>
           </div>
@@ -1021,10 +1041,10 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
               <div key={i} style={{ padding: 10, background: 'var(--panel)', borderRadius: 4, borderLeft: '3px solid #22d3ee' }}>
                 <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
                   <span className="mono" style={{ fontSize: 11, color: '#22d3ee', fontWeight: 700 }}>{(f.channel || 'TOUCH').toUpperCase()}</span>
-                  <span className="mono dim" style={{ fontSize: 10 }}>{f.date}</span>
+                  <span className="mono dim" style={{ fontSize: 10.5 }}>{f.date}</span>
                 </div>
-                <div style={{ fontSize: 11.5 }}>{f.notes || <span className="dim">(no notes)</span>}</div>
-                {f.contact && <div className="dim mono" style={{ fontSize: 10, marginTop: 3 }}>Contact: {f.contact}</div>}
+                <div style={{ fontSize: 11 }}>{f.notes || <span className="dim">(no notes)</span>}</div>
+                {f.contact && <div className="dim mono" style={{ fontSize: 10.5, marginTop: 3 }}>Contact: {f.contact}</div>}
               </div>
             ))
           )}

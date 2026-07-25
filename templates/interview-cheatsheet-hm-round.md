@@ -159,6 +159,10 @@ The HM is evaluating:
 - What's the {leadership team / executive sponsor} most excited about — and most worried about — in this function?
 - What's a recent decision you made in this function that you'd make differently with hindsight?
 
+**Direct read on fit (ask near the end, every round)**
+- "Before we wrap, is there anything in my background that gives you pause, or that you'd want addressed before the next round?"
+- Ask the hiring manager directly. Their answer is the objection that decides the loop. Capture it in the debrief (§10) immediately after. Silence is data too.
+
 **Save for the final loop (don't ask in HM round):**
 - Comp specifics — base/bonus/equity/grant refresh — those belong with the recruiter, not this round
 - Reference questions about specific team members — wait for the offer stage
@@ -181,5 +185,6 @@ The HM is evaluating:
 
 - [ ] **Thank-you to {HM}** within 2 hours — 4–6 sentences, NOT a form letter. Reference ONE specific thing they said that you've been thinking about. Reaffirm interest. Suggest one next-step artifact (e.g., "happy to share a one-pager on how I'd structure the first 90 days" — only if you'd actually do it).
 - [ ] Log call notes in `data/applications.md` notes column for #{NNN}
+- [ ] Capture the debrief in the dashboard (it prompts on any interview-stage change): the objection you heard, what landed, what you would change, and intel for the next round. Saves to `data/app-notes.json` for #{NNN}.
 - [ ] Self-debrief in this file: 3 bullets — what landed, what didn't, what you'd say differently. Future-you will use this in round 3.
 - [ ] If advanced: open `interview-prep/{Company Folder}/{company-slug}-round-{N+1}-final-loop.md` from the `interview-cheatsheet-final-loop` template

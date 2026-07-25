@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
+import { fileURLToPath } from 'node:url';
 import { ROOT_DIR } from '../config.mjs';
 import { logAgentRun } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
@@ -325,10 +326,23 @@ function runClaudeAgent(jobId, mode, target) {
     // to the CLI default with NO --model flag.
     const modelPref = /^(?:opus|sonnet|haiku|claude-[a-z0-9.-]+)$/i.test(rawModelPref) ? rawModelPref : '';
     const modelFlag = modelPref ? ['--model', modelPref] : [];
+    // SECURITY (CWE-94): this eval agent WebFetches attacker-controlled job postings,
+    // so a booby-trapped posting can attempt prompt injection. Constrain the blast
+    // radius via a deny list (eval-agent-sandbox.settings.json): it blocks editing
+    // server code / config / .env / .claude / installer and reading the OAuth tokens
+    // and other secrets, enforced by a file-permission hook even when the agent tries
+    // it through Bash (verified). An injected instruction then cannot rewrite a server
+    // module (persist / RCE on the one-click restart) or read secrets to exfiltrate.
+    // Bash is NOT blanket-dropped: the eval needs `node next-jd.mjs` for report
+    // numbering, which the settings file explicitly allows; on a shipped install any
+    // other Bash command is denied for want of an allow entry. --settings merges with
+    // the project allow list, and deny wins.
+    const evalSandboxSettings = fileURLToPath(new URL('../eval-agent-sandbox.settings.json', import.meta.url));
     const args = ['-p', isWin ? `"${prompt}"` : prompt,
                   ...modelFlag,
                   '--output-format', 'stream-json', '--verbose',
-                  '--permission-mode', 'acceptEdits'];
+                  '--permission-mode', 'acceptEdits',
+                  '--settings', isWin ? `"${evalSandboxSettings}"` : evalSandboxSettings];
 
     const update = (patch) => {
       const job = agentJobs.get(jobId) || {};

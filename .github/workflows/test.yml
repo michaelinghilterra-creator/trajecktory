@@ -21,16 +21,19 @@ jobs:
         with:
           node-version: '24'
       - run: npm ci
-      # Fail the build on a known high-severity advisory in a dependency.
+      # dashboard-web deps MUST be installed before test-all.mjs. The test suite
+      # spans both trees: several suites import dashboard-web/server modules, which
+      # pull in express / @anthropic-ai/sdk. Running test-all first fails with
+      # ERR_MODULE_NOT_FOUND on those deps (it passed locally only because a dev
+      # checkout already has dashboard-web/node_modules).
+      - run: npm ci
+        working-directory: dashboard-web
+      # Fail the build on a known high-severity advisory in either tree.
       - run: npm audit --audit-level=high
+      - run: npm audit --audit-level=high
+        working-directory: dashboard-web
       - run: npm run lint
       - run: node test-all.mjs
       # Build the dashboard-web app so a broken React/esbuild change fails CI.
-      # This is the "dashboard build" the old test-all.mjs --quick flag claimed
-      # to skip; it has always been a separate step, and the flag was inert.
-      - run: npm ci
-        working-directory: dashboard-web
-      - run: npm audit --audit-level=high
-        working-directory: dashboard-web
       - run: npm run build
         working-directory: dashboard-web

@@ -965,7 +965,12 @@ function parseLegacyProseReport(lines) {
     levelMatch: { jdLevel: null, naturalLevel: 'Director / Senior Director', verdict: null },
     sellSenior: [],
     downlevelPlan: null,
-    comp: { stated: compStated, sources: [], score: null, walkaway: 180, verdict: recommendation, market: companyBrief },
+    // walkaway is null, not a number: this parser has no access to the user's
+    // config/profile.yml, so it cannot know their floor. It used to hardcode one,
+    // which made the drawer render a Walk-away tile asserting a figure that was not
+    // the user's and mark roles "below" a line they had actually cleared. The other
+    // two comp shapes in this file already use null; this was the outlier.
+    comp: { stated: compStated, sources: [], score: null, walkaway: null, verdict: recommendation, market: companyBrief },
     customizationCV: [],
     customizationLI: [],
     starStories: [],

@@ -13,8 +13,13 @@ export const router = express.Router();
 const workflowJobs = new Map();
 router.post('/api/workflow/:step', (req, res) => {
   const step = req.params.step;
-  const def = WORKFLOW_STEPS[step];
-  if (!def) return res.status(400).json({ error: `Unknown step: ${step}` });
+  // hasOwn, not a bare lookup: WORKFLOW_STEPS is an object literal, so it
+  // inherits Object.prototype and `step=constructor` (or toString, valueOf) finds
+  // a TRUTHY value that is not a step. `def.cmd` is then undefined and exec()
+  // throws from inside the handler. Own-property only, so the allow-list is
+  // actually a list.
+  const def = Object.hasOwn(WORKFLOW_STEPS, step) ? WORKFLOW_STEPS[step] : null;
+  if (!def || typeof def.cmd !== 'string') return res.status(400).json({ error: `Unknown step: ${step}` });
 
   const jobId = `wf-${step}-${Date.now()}`;
   workflowJobs.set(jobId, { step, status: 'running', label: def.label, output: '', startedAt: Date.now() });

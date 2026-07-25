@@ -42,7 +42,7 @@ converter for the Full Report tab. The structured tabs read **only** from frontm
 | `date` | string (YYYY-MM-DD) | |
 | `url` | string | JD URL. |
 | `jdSnapshot` | string | Relative path to the saved posting text, e.g. `"jds/912-example-co.md"`. A posting is taken down the day it is filled, so the URL alone is worthless by the time a later interview round comes around. Write it for every evaluation. The dashboard reads it for the Posting tab and refuses any path outside `jds/`. |
-| `score` | number | Overall 0–5 score. |
+| `score` | number | Overall 0–5 headline. **Derived** by `lib/score.mjs` from the keyed `globalScore` dimensions + `config/profile.yml` weights, not authored. See **Derived vs legacy score**. |
 | `legitimacy` | object | See **Legitimacy** below. |
 | `domain` | string | E.g. `"AI/ML Observability, B2B SaaS"`. Used by the sector classifier. |
 
@@ -72,17 +72,71 @@ converter for the Full Report tab. The structured tabs read **only** from frontm
 "keywords": ["revenue operations", "MEDDPICC", "Salesforce", ...]
 ```
 
-### Global score breakdown
+### Global score breakdown (the dimensions the headline is derived from)
+
+The model rates each dimension 0–5 **with the evidence for that rating** (judgment is
+what the model is good at). It does **not** author the headline `score`; the
+headline is DERIVED by `lib/score.mjs` (`deriveScore`) as the weighted average of
+these dimensions minus a red-flag penalty. Weights live in `config/profile.yml`
+(`scoring.weights`). Give each entry a stable `key` so the code can match it to a
+weight; a `dim` label and `evidence` string are for display.
+
 ```json
 "globalScore": [
-  { "dim": "CV Match", "val": 4, "max": 5 },
-  { "dim": "North Star Alignment", "val": 5, "max": 5 },
-  { "dim": "Comp", "val": 5, "max": 5 },
-  { "dim": "Cultural Signals", "val": 2, "max": 5 },
-  { "dim": "Red Flags", "val": -3, "max": 5 }
+  { "key": "fit",       "dim": "Fit / CV Match",        "val": 4, "max": 5, "evidence": "Ran carrier scorecards across EMEA + LATAM at Northwind; the JD's BI stack lines up" },
+  { "key": "northStar", "dim": "North Star Alignment",  "val": 5, "max": 5, "evidence": "Matches the candidate's top target archetype" },
+  { "key": "level",     "dim": "Level Match",           "val": 4, "max": 5, "evidence": "JD asks VP; the candidate sits Director/Senior Director. Title stretch, scope fits" },
+  { "key": "comp",      "dim": "Comp",                  "val": 3, "max": 5, "evidence": "Band clears the floor, trails the ceiling" },
+  { "key": "location",  "dim": "Location / Logistics",  "val": 5, "max": 5, "evidence": "Remote, US time zones" },
+  { "key": "redFlags",  "dim": "Red Flags",             "val": 5, "max": 5, "evidence": "Clean: fresh posting, funded round, scoped mandate" }
 ]
 ```
-Negative values render as red bars. `max` is per-dimension (usually 5).
+
+**Canonical keys** (match `SCORE_DIMENSIONS` / `RED_FLAGS_KEY` in `lib/score.mjs`):
+`fit`, `northStar`, `level`, `comp`, `location` are the weighted positive
+dimensions; `redFlags` is a **penalty** rated 0–5 where **5 = clean, 0 = severe**
+(NOT a negative value; it subtracts up to `scoring.redFlagPenalty` points after the
+average). `max` is per-dimension (usually 5). Weights renormalize over whichever
+dimensions are present, so omitting one (e.g. `location` for a remote-anywhere role)
+is fine.
+
+Legacy reports predate this: their entries have no `key` (labels like
+`"Cultural Signals"`, and `Red Flags` stored as a negative `val`). Those are NOT
+re-derived. See **Derived vs legacy score** below.
+
+### Derived vs legacy score
+```json
+"score": 4.1,
+"scoreSource": "derived",
+"scoreBasis": {
+  "weights": { "fit": 0.35, "northStar": 0.25, "level": 0.15, "comp": 0.15, "location": 0.10 },
+  "contributions": [
+    { "key": "fit", "val": 4, "weight": 0.35, "points": 1.4 }
+  ],
+  "penalty": 0,
+  "weightedAverage": 4.1
+}
+```
+- `scoreSource`: `"derived"` (headline computed by `deriveScore` from the keyed
+  dimensions above) or `"legacy"` (authored under the old rubric). **Absent means
+  legacy**: old reports are read as legacy without being rewritten, and their
+  authored number is preserved, never silently recomputed.
+- `scoreBasis`: the derivation snapshot written by the compute step, so a derived
+  headline stays traceable to the exact weights and per-dimension points it used
+  even if the weights change later.
+- `score` (top-level, required): for a derived report this is what `deriveScore`
+  produced; for a legacy report it is the authored number. The drawer marks legacy
+  scores so the two are never mistaken for the same thing.
+- `scoreCeiling` (optional, 0–5): a HARD cap. Some blockers must keep the headline
+  low no matter how well the rest fits (a location the user will not work, visa they
+  cannot get, a hard requirement they plainly lack). A 10%-weighted Location
+  dimension cannot enforce that, so the eval sets `scoreCeiling` and `compute-scores`
+  applies `min(derived, ceiling)`. When it bites, `scoreBasis.ceilingApplied` is true.
+
+The derived fields are written by **`compute-scores.mjs`**, not by the eval model:
+the model emits the keyed `globalScore` dimensions (with evidence) and an optional
+`scoreCeiling`; running `node compute-scores.mjs <report> --apply` computes `score`,
+`scoreSource`, and `scoreBasis`. The model never authors the headline.
 
 ### CV match
 ```json
@@ -141,12 +195,20 @@ Negative values render as red bars. `max` is per-dimension (usually 5).
     { "src": "Salary.com (SF, 2026)", "data": "VP RevOps ~$346K avg", "note": "SF premium baked in" }
   ],
   "score": 5,
-  "walkaway": 200,
+  "note": "recorded, not scored",
+  "walkaway": 111,
   "verdict": "Meets target at floor, exceeds at ceiling",
   "market": "VP RevOps at AI-native Series C is high-demand, low-supply"
 }
 ```
-`walkaway` is an integer (thousands USD).
+`walkaway` is an integer (thousands USD). It is **copied from
+`compensation.minimum` in `config/profile.yml`, never estimated** — the 111 above is a
+deliberately implausible placeholder so this example is never mistaken for a real floor.
+`compensation.target_range` is the aspiration and is a different number: pay below the
+floor sets a `scoreCeiling`, pay merely below the aspiration does not.
+
+The comp dimension carries weight 0, so it is rated and displayed but contributes no
+points to the headline. `note` is rendered beside the dimension label in the drawer.
 
 ### Customization
 ```json

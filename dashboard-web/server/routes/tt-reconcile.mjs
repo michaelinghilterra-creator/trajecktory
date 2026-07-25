@@ -3,9 +3,12 @@ import fs from 'fs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { parseTargetTalentMd, appendTTRows, updateTTLine } from '../lib/target-talent.mjs';
 import { generateText, draftModel } from '../lib/anthropic.mjs';
-import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
+import { normCompany, reconcilePreview } from '../lib/tt-reconcile-core.mjs';
 import { TARGET_TALENT_MD } from '../config.mjs';
 import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
+import { loadEnvKey } from '../../../verify-contacts.mjs';
+import { findAndVerify } from '../../../find-contacts.mjs';
+import { setVerifyTag } from '../../../lib/email-verify.mjs';
 
 export const router = express.Router();
 
@@ -20,12 +23,9 @@ export const router = express.Router();
 // CLOSED app statuses (archive related TA contacts when ALL related apps closed):
 //   Rejected, Discarded, SKIP, No Response
 
-const TT_ACTIVE_APP_STATUSES = ACTIVE_STATUSES;
-const TT_CLOSED_APP_STATUSES = ['Rejected','Discarded','SKIP','No Response'];
-
-function _normCompany(s) {
-  return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-}
+// The archive decision + companies-needing-contacts live in
+// lib/tt-reconcile-core.mjs (reconcilePreview), shared with the reconcile-ta.mjs
+// CLI so the two can never drift. normCompany is imported from there too.
 
 // GET /api/tt-reconcile/preview
 // Returns:
@@ -37,57 +37,7 @@ router.get('/api/tt-reconcile/preview', (req, res) => {
   try {
     const apps = parseApplicationsMd();
     const ttRows = parseTargetTalentMd().filter(r => r.status !== 'Archived');
-
-    // Group apps by normalized company name
-    const appsByCompany = new Map();
-    for (const a of apps) {
-      const k = _normCompany(a.company);
-      if (!k) continue;
-      if (!appsByCompany.has(k)) appsByCompany.set(k, []);
-      appsByCompany.get(k).push(a);
-    }
-
-    // For each TA contact, look at their company's apps. If ANY app at that
-    // company is still active, keep the contact. If ALL apps are closed, archive.
-    const toArchive = [];
-    for (const c of ttRows) {
-      const k = _normCompany(c.company);
-      const companyApps = appsByCompany.get(k) || [];
-      if (companyApps.length === 0) continue; // no apps logged for this company — leave alone
-      const hasActive = companyApps.some(a => TT_ACTIVE_APP_STATUSES.includes(a.status));
-      if (hasActive) continue;
-      // All apps at this company are closed — archive
-      toArchive.push({
-        id: c.id,
-        first: c.first,
-        last: c.last,
-        company: c.company,
-        title: c.title,
-        reason: `${companyApps.length} application${companyApps.length === 1 ? '' : 's'} closed (${companyApps.map(a => a.status).slice(0, 3).join(', ')})`,
-        relatedApps: companyApps.map(a => ({ id: a.id, status: a.status, role: a.role, date: a.date })),
-      });
-    }
-
-    // Find ACTIVE companies (≥1 active app) with ZERO TA contacts
-    const ttCompaniesNorm = new Set(ttRows.map(c => _normCompany(c.company)));
-    const companiesNeedingContacts = [];
-    for (const [k, companyApps] of appsByCompany.entries()) {
-      if (ttCompaniesNorm.has(k)) continue; // already has contacts
-      const active = companyApps.filter(a => TT_ACTIVE_APP_STATUSES.includes(a.status));
-      if (active.length === 0) continue; // company has no active apps — skip
-      // Use the most recent active app as the "example role" to anchor the search
-      const mostRecent = active.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
-      companiesNeedingContacts.push({
-        company: mostRecent.company,
-        exampleRole: mostRecent.role,
-        appCount: active.length,
-        mostRecentApp: { id: mostRecent.id, role: mostRecent.role, status: mostRecent.status, date: mostRecent.date },
-      });
-    }
-    // Sort by recency of most recent app
-    companiesNeedingContacts.sort((a, b) => (b.mostRecentApp.date || '').localeCompare(a.mostRecentApp.date || ''));
-
-    res.json({ toArchive, companiesNeedingContacts });
+    res.json(reconcilePreview(apps, ttRows));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -111,6 +61,45 @@ router.post('/api/tt-reconcile/archive', (req, res) => {
       if (ok) archived++;
     }
     res.json({ ok: true, archived });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/tt-reconcile/find-emails
+// body: { ids?: [taId] }  (default: every active, non-Archived TA contact that has
+// no address). Runs the find-then-verify pipeline — Hunter Email Finder into
+// MillionVerifier — and writes ONLY a verified address. This is the API-feed
+// replacement for the old first.last@company guess: it turns the PEOPLE that
+// discover found on the web into deliverable ADDRESSES. A found address that does
+// not verify is never written (the contact goes to the LinkedIn fallback instead).
+router.post('/api/tt-reconcile/find-emails', async (req, res) => {
+  try {
+    const hkey = loadEnvKey('HUNTER_API_KEY');
+    const mkey = loadEnvKey('MILLIONVERIFIER_API_KEY');
+    if (!hkey || !mkey) {
+      return res.status(400).json({ error: 'HUNTER_API_KEY and MILLIONVERIFIER_API_KEY must both be set in dashboard-web/.env to find + verify emails.' });
+    }
+    const { ids } = req.body || {};
+    const idSet = Array.isArray(ids) && ids.length ? new Set(ids.map(Number)) : null;
+    const rows = parseTargetTalentMd().filter(r =>
+      r.status !== 'Archived' && !(r.email || '').trim() && r.first && r.last && r.company &&
+      (!idSet || idSet.has(r.id)));
+    const results = [];
+    for (const r of rows) {
+      try {
+        const f = await findAndVerify(r.company, r.first, r.last, hkey, mkey);
+        if (f.found && f.verify) {
+          updateTTLine(r.id, { email: setVerifyTag(f.email, f.verify) });
+          results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), company: r.company, email: f.email, state: f.verify.state });
+        } else {
+          results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), company: r.company, email: null, state: f.found ? 'unverifiable' : 'not_found' });
+        }
+      } catch (e) {
+        results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), company: r.company, email: null, state: 'error', error: e.message });
+      }
+    }
+    res.json({ ok: true, checked: rows.length, written: results.filter(x => x.email).length, results });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -226,7 +215,7 @@ If the search returns no reliable matches, return an empty array []. Never fabri
 // POST /api/tt-reconcile/bulk-add
 // body: { contacts: [{ company, first, last, title, linkedin?, city?, state?, notes? }] }
 // Writes confirmed contacts to data/target-talent.md.
-router.post('/api/tt-reconcile/bulk-add', (req, res) => {
+router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
   try {
     const { contacts } = req.body || {};
     if (!Array.isArray(contacts) || contacts.length === 0) {
@@ -234,13 +223,31 @@ router.post('/api/tt-reconcile/bulk-add', (req, res) => {
     }
     // Dedup by (normalized company + last + first) against existing rows
     const existing = parseTargetTalentMd();
-    const existingKeys = new Set(existing.map(r => `${_normCompany(r.company)}|${(r.last || '').toLowerCase()}|${(r.first || '').toLowerCase()}`));
+    const existingKeys = new Set(existing.map(r => `${normCompany(r.company)}|${(r.last || '').toLowerCase()}|${(r.first || '').toLowerCase()}`));
     const toWrite = contacts.filter(c => {
-      const k = `${_normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`;
+      const k = `${normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`;
       return !existingKeys.has(k);
     });
-    const written = appendTTRows(toWrite);
-    res.json({ ok: true, requested: contacts.length, written: written.length, skipped: contacts.length - written.length });
+    const written = appendTTRows(toWrite);   // [{id}], in the same order as toWrite
+
+    // Find + verify an email for each newly-added contact via the API feeds
+    // (Hunter Email Finder into MillionVerifier), and write ONLY a verified
+    // address. This replaces the old first.last@company guess: a reconcile add now
+    // yields a deliverable address or none (the contact goes to LinkedIn instead).
+    let emailsFound = 0;
+    const hkey = loadEnvKey('HUNTER_API_KEY');
+    const mkey = loadEnvKey('MILLIONVERIFIER_API_KEY');
+    if (hkey && mkey) {
+      for (let i = 0; i < written.length; i++) {
+        const c = toWrite[i];
+        if ((c.email || '').trim() || !c.first || !c.last || !c.company) continue;
+        try {
+          const f = await findAndVerify(c.company, c.first, c.last, hkey, mkey);
+          if (f.found && f.verify) { updateTTLine(written[i].id, { email: setVerifyTag(f.email, f.verify) }); emailsFound++; }
+        } catch { /* leave without an address; the LinkedIn fallback covers it */ }
+      }
+    }
+    res.json({ ok: true, requested: contacts.length, written: written.length, skipped: contacts.length - written.length, emailsFound, verifierKeys: !!(hkey && mkey) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -261,8 +268,8 @@ router.post('/api/tt-reconcile/bulk-import', (req, res) => {
     if (!rows.length) return res.status(400).json({ error: 'No valid rows found (need a header row plus rows with company, first, last, title).' });
     if (!fs.existsSync(TARGET_TALENT_MD)) fs.writeFileSync(TARGET_TALENT_MD, TT_HEADER, 'utf8');
     const existing = parseTargetTalentMd();
-    const existingKeys = new Set(existing.map(r => `${_normCompany(r.company)}|${(r.last || '').toLowerCase()}|${(r.first || '').toLowerCase()}`));
-    const toWrite = rows.filter(c => !existingKeys.has(`${_normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`));
+    const existingKeys = new Set(existing.map(r => `${normCompany(r.company)}|${(r.last || '').toLowerCase()}|${(r.first || '').toLowerCase()}`));
+    const toWrite = rows.filter(c => !existingKeys.has(`${normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`));
     const written = appendTTRows(toWrite);
     res.json({ ok: true, parsed: rows.length, imported: written.length, duplicates: rows.length - written.length });
   } catch (err) {

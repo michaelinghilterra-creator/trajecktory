@@ -45,6 +45,11 @@ copyFileSync(join(ROOT, 'lib/identity.mjs'), join(sandbox, 'lib/identity.mjs'));
 // aliases, so the sandbox copy needs that file present too.
 mkdirSync(join(sandbox, 'templates'), { recursive: true });
 copyFileSync(join(ROOT, 'templates/states.yml'), join(sandbox, 'templates/states.yml'));
+// merge-tracker.mjs now reads each report's DERIVED score via the v1 frontmatter
+// loader (dependency-free), so the sandbox needs it plus a reports/ dir for fixtures.
+mkdirSync(join(sandbox, 'dashboard-web/server'), { recursive: true });
+copyFileSync(join(ROOT, 'dashboard-web/server/v1-loader.mjs'), join(sandbox, 'dashboard-web/server/v1-loader.mjs'));
+mkdirSync(join(sandbox, 'reports'), { recursive: true });
 
 const HEADER = [
   '# Applications Tracker',
@@ -61,6 +66,23 @@ const seed = [
   '',
 ].join('\n');
 writeFileSync(join(sandbox, 'data/applications.md'), seed);
+
+// ── Report fixtures for the derived-score merge ──────────────────────────────
+// A report scored the NEW way carries scoreSource:"derived"; merge must use its
+// derived headline for the row, overriding whatever the TSV holds (a worker that
+// could not run compute-scores leaves a placeholder). A LEGACY report has no
+// scoreSource, so its number is ignored and the TSV score stands.
+const v1 = (o) => '---\n' + JSON.stringify(o) + '\n---\n# body\n';
+writeFileSync(join(sandbox, 'reports/112-derivedco-2026-06-12.md'), v1({
+  schema: 'trajecktory-report/v1', id: 112, company: 'DerivedCo', role: 'Director of RevOps',
+  url: 'https://example.test/derivedco', score: 4.4, scoreSource: 'derived',
+  globalScore: [{ key: 'fit', dim: 'Fit / CV Match', val: 4, max: 5 }],
+}));
+writeFileSync(join(sandbox, 'reports/113-legacyco-2026-06-12.md'), v1({
+  schema: 'trajecktory-report/v1', id: 113, company: 'LegacyCo', role: 'VP Ops',
+  url: 'https://example.test/legacyco', score: 9.9,   // absurd on purpose: must be ignored
+  globalScore: [{ dim: 'CV Match', val: 4, max: 5 }],
+}));
 
 // ── TSV fixtures (9-col: num date company role status score pdf report notes) ─
 const T = '\t';
@@ -101,6 +123,13 @@ const cases = {
   //     The heuristic must recognize "Closed" (from states.yml) and un-swap.
   '111-iotacorp.tsv': tsv(['111', '2026-06-12', 'IotaCorp', 'Chief of Cartography',
     '4.3/5', 'Closed', '❌', '[111](reports/111-iotacorp-2026-06-12.md)', 'Swapped order, new state']),
+  // 12. Report scored the NEW way → merge uses the report's DERIVED score (4.4),
+  //     overriding the placeholder score a worker left in the TSV.
+  '112-derivedco.tsv': tsv(['112', '2026-06-12', 'DerivedCo', 'Director of RevOps',
+    'Evaluated', '0.0/5', '❌', '[112](reports/112-derivedco-2026-06-12.md)', 'Placeholder score in TSV']),
+  // 13. LEGACY report (no scoreSource) → its number is ignored; the TSV score stands.
+  '113-legacyco.tsv': tsv(['113', '2026-06-12', 'LegacyCo', 'VP Ops',
+    'Evaluated', '3.3/5', '❌', '[113](reports/113-legacyco-2026-06-12.md)', 'Legacy TSV score']),
 };
 for (const [name, content] of Object.entries(cases)) {
   writeFileSync(join(sandbox, 'batch/tracker-additions', name), content);
@@ -177,10 +206,18 @@ console.log('\n4. New canonical states + aliases (states.yml drift guard)');
     `swapped col order with new state un-swapped (${swappedNew[SCORE]} / ${swappedNew[STATUS]})`);
 }
 
-console.log('\n5. No collateral damage');
+console.log('\n5. Derived score from the report (single source of the headline)');
 {
-  check(rows.length === 11, `row count correct: 2 seeds + 9 new = ${rows.length}/11`);
-  check(/Summary: \+9 added/.test(output), 'script reported +9 added');
+  const derived = cols(rowFor('DerivedCo'));
+  check(derived[SCORE] === '4.4/5', `derived report overrides the TSV placeholder 0.0 → 4.4 (got ${derived[SCORE]})`);
+  const legacy = cols(rowFor('LegacyCo'));
+  check(legacy[SCORE] === '3.3/5', `legacy report's number ignored; the TSV score stands (got ${legacy[SCORE]})`);
+}
+
+console.log('\n6. No collateral damage');
+{
+  check(rows.length === 13, `row count correct: 2 seeds + 11 new = ${rows.length}/13`);
+  check(/Summary: \+11 added/.test(output), 'script reported +11 added');
 }
 
 rmSync(sandbox, { recursive: true, force: true });
@@ -211,6 +248,8 @@ function runMerge(seedRows, caseMap, extraFiles = {}) {
   for (const m of ['discard.mjs', 'tracker.mjs', 'scan-core.mjs', 'identity.mjs']) {
     copyFileSync(join(ROOT, 'lib', m), join(sb, 'lib', m));
   }
+  mkdirSync(join(sb, 'dashboard-web/server'), { recursive: true });
+  copyFileSync(join(ROOT, 'dashboard-web/server/v1-loader.mjs'), join(sb, 'dashboard-web/server/v1-loader.mjs'));
   mkdirSync(join(sb, 'templates'), { recursive: true });
   copyFileSync(join(ROOT, 'templates/states.yml'), join(sb, 'templates/states.yml'));
   // CRLF on purpose — the data files are CRLF in the field.

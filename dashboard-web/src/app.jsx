@@ -13,23 +13,133 @@ const { useState, useEffect, useMemo, useCallback, useRef } = React;
 // this exact block once shipped a real user's floor and OTE target.
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "accent": "#a78bfa",
-  "density": "comfortable",
-  "theme": "dark",
+  "density": "compact",
+  "theme": "cyan",
   "defaultPipelineView": "table",
   "targetLow": 100,
   "targetHigh": 140,
   "walkAway": 90
 }/*EDITMODE-END*/;
 
-// Theme cycle order by luminance: dark -> dim -> light -> dark
+// Comp bands for the Pipeline's Comp Positioning card, read from the user's OWN
+// numbers in config/profile.yml (surfaced by /api/setup/state) rather than from
+// TWEAK_DEFAULTS above.
+//
+// Those defaults are placeholders, and the block's own comment says so: "Real
+// targets belong in the gitignored config/profile.yml." Nothing ever read the real
+// ones, so the card drew its bands from the placeholders regardless of what the
+// user had configured. Every role was plotted against thresholds that were not
+// theirs, and the chart looked entirely plausible while doing it.
+//
+// The first draft of THIS comment illustrated the bug by printing the placeholder
+// thresholds beside the user's real ones, in a tracked file, and the PII gate
+// stopped it — which is precisely the trap AGENTS.md documents: writing about a
+// leak tempts you to quote it. Describe the shape, never the values.
+//
+// The mapping follows the comp model settled earlier: `minimum` is the hard floor
+// you will not go under (walk-away), and `target_range` is the aspiration you can
+// miss and still take the job.
+function parseK(s) {
+  if (typeof s === 'number') return s;
+  const m = String(s || '').match(/\$?\s*([\d,.]+)\s*([KkMm])?/);
+  if (!m) return null;
+  const n = parseFloat(m[1].replace(/,/g, ''));
+  if (!Number.isFinite(n)) return null;
+  if (/[Mm]/.test(m[2] || '')) return Math.round(n * 1000);
+  return n > 1000 ? Math.round(n / 1000) : Math.round(n); // accept 180000 or 180
+}
+function compBands(setupState, tweaks) {
+  const c = setupState && setupState.values && setupState.values.compensation;
+  const range = String((c && c.target_range) || '');
+  const parts = range.split(/\s*[-–—to]+\s*/i).filter(Boolean);
+  const low = parts.length ? parseK(parts[0]) : null;
+  const high = parts.length > 1 ? parseK(parts[1]) : null;
+  const floor = c ? parseK(c.minimum) : null;
+  // Fall back to the placeholders only when the profile has nothing usable, and
+  // require the three to be ordered: a half-filled profile must not produce a
+  // chart with inverted bands.
+  if (floor != null && low != null && high != null && floor <= low && low <= high) {
+    return { walkAway: floor, targetLow: low, targetHigh: high, fromProfile: true };
+  }
+  return { walkAway: tweaks.walkAway, targetLow: tweaks.targetLow, targetHigh: tweaks.targetHigh, fromProfile: false };
+}
+
+// Theme cycle order by luminance: dark -> dim -> light -> dark. Used by the ⌘K
+// command palette's quick theme toggle. The six designer palettes are not in
+// this cycle; they are picked from the topbar Theme dropdown. From a designer
+// theme the cycle falls back to dark (indexOf === -1 -> 0).
 const THEME_ORDER = ["dark", "dim", "light"];
 const nextThemeAfter = (t) => THEME_ORDER[(THEME_ORDER.indexOf(t) + 1) % THEME_ORDER.length];
+
+// Full theme roster for the topbar Theme dropdown: base three, then the six
+// drop-in designer palettes. Every value MUST have a matching [data-theme="…"]
+// block in styles.css (guarded by tests/themes.test.mjs).
+const THEME_OPTIONS = [
+  { value: "dark",    label: "Violet Terminal" },
+  { value: "dim",     label: "Dim Slate" },
+  { value: "light",   label: "Daylight" },
+  { value: "ochre",   label: "Ochre CRT" },
+  { value: "emerald", label: "Emerald Ticker" },
+  { value: "cyan",    label: "Cyan Vapor" },
+  { value: "rose",    label: "Rose Noir" },
+  { value: "paper",   label: "Paper Slate" },
+  { value: "arctic",  label: "Arctic" },
+];
+
+// The designer palettes own their accent. For them we clear the inline
+// --accent/--accent-bg override so each theme's CSS accent wins; the base three
+// (dark/dim/light) keep the default accent applied inline.
+const DESIGNER_THEMES = new Set(["ochre", "emerald", "cyan", "rose", "paper", "arctic"]);
+
+// Where the user's appearance preferences persist. The pre-paint script in
+// index.html reads the SAME key to set data-theme before first paint, so keep
+// the string in sync (guarded by tests/themes.test.mjs).
+const TWEAKS_STORAGE_KEY = 'trajecktory.tweaks';
+
+// Only theme + density persist (the only preferences the UI changes). Everything
+// else in TWEAK_DEFAULTS (comp knobs, etc.) always comes from code, so changing a
+// default later is never frozen by a stale saved value. Anything invalid or from
+// a retired theme is ignored, so a bad saved value can never wedge the UI.
+function loadPersistedTweaks() {
+  try {
+    const o = JSON.parse(localStorage.getItem(TWEAKS_STORAGE_KEY) || '{}') || {};
+    const out = {};
+    if (THEME_OPTIONS.some(t => t.value === o.theme)) out.theme = o.theme;
+    if (o.density === 'comfortable' || o.density === 'compact') out.density = o.density;
+    return out;
+  } catch (e) { return {}; }
+}
+
+function savePersistedTweaks(values) {
+  try {
+    localStorage.setItem(TWEAKS_STORAGE_KEY, JSON.stringify({ theme: values.theme, density: values.density }));
+  } catch (e) { /* storage unavailable (private mode, quota); stays session-only */ }
+}
+
+// Tweak store for theme, density, and the comp knobs. Seeds from TWEAK_DEFAULTS
+// overlaid with the persisted preferences, and writes theme/density back on every
+// change so the choice survives a reload. setTweak accepts either
+// setTweak('key', value) or setTweak({ key: value, ... }).
+function useTweaks(defaults) {
+  const [values, setValues] = useState(() => ({ ...defaults, ...loadPersistedTweaks() }));
+  const setTweak = useCallback((keyOrEdits, val) => {
+    const edits = (typeof keyOrEdits === 'object' && keyOrEdits !== null)
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => {
+      const next = { ...prev, ...edits };
+      savePersistedTweaks(next);
+      return next;
+    });
+  }, []);
+  return [values, setTweak];
+}
 
 function App() {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState(null);   // ms timestamp of the last apps refetch
   const [tab, setTab] = useState("pipeline");
+  const [debriefPrompt, setDebriefPrompt] = useState(null);
   const [search, setSearch] = useState("");
   const [drawerApp, setDrawerApp] = useState(null);
   // Transient: a Follow-Ups click on a TA row pushes the contact id here and
@@ -51,11 +161,15 @@ function App() {
   const [filters, setFilters] = useState({ statuses: [], archetypes: [], scoreMin: 0 });
   const [cmdOpen, setCmdOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
-  const [tweaksOpen, setTweaksOpen] = useState(false);
 
-  const [tweaks, setTweak] = window.useTweaks ? window.useTweaks(TWEAK_DEFAULTS) : [TWEAK_DEFAULTS, () => {}];
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [followupCount, setFollowupCount] = useState(0);
   const [focusBadge, setFocusBadge] = useState(0);
+  // Gmail connection attention for the Review nav item: 'reconnect' (the weekly
+  // token died — replies are silently going uncaught), 'stale' (connected but no
+  // email check in a while), or null. Driven by /api/google/health, which probes
+  // the refresh token rather than trusting the ≈1h access-token expiry.
+  const [reviewAttention, setReviewAttention] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateHidden, setUpdateHidden] = useState(false);
   const [version, setVersion] = useState(null);
@@ -131,6 +245,29 @@ function App() {
     return () => window.removeEventListener('focus', onFocus);
   }, [refreshFocusBadge]);
 
+  // Gmail health for the Review nav nudge. Polled on mount and on window refocus,
+  // but throttled: /api/google/health may trigger a token refresh, so probe at most
+  // once every few minutes rather than on every focus event.
+  const gmailProbeAt = useRef(0);
+  const refreshGmailAttention = useCallback((force) => {
+    if (!force && Date.now() - gmailProbeAt.current < 5 * 60 * 1000) return;
+    gmailProbeAt.current = Date.now();
+    fetch('/api/google/health')
+      .then(r => r.json())
+      .then(h => {
+        if (!h || !h.connected) { setReviewAttention(null); return; }       // not connected: nothing to nudge
+        if (!h.healthy) { setReviewAttention('reconnect'); return; }        // dead refresh token: the real nudge
+        setReviewAttention(h.daysSinceCheck != null && h.daysSinceCheck >= 7 ? 'stale' : null);
+      })
+      .catch(() => {}); // non-critical — the nudge just stays off
+  }, []);
+  useEffect(() => { refreshGmailAttention(true); }, [refreshGmailAttention]);
+  useEffect(() => {
+    const onFocus = () => refreshGmailAttention(false);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refreshGmailAttention]);
+
   // First-run detection: if core config files are missing, open Launchpad so a
   // brand-new user lands on guided setup instead of an empty dashboard. Also
   // expose the per-section state to the Sidebar (for the incomplete badge).
@@ -192,10 +329,18 @@ function App() {
 
   // Apply theme + density + accent
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", tweaks.theme);
-    document.documentElement.style.setProperty("--accent", tweaks.accent);
-    document.documentElement.style.setProperty("--accent-bg", hexToRgba(tweaks.accent, 0.12));
-    document.documentElement.style.setProperty("--sidebar-w", "232px");
+    const root = document.documentElement;
+    root.setAttribute("data-theme", tweaks.theme);
+    if (DESIGNER_THEMES.has(tweaks.theme)) {
+      // Designer palette supplies its own accent. Clear any inline override
+      // (left over from a base theme) so the theme's CSS --accent wins.
+      root.style.removeProperty("--accent");
+      root.style.removeProperty("--accent-bg");
+    } else {
+      root.style.setProperty("--accent", tweaks.accent);
+      root.style.setProperty("--accent-bg", hexToRgba(tweaks.accent, 0.12));
+    }
+    root.style.setProperty("--sidebar-w", "232px");
   }, [tweaks.theme, tweaks.accent]);
 
   function hexToRgba(hex, a) {
@@ -215,6 +360,26 @@ function App() {
   // failure and simply swallowed them. Modules communicate via window.* here
   // (build.mjs runs esbuild with bundle:false), so this matches the house style.
   useEffect(() => { window.tjkToast = toast; }, [toast]);
+
+  // Gmail reconnect lands back here at /?google=connected|error|setup (the OAuth
+  // callback cannot know which tab was open). Surface the result once, open Insights
+  // (whose default subtab is Review, where the Gmail panel lives), and strip the
+  // query so a refresh does not re-toast. `setup` is not a failure: it means no
+  // OAuth client exists on this install yet, so it gets its own wording and sends
+  // the user to the card that explains what to do rather than reporting an error.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const g = params.get("google");
+    if (!g) return;
+    if (g === "connected") { toast("Gmail connected.", "success"); setTab("analytics"); }
+    // No kind: this is neutral information, not a success and not a failure. The
+    // stack's default styling is exactly that.
+    else if (g === "setup") { toast("Gmail needs a one-time setup before it can connect. See the Gmail sync card."); setTab("analytics"); }
+    else if (g === "error") { toast(`Gmail connect failed: ${params.get("reason") || "unknown"}`, "error"); setTab("analytics"); }
+    params.delete("google"); params.delete("reason");
+    const qs = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+  }, [toast]);
 
   // Action handler — updates local state + persists to applications.md via API.
   // `reachedStage` (optional): when closing a role that advanced past Applied,
@@ -261,6 +426,12 @@ function App() {
     }).then(r => {
       if (!r.ok) toast(`Save failed for ${app.company} (${r.status})`, 'error');
     }).catch(() => toast(`Save failed for ${app.company}`, 'error'));
+    // A round just concluded (we transitioned OUT of an interview stage): prompt
+    // for its debrief so the objection is captured now, not reconstructed later.
+    // Gated on !silent so bulk/programmatic changes never pop the modal.
+    if (!silent && window.isInterviewStage(app.status) && canonicalStatus !== app.status) {
+      setDebriefPrompt({ appId: app.id, company: app.company, role: app.role, stage: app.status });
+    }
     if (!silent) {
       const verb = { Applied: "Applied to", SKIP: "Skipped", Discarded: "Discarded", Closed: "Marked closed:", "Not a Fit": "Not a fit:", Rejected: "Marked rejected:", Responded: "Marked responded:", Offer: "Marked offer:" }[newStatus] || (window.isInterviewStage(newStatus) ? `Moved to ${newStatus}:` : "Updated");
       const suffix = reachedStage ? ` (reached ${reachedStage})` : "";
@@ -292,8 +463,8 @@ function App() {
   // Stats for sidebar nav badges (Pipeline pending-decisions + Follow-Ups count)
   const stats = useMemo(() => {
     const pending = apps.filter(a => a.status === "Evaluated").length;
-    return { pending, followups: followupCount, today: focusBadge };
-  }, [apps, followupCount, focusBadge]);
+    return { pending, followups: followupCount, today: focusBadge, reviewAttention };
+  }, [apps, followupCount, focusBadge, reviewAttention]);
 
   // Commands for palette
   const commands = useMemo(() => {
@@ -302,11 +473,11 @@ function App() {
       { section: "Navigate", icon: "↻", label: "Go to Follow-Ups",   run: () => setTab("followups") },
       { section: "Navigate", icon: "◈", label: "Go to Interview",    run: () => setTab("interview") },
       { section: "Navigate", icon: "≡", label: "Go to All Entries",  run: () => { setTab("pipeline"); setPipelineView("all"); } },
-      { section: "Navigate", icon: "🔗", label: "Go to LinkedIn SSI", run: () => setTab("linkedin-ssi") },
+      { section: "Navigate", icon: "◍", label: "Go to LinkedIn SSI", run: () => setTab("linkedin-ssi") },
       { section: "Navigate", icon: "◎", label: "Go to TA Outreach", run: () => setTab("target-talent") },
       { section: "Navigate", icon: "☎", label: "Go to Recruiters",   run: () => setTab("recruiters") },
-      { section: "Navigate", icon: "▤", label: "Go to Analytics",    run: () => setTab("analytics") },
-      { section: "Navigate", icon: "🚀", label: "Go to Launchpad (setup)", run: () => setTab("launchpad") },
+      { section: "Navigate", icon: "✦", label: "Go to Insights",     run: () => setTab("analytics") },
+      { section: "Navigate", icon: "◇", label: "Go to Launchpad (setup)", run: () => setTab("launchpad") },
     ];
     const viewCmds = [
       { section: "View", icon: "◐", label: `Theme: ${tweaks.theme} → ${nextThemeAfter(tweaks.theme)}`, run: () => setTweak("theme", nextThemeAfter(tweaks.theme)) },
@@ -372,30 +543,6 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Tweaks panel content
-  const tweaksUI = window.TweaksPanel && tweaksOpen ? (
-    <window.TweaksPanel onClose={() => setTweaksOpen(false)} title="Tweaks">
-      <window.TweakSection title="Appearance">
-        <window.TweakRadio label="Theme" value={tweaks.theme} options={["dark", "dim", "light"]} onChange={v => setTweak("theme", v)} />
-        <window.TweakRadio label="Density" value={tweaks.density} options={["comfortable", "compact"]} onChange={v => setTweak("density", v)} />
-        <window.TweakColor
-          label="Accent color"
-          value={tweaks.accent}
-          options={["#a78bfa", "#5b8def", "#22c55e", "#f97316", "#e5e5e5"]}
-          onChange={v => setTweak("accent", v)}
-        />
-      </window.TweakSection>
-      <window.TweakSection title="Defaults">
-        <window.TweakRadio
-          label="Default Pipeline view"
-          value={tweaks.defaultPipelineView}
-          options={["overview", "table"]}
-          onChange={v => { setTweak("defaultPipelineView", v); setPipelineView(v); }}
-        />
-      </window.TweakSection>
-    </window.TweaksPanel>
-  ) : null;
-
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', color:'var(--text-muted)', fontFamily:'var(--font-mono)', fontSize:13 }}>
       Loading trajecktory data…
@@ -411,18 +558,17 @@ function App() {
           search={search} setSearch={setSearch}
           searchPlaceholder={searchPlaceholder}
           lastSync={lastSync}
-          density={tweaks.density} setDensity={(d) => setTweak("density", d)}
           theme={tweaks.theme} setTheme={(t) => setTweak("theme", t)}
+          themeOptions={THEME_OPTIONS}
           openCmd={() => setCmdOpen(true)}
-          openTweaks={() => setTweaksOpen(o => !o)}
         />
 
         <div className="content" data-screen-label={`trajecktory · ${tab}`} data-tab={tab}>
           {!updateHidden && window.UpdateBanner ? <window.UpdateBanner info={updateInfo} toast={toast} onDismiss={() => setUpdateHidden(true)} /> : null}
           {tab === "focus"     && <window.FocusTab toast={toast} onFocusDataChanged={refreshFocusBadge} />}
-          {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} onQuickAction={handleAction} onDataChanged={refreshApps} search={search} compTweaks={{ walkAway: tweaks.walkAway, targetLow: tweaks.targetLow, targetHigh: tweaks.targetHigh }} />}
-          {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} />}
-          {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} />}
+          {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} onQuickAction={handleAction} onDataChanged={refreshApps} search={search} compTweaks={compBands(setupState, tweaks)} />}
+          {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} toast={toast} />}
+          {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} toast={toast} />}
           {tab === "interview" && <window.InterviewTab apps={apps} toast={toast} />}
           {tab === "recruiters"&& <window.RecruitersTab search={search} />}
           {tab === "target-talent" && <window.TargetTalentTab initialOpenId={pendingTaOpen} onInitialOpenConsumed={() => setPendingTaOpen(null)} search={search} />}
@@ -441,9 +587,12 @@ function App() {
           onFollowupChange={refreshApps}
         />
       )}
+      {debriefPrompt && window.DebriefModal && (
+        <window.DebriefModal prompt={debriefPrompt} toast={toast}
+          onClose={(saved) => { setDebriefPrompt(null); if (saved) refreshApps(); }} />
+      )}
       <window.CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={commands} />
       <window.ToastStack toasts={toasts} />
-      {tweaksUI}
     </div>
   );
 }

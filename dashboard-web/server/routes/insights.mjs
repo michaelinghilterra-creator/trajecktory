@@ -4,6 +4,7 @@ import path from 'path';
 import { generateText } from '../lib/anthropic.mjs';
 import { currentModel, resolveModelId } from '../lib/pricing.mjs';
 import { INSIGHTS_DIR, INSIGHTS_LATEST, INSIGHTS_HISTORY_MAX, loadProfileContext, loadPriorInsight, pruneInsightsHistory, buildInsightsContext, buildInsightsMetrics, stageFunnelStats } from '../lib/insights.mjs';
+import { MIN_SAMPLE } from '../lib/rate-confidence.mjs';
 
 export const router = express.Router();
 
@@ -28,7 +29,7 @@ router.post('/api/insights/generate', async (req, res) => {
 
 RULES:
 - Direct senior tone. No corporate filler. No em dashes.
-- If the data doesn't support a claim, don't make it. Flag thin samples (appliedN < 5) explicitly rather than over-reading them.
+- If the data doesn't support a claim, don't make it. A cohort with fewer than ${MIN_SAMPLE} applications (appliedN < ${MIN_SAMPLE}) is an insufficient sample: say "not enough data yet", never a response rate. Each rate in the snapshot carries a "conf" object (k of n, sufficient, lo/hi) - respect the gate, and when you cite a rate that clears it, prefer its range over the bare point estimate.
 - Prefer one strong specific recommendation over three generic ones.
 - Every recommendation must anchor in a number or row from the data.
 - If a prior_summary is provided, briefly note progress or drift versus that prior take (in summary or one whats_working/whats_not item).

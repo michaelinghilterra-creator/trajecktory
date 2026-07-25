@@ -192,6 +192,10 @@ The loop is evaluating:
 - What's the timeline to a decision? And to a start date?
 - What would a strong offer signal look like coming out of this?
 
+**Direct read on fit (ask the coordinator or your repeat HM contact):**
+- "Is there anything from today's panels that gives the team pause, or that you'd want me to clarify before a decision?"
+- This surfaces the objection while you can still address it. Capture it in the debrief (§10) the same day.
+
 ---
 
 ## §9 — Logistics
@@ -221,6 +225,7 @@ The loop is evaluating:
 
 **Day after:**
 - [ ] Log full debrief in `data/applications.md` notes column for #{NNN}
+- [ ] Capture the debrief in the dashboard (it prompts on any interview-stage change): the objection you heard, what landed per panel, what you would change, and any question you were not prepared for. Saves to `data/app-notes.json` for #{NNN}.
 - [ ] Update story-bank.md with any NEW stories you ended up telling, or refinements to existing ones
 - [ ] If references requested: brief each reference verbally before they're called — name the role, the company, the 1–2 angles to reinforce
 - [ ] Comp prep: write down your verbal-offer response + counteroffer framework BEFORE you're on a call where they share a number

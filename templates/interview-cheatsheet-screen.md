@@ -136,6 +136,10 @@ This is a recruiter-driven screen. {Recruiter}'s job is to:
 - {Bonus target % on base? Variable structure?}
 - {Hybrid cadence? Days/week on-site?}
 
+**Direct read on fit (ask near the end, every round)**
+- "Before we wrap, is there anything in my background that gives you pause, or that the hiring manager would want addressed?"
+- This is the single highest-value question you can ask. Whatever they say is the objection to fix. Capture it in the debrief (§10) the moment the call ends. If they say "nothing," that is data too.
+
 **Save for the hiring manager (don't ask recruiter):**
 - Tooling stack inside the team
 - Where current programs are working vs. stuck
@@ -172,4 +176,5 @@ This is a recruiter-driven screen. {Recruiter}'s job is to:
 
 - [ ] Send a short thank-you note to {recruiter} (3–4 sentences, reference one specific thing she said, reiterate interest, confirm next step)
 - [ ] Log call notes in `data/applications.md` notes column for #{NNN}
+- [ ] Capture the debrief while it is fresh: the objection you heard (their answer to the "anything that gives you pause" question), what landed, what you would change, and intel for the next round. The dashboard prompts for this on any interview-stage change; it saves to `data/app-notes.json` for #{NNN}.
 - [ ] If advanced: open `interview-prep/{Company Folder}/{company-slug}-round-2-hiring-manager.md` from the `interview-cheatsheet-hm-round` template (descriptor is the STAGE, never the interviewer's name)

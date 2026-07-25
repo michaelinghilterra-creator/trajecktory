@@ -632,7 +632,7 @@ function RecBar({ label, n, total, color }) {
   const pct = total > 0 ? Math.round((n / total) * 100) : 0;
   return (
     <div className="col" style={{ gap: 4 }}>
-      <div className="row" style={{ justifyContent: 'space-between', fontSize: 11.5 }}>
+      <div className="row" style={{ justifyContent: 'space-between', fontSize: 11 }}>
         <span style={{ color }}>{label}</span>
         <span className="mono dim">{n} · {pct}%</span>
       </div>
@@ -721,15 +721,23 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
         </div>
       </div>
 
-      <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+      {/* GRID, not a wrapping flex row. With flex:1 children a wrap leaves the last
+          line holding one card that grows to fill the ENTIRE line: between roughly
+          600 and 700px this rendered three cards at 225px and a fourth at 700px.
+          auto-fit + minmax keeps every column equal at every width, and wraps with
+          no orphan to stretch. */}
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
         <RecKpi label="Outreach Rate" value={`${outreachRate}%`}
           sub={outreachRate >= 40 ? 'Steady cadence, keep it up' : 'Below 40%. Draft a few more this week'}
           tone={outreachTone} />
+        {/* These thresholds are working targets you set, not industry benchmarks,
+            and the copy says so. The word "benchmark" used to be here and it made a
+            local rule of thumb sound like an external standard nobody could cite. */}
         <RecKpi label="Response Rate" value={sent ? `${responseRate}%` : '—'}
           sub={sent === 0 ? 'Send your first batch this week'
-             : responseRate >= 10 ? 'At/above benchmark, your hook works'
-             : responseRate >= 5 ? 'Around baseline, sharpen openers'
-             : 'Below 5%. Rewrite hook, lead with the role'}
+             : responseRate >= 10 ? 'Above your 10% target, your hook works'
+             : responseRate >= 5 ? 'Around your 5% floor, sharpen openers'
+             : 'Under your 5% floor. Rewrite hook, lead with the role'}
           tone={responseTone} />
         <RecKpi label="Active Convos" value={activeConvos}
           sub={activeConvos > 0 ? `${replied} replied · ${meeting} meetings. Work the warm pipeline` : 'No live convos. Replies fill this column'}
@@ -1011,7 +1019,7 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
           <div className="sub">{rows.length} of {contacts.length} contacts · {firmsShown} firms</div>
         </div>
         <div className="act">
-          {importMsg && <span className="dim" style={{ fontSize: 11.5 }}>{importMsg}</span>}
+          {importMsg && <span className="dim" style={{ fontSize: 11 }}>{importMsg}</span>}
           <a className="btn" href="/api/recruiters/template" download style={{ textDecoration: 'none' }} title="Download the CSV template (company, first, last, title, phone, linkedin, website, ...)">Template</a>
           <label className="btn" style={{ cursor: importing ? 'default' : 'pointer', opacity: importing ? 0.6 : 1 }} title="Bulk-import recruiter contacts from a CSV file">
             {importing ? 'Importing…' : 'Import CSV'}
@@ -1051,7 +1059,7 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
               <RecIcon d={REC_I.x} size={12} /> Clear
             </button>
           )}
-          <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-mute)', letterSpacing: '.06em' }}>
+          <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--text-mute)', letterSpacing: '.06em' }}>
             sorted by {cols.find(c => c.k === sortKey)?.label.toLowerCase()} · click a row for details
           </span>
         </div>
@@ -1086,7 +1094,7 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
                       <span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || '—'}</span>
                     </td>
                     <td title={c.firm || ''}>
-                      <span style={{ fontWeight: 600, fontSize: 12.5, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.firm.split(' — ')[0]}</span>
+                      <span style={{ fontWeight: 600, fontSize: 12, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.firm.split(' — ')[0]}</span>
                     </td>
                     <td>
                       <span style={{ fontSize: 12, color: locStr(c) === '—' ? 'var(--text-mute)' : 'var(--text-dim)' }}>{locStr(c)}</span>
@@ -1348,6 +1356,7 @@ function RecAICompose({ contact, contactId, onSaveDraft, onLogSent, onToast }) {
             <button className="btn sm" onClick={() => onSaveDraft(subject, fullEmail)}>
               <RecIcon d={REC_I.spark} size={12} /> Save as draft only
             </button>
+            <window.GmailDraftBtn to={contact.email} subject={subject} body={fullEmail} />
           </div>
         </>
         );
@@ -1572,7 +1581,7 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
                   return (
                     <>
                       {href
-                        ? <a className="iv link" href={href} target="_blank" rel="noreferrer">{stored || domain}{!stored && domain ? <span style={{ color: 'var(--text-mute)', marginLeft: 5, fontSize: 10 }}>(from email)</span> : null}</a>
+                        ? <a className="iv link" href={href} target="_blank" rel="noreferrer">{stored || domain}{!stored && domain ? <span style={{ color: 'var(--text-mute)', marginLeft: 5, fontSize: 10.5 }}>(from email)</span> : null}</a>
                         : <span className="iv" style={{ color: 'var(--text-mute)' }}>—</span>}
                       <button className="copy-btn" onClick={() => { setWebsite(stored); setEditingWeb(true); }}><RecIcon d={REC_I.pen} size={11} /> Edit</button>
                     </>
@@ -1606,7 +1615,7 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
                   </>
                 ) : data.linkedin ? (
                   <>
-                    <a className="iv link" href={data.linkedin} target="_blank" rel="noreferrer">View profile</a>
+                    <a className="iv link" href={window.safeHref(data.linkedin)} target="_blank" rel="noreferrer">View profile</a>
                     <button className="copy-btn" onClick={() => { setLinkedin(data.linkedin || ''); setEditingLi(true); }}><RecIcon d={REC_I.pen} size={11} /> Edit</button>
                   </>
                 ) : (
@@ -1633,10 +1642,10 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
               <RecIcon d={REC_I.trend} size={12} /> Pipeline stage
               <span className="r" style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
                 <button className={'btn ghost sm' + (pipeStyle === 'stepper' ? '' : '')}
-                  style={{ fontSize: 9.5, padding: '2px 7px', opacity: pipeStyle === 'stepper' ? 1 : 0.55 }}
+                  style={{ fontSize: 10.5, padding: '2px 7px', opacity: pipeStyle === 'stepper' ? 1 : 0.55 }}
                   onClick={() => setPipeStyle('stepper')}>Stepper</button>
                 <button className="btn ghost sm"
-                  style={{ fontSize: 9.5, padding: '2px 7px', opacity: pipeStyle === 'track' ? 1 : 0.55 }}
+                  style={{ fontSize: 10.5, padding: '2px 7px', opacity: pipeStyle === 'track' ? 1 : 0.55 }}
                   onClick={() => setPipeStyle('track')}>Track</button>
               </span>
             </div>
@@ -1747,7 +1756,7 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
           position: 'fixed', bottom: 20, right: 20, zIndex: 200,
           background: 'var(--panel)', border: '1px solid var(--border-2)',
           borderLeft: `3px solid ${toast.kind === 'success' ? 'var(--green)' : toast.kind === 'warn' ? 'var(--orange)' : 'var(--accent)'}`,
-          borderRadius: 8, padding: '10px 14px', fontSize: 12.5, color: 'var(--text)',
+          borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--text)',
           boxShadow: '0 12px 28px -12px rgba(0,0,0,0.6)',
         }}>{toast.msg}</div>
       )}

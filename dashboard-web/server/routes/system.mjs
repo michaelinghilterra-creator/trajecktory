@@ -19,6 +19,30 @@ export const router = express.Router();
 // Node being on PATH.
 const NODE = process.execPath;
 const updateJobs = new Map();
+
+// Subprocess stderr goes into a job record the browser polls, and git prints the
+// remote URL when authentication fails: `fatal: Authentication failed for
+// 'https://x-access-token:<TOKEN>@github.com/...'`. Bundles built while the repo
+// was private carry exactly that shape of origin, so a failed update could show
+// the embedded token on screen and keep it in memory.
+//
+// Strip the credential half of any URL userinfo, and any bare token-looking
+// string, before the output is stored. Redacting at the point of CAPTURE rather
+// than at display means it is gone from the job record too, so a later reader of
+// that map cannot find it either.
+const TOKEN_PATTERNS = [
+  // https://user:secret@host and https://token@host
+  [/(\b[a-z][a-z0-9+.-]*:\/\/)([^/\s:@]+)(?::([^/\s@]*))?@/gi, (_m, scheme, user, pass) => `${scheme}${pass === undefined ? '' : user + ':'}<redacted>@`],
+  // GitHub token formats, wherever they appear
+  [/\b(gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,})\b/g, '<redacted>'],
+  // Anthropic keys, in case a child ever echoes its environment
+  [/\bsk-ant-[A-Za-z0-9_-]{8,}\b/g, '<redacted>'],
+];
+export function redactSecrets(text) {
+  let out = String(text == null ? '' : text);
+  for (const [re, rep] of TOKEN_PATTERNS) out = out.replace(re, rep);
+  return out;
+}
 // Unique per server process. The updater UI watches this change to confirm the
 // server has actually restarted (rather than reloading into the old process).
 const BOOT_ID = randomBytes(8).toString('hex');
@@ -57,7 +81,7 @@ router.post('/api/system/update-apply', (req, res) => {
     { cwd: ROOT_DIR, timeout: 5 * 60 * 1000, maxBuffer: 4 * 1024 * 1024 },
     (err, stdout, stderr) => {
       const job = updateJobs.get(jobId) || {};
-      const output = (stdout || '') + (stderr ? '\n[stderr]\n' + stderr : '');
+      const output = redactSecrets((stdout || '') + (stderr ? '\n[stderr]\n' + stderr : ''));
       // The updater prints BUNDLE_UPDATE_REQUIRED (and exits non-zero) when the
       // code needs a newer heavy bundle than this install ships — that is not a
       // failure, it just means "download the installer".
