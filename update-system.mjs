@@ -260,7 +260,24 @@ function resolveGit() {
 // public repo needs no auth, and this stops a headless updater from hanging on a
 // credential prompt or reusing a stale cached credential once the old bundle
 // token is revoked.
-const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
+// A committer identity is forced here, defaulting ONLY when the machine has none
+// of its own, so the updater's commits succeed on a fresh install. A clean Windows
+// VM with a freshly-installed Git for Windows has no user.name/user.email, and the
+// commit is the FIRST updater operation that needs one (the checkouts before it do
+// not). Without this the commit threw, the swallowing catch downstream mislabeled
+// it "nothing to commit", the tree was left dirty, and the half-applied update
+// reported failure and never restarted. A real identity already in the environment
+// is respected; these are automated maintenance commits in a local-only repo, so
+// falling back to a clear "trajecktory updater" author when none is set is correct.
+// Exported so tests/update-commit-identity.test.mjs can assert a machine with no
+// configured git identity still commits with these, and fails without them.
+export const UPDATER_IDENTITY = {
+  GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || 'trajecktory updater',
+  GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || 'updater@trajecktory.local',
+  GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || 'trajecktory updater',
+  GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL || 'updater@trajecktory.local',
+};
+const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0', ...UPDATER_IDENTITY };
 function git(...args) {
   return execFileSync(resolveGit(), ['-c', 'credential.helper=', ...args], { cwd: ROOT, encoding: 'utf-8', timeout: 30000, env: GIT_ENV }).trim();
 }
@@ -688,19 +705,34 @@ async function apply() {
       console.log('npm install skipped (may need manual run)');
     }
 
-    // 7. Commit the upstream update
+    // 7. Commit the upstream update. A committer identity is forced via GIT_ENV so
+    //    a fresh install with no configured git identity can still commit.
     const remote = localVersion(); // Re-read after checkout updated VERSION
-    try {
-      const pathsToStage = [...updated];
-      const dismissFile = join(ROOT, '.update-dismissed');
-      if (existsSync(dismissFile)) {
-        unlinkSync(dismissFile);
-        pathsToStage.push('.update-dismissed');
+    const pathsToStage = [...updated];
+    const dismissFile = join(ROOT, '.update-dismissed');
+    if (existsSync(dismissFile)) {
+      unlinkSync(dismissFile);
+      pathsToStage.push('.update-dismissed');
+    }
+    addPaths(pathsToStage);
+    // A genuinely empty staging area is the ONLY benign case: `git diff --cached
+    // --name-only` lists what is staged, and empty means the checkout wrote nothing
+    // new (already current), so there is nothing to commit. ANY other commit failure
+    // is real and must surface. The old bare `catch {}` here mislabeled every failure
+    // as "nothing to commit", so a fresh-install commit that threw (no git identity)
+    // was silently swallowed, the tree left dirty, and the update reported success
+    // while never restarting — the exact way clean installs were stranded on updates.
+    if (git('diff', '--cached', '--name-only')) {
+      try {
+        git('commit', '-m', `chore: auto-update system files to v${remote}`);
+      } catch (e) {
+        console.error('Update failed: the checked-out system files could not be committed.');
+        console.error((e && (e.stderr?.toString?.() || e.message)) || String(e));
+        if (existsSync(lockFile)) unlinkSync(lockFile);
+        process.exit(1);
       }
-      addPaths(pathsToStage);
-      git('commit', '-m', `chore: auto-update system files to v${remote}`);
-    } catch {
-      // Nothing to commit (already up to date)
+    } else {
+      console.log('No system-file changes to commit (already current).');
     }
 
     // 8. Re-apply local customizations on top of the upstream changes.
