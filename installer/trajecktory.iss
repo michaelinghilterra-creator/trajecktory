@@ -36,6 +36,19 @@ WizardStyle=modern
 SetupIconFile=assets\trajecktory.ico
 ; SignTool=signtool $f                            ; configure if code-signing
 
+[InstallDelete]
+; Files REMOVED from the app upstream. Inno overwrites files the payload contains
+; but never deletes files it no longer ships, so a source file deleted in a newer
+; version lingers on disk after an in-place upgrade. dashboard-web\src is rebuilt
+; from on launch (build.mjs transpiles src\*.jsx), so a stale .jsx here would be
+; compiled into a dead bundle. The self-updater handles this class with
+; update-system.mjs PURGE_PATHS; this is the installer's equivalent. APPEND-ONLY,
+; never prune: an install may upgrade from any older version, so a path removed
+; from this list would start surviving again on machines that skipped the release
+; which purged it. Removed in the 2.0 relaunch (v1.24.1 -> v2.0.0):
+Type: files; Name: "{app}\trajecktory\dashboard-web\src\drawer.jsx"
+Type: files; Name: "{app}\trajecktory\dashboard-web\src\tweaks-panel.jsx"
+
 [Files]
 ; The staged offline payload: portable Node, the trajecktory tree with installed
 ; node_modules + Claude Code + bundled Chromium.
