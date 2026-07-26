@@ -1180,7 +1180,8 @@ function AIResponseView({ influencers, lockedInfluencer, onLog }) {
                 <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{tone} · reply draft</div>
               </div>
             </div>
-            <div style={{ background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)" }}>{out}</div>
+            <textarea className="ta" value={out} onChange={(e) => setOut(e.target.value)} aria-label="Editable draft, tweak it before you copy or log"
+              style={{ width: "100%", minHeight: 120, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)", resize: "vertical", fontFamily: "inherit" }} />
             {logErr && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)", marginTop: 10 }}>{logErr}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               {onLog && lockedInfluencer && (
@@ -1378,7 +1379,8 @@ function AIConnectView({ influencers, lockedInfluencer, onLog }) {
                 <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{angle} · {tone.toLowerCase()}</div>
               </div>
             </div>
-            <div style={{ background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)" }}>{out}</div>
+            <textarea className="ta" value={out} onChange={(e) => setOut(e.target.value)} aria-label="Editable draft, tweak it before you copy or log"
+              style={{ width: "100%", minHeight: 120, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)", resize: "vertical", fontFamily: "inherit" }} />
             {logErr && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)", marginTop: 10 }}>{logErr}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               {onLog && lockedInfluencer && (
