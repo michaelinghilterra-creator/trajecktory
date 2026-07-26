@@ -264,7 +264,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
             const color = isInt ? 'var(--orange)' : (sc != null && sc >= 4.0) ? 'var(--accent)' : 'var(--red)';
             const label = `Follow up · ${it.daysSinceLastTouch ?? 0}d silent`;
             return (
-              <div key={`${it.source || 'app'}-${it.id}`} onClick={() => onOpen(it)}
+              <div key={`${it.source || 'app'}-${it.id}`} onClick={() => onOpen(it)} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(it))}
                 style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto auto', gap: 12, alignItems: 'center',
                   padding: '9px 11px', borderRadius: 9, cursor: 'pointer',
                   background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
@@ -1069,13 +1069,13 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
               </div>
               <div>
                 <label className="dim mono" style={{ fontSize: 10.5 }}>CONTACT (optional)</label>
-                <input type="text" placeholder="Name or email"
+                <input type="text" aria-label="Contact name or email" placeholder="Name or email"
                   value={logModal.contact} onChange={e => setLogModal({ ...logModal, contact: e.target.value })}
                   style={{ width: '100%', padding: 8, marginTop: 4, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 12 }} />
               </div>
               <div>
                 <label className="dim mono" style={{ fontSize: 10.5 }}>NOTES</label>
-                <textarea placeholder="What did you send / what's the context?"
+                <textarea aria-label="Follow-up context" placeholder="What did you send / what's the context?"
                   value={logModal.notes} onChange={e => setLogModal({ ...logModal, notes: e.target.value })}
                   rows={4}
                   style={{ width: '100%', padding: 8, marginTop: 4, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 12, fontFamily: 'inherit', resize: 'vertical' }} />

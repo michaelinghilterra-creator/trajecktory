@@ -194,7 +194,12 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
         </div>
         <div className="act">
           <label className="btn" style={{ cursor: "pointer" }}>
-            <span onClick={e => { e.preventDefault(); setShowArchived(v => !v); }}
+            {/* Real checkbox, visually hidden: clicking the label (icon or text)
+                toggles it natively, it is keyboard-operable (Space), and screen
+                readers announce it. The styled box below is decorative. */}
+            <input type="checkbox" checked={showArchived} onChange={() => setShowArchived(v => !v)}
+              style={{ position: "absolute", opacity: 0, width: 0, height: 0 }} />
+            <span aria-hidden="true"
               style={{ width: 14, height: 14, border: "1.5px solid var(--border-2)", borderRadius: 3, display: "inline-grid", placeItems: "center", background: showArchived ? "var(--accent)" : "transparent", borderColor: showArchived ? "var(--accent)" : "var(--border-2)" }}>
               {showArchived && <TIcon d={TI.check} size={9} style={{ color: "#15101f" }} stroke={3} />}
             </span>
@@ -238,7 +243,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
             <thead>
               <tr>
                 {cols.map(c => (
-                  <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? "sorted" : ""} onClick={() => setSort(c.k)}>
+                  <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? "sorted" : ""} role="button" tabIndex={0} aria-sort={sortKey === c.k ? (sortDir === "asc" ? "ascending" : "descending") : "none"} onClick={() => setSort(c.k)} onKeyDown={window.kbdActivate(() => setSort(c.k))}>
                     {c.label}<span className="sort-ind">{sortKey === c.k ? (sortDir === "asc" ? "↑" : "↓") : "·"}</span>
                   </th>
                 ))}
@@ -252,7 +257,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
                 const m = TT_STATUS_MAP[c.status] || TT_STATUS[0];
                 const loc = [c.city, c.state].filter(Boolean).join(", ");
                 return (
-                  <tr key={c.id} className={selId === c.id ? "selected" : ""} onClick={() => onOpen(c.id)}>
+                  <tr key={c.id} className={selId === c.id ? "selected" : ""} tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(c.id))} onClick={() => onOpen(c.id)}>
                     <td>
                       <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
                         <div className="mono-av sm" style={{ borderColor: m.color, color: m.color, flex: "none" }}>{ttInitials(c.first + " " + c.last)}</div>

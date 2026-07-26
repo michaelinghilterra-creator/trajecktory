@@ -363,7 +363,7 @@ function ScheduleEditor({ template, onSave, saving }) {
         onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
         title="Drag to reorder"
       >⠿</span>
-      <input className="sched-input label" placeholder="Task name (e.g. Deep work block)" value={r.label} onChange={e => patch(r.id, 'label', e.target.value)} />
+      <input className="sched-input label" aria-label="Task name" placeholder="Task name (e.g. Deep work block)" value={r.label} onChange={e => patch(r.id, 'label', e.target.value)} />
       <div className="sched-days">
         {DAY_PRESETS.map(p => (
           <button key={p.id} type="button" className="chip preset" title={p.label} onClick={() => setPreset(r.id, p.days)}>{p.label.split('/')[0] === p.label ? p.label : p.id.toUpperCase()}</button>

@@ -244,7 +244,7 @@ function NeedsAttention({ apps, onOpen, selId, isStale = () => false, staleDays 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
         {queue.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>Nothing urgent. Pipeline is clear.</div>}
         {queue.map(({ a, label, icon, color }) => (
-          <div key={a.id} onClick={() => onOpen(a)}
+          <div key={a.id} onClick={() => onOpen(a)} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(a))}
             style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto auto', gap: 12, alignItems: 'center',
               padding: '9px 11px', borderRadius: 9, cursor: 'pointer',
               background: selId === a.id ? 'var(--accent-bg)' : 'var(--panel-2)',
@@ -489,7 +489,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
           <thead>
             <tr>
               {cols.map(c => (
-                <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? 'sorted' : ''} onClick={() => setSort(c.k)}>
+                <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? 'sorted' : ''} role="button" tabIndex={0} aria-sort={sortKey === c.k ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => setSort(c.k)} onKeyDown={window.kbdActivate(() => setSort(c.k))}>
                   {c.label}<span className="sort-ind">{sortKey === c.k ? (sortDir === 'asc' ? '↑' : '↓') : '·'}</span>
                 </th>
               ))}
@@ -506,7 +506,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
               return (
                 <tr key={a.id} className={(selId === a.id ? 'selected ' : '') + (stale ? 'stale' : '')}
                   style={a._triage ? { cursor: 'default', background: 'rgba(148,163,184,0.05)' } : undefined}
-                  onClick={() => onOpen(a)}>
+                  onClick={() => onOpen(a)} tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(a))}>
                   <td className="id">{a._triage ? '-' : String(a.id).padStart(3, '0')}</td>
                   <td className="t-date">{a.date?.slice(5)}<span className="age">{relAge(sit)}</span></td>
                   <td className="t-co-cell">
@@ -2226,7 +2226,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
         <thead>
           <tr>
             {cols.map(c => (
-              <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? 'sorted' : ''} onClick={() => setSort(c.k)}>
+              <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? 'sorted' : ''} role="button" tabIndex={0} aria-sort={sortKey === c.k ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} onClick={() => setSort(c.k)} onKeyDown={window.kbdActivate(() => setSort(c.k))}>
                 {c.label}
                 <span className="sort-ind">{sortKey === c.k ? (sortDir === 'asc' ? '↑' : '↓') : '·'}</span>
               </th>
@@ -2242,7 +2242,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
             return (
             <tr key={a.id} className={stale ? 'stale' : ''}
               style={a._triage ? { cursor: 'default', background: 'rgba(148,163,184,0.05)' } : undefined}
-              onClick={() => onOpen(a)}>
+              onClick={() => onOpen(a)} tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(a))}>
               <td className="id">{a._triage ? '-' : String(a.id).padStart(3, '0')}</td>
               <td className="date">{a.date?.slice(5)}</td>
               <td className="company t-co-cell">

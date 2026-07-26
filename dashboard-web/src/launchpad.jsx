@@ -1286,7 +1286,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>No companies tracked yet. Add some above, then run the merge step.</div>
         ) : (
           <>
-            <input id="lp-co-filter" className="inp" placeholder="Filter by name…" value={q}
+            <input id="lp-co-filter" className="inp" aria-label="Filter companies by name" placeholder="Filter by name…" value={q}
               onChange={e => setTracked(t => ({ ...t, q: e.target.value }))} style={{ width: '100%', marginBottom: 8 }} />
             <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, paddingRight: 4 }}>
               {shown.slice(0, 400).map((co) => (
@@ -1618,7 +1618,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         <div>
           <div style={LP_SUB}>Your titles</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input id="lp-role-input" className="inp" placeholder="e.g. Director of Customer Support" style={{ flex: 1 }} onKeyDown={e => { if (e.key === 'Enter') addTitle(); }} />
+            <input id="lp-role-input" className="inp" aria-label="Add a target role" placeholder="e.g. Director of Customer Support" style={{ flex: 1 }} onKeyDown={e => { if (e.key === 'Enter') addTitle(); }} />
             <button className="btn" onClick={addTitle}>Add title</button>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
@@ -1700,7 +1700,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         <div>
           <div style={LP_SUB}>Add your own</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input id="lp-co-input" className="inp" placeholder="Company name" style={{ flex: 1 }} onKeyDown={e => { if (e.key === 'Enter') addCompany(); }} />
+            <input id="lp-co-input" className="inp" aria-label="Add a company" placeholder="Company name" style={{ flex: 1 }} onKeyDown={e => { if (e.key === 'Enter') addCompany(); }} />
             <button className="btn" onClick={addCompany}>Add</button>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
@@ -1764,7 +1764,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
           <span style={{ width: 18, display: 'inline-flex', justifyContent: 'center', color: key === 'portfolio_url' ? 'var(--accent)' : 'var(--text-dim)' }}><LpIcon name={icon} size={16} /></span>
           <span style={{ width: 150, flexShrink: 0, fontSize: 12, color: key === 'portfolio_url' ? 'var(--accent)' : 'var(--text)' }}>{label}{optional ? <span style={{ color: 'var(--text-mute)', fontSize: 11 }}> optional</span> : null}</span>
-          <input className="inp" style={{ flex: 1 }} value={c[key] || ''} placeholder={placeholder} onChange={e => setFormVal('candidate', key, e.target.value)} />
+          <input className="inp" style={{ flex: 1 }} value={c[key] || ''} aria-label={placeholder} placeholder={placeholder} onChange={e => setFormVal('candidate', key, e.target.value)} />
         </div>
       );
       return (
@@ -1793,13 +1793,13 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             <LpLegend />
             <div style={LP_SUB}>Certifications &amp; coursework</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <input id="lp-cert-name" className="inp" placeholder="Certification or course" style={{ flex: 2 }} />
-              <input id="lp-cert-org" className="inp" placeholder="Issuer" style={{ flex: 1, minWidth: 0 }} />
+              <input id="lp-cert-name" className="inp" aria-label="Certification or course name" placeholder="Certification or course" style={{ flex: 2 }} />
+              <input id="lp-cert-org" className="inp" aria-label="Issuer" placeholder="Issuer" style={{ flex: 1, minWidth: 0 }} />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <input id="lp-cert-number" className="inp" placeholder="Certificate number (optional)" style={{ flex: 2 }} />
-              <input id="lp-cert-issued" className="inp" placeholder="Issued (MM/YYYY)" style={{ flex: 1, minWidth: 0 }} />
-              <input id="lp-cert-expires" className="inp" placeholder="Expires (MM/YYYY)" style={{ flex: 1, minWidth: 0 }} />
+              <input id="lp-cert-number" className="inp" aria-label="Certificate number" placeholder="Certificate number (optional)" style={{ flex: 2 }} />
+              <input id="lp-cert-issued" className="inp" aria-label="Issued date" placeholder="Issued (MM/YYYY)" style={{ flex: 1, minWidth: 0 }} />
+              <input id="lp-cert-expires" className="inp" aria-label="Expiry date" placeholder="Expires (MM/YYYY)" style={{ flex: 1, minWidth: 0 }} />
               <button className="btn" onClick={addCert}>Add</button>
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>

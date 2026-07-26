@@ -886,7 +886,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
 
       <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 6 }}>PASTE A JD</div>
-        <textarea value={pasteVal} onChange={e => setPasteVal(e.target.value)} placeholder="Paste a job URL or the full JD text…"
+        <textarea value={pasteVal} onChange={e => setPasteVal(e.target.value)} aria-label="Paste a job URL or JD text" placeholder="Paste a job URL or the full JD text…"
           style={{ width: '100%', height: 52, fontSize: 11, color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 6, padding: 6, background: 'var(--panel-2)', fontFamily: 'var(--mono)', resize: 'vertical', boxSizing: 'border-box' }} />
         <button onClick={submitPaste} disabled={pasteBusy || agentBusy2 || !pasteVal.trim()}
           style={{ width: '100%', marginTop: 6, background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 'not-allowed' : 'pointer', opacity: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 0.5 : 1 }}>
@@ -926,6 +926,7 @@ window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, theme, s
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <input
           type="text"
+          aria-label={searchPlaceholder || "Search"}
           placeholder={searchPlaceholder || "Search by company, role, status…"}
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -1160,7 +1161,7 @@ window.CommandPalette = function CommandPalette({ open, onClose, commands }) {
   return (
     <div className="cmdk-back" onClick={onClose}>
       <div className="cmdk" onClick={e => e.stopPropagation()}>
-        <input ref={inputRef} className="cmdk-input" placeholder="Type a command or search…" value={q} onChange={e => { setQ(e.target.value); setIdx(0); }} />
+        <input ref={inputRef} className="cmdk-input" aria-label="Command palette search" placeholder="Type a command or search…" value={q} onChange={e => { setQ(e.target.value); setIdx(0); }} />
         <div className="cmdk-list">
           {filtered.length === 0 && <div className="no-data">No matches</div>}
           {Object.entries(bySection).map(([sec, items]) => (

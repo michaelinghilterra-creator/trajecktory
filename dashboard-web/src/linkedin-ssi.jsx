@@ -592,21 +592,21 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
           <div className="card" style={{ padding: "12px 14px", margin: "6px 0 12px" }}>
             <div className="mono" style={{ fontSize: 10.5, color: "var(--text-mute)", letterSpacing: ".08em", marginBottom: 9 }}>NEW INFLUENCER</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 9 }}>
-              <input className="inp" placeholder="Name (required)" value={draft.name}
+              <input className="inp" aria-label="Contact name" placeholder="Name (required)" value={draft.name}
                 onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
                 onKeyDown={e => { if (e.key === "Enter") submitNew(); }} autoFocus />
-              <input className="inp" placeholder="Role, e.g. VP of Revenue Operations" value={draft.role}
+              <input className="inp" aria-label="Role" placeholder="Role, e.g. VP of Revenue Operations" value={draft.role}
                 onChange={e => setDraft(d => ({ ...d, role: e.target.value }))} />
-              <input className="inp" placeholder="Track, e.g. revops" value={draft.track}
+              <input className="inp" aria-label="Track" placeholder="Track, e.g. revops" value={draft.track}
                 onChange={e => setDraft(d => ({ ...d, track: e.target.value }))} />
-              <input className="inp" placeholder="Tier, e.g. local" value={draft.tier}
+              <input className="inp" aria-label="Tier" placeholder="Tier, e.g. local" value={draft.tier}
                 onChange={e => setDraft(d => ({ ...d, tier: e.target.value }))} />
-              <input className="inp" placeholder="Location" value={draft.location}
+              <input className="inp" aria-label="Location" placeholder="Location" value={draft.location}
                 onChange={e => setDraft(d => ({ ...d, location: e.target.value }))} />
-              <input className="inp" placeholder="LinkedIn profile URL" value={draft.linkedin}
+              <input className="inp" aria-label="LinkedIn profile URL" placeholder="LinkedIn profile URL" value={draft.linkedin}
                 onChange={e => setDraft(d => ({ ...d, linkedin: e.target.value }))} />
             </div>
-            <input className="inp" style={{ marginTop: 9, width: "100%" }} placeholder="Why follow them? (what they post about, and your angle)"
+            <input className="inp" style={{ marginTop: 9, width: "100%" }} aria-label="Why follow them" placeholder="Why follow them? (what they post about, and your angle)"
               value={draft.whyFollow} onChange={e => setDraft(d => ({ ...d, whyFollow: e.target.value }))} />
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
               <button className="btn primary" onClick={submitNew} disabled={!draft.name.trim() || busy}>{busy ? "Saving…" : "Save influencer"}</button>
@@ -640,7 +640,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
             <thead>
               <tr>
                 {cols.map(c => (
-                  <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? "sorted" : ""} onClick={() => setSort(c.k)}>
+                  <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? "sorted" : ""} role="button" tabIndex={0} aria-sort={sortKey === c.k ? (sortDir === "asc" ? "ascending" : "descending") : "none"} onClick={() => setSort(c.k)} onKeyDown={window.kbdActivate(() => setSort(c.k))}>
                     {c.label}<span className="sort-ind">{sortKey === c.k ? (sortDir === "asc" ? "↑" : "↓") : "·"}</span>
                   </th>
                 ))}
@@ -668,7 +668,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
                 const motion = NEXT_MOTION[stage];
                 const lt = lastTouch(p);
                 return (
-                  <tr key={p.id ?? p.name} onClick={() => onOpen && onOpen(p)} style={{ cursor: onOpen ? "pointer" : "default" }}>
+                  <tr key={p.id ?? p.name} onClick={() => onOpen && onOpen(p)} tabIndex={onOpen ? 0 : undefined} onKeyDown={onOpen ? window.kbdActivate(() => onOpen(p)) : undefined} style={{ cursor: onOpen ? "pointer" : "default" }}>
                     <td>
                       <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
                         <div className="mono-av sm" style={{ borderColor: tm.color, color: tm.color, flex: "none" }}>{initialsOf(p.name)}</div>
@@ -800,8 +800,8 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
               ))}
             </div>
           </div>
-          <div className="field"><label>Topic</label><input className="inp" placeholder="e.g. Category framing" value={topic} onChange={(e) => setTopic(e.target.value)} /></div>
-          <div className="field"><label>Your message</label><textarea className="ta" placeholder="What you said (keep it short)" value={message} onChange={(e) => setMessage(e.target.value)} /></div>
+          <div className="field"><label>Topic</label><input className="inp" aria-label="Topic" placeholder="e.g. Category framing" value={topic} onChange={(e) => setTopic(e.target.value)} /></div>
+          <div className="field"><label>Your message</label><textarea className="ta" aria-label="Your message" placeholder="What you said (keep it short)" value={message} onChange={(e) => setMessage(e.target.value)} /></div>
           <div className="grid cols-2" style={{ gap: 10 }}>
             <div className="field"><label>Got a response?</label>
               <select className="sel" value={responseReceived} onChange={(e) => setResponseReceived(e.target.value)}>
@@ -815,7 +815,7 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
             </div>
           </div>
           <div className="field"><label>Notes <span style={{ color: "var(--text-mute)", fontSize: 10.5, fontWeight: 400 }}>(optional)</span></label>
-            <input className="inp" placeholder="Follow-up plan, context, etc." value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <input className="inp" aria-label="Follow-up notes" placeholder="Follow-up plan, context, etc." value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
           {error && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)" }}>{error}</div>}
           <div style={{ display: "flex", gap: 8 }}>

@@ -270,7 +270,7 @@ function QuickActions({ c, onCompose, onQuickSent, starred, toggleStar }) {
 function FlatRow({ c, onOpen, selId, qaFor }) {
   const m = REC_STATUS_MAP[c.status] || REC_STATUS_MAP['Not Contacted'];
   return (
-    <div className={'flat-row' + (selId === c.id ? ' sel' : '')} onClick={() => onOpen(c)}>
+    <div className={'flat-row' + (selId === c.id ? ' sel' : '')} onClick={() => onOpen(c)} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(c))}>
       <span className="flat-av" style={{ borderColor: m.color, color: m.color }}>{initials(c.first + ' ' + c.last)}</span>
       <div style={{ minWidth: 0 }}>
         <div className="flat-name">{c.salute} {c.first} {c.last}</div>
@@ -417,7 +417,7 @@ function RecFirmCard({ f, onOpen, onCompose, starred, toggleStar }) {
   const touched = f.contacts.filter(c => wasContacted(c)).length;
   const isStar = starred.has(f.id);
   return (
-    <div className="firm-card" onClick={() => onOpen(f.contacts[0])}>
+    <div className="firm-card" onClick={() => onOpen(f.contacts[0])} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(f.contacts[0]))}>
       <div className="firm-top">
         <span className="firm-av">{firmMono(f.name)}</span>
         <div style={{ minWidth: 0 }}>
@@ -593,7 +593,7 @@ function RecActivityView({ recruiters, onBatch, onOpen, jumpView }) {
                 const icon = isInbound ? REC_I.inbound : REC_I.outbound;
                 const color = isInbound ? 'var(--cyan)' : m.color;
                 return (
-                  <div key={c.id} className="feed-item" onClick={() => onOpen(c)} style={{ cursor: 'pointer' }}>
+                  <div key={c.id} className="feed-item" onClick={() => onOpen(c)} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(c))} style={{ cursor: 'pointer' }}>
                     <div className="feed-node" style={{ borderColor: color, color }}>
                       <RecIcon d={icon} size={13} />
                     </div>
@@ -811,7 +811,7 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
             const fullName = `${c.first || c.firstName || ''} ${c.last || c.lastName || ''}`.trim() || c.firm;
             const sub = [c.title || c.role, c.firm].filter(Boolean).join(' · ');
             return (
-              <div key={c.id} onClick={() => onOpen(c)}
+              <div key={c.id} onClick={() => onOpen(c)} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(c))}
                 style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto auto', gap: 12, alignItems: 'center',
                   padding: '9px 11px', borderRadius: 9, cursor: 'pointer',
                   background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
@@ -987,7 +987,7 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
               {rows.map(c => {
                 const m = REC_STATUS_MAP[c.status] || REC_STATUS_MAP['Not Contacted'];
                 return (
-                  <tr key={c.id} className={selId === c.id ? 'selected' : ''} onClick={() => onOpen(c)}>
+                  <tr key={c.id} className={selId === c.id ? 'selected' : ''} tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(c))} onClick={() => onOpen(c)}>
                     <td>
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
                         <div className="mono-av sm" style={{ borderColor: m.color, color: m.color, flex: 'none' }}>{initials(c.first + ' ' + c.last)}</div>

@@ -307,7 +307,7 @@ function FocusChecklist({ items, keyId, apps, onOpen }) {
         {list.map((it, i) => {
           const isDone = done.includes(i);
           return (
-            <div key={i} className={'ins-focus-row' + (isDone ? ' done' : '')} onClick={() => toggle(i)}>
+            <div key={i} role="checkbox" aria-checked={isDone} tabIndex={0} className={'ins-focus-row' + (isDone ? ' done' : '')} onClick={() => toggle(i)} onKeyDown={window.kbdActivate(() => toggle(i))}>
               <span className="ins-check">{isDone ? <InsIcon name="check" size={12} /> : null}</span>
               <span style={{ flex: 1 }}>
                 <span className="ins-focus-lbl" style={{ fontSize: 13, fontWeight: 600 }}><Linkify text={it.action} apps={apps} onOpen={onOpen} /></span>

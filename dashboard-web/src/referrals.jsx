@@ -176,19 +176,19 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
         <div className="card padded-lg col" style={{ gap: 10 }}>
           <div className="card-title" style={{ fontSize: 13 }}>Add someone to your network list</div>
           <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-            <input className="inp" placeholder="Name *" value={form.name} style={{ minWidth: 160 }}
+            <input className="inp" aria-label="Name" placeholder="Name *" value={form.name} style={{ minWidth: 160 }}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} onKeyDown={e => e.key === 'Enter' && add()} />
-            <input className="inp" placeholder="How you know them (e.g. Acme Corp, 2015-2019)" value={form.how} style={{ minWidth: 220, flex: 1 }}
+            <input className="inp" aria-label="How you know them" placeholder="How you know them (e.g. Acme Corp, 2015-2019)" value={form.how} style={{ minWidth: 220, flex: 1 }}
               onChange={e => setForm(f => ({ ...f, how: e.target.value }))} />
           </div>
           <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-            <input className="inp" placeholder="Where they are now (their reach)" value={form.where} style={{ minWidth: 220, flex: 1 }}
+            <input className="inp" aria-label="Where they are now" placeholder="Where they are now (their reach)" value={form.where} style={{ minWidth: 220, flex: 1 }}
               onChange={e => setForm(f => ({ ...f, where: e.target.value }))} />
-            <input className="inp" placeholder="Target company or role you want in" value={form.target} style={{ minWidth: 220, flex: 1 }}
+            <input className="inp" aria-label="Target company or role" placeholder="Target company or role you want in" value={form.target} style={{ minWidth: 220, flex: 1 }}
               onChange={e => setForm(f => ({ ...f, target: e.target.value }))} />
           </div>
           <div className="row" style={{ gap: 10 }}>
-            <input className="inp" placeholder="Notes" value={form.notes} style={{ flex: 1 }}
+            <input className="inp" aria-label="Notes" placeholder="Notes" value={form.notes} style={{ flex: 1 }}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} onKeyDown={e => e.key === 'Enter' && add()} />
             <button className="btn primary sm" onClick={add}>Add</button>
           </div>
@@ -221,19 +221,19 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
               {filtered.map(row => (
                 <tr key={row.id} style={{ borderTop: '1px solid var(--border)' }}>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.name} placeholder="-"
+                    <input className="ref-cell" aria-label="Name" defaultValue={row.name} placeholder="-"
                       onBlur={e => e.target.value !== row.name && patch(row.id, { name: e.target.value })} />
                   </td>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.how} placeholder="-"
+                    <input className="ref-cell" aria-label="How you know them" defaultValue={row.how} placeholder="-"
                       onBlur={e => e.target.value !== row.how && patch(row.id, { how: e.target.value })} />
                   </td>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.where} placeholder="-"
+                    <input className="ref-cell" aria-label="Where they are now" defaultValue={row.where} placeholder="-"
                       onBlur={e => e.target.value !== row.where && patch(row.id, { where: e.target.value })} />
                   </td>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.target} placeholder="-"
+                    <input className="ref-cell" aria-label="Target" defaultValue={row.target} placeholder="-"
                       onBlur={e => e.target.value !== row.target && patch(row.id, { target: e.target.value })} />
                   </td>
                   <td style={refTd}>
@@ -250,7 +250,7 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
                     </div>
                   </td>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.notes} placeholder="-"
+                    <input className="ref-cell" aria-label="Notes" defaultValue={row.notes} placeholder="-"
                       onBlur={e => e.target.value !== row.notes && patch(row.id, { notes: e.target.value })} />
                   </td>
                   <td style={refTd}>
