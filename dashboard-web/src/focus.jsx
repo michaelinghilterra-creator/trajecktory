@@ -574,7 +574,7 @@ function TodoList({ todos, onCreate, onPatch, onDelete }) {
 
       <div className="filterbar" style={{ marginTop: 10, marginBottom: 8 }}>
         {TODO_FILTERS.map(f => (
-          <span key={f.id} className={'chip' + (filter === f.id ? ' on' : '')} onClick={() => setFilter(f.id)}>{f.label}</span>
+          <button type="button" key={f.id} className={'chip' + (filter === f.id ? ' on' : '')} onClick={() => setFilter(f.id)}>{f.label}</button>
         ))}
       </div>
 
@@ -593,7 +593,7 @@ function TodoList({ todos, onCreate, onPatch, onDelete }) {
             return (
               <div key={t.id} className="todo-item">
                 <div className={'todo-row' + (t.done ? ' done' : '')}>
-                  <button className={'focus-check' + (t.done ? ' checked' : '')} onClick={() => onPatch(t.id, { done: !t.done })}>
+                  <button className={'focus-check' + (t.done ? ' checked' : '')} aria-label={t.done ? 'Mark not done' : 'Mark done'} aria-pressed={t.done} onClick={() => onPatch(t.id, { done: !t.done })}>
                     {t.done ? '✓' : ''}
                   </button>
                   <div className="todo-row-main" onClick={toggle} style={{ cursor: 'pointer' }}>
@@ -713,7 +713,7 @@ window.FocusTab = function FocusTab({ toast, onFocusDataChanged }) {
     <div className="col" style={{ gap: 0 }}>
       <div className="subtabs">
         {FOCUS_SUBTABS.map(s => (
-          <div key={s.id} className={'subtab' + (sub === s.id ? ' active' : '')} onClick={() => setSub(s.id)}>{s.label}</div>
+          <button type="button" key={s.id} className={'subtab' + (sub === s.id ? ' active' : '')} onClick={() => setSub(s.id)}>{s.label}</button>
         ))}
       </div>
 

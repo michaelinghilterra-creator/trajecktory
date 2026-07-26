@@ -962,22 +962,22 @@ function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays
         <div className="filterbar">
           <span className="mono dim" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Status</span>
           {ALL_ENTRIES_STATUSES.map(s => window.STATUS_META[s] && (
-            <span key={s} className={`chip ${filters.statuses.includes(s) ? 'on' : ''}`} onClick={() => toggleStatus(s)}>
+            <button type="button" key={s} className={`chip ${filters.statuses.includes(s) ? 'on' : ''}`} onClick={() => toggleStatus(s)}>
               <span className="dot" style={{ width: 6, height: 6, borderRadius: 50, background: window.STATUS_META[s].color, display: 'inline-block' }}></span>
               {s}
-            </span>
+            </button>
           ))}
         </div>
         <div className="filterbar">
           <span className="mono dim" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Archetype</span>
           {archetypes.map(a => (
-            <span key={a} className={`chip ${filters.archetypes.includes(a) ? 'on' : ''}`} onClick={() => toggleArch(a)}>{a}</span>
+            <button type="button" key={a} className={`chip ${filters.archetypes.includes(a) ? 'on' : ''}`} onClick={() => toggleArch(a)}>{a}</button>
           ))}
         </div>
         <div className="filterbar">
           <span className="mono dim" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Score ≥</span>
           {[0, 3.0, 3.5, 4.0, 4.5].map(s => (
-            <span key={s} className={`chip ${filters.scoreMin === s ? 'on' : ''}`} onClick={() => setFilters(f => ({ ...f, scoreMin: s }))}>{s === 0 ? 'any' : s.toFixed(1)}</span>
+            <button type="button" key={s} className={`chip ${filters.scoreMin === s ? 'on' : ''}`} onClick={() => setFilters(f => ({ ...f, scoreMin: s }))}>{s === 0 ? 'any' : s.toFixed(1)}</button>
           ))}
           {(filters.statuses.length || filters.archetypes.length || filters.scoreMin) ? (
             <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={() => setFilters({ statuses: [], archetypes: [], scoreMin: 0 })}>Clear all</button>
@@ -2161,12 +2161,12 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
     <div className="col" style={{ gap: 0 }}>
       <div className="subtabs">
         {PL_SUBTABS.map(s => (
-          <div key={s.id} className={'subtab' + (subView === s.id ? ' active' : '')} onClick={() => setSubView(s.id)}>
+          <button type="button" key={s.id} className={'subtab' + (subView === s.id ? ' active' : '')} onClick={() => setSubView(s.id)}>
             <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
               <PIcon d={s.icon} size={14} />
             </span>
             {s.label}
-          </div>
+          </button>
         ))}
       </div>
 

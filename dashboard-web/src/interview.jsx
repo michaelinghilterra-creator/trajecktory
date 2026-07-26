@@ -1413,7 +1413,7 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
           <>
           <div className="subtabs">
             {IV_SUBTABS.map(s => (
-              <div key={s.id} className={'subtab' + (sub === s.id ? ' active' : '')} onClick={() => setSub(s.id)}>{s.label}</div>
+              <button type="button" key={s.id} className={'subtab' + (sub === s.id ? ' active' : '')} onClick={() => setSub(s.id)}>{s.label}</button>
             ))}
           </div>
 

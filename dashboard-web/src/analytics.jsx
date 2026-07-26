@@ -80,12 +80,12 @@ window.AnalyticsTab = function InsightsSection({ apps, onOpen, toast }) {
     <div className="col" style={{ gap: 0 }}>
       <div className="subtabs">
         {SECTION_TABS.map(s => (
-          <div key={s.id} className={'subtab' + (section === s.id ? ' active' : '')} onClick={() => setSection(s.id)}>
+          <button type="button" key={s.id} className={'subtab' + (section === s.id ? ' active' : '')} onClick={() => setSection(s.id)}>
             <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={s.icon} /></svg>
             </span>
             {s.label}
-          </div>
+          </button>
         ))}
       </div>
       <div className="col" style={{ gap: 16, paddingTop: 14 }}>
@@ -195,12 +195,12 @@ function InsightsBody({ apps: rawApps, onOpen }) {
         <>
           <div className="subtabs">
             {INS_SUBTABS.map(s => (
-              <div key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
+              <button type="button" key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
                 <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
                   <InsIcon name={s.icon} size={14} />
                 </span>
                 {s.label}
-              </div>
+              </button>
             ))}
           </div>
 

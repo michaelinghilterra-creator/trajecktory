@@ -1189,12 +1189,12 @@ window.RecruitersTab = function RecruitersTab({ search } = {}) {
     <div className="col" style={{ gap: 0 }}>
       <div className="subtabs">
         {REC_SUBTABS.map(s => (
-          <div key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
+          <button type="button" key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
             <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
               <RecIcon d={s.icon} size={14} />
             </span>
             {s.label}
-          </div>
+          </button>
         ))}
       </div>
 
@@ -1408,7 +1408,7 @@ function RecLogModal({ direction, subject, body, onSave, onClose }) {
             <h2>Log {sent ? 'Sent' : 'Received'} Message</h2>
             <div className="lh-sub">{sent ? 'records an outbound touch & advances to Sent' : 'records a reply & advances to Replied'}</div>
           </div>
-          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose}>
+          <button className="icon-btn" aria-label="Close" style={{ marginLeft: 'auto' }} onClick={onClose}>
             <RecIcon d={REC_I.x} size={15} />
           </button>
         </div>

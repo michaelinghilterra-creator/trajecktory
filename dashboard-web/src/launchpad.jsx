@@ -1615,7 +1615,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
             {titles.length ? titles.map(t => (
-              <span key={t} style={lpChipStyle()}>{t}<span onClick={() => removeTitle(t)} style={{ cursor: 'pointer', marginLeft: 6 }}>×</span></span>
+              <span key={t} style={lpChipStyle()}>{t}<button type="button" aria-label={`Remove ${t}`} onClick={() => removeTitle(t)} style={{ cursor: 'pointer', marginLeft: 6, background: 'none', border: 0, padding: 0, color: 'inherit', font: 'inherit' }}>×</button></span>
             )) : <span style={{ fontSize: 12, color: 'var(--text-mute)' }}>No titles yet.</span>}
           </div>
         </div>
@@ -1696,7 +1696,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             <button className="btn" onClick={addCompany}>Add</button>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-            {picks.length ? picks.map(n => <span key={n} style={lpChipStyle()}>{n}<span onClick={() => removePick(n)} style={{ cursor: 'pointer', marginLeft: 6 }}>×</span></span>)
+            {picks.length ? picks.map(n => <span key={n} style={lpChipStyle()}>{n}<button type="button" aria-label={`Remove ${n}`} onClick={() => removePick(n)} style={{ cursor: 'pointer', marginLeft: 6, background: 'none', border: 0, padding: 0, color: 'inherit', font: 'inherit' }}>×</button></span>)
               : <span style={{ fontSize: 12, color: 'var(--text-mute)' }}>None added yet.</span>}
           </div>
         </div>
@@ -1802,7 +1802,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                 <span key={i} style={lpChipStyle()}>
                   {it.name}{it.org ? ` · ${it.org}` : ''}
                   {it.expires ? <span style={{ color: 'var(--text-mute)' }}> · exp {it.expires}</span> : null}
-                  <span onClick={() => removeCert(i)} style={{ cursor: 'pointer', marginLeft: 6 }}>×</span>
+                  <button type="button" aria-label="Remove" onClick={() => removeCert(i)} style={{ cursor: 'pointer', marginLeft: 6, background: 'none', border: 0, padding: 0, color: 'inherit', font: 'inherit' }}>×</button>
                 </span>
               )) : <span style={{ fontSize: 12, color: 'var(--text-mute)' }}>No certifications added.</span>}
             </div>
@@ -2390,12 +2390,12 @@ window.SetupTab = function SetupTab({ toast, setTab }) {
     <div className="col" style={{ gap: 0 }}>
       <div className="subtabs">
         {SETUP_SUBTABS.map(s => (
-          <div key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
+          <button type="button" key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
             <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
               <SetupIcon name={s.icon} size={14} />
             </span>
             {s.label}
-          </div>
+          </button>
         ))}
       </div>
 

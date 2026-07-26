@@ -498,13 +498,13 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
       {/* Subtabs */}
       <div className="subtabs">
         {SUBTABS.map(s => (
-          <div key={s.id} className={'subtab' + (subView === s.id ? ' active' : '')} onClick={() => setSubView(s.id)}>
+          <button type="button" key={s.id} className={'subtab' + (subView === s.id ? ' active' : '')} onClick={() => setSubView(s.id)}>
             <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={s.icon} /></svg>
             </span>
             {s.label}
             {s.n != null && <span className="mono dim" style={{ marginLeft: 6, fontSize: 10.5 }}>{s.n}</span>}
-          </div>
+          </button>
         ))}
       </div>
 

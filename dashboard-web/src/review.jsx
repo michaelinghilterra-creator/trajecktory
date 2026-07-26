@@ -511,7 +511,7 @@ function RollingFloor({ toast }) {
           Days off:{' '}
           {st.pto.map(d => (
             <span key={d} style={{ marginRight: 8 }}>
-              {d} <a onClick={() => clearPto(d)} style={{ cursor: 'pointer', color: 'var(--accent)' }}>✕</a>
+              {d} <button type="button" aria-label={`Remove day off ${d}`} onClick={() => clearPto(d)} style={{ cursor: 'pointer', color: 'var(--accent)', background: 'none', border: 0, padding: 0, font: 'inherit' }}>✕</button>
             </span>
           ))}
         </div>
