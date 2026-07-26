@@ -407,6 +407,13 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
   const [composing, setComposing] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [draftResult, setDraftResult] = useState(null);
+  // Editable assembled email, seeded from the AI draft so the user can tweak the
+  // greeting, body, or signature before copying, logging, or saving it.
+  const [draftEmail, setDraftEmail] = useState("");
+  useEffect(() => {
+    if (draftResult) setDraftEmail(`Hi ${data?.first || "there"},\n\n${(draftResult.body || "").replace(/^\s+/, "")}\n\n${window.myEmailSignature()}`);
+    else setDraftEmail("");
+  }, [draftResult]);
   const [draftStage, setDraftStage] = useState("general");
   const [notes, setNotes] = useState("");
   const [website, setWebsite] = useState("");
@@ -642,31 +649,28 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
           {composing && drafting && (
             <div className="ai-loading"><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> drafting…</div>
           )}
-          {draftResult && (() => {
-            const cleanBody = (draftResult.body || "").replace(/^\s+/, "");
-            const fullEmail = `Hi ${data.first},\n\n${cleanBody}\n\n${window.myEmailSignature()}`;
-            return (
+          {draftResult && (
             <div className="ai-compose">
-              <div className="ai-head"><TIcon d={TI.spark} size={13} /> AI draft</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
-                <span>Subject: {draftResult.subject}</span>
+              <div className="ai-head"><TIcon d={TI.spark} size={13} /> AI draft <span style={{ marginLeft: 8, fontSize: 10.5, color: "var(--text-mute)", fontWeight: 400 }}>editable</span></div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 11, color: "var(--text-mute)" }}>Subject</span>
+                <input className="inp" value={draftResult.subject || ""} onChange={e => setDraftResult({ ...draftResult, subject: e.target.value })} style={{ flex: 1 }} />
                 <CopyBtn value={draftResult.subject || ""} />
               </div>
               <div style={{ position: "relative" }}>
-                <div className="ai-out">{fullEmail}</div>
+                <textarea className="ta" value={draftEmail} onChange={e => setDraftEmail(e.target.value)} rows={10} aria-label="Editable email draft" style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }} />
                 <div style={{ position: "absolute", top: 8, right: 8 }}>
-                  <CopyBtn value={fullEmail} />
+                  <CopyBtn value={draftEmail} />
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn primary sm" onClick={() => setLogModal({ direction: "Sent", subject: draftResult.subject, body: fullEmail })}><TIcon d={TI.check} size={12} /> I sent this</button>
-                <button className="btn sm" onClick={() => saveCorrAndClose({ direction: "Draft", subject: draftResult.subject, body: fullEmail })}><TIcon d={TI.pen} size={12} /> Save as draft</button>
-                <window.GmailDraftBtn to={data.email} subject={draftResult.subject} body={fullEmail} />
+                <button className="btn primary sm" onClick={() => setLogModal({ direction: "Sent", subject: draftResult.subject, body: draftEmail })}><TIcon d={TI.check} size={12} /> I sent this</button>
+                <button className="btn sm" onClick={() => saveCorrAndClose({ direction: "Draft", subject: draftResult.subject, body: draftEmail })}><TIcon d={TI.pen} size={12} /> Save as draft</button>
+                <window.GmailDraftBtn to={data.email} subject={draftResult.subject} body={draftEmail} />
                 <button className="btn sm" onClick={generateDraft}><TIcon d={TI.refresh} size={12} /> Regen</button>
               </div>
             </div>
-            );
-          })()}
+          )}
         </div>
         {/* Correspondence */}
         <div className="ds-section">

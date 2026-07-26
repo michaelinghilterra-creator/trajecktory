@@ -1,12 +1,12 @@
 # trajecktory
 
 <p align="center">
-  <img src="docs/og-image.png" alt="trajecktory: AI-driven job-search pipeline with a local dashboard" width="820">
+  <img src="docs/og-image.png" alt="trajecktory: run your whole job search from one local dashboard" width="820">
 </p>
 
 <p align="center">
-  <strong>The complete job hunt, run from one dashboard.</strong><br>
-  Companies use AI to filter candidates. trajecktory gives you AI to <em>choose</em> companies — scan, evaluate, tailor, apply, track, and follow up, all from a local web dashboard.
+  <strong>Your entire job search, run from one dashboard.</strong><br>
+  Companies use AI to filter you out. trajecktory gives you AI to run the whole search: find the roles worth your time, tailor for each one, work the right people, and never let a thread go cold. All local, all yours.
 </p>
 
 <p align="center">
@@ -19,86 +19,142 @@
 </p>
 
 <p align="center">
-  <img src="docs/dashboard-overview.png" alt="Dashboard Overview — pipeline funnel, response rate, and score distribution" width="820">
+  <img src="docs/dashboard-overview.png" alt="Overview: a weekly scorecard of your inputs against floors and your outcomes against sourced benchmarks" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/dashboard-analytics.png" alt="Pipeline Analytics — conversion, comp positioning, and archetype fit" width="405">
-  <img src="docs/dashboard-insights.png" alt="AI Insights — what's working, what's not, and this week's focus" width="405">
+  <img src="docs/dashboard-pipeline.png" alt="Pipeline: every role scored against your CV, tracked in one place" width="405">
+  <img src="docs/dashboard-insights.png" alt="Insights: honest analytics with confidence ranges, not fabricated benchmarks" width="405">
 </p>
 
 <p align="center">
-  <img src="docs/dashboard-drawer.png" alt="Per-role evaluation drawer — score breakdown, recommendation, and cheat sheet" width="405">
-  <img src="docs/dashboard-followups.png" alt="Follow-Up cadence — warm threads worth a nudge" width="405">
+  <img src="docs/dashboard-followups.png" alt="Follow-Ups: who has gone quiet, who is overdue, and the nudge already drafted" width="405">
+  <img src="docs/dashboard-drawer.png" alt="Per-role drawer: the full evaluation as a decision, not a wall of text" width="405">
 </p>
 
 <p align="center">
-  <img src="docs/dashboard-pipeline.png" alt="Pipeline tracker — every role, scored and tracked" width="405">
-  <img src="docs/dashboard-recruiters.png" alt="Recruiters CRM — a synthetic outreach funnel" width="405">
+  <img src="docs/dashboard-recruiters.png" alt="Recruiters CRM: track every contact and draft outreach in your voice" width="405">
+  <img src="docs/dashboard-posts.png" alt="Posts: draft LinkedIn and X posts, edit them, queue them, schedule through Buffer" width="405">
 </p>
 
 ---
+
+## Why this exists
+
+A modern job search is a dozen disconnected tools: a spreadsheet, forty browser tabs, your inbox,
+LinkedIn, a folder of resume versions, and a nagging feeling you forgot to follow up with someone.
+The busywork crowds out the two things that actually move a search forward: reaching the right
+people, and putting a genuinely tailored application in front of them.
+
+trajecktory collapses all of it into **one local command center**. You control your entire
+job-search ecosystem and workflow from a single dashboard on your own machine, so your time goes to
+the few roles worth it and the people who can actually help.
+
+## What it does for you
+
+- **Saves you time on the wrong roles.** It scans job boards (Greenhouse, Ashby, Lever, company
+  pages), scores every posting against your actual CV with a structured A-to-G report, and tells you
+  which handful is worth your energy. It recommends against anything below a real fit, because your
+  time and the recruiter's are both worth respecting.
+- **Tailors each application, for real.** One click produces an ATS-clean Word resume and cover
+  letter tuned to that specific posting, down to reordering your bullets to lead with what the role
+  cares about. Tailoring is the single largest lever in the data, and this is the lever pulled.
+- **Makes sure nothing goes cold.** It schedules your follow-ups on a sensible cadence, shows you at
+  a glance who is overdue and who to give up on, and drafts the nudge for you. The thread you would
+  have forgotten is the one it surfaces.
+- **Finds and works the right contacts.** A recruiter CRM and an in-network (target-talent) CRM, a
+  LinkedIn connection queue for people you can only reach there, and LinkedIn and X posts drafted in
+  your voice and scheduled through Buffer, so you build inbound while you work outbound.
+- **Reads your inbox so you do not have to.** An optional, read-only Gmail connection catches
+  replies and bounces, logs each against the right application, and drafts your response. It never
+  sends anything on its own.
+- **Every AI-written message is yours to edit.** Outreach emails, LinkedIn notes, follow-ups, posts:
+  each one lands in an editable field, and you tweak it before it goes anywhere. Nothing is a black
+  box you have to accept.
+- **Coaches you with honest numbers.** A weekly scorecard measures the inputs you control against
+  floors and your outcomes against sourced benchmarks. Conversion is reported by the furthest stage
+  each role ever reached, thin samples are flagged as too few to rate rather than guessed, and there
+  are no fabricated benchmarks anywhere.
+- **Preps you for the room.** Per-company interview prep opens as a glance (who, when, the opening,
+  the one story, the reset) with the deep reference one click away, not a wall of text.
+
+> **Not a spray-and-pray tool.** trajecktory is a filter, not a firehose. It surfaces the few roles
+> worth applying to and argues against the rest. It never submits anything: it fills the forms,
+> drafts the answers, and generates the documents, then stops so you make the final call.
+
+## Local, private, yours
+
+Everything runs on `http://localhost:3333`, bound to `127.0.0.1`. Your CV, contacts, tracker, and
+mail stay on your machine and are sent only to the AI provider you choose. No cloud, no database, no
+telemetry, no account. The tool works for you and answers to you.
 
 ## Download (Windows, no setup)
 
 **Just want to run it?** Download the Windows installer from the
 **[latest release](https://github.com/michaelinghilterra-creator/trajecktory/releases/latest)**
-and run it. It bundles everything (Node, Chromium, Claude Code, and Git) and installs in a
-few clicks. The only thing you provide is a [Claude](https://claude.ai) subscription (a paid
-plan) and a one-time sign-in.
+and run it. It bundles everything (Node, Chromium, Claude Code, and Git) and installs in a few
+clicks. The only thing you provide is a [Claude](https://claude.ai) subscription (a paid plan) and a
+one-time sign-in.
 
-> The installer is not code-signed yet, so Windows SmartScreen may warn "unknown publisher"
-> on first run. Click **More info -> Run anyway**.
+> The installer is not code-signed yet, so Windows SmartScreen may warn "unknown publisher" on first
+> run. Click **More info -> Run anyway**.
 
 Prefer to run from source (Node + Claude Code)? See **[docs/SETUP.md](docs/SETUP.md)**.
 
 ## First run: what to expect
 
-From download to your first evaluated role. The installer and the in-app Launchpad do the heavy lifting; you mostly review and confirm.
+From download to your first evaluated role. The installer and the in-app Launchpad do the heavy
+lifting; you mostly review and confirm.
 
-1. **Install.** Run the installer (a few clicks; it bundles Node, Chromium, Claude Code, and Git). If Windows SmartScreen warns "unknown publisher," click **More info -> Run anyway**. Restart if it asks (that puts Git on your PATH).
-2. **Launch.** Open trajecktory from the desktop/Start Menu shortcut, or tell Claude Desktop in Code mode "Start the live dashboard." It starts a local server and opens the dashboard at http://localhost:3333.
-3. **Take any update.** If an "Update available" banner appears, click **Update now**. It is one-click and updates system files only, so your CV, profile, tracker, and reports are never touched.
-4. **Work the Launchpad.** The Setup tab guides you with a readiness meter: paste your CV (or a LinkedIn URL, or upload a file), then confirm your identity, target roles, your edge, compensation, location rules, evaluation tuning, and companies to track. The generative steps hand you a copy-paste prompt to run in your own Claude Code; the rest you fill in and save.
-5. **Sign in to Claude.** Click "Sign in to Claude" in the left sidebar once (the bundled `claude login` on your own Claude plan). This is what lets Evaluate and Scan run. No Anthropic API key is required; everything runs on your Claude subscription. An optional key is only a faster path for the writing features.
-6. **(Optional) Models and cost.** Under Setup -> Models & cost you can pick which model runs each step, see the approximate cost per run, and flip billing between your Claude plan and an API key. Sensible, cheaper defaults are already applied, so you can skip this.
-7. **Run your first search.** From the left sidebar: API Scan (free, no AI) pulls fresh roles, then Triage scores the best fits (the API-key workflow uses Agent Scan and Evaluate instead). Review the scored roles, deep-dive the strongest, let trajecktory tailor a resume and cover letter, and track it. It schedules the follow-ups.
+1. **Install.** Run the installer (a few clicks; it bundles Node, Chromium, Claude Code, and Git).
+   If SmartScreen warns "unknown publisher," click **More info -> Run anyway**. Restart if it asks
+   (that puts Git on your PATH).
+2. **Launch.** Open trajecktory from the desktop or Start Menu shortcut, or tell Claude in Code mode
+   "Start the live dashboard." It opens at http://localhost:3333.
+3. **Take any update.** If an "Update available" banner appears, click **Update now**. It is
+   one-click and updates system files only; your CV, profile, tracker, and reports are never touched.
+4. **Work the Launchpad.** The Setup tab guides you with a readiness meter: paste your CV (or a
+   LinkedIn URL, or upload a file), then confirm your identity, target roles, your edge, comp,
+   location rules, evaluation tuning, and companies to track.
+5. **Sign in to Claude.** Click "Sign in to Claude" in the sidebar once. This is what lets Evaluate
+   and Scan run, on your own Claude plan. No Anthropic API key is required; adding one is only an
+   optional, faster path for the writing features.
+6. **Run your first search.** From the sidebar: Scan (free, no AI) pulls fresh roles, then Triage
+   scores the best fits. Review the scored roles, deep-dive the strongest, let trajecktory tailor a
+   resume and cover letter, and track it. It schedules the follow-ups.
 
-Fuller version with more context: **[docs/onboarding/first-run.md](docs/onboarding/first-run.md)**. Illustrated walkthrough with screenshots: the guides in **[docs/onboarding](docs/onboarding)** (`guide1.html`, `guide2.html`).
+Fuller walkthrough: **[docs/onboarding/first-run.md](docs/onboarding/first-run.md)**. Illustrated
+guides: **[docs/onboarding](docs/onboarding)**.
 
-## What Is This
+## The dashboard, tab by tab
 
-trajecktory is a local, AI-driven command center for the entire job search, run from a web dashboard. Instead of juggling spreadsheets, browser tabs, and one-off prompts, you get a single pipeline that:
+- **Today** a weekly time-blocked cadence, a focus timer, a streak, and your to-dos.
+- **Overview** your weekly scorecard: inputs (verified touches, connects, cadence, screens booked)
+  against floors, outcomes (warm vs cold reply, expired-before-action) against sourced benchmarks.
+- **Pipeline & Tracker** browse, filter, and sort every application; a per-role drawer renders the
+  full A-to-G evaluation as a cheat sheet.
+- **Follow-Ups** the stale-thread action queue, with coach intelligence on what is overdue and a
+  drafted, editable nudge for each.
+- **Recruiters & Target Talent** two CRMs (external recruiters, in-network contacts) with
+  AI-drafted, voice-matched, editable outreach.
+- **LinkedIn** an SSI tracker, a connection queue, an engagement drafter, and a **Posts** composer:
+  write your own or have Claude draft them, edit either, queue them, and schedule to LinkedIn and X
+  through Buffer.
+- **Interview** per-company prep and a live "click a cue" board for the round you are about to run.
+- **Insights** honest coaching analytics, plus an optional Gmail sync that logs replies and bounces.
 
-- **Scans** ATS portals (Greenhouse, Ashby, Lever, company pages) for new roles
-- **Evaluates** each posting against your CV with a structured A-F score across 10 weighted dimensions, plus a Block G posting-legitimacy check
-- **Tailors** an ATS-optimized Word resume and cover letter per role
-- **Tracks** every application in one source of truth, with integrity checks
-- **Manages outreach** — a recruiter CRM, in-network (target-talent) outreach, and LinkedIn engagement, with AI-drafted messages in your voice
-- **Schedules follow-ups** on a sensible cadence so nothing goes stale
-- **Coaches** you with analytics on conversion, archetype fit, and rejection patterns
+## How it works
 
-> **Not a spray-and-pray tool.** trajecktory is a filter — it surfaces the few roles worth your time out of hundreds and recommends against applying below 4.0/5. It never submits anything; you always have the final call.
-
-## The Dashboard
-
-Everything runs from a local web dashboard (`http://localhost:3333`, bound to `127.0.0.1` — your data never leaves your machine):
-
-- **Launchpad** — guided first-run setup with a readiness meter
-- **Overview & Insights** — pipeline health, conversion rates, and coaching analytics
-- **Pipeline & Tracker** — browse, filter, and sort every application; a per-role drawer renders the full A-G evaluation as a cheat sheet
-- **Recruiters & Target Talent** — CRMs for external recruiters and in-network contacts, with AI-drafted, voice-matched outreach
-- **LinkedIn SSI** — track and draft engagement to grow your network deliberately
-- **One-click actions** — Scan and Evaluate run agentically in the background; Apply generates your tailored CV + cover letter
-
-## How It Works
-
-1. **Onboard** in the Launchpad: add your CV, profile, and target roles
-2. **Scan** portals (or paste a single job URL); dead postings are liveness-gated out before any AI spend
-3. **Evaluate** — Claude reads each posting against your CV (reasoning about fit, not keyword matching) and writes a structured report
-4. **Tailor** — generate a docx resume + cover letter customized to the role
-5. **Track & act** — manage status, follow-ups, and recruiter / in-network outreach from the dashboard
-6. **Learn** — insights show what's converting so you target better over time
+1. **Onboard** in the Launchpad: add your CV, profile, and target roles.
+2. **Scan** portals (or paste a single job URL); dead postings are liveness-gated out before any AI
+   spend.
+3. **Evaluate** Claude reads each posting against your CV (reasoning about fit, not keyword
+   matching) and writes a structured report. The headline score is derived by code from keyed
+   dimensions, with pay rated but deliberately kept from moving the score.
+4. **Tailor** generate a per-role docx resume + cover letter, bullets and all.
+5. **Track and act** manage status, follow-ups, and recruiter and in-network outreach from the
+   dashboard; capture replies from Gmail.
+6. **Learn** honest insights show what is actually converting, so you target better over time.
 
 ## Quick Start
 
@@ -112,65 +168,66 @@ npm --prefix dashboard-web ci
 npx playwright install chromium     # liveness checks + scraping
 
 # 2. Launch the dashboard
-npm --prefix dashboard-web start    # → http://localhost:3333
+npm --prefix dashboard-web start    # -> http://localhost:3333
 ```
 
-Open the dashboard and the **Launchpad** tab walks you through adding your CV, profile, and target companies. Run `node doctor.mjs` anytime to validate prerequisites.
+Open the dashboard and the **Launchpad** walks you through adding your CV, profile, and target
+companies. Run `node doctor.mjs` anytime to validate prerequisites.
 
-> **Credentials:** Evaluate and Scan run on **your own Claude Pro/Max login** (via the bundled `claude` CLI — no per-use API cost). Resume / cover-letter and outreach drafts use **your own Anthropic API key**, which you can add during setup or later. None of this is shared with anyone.
+> **Credentials:** Evaluate and Scan run on **your own Claude Pro/Max login** (via the bundled
+> `claude` CLI, no per-use API cost). Resume, cover-letter, and outreach drafts run on that same
+> plan by default, so **no Anthropic API key is required**; adding one is only an optional, faster
+> path for the writing features. None of this is shared with anyone.
 
-## Also Runs in Any Agent CLI
+## Also runs in any agent CLI
 
-Prefer the terminal? The same engine works headless. trajecktory follows the [open agent skill standard](https://agentskills.io), so it runs in Claude Code, Gemini CLI, or OpenCode — paste a job URL or use the slash commands. See [docs/SETUP.md](docs/SETUP.md) for the CLI workflow.
-
-## Pre-configured Portals
-
-The scanner ships with **45+ companies** and **19 search queries** across major boards. Copy `templates/portals.example.yml` to `portals.yml` and add your own:
-
-**AI Labs:** Anthropic, OpenAI, Mistral, Cohere, LangChain, Pinecone
-**Voice AI:** ElevenLabs, PolyAI, Parloa, Hume AI, Deepgram, Vapi, Bland AI
-**AI Platforms:** Retool, Airtable, Vercel, Temporal, Glean, Arize AI
-**Contact Center:** Ada, LivePerson, Sierra, Decagon, Talkdesk, Genesys
-**Enterprise:** Salesforce, Twilio, Gong, Dialpad
-**LLMOps:** Langfuse, Weights & Biases, Lindy, Cognigy, Speechmatics
-**Automation:** n8n, Zapier, Make.com
-**European:** Factorial, Attio, Tinybird, Clarity AI, Travelperk
-
-**Job boards searched:** Ashby, Greenhouse, Lever, Wellfound, Workable, RemoteFront
+Prefer the terminal? The same engine works headless. trajecktory follows the
+[open agent skill standard](https://agentskills.io), so it runs in Claude Code, Gemini CLI, or
+OpenCode: paste a job URL or use the slash commands. See [docs/SETUP.md](docs/SETUP.md).
 
 ## Tech Stack
 
-![Claude Code](https://img.shields.io/badge/Claude_Code-000?style=flat&logo=anthropic&logoColor=white)
-![Node.js](https://img.shields.io/badge/Node.js-339933?style=flat&logo=node.js&logoColor=white)
-![React](https://img.shields.io/badge/React-61DAFB?style=flat&logo=react&logoColor=black)
-![Express](https://img.shields.io/badge/Express-000?style=flat&logo=express&logoColor=white)
-![Playwright](https://img.shields.io/badge/Playwright-2EAD33?style=flat&logo=playwright&logoColor=white)
-
-- **Dashboard:** Node/Express + React (esbuild), served locally on `127.0.0.1`
-- **Agent:** Claude Code (also Gemini CLI / OpenCode) with custom skills and modes
-- **CV:** docx generation via adm-zip slot-swap (default), preserving your master template byte-for-byte
-- **Scanner:** Playwright + ATS APIs
-- **Data:** local Markdown + YAML + TSV — no database, no cloud, no telemetry
+- **Dashboard:** Node/Express + React (esbuild), served locally on `127.0.0.1`.
+- **Agent:** Claude Code (also Gemini CLI / OpenCode) with custom skills and modes.
+- **CV:** docx generation via adm-zip slot-swap and per-JD bullet tailoring, preserving your master
+  template byte-for-byte outside the parts it tailors.
+- **Scanner:** Playwright + ATS APIs.
+- **Data:** local Markdown + YAML + TSV. No database, no cloud, no telemetry.
 
 ## Origin
 
-trajecktory began as [career-ops](https://github.com/santifer/career-ops) by **santifer** (MIT) — a CLI-first job-search tool he used to evaluate 740+ offers, generate 100+ tailored CVs, and land a Head of Applied AI role ([his case study](https://santifer.io/career-ops-system)). trajecktory builds on that foundation and reshapes it into a dashboard-driven, full-pipeline product.
+trajecktory began as [career-ops](https://github.com/santifer/career-ops) by **santifer** (MIT), a
+CLI-first job-search tool he used to evaluate 740+ offers, generate 100+ tailored CVs, and land a
+Head of Applied AI role. trajecktory builds on that foundation and reshapes it into a
+dashboard-driven, full-pipeline command center.
 
 ## Ethical Use
 
-trajecktory is built for quality, not quantity. It never submits an application on your behalf — it fills forms, drafts answers, and generates resumes, then stops so you make the final call. It strongly discourages low-fit applications (below 4.0/5), because your time and the recruiter's are both worth respecting. A well-targeted application to five companies beats a generic blast to fifty.
+trajecktory is built for quality, not quantity. It never submits an application on your behalf: it
+fills forms, drafts answers, and generates resumes, then stops so you make the final call. It
+strongly discourages low-fit applications, because your time and the recruiter's are both worth
+respecting. A well-targeted application to five companies beats a generic blast to fifty.
 
 ## Disclaimer
 
-**trajecktory is a local, open-source tool — NOT a hosted service.** By using this software, you acknowledge:
+**trajecktory is a local, open-source tool, NOT a hosted service.** By using this software, you
+acknowledge:
 
-1. **You control your data.** Your CV, contact info, and personal data stay on your machine and are sent directly to the AI provider you choose. We do not collect, store, or have access to any of your data.
-2. **You control the AI.** The default prompts instruct the AI not to auto-submit applications, but models can behave unpredictably. If you modify the prompts or use different models, you do so at your own risk. **Always review AI-generated content for accuracy before submitting.**
-3. **You comply with third-party ToS.** Use this tool in accordance with the Terms of Service of the career portals you interact with (Greenhouse, Lever, Workday, LinkedIn, etc.). Do not use it to spam employers or overwhelm ATS systems.
-4. **No guarantees.** Evaluations are recommendations, not truth. AI models may hallucinate skills or experience. The authors are not liable for employment outcomes, rejected applications, account restrictions, or any other consequences.
+1. **You control your data.** Your CV, contact info, and personal data stay on your machine and are
+   sent directly to the AI provider you choose. We do not collect, store, or access any of it.
+2. **You control the AI.** The default prompts instruct the AI not to auto-submit applications, but
+   models can behave unpredictably. If you modify the prompts or use different models, you do so at
+   your own risk. **Always review AI-generated content before submitting.**
+3. **You comply with third-party ToS.** Use this tool in accordance with the Terms of Service of the
+   career portals you interact with. Do not use it to spam employers or overwhelm ATS systems.
+4. **No guarantees.** Evaluations are recommendations, not truth. AI models may hallucinate. The
+   authors are not liable for employment outcomes, rejected applications, account restrictions, or
+   any other consequences.
 
-See [LEGAL_DISCLAIMER.md](LEGAL_DISCLAIMER.md) for full details. Provided under the [MIT License](LICENSE) "as is", without warranty of any kind.
+See [LEGAL_DISCLAIMER.md](LEGAL_DISCLAIMER.md) for full details. Provided under the
+[MIT License](LICENSE) "as is", without warranty of any kind.
 
 ## License
 
-The code is licensed under [MIT](LICENSE). "trajecktory" is the project's brand name: forks are welcome under MIT, but please use your own product name and do not imply endorsement.
+The code is licensed under [MIT](LICENSE). "trajecktory" is the project's brand name: forks are
+welcome under MIT, but please use your own product name and do not imply endorsement.

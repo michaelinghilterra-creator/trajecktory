@@ -1,0 +1,24 @@
+{
+  "_comment": "Bullet-group definitions for per-JD bullet tailoring. USER-LAYER: copy to cv-bullet-groups.json and regenerate 'ordinal', 'baseline_count', and 'baseline_chars' from YOUR master (templates/cv-master.docx) whenever you restructure it. Groups are keyed by ordinal (0 = the first role's bullet block, 1 = the next, ...), so this file survives a full bullet rewrite. These example values are fictional and will not match your master.",
+  "role_0": {
+    "ordinal": 0,
+    "label": "Director, Supply Chain Analytics",
+    "baseline_count": 5,
+    "baseline_chars": 1700,
+    "page_break_sensitive": true
+  },
+  "role_1": {
+    "ordinal": 1,
+    "label": "Manager, Logistics Operations",
+    "baseline_count": 3,
+    "baseline_chars": 950,
+    "page_break_sensitive": true
+  },
+  "role_2": {
+    "ordinal": 2,
+    "label": "Senior Analyst, Network Planning",
+    "baseline_count": 2,
+    "baseline_chars": 540,
+    "page_break_sensitive": true
+  }
+}

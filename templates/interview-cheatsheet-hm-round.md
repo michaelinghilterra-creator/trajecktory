@@ -16,6 +16,12 @@
 
 ---
 
+> **Standing closing move, every round, non-negotiable.** Before you wrap, ask some version of:
+> "Before we finish, is there anything in my background that gives you pause, or that you think the
+> hiring manager would want me to address?" People answer this honestly in conversation far more
+> often than they answer a post-rejection email. Whatever they say, log it as a screen objection.
+> Six conversations becomes six real data points on why rounds end. This fires on every round.
+
 ## §0 — 30-Second Pre-Call Strip
 
 > Read in the 60 seconds before joining. Memorized verbatim.

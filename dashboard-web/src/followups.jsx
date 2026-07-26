@@ -1003,10 +1003,13 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
                 <button className="btn ghost sm" onClick={() => setDraft(null)}>Dismiss</button>
               </div>
             </div>
-            <div style={{ fontSize: 12, marginBottom: 4 }}><b>Subject:</b> {draft.subject}</div>
-            <div style={{ fontSize: 12, marginTop: 8, padding: 8, background: 'var(--bg)', borderRadius: 4, whiteSpace: 'pre-wrap' }}>
-              {draft.body}{'\n\n'}{window.mySignoff()}
+            <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 6 }}>
+              <span className="mono dim" style={{ fontSize: 11 }}>Subject</span>
+              <input className="inp" style={{ flex: 1 }} value={draft.subject || ''} onChange={e => setDraft({ ...draft, subject: e.target.value })} />
             </div>
+            <textarea className="ta" aria-label="Editable follow-up draft" style={{ width: '100%', minHeight: 130, resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }}
+              value={draft.body || ''} onChange={e => setDraft({ ...draft, body: e.target.value })} />
+            <div className="mono dim" style={{ fontSize: 10.5, marginTop: 4 }}>Your sign-off is added automatically: {window.mySignoff()}</div>
             <div className="row" style={{ gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
               <button className="btn primary sm" onClick={() => logTouch({
                 channel: 'Email',

@@ -10,7 +10,7 @@
   "domain": "B2B SaaS, AI Workflow Tooling, GTM Operations",
   "summary": {
     "archetypeDetected": "Director / VP of Revenue Operations",
-    "function": "Revenue Operations leadership: forecast cadence, pipeline inspection, and GTM systems ownership",
+    "function": "RevOps leadership: forecast cadence, pipeline inspection, and GTM systems ownership",
     "seniority": "Director",
     "remote": "Remote US (all states eligible)",
     "teamSize": "Team of 4 revenue operations analysts",
@@ -308,7 +308,7 @@
 
 This is a synthetic report body used as parser test data. It exists so the v1
 frontmatter loader has a realistic narrative section to separate from the JSON
-block above. The role described is an invented Revenue Operations leadership
+block above. The role described is an invented RevOps leadership
 post: forecast oversight, pipeline inspection, and GTM systems ownership for a
 mid-market vendor.
 
