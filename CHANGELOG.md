@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.0.1...v2.0.2) (2026-07-26)
+
+
+### Bug Fixes
+
+* show a dash, not "null%", for a send-week with no applications ([#96](https://github.com/michaelinghilterra-creator/trajecktory/issues/96)) ([e1efac2](https://github.com/michaelinghilterra-creator/trajecktory/commit/e1efac25ea24a9009a290e2be28052da482b0efd))
+
 ## [2.0.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.0.0...v2.0.1) (2026-07-25)
 
 
