@@ -85,9 +85,12 @@ function Sparkline({ data, w = 120, h = 32, color = "var(--accent)" }) {
 
 /* Weekly trend chart */
 function WeekTrend({ weeks, target, height = 120 }) {
-  const totals = weeks.map((w) =>
-    w.brand == null ? null : w.brand + w.people + w.engage + w.rel
-  );
+  const totals = weeks.map((w) => {
+    const parts = [w.brand, w.people, w.engage, w.rel];
+    // Any null pillar means the week is not fully recorded; a partial sum would
+    // render a NaN bar. Treat the whole week as null (no bar) unless all four exist.
+    return parts.some((x) => x == null) ? null : parts.reduce((a, b) => a + b, 0);
+  });
   const max = 100;
   return (
     <div style={{ position: "relative", height }}>

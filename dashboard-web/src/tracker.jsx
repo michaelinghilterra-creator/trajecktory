@@ -63,7 +63,7 @@ window.TrackerTab = function TrackerTab({ apps, onOpen, search }) {
 
   // Status breakdown counts
   const breakdown = useMemoT(() => {
-    return ALL_STATUSES.map(s => ({ s, n: apps.filter(a => a.status === s).length, meta: window.STATUS_META[s] })).filter(x => x.n > 0);
+    return ALL_STATUSES.map(s => ({ s, n: apps.filter(a => a.status === s).length, meta: window.STATUS_META[s] || {} })).filter(x => x.n > 0);
   }, [apps]);
 
   return (
@@ -97,7 +97,7 @@ window.TrackerTab = function TrackerTab({ apps, onOpen, search }) {
           <span className="mono dim" style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.1em" }}>Status</span>
           {ALL_STATUSES.map(s => (
             <span key={s} className={`chip ${filters.statuses.includes(s) ? "on" : ""}`} onClick={() => toggleStatus(s)}>
-              <span className="dot" style={{ width: 6, height: 6, borderRadius: 50, background: window.STATUS_META[s].color, display: "inline-block" }}></span>
+              <span className="dot" style={{ width: 6, height: 6, borderRadius: 50, background: (window.STATUS_META[s] || {}).color, display: "inline-block" }}></span>
               {s}
             </span>
           ))}

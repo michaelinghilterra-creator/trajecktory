@@ -618,7 +618,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
                 <span className="ra-id">#{a.id}</span>
                 <span className="ra-role">{a.role}</span>
                 <span className="ra-score">
-                  <span className="ra-bar"><i style={{ width: `${(parseFloat(a.score) / 5) * 100}%` }} /></span>{a.score}
+                  <span className="ra-bar"><i style={{ width: `${((parseFloat(a.score) || 0) / 5) * 100}%` }} /></span>{a.score}
                 </span>
                 <span className="tag">{a.status}</span>
               </div>

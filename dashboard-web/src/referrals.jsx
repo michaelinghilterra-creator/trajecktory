@@ -14,13 +14,13 @@
 const { useState, useEffect, useMemo, useCallback } = React;
 
 const REF_STATUS_COLORS = {
-  'Not Asked': 'var(--text-muted)',
+  'Not Asked': 'var(--text-mute)',
   'Catching Up': '#38bdf8',
   'Asked': '#a78bfa',
   'Intro Made': '#f59e0b',
   'Applied w/ Referral': '#22c55e',
-  'No': 'var(--text-muted)',
-  'Dormant': 'var(--text-muted)',
+  'No': 'var(--text-mute)',
+  'Dormant': 'var(--text-mute)',
 };
 
 function refLocalToday() {
@@ -206,7 +206,7 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
         ) : (
           <table className="ref-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+              <tr style={{ textAlign: 'left', color: 'var(--text-mute)', fontFamily: 'var(--mono)', fontSize: 11 }}>
                 <th style={refTh}>Name</th>
                 <th style={refTh}>How you know them</th>
                 <th style={refTh}>Where now / reach</th>
@@ -278,7 +278,7 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
                   <RefCopyBtn text={t.body} />
                 </div>
                 <div className="dim mono" style={{ fontSize: 11 }}>{t.hint}</div>
-                <pre className="ai-out" style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--font-mono)', fontSize: 12, background: 'var(--bg-elev)', padding: 12, borderRadius: 8, border: '1px solid var(--border)', margin: 0 }}>{t.body}</pre>
+                <pre className="ai-out" style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--mono)', fontSize: 12, background: 'var(--panel-2)', padding: 12, borderRadius: 8, border: '1px solid var(--border)', margin: 0 }}>{t.body}</pre>
               </div>
             ))}
             <div className="dim mono" style={{ fontSize: 11 }}>

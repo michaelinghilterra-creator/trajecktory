@@ -142,7 +142,7 @@ function InsightsBody({ apps: rawApps, onOpen }) {
           <h1>Insights</h1>
           <div className="sub">
             {insights?.generated_at
-              ? <>Last analysis <InsAge iso={insights.generated_at} /> · across {insights.pipeline_size} entries · {insights.model}</>
+              ? <>Last analysis <InsAge iso={insights.generated_at} /> · across {insights.pipeline_size ?? 0} entries{insights.model ? ` · ${insights.model}` : ''}</>
               : <>Run a Claude-powered synthesis across every tab: pipeline, follow-ups, TA, recruiters, LinkedIn.</>}
           </div>
         </div>

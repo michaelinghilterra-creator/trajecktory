@@ -1931,7 +1931,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
           const isCover = r.coverOnly === true;
           return (
             <div className="dr-foot" style={{ borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: 8 }}>
-              <span style={{ color: 'var(--green)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
+              <span style={{ color: 'var(--green)', fontSize: 12, fontFamily: 'var(--mono)' }}>
                 {isCover ? `✓ Cover letter ready for ${app.company}`
                   : isByo ? `✓ Logged as applied to ${app.company} (no assets generated)`
                   : `✓ Applied to ${app.company}`}

@@ -656,7 +656,10 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
   const firmsEngaged = new Set(recruiters.filter(wasContacted).map(c => c.firmId)).size;
   const responseRate = sent > 0 ? Math.round((replied / sent) * 100) : 0;
   const outreachRate = total > 0 ? Math.round((sent / total) * 100) : 0;
-  const activeConvos = replied + meeting;
+  // `replied` (stage >= 3) already includes `meeting` (stage >= 4) and Connected,
+  // so adding them double-counted every meeting/connected recruiter. Active convos
+  // is the distinct set of anyone who replied or beyond = `replied`.
+  const activeConvos = replied;
   const firmCoverage = firms.length > 0 ? Math.round((firmsEngaged / firms.length) * 100) : 0;
 
   const outreachTone = outreachRate >= 40 ? 'good' : outreachRate >= 20 ? 'neutral' : 'warn';

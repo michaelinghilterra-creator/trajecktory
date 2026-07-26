@@ -247,7 +247,7 @@ window.PostingPanel = function PostingPanel({ app }) {
     return () => ctrl.abort();
   }, [app?.id]);
 
-  if (state.loading) return <div style={{ color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Loading posting…</div>;
+  if (state.loading) return <div style={{ color: 'var(--text-mute)', fontFamily: 'var(--mono)', fontSize: 12 }}>Loading posting…</div>;
 
   if (!state.ok) {
     return (
@@ -989,7 +989,7 @@ function QuickCopyBar() {
   };
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '8px 14px', borderTop: '1px solid var(--border)', background: 'var(--panel-2)' }}>
-      <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginRight: 2 }}>Quick copy:</span>
+      <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginRight: 2 }}>Quick copy:</span>
       {items.map(([label, val]) => (
         <button key={label} className="btn sm" style={{ fontSize: 11 }} title={`Copy: ${val}`} onClick={() => copy(label, val)}>
           {copied === label ? '✓ copied' : label}
@@ -1218,7 +1218,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
   };
   const row = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' };
   const btn = {
-    fontFamily: 'var(--font-mono)', fontSize: 12, padding: '5px 12px',
+    fontFamily: 'var(--mono)', fontSize: 12, padding: '5px 12px',
     borderRadius: 6, border: '1px solid var(--border, rgba(127,127,127,0.3))',
     cursor: 'pointer', background: 'transparent', color: 'inherit',
   };
@@ -1294,7 +1294,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
           <span className="mono" style={{ color: 'var(--green)' }}>↻</span>
           <span>Updating to <strong>v{info.remote}</strong> and restarting trajecktory…</span>
         </div>
-        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>This page reloads automatically when it is ready. If nothing happens after a minute or so, reopen trajecktory from the Start Menu.</div>
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>This page reloads automatically when it is ready. If nothing happens after a minute or so, reopen trajecktory from the Start Menu.</div>
       </div>
     );
   }
@@ -1353,7 +1353,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
           ))}
         </div>
       ) : showNotes && info.changelog ? (
-        <pre style={{ marginTop: 10, marginBottom: 0, maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{info.changelog}</pre>
+        <pre style={{ marginTop: 10, marginBottom: 0, maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--text-mute)', fontFamily: 'var(--mono)' }}>{info.changelog}</pre>
       ) : null}
     </div>
   );

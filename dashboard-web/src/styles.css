@@ -1452,10 +1452,10 @@ body {
   outline: none;
   transition: border-color .15s, background .15s;
 }
-.ref-cell::placeholder { color: var(--text-muted); }
+.ref-cell::placeholder { color: var(--text-mute); }
 .ref-cell:hover { border-color: var(--border); }
 .ref-cell:focus { border-color: var(--accent); background: var(--bg-2); }
-.ref-table tr:hover { background: var(--bg-elev, rgba(127,127,127,0.05)); }
+.ref-table tr:hover { background: var(--panel-2); }
 .tag {
   display: inline-flex;
   align-items: center;

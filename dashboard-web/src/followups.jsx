@@ -262,7 +262,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
             const isInt = window.isInterviewStage(it.status);
             const iconPath = isInt ? window.ICON.briefcase : isTA ? window.ICON.users : window.ICON.send;
             const color = isInt ? 'var(--orange)' : (sc != null && sc >= 4.0) ? 'var(--accent)' : 'var(--red)';
-            const label = `Follow up · ${it.daysSinceLastTouch}d silent`;
+            const label = `Follow up · ${it.daysSinceLastTouch ?? 0}d silent`;
             return (
               <div key={`${it.source || 'app'}-${it.id}`} onClick={() => onOpen(it)}
                 style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto auto', gap: 12, alignItems: 'center',
