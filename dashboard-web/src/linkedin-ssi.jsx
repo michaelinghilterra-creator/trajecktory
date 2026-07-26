@@ -1258,48 +1258,6 @@ function AIConnectView({ influencers, lockedInfluencer, onLog }) {
     } finally {
       setBusy(false);
     }
-    return; // skip the mock template fallback below
-
-    // (legacy mock retained below for reference but unreachable)
-    setTimeout(() => {
-      const firstName = (who || "there").split(" ")[0];
-      const refSnippet = priorEngagement
-        ? `your post on ${priorEngagement.length > 40 ? priorEngagement.slice(0, 40) + "…" : priorEngagement}`
-        : "your recent post";
-
-      // Pre-baked templates by (angle x tone). Mock generator. Kept under ~280 chars to leave room for a sign-off.
-      const lib = {
-        "Reference Post": {
-          Warm: `Hi ${firstName}, really enjoyed ${refSnippet} and wanted to connect properly. Working in RevOps / GTM analytics myself, and would value following more of your thinking. Thanks, ${window.myIdentity().firstName}`,
-          Concise: `${firstName}, commented on ${refSnippet}. Director-level RevOps / BI background, would like to stay in touch. Thanks, ${window.myIdentity().firstName}`,
-          Professional: `Hello ${firstName}, I appreciated the perspective in ${refSnippet} and the conversation it sparked. I lead BI & Revenue Operations work and would welcome the connection. Thanks, ${window.myIdentity().firstName}`,
-          Curious: `${firstName}, ${refSnippet} got me thinking. I'd love to connect and learn more about how you approach this. RevOps and BI background here. Thanks, ${window.myIdentity().firstName}`,
-        },
-        "Mutual Interest": {
-          Warm: `Hi ${firstName}, fellow ${theirRole || "GTM analytics / RevOps"} traveler here. I've been following your work and would love to connect. Thanks, ${window.myIdentity().firstName}`,
-          Concise: `${firstName}, overlap in ${theirRole || "RevOps / analytics"}. Would like to connect. Thanks, ${window.myIdentity().firstName}`,
-          Professional: `Hello ${firstName}, your work in ${theirRole || "GTM / RevOps"} aligns closely with what I lead. I'd welcome the connection. Thanks, ${window.myIdentity().firstName}`,
-          Curious: `${firstName}, saw your focus on ${theirRole || "RevOps / GTM analytics"} and have questions I'd love to bring you over time. Mind if we connect? Thanks, ${window.myIdentity().firstName}`,
-        },
-        "Shared Network": {
-          Warm: `Hi ${firstName}, we've got a few people in common in the ${theirRole || "RevOps"} space. Would be great to connect directly. Thanks, ${window.myIdentity().firstName}`,
-          Concise: `${firstName}, mutual connections in the ${theirRole || "RevOps"} world. Let's connect. Thanks, ${window.myIdentity().firstName}`,
-          Professional: `Hello ${firstName}, we share several mutual connections across the ${theirRole || "GTM analytics"} community. I'd welcome a direct connection. Thanks, ${window.myIdentity().firstName}`,
-          Curious: `${firstName}, we keep showing up in the same network corners (${theirRole || "RevOps / GTM"}). Curious about your work, and would love to connect. Thanks, ${window.myIdentity().firstName}`,
-        },
-        "Career Stage": {
-          Warm: `Hi ${firstName}, Director-level BI/RevOps leader exploring what's next. Your trajectory in ${theirRole || "this space"} is exactly the kind I follow closely. Would love to connect. Thanks, ${window.myIdentity().firstName}`,
-          Concise: `${firstName}, Director, BI & RevOps. In market. Would value the connection. Thanks, ${window.myIdentity().firstName}`,
-          Professional: `Hello ${firstName}, I lead BI & Revenue Operations at the Director level and am currently exploring next-step opportunities. I'd welcome a connection. Thanks, ${window.myIdentity().firstName}`,
-          Curious: `${firstName}, Director, BI & RevOps here, thinking about what's next. Would love to learn how you ended up in ${theirRole || "your current role"}. Can we connect? Thanks, ${window.myIdentity().firstName}`,
-        },
-      };
-
-      const draft = (lib[angle] && lib[angle][tone]) || lib["Reference Post"]["Warm"];
-      // Hard-cap at LIMIT
-      setOut(draft.length > LIMIT ? draft.slice(0, LIMIT - 1) + "…" : draft);
-      setBusy(false);
-    }, 650);
   };
 
   const charCount = out.length;

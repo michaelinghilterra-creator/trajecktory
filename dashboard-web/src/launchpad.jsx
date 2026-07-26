@@ -919,10 +919,15 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     window.tjkMutate(`/api/setup/handoff/${handoffKey || sectionId}`, { method: 'POST' })
       .then(r => r.json())
       .then(({ prompt }) => {
-        navigator.clipboard?.writeText(prompt).catch(() => {});
         setPendingGen(p => ({ ...p, [sectionId]: prompt }));
         track('handoff_started', { step: sectionId });
-        toast && toast('Prompt copied. Paste into your Claude Code', 'success');
+        // Only claim "copied" if the clipboard write actually resolved. On http /
+        // a LAN IP the clipboard API is unavailable, so the prompt (shown below in
+        // the textarea) has to be copied by hand; say that instead of lying.
+        const cp = navigator.clipboard?.writeText(prompt);
+        if (cp) cp.then(() => toast && toast('Prompt copied. Paste into your Claude Code', 'success'))
+                  .catch(() => toast && toast('Prompt ready below. Select it and copy', 'success'));
+        else toast && toast('Prompt ready below. Select it and copy', 'success');
       })
       .catch(() => toast && toast('Could not load prompt', 'error'));
   };
@@ -1156,9 +1161,12 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         }).then(r => r.json()).then(res => {
           if (res.error) { toast && toast(res.error, 'error'); return; }
           pendingBaseline.current.cv = state?.sections?.cv?.status || 'empty';
-          navigator.clipboard?.writeText(res.prompt).catch(() => {});
           setPendingGen(p => ({ ...p, cv: res.prompt }));
-          toast && toast(res.seededMaster ? 'Uploaded. Also seeded resume master' : 'Uploaded. Prompt copied', 'success');
+          const base = res.seededMaster ? 'Uploaded. Also seeded resume master' : 'Uploaded';
+          const cp = navigator.clipboard?.writeText(res.prompt);
+          if (cp) cp.then(() => toast && toast(base + '. Prompt copied', 'success'))
+                    .catch(() => toast && toast(base + '. Prompt ready below', 'success'));
+          else toast && toast(base + '. Prompt ready below', 'success');
         }).catch(() => toast && toast('Upload failed', 'error'));
       };
       reader.readAsDataURL(file);
