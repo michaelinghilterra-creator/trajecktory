@@ -1294,6 +1294,9 @@ function RecAICompose({ contact, contactId, onSaveDraft, onLogSent, onToast }) {
   const [busy, setBusy] = useStateR(false);
   const [out, setOut] = useStateR('');
   const [subject, setSubject] = useStateR(`Intro: ${contact.first}, exploring leadership mandates`);
+  // Editable assembled email, seeded from the AI draft so the user can tweak it
+  // before copying, logging, or saving.
+  const [email, setEmail] = useStateR('');
 
   const gen = useCallbackR(() => {
     setBusy(true); setOut('');
@@ -1308,6 +1311,7 @@ function RecAICompose({ contact, contactId, onSaveDraft, onLogSent, onToast }) {
         if (d.draft) {
           setSubject(d.draft.subject || subject);
           setOut(d.draft.body || '');
+          setEmail(`Hi ${contact.first},\n\n${(d.draft.body || '').replace(/^\s+/, '')}\n\n${window.myEmailSignature()}`);
         } else {
           onToast(d.error || 'Draft failed', 'warn');
         }
@@ -1334,33 +1338,30 @@ function RecAICompose({ contact, contactId, onSaveDraft, onLogSent, onToast }) {
           drafting a {tone.toLowerCase()} outreach…
         </div>
       )}
-      {out && !busy && (() => {
-        const cleanBody = (out || '').replace(/^\s+/, '');
-        const fullEmail = `Hi ${contact.first},\n\n${cleanBody}\n\n${window.myEmailSignature()}`;
-        return (
+      {out && !busy && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-dim)', padding: '2px 2px 0' }}>
-            <span><span style={{ color: 'var(--text-mute)' }}>Subject:</span> {subject}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 2px 0' }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-mute)' }}>Subject</span>
+            <input className="inp" value={subject} onChange={e => setSubject(e.target.value)} style={{ flex: 1 }} />
             <RecCopyField value={subject || ''} />
           </div>
           <div style={{ position: 'relative' }}>
-            <div className="ai-out">{fullEmail}</div>
+            <textarea className="ta" value={email} onChange={e => setEmail(e.target.value)} rows={10} aria-label="Editable outreach draft" style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit' }} />
             <div style={{ position: 'absolute', top: 8, right: 8 }}>
-              <RecCopyField value={fullEmail} />
+              <RecCopyField value={email} />
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn primary sm" onClick={() => onLogSent(subject, fullEmail)}>
+            <button className="btn primary sm" onClick={() => onLogSent(subject, email)}>
               <RecIcon d={REC_I.outbound} size={12} /> I sent this. Log it
             </button>
-            <button className="btn sm" onClick={() => onSaveDraft(subject, fullEmail)}>
+            <button className="btn sm" onClick={() => onSaveDraft(subject, email)}>
               <RecIcon d={REC_I.spark} size={12} /> Save as draft only
             </button>
-            <window.GmailDraftBtn to={contact.email} subject={subject} body={fullEmail} />
+            <window.GmailDraftBtn to={contact.email} subject={subject} body={email} />
           </div>
         </>
-        );
-      })()}
+      )}
     </div>
   );
 }

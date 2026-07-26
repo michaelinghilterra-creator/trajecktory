@@ -99,6 +99,9 @@ export const INTERVIEW_PREP_DIR = resolveInterviewPrepDir();
 export const CADENCE_PATH = path.join(DATA_DIR, 'cadence.json');
 export const CADENCE_LOG_PATH = path.join(DATA_DIR, 'cadence-log.json');
 export const TODOS_PATH = path.join(DATA_DIR, 'todos.json');
+// Social posts composer: drafts, queue, and an activity log. One JSON sidecar,
+// same pattern as todos.json. Gitignored personal data under DATA_DIR.
+export const POSTS_PATH = path.join(DATA_DIR, 'posts.json');
 
 export const PORT = process.env.PORT || 3333;
 // Bind to loopback by default so the dashboard (no auth, can spawn agents and

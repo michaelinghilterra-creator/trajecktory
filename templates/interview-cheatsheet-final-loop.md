@@ -16,6 +16,12 @@
 
 ---
 
+> **Standing closing move, every round, non-negotiable.** With each interviewer, before you wrap,
+> ask some version of: "Before we finish, is there anything in my background that gives you pause,
+> or that you think the panel would want me to address?" People answer this honestly in conversation
+> far more often than they answer a post-rejection email. Whatever they say, log it as an objection.
+> This fires with every interviewer, on every round.
+
 ## §0 — 30-Second Pre-Panel Strip
 
 > Read between every panel — the 60 seconds while you walk to the next room or wait for the next Zoom to start. Same three items, glanced at every transition.

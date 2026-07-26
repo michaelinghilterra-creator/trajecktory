@@ -120,7 +120,7 @@ function WeekTrend({ weeks, target, height = 120 }) {
   );
 }
 
-function LinkedInSSITab() {
+function LinkedInSSITab({ toast }) {
   const [ssiData, setSsiData] = useState(null);
   const [influencers, setInfluencers] = useState([]);
   const [engagementLog, setEngagementLog] = useState([]);
@@ -183,6 +183,10 @@ function LinkedInSSITab() {
           <button className={"subtab" + (activeView === "dashboard" ? " active" : "")} onClick={() => setActiveView("dashboard")}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: "6px", display: "inline-block"}}><path d={window.ICON.pulse} /></svg>
             Overview
+          </button>
+          <button className={"subtab" + (activeView === "posts" ? " active" : "")} onClick={() => setActiveView("posts")}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: "6px", display: "inline-block"}}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Posts
           </button>
           <button className={"subtab" + (activeView === "influencers" ? " active" : "")} onClick={() => setActiveView("influencers")}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight: "6px", display: "inline-block"}}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -391,6 +395,11 @@ function LinkedInSSITab() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* POSTS */}
+        {activeView === "posts" && window.PostsTab && (
+          <window.PostsTab toast={toast} />
         )}
 
         {/* INFLUENCERS */}
@@ -1171,7 +1180,8 @@ function AIResponseView({ influencers, lockedInfluencer, onLog }) {
                 <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{tone} · reply draft</div>
               </div>
             </div>
-            <div style={{ background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)" }}>{out}</div>
+            <textarea className="ta" value={out} onChange={(e) => setOut(e.target.value)} aria-label="Editable draft, tweak it before you copy or log"
+              style={{ width: "100%", minHeight: 120, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)", resize: "vertical", fontFamily: "inherit" }} />
             {logErr && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)", marginTop: 10 }}>{logErr}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               {onLog && lockedInfluencer && (
@@ -1369,7 +1379,8 @@ function AIConnectView({ influencers, lockedInfluencer, onLog }) {
                 <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{angle} · {tone.toLowerCase()}</div>
               </div>
             </div>
-            <div style={{ background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)" }}>{out}</div>
+            <textarea className="ta" value={out} onChange={(e) => setOut(e.target.value)} aria-label="Editable draft, tweak it before you copy or log"
+              style={{ width: "100%", minHeight: 120, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)", resize: "vertical", fontFamily: "inherit" }} />
             {logErr && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)", marginTop: 10 }}>{logErr}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               {onLog && lockedInfluencer && (
