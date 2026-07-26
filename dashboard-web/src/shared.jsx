@@ -287,6 +287,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
     { key: "followups",     label: "Follow-Ups",         icon: "↻", badge: stats.followups || null },
     { key: "target-talent", label: "TA Outreach",        icon: "◎" },
     { key: "linkedin-ssi",  label: "LinkedIn SSI",       icon: "◍" },
+    { key: "posts",         label: "Posts",              icon: "✎" },
     { key: "recruiters",    label: "Recruiters",         icon: "☎" },
     { key: "interview",     label: "Interview",          icon: "◈" },
     // Review moved under Insights (first subtab); its Gmail-health nudge rides

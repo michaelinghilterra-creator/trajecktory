@@ -573,6 +573,7 @@ function App() {
           {tab === "recruiters"&& <window.RecruitersTab search={search} />}
           {tab === "target-talent" && <window.TargetTalentTab initialOpenId={pendingTaOpen} onInitialOpenConsumed={() => setPendingTaOpen(null)} search={search} />}
           {tab === "linkedin-ssi" && <window.LinkedInSSITab />}
+          {tab === "posts" && <window.PostsTab toast={toast} />}
           {tab === "launchpad" && <window.SetupTab toast={toast} setTab={setTab} />}
         </div>
       </div>
