@@ -35,7 +35,7 @@
  *   {
  *     "title": "Senior Director of Customer Support",
  *     "subtitle_secondary": "Pipeline | Forecasting | Field Enablement",
- *     "summary": "Revenue Operations leader with eight years...",
+ *     "summary": "A rewritten one-paragraph summary for the target role.",
  *     "areas_of_expertise": "Revenue Forecasting, Pipeline Inspection, ...",
  *     "bullets": {
  *       "role_0": ["Reordered / lightly rephrased bullet one.", "Bullet two."]

@@ -355,7 +355,7 @@ const CHEATSHEET = {
     { current: 'Summary leads with analytics', change: 'Lead with systems consolidation', why: 'Consolidation is the actual mandate. Analytics is the thing they already have.' },
   ],
   customizationLI: [
-    { current: 'Headline says "Analytics leader"', change: '"Revenue Operations leader | GTM systems"', why: 'Recruiters at this level search on RevOps, not analytics.' },
+    { current: 'Headline says "Analytics leader"', change: '"RevOps leader | GTM systems"', why: 'Recruiters at this level search on RevOps, not analytics.' },
   ],
   leadStory: {
     title: 'The carrier scorecard rebuild',
