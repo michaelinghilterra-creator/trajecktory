@@ -117,6 +117,9 @@ window.ActionsCard = function ActionsCard() {
                 {weeks.slice().reverse().map(w => {
                   const age = daysBetween(w.week, todayYmd);
                   const tooYoung = age < 7;
+                  // A week with nothing sent has no rate to show. replyPct comes
+                  // back null then, and `${null}%` rendered the literal "null%".
+                  const noRate = tooYoung || w.replyPct == null;
                   return (
                     <tr key={w.week} style={{ textAlign: 'right', color: tooYoung ? 'var(--text-mute)' : 'var(--text-dim)' }}
                       title={tooYoung ? 'Less than a week old. Replies arrive within days, so this cannot be judged yet.' : undefined}>
@@ -126,8 +129,8 @@ window.ActionsCard = function ActionsCard() {
                       <td>{w.sent}</td>
                       <td>{w.replied}</td>
                       <td>{w.screened}</td>
-                      <td style={{ color: tooYoung ? 'var(--text-mute)' : w.replyPct >= 3.6 ? 'var(--green)' : 'var(--orange)' }}>
-                        {tooYoung ? '—' : `${w.replyPct}%`}
+                      <td style={{ color: noRate ? 'var(--text-mute)' : w.replyPct >= 3.6 ? 'var(--green)' : 'var(--orange)' }}>
+                        {noRate ? '—' : `${w.replyPct}%`}
                       </td>
                     </tr>
                   );

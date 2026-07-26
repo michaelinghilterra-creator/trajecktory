@@ -273,6 +273,18 @@ const APPS = [
   { id: 383, date: '2026-06-19', company: 'Soylent Systems',     role: 'Director, Sales Strategy',   score: 3.9, status: 'No Response',   archetype: 'Strategy',  sector: 'SaaS',       source: 'Ashby',      compStated: 'Not Stated',          url: 'https://jobs.example.com/soylent-dir-strategy', report: 'reports/383-soylent-systems-2026-06-19.md',    resume: 'trajecktory', seniority: 'Director', remote: 'Remote' },
   { id: 379, date: '2026-06-15', company: 'Stark Freight',       role: 'Revenue Operations Lead',    score: 2.8, status: 'Not a Fit',     archetype: 'RevOps',    sector: 'Logistics',  source: 'Website',    compStated: '$115,000 - $135,000', url: 'https://jobs.example.com/stark-revops-lead',    report: 'reports/379-stark-freight-2026-06-15.md',      resume: '',            seniority: 'Manager',  remote: 'Onsite' },
 ];
+// v2.0 derives the funnel and the warm/cold split from two fields the live
+// tracker carries per row: `reached` (the furthest rung ever reached, so a
+// replied-then-rejected row still counts as a reply) and the inbound/outbound
+// tags that split the warm channel. The APPS rows above predate both, so inject
+// them here rather than widening every line.
+const REACHED = { 412: '2nd Interview', 408: 'Phone Screen', 405: 'Offer', 401: 'Applied', 397: 'Applied', 394: 'Evaluated', 391: 'Evaluated', 386: 'Phone Screen', 383: 'Applied', 379: 'Evaluated' };
+const WARM = { 412: 'outbound', 408: 'outbound', 405: 'inbound', 401: 'outbound' };
+for (const a of APPS) {
+  a.reached = REACHED[a.id];
+  if (WARM[a.id] === 'outbound') a.outbound = true;
+  if (WARM[a.id] === 'inbound') a.inbound = true;
+}
 
 // The evaluation report behind app 412, as GET /api/cheatsheets/:id returns it.
 // Field names follow v1ToCheatsheet in dashboard-web/server/v1-loader.mjs; the
@@ -283,14 +295,34 @@ const CHEATSHEET = {
   seniority: 'VP', remote: 'Remote', teamSize: '6', compStated: '$190,000 - $230,000',
   tldr: 'A genuine step up: first senior RevOps hire under a new CRO, with the systems mess to prove the mandate is real. Comp clears your target. The risk is scope creep into pure analytics.',
   companyBrief: 'Northwind Analytics sells supply-chain visibility to mid-market shippers. Two acquisitions in eighteen months have left three overlapping CRM instances, which is why this role exists. The RevOps function is new, so you would be defining it rather than inheriting it.',
+  // v2.0: the headline is DERIVED by code from these dimension ratings, so the
+  // keys must be the canonical ones (lib/score.mjs) and scoreSource must be
+  // 'derived' for the drawer to render the formula. Comp is rated (4.6) but
+  // weighted 0, so it shows a bar and no points, which is the teaching point.
+  scoreSource: 'derived',
   globalScore: [
-    { dim: 'Role fit', val: 4.8, max: 5 },
-    { dim: 'Seniority', val: 4.5, max: 5, note: 'true VP scope' },
-    { dim: 'Compensation', val: 4.6, max: 5 },
-    { dim: 'Domain', val: 4.7, max: 5, note: 'logistics, your home turf' },
-    { dim: 'Location', val: 5.0, max: 5, note: 'fully remote' },
-    { dim: 'Stability', val: 3.9, max: 5, note: 'post-acquisition churn' },
+    { key: 'fit',       dim: 'Fit / CV Match',        val: 4.6, max: 5 },
+    { key: 'northStar', dim: 'North Star Alignment',  val: 4.4, max: 5, note: 'RevOps leadership, your stated target' },
+    { key: 'level',     dim: 'Level Match',           val: 4.5, max: 5, note: 'true VP scope' },
+    { key: 'comp',      dim: 'Comp',                  val: 4.6, max: 5, note: 'rated, weighted 0' },
+    { key: 'location',  dim: 'Location / Logistics',  val: 5.0, max: 5, note: 'fully remote' },
+    { key: 'redFlags',  dim: 'Red flags',             val: 5.0, max: 5, note: 'clean posting' },
   ],
+  // The arithmetic the "How is this scored?" panel prints. Weights are the
+  // fit-led defaults renormalized over the positive dimensions present (comp
+  // dropped, weight 0), so they sum to 1 and the weighted average equals the
+  // headline. No ceiling: comp clears the floor.
+  scoreBasis: {
+    weights: { fit: 0.41, northStar: 0.29, level: 0.18, location: 0.12 },
+    contributions: [
+      { key: 'fit',       val: 4.6, weight: 0.41, points: 1.89 },
+      { key: 'northStar', val: 4.4, weight: 0.29, points: 1.28 },
+      { key: 'level',     val: 4.5, weight: 0.18, points: 0.81 },
+      { key: 'location',  val: 5.0, weight: 0.12, points: 0.60 },
+    ],
+    penalty: 0,
+    weightedAverage: 4.58,
+  },
   recommendation: 'Apply. Lead with the carrier scorecard rebuild and frame it as consolidation, which is the problem they are actually hiring against.',
   keywords: ['RevOps', 'CRM consolidation', 'forecasting', 'net revenue retention', 'GTM systems', 'post-merger integration'],
   cvMatch: [
@@ -439,6 +471,99 @@ const SSI_LOG = [
   { date: '2026-07-14', influencer: 'Jane Rivera',  actionType: 'Messaged',  topic: 'Intro',           message: 'Short note after her post.', responseReceived: 'Yes', connectionMade: 'Connected', notes: '', loggedAt: '2026-07-14T09:41:00.000Z' },
 ];
 
+// ---- v2.0 Overview scorecard + Actions + cohorts ---------------------------
+// The weekly scorecard reads /api/metrics/weekly; the Actions card reads
+// /api/activity/actions + /api/activity/cohorts. All aggregate counts, zero PII.
+// Deliberately a mid-search week that is PART logged: cadence and screens are
+// in, but the outreach counters are not yet, so the scorecard shows a grey em
+// dash (which means "not logged", NOT zero) beside a met floor. That is the pair
+// of reading conventions the guide teaches, shown rather than described.
+const WEEKLY = {
+  weekStart: '2026-07-20', weekEnd: '2026-07-26',
+  metrics: {
+    weekStart: '2026-07-20', weekEnd: '2026-07-26',
+    verifiedTouches:        { value: 0,  available: false, source: 'starts with the outreach motion' },
+    replies:                { value: 4,  available: true,  source: 'correspondence' },
+    deliveredReplyRatePct:  { value: 22, available: true,  source: 'cumulative, contact-based, bounces excluded' },
+    screensBooked:          { value: 2,  available: true,  source: 'status events (week-scoped)' },
+    objectionsLogged:       { value: 1,  available: true,  source: 'debrief notes' },
+    linkedinConnects:       { value: 0,  available: false, source: 'no connects log yet' },
+    cadencePct:             { value: 82, available: true,  source: 'cadence log' },
+    unservicedApplications: { value: 6,  available: true,  source: 'applications (Applied, no follow-up)' },
+  },
+  floors: {
+    results: [
+      { key: 'cadencePct', label: 'Cadence adherence', value: 82, floor: 70, unit: '%', met: true, available: true },
+    ],
+    missed: [],
+    notLogged: [
+      { key: 'verifiedTouches',  label: 'Verified touches sent',  value: null, floor: 13, unit: '', met: null, available: false },
+      { key: 'linkedinConnects', label: 'LinkedIn connects sent', value: null, floor: 50, unit: '', met: null, available: false },
+    ],
+    allMet: false,
+  },
+};
+// Applications-sent series over the 60-day window (sparse bars), plus the two
+// outreach series that are honestly "not logged yet" until the motion starts.
+const ACTIONS_SERIES = {
+  start: '2026-05-28', end: '2026-07-26', days: 60,
+  series: [
+    { key: 'applications', label: 'Applications sent', available: true, source: 'data/apply-dates.json', total: 12,
+      points: (() => {
+        const out = []; const d = new Date('2026-05-28T00:00:00Z');
+        for (let i = 0; i < 60; i++) { out.push({ date: d.toISOString().slice(0, 10), value: 0 }); d.setUTCDate(d.getUTCDate() + 1); }
+        const bump = { '2026-06-15': 1, '2026-06-19': 1, '2026-06-24': 1, '2026-07-02': 1, '2026-07-06': 2, '2026-07-08': 1, '2026-07-09': 2, '2026-07-11': 1, '2026-07-14': 2 };
+        for (const p of out) if (bump[p.date]) p.value = bump[p.date];
+        return out;
+      })() },
+    { key: 'touches',  label: 'Verified touches', available: false, source: 'starts with the outreach motion', total: 0, points: [] },
+    { key: 'connects', label: 'LinkedIn connects', available: false, source: 'no connects log yet',           total: 0, points: [] },
+  ],
+};
+const COHORTS = {
+  weeks: [
+    { week: '2026-06-15', sent: 2, replied: 1, screened: 1, orphaned: 0, replyPct: 50.0, screenPct: 50.0 },
+    { week: '2026-06-22', sent: 1, replied: 0, screened: 0, orphaned: 1, replyPct: 0.0,  screenPct: 0.0 },
+    { week: '2026-06-29', sent: 3, replied: 1, screened: 0, orphaned: 0, replyPct: 33.3, screenPct: 0.0 },
+    { week: '2026-07-06', sent: 4, replied: 2, screened: 2, orphaned: 0, replyPct: 50.0, screenPct: 50.0 },
+    { week: '2026-07-13', sent: 3, replied: 1, screened: 0, orphaned: 0, replyPct: 33.3, screenPct: 0.0 },
+    { week: '2026-07-20', sent: 2, replied: 0, screened: 0, orphaned: 0, replyPct: 0.0,  screenPct: 0.0 },
+  ],
+  note: 'Keyed by the week the application was SENT, not when the row was created.',
+};
+// ---- Gmail (Google) — the whole namespace, so no real address or reply can
+// reach a PNG. Default DISCONNECTED (the honest first-run state, no address). The
+// Insights/Review capture flips googleMode to 'connected' to show the sync panel
+// populated with the invented persona. connectedEmail is the ONLY field carrying
+// an address, and it is the fictional one.
+let googleMode = 'disconnected'; // 'disconnected' | 'connected'
+const GOOGLE_HEALTH_CONNECTED = { connected: true, healthy: true, reason: 'ok', configured: true, connectedEmail: 'jordan.avery@example.com', lastCheckedAt: '2026-07-26T14:02:11.000Z', daysSinceCheck: 0 };
+const GOOGLE_HEALTH_DISCONNECTED = { connected: false, healthy: false, reason: 'not_configured', configured: false, connectedEmail: null, lastCheckedAt: null, daysSinceCheck: null };
+const GOOGLE_STATUS_CONNECTED = { configured: true, connected: true, connectedEmail: 'jordan.avery@example.com', scopes: ['gmail.readonly', 'gmail.compose'], canReadMail: true, canDraft: true, expired: false, expiresAt: '2026-08-25T14:00:00.000Z' };
+const GOOGLE_STATUS_DISCONNECTED = { configured: false, connected: false, connectedEmail: null, scopes: [], canReadMail: false, canDraft: false, expired: false, expiresAt: null };
+const GOOGLE_NOT_SETUP_400 = { error: 'Gmail is not set up on this install yet. It needs a one-time setup in your own Google account.', needsSetup: true };
+// Connected sweep results: two invented matched replies, same fictional companies
+// as the tracker so the guide reads as one story.
+const GOOGLE_REPLIES = {
+  replies: [
+    { msgId: 'm1', from: 'Alex Kim <alex.kim@example.com>', subject: 'Re: VP, Revenue Operations', date: '2026-07-15', sentiment: 'positive', contact: { name: 'Alex Kim', email: 'alex.kim@example.com' }, candidateApps: [{ id: 412, company: 'Northwind Analytics', role: 'VP, Revenue Operations' }], handled: null },
+    { msgId: 'm2', from: 'Rosa Delgado <rosa.delgado@example.com>', subject: 'Re: Director of GTM Systems', date: '2026-07-13', sentiment: 'neutral', contact: { name: 'Rosa Delgado', email: 'rosa.delgado@example.com' }, candidateApps: [{ id: 408, company: 'Globex Health', role: 'Director of GTM Systems' }], handled: null },
+  ],
+  byCompany: [], unknown: [], unmatched: 0,
+};
+const SCAN_BOUNCES = { dryRun: true, scanned: 0, hardBounces: 0, softBounces: 0, wouldFlip: 0, proposed: [] };
+const REVIEW_STATUS = {
+  lock: { locked: false, reason: null },
+  lastReview: { weekStart: '2026-07-13', weekEnd: '2026-07-19', outreachMet: true, floors: { verifiedTouches: 15, linkedinConnects: 54, cadencePct: 78 } },
+  history: [
+    { weekStart: '2026-07-06', weekEnd: '2026-07-12', outreachMet: false },
+    { weekStart: '2026-07-13', weekEnd: '2026-07-19', outreachMet: true },
+  ],
+};
+const DEBRIEFS_PENDING = { pending: [
+  { id: 412, company: 'Northwind Analytics', role: 'VP, Revenue Operations', stage: '2nd Interview' },
+] };
+
 let stateMode = 'firstrun'; // 'firstrun' | 'started' | 'ready'
 // 'empty'      → a genuinely fresh install: no triage results, no to-dos, no
 //                cadence, so no sidebar badges. This is what the first-run
@@ -474,7 +599,7 @@ async function installMocks(page) {
     // handoff prompt text is static + read-only; let it hit the server for authenticity
     return route.continue();
   });
-  await page.route('**/api/system/version', route => json(route, { version: '1.24.0' }));
+  await page.route('**/api/system/version', route => json(route, { version: '2.0.2' }));
   await page.route('**/api/claude-status', route => json(route, { signedIn: false }));
   await page.route('**/api/triage/results', route => json(route, (dataMode === 'empty' || !showTriage) ? { cards: [] } : TRIAGE));
   await page.route('**/api/agent/cost-history', route => json(route, []));
@@ -536,6 +661,30 @@ async function installMocks(page) {
     },
     eventsTracked: 26,
   }));
+
+  // ── v2.0 Overview scorecard + Actions card feeds (all aggregate, zero PII) ──
+  await page.route('**/api/metrics/weekly', route => json(route, WEEKLY));
+  await page.route('**/api/activity/actions**', route => json(route, ACTIONS_SERIES));
+  await page.route('**/api/activity/cohorts**', route => json(route, COHORTS));
+  await page.route('**/api/review/status', route => json(route, REVIEW_STATUS));
+  await page.route('**/api/interview/debriefs/pending', route => json(route, DEBRIEFS_PENDING));
+  await page.route('**/api/followups/withheld', route => json(route, { withheld: [] }));
+
+  // ── Gmail namespace. app.jsx probes /api/google/health on EVERY page load, so
+  // an unmocked namespace would stamp the real connected address onto every shot.
+  // Blanket-stub the namespace FIRST, then the specific handlers — Playwright
+  // matches the most-recently-registered route first, so the specifics win and
+  // anything unforeseen still lands on the harmless blanket rather than a real
+  // inbox. Default disconnected; the Review capture flips googleMode.
+  await page.route('**/api/google/**', route => json(route, { ok: true }));
+  await page.route('**/api/google/health', route => json(route, googleMode === 'connected' ? GOOGLE_HEALTH_CONNECTED : GOOGLE_HEALTH_DISCONNECTED));
+  await page.route('**/api/google/status', route => json(route, googleMode === 'connected' ? GOOGLE_STATUS_CONNECTED : GOOGLE_STATUS_DISCONNECTED));
+  await page.route('**/api/google/replies**', route =>
+    googleMode === 'connected' ? json(route, GOOGLE_REPLIES)
+      : route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify(GOOGLE_NOT_SETUP_400) }));
+  await page.route('**/api/google/scan-bounces', route =>
+    googleMode === 'connected' ? json(route, SCAN_BOUNCES)
+      : route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify(GOOGLE_NOT_SETUP_400) }));
 
   // Today tab. Order matters: '/api/cadence/today' and '/api/cadence/streak' are
   // matched before the bare '/api/cadence' template route.
@@ -958,7 +1107,6 @@ async function main() {
     ['Recruiters', 'g3-recruiters', 660],
     ['TA Outreach', 'g3-ta-outreach', 620],
     ['LinkedIn SSI', 'g3-linkedin-ssi', 700],
-    ['Insights', 'g3-insights', 520],
   ]) {
     try {
       await clickNav(page, nav);
@@ -966,6 +1114,22 @@ async function main() {
       await shotContentTight(page, name, cap);
     } catch (e) { console.log(`  ${name} skip:`, e.message); }
   }
+
+  // Insights now opens on its Review subtab (the weekly floors + the Gmail sync
+  // panel). Capture Review in the CONNECTED state (invented persona), then the
+  // second subtab, the analysis, in its honest "nothing generated yet" state.
+  try {
+    googleMode = 'connected';
+    await clickNav(page, 'Insights');
+    await page.waitForTimeout(1300);
+    await shotContentTight(page, 'g3-review', 640);
+    try {
+      await page.locator('.subtab', { hasText: 'Insights' }).first().click();
+      await page.waitForTimeout(900);
+      await shotContentTight(page, 'g3-insights', 520);
+    } catch (e) { console.log('  insights analysis skip:', e.message); }
+    googleMode = 'disconnected';
+  } catch (e) { console.log('  review/insights skip:', e.message); googleMode = 'disconnected'; }
 
   try {
     await clickNav(page, 'Interview');
