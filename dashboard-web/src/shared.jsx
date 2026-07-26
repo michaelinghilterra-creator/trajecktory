@@ -285,9 +285,8 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
     { key: "focus",         label: "Today",              icon: "◔", badge: stats.today || null },
     { key: "pipeline",      label: "Pipeline",           icon: "▥", badge: stats.pending },
     { key: "followups",     label: "Follow-Ups",         icon: "↻", badge: stats.followups || null },
-    { key: "target-talent", label: "TA Outreach",        icon: "◎" },
-    { key: "linkedin-ssi",  label: "LinkedIn SSI",       icon: "◍" },
-    { key: "recruiters",    label: "Recruiters",         icon: "☎" },
+    { key: "network",       label: "Network",            icon: "◎" },
+    { key: "linkedin-ssi",  label: "LinkedIn",           icon: "◍" },
     { key: "interview",     label: "Interview",          icon: "◈" },
     // Review moved under Insights (first subtab); its Gmail-health nudge rides
     // the Insights item now. Connect moved under Follow-Ups.
@@ -1366,9 +1365,8 @@ window.TabStrip = function TabStrip({ tab, setTab, counts }) {
     { key: "overview",  label: "Overview",    num: counts.pending },
     { key: "pipeline",  label: "Pipeline",    num: counts.active },
     { key: "followups", label: "Follow-Ups" },
-    { key: "target-talent", label: "TA Outreach" },
-    { key: "linkedin-ssi", label: "LinkedIn SSI" },
-    { key: "recruiters",label: "Recruiters" },
+    { key: "network",   label: "Network" },
+    { key: "linkedin-ssi", label: "LinkedIn" },
     { key: "analytics", label: "Analytics" },
   ];
   return (

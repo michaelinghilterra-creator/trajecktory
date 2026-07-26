@@ -57,6 +57,7 @@ export const CONNECTS_PATH = path.join(DATA_DIR, 'linkedin-connects.json');
 export const ACTIVATION_PATH = path.join(DATA_DIR, 'activation-log.tsv');
 export const RECRUITERS_MD = path.join(DATA_DIR, 'recruiters.md');
 export const RECRUITER_CORR_DIR = path.join(DATA_DIR, 'recruiter-correspondence');
+export const REFERRALS_MD = path.join(DATA_DIR, 'referrals.md');
 export const TARGET_TALENT_MD = path.join(DATA_DIR, 'target-talent.md');
 export const TT_CORR_DIR = path.join(DATA_DIR, 'target-talent-correspondence');
 export const LINKEDIN_SSI_DIR = path.join(DATA_DIR, 'linkedin-ssi');

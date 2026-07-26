@@ -1436,6 +1436,26 @@ body {
 }
 .inp:focus, .sel:focus, .ta:focus { border-color: var(--accent); }
 .ta { min-height: 80px; resize: vertical; }
+
+/* Referrals: borderless inline-edit cells that reveal a border on hover/focus,
+   so the tracker reads as a table but every cell is editable in place. */
+.ref-cell {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-sans, inherit);
+  font-size: 13px;
+  padding: 6px 8px;
+  width: 100%;
+  min-width: 90px;
+  outline: none;
+  transition: border-color .15s, background .15s;
+}
+.ref-cell::placeholder { color: var(--text-muted); }
+.ref-cell:hover { border-color: var(--border); }
+.ref-cell:focus { border-color: var(--accent); background: var(--bg-2); }
+.ref-table tr:hover { background: var(--bg-elev, rgba(127,127,127,0.05)); }
 .tag {
   display: inline-flex;
   align-items: center;
