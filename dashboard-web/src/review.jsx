@@ -1,5 +1,5 @@
 // Review tab — the weekly tracking view. The three floors with teeth, the
-// leading indicators, the build-lock state, and a one-field LinkedIn-connect
+// leading indicators, the live rolling build-cap floor, and a one-field LinkedIn-connect
 // logger. Reads the same numbers weekly-review.mjs reviews (GET
 // /api/metrics/weekly and /api/review/status), so the screen and the CLI can
 // never disagree. A blank source shows "not logged", never a fake zero.
@@ -550,10 +550,9 @@ window.ReviewTab = function ReviewTab({ toast }) {
       .then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); return; }
-        setStatus({ lock: res.lock, lastReview: res.lastReview, history: res.history });
+        setStatus({ lastReview: res.lastReview, history: res.history });
         load();
-        const nowLocked = res.lock && res.lock.locked;
-        toast && toast(nowLocked ? 'Week logged. Build lock ENGAGED.' : `Weekly review logged (${res.weekStart}).`, nowLocked ? 'warn' : 'success');
+        toast && toast(`Weekly review logged (${res.weekStart}).`, 'success');
       })
       .catch(e => toast && toast(e.message, 'error'))
       .finally(() => setRunning(false));

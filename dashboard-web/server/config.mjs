@@ -46,11 +46,11 @@ export const STATUS_EVENTS_PATH = path.join(DATA_DIR, 'status-events.tsv');
 // re-scan is idempotent). Both are gitignored personal data under DATA_DIR.
 export const GOOGLE_TOKENS_PATH = path.join(DATA_DIR, 'google-tokens.json');
 export const GOOGLE_SYNC_PATH = path.join(DATA_DIR, 'google-sync.json');
-// Weekly review with teeth: the append-only review log, the build-lock state it
-// can engage, and a manual LinkedIn-connects tally (connections are sent by hand,
-// so the count is logged here). All gitignored personal data under DATA_DIR.
+// Weekly review with teeth: the append-only review log and a manual
+// LinkedIn-connects tally (connections are sent by hand, so the count is logged
+// here). All gitignored personal data under DATA_DIR. The old build-lock.json
+// (weekly lock) is retired; the build cap is the live rolling floor below.
 export const REVIEW_LOG_PATH = path.join(DATA_DIR, 'review-log.json');
-export const BUILD_LOCK_PATH = path.join(DATA_DIR, 'build-lock.json');
 // Rolling outreach floor (v1): PTO days + monthly reset log. Gitignored user data.
 export const BUILD_FLOOR_PATH = path.join(DATA_DIR, 'build-floor.json');
 export const CONNECTS_PATH = path.join(DATA_DIR, 'linkedin-connects.json');
