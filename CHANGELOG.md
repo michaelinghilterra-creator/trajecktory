@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.0.2...v2.1.0) (2026-07-26)
+
+
+### Features
+
+* bullet tailoring, posts composer, editable drafts, interview summary, and a product-led README ([#98](https://github.com/michaelinghilterra-creator/trajecktory/issues/98)) ([970b316](https://github.com/michaelinghilterra-creator/trajecktory/commit/970b3165dfdf20015435248bb7624772319452f6))
+
 ## [2.0.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.0.1...v2.0.2) (2026-07-26)
 
 
