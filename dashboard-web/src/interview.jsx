@@ -326,7 +326,7 @@ function CalibrationPanel({ cam, setCam }) {
     <div className="card" style={{ padding: 12 }}>
       <div className="card-head" style={{ marginBottom: 8 }}>
         <span className="card-title">Camera calibration</span>
-        <span className="card-meta mono" title="Saved per display — laptop and docked are different numbers">
+        <span className="card-meta mono" title="Saved per display: laptop and docked are different numbers">
           {(typeof screen !== 'undefined' ? screen.width + '×' + screen.height : 'display')}
         </span>
       </div>
@@ -1468,7 +1468,7 @@ window.InterviewTab = function InterviewTab({ apps, toast }) {
                         set of document keydown/click listeners behind the overlay and
                         fight the real one over the Esc contract. */}
                     {present ? (
-                      <div className="no-data" style={{ padding: 24 }}>Presenting — press Esc to come back.</div>
+                      <div className="no-data" style={{ padding: 24 }}>Presenting. Press Esc to come back.</div>
                     ) : (
                       <Board
                         key={selId + ':' + selRound}

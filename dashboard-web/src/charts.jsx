@@ -47,7 +47,7 @@ window.FunnelChart = function FunnelChart({ data, height = 220 }) {
         const drop = next ? Math.round((d.value - next.value) / Math.max(d.value, 1) * 100) : null;
         const conv = total ? Math.round((d.value / total) * 100) : 0;
         const topApps = (d.apps || []).slice().sort((a, b) => b.score - a.score).slice(0, 3);
-        const avgScore = (() => { const sc = (d.apps || []).filter(a => a.score != null); return sc.length ? (sc.reduce((s, a) => s + a.score, 0) / sc.length).toFixed(2) : "—"; })();
+        const avgScore = (() => { const sc = (d.apps || []).filter(a => a.score != null); return sc.length ? (sc.reduce((s, a) => s + a.score, 0) / sc.length).toFixed(2) : "-"; })();
         const insight = hover.i === 0
           ? `Entry point: every logged role lands here.`
           : !next
@@ -260,7 +260,7 @@ window.Timeline = function Timeline({ apps, days = 28, height = 160 }) {
         const labeled = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
         const items = d.items;
         const top = items.slice().sort((a, b) => b.score - a.score).slice(0, 3);
-        const avg = (() => { const sc = items.filter(a => a.score != null); return sc.length ? (sc.reduce((s, a) => s + a.score, 0) / sc.length).toFixed(2) : "—"; })();
+        const avg = (() => { const sc = items.filter(a => a.score != null); return sc.length ? (sc.reduce((s, a) => s + a.score, 0) / sc.length).toFixed(2) : "-"; })();
         const dAgo = window.daysAgo(d.date);
         const insight = items.length === 0
           ? "Quiet day. No roles logged."
@@ -389,7 +389,7 @@ window.HBars = function HBars({ data, height = 200, format = (v) => v.toFixed(2)
               <div className="tip-row"><span className="l">{unit} in bucket</span><span className="v">{items.length}</span></div>
               {top.length > 0 && <div className="tip-co">{top.map((a, i) => (
                 <span key={a.id || i}>
-                  <b>{a.company || a.label || "—"}</b>
+                  <b>{a.company || a.label || "-"}</b>
                   {typeof a.score === "number" ? ` ${window.fmtScore(a.score)}` : ""}
                   {i < top.length - 1 ? " · " : ""}
                 </span>
@@ -484,7 +484,7 @@ window.Velocity = function Velocity({ apps, windowDays = 7, color = "var(--cyan)
         const dateObj = new Date(s.date + "T00:00:00Z");
         const labeled = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
         const top = s.items.slice().sort((a,b)=>b.score-a.score).slice(0,3);
-        const avgS = (() => { const sc = s.items.filter(a => a.score != null); return sc.length ? (sc.reduce((a, b) => a + b.score, 0) / sc.length).toFixed(2) : "—"; })();
+        const avgS = (() => { const sc = s.items.filter(a => a.score != null); return sc.length ? (sc.reduce((a, b) => a + b.score, 0) / sc.length).toFixed(2) : "-"; })();
         const prevS = series[hover.i - windowDays]?.sum;
         const wow = prevS != null ? s.sum - prevS : null;
         const insight = s.sum === 0 ? `No activity in this ${periodLabel} window.`
@@ -838,7 +838,7 @@ window.Sankey = function Sankey({ apps }) {
           const n = hover.payload;
           const pct = flow.total ? Math.round((n.count / flow.total) * 100) : 0;
           const top = n.items.slice().sort((a,b)=>b.score-a.score).slice(0,3);
-          const avgS = (() => { const sc = n.items.filter(a => a.score != null); return sc.length ? (sc.reduce((s, a) => s + a.score, 0) / sc.length).toFixed(2) : "—"; })();
+          const avgS = (() => { const sc = n.items.filter(a => a.score != null); return sc.length ? (sc.reduce((s, a) => s + a.score, 0) / sc.length).toFixed(2) : "-"; })();
           const lastReached = "reached-" + (window.FUNNEL_ORDER.length - 1);
           const insight = n.id.startsWith("arch-") ? `Source archetype: ${pct}% of total roles tracked.`
             : n.id === "discarded" ? "Dismissed: SKIP, Not a Fit, or Discarded, filtered before applying."

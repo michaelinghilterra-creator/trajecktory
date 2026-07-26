@@ -109,7 +109,7 @@ window.FUNNEL_ORDER = ["Evaluated","Applied","Responded",...window.INTERVIEW_STA
 // ("$200,000" → 200), shorthand ("$150K" → 150), and noise suffixes (USD,
 // USD/year, /yr, annually). Currency is assumed USD for an American user.
 window.parseComp = function parseComp(s) {
-  if (!s || typeof s !== 'string') return { display: '—', salary: null };
+  if (!s || typeof s !== 'string') return { display: '-', salary: null };
   // Strip currency suffix noise. Replace USD-* tokens with a single space so
   // adjacent words don't run together ("USD base" → " base"), then collapse
   // multiple spaces.

@@ -39,7 +39,7 @@ function ttDomain(email) {
 }
 
 function relTouch(d) {
-  if (!d) return "—";
+  if (!d) return "-";
   const now = new Date();
   const then = new Date(d);
   const days = Math.round((now - then) / 864e5);
@@ -260,17 +260,17 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
                       </div>
                     </td>
                     <td title={c.title || "No job title recorded for this contact"}>
-                      <span style={{ fontSize: 12, color: "var(--text-dim)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} aria-label={c.title || "No job title recorded"}>{c.title || "—"}</span>
+                      <span style={{ fontSize: 12, color: "var(--text-dim)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} aria-label={c.title || "No job title recorded"}>{c.title || "-"}</span>
                     </td>
                     <td title={c.company || ""}>
                       <span style={{ fontWeight: 600, fontSize: 12, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.company}</span>
                     </td>
                     <td>
-                      <span style={{ fontSize: 12, color: loc ? "var(--text-dim)" : "var(--text-mute)" }} title={loc || "No location recorded for this contact"} aria-label={loc || "No location recorded"}>{loc || "—"}</span>
+                      <span style={{ fontSize: 12, color: loc ? "var(--text-dim)" : "var(--text-mute)" }} title={loc || "No location recorded for this contact"} aria-label={loc || "No location recorded"}>{loc || "-"}</span>
                     </td>
                     <td><StatusBadge status={c.status} size="sm" /></td>
                     <td>
-                      <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: c.lastTouch ? "var(--text-dim)" : "var(--text-mute)" }} title={c.lastTouch ? relTouch(c.lastTouch) : "Never contacted"} aria-label={c.lastTouch ? relTouch(c.lastTouch) : "Never contacted"}>{c.lastTouch ? relTouch(c.lastTouch) : "—"}</span>
+                      <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: c.lastTouch ? "var(--text-dim)" : "var(--text-mute)" }} title={c.lastTouch ? relTouch(c.lastTouch) : "Never contacted"} aria-label={c.lastTouch ? relTouch(c.lastTouch) : "Never contacted"}>{c.lastTouch ? relTouch(c.lastTouch) : "-"}</span>
                     </td>
                   </tr>
                 );
@@ -565,7 +565,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
             <div className="info-row">
               <span className="ik">Email</span>
               <span className="iv">
-                {data.email || "—"}
+                {data.email || "-"}
                 {(() => {
                   const n = data.notes || "";
                   const bounced  = /EMAIL BOUNCED|bounced/i.test(n);
@@ -587,7 +587,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
             )}
             <div className="info-row">
               <span className="ik">Location</span>
-              <span className="iv">{[data.city, data.state].filter(Boolean).join(", ") || "—"}</span>
+              <span className="iv">{[data.city, data.state].filter(Boolean).join(", ") || "-"}</span>
               <span />
             </div>
             <div className="info-row">
@@ -599,7 +599,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
             </div>
             <div className="info-row">
               <span className="ik">Last touch</span>
-              <span className="iv" style={{ fontFamily: "var(--mono)", fontSize: 12 }}>{data.lastTouch || "—"}</span>
+              <span className="iv" style={{ fontFamily: "var(--mono)", fontSize: 12 }}>{data.lastTouch || "-"}</span>
               <span />
             </div>
           </div>

@@ -266,7 +266,7 @@ function LpSelect({ label, value, onChange, options, optional, hint }) {
     <div className="field">
       <label>{label}{optional ? ' · optional' : ''}</label>
       <select className="inp" value={value || ''} onChange={e => onChange(e.target.value)}>
-        <option value="">— select —</option>
+        <option value="">Select…</option>
         {opts.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
       {hint && <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 3, lineHeight: 1.4 }}>{hint}</div>}
@@ -346,7 +346,7 @@ function LpSummaryBox({ id, configured }) {
 const LP_TIER = { haiku: 'fast · cheapest', sonnet: 'balanced', opus: 'deepest · priciest' };
 const LP_MODE_LABEL = { pipeline: 'Evaluate', deep: 'Deep eval', scan: 'Agent Scan', triage: 'Triage' };
 function lpUsd(n) {
-  if (n == null || isNaN(n)) return '—';
+  if (n == null || isNaN(n)) return '-';
   return n < 0.01 ? `$${n.toFixed(3)}` : `$${n.toFixed(2)}`;
 }
 function ModelsCostPanel() {
@@ -480,9 +480,9 @@ function ModelsCostPanel() {
             <tbody>
               {history.map((h, i) => (
                 <tr key={i} style={{ color: 'var(--text-dim)', borderTop: '1px solid var(--border)' }}>
-                  <td style={{ padding: '4px 8px 4px 0' }}>{h.ts ? new Date(h.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</td>
+                  <td style={{ padding: '4px 8px 4px 0' }}>{h.ts ? new Date(h.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}</td>
                   <td style={{ padding: '4px 8px' }}>{LP_MODE_LABEL[h.mode] || h.mode}</td>
-                  <td style={{ padding: '4px 8px' }}>{h.model && h.model !== 'default' ? h.model : '—'} <span style={{ color: 'var(--text-mute)' }}>· {h.billedTo === 'api' ? 'key avail.' : 'plan'}</span></td>
+                  <td style={{ padding: '4px 8px' }}>{h.model && h.model !== 'default' ? h.model : '-'} <span style={{ color: 'var(--text-mute)' }}>· {h.billedTo === 'api' ? 'key avail.' : 'plan'}</span></td>
                   <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }} title="Local estimate from token counts, not your API invoice.">~{lpUsd(h.cost)} <span style={{ color: 'var(--text-mute)' }}>est.</span></td>
                 </tr>
               ))}
@@ -948,7 +948,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         delete pendingBaseline.current[sectionId];
         setCheckMsg(m => { const n = { ...m }; delete n[sectionId]; return n; });
         track('handoff_verified', { step: sectionId });
-        toast && toast('Confirmed — that step is saved', 'success');
+        toast && toast('Confirmed. That step is saved', 'success');
       } else {
         // The single most useful signal in the whole log: a handoff the user
         // believed they had run, that produced nothing. Invisible from outside.

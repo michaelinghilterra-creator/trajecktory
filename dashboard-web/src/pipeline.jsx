@@ -54,7 +54,7 @@ const scoreBucket = (s) => s == null ? 'na' : s >= 4.0 ? 'strong' : s >= 3.0 ? '
 const scoreColor = (s) => s == null ? 'var(--text-mute)' : s >= 4.0 ? 'var(--green)' : s >= 3.0 ? 'var(--yellow)' : 'var(--red)';
 
 function shortenComp(raw) {
-  if (!raw) return '—';
+  if (!raw) return '-';
   const nums = (raw.match(/\$[\d,]+/g) || []).map(s => parseInt(s.replace(/[^\d]/g, ''), 10));
   if (nums.length === 0) return raw.length > 22 ? raw.slice(0, 21) + '…' : raw;
   const k = (n) => (n >= 1000 ? '$' + Math.round(n / 1000) + 'K' : '$' + n);
@@ -81,7 +81,7 @@ function relAge(days) {
 function monogram(name) {
   const clean = (name || '').replace(/[^A-Za-z0-9 ]/g, '').trim();
   const parts = clean.split(/\s+/).filter(Boolean);
-  if (!parts.length) return '—';
+  if (!parts.length) return '-';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
@@ -94,7 +94,7 @@ function monogram(name) {
 function engineOf(resume) {
   if (!resume) return null;
   const cleaned = String(resume).trim();
-  if (!cleaned || cleaned === '—' || cleaned === '-') return null;
+  if (!cleaned || cleaned === '-' || cleaned === '-') return null;
   if (ENGINE_META[cleaned]) return cleaned; // known engine
   // Filenames map to the default generator
   if (/\.docx$/i.test(cleaned)) return 'CareerOps';
@@ -159,7 +159,7 @@ function StatusBadge({ status, size = 'md' }) {
 }
 
 function SourcePill({ source }) {
-  const s = SOURCE[source] || { short: source || '—', color: 'var(--text-dim)', rgb: '139,139,148' };
+  const s = SOURCE[source] || { short: source || '-', color: 'var(--text-dim)', rgb: '139,139,148' };
   return (
     <span className="src-pill" style={{ color: s.color, borderColor: `rgba(${s.rgb},0.38)`, background: `rgba(${s.rgb},0.1)` }}>
       <span className="sp-dot" style={{ background: s.color }} />
@@ -199,7 +199,7 @@ function Kpi({ k, v, sub, icon, color }) {
 function OverviewKpis({ apps, isStale = () => false }) {
   const inFlight = apps.filter(a => ['Responded', 'Offer'].includes(a.status) || window.isInterviewStage(a.status)).length;
   const scored = apps.filter(a => a.score != null);
-  const avg = scored.length ? (scored.reduce((s, a) => s + a.score, 0) / scored.length).toFixed(2) : '—';
+  const avg = scored.length ? (scored.reduce((s, a) => s + a.score, 0) / scored.length).toFixed(2) : '-';
   const strong = scored.filter(a => a.score >= 4.0).length;
   const stale = apps.filter(a => isStale(a)).length;
   const interviews = apps.filter(a => window.isInterviewStage(a.status)).length;
@@ -397,7 +397,7 @@ function buildTriageRows(cards) {
     rows.push({
       id: 'tri-' + c.url, _triage: true,
       date: c.date || today, company: c.company, role: c.title,
-      archetype: '—', score: c.score, status: 'Triage', source: null,
+      archetype: '-', score: c.score, status: 'Triage', source: null,
       url: c.url, rationale: c.rationale,
       report: null, resume: null, compStated: null, salary: null,
       sector: '', sectorRaw: '', legitimacy: null, target: null, size: null,
@@ -507,7 +507,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
                 <tr key={a.id} className={(selId === a.id ? 'selected ' : '') + (stale ? 'stale' : '')}
                   style={a._triage ? { cursor: 'default', background: 'rgba(148,163,184,0.05)' } : undefined}
                   onClick={() => onOpen(a)}>
-                  <td className="id">{a._triage ? '—' : String(a.id).padStart(3, '0')}</td>
+                  <td className="id">{a._triage ? '-' : String(a.id).padStart(3, '0')}</td>
                   <td className="t-date">{a.date?.slice(5)}<span className="age">{relAge(sit)}</span></td>
                   <td className="t-co-cell">
                     <div className="co-cell">
@@ -733,7 +733,7 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
         <Kpi k="Interview Rate" v={intvRate + '%'} sub={`${intvAll} reached a screen · all time`} icon={PI.briefcase} />
         <Kpi
           k="Avg Days to Rejection"
-          v={rejTiming && rejTiming.n > 0 ? rejTiming.avgDays + 'd' : '—'}
+          v={rejTiming && rejTiming.n > 0 ? rejTiming.avgDays + 'd' : '-'}
           sub={rejTiming && rejTiming.n > 0
             ? `median ${rejTiming.medianDays}d · n=${rejTiming.n}${rejTiming.excluded ? ` · ${rejTiming.excluded} excluded (date conflict)` : ''}`
             : 'fills as you mark rejections'}
@@ -810,7 +810,7 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
           {vel.map(({ s, avgAge, n }) => (
             <div className="pl-histo-col" key={s.id}>
               <div className="pl-histo-bar" style={{ height: `${n ? Math.max((avgAge / maxAge) * 100, 4) : 0}%`, background: s.color, opacity: 0.85 }}>
-                <span className="hn">{n ? avgAge + 'd' : '—'}</span>
+                <span className="hn">{n ? avgAge + 'd' : '-'}</span>
               </div>
               <span className="pl-histo-x" style={{ color: s.color }}>{s.id}</span>
             </div>
@@ -1326,7 +1326,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                   value={eventDate}
                   max={localToday()}
                   onChange={e => setEventDate(e.target.value)}
-                  title="When this was booked or notified — not when it was conducted, and not when you're typing it in. Defaults to today."
+                  title="When this was booked or notified, not when it was conducted, and not when you're typing it in. Defaults to today."
                 />
                 {!isClosed && m.stage > 0 && <button className="btn ghost sm" onClick={() => onStatusChange && onStatusChange(app, STATUS[m.stage - 1].id, eventDate)}>← Back</button>}
                 {!isClosed && m.stage < LAST_STAGE && <button className="btn ghost sm" style={{ color: 'var(--accent-2)' }} onClick={() => onStatusChange && onStatusChange(app, STATUS[m.stage + 1].id, eventDate)}>Advance →</button>}
@@ -1397,7 +1397,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                 <div className="rp-snap">
                   <div className="rp-snap-label">Comp</div>
                   <div className="rp-snap-value mono" style={{ fontSize: 16 }}>
-                    {comp && comp.stated ? (comp.stated.length > 16 ? comp.stated.slice(0, 15) + '…' : comp.stated) : (app.salary != null ? `$${app.salary}k` : '—')}
+                    {comp && comp.stated ? (comp.stated.length > 16 ? comp.stated.slice(0, 15) + '…' : comp.stated) : (app.salary != null ? `$${app.salary}k` : '-')}
                   </div>
                   {app.salary != null && app.target != null && (
                     <div className="rp-snap-sub" style={{ color: gap >= 0 ? 'var(--green)' : 'var(--red)' }}>{gap >= 0 ? '+' : ''}{gap}k vs target</div>
@@ -1405,7 +1405,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                 </div>
                 <div className="rp-snap">
                   <div className="rp-snap-label">Domain</div>
-                  <div className="rp-snap-value sm">{app.sector || '—'}</div>
+                  <div className="rp-snap-value sm">{app.sector || '-'}</div>
                   <div className="rp-snap-sub">{(cs && cs.archetypeDetected) || app.archetype || ''}</div>
                 </div>
                 <div className="rp-snap">
@@ -1591,7 +1591,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               {comp ? (
                 <>
                   <div className="rp-snap-grid three">
-                    <div className="rp-snap"><div className="rp-snap-label">Stated OTE</div><div className="rp-snap-value sm">{comp.stated || '—'}</div>{comp.score && <div className="rp-snap-sub">{comp.score}/5 comp score</div>}</div>
+                    <div className="rp-snap"><div className="rp-snap-label">Stated OTE</div><div className="rp-snap-value sm">{comp.stated || '-'}</div>{comp.score && <div className="rp-snap-sub">{comp.score}/5 comp score</div>}</div>
                     <div className="rp-snap"><div className="rp-snap-label">Posted vs target</div><div className="rp-snap-value mono" style={{ fontSize: 18, color: gap >= 0 ? 'var(--green)' : 'var(--red)' }}>{gap >= 0 ? '+' : '−'}{Math.abs(gap)}k</div>{app.salary != null && app.target != null && <div className="rp-snap-sub">${app.salary}k · ${app.target}k tgt</div>}</div>
                     {comp.walkaway && <div className="rp-snap"><div className="rp-snap-label">Walk-away</div><div className="rp-snap-value mono" style={{ fontSize: 18 }}>${comp.walkaway}k</div><div className="rp-snap-sub" style={{ color: app.salary >= comp.walkaway ? 'var(--green)' : 'var(--red)' }}>{app.salary >= comp.walkaway ? 'cleared' : 'below'}</div></div>}
                   </div>
@@ -2243,7 +2243,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
             <tr key={a.id} className={stale ? 'stale' : ''}
               style={a._triage ? { cursor: 'default', background: 'rgba(148,163,184,0.05)' } : undefined}
               onClick={() => onOpen(a)}>
-              <td className="id">{a._triage ? '—' : String(a.id).padStart(3, '0')}</td>
+              <td className="id">{a._triage ? '-' : String(a.id).padStart(3, '0')}</td>
               <td className="date">{a.date?.slice(5)}</td>
               <td className="company t-co-cell">
                 <div className="co-cell">
@@ -2272,7 +2272,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
               </td>
               <td className="dim" style={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 0 }}
                 title={a.sectorRaw || a.sector || ''}>
-                {a.sector || '—'}
+                {a.sector || '-'}
               </td>
               <td><StatusBadge status={a.status} /></td>
               <td><ScoreChip score={a.score} provisional={a._triage} /></td>

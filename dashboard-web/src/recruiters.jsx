@@ -61,12 +61,12 @@ function firmIdFromName(name) {
   return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 function locStr(c) {
-  if (!c.city) return '—';
-  if (!c.state || c.state === '—') return c.city;
+  if (!c.city) return '-';
+  if (!c.state || c.state === '-') return c.city;
   return `${c.city}, ${c.state}`;
 }
 function relTouch(d) {
-  if (!d) return '—';
+  if (!d) return '-';
   const today = new Date();
   const days = Math.round((today - new Date(d)) / 864e5);
   if (days <= 0) return 'today';
@@ -204,7 +204,7 @@ function KpiHero({ kpis }) {
       </div>
       <div className="kpi-mini-col">
         <MiniKpi icon={REC_I.inbound} k="Response Rate"
-          v={kpis.touched ? `${kpis.response}%` : '—'}
+          v={kpis.touched ? `${kpis.response}%` : '-'}
           sub={kpis.touched ? `${kpis.replied} replied of ${kpis.touched}` : 'awaiting first send'} />
         <MiniKpi icon={REC_I.msg} k="Active Convos" v={kpis.inFlight}
           sub="replied · meeting · connected"
@@ -736,7 +736,7 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
         {/* These thresholds are working targets you set, not industry benchmarks,
             and the copy says so. The word "benchmark" used to be here and it made a
             local rule of thumb sound like an external standard nobody could cite. */}
-        <RecKpi label="Response Rate" value={sent ? `${responseRate}%` : '—'}
+        <RecKpi label="Response Rate" value={sent ? `${responseRate}%` : '-'}
           sub={sent === 0 ? 'Send your first batch this week'
              : responseRate >= 10 ? 'Above your 10% target, your hook works'
              : responseRate >= 5 ? 'Around your 5% floor, sharpen openers'
@@ -821,7 +821,7 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
                 </span>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fullName}</div>
-                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub || '—'}</div>
+                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub || '-'}</div>
                 </div>
                 <span className="mono" style={{ fontSize: 11, color, whiteSpace: 'nowrap' }}>{verdict(c)}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -871,12 +871,12 @@ function RecAnalyticsView({ recruiters, firms }) {
 
       <div className="grid cols-4" style={{ marginBottom: 14 }}>
         <MiniKpi icon={REC_I.outbound} k="Sent → Replied"
-          v={sent ? Math.round((replied / sent) * 100) + '%' : '—'}
+          v={sent ? Math.round((replied / sent) * 100) + '%' : '-'}
           sub={sent ? `${replied} of ${sent} sent` : 'no outreach sent yet'} />
         <MiniKpi icon={REC_I.clock} k="Replied → Meeting"
-          v={replied ? Math.round((meeting / replied) * 100) + '%' : '—'}
+          v={replied ? Math.round((meeting / replied) * 100) + '%' : '-'}
           sub={`${meeting} meetings booked`} />
-        <MiniKpi icon={REC_I.clock} k="Avg Days to Reply" v="—" sub="from first outreach" />
+        <MiniKpi icon={REC_I.clock} k="Avg Days to Reply" v="-" sub="from first outreach" />
         <MiniKpi icon={REC_I.users} k="Connected" v={connected} sub="relationships established" />
       </div>
 
@@ -1094,17 +1094,17 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
                       </div>
                     </td>
                     <td title={c.title || ''}>
-                      <span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || '—'}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || '-'}</span>
                     </td>
                     <td title={c.firm || ''}>
                       <span style={{ fontWeight: 600, fontSize: 12, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.firm.split(' — ')[0]}</span>
                     </td>
                     <td>
-                      <span style={{ fontSize: 12, color: locStr(c) === '—' ? 'var(--text-mute)' : 'var(--text-dim)' }}>{locStr(c)}</span>
+                      <span style={{ fontSize: 12, color: locStr(c) === '-' ? 'var(--text-mute)' : 'var(--text-dim)' }}>{locStr(c)}</span>
                     </td>
                     <td><RecStatusBadge status={c.status} size="sm" /></td>
                     <td>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: c.lastTouch ? 'var(--text-dim)' : 'var(--text-mute)' }}>{c.lastTouch ? relTouch(c.lastTouch) : '—'}</span>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: c.lastTouch ? 'var(--text-dim)' : 'var(--text-mute)' }}>{c.lastTouch ? relTouch(c.lastTouch) : '-'}</span>
                     </td>
                   </tr>
                 );

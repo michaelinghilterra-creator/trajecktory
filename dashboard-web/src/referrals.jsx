@@ -41,7 +41,7 @@ function RefCopyBtn({ text, label }) {
 const REF_TEMPLATES = [
   {
     id: 'reconnect',
-    title: 'Template 1 — reconnect, no ask yet',
+    title: 'Template 1: reconnect, no ask yet',
     hint: 'Use first for anyone you have lost touch with. It opens the door; the ask comes after they reply.',
     body: `Subject: Long overdue hello
 
@@ -55,7 +55,7 @@ No agenda on this one, I would just genuinely like to catch up and hear what you
   },
   {
     id: 'ask',
-    title: 'Template 2 — the referral ask',
+    title: 'Template 2: the referral ask',
     hint: 'Use once you are back in touch, or for someone you are already close with. Make it specific and easy to say yes to.',
     body: `Hi [First],
 
@@ -69,7 +69,7 @@ Thanks either way,
   {
     id: 'blurb',
     title: 'Blurb to attach',
-    hint: 'A two-line summary they can forward. Fill in from your own CV — no invented numbers.',
+    hint: 'A two-line summary they can forward. Fill in from your own CV. No invented numbers.',
     body: `[Your headline identity, e.g. "Revenue Operations and analytics leader."] [One or two quantified proof points taken verbatim from your CV.] Targeting [target titles], [location or remote]. Resume attached.`,
   },
 ];
@@ -221,19 +221,19 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
               {filtered.map(row => (
                 <tr key={row.id} style={{ borderTop: '1px solid var(--border)' }}>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.name} placeholder="—"
+                    <input className="ref-cell" defaultValue={row.name} placeholder="-"
                       onBlur={e => e.target.value !== row.name && patch(row.id, { name: e.target.value })} />
                   </td>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.how} placeholder="—"
+                    <input className="ref-cell" defaultValue={row.how} placeholder="-"
                       onBlur={e => e.target.value !== row.how && patch(row.id, { how: e.target.value })} />
                   </td>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.where} placeholder="—"
+                    <input className="ref-cell" defaultValue={row.where} placeholder="-"
                       onBlur={e => e.target.value !== row.where && patch(row.id, { where: e.target.value })} />
                   </td>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.target} placeholder="—"
+                    <input className="ref-cell" defaultValue={row.target} placeholder="-"
                       onBlur={e => e.target.value !== row.target && patch(row.id, { target: e.target.value })} />
                   </td>
                   <td style={refTd}>
@@ -245,12 +245,12 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
                   </td>
                   <td style={refTd}>
                     <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                      <span className="mono dim" style={{ fontSize: 11, minWidth: 68 }}>{row.lastTouch || '—'}</span>
+                      <span className="mono dim" style={{ fontSize: 11, minWidth: 68 }}>{row.lastTouch || '-'}</span>
                       <button className="btn ghost sm" title="Log a touch today" onClick={() => logToday(row)}>Today</button>
                     </div>
                   </td>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.notes} placeholder="—"
+                    <input className="ref-cell" defaultValue={row.notes} placeholder="-"
                       onBlur={e => e.target.value !== row.notes && patch(row.id, { notes: e.target.value })} />
                   </td>
                   <td style={refTd}>

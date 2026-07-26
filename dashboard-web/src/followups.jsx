@@ -275,7 +275,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.company}</div>
                   <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {it.role || `${it.taFirst || ''} ${it.taLast || ''}`.trim() || '—'}
+                    {it.role || `${it.taFirst || ''} ${it.taLast || ''}`.trim() || '-'}
                   </div>
                 </div>
                 <span className="mono" style={{ fontSize: 11, color, whiteSpace: 'nowrap' }}>{label}</span>

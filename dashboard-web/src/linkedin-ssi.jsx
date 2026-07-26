@@ -211,7 +211,7 @@ function LinkedInSSITab({ toast }) {
           <div>
             <h1>LinkedIn SSI</h1>
             <div className="sub">
-              score {ssiData?.score ?? '—'} / 100 · target {ssiData?.target ?? 60} · {influencers.length} influencers tracked · {engagementLog.filter(a => new Date(a.date) >= new Date(Date.now() - 7*24*60*60*1000)).length} touchpoints this week
+              score {ssiData?.score ?? '-'} / 100 · target {ssiData?.target ?? 60} · {influencers.length} influencers tracked · {engagementLog.filter(a => new Date(a.date) >= new Date(Date.now() - 7*24*60*60*1000)).length} touchpoints this week
             </div>
           </div>
         </div>
@@ -676,7 +676,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
                       </div>
                     </td>
                     <td className="ssi-title" title={p.role || ""}>
-                      <span style={{ fontSize: 12, color: "var(--text-dim)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.role || "—"}</span>
+                      <span style={{ fontSize: 12, color: "var(--text-dim)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.role || "-"}</span>
                     </td>
                     <td>
                       <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: tm.color, border: `1px solid ${tm.color}`, padding: "2px 7px", borderRadius: 5, opacity: .9, whiteSpace: "nowrap" }}>{tm.label}</span>
@@ -697,7 +697,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
                         ))}
                       </div>
                     </td>
-                    <td><span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: lt ? "var(--text-dim)" : "var(--text-mute)" }}>{lt ? lt.slice(5) : "—"}</span></td>
+                    <td><span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: lt ? "var(--text-dim)" : "var(--text-mute)" }}>{lt ? lt.slice(5) : "-"}</span></td>
                     <td>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--text-dim)" }}>
                         <span style={{ width: 6, height: 6, borderRadius: 99, background: motion.color, flex: "none" }} />
@@ -1070,7 +1070,7 @@ function WeeklyView({ weeks, target, setSsiData }) {
                 </>
               ) : (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 44, color: "var(--text-mute)", fontFamily: "var(--mono)", fontSize: 12 }}>
-                  — not recorded
+                  not recorded
                 </div>
               )}
             </div>
