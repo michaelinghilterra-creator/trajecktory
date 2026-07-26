@@ -1151,4 +1151,21 @@ async function main() {
   console.log('Done. Screenshots in', OUT);
 }
 
-main().catch((e) => { console.error('capture failed:', e); process.exit(1); });
+// Run the full guide capture only when invoked directly, so capture-readme.mjs
+// can import installMocks/clickNav and reuse the PII-safe mock harness without
+// triggering this run.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((e) => { console.error('capture failed:', e); process.exit(1); });
+}
+
+// Let an importer (capture-readme.mjs) drive the mock mode. The route handlers
+// read these module vars at request time, so setting them before page.goto is
+// enough. dataMode 'populated' serves the invented fixtures; 'empty' serves the
+// first-run empty states.
+export function setMode(opts = {}) {
+  if (opts.dataMode !== undefined) dataMode = opts.dataMode;
+  if (opts.stateMode !== undefined) stateMode = opts.stateMode;
+  if (opts.showTriage !== undefined) showTriage = opts.showTriage;
+}
+
+export { installMocks, clickNav, BASE, VIEWPORT, SCALE };
