@@ -595,7 +595,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
               <input className="inp" aria-label="Contact name" placeholder="Name (required)" value={draft.name}
                 onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
                 onKeyDown={e => { if (e.key === "Enter") submitNew(); }} autoFocus />
-              <input className="inp" aria-label="Role" placeholder="Role, e.g. VP of Revenue Operations" value={draft.role}
+              <input className="inp" aria-label="Role" placeholder="Role, e.g. VP of Marketing" value={draft.role}
                 onChange={e => setDraft(d => ({ ...d, role: e.target.value }))} />
               <input className="inp" aria-label="Track" placeholder="Track, e.g. revops" value={draft.track}
                 onChange={e => setDraft(d => ({ ...d, track: e.target.value }))} />

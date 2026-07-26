@@ -70,7 +70,7 @@ Thanks either way,
     id: 'blurb',
     title: 'Blurb to attach',
     hint: 'A two-line summary they can forward. Fill in from your own CV. No invented numbers.',
-    body: `[Your headline identity, e.g. "Revenue Operations and analytics leader."] [One or two quantified proof points taken verbatim from your CV.] Targeting [target titles], [location or remote]. Resume attached.`,
+    body: `[Your headline identity in one line, e.g. "Supply chain operations leader."] [One or two quantified proof points taken verbatim from your CV.] Targeting [target titles], [location or remote]. Resume attached.`,
   },
 ];
 
