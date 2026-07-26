@@ -30,6 +30,7 @@ import { router as postsRoutes } from './routes/posts.mjs';
 import { router as interviewRoutes } from './routes/interview.mjs';
 import { router as googleRoutes } from './routes/google.mjs';
 import { router as reviewRoutes } from './routes/review.mjs';
+import { router as buildFloorRoutes } from './routes/build-floor.mjs';
 import { router as systemRoutes, updateJobs } from './routes/system.mjs';
 import { getIdentity } from './lib/profile.mjs';
 
@@ -183,6 +184,7 @@ app.use(postsRoutes);
 app.use(interviewRoutes);
 app.use(googleRoutes);
 app.use(reviewRoutes);
+app.use(buildFloorRoutes);
 app.use(systemRoutes);
 
 // Public identity for the frontend's signature blocks, so no name/email/phone

@@ -427,6 +427,99 @@ function WeekOverWeek({ history }) {
   );
 }
 
+// The rolling outreach floor — the live build-cap gate (replaces the old weekly
+// lock banner). Reads GET /api/build-floor. Shows the trailing count vs floor, the
+// working-day window, a mark-day-off control, and the once-a-month reset.
+const ROLL_STATE = {
+  met:       { color: 'var(--green)',     label: 'On pace',            gate: 'Building unlocked.' },
+  grace:     { color: 'var(--blue)',      label: 'Reset grace period', gate: 'Building unlocked while you get back on track.' },
+  behind:    { color: 'var(--red)',       label: 'Behind pace',        gate: 'Building locked.' },
+  'ramp-in': { color: 'var(--text-mute)', label: 'Getting started',    gate: 'Floor not enforced yet.' },
+  'no-data': { color: 'var(--text-mute)', label: 'No touches yet',     gate: 'Floor not enforced yet.' },
+};
+
+function RollingFloor({ toast }) {
+  const [st, setSt] = useStateRv(null);
+  const [ptoDate, setPtoDate] = useStateRv('');
+  const load = useCallbackRv(() => { fetch('/api/build-floor').then(r => r.json()).then(setSt).catch(() => {}); }, []);
+  useEffectRv(() => { load(); }, [load]);
+  if (!st) return null;
+  const s = ROLL_STATE[st.state] || ROLL_STATE.behind;
+
+  const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const markPto = () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ptoDate)) { toast && toast('Pick a date first', 'warn'); return; }
+    post('/api/build-floor/pto', { date: ptoDate, on: true }).then(r => r.json())
+      .then(x => { setSt(x); setPtoDate(''); toast && toast(`Marked ${ptoDate} as a day off`, 'success'); }).catch(() => {});
+  };
+  const clearPto = (d) => post('/api/build-floor/pto', { date: d, on: false }).then(r => r.json()).then(setSt).catch(() => {});
+  const doReset = () => {
+    if (!window.confirm(`Use your monthly reset?\n\nThis starts a ${st.graceDays}-working-day grace period where the floor is paused so you can get back on track. It does not lower the floor, and you get one per month.`)) return;
+    post('/api/build-floor/reset').then(async r => {
+      const x = await r.json();
+      if (!r.ok) { toast && toast(x.error || 'Reset unavailable', 'warn'); if (x.status) setSt(x.status); return; }
+      setSt(x); toast && toast(`Reset used. Floor paused through ${x.graceUntil}.`, 'success');
+    }).catch(() => {});
+  };
+  const mmdd = (d) => (d ? d.slice(5) : '');
+
+  return (
+    <div className="card" style={{ borderLeft: `3px solid ${s.color}`, marginBottom: 18, padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Build cap · rolling outreach floor</div>
+          <div className="dim mono" style={{ fontSize: 11, marginTop: 2 }}>
+            Verified touches over your trailing {st.windowDays} working days.
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div className="mono" style={{ fontSize: 22, fontWeight: 700, color: s.color }}>
+            {st.trailingCount} <span className="dim" style={{ fontSize: 14 }}>/ {st.floor}</span>
+          </div>
+          <div className="mono" style={{ fontSize: 11, color: s.color }}>{s.label}</div>
+        </div>
+      </div>
+
+      <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
+        <span style={{ color: s.color, fontWeight: 600 }}>{s.gate}</span>{' '}
+        {st.state === 'behind' && `${st.gap} more ${st.gap === 1 ? 'touch' : 'touches'} in your trailing week unlocks it — weekend touches count.`}
+        {st.state === 'grace' && `Grace period active through ${st.graceUntil}.`}
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap' }}>
+        {st.window.map(day => (
+          <div key={day} title={day} style={{ textAlign: 'center', minWidth: 42, padding: '4px 6px', borderRadius: 6, background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
+            <div className="mono" style={{ fontSize: 14, fontWeight: 700 }}>{(st.perDay.find(p => p.day === day) || {}).count || 0}</div>
+            <div className="dim mono" style={{ fontSize: 10 }}>{mmdd(day)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input type="date" value={ptoDate} onChange={e => setPtoDate(e.target.value)}
+          style={{ padding: '6px 8px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontSize: 12 }} />
+        <button className="btn ghost sm" onClick={markPto}>Mark day off</button>
+        <div style={{ flex: 1 }} />
+        <button className="btn ghost sm" onClick={doReset} disabled={!st.reset.availableThisMonth}
+          title={st.reset.availableThisMonth ? 'Starts a grace period so you can get back on track. Once a month.' : 'Already used this month.'}>
+          {st.reset.availableThisMonth ? 'Use monthly reset' : 'Reset used this month'}
+        </button>
+      </div>
+
+      {st.pto && st.pto.length ? (
+        <div className="dim mono" style={{ fontSize: 11, marginTop: 10 }}>
+          Days off:{' '}
+          {st.pto.map(d => (
+            <span key={d} style={{ marginRight: 8 }}>
+              {d} <a onClick={() => clearPto(d)} style={{ cursor: 'pointer', color: 'var(--accent)' }}>✕</a>
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 window.ReviewTab = function ReviewTab({ toast }) {
   const [data, setData] = useStateRv(null);
   const [status, setStatus] = useStateRv(null);
@@ -480,7 +573,6 @@ window.ReviewTab = function ReviewTab({ toast }) {
 
   const m = data.metrics || {};
   const floors = (data.floors && data.floors.results) || [];
-  const locked = status && status.lock && status.lock.locked;
   const history = (status && status.history) || [];
 
   return (
@@ -501,15 +593,10 @@ window.ReviewTab = function ReviewTab({ toast }) {
 
       <GmailPanel toast={toast} />
 
-      {locked ? (
-        <div className="card" style={{ borderLeft: '3px solid var(--red)', marginBottom: 18 }}>
-          <strong style={{ color: 'var(--red)' }}>Build lock engaged.</strong>{' '}
-          <span className="dim">{status.lock.reason}</span>
-          <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
-            Improvement work is locked. Break-fix, data integrity, live-process work, and sub-30-minute unblocks stay allowed.
-          </div>
-        </div>
-      ) : null}
+      <RollingFloor toast={toast} />
+      <p className="dim mono" style={{ fontSize: 11, marginTop: -8, marginBottom: 18 }}>
+        When behind, improvement work is locked. Break-fix, data integrity, live-process work, and sub-30-minute unblocks stay allowed.
+      </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 24 }}>
         {floors.map(r => <ReviewFloor key={r.key} r={r} />)}
