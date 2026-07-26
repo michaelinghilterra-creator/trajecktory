@@ -625,13 +625,32 @@ async function apply() {
     // 4. Checkout system files only
     console.log('Updating system files...');
     const updated = [];
+    const failedCheckouts = [];
     for (const path of SYSTEM_PATHS) {
       try {
         git('checkout', srcRef, '--', path);
         updated.push(path);
       } catch {
-        // File may not exist in remote (new additions), skip
+        // Distinguish two failures the old bare catch swallowed together:
+        //   - the path simply is not in <ref> (a system file added or removed
+        //     between versions) — benign, skip;
+        //   - a REAL checkout failure (a locked/read-only file, a permissions
+        //     error, a broken ref) — which silently leaves that system file at
+        //     the OLD version while the update reports success, i.e. a
+        //     half-updated install.
+        // `git cat-file -e <ref>:<path>` is true only when the path really
+        // exists in the ref, and is locale-independent (no error-text parsing).
+        // gitQuiet returns '' on success and null on failure, so test !== null.
+        const inRef = gitQuiet('cat-file', '-e', `${srcRef}:${path}`) !== null;
+        if (inRef) failedCheckouts.push(path);
       }
+    }
+    if (failedCheckouts.length) {
+      console.error(`Update failed: could not check out ${failedCheckouts.length} system path(s): ${failedCheckouts.join(', ')}`);
+      console.error('Rolling back the partial update so the install stays consistent. Retry the update, or reinstall from the latest installer.');
+      revertPaths(updated);
+      if (existsSync(lockFile)) unlinkSync(lockFile);
+      process.exit(1);
     }
 
     // 4b. Purge files that were REMOVED from the system layer.
@@ -703,6 +722,26 @@ async function apply() {
       execSync('npm install --ignore-scripts --silent', { cwd: ROOT, timeout: 60000 });
     } catch {
       console.log('npm install skipped (may need manual run)');
+    }
+
+    // 6b. Rebuild the dashboard UI. The bundles the server actually serves live in
+    //     dashboard-web/src/dist, which is gitignored and therefore NOT part of the
+    //     system-file checkout above. So a self-update that changed any dashboard
+    //     source updated the .jsx but left the compiled dist/ stale — after the
+    //     restart the user would keep running the OLD UI (or a broken one if dist
+    //     was absent). Rebuild so the served bundle matches the code that just
+    //     landed. npm install ran first, so esbuild is present. A build failure is
+    //     surfaced loudly but does not abort: the server/modes update is already
+    //     valid; only the UI bundle is stale, and the message says how to fix it.
+    const buildScript = join(ROOT, 'dashboard-web', 'build.mjs');
+    if (existsSync(buildScript)) {
+      try {
+        execFileSync(process.execPath, ['build.mjs'], { cwd: join(ROOT, 'dashboard-web'), timeout: 120000, stdio: 'pipe' });
+        console.log('Dashboard UI rebuilt.');
+      } catch (e) {
+        console.error('DASHBOARD REBUILD FAILED — the dashboard may show a stale UI until you run: node dashboard-web/build.mjs');
+        console.error((e && (e.stderr?.toString?.() || e.message)) || String(e));
+      }
     }
 
     // 7. Commit the upstream update. A committer identity is forced via GIT_ENV so
