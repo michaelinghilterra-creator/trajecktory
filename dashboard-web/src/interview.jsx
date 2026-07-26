@@ -458,6 +458,18 @@ function prepRole(label) {
   return 'plain';
 }
 
+// Sections pinned open "above the fold"; the rest collapse into <details> so the
+// prep sheet opens as a glanceable summary (the pre-call strip, the opening, the
+// one story, and the reset when it goes sideways) with the deep reference one
+// click away. Keyed on ROLE so one rule serves a screen, an hm-round and a final
+// loop (the same principle as CRAM_BLOCKS below). Cross-panel threading, a final
+// loop's "most important thing", is pinned by label because its role is the same
+// 'why' as a screen's why-now, which stays collapsed.
+const ABOVE_FOLD_ROLES = new Set(['strip', 'open', 'hero', 'probes']);
+function isAboveFold(s) {
+  return ABOVE_FOLD_ROLES.has(s.role) || /cross-panel/i.test(s.label || '');
+}
+
 // THREE numbering grammars are on disk, not one:
 //
 //   "## §4B - Situational Question Bank"    the documented grammar
@@ -588,7 +600,13 @@ function PrepDoc({ doc, actions }) {
 
   const jump = (id) => {
     const el = nodes.current[id];
-    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (el) {
+      // Navigating the rail to a collapsed section opens it, so a jump never lands
+      // on a closed header with the content still hidden.
+      const d = el.querySelector('details.ib-secfold');
+      if (d) d.open = true;
+      if (el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
     setActive(id);
   };
 
@@ -627,21 +645,38 @@ function PrepDoc({ doc, actions }) {
         ) : null}
         {doc.meta.restHtml ? <div dangerouslySetInnerHTML={{ __html: doc.meta.restHtml }} /> : null}
 
-        {doc.sections.map(s => (
-          <section
-            key={s.id}
-            id={s.id}
-            className="ib-sec"
-            data-role={s.role}
-            ref={el => { nodes.current[s.id] = el; }}
-          >
-            <div className="ib-sechead">
+        {doc.sections.map(s => {
+          const pinned = isAboveFold(s);
+          const headInner = (
+            <>
               {s.marker ? <span className="ib-secmk">{s.marker}</span> : null}
               <span className="ib-sectitle">{s.label}</span>
-            </div>
-            <div className="ib-secbody" dangerouslySetInnerHTML={{ __html: s.html }} />
-          </section>
-        ))}
+              {!pinned ? <span className="dim ib-secmore" style={{ marginLeft: 8, fontSize: 11, fontWeight: 400 }}>expand</span> : null}
+            </>
+          );
+          return (
+            <section
+              key={s.id}
+              id={s.id}
+              className="ib-sec"
+              data-role={s.role}
+              data-fold={pinned ? 'open' : 'collapsed'}
+              ref={el => { nodes.current[s.id] = el; }}
+            >
+              {pinned ? (
+                <>
+                  <div className="ib-sechead">{headInner}</div>
+                  <div className="ib-secbody" dangerouslySetInnerHTML={{ __html: s.html }} />
+                </>
+              ) : (
+                <details className="ib-secfold">
+                  <summary className="ib-sechead" style={{ cursor: 'pointer' }}>{headInner}</summary>
+                  <div className="ib-secbody" dangerouslySetInnerHTML={{ __html: s.html }} />
+                </details>
+              )}
+            </section>
+          );
+        })}
       </div>
     </div>
   );
