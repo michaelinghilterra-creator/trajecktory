@@ -100,3 +100,6 @@ data/app-notes.json
 # User-layer: locators are verbatim text from the user's master resume (see cv-master.docx).
 # The shipped default is cv-template-slots.example.json.
 templates/cv-template-slots.json
+# User-layer: bullet-group ordinals + baselines derived from the user's master.
+# The shipped default is cv-bullet-groups.example.json.
+templates/cv-bullet-groups.json

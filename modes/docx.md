@@ -21,9 +21,12 @@ top of the resume for this role," this is the right mode.
 For a lighter touch (preserve the candidate's existing summary voice
 heavily, only nudge vocabulary), use `modes/docx-light.md`.
 
-For literal bullet reordering or per-bullet keyword injection: not
-supported in this version. The template-swap engine preserves bullet
-paragraphs exactly. A future iteration could add `--reorder-bullets`.
+Bullet tailoring (reorder, curate, lightly rephrase per JD) is now
+supported as an OPT-IN extension past the four slots. It is off unless
+you deliberately supply a `bullets` object in the swaps file. See
+"Bullet tailoring" below. When you do not supply `bullets`, every
+experience bullet stays byte-for-byte identical to the master, exactly
+as before.
 
 ## What this mode tailors
 
@@ -39,7 +42,50 @@ Same four slots as `docx-light`:
 ## What this mode NEVER touches
 
 Same as `docx-light`: every paragraph from "PROFESSIONAL EXPERIENCE"
-downward stays byte-identical to the master.
+downward stays byte-identical to the master, UNLESS the user explicitly
+asks for bullet tailoring (see below), in which case only the bullets of
+the roles you name change, and only within the truthfulness rules.
+
+## Bullet tailoring (opt-in)
+
+When the user wants the bullets themselves tailored to a JD (not just the
+top four slots), add a `bullets` object to the swaps file. It is keyed by
+bullet-group name, and each value is the ordered list of bullets for that
+role:
+
+```json
+{
+  "title": "...",
+  "summary": "...",
+  "bullets": {
+    "role_0": ["Most JD-relevant bullet first.", "Next bullet.", "..."]
+  }
+}
+```
+
+Groups are defined in `templates/cv-bullet-groups.json` (user-layer),
+keyed by ORDINAL: `role_0` is the first role's bullet block, `role_1` the
+next, and so on, top to bottom. Read that file to learn which ordinal maps
+to which role before writing any bullets. Each new bullet paragraph is
+cloned from that role's first bullet, so list formatting is preserved
+exactly.
+
+**Truthfulness (non-negotiable, the engine cannot check this, you must):**
+- Only **reorder**, **curate** (drop an irrelevant bullet), or **lightly
+  rephrase** the candidate's REAL bullets from `cv.md` / the master. Never
+  invent a bullet, a metric, or an accomplishment.
+- Every rephrased bullet must still map to a real bullet in the master. A
+  reader who asks "where did this come from" must be able to point at the
+  original.
+- Lead each role with the bullet most relevant to the JD. That single
+  reorder is most of the value and carries zero fabrication risk.
+
+**Page-break guard:** the engine blocks (exit 2) if a page-break-sensitive
+role's bullet **count changes** or its total text drifts more than ±15%
+from the master, because that reflows the page. To stay clean, keep the
+same number of bullets per role and similar lengths (reorder and light
+rephrase, not add/drop). Only pass `--allow-length-drift` when you have
+deliberately curated a role's bullets and accept the reflow.
 
 ## Pipeline
 
@@ -84,6 +130,7 @@ summary and areas_of_expertise) still applies.
   `cv.md`.
 - Every summary claim must be supported by a real bullet.
 - Title must legitimately match the candidate's level — no promotions.
+- Tailored bullets only reorder, curate, or lightly rephrase real bullets; never invent one (see Bullet tailoring).
 
 ## Output
 

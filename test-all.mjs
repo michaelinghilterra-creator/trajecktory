@@ -492,6 +492,7 @@ for (const suite of [
   'tests/v1-loader.test.mjs',
   'tests/weekly-review.test.mjs',
   'tests/weekly-run.test.mjs',
+  'tests/docx-bullets.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);
