@@ -25,14 +25,28 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const url = (process.argv[2] || '').trim();
 if (!url) { process.stderr.write('usage: node fetch-jd.mjs <job-url>\n'); process.exit(2); }
 
-const stripHtml = (html) => String(html || '')
-  .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-  .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-  .replace(/<\/(p|div|li|h[1-6]|br|tr)>/gi, '\n')
-  .replace(/<[^>]+>/g, ' ')
-  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-  .replace(/&#39;|&rsquo;|&lsquo;/g, "'").replace(/&quot;|&ldquo;|&rdquo;/g, '"')
-  .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+// HTML → plain text for Greenhouse `content` (Ashby/Lever already give descriptionPlain).
+// Deliberately NOT a security sanitizer: it strips ALL tags with one generic pattern
+// rather than an incomplete <script>-specific regex (which CodeQL rightly flags as an
+// unreliable tag filter), and it decodes entities in a SINGLE pass via a lookup so
+// nothing is double-unescaped (a staged "&amp;"→"&" before "&lt;"→"<" would double-decode).
+const HTML_ENT = { amp: '&', nbsp: ' ', lt: '<', gt: '>', quot: '"', apos: "'", rsquo: "'", lsquo: "'", ldquo: '"', rdquo: '"' };
+const decodeEntities = (s) => s.replace(/&(#\d+|#x[0-9a-f]+|amp|nbsp|lt|gt|quot|apos|rsquo|lsquo|ldquo|rdquo);/gi, (m, e) => {
+  if (e[0] === '#') {
+    const code = e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : Number(e.slice(1));
+    return Number.isFinite(code) ? String.fromCharCode(code) : m;
+  }
+  return HTML_ENT[e.toLowerCase()] ?? m;
+});
+const stripHtml = (html) =>
+  // Decode entities FIRST — Greenhouse `content` is entity-escaped HTML (&lt;h2&gt;),
+  // so the real tags only appear after decoding. ONE pass (single replace) so nothing is
+  // double-unescaped, then strip the now-real tags with a generic pattern (no incomplete
+  // <script>-specific filter, which CodeQL rightly rejects).
+  decodeEntities(String(html || ''))
+    .replace(/<\/(?:p|div|li|h[1-6]|br|tr)\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 
 async function getJson(u) {
   const res = await fetch(u, { headers: { accept: 'application/json' } });
