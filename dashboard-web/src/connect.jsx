@@ -6,9 +6,42 @@
 // compliant.
 const { useState: useStateCq, useEffect: useEffectCq } = React;
 
+// Statuses that mean an invite/message has already gone out (contact is past the
+// "send a request" step). The row stays in the queue until they accept
+// (Connected) so you don't lose track, but it's shown as done, not actionable.
+const CONNECT_SENT_STAGES = ['Sent', 'Replied', 'Meeting Scheduled'];
+
 function ConnectRow({ c, toast }) {
   const [note, setNote] = useStateCq(null);
   const [loading, setLoading] = useStateCq(false);
+  const [sending, setSending] = useStateCq(false);
+  const [sentAt, setSentAt] = useStateCq(CONNECT_SENT_STAGES.includes(c.status) ? (c.status === 'Sent' ? 'earlier' : c.status) : null);
+  const done = !!sentAt;
+
+  // Record that the invite went out, right here — no jumping to the Network tab.
+  // Posts the note as a "Sent" correspondence to the contact's own route (TA vs
+  // recruiter), which appends the message, advances status to Sent, and stamps
+  // Last Touch. Passing the drafted note as the body is how "I used the AI note"
+  // gets captured; a self-written invite records a short generic line instead.
+  const markSent = () => {
+    if (sending || done) return;
+    setSending(true);
+    const url = c.source === 'recruiter'
+      ? `/api/recruiters/${c.id}/correspondence`
+      : `/api/target-talent/${c.id}/correspondence`;
+    const body = (note?.response || '').trim() || `LinkedIn connection request sent to ${c.name || 'this contact'}.`;
+    fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction: 'Sent', subject: 'LinkedIn connection request', body }),
+    }).then(r => r.json())
+      .then(res => {
+        if (res.error) { toast && toast(res.error, 'error'); return; }
+        setSentAt('just now');
+        toast && toast(`Marked sent — ${c.name || 'contact'} moved to Sent`, 'success');
+      })
+      .catch(e => toast && toast(e.message, 'error'))
+      .finally(() => setSending(false));
+  };
 
   const draft = () => {
     setLoading(true);
@@ -45,11 +78,16 @@ function ConnectRow({ c, toast }) {
               : <span title="No email address on file. Find one (Hunter/MillionVerifier) to move this contact to the email motion.">no email on file</span>}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}
           <button className="btn accent sm" onClick={draft} disabled={loading}>
             {loading ? 'Drafting…' : (note ? 'Redraft' : 'Draft note')}
           </button>
+          {done
+            ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, whiteSpace: 'nowrap' }} title={`Recorded as sent (${sentAt})`}>✓ Sent</span>
+            : <button className="btn sm" onClick={markSent} disabled={sending} title="Record that you sent this invite. Advances the contact to Sent and stamps Last Touch.">
+                {sending ? 'Saving…' : 'Mark sent'}
+              </button>}
         </div>
       </div>
       {note ? (
@@ -59,7 +97,14 @@ function ConnectRow({ c, toast }) {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
             <span className="dim mono" style={{ fontSize: 11 }}>{note.length}/300 chars</span>
-            <button className="btn sm" onClick={copy}>Copy</button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn sm" onClick={copy}>Copy</button>
+              {done
+                ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, alignSelf: 'center' }}>✓ Sent</span>
+                : <button className="btn primary sm" onClick={markSent} disabled={sending} title="Log this note as the invite you sent. Advances the contact to Sent.">
+                    {sending ? 'Saving…' : 'Mark as sent'}
+                  </button>}
+            </div>
           </div>
         </div>
       ) : null}
@@ -85,7 +130,8 @@ window.ConnectTab = function ConnectTab({ toast }) {
       <h2 style={{ margin: '0 0 2px' }}>Connect queue</h2>
       <p className="dim" style={{ fontSize: 13, marginTop: 4, marginBottom: 18 }}>
         {queue.length} contact{queue.length === 1 ? '' : 's'} we cannot email (a LinkedIn handle, no
-        sendable address). Draft a note, copy it, send it by hand. Nothing is sent from here.
+        sendable address). Draft a note, copy it, send the invite by hand, then hit Mark sent to
+        record it (advances the contact to Sent, stamps Last Touch). Nothing is sent from here.
       </p>
       {queue.length === 0
         ? <div className="card dim">Nobody in the queue. Every reachable contact has a sendable email.</div>
