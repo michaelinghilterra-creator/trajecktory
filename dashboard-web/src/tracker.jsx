@@ -63,7 +63,7 @@ window.TrackerTab = function TrackerTab({ apps, onOpen, search }) {
 
   // Status breakdown counts
   const breakdown = useMemoT(() => {
-    return ALL_STATUSES.map(s => ({ s, n: apps.filter(a => a.status === s).length, meta: window.STATUS_META[s] })).filter(x => x.n > 0);
+    return ALL_STATUSES.map(s => ({ s, n: apps.filter(a => a.status === s).length, meta: window.STATUS_META[s] || {} })).filter(x => x.n > 0);
   }, [apps]);
 
   return (
@@ -96,22 +96,22 @@ window.TrackerTab = function TrackerTab({ apps, onOpen, search }) {
         <div className="filterbar" style={{ marginBottom: 8 }}>
           <span className="mono dim" style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.1em" }}>Status</span>
           {ALL_STATUSES.map(s => (
-            <span key={s} className={`chip ${filters.statuses.includes(s) ? "on" : ""}`} onClick={() => toggleStatus(s)}>
-              <span className="dot" style={{ width: 6, height: 6, borderRadius: 50, background: window.STATUS_META[s].color, display: "inline-block" }}></span>
+            <button type="button" key={s} className={`chip ${filters.statuses.includes(s) ? "on" : ""}`} onClick={() => toggleStatus(s)}>
+              <span className="dot" style={{ width: 6, height: 6, borderRadius: 50, background: (window.STATUS_META[s] || {}).color, display: "inline-block" }}></span>
               {s}
-            </span>
+            </button>
           ))}
         </div>
         <div className="filterbar" style={{ marginBottom: 8 }}>
           <span className="mono dim" style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.1em" }}>Archetype</span>
           {window.ARCHETYPES.map(a => (
-            <span key={a} className={`chip ${filters.archetypes.includes(a) ? "on" : ""}`} onClick={() => toggleArch(a)}>{a}</span>
+            <button type="button" key={a} className={`chip ${filters.archetypes.includes(a) ? "on" : ""}`} onClick={() => toggleArch(a)}>{a}</button>
           ))}
         </div>
         <div className="filterbar" style={{ marginBottom: 0 }}>
           <span className="mono dim" style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.1em" }}>Score ≥</span>
           {[0, 3.0, 3.5, 4.0, 4.5].map(s => (
-            <span key={s} className={`chip ${filters.scoreMin === s ? "on" : ""}`} onClick={() => setFilters(f => ({ ...f, scoreMin: s }))}>{s === 0 ? "any" : s.toFixed(1)}</span>
+            <button type="button" key={s} className={`chip ${filters.scoreMin === s ? "on" : ""}`} onClick={() => setFilters(f => ({ ...f, scoreMin: s }))}>{s === 0 ? "any" : s.toFixed(1)}</button>
           ))}
           {(filters.statuses.length || filters.archetypes.length || filters.scoreMin) ? (
             <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => setFilters({ statuses: [], archetypes: [], scoreMin: 0 })}>Clear all</button>

@@ -85,9 +85,12 @@ function Sparkline({ data, w = 120, h = 32, color = "var(--accent)" }) {
 
 /* Weekly trend chart */
 function WeekTrend({ weeks, target, height = 120 }) {
-  const totals = weeks.map((w) =>
-    w.brand == null ? null : w.brand + w.people + w.engage + w.rel
-  );
+  const totals = weeks.map((w) => {
+    const parts = [w.brand, w.people, w.engage, w.rel];
+    // Any null pillar means the week is not fully recorded; a partial sum would
+    // render a NaN bar. Treat the whole week as null (no bar) unless all four exist.
+    return parts.some((x) => x == null) ? null : parts.reduce((a, b) => a + b, 0);
+  });
   const max = 100;
   return (
     <div style={{ position: "relative", height }}>
@@ -208,7 +211,7 @@ function LinkedInSSITab({ toast }) {
           <div>
             <h1>LinkedIn SSI</h1>
             <div className="sub">
-              score {ssiData?.score ?? '—'} / 100 · target {ssiData?.target ?? 60} · {influencers.length} influencers tracked · {engagementLog.filter(a => new Date(a.date) >= new Date(Date.now() - 7*24*60*60*1000)).length} touchpoints this week
+              score {ssiData?.score ?? '-'} / 100 · target {ssiData?.target ?? 60} · {influencers.length} influencers tracked · {engagementLog.filter(a => new Date(a.date) >= new Date(Date.now() - 7*24*60*60*1000)).length} touchpoints this week
             </div>
           </div>
         </div>
@@ -589,21 +592,21 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
           <div className="card" style={{ padding: "12px 14px", margin: "6px 0 12px" }}>
             <div className="mono" style={{ fontSize: 10.5, color: "var(--text-mute)", letterSpacing: ".08em", marginBottom: 9 }}>NEW INFLUENCER</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 9 }}>
-              <input className="inp" placeholder="Name (required)" value={draft.name}
+              <input className="inp" aria-label="Contact name" placeholder="Name (required)" value={draft.name}
                 onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
                 onKeyDown={e => { if (e.key === "Enter") submitNew(); }} autoFocus />
-              <input className="inp" placeholder="Role, e.g. VP of Revenue Operations" value={draft.role}
+              <input className="inp" aria-label="Role" placeholder="Role, e.g. VP of Marketing" value={draft.role}
                 onChange={e => setDraft(d => ({ ...d, role: e.target.value }))} />
-              <input className="inp" placeholder="Track, e.g. revops" value={draft.track}
+              <input className="inp" aria-label="Track" placeholder="Track, e.g. revops" value={draft.track}
                 onChange={e => setDraft(d => ({ ...d, track: e.target.value }))} />
-              <input className="inp" placeholder="Tier, e.g. local" value={draft.tier}
+              <input className="inp" aria-label="Tier" placeholder="Tier, e.g. local" value={draft.tier}
                 onChange={e => setDraft(d => ({ ...d, tier: e.target.value }))} />
-              <input className="inp" placeholder="Location" value={draft.location}
+              <input className="inp" aria-label="Location" placeholder="Location" value={draft.location}
                 onChange={e => setDraft(d => ({ ...d, location: e.target.value }))} />
-              <input className="inp" placeholder="LinkedIn profile URL" value={draft.linkedin}
+              <input className="inp" aria-label="LinkedIn profile URL" placeholder="LinkedIn profile URL" value={draft.linkedin}
                 onChange={e => setDraft(d => ({ ...d, linkedin: e.target.value }))} />
             </div>
-            <input className="inp" style={{ marginTop: 9, width: "100%" }} placeholder="Why follow them? (what they post about, and your angle)"
+            <input className="inp" style={{ marginTop: 9, width: "100%" }} aria-label="Why follow them" placeholder="Why follow them? (what they post about, and your angle)"
               value={draft.whyFollow} onChange={e => setDraft(d => ({ ...d, whyFollow: e.target.value }))} />
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
               <button className="btn primary" onClick={submitNew} disabled={!draft.name.trim() || busy}>{busy ? "Saving…" : "Save influencer"}</button>
@@ -637,7 +640,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
             <thead>
               <tr>
                 {cols.map(c => (
-                  <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? "sorted" : ""} onClick={() => setSort(c.k)}>
+                  <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? "sorted" : ""} role="button" tabIndex={0} aria-sort={sortKey === c.k ? (sortDir === "asc" ? "ascending" : "descending") : "none"} onClick={() => setSort(c.k)} onKeyDown={window.kbdActivate(() => setSort(c.k))}>
                     {c.label}<span className="sort-ind">{sortKey === c.k ? (sortDir === "asc" ? "↑" : "↓") : "·"}</span>
                   </th>
                 ))}
@@ -665,7 +668,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
                 const motion = NEXT_MOTION[stage];
                 const lt = lastTouch(p);
                 return (
-                  <tr key={p.id ?? p.name} onClick={() => onOpen && onOpen(p)} style={{ cursor: onOpen ? "pointer" : "default" }}>
+                  <tr key={p.id ?? p.name} onClick={() => onOpen && onOpen(p)} tabIndex={onOpen ? 0 : undefined} onKeyDown={onOpen ? window.kbdActivate(() => onOpen(p)) : undefined} style={{ cursor: onOpen ? "pointer" : "default" }}>
                     <td>
                       <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
                         <div className="mono-av sm" style={{ borderColor: tm.color, color: tm.color, flex: "none" }}>{initialsOf(p.name)}</div>
@@ -673,7 +676,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
                       </div>
                     </td>
                     <td className="ssi-title" title={p.role || ""}>
-                      <span style={{ fontSize: 12, color: "var(--text-dim)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.role || "—"}</span>
+                      <span style={{ fontSize: 12, color: "var(--text-dim)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.role || "-"}</span>
                     </td>
                     <td>
                       <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: tm.color, border: `1px solid ${tm.color}`, padding: "2px 7px", borderRadius: 5, opacity: .9, whiteSpace: "nowrap" }}>{tm.label}</span>
@@ -694,7 +697,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
                         ))}
                       </div>
                     </td>
-                    <td><span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: lt ? "var(--text-dim)" : "var(--text-mute)" }}>{lt ? lt.slice(5) : "—"}</span></td>
+                    <td><span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: lt ? "var(--text-dim)" : "var(--text-mute)" }}>{lt ? lt.slice(5) : "-"}</span></td>
                     <td>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--text-dim)" }}>
                         <span style={{ width: 6, height: 6, borderRadius: 99, background: motion.color, flex: "none" }} />
@@ -797,8 +800,8 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
               ))}
             </div>
           </div>
-          <div className="field"><label>Topic</label><input className="inp" placeholder="e.g. Category framing" value={topic} onChange={(e) => setTopic(e.target.value)} /></div>
-          <div className="field"><label>Your message</label><textarea className="ta" placeholder="What you said (keep it short)" value={message} onChange={(e) => setMessage(e.target.value)} /></div>
+          <div className="field"><label>Topic</label><input className="inp" aria-label="Topic" placeholder="e.g. Category framing" value={topic} onChange={(e) => setTopic(e.target.value)} /></div>
+          <div className="field"><label>Your message</label><textarea className="ta" aria-label="Your message" placeholder="What you said (keep it short)" value={message} onChange={(e) => setMessage(e.target.value)} /></div>
           <div className="grid cols-2" style={{ gap: 10 }}>
             <div className="field"><label>Got a response?</label>
               <select className="sel" value={responseReceived} onChange={(e) => setResponseReceived(e.target.value)}>
@@ -812,7 +815,7 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
             </div>
           </div>
           <div className="field"><label>Notes <span style={{ color: "var(--text-mute)", fontSize: 10.5, fontWeight: 400 }}>(optional)</span></label>
-            <input className="inp" placeholder="Follow-up plan, context, etc." value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <input className="inp" aria-label="Follow-up notes" placeholder="Follow-up plan, context, etc." value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
           {error && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)" }}>{error}</div>}
           <div style={{ display: "flex", gap: 8 }}>
@@ -1067,7 +1070,7 @@ function WeeklyView({ weeks, target, setSsiData }) {
                 </>
               ) : (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 44, color: "var(--text-mute)", fontFamily: "var(--mono)", fontSize: 12 }}>
-                  — not recorded
+                  not recorded
                 </div>
               )}
             </div>
@@ -1255,48 +1258,6 @@ function AIConnectView({ influencers, lockedInfluencer, onLog }) {
     } finally {
       setBusy(false);
     }
-    return; // skip the mock template fallback below
-
-    // (legacy mock retained below for reference but unreachable)
-    setTimeout(() => {
-      const firstName = (who || "there").split(" ")[0];
-      const refSnippet = priorEngagement
-        ? `your post on ${priorEngagement.length > 40 ? priorEngagement.slice(0, 40) + "…" : priorEngagement}`
-        : "your recent post";
-
-      // Pre-baked templates by (angle x tone). Mock generator. Kept under ~280 chars to leave room for a sign-off.
-      const lib = {
-        "Reference Post": {
-          Warm: `Hi ${firstName}, really enjoyed ${refSnippet} and wanted to connect properly. Working in RevOps / GTM analytics myself, and would value following more of your thinking. Thanks, ${window.myIdentity().firstName}`,
-          Concise: `${firstName}, commented on ${refSnippet}. Director-level RevOps / BI background, would like to stay in touch. Thanks, ${window.myIdentity().firstName}`,
-          Professional: `Hello ${firstName}, I appreciated the perspective in ${refSnippet} and the conversation it sparked. I lead BI & Revenue Operations work and would welcome the connection. Thanks, ${window.myIdentity().firstName}`,
-          Curious: `${firstName}, ${refSnippet} got me thinking. I'd love to connect and learn more about how you approach this. RevOps and BI background here. Thanks, ${window.myIdentity().firstName}`,
-        },
-        "Mutual Interest": {
-          Warm: `Hi ${firstName}, fellow ${theirRole || "GTM analytics / RevOps"} traveler here. I've been following your work and would love to connect. Thanks, ${window.myIdentity().firstName}`,
-          Concise: `${firstName}, overlap in ${theirRole || "RevOps / analytics"}. Would like to connect. Thanks, ${window.myIdentity().firstName}`,
-          Professional: `Hello ${firstName}, your work in ${theirRole || "GTM / RevOps"} aligns closely with what I lead. I'd welcome the connection. Thanks, ${window.myIdentity().firstName}`,
-          Curious: `${firstName}, saw your focus on ${theirRole || "RevOps / GTM analytics"} and have questions I'd love to bring you over time. Mind if we connect? Thanks, ${window.myIdentity().firstName}`,
-        },
-        "Shared Network": {
-          Warm: `Hi ${firstName}, we've got a few people in common in the ${theirRole || "RevOps"} space. Would be great to connect directly. Thanks, ${window.myIdentity().firstName}`,
-          Concise: `${firstName}, mutual connections in the ${theirRole || "RevOps"} world. Let's connect. Thanks, ${window.myIdentity().firstName}`,
-          Professional: `Hello ${firstName}, we share several mutual connections across the ${theirRole || "GTM analytics"} community. I'd welcome a direct connection. Thanks, ${window.myIdentity().firstName}`,
-          Curious: `${firstName}, we keep showing up in the same network corners (${theirRole || "RevOps / GTM"}). Curious about your work, and would love to connect. Thanks, ${window.myIdentity().firstName}`,
-        },
-        "Career Stage": {
-          Warm: `Hi ${firstName}, Director-level BI/RevOps leader exploring what's next. Your trajectory in ${theirRole || "this space"} is exactly the kind I follow closely. Would love to connect. Thanks, ${window.myIdentity().firstName}`,
-          Concise: `${firstName}, Director, BI & RevOps. In market. Would value the connection. Thanks, ${window.myIdentity().firstName}`,
-          Professional: `Hello ${firstName}, I lead BI & Revenue Operations at the Director level and am currently exploring next-step opportunities. I'd welcome a connection. Thanks, ${window.myIdentity().firstName}`,
-          Curious: `${firstName}, Director, BI & RevOps here, thinking about what's next. Would love to learn how you ended up in ${theirRole || "your current role"}. Can we connect? Thanks, ${window.myIdentity().firstName}`,
-        },
-      };
-
-      const draft = (lib[angle] && lib[angle][tone]) || lib["Reference Post"]["Warm"];
-      // Hard-cap at LIMIT
-      setOut(draft.length > LIMIT ? draft.slice(0, LIMIT - 1) + "…" : draft);
-      setBusy(false);
-    }, 650);
   };
 
   const charCount = out.length;

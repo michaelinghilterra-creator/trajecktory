@@ -80,12 +80,12 @@ window.AnalyticsTab = function InsightsSection({ apps, onOpen, toast }) {
     <div className="col" style={{ gap: 0 }}>
       <div className="subtabs">
         {SECTION_TABS.map(s => (
-          <div key={s.id} className={'subtab' + (section === s.id ? ' active' : '')} onClick={() => setSection(s.id)}>
+          <button type="button" key={s.id} className={'subtab' + (section === s.id ? ' active' : '')} onClick={() => setSection(s.id)}>
             <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={s.icon} /></svg>
             </span>
             {s.label}
-          </div>
+          </button>
         ))}
       </div>
       <div className="col" style={{ gap: 16, paddingTop: 14 }}>
@@ -142,7 +142,7 @@ function InsightsBody({ apps: rawApps, onOpen }) {
           <h1>Insights</h1>
           <div className="sub">
             {insights?.generated_at
-              ? <>Last analysis <InsAge iso={insights.generated_at} /> · across {insights.pipeline_size} entries · {insights.model}</>
+              ? <>Last analysis <InsAge iso={insights.generated_at} /> · across {insights.pipeline_size ?? 0} entries{insights.model ? ` · ${insights.model}` : ''}</>
               : <>Run a Claude-powered synthesis across every tab: pipeline, follow-ups, TA, recruiters, LinkedIn.</>}
           </div>
         </div>
@@ -195,12 +195,12 @@ function InsightsBody({ apps: rawApps, onOpen }) {
         <>
           <div className="subtabs">
             {INS_SUBTABS.map(s => (
-              <div key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
+              <button type="button" key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
                 <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
                   <InsIcon name={s.icon} size={14} />
                 </span>
                 {s.label}
-              </div>
+              </button>
             ))}
           </div>
 
@@ -307,7 +307,7 @@ function FocusChecklist({ items, keyId, apps, onOpen }) {
         {list.map((it, i) => {
           const isDone = done.includes(i);
           return (
-            <div key={i} className={'ins-focus-row' + (isDone ? ' done' : '')} onClick={() => toggle(i)}>
+            <div key={i} role="checkbox" aria-checked={isDone} tabIndex={0} className={'ins-focus-row' + (isDone ? ' done' : '')} onClick={() => toggle(i)} onKeyDown={window.kbdActivate(() => toggle(i))}>
               <span className="ins-check">{isDone ? <InsIcon name="check" size={12} /> : null}</span>
               <span style={{ flex: 1 }}>
                 <span className="ins-focus-lbl" style={{ fontSize: 13, fontWeight: 600 }}><Linkify text={it.action} apps={apps} onOpen={onOpen} /></span>

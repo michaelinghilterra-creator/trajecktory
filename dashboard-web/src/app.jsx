@@ -498,7 +498,6 @@ function App() {
     ];
     const actionCmds = [
       { section: "Actions", icon: "↗", label: "Filter Pipeline: Interviews only", run: () => { setTab("pipeline"); setFilters(f => ({ ...f, statuses: [...window.INTERVIEW_STAGES] })); } },
-      { section: "Actions", icon: "↗", label: "Export current view as CSV", run: () => toast("CSV exported (mock)", "success") },
     ];
     const jumpCmds = apps.slice(0, 30).map(a => ({
       section: "Jump to role",
@@ -555,7 +554,7 @@ function App() {
   }, []);
 
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', color:'var(--text-muted)', fontFamily:'var(--font-mono)', fontSize:13 }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', color:'var(--text-mute)', fontFamily:'var(--mono)', fontSize:13 }}>
       Loading trajecktory data…
     </div>
   );

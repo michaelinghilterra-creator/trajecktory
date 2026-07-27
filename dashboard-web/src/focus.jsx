@@ -129,7 +129,7 @@ function FocusTimer({ task, prefs, onPomodoroComplete, onExit, restore }) {
       const n = sessionPomos + 1;
       setSessionPomos(n);
       if (prefs.sound) playChime(2);
-      notify('Focus block done ✓', `${task.label} — time for a break.`);
+      notify('Focus block done ✓', `${task.label}. Time for a break.`);
       onPomodoroComplete(task);
       const isLong = n % 4 === 0;
       setBreakLong(isLong);
@@ -363,7 +363,7 @@ function ScheduleEditor({ template, onSave, saving }) {
         onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
         title="Drag to reorder"
       >⠿</span>
-      <input className="sched-input label" placeholder="Task name (e.g. Deep work block)" value={r.label} onChange={e => patch(r.id, 'label', e.target.value)} />
+      <input className="sched-input label" aria-label="Task name" placeholder="Task name (e.g. Deep work block)" value={r.label} onChange={e => patch(r.id, 'label', e.target.value)} />
       <div className="sched-days">
         {DAY_PRESETS.map(p => (
           <button key={p.id} type="button" className="chip preset" title={p.label} onClick={() => setPreset(r.id, p.days)}>{p.label.split('/')[0] === p.label ? p.label : p.id.toUpperCase()}</button>
@@ -574,7 +574,7 @@ function TodoList({ todos, onCreate, onPatch, onDelete }) {
 
       <div className="filterbar" style={{ marginTop: 10, marginBottom: 8 }}>
         {TODO_FILTERS.map(f => (
-          <span key={f.id} className={'chip' + (filter === f.id ? ' on' : '')} onClick={() => setFilter(f.id)}>{f.label}</span>
+          <button type="button" key={f.id} className={'chip' + (filter === f.id ? ' on' : '')} onClick={() => setFilter(f.id)}>{f.label}</button>
         ))}
       </div>
 
@@ -593,7 +593,7 @@ function TodoList({ todos, onCreate, onPatch, onDelete }) {
             return (
               <div key={t.id} className="todo-item">
                 <div className={'todo-row' + (t.done ? ' done' : '')}>
-                  <button className={'focus-check' + (t.done ? ' checked' : '')} onClick={() => onPatch(t.id, { done: !t.done })}>
+                  <button className={'focus-check' + (t.done ? ' checked' : '')} aria-label={t.done ? 'Mark not done' : 'Mark done'} aria-pressed={t.done} onClick={() => onPatch(t.id, { done: !t.done })}>
                     {t.done ? '✓' : ''}
                   </button>
                   <div className="todo-row-main" onClick={toggle} style={{ cursor: 'pointer' }}>
@@ -668,7 +668,7 @@ window.FocusTab = function FocusTab({ toast, onFocusDataChanged }) {
     mutate('/api/cadence/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: t.id, done: next }) })
       .then(r => { if (!r.ok) throw new Error(); })
       .then(() => { loadStreak(); notifyBadge(); })
-      .catch(() => { setToday(ts => ts.map(x => x.id === t.id ? { ...x, done: t.done } : x)); toast && toast('Could not save — is the server running?', 'warn'); });
+      .catch(() => { setToday(ts => ts.map(x => x.id === t.id ? { ...x, done: t.done } : x)); toast && toast('Could not save. Is the server running?', 'warn'); });
   };
 
   const onPomodoroComplete = (t) => {
@@ -677,7 +677,7 @@ window.FocusTab = function FocusTab({ toast, onFocusDataChanged }) {
     mutate('/api/cadence/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ taskId: t.id, pomodorosDone: nextCount }) })
       .then(() => loadToday())
       .catch(() => {});
-    toast && toast(`🍅 Focus block done — ${t.label}`, 'success');
+    toast && toast(`🍅 Focus block done: ${t.label}`, 'success');
   };
 
   const saveSchedule = (rows) => {
@@ -685,7 +685,7 @@ window.FocusTab = function FocusTab({ toast, onFocusDataChanged }) {
     mutate('/api/cadence', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tasks: rows }) })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(tpl => { setTemplate(tpl); loadToday(); loadStreak(); notifyBadge(); toast && toast('Schedule saved', 'success'); })
-      .catch((status) => toast && toast(status === 403 ? 'Save blocked — reload the page and try again' : 'Save failed', 'warn'))
+      .catch((status) => toast && toast(status === 403 ? 'Save blocked. Reload the page and try again' : 'Save failed', 'warn'))
       .finally(() => setSaving(false));
   };
 
@@ -693,14 +693,14 @@ window.FocusTab = function FocusTab({ toast, onFocusDataChanged }) {
     mutate('/api/todos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(() => { loadTodos(); notifyBadge(); })
-      .catch((status) => toast && toast(status === 403 ? 'Blocked — reload the page and try again' : 'Could not add to-do', 'warn'));
+      .catch((status) => toast && toast(status === 403 ? 'Blocked. Reload the page and try again' : 'Could not add to-do', 'warn'));
   };
   const patchTodo = (id, patch) => {
     setTodos(ts => ts.map(t => t.id === id ? { ...t, ...patch } : t)); // optimistic
     mutate(`/api/todos/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(() => { loadTodos(); notifyBadge(); })
-      .catch(() => { loadTodos(); toast && toast('Could not save — is the server running?', 'warn'); });
+      .catch(() => { loadTodos(); toast && toast('Could not save. Is the server running?', 'warn'); });
   };
   const deleteTodo = (id) => {
     setTodos(ts => ts.filter(t => t.id !== id)); // optimistic
@@ -713,7 +713,7 @@ window.FocusTab = function FocusTab({ toast, onFocusDataChanged }) {
     <div className="col" style={{ gap: 0 }}>
       <div className="subtabs">
         {FOCUS_SUBTABS.map(s => (
-          <div key={s.id} className={'subtab' + (sub === s.id ? ' active' : '')} onClick={() => setSub(s.id)}>{s.label}</div>
+          <button type="button" key={s.id} className={'subtab' + (sub === s.id ? ' active' : '')} onClick={() => setSub(s.id)}>{s.label}</button>
         ))}
       </div>
 

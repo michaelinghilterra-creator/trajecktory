@@ -70,7 +70,7 @@ window.ActionsCard = function ActionsCard() {
           Last 7d <span style={{ color: 'var(--accent)' }}>{last7}</span>&nbsp;·&nbsp;
           Prior 7d <span style={{ color: 'var(--text-dim)' }}>{prior7}</span>
           <span style={{ color: trend > 0 ? 'var(--green)' : trend < 0 ? 'var(--red)' : 'var(--text-dim)', marginLeft: 6 }}>
-            {trend > 0 ? `▲ +${trend}` : trend < 0 ? `▼ ${trend}` : '— flat'}
+            {trend > 0 ? `▲ +${trend}` : trend < 0 ? `▼ ${trend}` : 'flat'}
           </span>
         </span>
       </div>
@@ -130,7 +130,7 @@ window.ActionsCard = function ActionsCard() {
                       <td>{w.replied}</td>
                       <td>{w.screened}</td>
                       <td style={{ color: noRate ? 'var(--text-mute)' : w.replyPct >= 3.6 ? 'var(--green)' : 'var(--orange)' }}>
-                        {noRate ? '—' : `${w.replyPct}%`}
+                        {noRate ? '-' : `${w.replyPct}%`}
                       </td>
                     </tr>
                   );

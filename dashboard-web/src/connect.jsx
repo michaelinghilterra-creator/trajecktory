@@ -21,7 +21,12 @@ function ConnectRow({ c, toast }) {
       .finally(() => setLoading(false));
   };
   const copy = () => {
-    navigator.clipboard.writeText(note.response).then(() => toast && toast('Note copied', 'success'));
+    // navigator.clipboard is undefined on http / a LAN IP; guard so the button
+    // does not throw, and never claim a copy that did not happen.
+    const cp = navigator.clipboard?.writeText(note.response);
+    if (cp) cp.then(() => toast && toast('Note copied', 'success'))
+              .catch(() => toast && toast('Copy failed. Select the text and copy it manually', 'warn'));
+    else toast && toast('Copy not available here. Select the text and copy it manually', 'warn');
   };
   const href = c.linkedin ? (/^https?:/.test(c.linkedin) ? c.linkedin : `https://${c.linkedin}`) : null;
 

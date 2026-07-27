@@ -17,7 +17,7 @@ function ReviewFloor({ r }) {
   return (
     <div className="kpi">
       <span className="kpi-label">{r.label}</span>
-      <span className="kpi-value" style={{ color: t.color }}>{r.available ? `${r.value}${r.unit || ''}` : '—'}</span>
+      <span className="kpi-value" style={{ color: t.color }}>{r.available ? `${r.value}${r.unit || ''}` : '-'}</span>
       <span className="dim mono" style={{ fontSize: 11 }}>
         floor {r.floor}{r.unit || ''} · <span style={{ color: t.color }}>{t.label}</span>
       </span>
@@ -134,7 +134,7 @@ function ReplyRow({ reply, toast }) {
   const act = (action) => {
     if (action !== 'dismiss' && !appId) { toast && toast('Pick which application this reply belongs to.', 'error'); return; }
     setBusy(true);
-    const note = `${reply.from} — ${reply.subject || '(no subject)'} [${sentiment}]`;
+    const note = `${reply.from}: ${reply.subject || '(no subject)'} [${sentiment}]`;
     const body = action === 'dismiss' ? {} : { appId, note, company };
     fetch(`/api/google/replies/${encodeURIComponent(reply.msgId)}/${action}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -409,11 +409,11 @@ function WeekOverWeek({ history }) {
                       <td style={WOW_TD_L}>{fl.label}</td>
                       {cells.map((c, i) => (
                         <td key={i} className="mono" style={{ ...WOW_TD, color: wowCellColor(c) }}>
-                          {c && c.available ? `${c.value}${fl.unit}` : '—'}
+                          {c && c.available ? `${c.value}${fl.unit}` : '-'}
                         </td>
                       ))}
                       <td className="mono" style={{ ...WOW_TD, color: deltaColor, fontWeight: 600 }}>
-                        {delta == null ? '—' : `${delta > 0 ? '+' : ''}${delta}${fl.unit}`}
+                        {delta == null ? '-' : `${delta > 0 ? '+' : ''}${delta}${fl.unit}`}
                       </td>
                     </tr>
                   );
@@ -482,7 +482,7 @@ function RollingFloor({ toast }) {
 
       <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
         <span style={{ color: s.color, fontWeight: 600 }}>{s.gate}</span>{' '}
-        {st.state === 'behind' && `${st.gap} more ${st.gap === 1 ? 'touch' : 'touches'} in your trailing week unlocks it — weekend touches count.`}
+        {st.state === 'behind' && `${st.gap} more ${st.gap === 1 ? 'touch' : 'touches'} in your trailing week unlocks it. Weekend touches count.`}
         {st.state === 'grace' && `Grace period active through ${st.graceUntil}.`}
       </div>
 
@@ -511,7 +511,7 @@ function RollingFloor({ toast }) {
           Days off:{' '}
           {st.pto.map(d => (
             <span key={d} style={{ marginRight: 8 }}>
-              {d} <a onClick={() => clearPto(d)} style={{ cursor: 'pointer', color: 'var(--accent)' }}>✕</a>
+              {d} <button type="button" aria-label={`Remove day off ${d}`} onClick={() => clearPto(d)} style={{ cursor: 'pointer', color: 'var(--accent)', background: 'none', border: 0, padding: 0, font: 'inherit' }}>✕</button>
             </span>
           ))}
         </div>
