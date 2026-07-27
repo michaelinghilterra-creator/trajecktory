@@ -5,8 +5,9 @@ import { parseApplicationsMd } from './applications.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, matchByCompany } from './target-talent.mjs';
 import { parseRecruitersMd } from './recruiters.mjs';
 import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
-import { INTERVIEW_STAGES, isInterviewStage } from './statuses.mjs';
+import { INTERVIEW_STAGES, isInterviewStage, FUNNEL_ORDER } from './statuses.mjs';
 import { isSendable } from '../../../lib/email-verify.mjs';
+import { normalizeCompany } from '../../../lib/identity.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
 // quickly each stage cools: warm Responded threads cool fastest, post-
@@ -387,43 +388,74 @@ function _hasLinkedIn(row) {
   return !!(row && (row.linkedin || '').trim());
 }
 
-function computeConnectQueue({ taRows, recruiterRows } = {}) {
+// Companies the user has AT LEAST APPLIED to. Outreach (LinkedIn or email) should
+// only surface for a company you've actually committed to — an Evaluated-only or
+// Discarded row is not yet a reason to spend a contact on, and once you apply the
+// company's contacts appear. `reached` is the furthest funnel rung a row ever hit
+// (FUNNEL_ORDER: Evaluated=0, Applied=1, …), so `reached >= Applied` is exactly
+// "applied, or further, at any point" and correctly includes an applied-then-
+// rejected row. Matched on the normalized company name (the one identity engine).
+const _APPLIED_IDX = FUNNEL_ORDER.indexOf('Applied');
+function appliedCompanies(apps) {
+  const set = new Set();
+  for (const a of (apps || [])) {
+    if (FUNNEL_ORDER.indexOf(a.reached) >= _APPLIED_IDX) set.add(normalizeCompany(a.company));
+  }
+  return set;
+}
+
+function _bothBooks({ taRows, recruiterRows }) {
   const ta  = taRows        ?? (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
   const rec = recruiterRows ?? (() => { try { return parseRecruitersMd();  } catch { return []; } })();
-  const out = [];
-  const consider = (row, source) => {
-    if (!_hasLinkedIn(row)) return;              // no LinkedIn handle → not reachable here
-    if (isSendable(row)) return;                 // has a live email → belongs to the email motion
-    if (CONNECT_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
-    const company = source === 'recruiter' ? row.firm : row.company;
-    const name = `${row.first || ''} ${row.last || ''}`.trim();
-    out.push({
-      source,                                     // 'ta' | 'recruiter'
-      id: row.id,
-      name,
-      firstName: row.first || '',
-      role: row.title || '',
-      company: company || '',
-      linkedin: (row.linkedin || '').trim(),
-      status: row.status || '',
-      // Two distinct reasons a contact is unsendable, kept apart on purpose:
-      // hasEmail=false means NO address is on file at all; hasEmail=true with a
-      // non-sendable emailState means there IS an address, it just is not verified
-      // deliverable (unverified / bounced / invalid / blocked). The UI labels them
-      // differently so "find an address" and "verify the address" read as the
-      // different next actions they are. `email` mirrors verified.address.
-      hasEmail: !!(row.email || '').trim(),
-      emailState: row.verified?.state || 'unverified', // why they landed here
-      reason: (row.notes || '').replace(/\s+/g, ' ').trim().slice(0, 160),
-    });
+  return { ta, rec };
+}
+
+// One row shape for both queues. `email` is the clean address (verified.address),
+// empty on connect-queue rows. hasEmail/emailState keep the connect UI's "no email
+// on file" vs "email unverified" distinction.
+function _queueRow(row, source) {
+  const company = source === 'recruiter' ? row.firm : row.company;
+  return {
+    source,                                       // 'ta' | 'recruiter'
+    id: row.id,
+    name: `${row.first || ''} ${row.last || ''}`.trim(),
+    firstName: row.first || '',
+    role: row.title || '',
+    company: company || '',
+    linkedin: (row.linkedin || '').trim(),
+    email: (row.email || '').trim(),
+    status: row.status || '',
+    hasEmail: !!(row.email || '').trim(),
+    emailState: row.verified?.state || 'unverified',
+    reason: (row.notes || '').replace(/\s+/g, ' ').trim().slice(0, 160),
   };
-  for (const r of ta)  consider(r, 'ta');
-  for (const r of rec) consider(r, 'recruiter');
+}
+
+function _sortByCompanyName(out) {
   // Stable, readable order: by company, then by name.
   out.sort((a, b) =>
     (a.company || '').localeCompare(b.company || '') ||
     (a.name || '').localeCompare(b.name || ''));
   return out;
+}
+
+// LinkedIn fallback lane: a real handle, NO sendable email, at a company you've
+// applied to, not yet actioned.
+function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
+  const { ta, rec } = _bothBooks({ taRows, recruiterRows });
+  const applied = appliedCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
+  const out = [];
+  const consider = (row, source) => {
+    if (!_hasLinkedIn(row)) return;              // no LinkedIn handle → not reachable here
+    if (isSendable(row)) return;                 // has a live email → belongs to the email queue
+    if (CONNECT_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
+    const company = source === 'recruiter' ? row.firm : row.company;
+    if (!applied.has(normalizeCompany(company))) return;   // only companies you've applied to
+    out.push(_queueRow(row, source));
+  };
+  for (const r of ta)  consider(r, 'ta');
+  for (const r of rec) consider(r, 'recruiter');
+  return _sortByCompanyName(out);
 }
 
 // How many contacts are being held back purely because their address could not be
