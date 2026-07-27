@@ -380,6 +380,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [pasteBusy, setPasteBusy] = useState(false);
   const [pasteMsg, setPasteMsg] = useState('');
   const [hasKey, setHasKey] = useState(false);       // API key present AND billed to it (effective)
+  const [pendingCount, setPendingCount] = useState(null);   // URLs waiting to evaluate
   const pollersRef = useRef({});
 
   // Agent Scan and Evaluate Pipeline spawn the bundled Claude CLI, which needs a
@@ -452,7 +453,10 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
       return next;
     });
   }).catch(() => {});
-  useEffect(() => { loadTriage(); }, []);
+  // How many URLs are waiting to be evaluated (unchecked "- [ ]" in pipeline.md).
+  // Shown on the Evaluate step so the user sees the queue depth without me telling them.
+  const loadPending = () => fetch('/api/pipeline/pending').then(r => r.json()).then(d => setPendingCount(d.pending)).catch(() => {});
+  useEffect(() => { loadTriage(); loadPending(); }, []);
   // Clear any in-flight pollers (agent steps, deep dives, paste) on unmount.
   useEffect(() => () => { Object.values(pollersRef.current).forEach(clearInterval); }, []);
 
@@ -564,10 +568,51 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           setJobs(j => ({ ...j, [step.id]: { ...(j[step.id] || {}), status: 'interrupted' } }));
         } else {
           setJobs(j => ({ ...j, [step.id]: job }));
-          if (job.status === 'done') { onDataChanged && onDataChanged(); if (step.id === 'triage') loadTriage(); }
+          if (job.status === 'done') {
+            onDataChanged && onDataChanged();
+            if (step.id === 'triage') loadTriage();
+            // Consolidation: a finished Evaluate batch auto-runs the housekeeping
+            // it always needed (Merge → Verify → Health), so results appear without
+            // three more manual clicks. Refresh the pending count too.
+            if (step.id === 'cli-eval') runPostEvalChain();
+          }
+          if (step.id === 'cli-eval') loadPending();
         }
       },
     });
+  }
+
+  // Run a deterministic /api/workflow step to completion; resolves with its
+  // terminal status. Used to chain post-Evaluate housekeeping sequentially.
+  function runAutoStepAsync(id) {
+    return new Promise((resolve) => {
+      setJobs(j => ({ ...j, [id]: { status: 'running', summary: 'Starting…' } }));
+      window.tjkMutate(`/api/workflow/${id}`, { method: 'POST' })
+        .then(r => r.json())
+        .then(({ jobId, error }) => {
+          if (error || !jobId) { setJobs(j => ({ ...j, [id]: { status: 'error', error: error || 'failed to start' } })); return resolve('error'); }
+          const poll = setInterval(() => {
+            fetch(`/api/workflow/status/${jobId}`).then(r => r.json()).then(job => {
+              if (job.status === 'done' || job.status === 'error') {
+                clearInterval(poll); delete pollersRef.current[id];
+                setJobs(j => ({ ...j, [id]: job }));
+                if (job.status === 'done') onDataChanged && onDataChanged();
+                resolve(job.status);
+              }
+            }).catch(() => { clearInterval(poll); resolve('error'); });
+          }, 2000);
+          pollersRef.current[id] = poll;
+        })
+        .catch(err => { setJobs(j => ({ ...j, [id]: { status: 'error', error: err.message } })); resolve('error'); });
+    });
+  }
+
+  // Post-Evaluate housekeeping chain: merge tracker → verify actionable → health.
+  // Sequential, because merge writes applications.md that verify/health then read.
+  async function runPostEvalChain() {
+    if (await runAutoStepAsync('merge') === 'error') return;
+    await runAutoStepAsync('verify');
+    await runAutoStepAsync('health');
   }
 
   function runStep(step) {
@@ -614,7 +659,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                 delete pollersRef.current[step.id];
                 setJobs(j => ({ ...j, [step.id]: job }));
                 // Merge Tracker / Verify wrote to applications.md — re-sync.
-                if (job.status === 'done') onDataChanged && onDataChanged();
+                if (job.status === 'done') { onDataChanged && onDataChanged(); loadPending(); }
               }
             })
             .catch(() => { clearInterval(poll); });
@@ -764,7 +809,11 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                 <span className="workflow-status-glyph" style={{ color: g.color }}>{g.ch}</span>
                 <span className="workflow-label">
                   <span className="workflow-name">{stepLabel}</span>
-                  <span className="workflow-hint">{step.hint}</span>
+                  <span className="workflow-hint">
+                    {step.id === 'cli-eval' && pendingCount != null
+                      ? `${step.hint} · ${pendingCount} waiting`
+                      : step.hint}
+                  </span>
                 </span>
               </button>
               {blockedByEval && (
