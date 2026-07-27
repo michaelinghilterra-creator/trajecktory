@@ -50,6 +50,20 @@ const m = weeklyMetrics({
   unservicedApplications: 12,
 });
 check(m.verifiedTouches.value === 2 && m.verifiedTouches.available, 'touches counted within the week only');
+
+// Channel split: a LinkedIn connection request shares the correspondence log but
+// is a connect, not a verified (email) touch. It must not book as a touch.
+const mixed = weeklyMetrics({
+  weekStart: start, weekEnd: end,
+  correspondence: [
+    { direction: 'Sent', date: '2026-07-21', subject: 'Re: your RevOps opening' },       // email touch
+    { direction: 'Sent', date: '2026-07-22', subject: 'LinkedIn connection request' },    // connect, not a touch
+    { direction: 'Sent', date: '2026-07-23', subject: 'LinkedIn connection request (2nd try)' }, // still a connect
+  ],
+  connects: [{ date: '2026-07-21' }, { date: '2026-07-22' }, { date: '2026-07-23' }],
+});
+check(mixed.verifiedTouches.value === 1, 'LinkedIn invites are excluded from verified (email) touches');
+check(mixed.linkedinConnects.value === 3, 'connects come from the connects log, counted separately');
 check(m.replies.value === 1, 'replies counted within the week only');
 check(m.deliveredReplyRatePct.value === 18 && m.deliveredReplyRatePct.available, 'delivered reply rate is the injected cumulative number, not a same-week ratio');
 check(weeklyMetrics({ weekStart: start, weekEnd: end, correspondence }).deliveredReplyRatePct.available === false, 'no reply rate provided → not logged (never a same-week ratio)');
