@@ -5,6 +5,8 @@ import { ROOT_DIR } from '../config.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { loadInfluencer, toneInstruction, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue } from '../lib/followups.mjs';
+import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
+import { parseRecruitersMd, updateRecruiterLine } from '../lib/recruiters.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
 export const router = express.Router();
@@ -205,6 +207,33 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     res.json({ response, length: response.length, recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
   } catch (err) {
     console.error('Error generating connect note:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/linkedin-drafts/archive-contact — dispo a stale connect-queue contact
+// (left the company, or changed to an unrelated role). Sets status Archived and
+// appends a dated reason to notes, preserving the rest, so the contact drops off
+// the queue and never gets outreach. It is NOT deleted: the record stays on the
+// Network tab, auditable, and can be re-added fresh if they land at a target co.
+const ARCHIVE_REASONS = { 'left-company': 'Left the company', 'changed-role': 'Changed role' };
+router.post('/api/linkedin-drafts/archive-contact', (req, res) => {
+  try {
+    const { source, id, reason } = req.body || {};
+    const reasonText = ARCHIVE_REASONS[reason];
+    if (!source || id == null) return res.status(400).json({ error: 'source and id are required.' });
+    if (!reasonText) return res.status(400).json({ error: `reason must be one of: ${Object.keys(ARCHIVE_REASONS).join(', ')}` });
+    const isRec = source === 'recruiter';
+    const rows = isRec ? parseRecruitersMd() : parseTargetTalentMd();
+    const row = rows.find(r => String(r.id) === String(id));
+    if (!row) return res.status(404).json({ error: 'Contact not found.' });
+    const date = new Date().toISOString().slice(0, 10);
+    const existing = (row.notes || '').trim();
+    const notes = `${existing ? existing + ' · ' : ''}Archived ${date}: ${reasonText}`;
+    const ok = (isRec ? updateRecruiterLine : updateTTLine)(Number(id), { status: 'Archived', notes });
+    if (!ok) return res.status(404).json({ error: 'Contact not found.' });
+    res.json({ ok: true, status: 'Archived', reason: reasonText });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

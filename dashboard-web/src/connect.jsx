@@ -11,6 +11,7 @@ function ConnectRow({ c, toast, onDone }) {
   const [loading, setLoading] = useStateCq(false);
   const [sending, setSending] = useStateCq(false);
   const [sentAt, setSentAt] = useStateCq(null);
+  const [showArchive, setShowArchive] = useStateCq(false);
   const done = !!sentAt;
 
   // Record that the invite went out, right here — no jumping to the Network tab.
@@ -34,6 +35,25 @@ function ConnectRow({ c, toast, onDone }) {
         setSentAt('just now');                 // brief ✓ so the click is confirmed,
         toast && toast(`Marked sent — ${c.name || 'contact'}`, 'success');
         setTimeout(() => onDone && onDone(c.source, c.id), 1000); // then drop off the list
+      })
+      .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
+  };
+
+  // Dispo a stale contact (left the company, or changed to an unrelated role) so
+  // they stop cluttering the queue and never get outreach. Archives the contact
+  // (status Archived + a dated reason note) and drops the row. If they moved to a
+  // target company, re-add them fresh there — this only retires the stale record.
+  const archive = (reason) => {
+    if (sending || done) return;
+    setSending(true);
+    fetch('/api/linkedin-drafts/archive-contact', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: c.source, id: c.id, reason }),
+    }).then(r => r.json())
+      .then(res => {
+        if (res.error) { toast && toast(res.error, 'error'); setSending(false); return; }
+        toast && toast(`Archived — ${c.name || 'contact'}`, 'success');
+        onDone && onDone(c.source, c.id);
       })
       .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
   };
@@ -72,6 +92,19 @@ function ConnectRow({ c, toast, onDone }) {
               ? <span title="An address is on file but is not verified deliverable. Verify it to move this contact to the email motion.">email {c.emailState}</span>
               : <span title="No email address on file. Find one (Hunter/MillionVerifier) to move this contact to the email motion.">no email on file</span>}
           </div>
+          {!done && (
+            <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {!showArchive
+                ? <button className="btn ghost sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => setShowArchive(true)} disabled={sending}
+                    title="Contact left the company or changed to an unrelated role? Archive them so they drop off and never get outreach.">Not reachable?</button>
+                : <>
+                    <span>Archive — reason:</span>
+                    <button className="btn sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => archive('left-company')} disabled={sending}>Left company</button>
+                    <button className="btn sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => archive('changed-role')} disabled={sending}>Changed role</button>
+                    <button className="btn ghost sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => setShowArchive(false)} disabled={sending}>Cancel</button>
+                  </>}
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}
@@ -132,7 +165,8 @@ window.ConnectTab = function ConnectTab({ toast }) {
       <p className="dim" style={{ fontSize: 13, marginTop: 4, marginBottom: 18 }}>
         {queue.length} contact{queue.length === 1 ? '' : 's'} we cannot email (a LinkedIn handle, no
         sendable address). Draft a note, copy it, send the invite by hand, then hit Mark sent — the
-        row drops off once recorded. Nothing is sent from here.
+        row drops off once recorded. Contact moved on? Use “Not reachable?” to archive them. Nothing
+        is sent from here.
       </p>
       {queue.length === 0
         ? <div className="card dim">Nobody in the queue. Every reachable contact has a sendable email.</div>
