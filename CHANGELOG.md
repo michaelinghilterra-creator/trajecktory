@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.2.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.1.0...v2.2.0) (2026-07-27)
+
+
+### Features
+
+* add Network/Referrals tab, rolling outreach floor, and Buffer docs ([#100](https://github.com/michaelinghilterra-creator/trajecktory/issues/100)) ([1a7bdbc](https://github.com/michaelinghilterra-creator/trajecktory/commit/1a7bdbc344784e5fb6a39315be19f567f831feb8))
+
+
+### Bug Fixes
+
+* dashboard UX, accessibility, and correctness pass ([#102](https://github.com/michaelinghilterra-creator/trajecktory/issues/102)) ([c0943bc](https://github.com/michaelinghilterra-creator/trajecktory/commit/c0943bcf43fa9e96d94a122aeb9d79e3ce5de17b))
+* harden self-update (real checkout failures + UI rebuild) ([#104](https://github.com/michaelinghilterra-creator/trajecktory/issues/104)) ([75cef83](https://github.com/michaelinghilterra-creator/trajecktory/commit/75cef83a4145c4f8ed31e1bcddc4a08eb09f6570))
+
 ## [2.1.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.0.2...v2.1.0) (2026-07-26)
 
 
