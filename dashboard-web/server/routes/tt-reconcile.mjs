@@ -7,7 +7,7 @@ import { normCompany, reconcilePreview } from '../lib/tt-reconcile-core.mjs';
 import { TARGET_TALENT_MD } from '../config.mjs';
 import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
-import { findAndVerify } from '../../../find-contacts.mjs';
+import { findAndVerify, hunterSearchesLeft, planFindBudget, DEFAULT_FIND_LIMIT } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 
 export const router = express.Router();
@@ -80,13 +80,24 @@ router.post('/api/tt-reconcile/find-emails', async (req, res) => {
     if (!hkey || !mkey) {
       return res.status(400).json({ error: 'HUNTER_API_KEY and MILLIONVERIFIER_API_KEY must both be set in dashboard-web/.env to find + verify emails.' });
     }
-    const { ids } = req.body || {};
+    const { ids, limit } = req.body || {};
     const idSet = Array.isArray(ids) && ids.length ? new Set(ids.map(Number)) : null;
     const rows = parseTargetTalentMd().filter(r =>
       r.status !== 'Archived' && !(r.email || '').trim() && r.first && r.last && r.company &&
       (!idSet || idSet.has(r.id)));
+
+    // Budget guardrail: each contact = one Hunter search credit (found or not),
+    // free tier 50/month. A no-ids click used to run EVERY addressless contact
+    // and could drain the tier in one go. Cap to the smaller of remaining
+    // credits and a per-run size: honor an explicit id selection or a body
+    // `limit`, else the small default. See find-contacts.planFindBudget.
+    const creditsLeft = await hunterSearchesLeft(hkey);
+    const wanted = idSet ? rows.length : (Number.isFinite(limit) && limit > 0 ? limit : DEFAULT_FIND_LIMIT);
+    const cap = planFindBudget({ needed: rows.length, limit: wanted, creditsLeft });
+    const toRun = rows.slice(0, cap);
+
     const results = [];
-    for (const r of rows) {
+    for (const r of toRun) {
       try {
         const f = await findAndVerify(r.company, r.first, r.last, hkey, mkey);
         if (f.found && f.verify) {
@@ -99,7 +110,11 @@ router.post('/api/tt-reconcile/find-emails', async (req, res) => {
         results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), company: r.company, email: null, state: 'error', error: e.message });
       }
     }
-    res.json({ ok: true, checked: rows.length, written: results.filter(x => x.email).length, results });
+    res.json({
+      ok: true, checked: toRun.length, written: results.filter(x => x.email).length,
+      needing: rows.length, skippedForBudget: rows.length - toRun.length,
+      creditsBefore: creditsLeft, creditsSpent: toRun.length, results,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -234,20 +249,27 @@ router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
     // (Hunter Email Finder into MillionVerifier), and write ONLY a verified
     // address. This replaces the old first.last@company guess: a reconcile add now
     // yields a deliverable address or none (the contact goes to LinkedIn instead).
-    let emailsFound = 0;
+    let emailsFound = 0, budgetHit = false;
     const hkey = loadEnvKey('HUNTER_API_KEY');
     const mkey = loadEnvKey('MILLIONVERIFIER_API_KEY');
     if (hkey && mkey) {
+      // Budget guardrail: don't let a large bulk-add drain the Hunter free tier.
+      // Stop finding once credits run out (unknown balance → don't block, still
+      // bounded by how many contacts were added).
+      let budget = await hunterSearchesLeft(hkey);
+      if (budget == null) budget = Infinity;
       for (let i = 0; i < written.length; i++) {
         const c = toWrite[i];
         if ((c.email || '').trim() || !c.first || !c.last || !c.company) continue;
+        if (budget <= 0) { budgetHit = true; break; }
         try {
           const f = await findAndVerify(c.company, c.first, c.last, hkey, mkey);
+          budget -= 1;
           if (f.found && f.verify) { updateTTLine(written[i].id, { email: setVerifyTag(f.email, f.verify) }); emailsFound++; }
         } catch { /* leave without an address; the LinkedIn fallback covers it */ }
       }
     }
-    res.json({ ok: true, requested: contacts.length, written: written.length, skipped: contacts.length - written.length, emailsFound, verifierKeys: !!(hkey && mkey) });
+    res.json({ ok: true, requested: contacts.length, written: written.length, skipped: contacts.length - written.length, emailsFound, budgetHit, verifierKeys: !!(hkey && mkey) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

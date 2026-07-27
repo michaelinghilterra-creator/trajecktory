@@ -478,6 +478,7 @@ for (const suite of [
   'tests/email-verify.test.mjs',
   'tests/bounce-parse.test.mjs',
   'tests/verify-contacts.test.mjs',
+  'tests/hunter-budget.test.mjs',
   'tests/tt-reconcile.test.mjs',
   'tests/connect-queue.test.mjs',
   'tests/debrief.test.mjs',

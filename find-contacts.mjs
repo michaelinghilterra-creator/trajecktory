@@ -45,6 +45,36 @@ async function hunterFind(company, first, last, key) {
   return mapHunterFind(j);
 }
 
+// Remaining Hunter *search* credits — the Email Finder bucket, distinct from the
+// verifier bucket verify-contacts.hunterCredits() reads. The Finder spends ONE
+// search credit per contact whether or not it finds an address, and the free
+// tier is only 50/month, so every finder path must budget against this. The
+// /v2/account call is free (does not spend a credit). Returns null on any
+// failure so callers fall back to the per-run default cap rather than blocking.
+export async function hunterSearchesLeft(key) {
+  try {
+    const r = await fetch(`https://api.hunter.io/v2/account?api_key=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(10_000) });
+    const s = (await r.json())?.data?.requests?.searches;
+    return s && Number.isFinite(s.available) && Number.isFinite(s.used) ? Math.max(0, s.available - s.used) : null;
+  } catch { return null; }
+}
+
+// Per-run default: with no explicit --limit, do at most this many lookups so a
+// single run can never drain the month. Raise it deliberately with --limit=N.
+export const DEFAULT_FIND_LIMIT = 10;
+
+// Decide how many finder calls to actually make this run. Never exceed remaining
+// Hunter search credits; with no explicit limit, fall back to DEFAULT_FIND_LIMIT.
+// creditsLeft null = unknown (the credits endpoint failed) → cap on the
+// default/limit only. Pure + unit-tested; both the CLI and the dashboard
+// find-emails endpoint route their budget through here so they cannot drift.
+export function planFindBudget({ needed, limit = 0, creditsLeft = null, defaultLimit = DEFAULT_FIND_LIMIT }) {
+  const wanted = limit > 0 ? limit : defaultLimit;
+  let cap = Math.min(needed, wanted);
+  if (creditsLeft != null) cap = Math.min(cap, Math.max(0, creditsLeft));
+  return Math.max(0, cap);
+}
+
 // The find-then-verify pipeline for ONE contact, shared by the CLI loop below and
 // the dashboard reconcile endpoint. Returns:
 //   { found:false }                                 — Hunter had nothing
@@ -147,12 +177,24 @@ async function main() {
   const targets = fileArg === 'tt' ? ['tt'] : fileArg === 'rec' ? ['rec'] : ['tt', 'rec'];
   let needs = [];
   for (const fk of targets) for (const c of readNeedsEmail(FILES[fk])) needs.push({ ...c, fk });
-  const capped = limit > 0 ? needs.slice(0, limit) : needs;
 
-  say(`\n🔎 find-contacts — ${APPLY ? 'APPLY' : 'DRY RUN'}`);
-  say(`   active contacts with NO address: ${capped.length}${limit ? ` (of ${needs.length}, capped)` : ''}`);
+  // Budget guardrail: the Finder spends one Hunter search credit per contact
+  // (found or not), free tier is 50/month. Cap to the smaller of remaining
+  // credits and a per-run default so a bare run can't drain the month.
+  const creditsLeft = await hunterSearchesLeft(hkey);
+  const cap = planFindBudget({ needed: needs.length, limit, creditsLeft });
+  const capped = needs.slice(0, cap);
+
+  say(`\n🔎 find-contacts — ${APPLY ? 'APPLY' : 'DRY RUN'} · Hunter search credits left: ${creditsLeft ?? 'unknown'}`);
+  say(`   active contacts with NO address: ${needs.length}`);
+  say(`   will look up this run          : ${capped.length}  (≈ ${capped.length} Hunter credit${capped.length === 1 ? '' : 's'})`);
+  if (capped.length < needs.length) {
+    const byCredits = creditsLeft != null && creditsLeft <= (limit > 0 ? limit : DEFAULT_FIND_LIMIT);
+    say(`   capped by ${byCredits ? `remaining credits (${creditsLeft})` : `per-run limit (${limit > 0 ? `--limit=${limit}` : `default ${DEFAULT_FIND_LIMIT}`})`}; pass --limit=N to do more.`);
+  }
   for (const c of capped) say(`     #${c.id} ${c.first} ${c.last} @ ${c.company} [${c.status}]`);
-  if (!APPLY) { say(`\n   Dry run. Re-run with --apply to find (Hunter) + verify (MillionVerifier) + write.`); if (JSON_OUT) console.log(JSON.stringify({ ok: true, applied: false, needs: capped.length }, null, 2)); return; }
+  if (!APPLY) { say(`\n   Dry run. Re-run with --apply to find (Hunter) + verify (MillionVerifier) + write.`); if (JSON_OUT) console.log(JSON.stringify({ ok: true, applied: false, needs: needs.length, willLookup: capped.length, creditsLeft }, null, 2)); return; }
+  if (creditsLeft === 0) { say('\n   ⛔ No Hunter search credits left this month — nothing looked up.'); if (JSON_OUT) console.log(JSON.stringify({ ok: true, applied: true, tally: { found_ok: 0, found_risky: 0, found_invalid: 0, not_found: 0, error: 0 }, creditsLeft: 0, backups: [] }, null, 2)); return; }
   if (!capped.length) { say('\n   Nothing to find.'); return; }
 
   const editsByFile = { tt: new Map(), rec: new Map() };
