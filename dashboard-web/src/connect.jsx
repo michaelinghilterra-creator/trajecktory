@@ -6,16 +6,11 @@
 // compliant.
 const { useState: useStateCq, useEffect: useEffectCq } = React;
 
-// Statuses that mean an invite/message has already gone out (contact is past the
-// "send a request" step). The row stays in the queue until they accept
-// (Connected) so you don't lose track, but it's shown as done, not actionable.
-const CONNECT_SENT_STAGES = ['Sent', 'Replied', 'Meeting Scheduled'];
-
-function ConnectRow({ c, toast }) {
+function ConnectRow({ c, toast, onDone }) {
   const [note, setNote] = useStateCq(null);
   const [loading, setLoading] = useStateCq(false);
   const [sending, setSending] = useStateCq(false);
-  const [sentAt, setSentAt] = useStateCq(CONNECT_SENT_STAGES.includes(c.status) ? (c.status === 'Sent' ? 'earlier' : c.status) : null);
+  const [sentAt, setSentAt] = useStateCq(null);
   const done = !!sentAt;
 
   // Record that the invite went out, right here — no jumping to the Network tab.
@@ -35,12 +30,12 @@ function ConnectRow({ c, toast }) {
       body: JSON.stringify({ direction: 'Sent', subject: 'LinkedIn connection request', body }),
     }).then(r => r.json())
       .then(res => {
-        if (res.error) { toast && toast(res.error, 'error'); return; }
-        setSentAt('just now');
-        toast && toast(`Marked sent — ${c.name || 'contact'} moved to Sent`, 'success');
+        if (res.error) { toast && toast(res.error, 'error'); setSending(false); return; }
+        setSentAt('just now');                 // brief ✓ so the click is confirmed,
+        toast && toast(`Marked sent — ${c.name || 'contact'}`, 'success');
+        setTimeout(() => onDone && onDone(c.source, c.id), 1000); // then drop off the list
       })
-      .catch(e => toast && toast(e.message, 'error'))
-      .finally(() => setSending(false));
+      .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
   };
 
   const draft = () => {
@@ -122,6 +117,12 @@ window.ConnectTab = function ConnectTab({ toast }) {
       .catch(e => setErr(e.message));
   }, []);
 
+  // A row leaves the queue two ways: you sent the invite, or you archived a stale
+  // contact. Both drop it from view here; the server also stops returning it, so a
+  // reload stays consistent.
+  const dropRow = (source, id) =>
+    setQueue(q => (q || []).filter(c => !(c.source === source && String(c.id) === String(id))));
+
   if (err) return <div className="dim" style={{ padding: 28 }}>Could not load the connect queue: {err}</div>;
   if (!queue) return <div className="dim" style={{ padding: 28 }}>Loading connect queue…</div>;
 
@@ -130,12 +131,12 @@ window.ConnectTab = function ConnectTab({ toast }) {
       <h2 style={{ margin: '0 0 2px' }}>Connect queue</h2>
       <p className="dim" style={{ fontSize: 13, marginTop: 4, marginBottom: 18 }}>
         {queue.length} contact{queue.length === 1 ? '' : 's'} we cannot email (a LinkedIn handle, no
-        sendable address). Draft a note, copy it, send the invite by hand, then hit Mark sent to
-        record it (advances the contact to Sent, stamps Last Touch). Nothing is sent from here.
+        sendable address). Draft a note, copy it, send the invite by hand, then hit Mark sent — the
+        row drops off once recorded. Nothing is sent from here.
       </p>
       {queue.length === 0
         ? <div className="card dim">Nobody in the queue. Every reachable contact has a sendable email.</div>
-        : queue.map(c => <ConnectRow key={`${c.source}:${c.id}`} c={c} toast={toast} />)}
+        : queue.map(c => <ConnectRow key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} />)}
     </div>
   );
 };

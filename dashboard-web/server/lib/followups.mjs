@@ -377,7 +377,11 @@ function computeGhostedCandidates() {
 // 1st-degree connection — message directly, no request needed). Spans both
 // target-talent.md and recruiters.md. Rows are injectable so this is unit-tested
 // without reading the real (gitignored) contact files.
-const CONNECT_QUEUE_EXCLUDE_STATUS = new Set(['Archived', 'Connected']);
+// Only contacts still needing a request belong in the queue. Anything at or past
+// "Sent" has already been actioned (or the contact was archived as stale), so it
+// drops out — the queue is a to-do list, not a history. Sent/Replied/Meeting are
+// tracked on the Network tab; Connected means they accepted.
+const CONNECT_QUEUE_EXCLUDE_STATUS = new Set(['Archived', 'Connected', 'Sent', 'Replied', 'Meeting Scheduled']);
 
 function _hasLinkedIn(row) {
   return !!(row && (row.linkedin || '').trim());

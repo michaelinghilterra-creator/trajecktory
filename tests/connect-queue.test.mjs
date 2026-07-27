@@ -68,6 +68,10 @@ const taRows = [
   // an address" case that must read differently from "address present, unverified"
   ta({ id: 8, first: 'Tay', last: 'Okonkwo', title: 'Head of People', company: 'Meridian AI',
        linkedin: 'linkedin.com/in/tay-okonkwo-ex', status: 'Not Contacted' }),
+  // no email, only a LinkedIn handle, BUT the invite already went out (status Sent)
+  // → excluded: the queue is a to-do list, and a sent invite is done, not pending.
+  ta({ id: 9, first: 'Noa', last: 'Bergman', title: 'Talent Partner', company: 'Solstice Data',
+       linkedin: 'linkedin.com/in/noa-bergman-ex', status: 'Sent' }),
 ];
 
 const recruiterRows = [
@@ -96,6 +100,7 @@ check(!ids.includes('recruiter:101'), 'recruiter with a risky-but-sendable email
 check(!ids.includes('ta:4'), 'already-Connected contact is NOT queued');
 check(!ids.includes('ta:5'), 'Archived (dead-opp) contact is NOT queued');
 check(!ids.includes('ta:6'), 'contact with no LinkedIn handle is NOT queued');
+check(!ids.includes('ta:9'), 'contact whose invite already went out (status Sent) is NOT queued');
 
 const robin = q.find(r => r.id === 102);
 check(robin && robin.company === 'Halcyon Partners', 'recruiter company is taken from `firm`');
