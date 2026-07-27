@@ -3,7 +3,7 @@ import fs from 'fs';
 import { collectWeeklyMetrics } from '../lib/weekly-collect.mjs';
 import { evaluateFloors } from '../lib/review-thresholds.mjs';
 import { runWeeklyReview } from '../lib/weekly-run.mjs';
-import { REVIEW_LOG_PATH, BUILD_LOCK_PATH } from '../config.mjs';
+import { REVIEW_LOG_PATH } from '../config.mjs';
 import { logConnect, readConnects } from '../lib/connects.mjs';
 import { actionSeries, applicationCohorts } from '../lib/activity.mjs';
 
@@ -43,14 +43,15 @@ router.get('/api/activity/cohorts', (req, res) => {
   }
 });
 
-// GET /api/review/status — the last review and the current build-lock state.
+// GET /api/review/status — the last review and recent history. The build-cap gate
+// moved to the live rolling floor (GET /api/build-floor); this no longer returns a
+// lock. `lock: null` is kept in the shape so any older client reads "not locked"
+// rather than crashing.
 router.get('/api/review/status', (req, res) => {
   try {
-    let lock = { locked: false };
-    try { lock = JSON.parse(fs.readFileSync(BUILD_LOCK_PATH, 'utf8')); } catch { /* none yet */ }
     let log = [];
     try { log = JSON.parse(fs.readFileSync(REVIEW_LOG_PATH, 'utf8')) || []; } catch { /* none yet */ }
-    res.json({ lock, lastReview: log[log.length - 1] || null, history: log.slice(-8) });
+    res.json({ lock: null, lastReview: log[log.length - 1] || null, history: log.slice(-8) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -63,8 +64,8 @@ router.get('/api/review/status', (req, res) => {
 // rather than a live recompute. Runs the exact engine weekly-review.mjs runs.
 router.post('/api/review/run', (req, res) => {
   try {
-    const { weekStart, weekEnd, lock, entry, history } = runWeeklyReview({ now: new Date() });
-    res.json({ ok: true, weekStart, weekEnd, lock, lastReview: entry, history: history.slice(-8) });
+    const { weekStart, weekEnd, entry, history } = runWeeklyReview({ now: new Date() });
+    res.json({ ok: true, weekStart, weekEnd, lock: null, lastReview: entry, history: history.slice(-8) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

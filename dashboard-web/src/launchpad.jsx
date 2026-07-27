@@ -137,6 +137,12 @@ const LP_OPTIONAL = [
     sowhat: 'A guessed email that bounces is worse than none. The note goes nowhere, and it reads to you like you were ignored. With this on, you only write to an email that has been checked.',
     affectsScore: 'no',
     ifYouSkip: 'You cannot reach those people by email, so follow-ups skip them. The rest still works, and you can still use LinkedIn.' },
+  { id: 'buffer',    label: 'Social posting (optional)',
+    does: 'Sends your saved posts to LinkedIn and X for you.',
+    sowhat: 'You draft and line up posts here. Buffer is the tool that sends them out on a set day. So a week of posts can go out on its own, not one at a time by hand.',
+    affectsScore: 'no',
+    extra: 'Setup is a one-time thing you do in Claude Code, not on this screen. trajecktory ships no shared posting link, so nothing ever goes out without your approval.',
+    ifYouSkip: 'You still write and line up posts here. You just paste them into LinkedIn or X on your own.' },
   { id: 'obsidian',  label: 'Obsidian vault',
     does: 'Copies notes about jobs you applied to into your Obsidian vault.',
     sowhat: 'Useful only if you already keep your notes there.',
@@ -2177,7 +2183,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                     {tpl('contacts', 'Recruiters and contacts', 'People you already know. Works for both lists.')}
                   </div>
                   <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6 }}>
-                    <b style={{ color: 'var(--text)' }}>Contacts upload is on the Recruiters tab.</b> Fill in the contacts sheet and use the bulk import there.
+                    <b style={{ color: 'var(--text)' }}>Contacts upload is on the Network tab, under Recruiters.</b> Fill in the contacts sheet and use the bulk import there.
                     <div style={{ marginTop: 6, color: 'var(--text-mute)' }}>
                       Applications is download only for now. Bringing filled-in rows into the tracker has to go through the same merge step everything else uses, and a half-built importer that scrambles a tracker is worse than none. Fill the sheet in and it will be ready when that lands.
                     </div>
@@ -2282,6 +2288,25 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                   {discKeys.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{discKeys.msg}</div>}
                   <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>
                     Brave: brave.com/search/api (free tier available). Muse: themuse.com/developers/api/v2. Stored locally in dashboard-web/.env; only ever sent to those services. Neither is needed for API Scan, Agent Scan, or Evaluate.
+                  </div>
+                </div>
+              );
+            }
+            if (o.id === 'buffer') {
+              return (
+                <div>
+                  <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
+                  <LpWhy item={o} />
+                  <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.7 }}>
+                    <b style={{ color: 'var(--text)' }}>One-time connect (in Claude Code, not here):</b>
+                    <ol style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                      <li>Add the Buffer MCP server to Claude Code and sign in to Buffer once.</li>
+                      <li>Draft and queue posts in <b>LinkedIn → Posts</b>.</li>
+                      <li>In a Claude Code session, ask Claude to schedule your queued posts, then <b>Mark scheduled</b>.</li>
+                    </ol>
+                    <div style={{ marginTop: 8, color: 'var(--text-mute)' }}>
+                      trajecktory never posts on its own; publishing always goes through your approval and your own Buffer account.
+                    </div>
                   </div>
                 </div>
               );

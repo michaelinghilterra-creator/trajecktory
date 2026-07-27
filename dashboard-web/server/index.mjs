@@ -14,6 +14,7 @@ import { router as workflowRoutes, workflowJobs } from './routes/workflow.mjs';
 import { router as agentRoutes, agentJobs } from './routes/agent.mjs';
 import { router as triageRoutes } from './routes/triage.mjs';
 import { router as recruitersRoutes } from './routes/recruiters.mjs';
+import { router as referralsRoutes } from './routes/referrals.mjs';
 import { router as targetTalentRoutes } from './routes/target-talent.mjs';
 import { router as ttReconcileRoutes } from './routes/tt-reconcile.mjs';
 import { router as linkedinSsiRoutes } from './routes/linkedin-ssi.mjs';
@@ -29,6 +30,7 @@ import { router as postsRoutes } from './routes/posts.mjs';
 import { router as interviewRoutes } from './routes/interview.mjs';
 import { router as googleRoutes } from './routes/google.mjs';
 import { router as reviewRoutes } from './routes/review.mjs';
+import { router as buildFloorRoutes } from './routes/build-floor.mjs';
 import { router as systemRoutes, updateJobs } from './routes/system.mjs';
 import { getIdentity } from './lib/profile.mjs';
 
@@ -166,6 +168,7 @@ app.use(workflowRoutes);
 app.use(agentRoutes);
 app.use(triageRoutes);
 app.use(recruitersRoutes);
+app.use(referralsRoutes);
 app.use(targetTalentRoutes);
 app.use(ttReconcileRoutes);
 app.use(linkedinSsiRoutes);
@@ -181,6 +184,7 @@ app.use(postsRoutes);
 app.use(interviewRoutes);
 app.use(googleRoutes);
 app.use(reviewRoutes);
+app.use(buildFloorRoutes);
 app.use(systemRoutes);
 
 // Public identity for the frontend's signature blocks, so no name/email/phone

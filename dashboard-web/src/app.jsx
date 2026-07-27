@@ -143,9 +143,14 @@ function App() {
   const [search, setSearch] = useState("");
   const [drawerApp, setDrawerApp] = useState(null);
   // Transient: a Follow-Ups click on a TA row pushes the contact id here and
-  // switches tab; TargetTalentTab consumes it once and opens its own drawer.
+  // switches to Network → TA Outreach; TargetTalentTab consumes it once and
+  // opens its own drawer.
   const [pendingTaOpen, setPendingTaOpen] = useState(null);
-  const openTaContact = (id) => { setPendingTaOpen(id); setTab("target-talent"); };
+  // Network parent-tab subtab (referrals | recruiters | ta), lifted here so the
+  // command palette and the Follow-Ups→TA jump can target a specific subtab,
+  // mirroring pipelineView. Defaults to Referrals (warmest channel).
+  const [networkSub, setNetworkSub] = useState("referrals");
+  const openTaContact = (id) => { setPendingTaOpen(id); setNetworkSub("ta"); setTab("network"); };
   const [pipelineView, setPipelineView] = useState("overview");
 
   // Reset Pipeline's subtab whenever the user navigates away. Otherwise
@@ -156,6 +161,12 @@ function App() {
   useEffect(() => {
     if (tab !== "pipeline" && pipelineView !== "overview") {
       setPipelineView("overview");
+    }
+    // Same for Network: re-entry defaults back to Referrals. A command-palette /
+    // Follow-Ups jump that sets networkSub in the same tick as tab still wins
+    // (state updates batch, and tab === "network" skips this reset).
+    if (tab !== "network" && networkSub !== "referrals") {
+      setNetworkSub("referrals");
     }
   }, [tab]);
   const [filters, setFilters] = useState({ statuses: [], archetypes: [], scoreMin: 0 });
@@ -473,9 +484,10 @@ function App() {
       { section: "Navigate", icon: "↻", label: "Go to Follow-Ups",   run: () => setTab("followups") },
       { section: "Navigate", icon: "◈", label: "Go to Interview",    run: () => setTab("interview") },
       { section: "Navigate", icon: "≡", label: "Go to All Entries",  run: () => { setTab("pipeline"); setPipelineView("all"); } },
-      { section: "Navigate", icon: "◍", label: "Go to LinkedIn SSI", run: () => setTab("linkedin-ssi") },
-      { section: "Navigate", icon: "◎", label: "Go to TA Outreach", run: () => setTab("target-talent") },
-      { section: "Navigate", icon: "☎", label: "Go to Recruiters",   run: () => setTab("recruiters") },
+      { section: "Navigate", icon: "◍", label: "Go to LinkedIn",     run: () => setTab("linkedin-ssi") },
+      { section: "Navigate", icon: "⇄", label: "Go to Referrals",    run: () => { setNetworkSub("referrals"); setTab("network"); } },
+      { section: "Navigate", icon: "☎", label: "Go to Recruiters",   run: () => { setNetworkSub("recruiters"); setTab("network"); } },
+      { section: "Navigate", icon: "◎", label: "Go to TA Outreach",  run: () => { setNetworkSub("ta"); setTab("network"); } },
       { section: "Navigate", icon: "✦", label: "Go to Insights",     run: () => setTab("analytics") },
       { section: "Navigate", icon: "◇", label: "Go to Launchpad (setup)", run: () => setTab("launchpad") },
     ];
@@ -505,7 +517,7 @@ function App() {
   // linkedin-ssi: influencer names; dictionary: jargon) and start fresh when
   // entered. Clearing on entry OR exit of cluster A keeps the term scoped to
   // the user's intent.
-  const SEARCH_CLUSTER_A = useMemo(() => new Set(["pipeline", "followups", "target-talent"]), []);
+  const SEARCH_CLUSTER_A = useMemo(() => new Set(["pipeline", "followups", "network"]), []);
   const prevTabRef = useRef(tab);
   useEffect(() => {
     const wasInA = SEARCH_CLUSTER_A.has(prevTabRef.current);
@@ -518,8 +530,7 @@ function App() {
     switch (tab) {
       case "pipeline":       return "Search company, role, source…";
       case "followups":      return "Search company, role…";
-      case "target-talent":  return "Search name, company, title…";
-      case "recruiters":     return "Search name, firm, title, city…";
+      case "network":        return "Search contacts: name, company, firm…";
       case "linkedin-ssi":   return "Search influencer name…";
       default:               return "Search by company, role, status…";
     }
@@ -570,8 +581,7 @@ function App() {
           {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} toast={toast} />}
           {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} toast={toast} />}
           {tab === "interview" && <window.InterviewTab apps={apps} toast={toast} />}
-          {tab === "recruiters"&& <window.RecruitersTab search={search} />}
-          {tab === "target-talent" && <window.TargetTalentTab initialOpenId={pendingTaOpen} onInitialOpenConsumed={() => setPendingTaOpen(null)} search={search} />}
+          {tab === "network" && <window.NetworkTab view={networkSub} setView={setNetworkSub} search={search} pendingTaOpen={pendingTaOpen} onTaOpenConsumed={() => setPendingTaOpen(null)} toast={toast} />}
           {tab === "linkedin-ssi" && <window.LinkedInSSITab toast={toast} />}
           {tab === "launchpad" && <window.SetupTab toast={toast} setTab={setTab} />}
         </div>

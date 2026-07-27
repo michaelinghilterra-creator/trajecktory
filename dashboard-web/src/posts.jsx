@@ -169,6 +169,23 @@ window.PostsTab = function PostsTab({ toast }) {
     React.createElement("p", { style: { margin: "0 0 16px", color: "var(--text-dim)", fontSize: 13, maxWidth: 720 } },
       "Draft posts for two lanes: Professional lands on LinkedIn (the lane that earns screens), trajecktory lands on X (build in public). Write your own or have Claude draft one, edit either, then queue it. Queued posts are ready; Claude schedules the queue to Buffer after you approve. Nothing posts automatically."),
 
+    // Connect-Buffer callout — the one-time setup that makes "schedule the queue" work.
+    React.createElement("details", { className: "card", style: { marginBottom: 16, borderColor: "var(--border)", padding: "10px 14px" } },
+      React.createElement("summary", { style: { cursor: "pointer", fontSize: 12.5, fontWeight: 700, color: "var(--text-dim)" } },
+        "First time? Connect Buffer to publish →"),
+      React.createElement("div", { style: { marginTop: 10, fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.7 } },
+        React.createElement("p", { style: { margin: "0 0 8px" } },
+          "This composer drafts and queues. Buffer is what actually schedules your posts to LinkedIn and X. It is a one-time connect, done in Claude Code, not on this screen:"),
+        React.createElement("ol", { style: { margin: "0 0 8px", paddingLeft: 18 } },
+          React.createElement("li", null, "Add the Buffer MCP server to Claude Code and sign in to Buffer once."),
+          React.createElement("li", null, "Draft and queue posts here."),
+          React.createElement("li", null, "In a Claude Code session, ask Claude to schedule your queued posts, then Mark them scheduled."),
+        ),
+        React.createElement("div", { style: { color: "var(--text-mute)", fontSize: 11.5 } },
+          "trajecktory ships no shared posting link and never posts on its own; publishing always goes through your approval and your own Buffer account."),
+      ),
+    ),
+
     // Composer
     React.createElement("div", { className: "card", style: { marginBottom: 22, borderColor: "var(--border)" } },
       React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 8 } }, laneChip("professional"), laneChip("trajecktory")),
