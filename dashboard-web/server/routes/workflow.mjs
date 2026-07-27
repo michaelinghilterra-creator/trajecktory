@@ -1,9 +1,25 @@
 import express from 'express';
 import { exec } from 'child_process';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { ROOT_DIR } from '../config.mjs';
 import { WORKFLOW_STEPS, tailLines } from '../lib/workflow.mjs';
 
 export const router = express.Router();
+
+// How many URLs are waiting to be evaluated. Counts unchecked "- [ ]" lines in
+// data/pipeline.md (dead "- [!]" and done "- [x]" are excluded). The dashboard
+// shows this on the Evaluate step so the user sees the queue depth and knows to
+// run another batch, instead of learning it only from the agent's freeform log.
+router.get('/api/pipeline/pending', (_req, res) => {
+  try {
+    const text = readFileSync(join(ROOT_DIR, 'data/pipeline.md'), 'utf8');
+    const pending = (text.match(/^\s*-\s*\[ \]\s+https?:\/\//gm) || []).length;
+    res.json({ pending });
+  } catch {
+    res.json({ pending: 0 });
+  }
+});
 
 // ── Workflow Runner ──────────────────────────────────────────────────────────
 // Lets the dashboard sidebar drive the morning workflow with single clicks.
