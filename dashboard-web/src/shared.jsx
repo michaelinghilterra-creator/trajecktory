@@ -697,12 +697,14 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const visibleTriage = triageCards.filter(c => !dismissed.has(c.url));
 
   // Two layouts: keyless users get the lean plan steps; key users get the full
-  // pipeline with the formerly-Advanced steps promoted inline (scan → evaluate →
-  // merge order). No collapsible Advanced section in either case.
+  // pipeline. Merge/Verify/Health are NOT listed for key users: a finished
+  // Evaluate batch auto-runs that housekeeping (runPostEvalChain), so showing
+  // them as separate manual steps was redundant. They still run — just not by hand.
   const BASE_ORDER  = ['api-scan', 'triage', 'merge', 'verify', 'health'];
   // API-key users skip Triage (a cheap Haiku pre-filter): their evals are cheap and
-  // the batch already takes best-fit-first, so they go straight scan -> evaluate.
-  const POWER_ORDER = ['api-scan', 'cli-scan', 'gate', 'cli-eval', 'merge', 'verify', 'health', 'discover'];
+  // the batch already takes best-fit-first, so they go straight scan -> evaluate,
+  // and the post-eval housekeeping runs automatically.
+  const POWER_ORDER = ['api-scan', 'cli-scan', 'gate', 'cli-eval', 'discover'];
   const stepById = Object.fromEntries(STEPS.map(s => [s.id, s]));
   const visibleSteps = (hasKey ? POWER_ORDER : BASE_ORDER).map(id => stepById[id]).filter(Boolean);
 
