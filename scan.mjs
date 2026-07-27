@@ -440,6 +440,17 @@ async function main() {
       .join(', ');
     console.log(`  not scanned by platform: ${line}`);
   }
+  // No API-backed targets at all: this zero-token scanner can only hit
+  // Greenhouse/Ashby/Lever. If every enabled company is Workday/custom (or the
+  // API-backed ones were disabled), the scan returns nothing and that reads as
+  // "broken" rather than "misconfigured". Say the cause and the two fixes.
+  if (targets.length === 0) {
+    console.log('\n⚠  No enabled company has a scannable ATS API (Greenhouse/Ashby/Lever),');
+    console.log('   so this zero-token API scan has nothing to query. Either:');
+    console.log('     • enable API-backed companies in portals.yml (flip `enabled: false` → true on');
+    console.log('       Greenhouse/Ashby/Lever rows), or');
+    console.log('     • run Agent Scan (WebSearch) for Workday/custom career sites.');
+  }
   if (dryRun) console.log('(dry run — no files will be written)\n');
 
   // 3. Load dedup sets
