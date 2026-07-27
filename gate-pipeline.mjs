@@ -260,10 +260,14 @@ const dead      = results.filter(r => r.result === 'expired');
 const uncertain = results.filter(r => r.result === 'uncertain');
 
 console.log('');
-if (decidedCount) console.log(`Already evaluated: ${decidedCount} (skipped, not browser-checked)`);
+const suppressed = decidedCount + repostCount;
+if (suppressed) console.log(`Suppressed: ${suppressed} (${decidedCount} already evaluated, ${repostCount} active-role reposts — not browser-checked)`);
 console.log(`Live:      ${live.length}`);
 console.log(`Dead:      ${dead.length}`);
 console.log(`Uncertain: ${uncertain.length} (kept as live — manual review)`);
+// One reconciling line so the numbers always add up to the pending total the
+// user started with (live + dead + uncertain + suppressed), no "missing" rows.
+console.log(`Total:     ${live.length + dead.length + uncertain.length + suppressed} pending  =  ${live.length} live · ${dead.length} dead · ${uncertain.length} uncertain · ${suppressed} suppressed`);
 console.log('');
 
 // ── Rewrite pipeline.md ──────────────────────────────────────────────────────
