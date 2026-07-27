@@ -381,6 +381,8 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [pasteMsg, setPasteMsg] = useState('');
   const [hasKey, setHasKey] = useState(false);       // API key present AND billed to it (effective)
   const [pendingCount, setPendingCount] = useState(null);   // URLs waiting to evaluate
+  const [needsManual, setNeedsManual] = useState([]);       // URLs the eval couldn't read → paste
+  const [evalSummary, setEvalSummary] = useState('');       // plain "what the last batch did" line
   const pollersRef = useRef({});
 
   // Agent Scan and Evaluate Pipeline spawn the bundled Claude CLI, which needs a
@@ -456,7 +458,11 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // How many URLs are waiting to be evaluated (unchecked "- [ ]" in pipeline.md).
   // Shown on the Evaluate step so the user sees the queue depth without me telling them.
   const loadPending = () => fetch('/api/pipeline/pending').then(r => r.json()).then(d => setPendingCount(d.pending)).catch(() => {});
-  useEffect(() => { loadTriage(); loadPending(); }, []);
+  // Postings the eval couldn't read (Workday/Ashby SPAs). It logs them instead of
+  // stitching a JD from search results; the user confirms live + pastes the JD.
+  const loadNeedsManual = () => fetch('/api/pipeline/needs-manual').then(r => r.json()).then(d => setNeedsManual(d.items || [])).catch(() => {});
+  const resolveNeedsManual = (url) => window.tjkMutate('/api/pipeline/needs-manual/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) }).then(() => loadNeedsManual()).catch(() => {});
+  useEffect(() => { loadTriage(); loadPending(); loadNeedsManual(); }, []);
   // Clear any in-flight pollers (agent steps, deep dives, paste) on unmount.
   useEffect(() => () => { Object.values(pollersRef.current).forEach(clearInterval); }, []);
 
@@ -571,12 +577,25 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           if (job.status === 'done') {
             onDataChanged && onDataChanged();
             if (step.id === 'triage') loadTriage();
-            // Consolidation: a finished Evaluate batch auto-runs the housekeeping
-            // it always needed (Merge → Verify → Health), so results appear without
-            // three more manual clicks. Refresh the pending count too.
-            if (step.id === 'cli-eval') runPostEvalChain();
+            // A finished Evaluate batch auto-runs its housekeeping (Merge → Health;
+            // Verify is intentionally excluded — see runPostEvalChain), then shows a
+            // plain one-line summary so the count never moves without a visible reason.
+            if (step.id === 'cli-eval') {
+              runPostEvalChain();
+              Promise.all([
+                fetch('/api/pipeline/pending').then(r => r.json()).catch(() => ({})),
+                fetch('/api/pipeline/needs-manual').then(r => r.json()).catch(() => ({})),
+              ]).then(([p, nm]) => {
+                const scored = job.evaluationsDone || 0;
+                const pend = p.pending || 0;
+                const cr = (nm.items || []).length;
+                const msg = `Batch: ${scored} scored · ${pend} still queued` + (cr ? ` · ${cr} need your paste (couldn't read)` : '');
+                setEvalSummary(msg);
+                toast && toast(msg, scored ? 'success' : (cr ? 'warn' : 'info'));
+              });
+            }
           }
-          if (step.id === 'cli-eval') loadPending();
+          if (step.id === 'cli-eval') { loadPending(); loadNeedsManual(); }
         }
       },
     });
@@ -607,11 +626,13 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     });
   }
 
-  // Post-Evaluate housekeeping chain: merge tracker → verify actionable → health.
-  // Sequential, because merge writes applications.md that verify/health then read.
+  // Post-Evaluate housekeeping chain: merge tracker → health. Verify Actionable is
+  // deliberately NOT auto-run: it cannot detect closures on Workday/Ashby SPAs (its
+  // liveness check returns inconclusive and keeps the row), so it silently culled
+  // some live rows while missing dead ones, and the count drops it caused read as a
+  // bug. Run it by hand from the sidebar if you want a dead-link sweep.
   async function runPostEvalChain() {
     if (await runAutoStepAsync('merge') === 'error') return;
-    await runAutoStepAsync('verify');
     await runAutoStepAsync('health');
   }
 
@@ -932,6 +953,37 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               {triageSuppressed.length} already tracked · skipped
             </div>
           )}
+        </div>
+      )}
+
+      {evalSummary && (
+        <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', flex: 1, lineHeight: 1.4 }}>
+            <span style={{ color: 'var(--text-mute)', fontWeight: 600 }}>LAST BATCH · </span>{evalSummary}
+          </div>
+          <button onClick={() => setEvalSummary('')} title="Dismiss"
+            style={{ background: 'none', border: 'none', color: 'var(--text-mute)', cursor: 'pointer', fontSize: 12, flexShrink: 0 }}>×</button>
+        </div>
+      )}
+
+      {needsManual.length > 0 && (
+        <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--yellow)', marginBottom: 4 }}>
+            ⚠ COULDN'T READ ({needsManual.length})
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text-mute)', marginBottom: 6, lineHeight: 1.4 }}>
+            These wouldn't load (usually Workday/Ashby). Open each, confirm it's live, paste its JD below, then clear it. No score was invented for these.
+          </div>
+          {needsManual.map(it => (
+            <div key={it.url} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, fontSize: 10.5 }}>
+              <a href={window.safeHref(it.url)} target="_blank" rel="noreferrer" title={it.url}
+                style={{ color: 'var(--accent)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {(it.company || it.url) + (it.role ? ` · ${it.role}` : '')} ↗
+              </a>
+              <button onClick={() => resolveNeedsManual(it.url)} title="Clear once you've pasted the JD"
+                style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-mute)', borderRadius: 4, padding: '1px 6px', fontSize: 10, cursor: 'pointer', flexShrink: 0 }}>clear</button>
+            </div>
+          ))}
         </div>
       )}
 

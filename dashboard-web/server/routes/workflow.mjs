@@ -1,6 +1,6 @@
 import express from 'express';
 import { exec } from 'child_process';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { ROOT_DIR } from '../config.mjs';
 import { WORKFLOW_STEPS, tailLines } from '../lib/workflow.mjs';
@@ -18,6 +18,38 @@ router.get('/api/pipeline/pending', (_req, res) => {
     res.json({ pending });
   } catch {
     res.json({ pending: 0 });
+  }
+});
+
+// Postings the eval could NOT read (Workday / Ashby single-page apps). Rather than
+// stitch a JD from search results — which shipped closed roles as confident scores —
+// the eval logs them to data/needs-manual-jd.tsv and defers to the user: confirm the
+// posting is live, then paste the JD text into the Paste-a-JD box for a real eval.
+// GET lists them; POST /resolve removes one once the user has handled it.
+const NEEDS_MANUAL = 'data/needs-manual-jd.tsv';
+router.get('/api/pipeline/needs-manual', (_req, res) => {
+  try {
+    const text = readFileSync(join(ROOT_DIR, NEEDS_MANUAL), 'utf8');
+    const items = text.split('\n').slice(1)               // skip header row
+      .map(l => l.split('\t'))
+      .filter(c => c[0] && /^https?:\/\//.test(c[0].trim()))
+      .map(c => ({ url: c[0].trim(), company: (c[1] || '').trim(), role: (c[2] || '').trim() }));
+    res.json({ items });
+  } catch {
+    res.json({ items: [] });
+  }
+});
+router.post('/api/pipeline/needs-manual/resolve', (req, res) => {
+  const url = ((req.body && req.body.url) || '').trim();
+  if (!url) return res.status(400).json({ error: 'url required' });
+  try {
+    const p = join(ROOT_DIR, NEEDS_MANUAL);
+    const lines = readFileSync(p, 'utf8').split('\n');
+    const kept = lines.slice(1).filter(l => l && l.split('\t')[0].trim() !== url);
+    writeFileSync(p, [lines[0], ...kept].join('\n') + (kept.length ? '\n' : ''));
+    res.json({ ok: true, remaining: kept.length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
