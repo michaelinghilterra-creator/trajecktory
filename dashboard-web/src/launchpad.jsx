@@ -266,7 +266,7 @@ function LpSelect({ label, value, onChange, options, optional, hint }) {
     <div className="field">
       <label>{label}{optional ? ' · optional' : ''}</label>
       <select className="inp" value={value || ''} onChange={e => onChange(e.target.value)}>
-        <option value="">— select —</option>
+        <option value="">Select…</option>
         {opts.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
       {hint && <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 3, lineHeight: 1.4 }}>{hint}</div>}
@@ -346,7 +346,7 @@ function LpSummaryBox({ id, configured }) {
 const LP_TIER = { haiku: 'fast · cheapest', sonnet: 'balanced', opus: 'deepest · priciest' };
 const LP_MODE_LABEL = { pipeline: 'Evaluate', deep: 'Deep eval', scan: 'Agent Scan', triage: 'Triage' };
 function lpUsd(n) {
-  if (n == null || isNaN(n)) return '—';
+  if (n == null || isNaN(n)) return '-';
   return n < 0.01 ? `$${n.toFixed(3)}` : `$${n.toFixed(2)}`;
 }
 function ModelsCostPanel() {
@@ -480,9 +480,9 @@ function ModelsCostPanel() {
             <tbody>
               {history.map((h, i) => (
                 <tr key={i} style={{ color: 'var(--text-dim)', borderTop: '1px solid var(--border)' }}>
-                  <td style={{ padding: '4px 8px 4px 0' }}>{h.ts ? new Date(h.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</td>
+                  <td style={{ padding: '4px 8px 4px 0' }}>{h.ts ? new Date(h.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}</td>
                   <td style={{ padding: '4px 8px' }}>{LP_MODE_LABEL[h.mode] || h.mode}</td>
-                  <td style={{ padding: '4px 8px' }}>{h.model && h.model !== 'default' ? h.model : '—'} <span style={{ color: 'var(--text-mute)' }}>· {h.billedTo === 'api' ? 'key avail.' : 'plan'}</span></td>
+                  <td style={{ padding: '4px 8px' }}>{h.model && h.model !== 'default' ? h.model : '-'} <span style={{ color: 'var(--text-mute)' }}>· {h.billedTo === 'api' ? 'key avail.' : 'plan'}</span></td>
                   <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }} title="Local estimate from token counts, not your API invoice.">~{lpUsd(h.cost)} <span style={{ color: 'var(--text-mute)' }}>est.</span></td>
                 </tr>
               ))}
@@ -919,10 +919,15 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     window.tjkMutate(`/api/setup/handoff/${handoffKey || sectionId}`, { method: 'POST' })
       .then(r => r.json())
       .then(({ prompt }) => {
-        navigator.clipboard?.writeText(prompt).catch(() => {});
         setPendingGen(p => ({ ...p, [sectionId]: prompt }));
         track('handoff_started', { step: sectionId });
-        toast && toast('Prompt copied. Paste into your Claude Code', 'success');
+        // Only claim "copied" if the clipboard write actually resolved. On http /
+        // a LAN IP the clipboard API is unavailable, so the prompt (shown below in
+        // the textarea) has to be copied by hand; say that instead of lying.
+        const cp = navigator.clipboard?.writeText(prompt);
+        if (cp) cp.then(() => toast && toast('Prompt copied. Paste into your Claude Code', 'success'))
+                  .catch(() => toast && toast('Prompt ready below. Select it and copy', 'success'));
+        else toast && toast('Prompt ready below. Select it and copy', 'success');
       })
       .catch(() => toast && toast('Could not load prompt', 'error'));
   };
@@ -948,7 +953,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         delete pendingBaseline.current[sectionId];
         setCheckMsg(m => { const n = { ...m }; delete n[sectionId]; return n; });
         track('handoff_verified', { step: sectionId });
-        toast && toast('Confirmed — that step is saved', 'success');
+        toast && toast('Confirmed. That step is saved', 'success');
       } else {
         // The single most useful signal in the whole log: a handoff the user
         // believed they had run, that produced nothing. Invisible from outside.
@@ -1156,9 +1161,12 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         }).then(r => r.json()).then(res => {
           if (res.error) { toast && toast(res.error, 'error'); return; }
           pendingBaseline.current.cv = state?.sections?.cv?.status || 'empty';
-          navigator.clipboard?.writeText(res.prompt).catch(() => {});
           setPendingGen(p => ({ ...p, cv: res.prompt }));
-          toast && toast(res.seededMaster ? 'Uploaded. Also seeded resume master' : 'Uploaded. Prompt copied', 'success');
+          const base = res.seededMaster ? 'Uploaded. Also seeded resume master' : 'Uploaded';
+          const cp = navigator.clipboard?.writeText(res.prompt);
+          if (cp) cp.then(() => toast && toast(base + '. Prompt copied', 'success'))
+                    .catch(() => toast && toast(base + '. Prompt ready below', 'success'));
+          else toast && toast(base + '. Prompt ready below', 'success');
         }).catch(() => toast && toast('Upload failed', 'error'));
       };
       reader.readAsDataURL(file);
@@ -1278,7 +1286,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>No companies tracked yet. Add some above, then run the merge step.</div>
         ) : (
           <>
-            <input id="lp-co-filter" className="inp" placeholder="Filter by name…" value={q}
+            <input id="lp-co-filter" className="inp" aria-label="Filter companies by name" placeholder="Filter by name…" value={q}
               onChange={e => setTracked(t => ({ ...t, q: e.target.value }))} style={{ width: '100%', marginBottom: 8 }} />
             <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, paddingRight: 4 }}>
               {shown.slice(0, 400).map((co) => (
@@ -1610,12 +1618,12 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         <div>
           <div style={LP_SUB}>Your titles</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input id="lp-role-input" className="inp" placeholder="e.g. Director of Customer Support" style={{ flex: 1 }} onKeyDown={e => { if (e.key === 'Enter') addTitle(); }} />
+            <input id="lp-role-input" className="inp" aria-label="Add a target role" placeholder="e.g. Director of Customer Support" style={{ flex: 1 }} onKeyDown={e => { if (e.key === 'Enter') addTitle(); }} />
             <button className="btn" onClick={addTitle}>Add title</button>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
             {titles.length ? titles.map(t => (
-              <span key={t} style={lpChipStyle()}>{t}<span onClick={() => removeTitle(t)} style={{ cursor: 'pointer', marginLeft: 6 }}>×</span></span>
+              <span key={t} style={lpChipStyle()}>{t}<button type="button" aria-label={`Remove ${t}`} onClick={() => removeTitle(t)} style={{ cursor: 'pointer', marginLeft: 6, background: 'none', border: 0, padding: 0, color: 'inherit', font: 'inherit' }}>×</button></span>
             )) : <span style={{ fontSize: 12, color: 'var(--text-mute)' }}>No titles yet.</span>}
           </div>
         </div>
@@ -1692,11 +1700,11 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         <div>
           <div style={LP_SUB}>Add your own</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input id="lp-co-input" className="inp" placeholder="Company name" style={{ flex: 1 }} onKeyDown={e => { if (e.key === 'Enter') addCompany(); }} />
+            <input id="lp-co-input" className="inp" aria-label="Add a company" placeholder="Company name" style={{ flex: 1 }} onKeyDown={e => { if (e.key === 'Enter') addCompany(); }} />
             <button className="btn" onClick={addCompany}>Add</button>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-            {picks.length ? picks.map(n => <span key={n} style={lpChipStyle()}>{n}<span onClick={() => removePick(n)} style={{ cursor: 'pointer', marginLeft: 6 }}>×</span></span>)
+            {picks.length ? picks.map(n => <span key={n} style={lpChipStyle()}>{n}<button type="button" aria-label={`Remove ${n}`} onClick={() => removePick(n)} style={{ cursor: 'pointer', marginLeft: 6, background: 'none', border: 0, padding: 0, color: 'inherit', font: 'inherit' }}>×</button></span>)
               : <span style={{ fontSize: 12, color: 'var(--text-mute)' }}>None added yet.</span>}
           </div>
         </div>
@@ -1756,7 +1764,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
           <span style={{ width: 18, display: 'inline-flex', justifyContent: 'center', color: key === 'portfolio_url' ? 'var(--accent)' : 'var(--text-dim)' }}><LpIcon name={icon} size={16} /></span>
           <span style={{ width: 150, flexShrink: 0, fontSize: 12, color: key === 'portfolio_url' ? 'var(--accent)' : 'var(--text)' }}>{label}{optional ? <span style={{ color: 'var(--text-mute)', fontSize: 11 }}> optional</span> : null}</span>
-          <input className="inp" style={{ flex: 1 }} value={c[key] || ''} placeholder={placeholder} onChange={e => setFormVal('candidate', key, e.target.value)} />
+          <input className="inp" style={{ flex: 1 }} value={c[key] || ''} aria-label={placeholder} placeholder={placeholder} onChange={e => setFormVal('candidate', key, e.target.value)} />
         </div>
       );
       return (
@@ -1785,13 +1793,13 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             <LpLegend />
             <div style={LP_SUB}>Certifications &amp; coursework</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <input id="lp-cert-name" className="inp" placeholder="Certification or course" style={{ flex: 2 }} />
-              <input id="lp-cert-org" className="inp" placeholder="Issuer" style={{ flex: 1, minWidth: 0 }} />
+              <input id="lp-cert-name" className="inp" aria-label="Certification or course name" placeholder="Certification or course" style={{ flex: 2 }} />
+              <input id="lp-cert-org" className="inp" aria-label="Issuer" placeholder="Issuer" style={{ flex: 1, minWidth: 0 }} />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <input id="lp-cert-number" className="inp" placeholder="Certificate number (optional)" style={{ flex: 2 }} />
-              <input id="lp-cert-issued" className="inp" placeholder="Issued (MM/YYYY)" style={{ flex: 1, minWidth: 0 }} />
-              <input id="lp-cert-expires" className="inp" placeholder="Expires (MM/YYYY)" style={{ flex: 1, minWidth: 0 }} />
+              <input id="lp-cert-number" className="inp" aria-label="Certificate number" placeholder="Certificate number (optional)" style={{ flex: 2 }} />
+              <input id="lp-cert-issued" className="inp" aria-label="Issued date" placeholder="Issued (MM/YYYY)" style={{ flex: 1, minWidth: 0 }} />
+              <input id="lp-cert-expires" className="inp" aria-label="Expiry date" placeholder="Expires (MM/YYYY)" style={{ flex: 1, minWidth: 0 }} />
               <button className="btn" onClick={addCert}>Add</button>
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>
@@ -1802,7 +1810,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                 <span key={i} style={lpChipStyle()}>
                   {it.name}{it.org ? ` · ${it.org}` : ''}
                   {it.expires ? <span style={{ color: 'var(--text-mute)' }}> · exp {it.expires}</span> : null}
-                  <span onClick={() => removeCert(i)} style={{ cursor: 'pointer', marginLeft: 6 }}>×</span>
+                  <button type="button" aria-label="Remove" onClick={() => removeCert(i)} style={{ cursor: 'pointer', marginLeft: 6, background: 'none', border: 0, padding: 0, color: 'inherit', font: 'inherit' }}>×</button>
                 </span>
               )) : <span style={{ fontSize: 12, color: 'var(--text-mute)' }}>No certifications added.</span>}
             </div>
@@ -2390,12 +2398,12 @@ window.SetupTab = function SetupTab({ toast, setTab }) {
     <div className="col" style={{ gap: 0 }}>
       <div className="subtabs">
         {SETUP_SUBTABS.map(s => (
-          <div key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
+          <button type="button" key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
             <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
               <SetupIcon name={s.icon} size={14} />
             </span>
             {s.label}
-          </div>
+          </button>
         ))}
       </div>
 

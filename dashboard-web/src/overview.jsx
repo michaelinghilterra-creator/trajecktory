@@ -103,8 +103,6 @@ const warmKind = (a) => !a ? null
 const COLD_APPLY_BENCHMARK = { lo: 3.6, hi: 4.7, label: '3.6-4.7% market median' };
 
 window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, search }) {
-  const [selected, setSelected] = useStateO(new Set());
-  const [scoreFilter, setScoreFilter] = useStateO(0);
   // The weekly scorecard: the seven metrics the relaunch plan says to manage to.
   // They already existed, two clicks deep on Insights -> Review, while this page
   // led with counts of what the SCANNER produced. The plan decided what to look
@@ -199,7 +197,7 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
   }, [funnel]);
   const avgScore = useMemoO(() => {
     const scored = activeApps.filter(a => a.score != null);
-    if (!scored.length) return "—";
+    if (!scored.length) return "-";
     return (scored.reduce((s, a) => s + a.score, 0) / scored.length).toFixed(2);
   }, [activeApps]);
 
@@ -215,11 +213,11 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
     const appliedApps = apps.filter(a => appliedStatuses.includes(a.status) && a.score != null);
     const appliedAvg = appliedApps.length
       ? (appliedApps.reduce((s, a) => s + a.score, 0) / appliedApps.length).toFixed(1)
-      : "—";
+      : "-";
     const scoredApps = apps.filter(a => a.score != null);
     const portfolioAvg = scoredApps.length
       ? (scoredApps.reduce((s, a) => s + a.score, 0) / scoredApps.length).toFixed(1)
-      : "—";
+      : "-";
     return {
       bands: bands.map(b => {
         const total = apps.filter(a => a.score != null && a.score >= b.min && a.score < b.max).length;
@@ -246,41 +244,9 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
     const peakCount = peakDate ? dayCounts[peakDate] : 0;
     const peakLabel = peakDate
       ? new Date(peakDate + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
-      : "—";
+      : "-";
     return { last7, prior7, trend, avgPerWeek, peakCount, peakLabel };
   }, [apps]);
-
-  // ── Worklist (merged from Actions module) ──────────────────────────────
-  // All Evaluated entries filtered by chip score + global search, sorted by
-  // score desc, recency desc. The list below the chart row replaces the
-  // former "Action Required" card and the standalone Actions tab.
-  const pending = useMemoO(() => {
-    return apps
-      .filter(a => a.status === "Evaluated")
-      .filter(a => a.score >= scoreFilter)
-      .filter(a => {
-        if (!search) return true;
-        const ql = search.toLowerCase();
-        return `${a.company} ${a.role} ${a.archetype}`.toLowerCase().includes(ql);
-      })
-      .sort((a, b) => b.score - a.score || window.daysAgo(b.date) - window.daysAgo(a.date));
-  }, [apps, scoreFilter, search]);
-
-const toggleRow = (id) => setSelected(s => {
-    const n = new Set(s);
-    if (n.has(id)) n.delete(id); else n.add(id);
-    return n;
-  });
-  const toggleAll = () => {
-    if (selected.size === pending.length) setSelected(new Set());
-    else setSelected(new Set(pending.map(a => a.id)));
-  };
-  const allChk = selected.size === pending.length && pending.length > 0;
-  const someChk = selected.size > 0 && !allChk;
-  const bulk = (newStatus) => {
-    pending.filter(a => selected.has(a.id)).forEach(a => onAction(a, newStatus, true));
-    setSelected(new Set());
-  };
 
   // Daily quote — rotates by day-of-year so it changes each day, stable within a session
   const dailyQuote = useMemoO(() => {
@@ -349,7 +315,7 @@ const toggleRow = (id) => setSelected(s => {
               <div className="kpi" key={key} title={d ? d.source : 'loading'}>
                 <span className="kpi-label">{label}</span>
                 <span className="kpi-value" style={{ color }}>
-                  {!m ? '·' : unlogged ? '—' : fmt(v)}
+                  {!m ? '·' : unlogged ? '-' : fmt(v)}
                 </span>
                 <span className="kpi-delta">
                   {floor != null ? `floor ${fmt(floor)}` : 'this week'}
@@ -399,14 +365,14 @@ const toggleRow = (id) => setSelected(s => {
             <div className="kpi" key="cold" title="Applications with no prior contact. Benchmark is Ashby's cold-apply-to-screen median across ~100M applications.">
               <span className="kpi-label">Cold reply rate</span>
               <span className="kpi-value" style={{ color: cold.pct != null && cold.pct >= COLD_APPLY_BENCHMARK.lo ? 'var(--green)' : 'var(--orange)' }}>
-                {cold.pct == null ? '—' : `${cold.pct}%`}
+                {cold.pct == null ? '-' : `${cold.pct}%`}
               </span>
               <span className="kpi-delta">{cold.k} of {cold.n} · {COLD_APPLY_BENCHMARK.label}</span>
             </div>,
             <div className="kpi" key="warm" title={`Contact with a person existed before the application, either direction. Tagged: ${kindLabel}. Only the outbound share is scalable.`}>
               <span className="kpi-label">Warm reply rate</span>
               <span className="kpi-value" style={{ color: undercounted ? 'var(--text-mute)' : 'var(--green)' }}>
-                {warm.n ? `${warm.pct}%` : '—'}
+                {warm.n ? `${warm.pct}%` : '-'}
               </span>
               <span className="kpi-delta">
                 {warm.k} of {warm.n} · {kindLabel}
@@ -445,7 +411,7 @@ const toggleRow = (id) => setSelected(s => {
             Last 7d <span style={{ color: "var(--accent)" }}>{activityInsights.last7}</span>&nbsp;·&nbsp;
             Prior 7d <span style={{ color: "var(--text-dim)" }}>{activityInsights.prior7}</span>
             <span style={{ color: activityInsights.trend > 0 ? "var(--green)" : activityInsights.trend < 0 ? "var(--red)" : "var(--text-dim)", marginLeft: 6 }}>
-              {activityInsights.trend > 0 ? `▲ +${activityInsights.trend}` : activityInsights.trend < 0 ? `▼ ${activityInsights.trend}` : "— flat"}
+              {activityInsights.trend > 0 ? `▲ +${activityInsights.trend}` : activityInsights.trend < 0 ? `▼ ${activityInsights.trend}` : "flat"}
             </span>
           </span>
         </div>
@@ -514,60 +480,6 @@ const toggleRow = (id) => setSelected(s => {
         </div>
       </div>
 
-      {/* Pending Roles — compact Needs-Attention row layout */}
-      <div className="card padded-lg">
-        <div className="card-head">
-          <span className="card-title"><span className="dot" />Pending Roles</span>
-          <span className="card-meta mono">{pending.length} item{pending.length === 1 ? "" : "s"}</span>
-        </div>
-
-        <div className="row" style={{ gap: 8, marginBottom: 10, marginTop: 6 }}>
-          <span className="mono dim" style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.1em" }}>Score ≥</span>
-          {[0, 3.0, 3.5, 4.0, 4.5].map(s => (
-            <span key={s} className={`chip ${scoreFilter === s ? "on" : ""}`} onClick={() => setScoreFilter(s)}>{s === 0 ? "any" : s.toFixed(1)}</span>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-          {pending.length === 0 && <div className="no-data" style={{ padding: "8px 0" }}>No pending decisions match your filter.</div>}
-          {pending.map(a => {
-            const sit = window.daysAgo(a.date);
-            const sc = a.score;
-            const color = sc != null && sc >= 4.0 ? "var(--accent)"
-                        : sc != null && sc >= 3.5 ? "var(--yellow)"
-                        : "var(--text-mute)";
-            const label = sit === 0 ? "Scored today. Apply or skip"
-                        : sit <= 3  ? `Scored ${sit}d ago, still fresh`
-                        : sit <= 7  ? `Scored ${sit}d ago, decide soon`
-                                    : `${sit}d silent, getting stale`;
-            const labelColor = sit > 7 ? "var(--red)" : sit > 3 ? "var(--yellow)" : "var(--accent)";
-            return (
-              <div key={a.id} onClick={() => onOpen(a)}
-                style={{ display: "grid", gridTemplateColumns: "28px 1fr auto auto", gap: 12, alignItems: "center",
-                  padding: "9px 11px", borderRadius: 9, cursor: "pointer",
-                  background: "var(--panel-2)", border: "1px solid var(--border)" }}>
-                <span style={{ width: 28, height: 28, borderRadius: 7, display: "grid", placeItems: "center",
-                  background: "var(--panel)", border: "1px solid var(--border)", color }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={window.ICON.briefcase} /></svg>
-                </span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.company}</div>
-                  <div className="mono" style={{ fontSize: 10.5, color: "var(--text-mute)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.role}</div>
-                </div>
-                <span className="mono" style={{ fontSize: 11, color: labelColor, whiteSpace: "nowrap" }}>{label}</span>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <window.ScoreChip score={a.score} />
-                  <div className="row" style={{ gap: 4 }}>
-                    <button className="btn primary sm" onClick={(e) => { e.stopPropagation(); onOpen(a); }}>Apply</button>
-                    <button className="btn sm" onClick={(e) => { e.stopPropagation(); onAction(a, "SKIP"); }}>Skip</button>
-                    <button className="btn ghost sm" onClick={(e) => { e.stopPropagation(); onOpen(a); }}>Review</button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 };

@@ -14,13 +14,13 @@
 const { useState, useEffect, useMemo, useCallback } = React;
 
 const REF_STATUS_COLORS = {
-  'Not Asked': 'var(--text-muted)',
+  'Not Asked': 'var(--text-mute)',
   'Catching Up': '#38bdf8',
   'Asked': '#a78bfa',
   'Intro Made': '#f59e0b',
   'Applied w/ Referral': '#22c55e',
-  'No': 'var(--text-muted)',
-  'Dormant': 'var(--text-muted)',
+  'No': 'var(--text-mute)',
+  'Dormant': 'var(--text-mute)',
 };
 
 function refLocalToday() {
@@ -41,7 +41,7 @@ function RefCopyBtn({ text, label }) {
 const REF_TEMPLATES = [
   {
     id: 'reconnect',
-    title: 'Template 1 — reconnect, no ask yet',
+    title: 'Template 1: reconnect, no ask yet',
     hint: 'Use first for anyone you have lost touch with. It opens the door; the ask comes after they reply.',
     body: `Subject: Long overdue hello
 
@@ -55,7 +55,7 @@ No agenda on this one, I would just genuinely like to catch up and hear what you
   },
   {
     id: 'ask',
-    title: 'Template 2 — the referral ask',
+    title: 'Template 2: the referral ask',
     hint: 'Use once you are back in touch, or for someone you are already close with. Make it specific and easy to say yes to.',
     body: `Hi [First],
 
@@ -69,8 +69,8 @@ Thanks either way,
   {
     id: 'blurb',
     title: 'Blurb to attach',
-    hint: 'A two-line summary they can forward. Fill in from your own CV — no invented numbers.',
-    body: `[Your headline identity, e.g. "Revenue Operations and analytics leader."] [One or two quantified proof points taken verbatim from your CV.] Targeting [target titles], [location or remote]. Resume attached.`,
+    hint: 'A two-line summary they can forward. Fill in from your own CV. No invented numbers.',
+    body: `[Your headline identity in one line, e.g. "Supply chain operations leader."] [One or two quantified proof points taken verbatim from your CV.] Targeting [target titles], [location or remote]. Resume attached.`,
   },
 ];
 
@@ -176,19 +176,19 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
         <div className="card padded-lg col" style={{ gap: 10 }}>
           <div className="card-title" style={{ fontSize: 13 }}>Add someone to your network list</div>
           <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-            <input className="inp" placeholder="Name *" value={form.name} style={{ minWidth: 160 }}
+            <input className="inp" aria-label="Name" placeholder="Name *" value={form.name} style={{ minWidth: 160 }}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} onKeyDown={e => e.key === 'Enter' && add()} />
-            <input className="inp" placeholder="How you know them (e.g. Acme Corp, 2015-2019)" value={form.how} style={{ minWidth: 220, flex: 1 }}
+            <input className="inp" aria-label="How you know them" placeholder="How you know them (e.g. Acme Corp, 2015-2019)" value={form.how} style={{ minWidth: 220, flex: 1 }}
               onChange={e => setForm(f => ({ ...f, how: e.target.value }))} />
           </div>
           <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-            <input className="inp" placeholder="Where they are now (their reach)" value={form.where} style={{ minWidth: 220, flex: 1 }}
+            <input className="inp" aria-label="Where they are now" placeholder="Where they are now (their reach)" value={form.where} style={{ minWidth: 220, flex: 1 }}
               onChange={e => setForm(f => ({ ...f, where: e.target.value }))} />
-            <input className="inp" placeholder="Target company or role you want in" value={form.target} style={{ minWidth: 220, flex: 1 }}
+            <input className="inp" aria-label="Target company or role" placeholder="Target company or role you want in" value={form.target} style={{ minWidth: 220, flex: 1 }}
               onChange={e => setForm(f => ({ ...f, target: e.target.value }))} />
           </div>
           <div className="row" style={{ gap: 10 }}>
-            <input className="inp" placeholder="Notes" value={form.notes} style={{ flex: 1 }}
+            <input className="inp" aria-label="Notes" placeholder="Notes" value={form.notes} style={{ flex: 1 }}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} onKeyDown={e => e.key === 'Enter' && add()} />
             <button className="btn primary sm" onClick={add}>Add</button>
           </div>
@@ -206,7 +206,7 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
         ) : (
           <table className="ref-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+              <tr style={{ textAlign: 'left', color: 'var(--text-mute)', fontFamily: 'var(--mono)', fontSize: 11 }}>
                 <th style={refTh}>Name</th>
                 <th style={refTh}>How you know them</th>
                 <th style={refTh}>Where now / reach</th>
@@ -221,19 +221,19 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
               {filtered.map(row => (
                 <tr key={row.id} style={{ borderTop: '1px solid var(--border)' }}>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.name} placeholder="—"
+                    <input className="ref-cell" aria-label="Name" defaultValue={row.name} placeholder="-"
                       onBlur={e => e.target.value !== row.name && patch(row.id, { name: e.target.value })} />
                   </td>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.how} placeholder="—"
+                    <input className="ref-cell" aria-label="How you know them" defaultValue={row.how} placeholder="-"
                       onBlur={e => e.target.value !== row.how && patch(row.id, { how: e.target.value })} />
                   </td>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.where} placeholder="—"
+                    <input className="ref-cell" aria-label="Where they are now" defaultValue={row.where} placeholder="-"
                       onBlur={e => e.target.value !== row.where && patch(row.id, { where: e.target.value })} />
                   </td>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.target} placeholder="—"
+                    <input className="ref-cell" aria-label="Target" defaultValue={row.target} placeholder="-"
                       onBlur={e => e.target.value !== row.target && patch(row.id, { target: e.target.value })} />
                   </td>
                   <td style={refTd}>
@@ -245,12 +245,12 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
                   </td>
                   <td style={refTd}>
                     <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                      <span className="mono dim" style={{ fontSize: 11, minWidth: 68 }}>{row.lastTouch || '—'}</span>
+                      <span className="mono dim" style={{ fontSize: 11, minWidth: 68 }}>{row.lastTouch || '-'}</span>
                       <button className="btn ghost sm" title="Log a touch today" onClick={() => logToday(row)}>Today</button>
                     </div>
                   </td>
                   <td style={refTd}>
-                    <input className="ref-cell" defaultValue={row.notes} placeholder="—"
+                    <input className="ref-cell" aria-label="Notes" defaultValue={row.notes} placeholder="-"
                       onBlur={e => e.target.value !== row.notes && patch(row.id, { notes: e.target.value })} />
                   </td>
                   <td style={refTd}>
@@ -278,7 +278,7 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
                   <RefCopyBtn text={t.body} />
                 </div>
                 <div className="dim mono" style={{ fontSize: 11 }}>{t.hint}</div>
-                <pre className="ai-out" style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--font-mono)', fontSize: 12, background: 'var(--bg-elev)', padding: 12, borderRadius: 8, border: '1px solid var(--border)', margin: 0 }}>{t.body}</pre>
+                <pre className="ai-out" style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--mono)', fontSize: 12, background: 'var(--panel-2)', padding: 12, borderRadius: 8, border: '1px solid var(--border)', margin: 0 }}>{t.body}</pre>
               </div>
             ))}
             <div className="dim mono" style={{ fontSize: 11 }}>

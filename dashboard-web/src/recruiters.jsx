@@ -61,12 +61,12 @@ function firmIdFromName(name) {
   return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 function locStr(c) {
-  if (!c.city) return '—';
-  if (!c.state || c.state === '—') return c.city;
+  if (!c.city) return '-';
+  if (!c.state || c.state === '-') return c.city;
   return `${c.city}, ${c.state}`;
 }
 function relTouch(d) {
-  if (!d) return '—';
+  if (!d) return '-';
   const today = new Date();
   const days = Math.round((today - new Date(d)) / 864e5);
   if (days <= 0) return 'today';
@@ -204,7 +204,7 @@ function KpiHero({ kpis }) {
       </div>
       <div className="kpi-mini-col">
         <MiniKpi icon={REC_I.inbound} k="Response Rate"
-          v={kpis.touched ? `${kpis.response}%` : '—'}
+          v={kpis.touched ? `${kpis.response}%` : '-'}
           sub={kpis.touched ? `${kpis.replied} replied of ${kpis.touched}` : 'awaiting first send'} />
         <MiniKpi icon={REC_I.msg} k="Active Convos" v={kpis.inFlight}
           sub="replied · meeting · connected"
@@ -270,7 +270,7 @@ function QuickActions({ c, onCompose, onQuickSent, starred, toggleStar }) {
 function FlatRow({ c, onOpen, selId, qaFor }) {
   const m = REC_STATUS_MAP[c.status] || REC_STATUS_MAP['Not Contacted'];
   return (
-    <div className={'flat-row' + (selId === c.id ? ' sel' : '')} onClick={() => onOpen(c)}>
+    <div className={'flat-row' + (selId === c.id ? ' sel' : '')} onClick={() => onOpen(c)} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(c))}>
       <span className="flat-av" style={{ borderColor: m.color, color: m.color }}>{initials(c.first + ' ' + c.last)}</span>
       <div style={{ minWidth: 0 }}>
         <div className="flat-name">{c.salute} {c.first} {c.last}</div>
@@ -417,7 +417,7 @@ function RecFirmCard({ f, onOpen, onCompose, starred, toggleStar }) {
   const touched = f.contacts.filter(c => wasContacted(c)).length;
   const isStar = starred.has(f.id);
   return (
-    <div className="firm-card" onClick={() => onOpen(f.contacts[0])}>
+    <div className="firm-card" onClick={() => onOpen(f.contacts[0])} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(f.contacts[0]))}>
       <div className="firm-top">
         <span className="firm-av">{firmMono(f.name)}</span>
         <div style={{ minWidth: 0 }}>
@@ -593,7 +593,7 @@ function RecActivityView({ recruiters, onBatch, onOpen, jumpView }) {
                 const icon = isInbound ? REC_I.inbound : REC_I.outbound;
                 const color = isInbound ? 'var(--cyan)' : m.color;
                 return (
-                  <div key={c.id} className="feed-item" onClick={() => onOpen(c)} style={{ cursor: 'pointer' }}>
+                  <div key={c.id} className="feed-item" onClick={() => onOpen(c)} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(c))} style={{ cursor: 'pointer' }}>
                     <div className="feed-node" style={{ borderColor: color, color }}>
                       <RecIcon d={icon} size={13} />
                     </div>
@@ -656,7 +656,10 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
   const firmsEngaged = new Set(recruiters.filter(wasContacted).map(c => c.firmId)).size;
   const responseRate = sent > 0 ? Math.round((replied / sent) * 100) : 0;
   const outreachRate = total > 0 ? Math.round((sent / total) * 100) : 0;
-  const activeConvos = replied + meeting;
+  // `replied` (stage >= 3) already includes `meeting` (stage >= 4) and Connected,
+  // so adding them double-counted every meeting/connected recruiter. Active convos
+  // is the distinct set of anyone who replied or beyond = `replied`.
+  const activeConvos = replied;
   const firmCoverage = firms.length > 0 ? Math.round((firmsEngaged / firms.length) * 100) : 0;
 
   const outreachTone = outreachRate >= 40 ? 'good' : outreachRate >= 20 ? 'neutral' : 'warn';
@@ -733,7 +736,7 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
         {/* These thresholds are working targets you set, not industry benchmarks,
             and the copy says so. The word "benchmark" used to be here and it made a
             local rule of thumb sound like an external standard nobody could cite. */}
-        <RecKpi label="Response Rate" value={sent ? `${responseRate}%` : '—'}
+        <RecKpi label="Response Rate" value={sent ? `${responseRate}%` : '-'}
           sub={sent === 0 ? 'Send your first batch this week'
              : responseRate >= 10 ? 'Above your 10% target, your hook works'
              : responseRate >= 5 ? 'Around your 5% floor, sharpen openers'
@@ -808,7 +811,7 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
             const fullName = `${c.first || c.firstName || ''} ${c.last || c.lastName || ''}`.trim() || c.firm;
             const sub = [c.title || c.role, c.firm].filter(Boolean).join(' · ');
             return (
-              <div key={c.id} onClick={() => onOpen(c)}
+              <div key={c.id} onClick={() => onOpen(c)} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(c))}
                 style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto auto', gap: 12, alignItems: 'center',
                   padding: '9px 11px', borderRadius: 9, cursor: 'pointer',
                   background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
@@ -818,7 +821,7 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
                 </span>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fullName}</div>
-                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub || '—'}</div>
+                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub || '-'}</div>
                 </div>
                 <span className="mono" style={{ fontSize: 11, color, whiteSpace: 'nowrap' }}>{verdict(c)}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -834,105 +837,6 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
 }
 
 // ─── Analytics view (deprecated — replaced by Overview) ──────────────────
-function RecAnalyticsView({ recruiters, firms }) {
-  const total = recruiters.length;
-  const stages = REC_PIPELINE;
-  const cum = stages.map(s => ({
-    s,
-    reached: recruiters.filter(c => (REC_STATUS_MAP[c.status]?.stage || 0) >= s.stage).length,
-  }));
-  const maxReached = cum[0]?.reached || 1;
-  const sent = recruiters.filter(c => wasContacted(c)).length;
-  const replied = recruiters.filter(c => (REC_STATUS_MAP[c.status]?.stage || 0) >= 3).length;
-  const meeting = recruiters.filter(c => (REC_STATUS_MAP[c.status]?.stage || 0) >= 4).length;
-  const connected = recruiters.filter(c => c.status === 'Connected').length;
-
-  // "Coverage by Firm" — live data has no `focus` field; firm is the right grouping
-  const byFirm = [...firms]
-    .map(f => ({
-      key: f.name.split(' — ')[0],
-      total: f.n,
-      engaged: f.contacts.filter(c => wasContacted(c)).length,
-    }))
-    .sort((a, b) => b.total - a.total).slice(0, 9);
-  const maxFirm = Math.max(...byFirm.map(v => v.total), 1);
-
-  return (
-    <div className="fade-up">
-      <div className="rec-head">
-        <div>
-          <h1>Analytics</h1>
-          <div className="sub">outreach performance across {total} contacts · {firms.length} firms</div>
-        </div>
-      </div>
-
-      <div className="grid cols-4" style={{ marginBottom: 14 }}>
-        <MiniKpi icon={REC_I.outbound} k="Sent → Replied"
-          v={sent ? Math.round((replied / sent) * 100) + '%' : '—'}
-          sub={sent ? `${replied} of ${sent} sent` : 'no outreach sent yet'} />
-        <MiniKpi icon={REC_I.clock} k="Replied → Meeting"
-          v={replied ? Math.round((meeting / replied) * 100) + '%' : '—'}
-          sub={`${meeting} meetings booked`} />
-        <MiniKpi icon={REC_I.clock} k="Avg Days to Reply" v="—" sub="from first outreach" />
-        <MiniKpi icon={REC_I.users} k="Connected" v={connected} sub="relationships established" />
-      </div>
-
-      <div className="grid" style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 14, alignItems: 'start' }}>
-        <div className="card">
-          <div className="card-head"><span className="card-title"><span className="dot" />Outreach Funnel</span></div>
-          <div style={{ marginTop: 2 }}>
-            {cum.map(({ s, reached }, i) => {
-              const pct = Math.round((reached / maxReached) * 100);
-              const drop = i > 0 ? cum[i - 1].reached - reached : 0;
-              return (
-                <div className="funnel-row" key={s.id}>
-                  <span className="funnel-lbl">
-                    <span style={{ width: 7, height: 7, borderRadius: 99, background: s.color, display: 'inline-block' }} />
-                    {s.id}
-                  </span>
-                  <div className="funnel-track">
-                    <div className="funnel-fill"
-                      style={{ width: `${Math.max(pct, reached ? 7 : 0)}%`, background: s.color }}>
-                      {reached > 0 ? reached : ''}
-                    </div>
-                  </div>
-                  <span className="funnel-val">
-                    {i > 0 ? (drop > 0 ? <span style={{ color: 'var(--text-mute)' }}>−{drop}</span> : '0') : pct + '%'}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="divider" />
-          <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6 }}>
-            {sent === 0
-              ? <>The entire base sits at <span style={{ color: 'var(--text)' }}>Not Contacted</span>. The first and largest opportunity is the <span style={{ color: 'var(--accent-2)' }}>Not Contacted → Drafted</span> step. That's where to focus first.</>
-              : <>Conversion at each step: aim to keep <span style={{ color: 'var(--accent-2)' }}>Sent → Replied</span> above 20% and <span style={{ color: 'var(--accent-2)' }}>Replied → Meeting</span> above 50%.</>}
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-head"><span className="card-title"><span className="dot" />Coverage by Firm</span></div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 2 }}>
-            {byFirm.map(v => (
-              <div key={v.key}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
-                  <span>{v.key}</span>
-                  <span className="mono" style={{ color: 'var(--text-mute)', fontSize: 11 }}>{v.engaged}/{v.total} engaged</span>
-                </div>
-                <div className="bar" style={{ position: 'relative' }}>
-                  <span style={{ width: `${(v.total / maxFirm) * 100}%`, background: 'var(--panel-3)', position: 'absolute', inset: 0, borderRadius: 99 }} />
-                  <span style={{ width: `${(v.engaged / maxFirm) * 100}%`, position: 'relative' }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Sub-tabs ───────────────────────────────────────────────────────────────
 // ─── Directory (unified sortable table — replaces Contacts + Firms) ─────────
 // One sortable contact table; firm is a sortable/filterable column so it covers
@@ -1083,7 +987,7 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
               {rows.map(c => {
                 const m = REC_STATUS_MAP[c.status] || REC_STATUS_MAP['Not Contacted'];
                 return (
-                  <tr key={c.id} className={selId === c.id ? 'selected' : ''} onClick={() => onOpen(c)}>
+                  <tr key={c.id} className={selId === c.id ? 'selected' : ''} tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(c))} onClick={() => onOpen(c)}>
                     <td>
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
                         <div className="mono-av sm" style={{ borderColor: m.color, color: m.color, flex: 'none' }}>{initials(c.first + ' ' + c.last)}</div>
@@ -1091,17 +995,17 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
                       </div>
                     </td>
                     <td title={c.title || ''}>
-                      <span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || '—'}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || '-'}</span>
                     </td>
                     <td title={c.firm || ''}>
                       <span style={{ fontWeight: 600, fontSize: 12, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.firm.split(' — ')[0]}</span>
                     </td>
                     <td>
-                      <span style={{ fontSize: 12, color: locStr(c) === '—' ? 'var(--text-mute)' : 'var(--text-dim)' }}>{locStr(c)}</span>
+                      <span style={{ fontSize: 12, color: locStr(c) === '-' ? 'var(--text-mute)' : 'var(--text-dim)' }}>{locStr(c)}</span>
                     </td>
                     <td><RecStatusBadge status={c.status} size="sm" /></td>
                     <td>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: c.lastTouch ? 'var(--text-dim)' : 'var(--text-mute)' }}>{c.lastTouch ? relTouch(c.lastTouch) : '—'}</span>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: c.lastTouch ? 'var(--text-dim)' : 'var(--text-mute)' }}>{c.lastTouch ? relTouch(c.lastTouch) : '-'}</span>
                     </td>
                   </tr>
                 );
@@ -1186,12 +1090,12 @@ window.RecruitersTab = function RecruitersTab({ search } = {}) {
     <div className="col" style={{ gap: 0 }}>
       <div className="subtabs">
         {REC_SUBTABS.map(s => (
-          <div key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
+          <button type="button" key={s.id} className={'subtab' + (view === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
             <span className="ico" style={{ display: 'inline-flex', marginRight: 6, verticalAlign: 'middle' }}>
               <RecIcon d={s.icon} size={14} />
             </span>
             {s.label}
-          </div>
+          </button>
         ))}
       </div>
 
@@ -1405,7 +1309,7 @@ function RecLogModal({ direction, subject, body, onSave, onClose }) {
             <h2>Log {sent ? 'Sent' : 'Received'} Message</h2>
             <div className="lh-sub">{sent ? 'records an outbound touch & advances to Sent' : 'records a reply & advances to Replied'}</div>
           </div>
-          <button className="icon-btn" style={{ marginLeft: 'auto' }} onClick={onClose}>
+          <button className="icon-btn" aria-label="Close" style={{ marginLeft: 'auto' }} onClick={onClose}>
             <RecIcon d={REC_I.x} size={15} />
           </button>
         </div>

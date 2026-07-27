@@ -22,9 +22,9 @@ window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, 
     <div className="col" style={{ gap: 0 }}>
       <div className="subtabs">
         {NET_SUBTABS.map(s => (
-          <div key={s.id} className={'subtab' + (active === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
+          <button type="button" key={s.id} className={'subtab' + (active === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
             {s.label}
-          </div>
+          </button>
         ))}
       </div>
 

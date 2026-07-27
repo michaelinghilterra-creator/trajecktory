@@ -109,7 +109,7 @@ window.FUNNEL_ORDER = ["Evaluated","Applied","Responded",...window.INTERVIEW_STA
 // ("$200,000" → 200), shorthand ("$150K" → 150), and noise suffixes (USD,
 // USD/year, /yr, annually). Currency is assumed USD for an American user.
 window.parseComp = function parseComp(s) {
-  if (!s || typeof s !== 'string') return { display: '—', salary: null };
+  if (!s || typeof s !== 'string') return { display: '-', salary: null };
   // Strip currency suffix noise. Replace USD-* tokens with a single space so
   // adjacent words don't run together ("USD base" → " base"), then collapse
   // multiple spaces.
@@ -177,6 +177,18 @@ window.appReached = (app, stage) => {
 
 window.TODAY = new Date();
 window.daysAgo = (iso) => Math.floor((window.TODAY - new Date(iso)) / 86400000);
+
+// Keyboard-activate helper for elements that act as buttons but cannot BE a
+// <button> without breaking layout/semantics (a clickable table row, a sortable
+// <th>, a fake-checkbox div). Returns an onKeyDown handler that fires `fn` on
+// Enter or Space, matching native button behavior. Pair with tabIndex={0} plus a
+// role/aria-sort/aria-checked so screen readers and keyboards can operate it.
+window.kbdActivate = (fn) => (e) => {
+  if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+    e.preventDefault();
+    fn(e);
+  }
+};
 
 // ── Self-healing mutating fetch ──────────────────────────────────────────────
 // The dashboard issues a per-start auth token as a cookie when the HTML loads,

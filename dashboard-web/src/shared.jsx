@@ -247,7 +247,7 @@ window.PostingPanel = function PostingPanel({ app }) {
     return () => ctrl.abort();
   }, [app?.id]);
 
-  if (state.loading) return <div style={{ color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>Loading posting…</div>;
+  if (state.loading) return <div style={{ color: 'var(--text-mute)', fontFamily: 'var(--mono)', fontSize: 12 }}>Loading posting…</div>;
 
   if (!state.ok) {
     return (
@@ -849,7 +849,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
             return (
               <div key={card.url} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                  <span title="Pre-filter score (coarse Haiku pass), not comparable to a derived evaluation score" style={{ color, fontWeight: 700, fontFamily: 'var(--mono)', fontSize: 12 }}>{sc == null ? '—' : '~' + sc.toFixed(1)}</span>
+                  <span title="Pre-filter score (coarse Haiku pass), not comparable to a derived evaluation score" style={{ color, fontWeight: 700, fontFamily: 'var(--mono)', fontSize: 12 }}>{sc == null ? '-' : '~' + sc.toFixed(1)}</span>
                   <span style={{ fontSize: 11, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${card.company}: ${card.title}`}>{card.company} · {card.title}</span>
                 </div>
                 {card.rationale && <div style={{ fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4, marginTop: 2 }}>{card.rationale}</div>}
@@ -886,7 +886,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
 
       <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 6 }}>PASTE A JD</div>
-        <textarea value={pasteVal} onChange={e => setPasteVal(e.target.value)} placeholder="Paste a job URL or the full JD text…"
+        <textarea value={pasteVal} onChange={e => setPasteVal(e.target.value)} aria-label="Paste a job URL or JD text" placeholder="Paste a job URL or the full JD text…"
           style={{ width: '100%', height: 52, fontSize: 11, color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 6, padding: 6, background: 'var(--panel-2)', fontFamily: 'var(--mono)', resize: 'vertical', boxSizing: 'border-box' }} />
         <button onClick={submitPaste} disabled={pasteBusy || agentBusy2 || !pasteVal.trim()}
           style={{ width: '100%', marginTop: 6, background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 'not-allowed' : 'pointer', opacity: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 0.5 : 1 }}>
@@ -926,6 +926,7 @@ window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, theme, s
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <input
           type="text"
+          aria-label={searchPlaceholder || "Search"}
           placeholder={searchPlaceholder || "Search by company, role, status…"}
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -989,7 +990,7 @@ function QuickCopyBar() {
   };
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '8px 14px', borderTop: '1px solid var(--border)', background: 'var(--panel-2)' }}>
-      <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)', marginRight: 2 }}>Quick copy:</span>
+      <span style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginRight: 2 }}>Quick copy:</span>
       {items.map(([label, val]) => (
         <button key={label} className="btn sm" style={{ fontSize: 11 }} title={`Copy: ${val}`} onClick={() => copy(label, val)}>
           {copied === label ? '✓ copied' : label}
@@ -1160,7 +1161,7 @@ window.CommandPalette = function CommandPalette({ open, onClose, commands }) {
   return (
     <div className="cmdk-back" onClick={onClose}>
       <div className="cmdk" onClick={e => e.stopPropagation()}>
-        <input ref={inputRef} className="cmdk-input" placeholder="Type a command or search…" value={q} onChange={e => { setQ(e.target.value); setIdx(0); }} />
+        <input ref={inputRef} className="cmdk-input" aria-label="Command palette search" placeholder="Type a command or search…" value={q} onChange={e => { setQ(e.target.value); setIdx(0); }} />
         <div className="cmdk-list">
           {filtered.length === 0 && <div className="no-data">No matches</div>}
           {Object.entries(bySection).map(([sec, items]) => (
@@ -1218,7 +1219,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
   };
   const row = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' };
   const btn = {
-    fontFamily: 'var(--font-mono)', fontSize: 12, padding: '5px 12px',
+    fontFamily: 'var(--mono)', fontSize: 12, padding: '5px 12px',
     borderRadius: 6, border: '1px solid var(--border, rgba(127,127,127,0.3))',
     cursor: 'pointer', background: 'transparent', color: 'inherit',
   };
@@ -1294,7 +1295,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
           <span className="mono" style={{ color: 'var(--green)' }}>↻</span>
           <span>Updating to <strong>v{info.remote}</strong> and restarting trajecktory…</span>
         </div>
-        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>This page reloads automatically when it is ready. If nothing happens after a minute or so, reopen trajecktory from the Start Menu.</div>
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>This page reloads automatically when it is ready. If nothing happens after a minute or so, reopen trajecktory from the Start Menu.</div>
       </div>
     );
   }
@@ -1353,7 +1354,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
           ))}
         </div>
       ) : showNotes && info.changelog ? (
-        <pre style={{ marginTop: 10, marginBottom: 0, maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{info.changelog}</pre>
+        <pre style={{ marginTop: 10, marginBottom: 0, maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--text-mute)', fontFamily: 'var(--mono)' }}>{info.changelog}</pre>
       ) : null}
     </div>
   );
