@@ -21,6 +21,7 @@ import { join } from 'path';
 import {
   canonicalUrl, normalizeCompany, sameRole, roleSignature,
   urlFromReport, buildDecidedIndex, findDecided,
+  buildActiveRoleIndex, findActiveRepost,
 } from '../lib/identity.mjs';
 
 let passed = 0, failed = 0;
@@ -207,6 +208,29 @@ writeFileSync(join(sb, 'data/apps3-reversed.md'), [
 const idx3r = buildDecidedIndex({ appsPath: join(sb, 'data/apps3-reversed.md'), rootDir: sb });
 check(findDecided(idx3r, 'https://jobs.ashbyhq.com/co/aaa-111')?.num === 9007,
   'and gives the SAME answer when the two rows are stored in the opposite order');
+
+// ── Active-engagement repost guard (Option A dedup) ───────────────────────────
+// A reposted req gets a new url, so findDecided (url-keyed) treats it as new.
+// findActiveRepost catches it by company+role, but ONLY for roles you are
+// already engaged on (Applied..Offer), where re-evaluating is pure waste.
+writeFileSync(join(sb, 'data/apps-active.md'), [
+  HEADER,
+  '| 940 | 2020-01-06 | Globex | Widget Operations Manager | 2.9/5 | Applied | ❌ | — | [940](reports/940.md) | n | https://job-boards.greenhouse.io/globex/jobs/6107003004 |',
+  '| 802 | 2020-01-05 | Initech | Director of Widget Operations | 3.8/5 | 1st Interview | ❌ | — | [802](reports/802.md) | n | https://jobs.ashbyhq.com/initech/c0050170 |',
+  '| 500 | 2020-01-04 | Contoso | Director of Widgetry | 3.5/5 | Evaluated | ❌ | — | [500](reports/500.md) | n | https://boards.greenhouse.io/contoso/jobs/1 |',
+  '',
+].join('\n'));
+const actIdx = buildActiveRoleIndex({ appsPath: join(sb, 'data/apps-active.md'), rootDir: sb });
+check(findActiveRepost(actIdx, 'https://job-boards.greenhouse.io/globex/jobs/9999999', { company: 'Globex', role: 'Widget Operations Manager' })?.num === 940,
+  'repost of an APPLIED role (new url, same company+role) is suppressed');
+check(findActiveRepost(actIdx, 'https://jobs.ashbyhq.com/initech/NEWID', { company: 'Initech', role: 'Director of Widget Operations' })?.num === 802,
+  'repost of an INTERVIEWING role is suppressed');
+check(findActiveRepost(actIdx, 'https://job-boards.greenhouse.io/globex/jobs/123', { company: 'Globex', role: 'Support Operations Manager' }) === null,
+  'a DIFFERENT role at the same active company is NOT suppressed');
+check(findActiveRepost(actIdx, 'https://boards.greenhouse.io/contoso/jobs/2', { company: 'Contoso', role: 'Director of Widgetry' }) === null,
+  'a repost of a merely-EVALUATED (not active) role is NOT suppressed');
+check(findActiveRepost(actIdx, 'https://job-boards.greenhouse.io/globex/jobs/6107003004', { company: 'Globex', role: 'Widget Operations Manager' }) === null,
+  'the SAME url is left to findDecided, not double-suppressed here');
 
 rmSync(sb, { recursive: true, force: true });
 

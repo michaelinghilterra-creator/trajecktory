@@ -400,30 +400,9 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
           rather than omitted, because "you sent none" and "nothing logs this yet"
           are different facts and only one of them is your fault. Both series
           start filling with the outreach motion. */}
+      {/* Full-width Actions band. Tracker intake removed 2026-07-27: it plotted
+          total scanner volume, which the user explicitly does not track. */}
       <window.ActionsCard />
-
-      {/* Activity · last N days — full-width band on top */}
-      <div className="card padded-lg" style={{ display: "flex", flexDirection: "column" }}>
-        <div className="card-head">
-          <span className="card-title">Tracker intake · last {ACTIVITY_WINDOW} days</span>
-          <span className="card-meta mono">
-            {apps.filter(a => window.daysAgo(a.date) <= ACTIVITY_WINDOW - 1).length} entries &nbsp;·&nbsp;
-            Last 7d <span style={{ color: "var(--accent)" }}>{activityInsights.last7}</span>&nbsp;·&nbsp;
-            Prior 7d <span style={{ color: "var(--text-dim)" }}>{activityInsights.prior7}</span>
-            <span style={{ color: activityInsights.trend > 0 ? "var(--green)" : activityInsights.trend < 0 ? "var(--red)" : "var(--text-dim)", marginLeft: 6 }}>
-              {activityInsights.trend > 0 ? `▲ +${activityInsights.trend}` : activityInsights.trend < 0 ? `▼ ${activityInsights.trend}` : "flat"}
-            </span>
-          </span>
-        </div>
-        <window.Timeline apps={apps} days={ACTIVITY_WINDOW} height={72} />
-        <div className="row mono" style={{ marginTop: 10, fontSize: 10.5, color: "var(--text-mute)", gap: 4 }}>
-          Avg/wk
-          <span className="mono" style={{ color: "var(--text-dim)", marginLeft: 2 }}>{activityInsights.avgPerWeek}</span>
-          <span style={{ color: "var(--text-dim)" }}>·</span>
-          Peak
-          <span className="mono" style={{ color: "var(--text-dim)" }}>{activityInsights.peakCount} on {activityInsights.peakLabel}</span>
-        </div>
-      </div>
 
       {/* Pipeline Funnel · Score Distribution — 50/50 below the activity band */}
       <div className="grid cols-2" style={{ alignItems: "stretch" }}>

@@ -48,7 +48,13 @@ const TEST_LIMIT = parseInt(process.env.TJK_TEST_LIMIT, 10) || 0;
 function detectApi(company) {
   // Greenhouse: explicit api field
   if (company.api && company.api.includes('greenhouse')) {
-    return { type: 'greenhouse', url: company.api };
+    // ?content=true returns the full JD body per job, which the location filter
+    // greps for a "remote" signal (a remote role listing only its HQ city would
+    // otherwise be geo-blocked as out-of-region).
+    const api = company.api.includes('content=true')
+      ? company.api
+      : company.api + (company.api.includes('?') ? '&' : '?') + 'content=true';
+    return { type: 'greenhouse', url: api };
   }
 
   const url = company.careers_url || '';
@@ -76,7 +82,7 @@ function detectApi(company) {
   if (ghEuMatch && !company.api) {
     return {
       type: 'greenhouse',
-      url: `https://boards-api.greenhouse.io/v1/boards/${ghEuMatch[1]}/jobs`,
+      url: `https://boards-api.greenhouse.io/v1/boards/${ghEuMatch[1]}/jobs?content=true`,
     };
   }
 
@@ -129,6 +135,7 @@ function parseGreenhouse(json, companyName) {
     company: companyName,
     location: j.location?.name || '',
     postedAt: j.updated_at || null,   // ISO string; best available proxy for age
+    remoteHint: j.content || '',      // JD body (needs ?content=true) — grepped for "remote"
   }));
 }
 
@@ -140,6 +147,8 @@ function parseAshby(json, companyName) {
     company: companyName,
     location: j.location || '',
     postedAt: j.publishedDate || j.createdAt || null,  // ISO string
+    // Ashby exposes an explicit isRemote flag + workplaceType — precise, no body grep needed.
+    remoteHint: `${j.isRemote ? 'remote' : ''} ${j.workplaceType || ''} ${j.descriptionPlain || ''}`,
   }));
 }
 
@@ -151,6 +160,8 @@ function parseLever(json, companyName) {
     company: companyName,
     location: j.categories?.location || '',
     postedAt: j.createdAt ? new Date(j.createdAt).toISOString() : null,  // Unix ms → ISO
+    // Lever exposes workplaceType ("remote"/"hybrid"/"on-site") — precise signal + body backup.
+    remoteHint: `${j.workplaceType || ''} ${j.descriptionPlain || ''}`,
   }));
 }
 
@@ -461,7 +472,7 @@ async function main() {
           totalFiltered++;
           continue;
         }
-        if (!locationFilter(job.location)) {
+        if (!locationFilter(job.location, job.remoteHint)) {
           totalGeoBlocked++;
           continue;
         }

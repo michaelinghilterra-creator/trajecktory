@@ -81,7 +81,7 @@ window.ConnectTab = function ConnectTab({ toast }) {
   if (!queue) return <div className="dim" style={{ padding: 28 }}>Loading connect queue…</div>;
 
   return (
-    <div style={{ padding: 24, maxWidth: 780 }}>
+    <div style={{ padding: 24, maxWidth: "none", marginLeft: 0, marginRight: 0 }}>
       <h2 style={{ margin: '0 0 2px' }}>Connect queue</h2>
       <p className="dim" style={{ fontSize: 13, marginTop: 4, marginBottom: 18 }}>
         {queue.length} contact{queue.length === 1 ? '' : 's'} we cannot email (a LinkedIn handle, no

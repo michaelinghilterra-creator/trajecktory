@@ -164,7 +164,7 @@ window.PostsTab = function PostsTab({ toast }) {
 
   if (loading) return React.createElement("div", { style: { padding: 24, color: "var(--text-mute)" } }, "Loading posts…");
 
-  return React.createElement("div", { className: "posts-tab", style: { padding: "18px 20px", maxWidth: 1100 } },
+  return React.createElement("div", { className: "posts-tab", style: { padding: "18px 20px", maxWidth: "none", marginLeft: 0, marginRight: 0 } },
     React.createElement("h2", { style: { margin: "0 0 4px" } }, "Posts"),
     React.createElement("p", { style: { margin: "0 0 16px", color: "var(--text-dim)", fontSize: 13, maxWidth: 720 } },
       "Draft posts for two lanes: Professional lands on LinkedIn (the lane that earns screens), trajecktory lands on X (build in public). Write your own or have Claude draft one, edit either, then queue it. Queued posts are ready; Claude schedules the queue to Buffer after you approve. Nothing posts automatically."),

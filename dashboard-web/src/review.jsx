@@ -575,7 +575,7 @@ window.ReviewTab = function ReviewTab({ toast }) {
   const history = (status && status.history) || [];
 
   return (
-    <div style={{ padding: 24, maxWidth: 900 }}>
+    <div style={{ padding: 24, maxWidth: "none", marginLeft: 0, marginRight: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2, gap: 12 }}>
         <h2 style={{ margin: 0 }}>Weekly review</h2>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
