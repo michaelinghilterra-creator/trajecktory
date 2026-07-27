@@ -383,6 +383,9 @@ function computeGhostedCandidates() {
 // drops out — the queue is a to-do list, not a history. Sent/Replied/Meeting are
 // tracked on the Network tab; Connected means they accepted.
 const CONNECT_QUEUE_EXCLUDE_STATUS = new Set(['Archived', 'Connected', 'Sent', 'Replied', 'Meeting Scheduled']);
+// The email queue mirrors it: once you've emailed a contact (Sent) or they moved
+// past it, they leave the "to email" list; Archived stays out either way.
+const EMAIL_QUEUE_EXCLUDE_STATUS = new Set(['Archived', 'Sent', 'Replied', 'Meeting Scheduled', 'Connected']);
 
 function _hasLinkedIn(row) {
   return !!(row && (row.linkedin || '').trim());
@@ -458,6 +461,26 @@ function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
   return _sortByCompanyName(out);
 }
 
+// The email counterpart: contacts you CAN email (a sendable, verified address) at
+// companies you've applied to, that you have not emailed yet. Working this list
+// logs verified EMAIL touches (the 13/week floor) the same one-at-a-time way the
+// connect queue logs LinkedIn connects.
+function computeEmailQueue({ taRows, recruiterRows, apps } = {}) {
+  const { ta, rec } = _bothBooks({ taRows, recruiterRows });
+  const applied = appliedCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
+  const out = [];
+  const consider = (row, source) => {
+    if (!isSendable(row)) return;                // MUST have a sendable email
+    if (EMAIL_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
+    const company = source === 'recruiter' ? row.firm : row.company;
+    if (!applied.has(normalizeCompany(company))) return;
+    out.push(_queueRow(row, source));
+  };
+  for (const r of ta)  consider(r, 'ta');
+  for (const r of rec) consider(r, 'recruiter');
+  return _sortByCompanyName(out);
+}
+
 // How many contacts are being held back purely because their address could not be
 // checked. The send gate refusing an unverified address is correct, but its effect
 // is INVISIBLE: the row simply does not appear, and fewer rows looks like a quiet
@@ -485,7 +508,7 @@ function countWithheldContacts({ taRows, recruiterRows } = {}) {
 
 export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA,
-  computeGhostedCandidates, channelFor, computeConnectQueue, countWithheldContacts,
+  computeGhostedCandidates, channelFor, computeConnectQueue, computeEmailQueue, countWithheldContacts,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 
