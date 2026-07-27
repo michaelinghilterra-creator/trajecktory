@@ -16,18 +16,32 @@
 //
 // Exit code: 0 always (a low live rate is not a script error).
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { chromium } from 'playwright';
 import yaml from 'js-yaml';
 import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness, workdaySiteFromCareersUrl } from './liveness-core.mjs';
-import { buildDecidedIndex, findDecided } from './lib/identity.mjs';
+import { buildDecidedIndex, findDecided, buildActiveRoleIndex, findActiveRepost } from './lib/identity.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(__dirname, 'data/pipeline.md');
 const PORTALS = join(__dirname, 'portals.yml');
 const APPS = join(__dirname, 'data/applications.md');
+const MERGE_DROPS = join(__dirname, 'data/merge-drops.tsv');
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
+// Append repost-suppression rows to the audit log (header written once). A
+// suppression the user cannot inspect is the exact failure this guard fixes, so
+// every drop is recorded.
+function flushDropLog(rows) {
+  if (!rows.length) return;
+  if (!existsSync(MERGE_DROPS)) {
+    writeFileSync(MERGE_DROPS, 'date\treason\tprior_num\tprior_status\tcompany\trole\turl\n', 'utf8');
+  }
+  appendFileSync(MERGE_DROPS, rows.join('\n') + '\n', 'utf8');
+}
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
@@ -55,7 +69,12 @@ const PENDING_RX = /^(\s*-\s*\[ \]\s+)(https?:\/\/[^\s|]+)(\s.*)?$/;
 const pending = [];
 for (let i = 0; i < lines.length; i++) {
   const m = lines[i].match(PENDING_RX);
-  if (m) pending.push({ idx: i, prefix: m[1], url: m[2], suffix: m[3] || '' });
+  if (m) {
+    // Pipeline lines carry "| Company | Role" metadata after the URL. Parse it
+    // for the repost guard's company+role hint (empty when a bare URL).
+    const meta = (m[3] || '').split('|').map(s => s.trim()).filter(Boolean);
+    pending.push({ idx: i, prefix: m[1], url: m[2], suffix: m[3] || '', company: meta[0] || '', role: meta[1] || '' });
+  }
 }
 
 if (pending.length === 0) {
@@ -75,8 +94,11 @@ if (pending.length === 0) {
 // because a wrong suppression hides a real job while a missed one only costs a
 // check. --allow-reeval bypasses this for a genuine repost worth re-scoring.
 let decidedCount = 0;
+let repostCount = 0;
+const dropLog = [];   // rows appended to data/merge-drops.tsv for audit
 if (!allowReeval) {
   const index = buildDecidedIndex({ appsPath: APPS, rootDir: __dirname });
+  const activeIndex = buildActiveRoleIndex({ appsPath: APPS, rootDir: __dirname });
   const stillPending = [];
   for (const p of pending) {
     const prior = findDecided(index, p.url);
@@ -84,19 +106,32 @@ if (!allowReeval) {
       lines[p.idx] = `- [!] ${p.url}${p.suffix} — already evaluated as #${prior.num} (${prior.status})`;
       decidedCount++;
       console.log(`  ⏭ decided   #${prior.num} (${prior.status}) — ${p.url.slice(0, 78)}`);
-    } else {
-      stillPending.push(p);
+      continue;
     }
+    // Repost guard: a NEW url for a role you are ALREADY engaged on (applied /
+    // interviewing) is the same requisition resurfacing — suppress, never re-eval.
+    const repost = findActiveRepost(activeIndex, p.url, { company: p.company, role: p.role });
+    if (repost) {
+      lines[p.idx] = `- [!] ${p.url}${p.suffix} — repost of #${repost.num} (${repost.status}); already engaged, skipped`;
+      repostCount++;
+      dropLog.push(`${todayISO()}\trepost\t${repost.num}\t${repost.status}\t${p.company}\t${p.role}\t${p.url}`);
+      console.log(`  ⏭ repost    of #${repost.num} (${repost.status}) — ${p.company} / ${p.role}`);
+      continue;
+    }
+    stillPending.push(p);
   }
   pending.length = 0;
   pending.push(...stillPending);
 
-  if (decidedCount && pending.length === 0) {
-    if (!dryRun) writeFileSync(PIPELINE, lines.join('\n'), 'utf8');
-    console.log(`\nAlready evaluated: ${decidedCount} (skipped, not browser-checked)`);
+  if (repostCount) console.log(`\nReposts suppressed: ${repostCount} (already applied/interviewing — logged to data/merge-drops.tsv)`);
+
+  if ((decidedCount || repostCount) && pending.length === 0) {
+    if (!dryRun) { writeFileSync(PIPELINE, lines.join('\n'), 'utf8'); flushDropLog(dropLog); }
+    if (decidedCount) console.log(`Already evaluated: ${decidedCount} (skipped, not browser-checked)`);
     console.log('Nothing left to liveness-check.');
     process.exit(0);
   }
+  if (!dryRun) flushDropLog(dropLog);
 }
 
 console.log(`Gating ${pending.length} pending URLs (concurrency ${concurrency})...`);
