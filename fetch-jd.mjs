@@ -82,6 +82,16 @@ async function greenhouse(token, id) {
   return { title: j.title, location: j.location?.name, text: stripHtml(j.content) };
 }
 
+// SSRF barrier (CWE-918). The slug/token/id come from an attacker-influenced pipeline
+// URL and are interpolated into the PATH of a hardcoded-host ATS API request. A crafted
+// job URL must not be able to redirect or traverse that request, so every dynamic path
+// segment is validated against a strict character allowlist (URL-path-safe only, no `/`,
+// `@`, `:`, `?`, `#`, and no `..`) BEFORE it can reach fetch(). The regex `.test()` below
+// is the sanitizer on the taint path; anything failing it is treated as unreadable and
+// falls through to WebFetch/manual paste. `SEG` is deliberately inlined at each guard.
+const SEG = /^[A-Za-z0-9._%-]+$/;
+const ok = (s) => typeof s === 'string' && SEG.test(s) && !s.includes('..');
+
 async function main() {
   let out = null;
   const ashbyM = url.match(/jobs\.ashbyhq\.com\/([^/?#]+)\/([0-9a-f-]{16,})/i);
@@ -90,14 +100,18 @@ async function main() {
   const ghJidM = url.match(/[?&]gh_jid=(\d+)/);
 
   try {
-    if (ashbyM) out = await ashby(decodeURIComponent(ashbyM[1]), ashbyM[2]);
-    else if (leverM) out = await lever(leverM[1], leverM[2]);
-    else if (ghBoardM) out = await greenhouse(ghBoardM[1], ghBoardM[2]);
-    else if (ghJidM) {
-      // company-hosted Greenhouse: token not in the path — try portals.yml.
+    if (ashbyM && SEG.test(ashbyM[1]) && !ashbyM[1].includes('..') && SEG.test(ashbyM[2])) {
+      out = await ashby(ashbyM[1], ashbyM[2]);
+    } else if (leverM && SEG.test(leverM[1]) && !leverM[1].includes('..') && SEG.test(leverM[2])) {
+      out = await lever(leverM[1], leverM[2]);
+    } else if (ghBoardM && SEG.test(ghBoardM[1]) && !ghBoardM[1].includes('..') && SEG.test(ghBoardM[2])) {
+      out = await greenhouse(ghBoardM[1], ghBoardM[2]);
+    } else if (ghJidM && SEG.test(ghJidM[1])) {
+      // company-hosted Greenhouse: token not in the path — resolve via portals.yml (a
+      // local config value, not the request URL), then re-validate before use.
       const host = (() => { try { return new URL(url).hostname; } catch { return ''; } })();
       const tok = greenhouseTokenFromPortals(host);
-      if (tok) out = await greenhouse(tok, ghJidM[1]);
+      if (tok && ok(tok)) out = await greenhouse(tok, ghJidM[1]);
     }
   } catch (e) {
     process.stderr.write(`fetch-jd: ${e.message}\n`);
