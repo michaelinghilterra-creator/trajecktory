@@ -303,7 +303,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   const [findFor, setFindFor] = useStateF(null);         // { company, role } for the Find-contacts modal
   // Subview: 'overview' (KPIs), 'warm' (the urgent queue + nav badge), 'cold'
   // ("Applications out": cold portal apps that should not nag daily).
-  const [subView, setSubView] = useStateF('warm');
+  const [subView, setSubView] = useStateF('overview');
 
   const load = () => {
     setLoading(true);

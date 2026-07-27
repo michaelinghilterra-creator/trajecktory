@@ -220,3 +220,42 @@ talent_states:
       makes it valid for an outreach DENOMINATOR but never for a reply numerator.
       Any reply rate over archived contacts is a floor, not a measurement.
     contacted: false
+
+# Referral contacts (people in the user's own network who can refer or introduce
+# them). A separate ladder from recruiters/talent because the motion is warm and
+# personal: you reconnect first, then ask, and the terminal win is an application
+# that carried a referral. `asked: true` marks the rungs where an ask has gone
+# out, so an outreach count can credit them without hardcoding the list.
+referral_states:
+  - id: not_asked
+    label: Not Asked
+    stage: 0
+    asked: false
+  - id: catching_up
+    label: Catching Up
+    description: Reconnect note sent, no referral ask yet. The door is open.
+    stage: 1
+    asked: false
+  - id: asked
+    label: Asked
+    description: Referral ask sent (either after catching up, or straight to a close contact).
+    stage: 2
+    asked: true
+  - id: intro_made
+    label: Intro Made
+    description: They made the introduction or flagged the application internally.
+    stage: 3
+    asked: true
+  - id: applied_referral
+    label: Applied w/ Referral
+    description: An application went out carrying this referral. The terminal win.
+    stage: 4
+    asked: true
+  - id: no
+    label: No
+    description: Declined or not a fit. Off the ladder, no hard feelings.
+    asked: true
+  - id: dormant
+    label: Dormant
+    description: Parked. Reached out, went quiet, revisit later.
+    asked: true

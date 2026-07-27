@@ -3,14 +3,14 @@
  * weekly-review.test.mjs — the weekly-review engine's pure core.
  *
  * Pins: week windowing, the metric availability rule (not-logged is unknown, not
- * zero), floor evaluation, and the build-lock decision (2 consecutive genuine
- * outreach misses, a not-logged week never trips it).
+ * zero), and floor evaluation. The weekly build-lock decision was retired in
+ * favour of the live rolling floor (see tests/rolling-floor.test.mjs).
  *
  * Run: node tests/weekly-review.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
 import { weeklyMetrics, weekBounds } from '../dashboard-web/server/lib/weekly-metrics.mjs';
-import { evaluateFloors, lockDecision, FLOORS } from '../dashboard-web/server/lib/review-thresholds.mjs';
+import { evaluateFloors, FLOORS } from '../dashboard-web/server/lib/review-thresholds.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -80,12 +80,8 @@ check(feBlank.results.find(r => r.key === 'verifiedTouches').met === null, 'not-
 check(feBlank.notLogged.includes('verifiedTouches'), 'notLogged names the missing floor');
 check(FLOORS.verifiedTouches.min === 13, 'outreach floor is 13/wk per the plan');
 
-// ── lockDecision ─────────────────────────────────────────────────────────────
-check(lockDecision([{ outreachMet: false }, { outreachMet: false }]).locked === true, 'two consecutive misses → lock');
-check(lockDecision([{ outreachMet: false }, { outreachMet: true }]).locked === false, 'a met week clears the lock');
-check(lockDecision([{ outreachMet: false }, { outreachMet: null }]).locked === false, 'a not-logged week does not trip the lock');
-check(lockDecision([{ outreachMet: false }]).locked === false, 'a single miss only flags, does not lock');
-check(lockDecision([]).locked === false, 'no history → no lock');
+// The weekly build-lock (lockDecision) was retired; the build cap is now the live
+// rolling floor, covered by tests/rolling-floor.test.mjs.
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

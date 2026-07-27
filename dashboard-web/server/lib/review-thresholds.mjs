@@ -1,8 +1,14 @@
 /**
- * lib/review-thresholds.mjs — the single home for the weekly-review floors, the
- * kill criteria, and the build-lock decision. Deterministic, NO LLM: the numbers
- * and the pass/fail live here so the review CLI and the dashboard tracking view
- * read exactly one source. Floors and kill criteria are from the relaunch plan.
+ * lib/review-thresholds.mjs — the single home for the weekly-review floors and
+ * the kill criteria. Deterministic, NO LLM: the numbers and the pass/fail live
+ * here so the review CLI and the dashboard tracking view read exactly one source.
+ * Floors and kill criteria are from the relaunch plan.
+ *
+ * The build-cap gate is NOT here anymore. It used to be a weekly lock (two
+ * consecutive missed weeks), which retired in favour of the live rolling floor
+ * (lib/rolling-floor.mjs): a trailing-5-working-day gate with no calendar-week
+ * boundary to game. The floors below are still the weekly leading-indicator
+ * DISPLAY; they no longer decide whether the build is locked.
  *
  * A design rule that matters: a metric that is NOT LOGGED is judged `null`
  * (unknown), never a pass and never a fail. Missing manual data reads not-logged,
@@ -33,10 +39,9 @@ export const KILL = {
     note: 'If 6 screen objections come back and tenure is NOT the theme, the resume identity work solved the wrong problem. Stop and re-diagnose.' },
 };
 
-// Consecutive weeks of missing the outreach floor before the build lock engages.
-export const MISS_TO_LOCK = 2;
-
-// The outreach floor (the one whose repeated miss engages the lock).
+// The outreach floor key: the metric the live rolling floor gates the build cap
+// on (see lib/rolling-floor.mjs). Still marked per-week in the review history so
+// the week-over-week view can show it; it no longer drives a lock.
 export const OUTREACH_FLOOR_KEY = 'verifiedTouches';
 
 // Evaluate the three floors against a weekly-metrics object. Each metric is
@@ -57,14 +62,8 @@ export function evaluateFloors(metrics) {
   };
 }
 
-// Given the review history (oldest → newest), decide whether the build lock
-// engages: MISS_TO_LOCK consecutive weeks where the outreach floor was MISSED. A
-// not-logged week is not a miss, so it does not trip the lock (but it also does
-// not clear a prior miss: the run must be consecutive genuine misses). The lock
-// governs IMPROVEMENT only; repair, data integrity, live-process work, and
-// sub-30-minute unblocks are always allowed (enforced by the CLI/report, not here).
-export function lockDecision(history = []) {
-  const recent = history.slice(-MISS_TO_LOCK);
-  const locked = recent.length === MISS_TO_LOCK && recent.every(h => h && h.outreachMet === false);
-  return { locked, reason: locked ? `Outreach floor (${FLOORS[OUTREACH_FLOOR_KEY].label}) missed ${MISS_TO_LOCK} weeks running.` : null };
-}
+// The weekly build-lock decision (two consecutive missed weeks) lived here and
+// was retired: the build cap is now the live rolling floor (lib/rolling-floor.mjs),
+// which has no calendar-week boundary to game. The rolling floor still governs
+// IMPROVEMENT only; repair, data integrity, live-process work, and sub-30-minute
+// unblocks stay allowed (surfaced by the Review card, not enforced in code).

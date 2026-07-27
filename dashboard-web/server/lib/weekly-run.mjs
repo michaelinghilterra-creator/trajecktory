@@ -17,8 +17,8 @@
  */
 import fs from 'fs';
 import { collectWeeklyMetrics } from './weekly-collect.mjs';
-import { evaluateFloors, lockDecision, OUTREACH_FLOOR_KEY } from './review-thresholds.mjs';
-import { REVIEW_LOG_PATH, BUILD_LOCK_PATH } from '../config.mjs';
+import { evaluateFloors, OUTREACH_FLOOR_KEY } from './review-thresholds.mjs';
+import { REVIEW_LOG_PATH } from '../config.mjs';
 
 // Shape ONE week's history row from its metrics + floor evaluation. Pure. Stores
 // the floor results and the flattened metric values so a later view reads frozen
@@ -47,19 +47,17 @@ export function upsertWeek(history, entry) {
 const readLog = () => { try { return JSON.parse(fs.readFileSync(REVIEW_LOG_PATH, 'utf8')) || []; } catch { return []; } };
 
 // Run the review for the week containing `now`: collect the metrics, evaluate the
-// floors, freeze the week into the log, decide the build lock from the run of
-// outreach results, and (unless write===false) persist the log + lock. Returns
-// everything both callers need to print or render. `write:false` is the dry run.
+// floors, freeze the week into the log, and (unless write===false) persist the
+// log. Returns everything both callers need to print or render. `write:false` is
+// the dry run. The build-cap gate is no longer decided here — it is the live
+// rolling floor (lib/rolling-floor.mjs); this call only freezes the week's numbers.
 export function runWeeklyReview({ now = new Date(), write = true } = {}) {
   const { weekStart, weekEnd, metrics } = collectWeeklyMetrics(now);
   const floors = evaluateFloors(metrics);
   const entry = buildWeekEntry({ weekStart, weekEnd, metrics, floors });
   const history = upsertWeek(readLog(), entry);
-  const lock = lockDecision(history.map(h => ({ week: h.week, outreachMet: h.outreachMet })));
   if (write) {
     fs.writeFileSync(REVIEW_LOG_PATH, JSON.stringify(history, null, 2) + '\n');
-    fs.writeFileSync(BUILD_LOCK_PATH, JSON.stringify(
-      { locked: lock.locked, reason: lock.reason, since: lock.locked ? weekStart : null, week: weekStart }, null, 2) + '\n');
   }
-  return { weekStart, weekEnd, metrics, floors, lock, history, entry };
+  return { weekStart, weekEnd, metrics, floors, history, entry };
 }

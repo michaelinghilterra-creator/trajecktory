@@ -15,11 +15,13 @@ const STATES_FILE = path.join(ROOT_DIR, 'templates', 'states.yml');
 let _states = [];
 let _recruiterStates = [];
 let _talentStates = [];
+let _referralStates = [];
 try {
   const doc = yaml.load(fs.readFileSync(STATES_FILE, 'utf8'));
   _states = Array.isArray(doc?.states) ? doc.states : [];
   _recruiterStates = Array.isArray(doc?.recruiter_states) ? doc.recruiter_states : [];
   _talentStates = Array.isArray(doc?.talent_states) ? doc.talent_states : [];
+  _referralStates = Array.isArray(doc?.referral_states) ? doc.referral_states : [];
 } catch (e) {
   console.warn('[statuses] could not load templates/states.yml:', e.message);
 }
@@ -78,6 +80,12 @@ export const RECRUITER_CONTACTED = new Set(_recruiterStates.filter(s => s.contac
 export const TALENT_CONTACTED = new Set(_talentStates.filter(s => s.contacted).map(s => s.label));
 export const RECRUITER_REPLIED = new Set(_recruiterStates.filter(s => s.replied).map(s => s.label));
 export const TALENT_REPLIED = new Set(_talentStates.filter(s => s.replied).map(s => s.label));
+
+// Referral ladder (people in the user's own network). `asked` marks the rungs
+// where a referral ask has gone out, mirroring how `contacted` works above.
+export const REFERRAL_STATES = _referralStates;
+export const REFERRAL_STATUS_LABELS = _referralStates.map(s => s.label);
+export const REFERRAL_ASKED = new Set(_referralStates.filter(s => s.asked).map(s => s.label));
 
 // A status seen in the data that no ladder knows about is a silent data-quality
 // hole — it is how `Bounced` rendered as "Not Contacted" for a month. Warn on it
