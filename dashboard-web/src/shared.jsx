@@ -382,6 +382,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [hasKey, setHasKey] = useState(false);       // API key present AND billed to it (effective)
   const [pendingCount, setPendingCount] = useState(null);   // URLs waiting to evaluate
   const [needsManual, setNeedsManual] = useState([]);       // URLs the eval couldn't read → paste
+  const [evalSummary, setEvalSummary] = useState('');       // plain "what the last batch did" line
   const pollersRef = useRef({});
 
   // Agent Scan and Evaluate Pipeline spawn the bundled Claude CLI, which needs a
@@ -576,10 +577,23 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           if (job.status === 'done') {
             onDataChanged && onDataChanged();
             if (step.id === 'triage') loadTriage();
-            // Consolidation: a finished Evaluate batch auto-runs the housekeeping
-            // it always needed (Merge → Verify → Health), so results appear without
-            // three more manual clicks. Refresh the pending count too.
-            if (step.id === 'cli-eval') runPostEvalChain();
+            // A finished Evaluate batch auto-runs its housekeeping (Merge → Health;
+            // Verify is intentionally excluded — see runPostEvalChain), then shows a
+            // plain one-line summary so the count never moves without a visible reason.
+            if (step.id === 'cli-eval') {
+              runPostEvalChain();
+              Promise.all([
+                fetch('/api/pipeline/pending').then(r => r.json()).catch(() => ({})),
+                fetch('/api/pipeline/needs-manual').then(r => r.json()).catch(() => ({})),
+              ]).then(([p, nm]) => {
+                const scored = job.evaluationsDone || 0;
+                const pend = p.pending || 0;
+                const cr = (nm.items || []).length;
+                const msg = `Batch: ${scored} scored · ${pend} still queued` + (cr ? ` · ${cr} need your paste (couldn't read)` : '');
+                setEvalSummary(msg);
+                toast && toast(msg, scored ? 'success' : (cr ? 'warn' : 'info'));
+              });
+            }
           }
           if (step.id === 'cli-eval') { loadPending(); loadNeedsManual(); }
         }
@@ -942,6 +956,16 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         </div>
       )}
 
+      {evalSummary && (
+        <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', flex: 1, lineHeight: 1.4 }}>
+            <span style={{ color: 'var(--text-mute)', fontWeight: 600 }}>LAST BATCH · </span>{evalSummary}
+          </div>
+          <button onClick={() => setEvalSummary('')} title="Dismiss"
+            style={{ background: 'none', border: 'none', color: 'var(--text-mute)', cursor: 'pointer', fontSize: 12, flexShrink: 0 }}>×</button>
+        </div>
+      )}
+
       {needsManual.length > 0 && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--yellow)', marginBottom: 4 }}>
@@ -952,7 +976,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           </div>
           {needsManual.map(it => (
             <div key={it.url} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, fontSize: 10.5 }}>
-              <a href={it.url} target="_blank" rel="noreferrer" title={it.url}
+              <a href={window.safeHref(it.url)} target="_blank" rel="noreferrer" title={it.url}
                 style={{ color: 'var(--accent)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {(it.company || it.url) + (it.role ? ` · ${it.role}` : '')} ↗
               </a>
