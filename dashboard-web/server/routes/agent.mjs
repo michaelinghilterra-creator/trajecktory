@@ -114,6 +114,30 @@ function evalBatchSize(power) {
   return parseInt(process.env.TJK_EVAL_BATCH, 10) || 5;
 }
 
+// How many pending postings are actually queued for evaluation: the unchecked
+// "- [ ]" lines in data/pipeline.md. The eval agent takes its work from exactly
+// these, best-fit first. Returns null (not 0) when the file cannot be read, so
+// callers can tell "no pending" from "unknown".
+function countPipelinePending() {
+  try {
+    const txt = fs.readFileSync(path.join(ROOT_DIR, 'data/pipeline.md'), 'utf8');
+    const m = txt.match(/^\s*-\s*\[ \]/gm);
+    return m ? m.length : 0;
+  } catch { return null; }
+}
+
+// The Evaluate meter's denominator. It must be the number of postings the run
+// will REALLY attempt — min(batch cap, pending) — not the raw cap. Showing the
+// cap made "0 of 8" appear when only 3 URLs were pending, so the denominator
+// never tied off with what the run produced. A number the user cannot reconcile
+// reads as the tool lying, even when every posting was handled correctly. Fall
+// back to the cap only when the pipeline is unreadable.
+function pipelineEvalTotal(power) {
+  const cap = evalBatchSize(power);
+  const pending = countPipelinePending();
+  return pending === null ? cap : Math.min(cap, pending);
+}
+
 function dashboardConstraints(mode, opts) {
   const power = effectivePower(opts, mode);
   // Power pipeline runs bill the user's API key (separate from the flat plan
@@ -559,7 +583,7 @@ async function runAgent(jobId, mode, target) {
   agentJobs.set(jobId, { mode, status: 'running', activity: 'Starting agent…', toolCalls: [], toolCount: 0, output: '', startedAt: Date.now(),
     // Progress meter: pipeline has a known batch size; deep is a single eval; scan
     // and triage are open-ended, so they show elapsed only (progressTotal null).
-    progressTotal: mode === 'pipeline' ? evalBatchSize(effectivePower(target, mode)) : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
+    progressTotal: mode === 'pipeline' ? pipelineEvalTotal(effectivePower(target, mode)) : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
   persistJobs();   // capture the running record immediately so a restart can mark it interrupted
   const before = probeArtifacts(mode);
   const res = await runClaudeAgent(jobId, mode, target);
