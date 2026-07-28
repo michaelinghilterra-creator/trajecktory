@@ -59,6 +59,18 @@ export async function hunterSearchesLeft(key) {
   } catch { return null; }
 }
 
+// Remaining MillionVerifier credits. Mirrors hunterSearchesLeft: returns a number,
+// or null when the balance cannot be read (bad key, network, unexpected shape) so
+// callers can show "unknown" rather than a misleading 0. The v3 credits endpoint
+// returns { credits: <int> }.
+export async function millionVerifierCreditsLeft(key) {
+  try {
+    const r = await fetch(`https://api.millionverifier.com/api/v3/credits?api=${encodeURIComponent(key)}`, { signal: AbortSignal.timeout(10_000) });
+    const c = (await r.json())?.credits;
+    return Number.isFinite(c) ? Math.max(0, c) : null;
+  } catch { return null; }
+}
+
 // Per-run default: with no explicit --limit, do at most this many lookups so a
 // single run can never drain the month. Raise it deliberately with --limit=N.
 export const DEFAULT_FIND_LIMIT = 10;

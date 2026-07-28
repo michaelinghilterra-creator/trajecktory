@@ -6,6 +6,25 @@
 // compliant.
 const { useState: useStateCq, useEffect: useEffectCq } = React;
 
+// Two independent contact signals, shown in both the Connect and Email queues:
+//   NEW           — added by your most recent Reconcile (clears on the next one)
+//   Not contacted — no outreach logged yet (clears once you Mark sent)
+// A contact can carry either, both, or neither.
+function OutreachPills({ c }) {
+  return (
+    <>
+      {c.isNew ? (
+        <span title="Added by your most recent Reconcile. Clears the next time you reconcile."
+          style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.4px', padding: '1px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff', verticalAlign: 'middle' }}>NEW</span>
+      ) : null}
+      {c.notContacted ? (
+        <span title="You haven't reached out to this contact yet."
+          style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text-mute)', verticalAlign: 'middle' }}>Not contacted</span>
+      ) : null}
+    </>
+  );
+}
+
 function ConnectRow({ c, toast, onDone }) {
   const [note, setNote] = useStateCq(null);
   const [loading, setLoading] = useStateCq(false);
@@ -85,6 +104,7 @@ function ConnectRow({ c, toast, onDone }) {
           <div style={{ fontWeight: 600 }}>
             {c.name || '(no name)'}{' '}
             <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
+            <OutreachPills c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
             {c.company} · <span className="mono">{c.source}</span> ·{' '}
@@ -191,9 +211,31 @@ function EmailRow({ c, toast, onDone }) {
   const [loading, setLoading] = useStateCq(false);
   const [sending, setSending] = useStateCq(false);
   const [sentAt, setSentAt] = useStateCq(null);
+  const [showArchive, setShowArchive] = useStateCq(false);
   const done = !!sentAt;
   const base = c.source === 'recruiter' ? `/api/recruiters/${c.id}` : `/api/target-talent/${c.id}`;
   const firstName = c.firstName || (c.name || '').split(/\s+/)[0] || 'there';
+  // LinkedIn profile link, same normalization as the Connect queue, so you can
+  // confirm the TA is still at the company before you spend a draft on them.
+  const href = c.linkedin ? (/^https?:/.test(c.linkedin) ? c.linkedin : `https://${c.linkedin}`) : null;
+
+  // Same "Not reachable?" disposition as the Connect queue: a contact who left the
+  // company or changed roles gets Archived (status Archived + dated reason) and
+  // drops off, so you never email a dead lead. Shares the archive-contact endpoint.
+  const archive = (reason) => {
+    if (sending || done) return;
+    setSending(true);
+    fetch('/api/linkedin-drafts/archive-contact', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: c.source, id: c.id, reason }),
+    }).then(r => r.json())
+      .then(res => {
+        if (res.error) { toast && toast(res.error, 'error'); setSending(false); return; }
+        toast && toast(`Archived — ${c.name || 'contact'}`, 'success');
+        onDone && onDone(c.source, c.id);
+      })
+      .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
+  };
 
   const gen = () => {
     setLoading(true);
@@ -254,13 +296,28 @@ function EmailRow({ c, toast, onDone }) {
           <div style={{ fontWeight: 600 }}>
             {c.name || '(no name)'}{' '}
             <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
+            <OutreachPills c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
             {c.company} · <span className="mono">{c.source}</span> · <span className="mono">{c.email}</span>
             {c.emailState === 'risky' ? <span title="Catch-all domain: usually deliverable."> · risky</span> : null}
           </div>
+          {!done && (
+            <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {!showArchive
+                ? <button className="btn ghost sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => setShowArchive(true)} disabled={sending}
+                    title="Contact left the company or changed to an unrelated role? Archive them so they drop off and never get emailed.">Not reachable?</button>
+                : <>
+                    <span>Archive — reason:</span>
+                    <button className="btn sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => archive('left-company')} disabled={sending}>Left company</button>
+                    <button className="btn sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => archive('changed-role')} disabled={sending}>Changed role</button>
+                    <button className="btn ghost sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => setShowArchive(false)} disabled={sending}>Cancel</button>
+                  </>}
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+          {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer" title="Open the LinkedIn profile to confirm they're still at the company before emailing.">Open ↗</a> : null}
           <button className="btn accent sm" onClick={gen} disabled={loading}>
             {loading ? 'Drafting…' : (draft ? 'Redraft' : 'Draft email')}
           </button>

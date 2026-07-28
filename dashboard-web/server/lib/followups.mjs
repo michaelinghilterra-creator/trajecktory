@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { FOLLOWUPS_MD } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
-import { parseTargetTalentMd, readTTCorrespondence, matchByCompany } from './target-talent.mjs';
+import { parseTargetTalentMd, readTTCorrespondence, matchByCompany, getNewBaselineId } from './target-talent.mjs';
 import { parseRecruitersMd } from './recruiters.mjs';
 import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
 import { INTERVIEW_STAGES, isInterviewStage, FUNNEL_ORDER } from './statuses.mjs';
@@ -416,8 +416,13 @@ function _bothBooks({ taRows, recruiterRows }) {
 // One row shape for both queues. `email` is the clean address (verified.address),
 // empty on connect-queue rows. hasEmail/emailState keep the connect UI's "no email
 // on file" vs "email unverified" distinction.
-function _queueRow(row, source) {
+// baselineId is the "NEW since last reconcile" watermark (see target-talent.mjs).
+// isNew flags a contact added after the last reconcile opened; notContacted flags
+// one you have not reached out to yet. They are independent signals — a contact can
+// be new, not-contacted, both, or neither — so the UI badges them separately.
+function _queueRow(row, source, baselineId = null) {
   const company = source === 'recruiter' ? row.firm : row.company;
+  const status = row.status || '';
   return {
     source,                                       // 'ta' | 'recruiter'
     id: row.id,
@@ -427,10 +432,12 @@ function _queueRow(row, source) {
     company: company || '',
     linkedin: (row.linkedin || '').trim(),
     email: (row.email || '').trim(),
-    status: row.status || '',
+    status,
     hasEmail: !!(row.email || '').trim(),
     emailState: row.verified?.state || 'unverified',
     reason: (row.notes || '').replace(/\s+/g, ' ').trim().slice(0, 160),
+    isNew: baselineId != null && Number.isFinite(row.id) && row.id > baselineId,
+    notContacted: !status.trim() || /^\s*not\s*contacted\s*$/i.test(status),
   };
 }
 
@@ -447,6 +454,7 @@ function _sortByCompanyName(out) {
 function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
   const { ta, rec } = _bothBooks({ taRows, recruiterRows });
   const applied = appliedCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
+  const baselineId = getNewBaselineId();
   const out = [];
   const consider = (row, source) => {
     if (!_hasLinkedIn(row)) return;              // no LinkedIn handle → not reachable here
@@ -454,7 +462,7 @@ function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
     if (CONNECT_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
     const company = source === 'recruiter' ? row.firm : row.company;
     if (!applied.has(normalizeCompany(company))) return;   // only companies you've applied to
-    out.push(_queueRow(row, source));
+    out.push(_queueRow(row, source, baselineId));
   };
   for (const r of ta)  consider(r, 'ta');
   for (const r of rec) consider(r, 'recruiter');
@@ -468,13 +476,14 @@ function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
 function computeEmailQueue({ taRows, recruiterRows, apps } = {}) {
   const { ta, rec } = _bothBooks({ taRows, recruiterRows });
   const applied = appliedCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
+  const baselineId = getNewBaselineId();
   const out = [];
   const consider = (row, source) => {
     if (!isSendable(row)) return;                // MUST have a sendable email
     if (EMAIL_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
     const company = source === 'recruiter' ? row.firm : row.company;
     if (!applied.has(normalizeCompany(company))) return;
-    out.push(_queueRow(row, source));
+    out.push(_queueRow(row, source, baselineId));
   };
   for (const r of ta)  consider(r, 'ta');
   for (const r of rec) consider(r, 'recruiter');

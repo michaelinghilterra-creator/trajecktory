@@ -1,13 +1,13 @@
 import express from 'express';
 import fs from 'fs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
-import { parseTargetTalentMd, appendTTRows, updateTTLine } from '../lib/target-talent.mjs';
+import { parseTargetTalentMd, appendTTRows, updateTTLine, maxTTId, setNewBaselineId } from '../lib/target-talent.mjs';
 import { generateText, draftModel } from '../lib/anthropic.mjs';
 import { normCompany, reconcilePreview } from '../lib/tt-reconcile-core.mjs';
 import { TARGET_TALENT_MD } from '../config.mjs';
 import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
-import { findAndVerify, hunterSearchesLeft, planFindBudget, DEFAULT_FIND_LIMIT } from '../../../find-contacts.mjs';
+import { findAndVerify, hunterSearchesLeft, millionVerifierCreditsLeft, planFindBudget, DEFAULT_FIND_LIMIT } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 
 export const router = express.Router();
@@ -35,9 +35,36 @@ export const router = express.Router();
 //   }
 router.get('/api/tt-reconcile/preview', (req, res) => {
   try {
+    // Opening the reconcile flow is the boundary for "NEW since last reconcile":
+    // snapshot the current max contact id as the watermark, so any contact this
+    // reconcile adds (a higher id) is badged NEW in the Connect/Email queues, and
+    // the previous batch stops being new. See setNewBaselineId in target-talent.mjs.
+    setNewBaselineId(maxTTId());
     const apps = parseApplicationsMd();
     const ttRows = parseTargetTalentMd().filter(r => r.status !== 'Archived');
     res.json(reconcilePreview(apps, ttRows));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/tt-reconcile/credit-balances
+// Live Hunter (email-finder search credits) and MillionVerifier (verification
+// credits) balances so the user knows when to top up before a reconcile drains
+// them. Each is { configured, left }: configured=false means no key set;
+// left=null means the key is set but the balance could not be read right now.
+router.get('/api/tt-reconcile/credit-balances', async (req, res) => {
+  try {
+    const hkey = loadEnvKey('HUNTER_API_KEY');
+    const mkey = loadEnvKey('MILLIONVERIFIER_API_KEY');
+    const [hunter, mv] = await Promise.all([
+      hkey ? hunterSearchesLeft(hkey) : Promise.resolve(null),
+      mkey ? millionVerifierCreditsLeft(mkey) : Promise.resolve(null),
+    ]);
+    res.json({
+      hunter: { configured: !!hkey, left: hunter },
+      millionVerifier: { configured: !!mkey, left: mv },
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
