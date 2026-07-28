@@ -105,6 +105,9 @@ export const TODOS_PATH = path.join(DATA_DIR, 'todos.json');
 // Social posts composer: drafts, queue, and an activity log. One JSON sidecar,
 // same pattern as todos.json. Gitignored personal data under DATA_DIR.
 export const POSTS_PATH = path.join(DATA_DIR, 'posts.json');
+// AI Coach: the rolling chat transcript + the cached daily brief. One JSON sidecar,
+// same pattern as posts.json. Gitignored personal data under DATA_DIR.
+export const COACH_PATH = path.join(DATA_DIR, 'coach-conversations.json');
 
 export const PORT = process.env.PORT || 3333;
 // Bind to loopback by default so the dashboard (no auth, can spawn agents and

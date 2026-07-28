@@ -25,6 +25,52 @@ function OutreachPills({ c }) {
   );
 }
 
+// Company outreach context, shown on every queue row so you can decide inside the
+// queue whether reaching a second person at the same company is doubling up —
+// instead of leaving to reconcile across the Pipeline drawer and Network tab.
+// `touchedToday` (same calendar day) is a hold-off warning; otherwise the most
+// recent prior touch to ANYONE ELSE at that company is shown for timing.
+function relDaysAgo(dateStr) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr || '')) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const then = new Date(y, m - 1, d);
+  const now = new Date();
+  const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - then) / 86400000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 14) return 'last week';
+  return `${Math.floor(days / 7)} weeks ago`;
+}
+function chLabel(ch) { return ch === 'linkedin' ? 'LinkedIn invite' : 'email'; }
+
+function CompanyOutreach({ c }) {
+  const o = c.companyOutreach;
+  if (!o) return null;
+  if (o.touchedToday) {
+    return (
+      <div style={{ fontSize: 11, marginTop: 5, padding: '2px 8px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 5,
+        background: 'color-mix(in srgb, var(--orange) 15%, transparent)', color: 'var(--orange)', border: '1px solid color-mix(in srgb, var(--orange) 40%, transparent)' }}
+        title={`You already reached out at ${c.company} today (${chLabel(o.touchedToday.channel)} to ${o.touchedToday.name}). Reaching a second contact there today may read as over-contacting — consider holding off.`}>
+        ⚠ Already reached out at {c.company} today — {chLabel(o.touchedToday.channel)} to {o.touchedToday.name}
+      </div>
+    );
+  }
+  if (o.lastTouch) {
+    return (
+      <div className="dim" style={{ fontSize: 11, marginTop: 5 }}
+        title={`Most recent outreach to anyone else at ${c.company}.`}>
+        {c.company}: last reached out {relDaysAgo(o.lastTouch.date)} · {chLabel(o.lastTouch.channel)} to {o.lastTouch.name}
+      </div>
+    );
+  }
+  return (
+    <div className="dim" style={{ fontSize: 11, marginTop: 5, opacity: 0.7 }}>
+      No prior outreach at {c.company}
+    </div>
+  );
+}
+
 function ConnectRow({ c, toast, onDone }) {
   const [note, setNote] = useStateCq(null);
   const [loading, setLoading] = useStateCq(false);
@@ -112,6 +158,7 @@ function ConnectRow({ c, toast, onDone }) {
               ? <span title="An address is on file but is not verified deliverable. Verify it to move this contact to the email motion.">email {c.emailState}</span>
               : <span title="No email address on file. Find one (Hunter/MillionVerifier) to move this contact to the email motion.">no email on file</span>}
           </div>
+          <CompanyOutreach c={c} />
           {!done && (
             <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               {!showArchive
@@ -302,6 +349,7 @@ function EmailRow({ c, toast, onDone }) {
             {c.company} · <span className="mono">{c.source}</span> · <span className="mono">{c.email}</span>
             {c.emailState === 'risky' ? <span title="Catch-all domain: usually deliverable."> · risky</span> : null}
           </div>
+          <CompanyOutreach c={c} />
           {!done && (
             <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               {!showArchive

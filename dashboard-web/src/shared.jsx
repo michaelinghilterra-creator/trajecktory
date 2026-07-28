@@ -283,6 +283,7 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
   // now that the standalone Overview tab is folded into Pipeline → Overview.
   const items = [
     { key: "focus",         label: "Today",              icon: "◔", badge: stats.today || null },
+    { key: "coach",         label: "AI Coach",           icon: "◉" },
     { key: "pipeline",      label: "Pipeline",           icon: "▥", badge: stats.pending },
     { key: "followups",     label: "Follow-Ups",         icon: "↻", badge: stats.followups || null },
     { key: "network",       label: "Network",            icon: "◎" },
