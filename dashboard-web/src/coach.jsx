@@ -5,12 +5,17 @@
 // a floating panel. Persists history server-side (data/coach-conversations.json).
 const { useState: useStateCo, useEffect: useEffectCo, useRef: useRefCo } = React;
 
+// Scenario-based quick starts. Clicking one sends it, so the user's message lands
+// in the chat and the Coach answers immediately — the fastest way in for someone
+// who doesn't know what to ask.
 const COACH_PROMPTS = [
   'What should I do today?',
-  'Walk me through the daily workflow',
-  'Where do I find LinkedIn contacts?',
-  "Why isn't my scan finding roles?",
+  'I applied for a role — what do I do next?',
+  'How do I find new jobs?',
+  'My TA contact list is empty — how do I add people?',
+  'How do I reach out to someone on LinkedIn?',
   'I got a rejection — what now?',
+  'Walk me through the daily workflow',
 ];
 
 function coachDay(ts) {
@@ -55,7 +60,16 @@ function CoachChat({ toast, compact }) {
   const [sending, setSending] = useStateCo(false);
   const [acting, setActing] = useStateCo(false);
   const [actedLabel, setActedLabel] = useStateCo(null);
+  // The side "Quick starts" rail only fits when there's room; below this it would
+  // squeeze the chat, so we fall back to inline starter bubbles instead.
+  const [wide, setWide] = useStateCo(typeof window !== 'undefined' ? window.innerWidth >= 900 : true);
   const scrollRef = useRefCo(null);
+
+  useEffectCo(() => {
+    const onResize = () => setWide(window.innerWidth >= 900);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const scrollDown = () => { requestAnimationFrame(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }); };
 
@@ -115,8 +129,18 @@ function CoachChat({ toast, compact }) {
     rows.push({ m, key: m.id });
   }
 
+  const starters = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'stretch' }}>
+      {COACH_PROMPTS.map(p => (
+        <button key={p} className="btn ghost sm" onClick={() => send(p)} disabled={sending}
+          style={{ textAlign: 'left', whiteSpace: 'normal', height: 'auto', lineHeight: 1.35, padding: '8px 10px' }}>{p}</button>
+      ))}
+    </div>
+  );
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: compact ? '12px 14px' : '18px 22px', minHeight: 0 }}>
         {brief && (
           <div className="card" style={{ marginBottom: 14, background: 'color-mix(in srgb, var(--accent) 8%, var(--panel))', border: '1px solid color-mix(in srgb, var(--accent) 30%, var(--border))' }}>
@@ -129,14 +153,10 @@ function CoachChat({ toast, compact }) {
           ? <div key={r.key} style={{ textAlign: 'center', margin: '10px 0', fontSize: 10.5, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '.5px' }}>{r.divider}</div>
           : <CoachMessage key={r.key} m={r.m} onAct={act} acting={acting} actedLabel={actedLabel} />)}
         {sending && <div className="dim" style={{ fontSize: 12, fontStyle: 'italic', padding: '2px 4px' }}>Coach is thinking…</div>}
-        {showPrompts && (
+        {(compact || !wide) && showPrompts && (
           <div style={{ marginTop: 8 }}>
-            <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>Ask me anything — or start with one of these:</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
-              {COACH_PROMPTS.map(p => (
-                <button key={p} className="btn ghost sm" style={{ textAlign: 'left' }} onClick={() => send(p)}>{p}</button>
-              ))}
-            </div>
+            <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>Ask me anything — or tap one to start:</div>
+            {starters}
           </div>
         )}
       </div>
@@ -151,13 +171,21 @@ function CoachChat({ toast, compact }) {
         />
         <button className="btn primary" onClick={() => send()} disabled={sending || !input.trim()}>Send</button>
       </div>
+      </div>
+      {!compact && wide && (
+        <div style={{ width: 250, flexShrink: 0, borderLeft: '1px solid var(--border)', padding: '16px 14px', overflowY: 'auto' }}>
+          <div className="dim" style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 10 }}>Quick starts</div>
+          {starters}
+          <div className="dim" style={{ fontSize: 11, marginTop: 12, lineHeight: 1.4 }}>Tap one to ask it, or type your own below.</div>
+        </div>
+      )}
     </div>
   );
 }
 
 window.CoachTab = function CoachTab({ toast }) {
   return (
-    <div style={{ padding: 24, maxWidth: 820, marginLeft: 0 }}>
+    <div style={{ padding: 24, maxWidth: 1120, marginLeft: 0 }}>
       <h2 style={{ margin: '0 0 2px' }}>AI Coach</h2>
       <p className="dim" style={{ fontSize: 13, marginTop: 4, marginBottom: 14 }}>
         Your guide through the job search. Ask what to do next, where to find things, or tell me what
@@ -183,7 +211,7 @@ window.CoachFloating = function CoachFloating({ toast }) {
         {open ? '×' : '💬'}
       </button>
       {open && (
-        <div style={{ position: 'fixed', right: 20, bottom: 84, zIndex: 900, width: 'min(380px, calc(100vw - 40px))', height: 'min(560px, calc(100vh - 120px))',
+        <div style={{ position: 'fixed', right: 20, bottom: 84, zIndex: 900, width: 'min(440px, calc(100vw - 40px))', height: 'min(600px, calc(100vh - 120px))',
           background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: '0 10px 40px rgba(0,0,0,.35)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontWeight: 600, fontSize: 14 }}>AI Coach</div>
