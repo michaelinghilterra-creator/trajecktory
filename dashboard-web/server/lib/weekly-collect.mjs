@@ -14,8 +14,30 @@ import { parseStatusEvents } from './sidecars.mjs';
 import { readAppNotes } from './notes.mjs';
 import { DEBRIEF_HEADER_RE } from './debrief.mjs';
 import { readConnects } from './connects.mjs';
+import { influencerConnects } from './engagement-log.mjs';
 import { isLinkedInInvite } from './channels.mjs';
 import { computeStreak } from './cadence.mjs';
+
+// All LinkedIn connection requests, from BOTH ledgers: linkedin-connects.json
+// (the TA/recruiter Connect queue + the manual "log a connect" button) and the
+// influencer engagement log (the AI Connect flow). These were two separate stores
+// and the weekly review only counted the first, so a connection request logged
+// from the Influencers list never showed under "LinkedIn connects sent". Union
+// them, deduped on (date, name, source). Returns null only when there is no
+// connects log at all, so the metric still reads "not logged" rather than 0.
+function allConnects() {
+  const base = readConnects();
+  const infl = influencerConnects();
+  if (base === null && infl.length === 0) return null;
+  const merged = [...(base || []), ...infl];
+  const seen = new Set();
+  return merged.filter(c => {
+    const k = `${c.date}|${c.name}|${c.source}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
 
 // Every dated Sent/Received across both contact books, as a flat log. `subject`
 // rides along so weeklyMetrics can tell an email touch from a LinkedIn invite
@@ -97,7 +119,7 @@ export function collectWeeklyMetrics(now = new Date()) {
     deliveredReplyRatePct: deliveredReplyRatePct(),
     statusEvents: (() => { try { return parseStatusEvents().map(e => ({ status: e.status, date: (e.date || '').slice(0, 10) })); } catch { return null; } })(),
     debriefs: allDebriefs(),
-    connects: readConnects(),
+    connects: allConnects(),
     cadencePct: cadenceThisWeekPct(),
     unservicedApplications: unservicedCount(),
   });
