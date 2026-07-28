@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.3.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.2.0...v2.3.0) (2026-07-28)
+
+
+### Features
+
+* ATS-API JD reads, trustworthy eval status, and per-run summary ([#107](https://github.com/michaelinghilterra-creator/trajecktory/issues/107)) ([dc9638d](https://github.com/michaelinghilterra-creator/trajecktory/commit/dc9638d97259311db39ae3d24c4dc29f2a5f0414))
+* connect + email outreach queues, AI Reply, and dashboard agent fixes ([#108](https://github.com/michaelinghilterra-creator/trajecktory/issues/108)) ([e098e01](https://github.com/michaelinghilterra-creator/trajecktory/commit/e098e014301b85471e52412b7396333a3d88c9ad))
+* recover remote roles, suppress reposts, and streamline the dashboard ([#105](https://github.com/michaelinghilterra-creator/trajecktory/issues/105)) ([9562951](https://github.com/michaelinghilterra-creator/trajecktory/commit/9562951af1cdce97152be54e82a10fcc93dd60d3))
+
 ## [2.2.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.1.0...v2.2.0) (2026-07-27)
 
 
