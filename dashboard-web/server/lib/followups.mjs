@@ -3,11 +3,12 @@ import path from 'path';
 import { FOLLOWUPS_MD } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, matchByCompany, getNewBaselineId } from './target-talent.mjs';
-import { parseRecruitersMd } from './recruiters.mjs';
+import { parseRecruitersMd, readRecruiterCorrespondence } from './recruiters.mjs';
 import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
 import { INTERVIEW_STAGES, isInterviewStage, FUNNEL_ORDER } from './statuses.mjs';
 import { isSendable } from '../../../lib/email-verify.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
+import { isLinkedInInvite } from './channels.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
 // quickly each stage cools: warm Responded threads cool fastest, post-
@@ -420,9 +421,60 @@ function _bothBooks({ taRows, recruiterRows }) {
 // isNew flags a contact added after the last reconcile opened; notContacted flags
 // one you have not reached out to yet. They are independent signals — a contact can
 // be new, not-contacted, both, or neither — so the UI badges them separately.
-function _queueRow(row, source, baselineId = null) {
+// Today as a LOCAL calendar date (YYYY-MM-DD), matching how correspondence dates
+// are stamped, so "same day" means the same day the user is actually living in.
+function _localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Every outbound touch (email OR LinkedIn invite), grouped by normalized company,
+// so a queue row can show when anyone at that company was last reached — the thing
+// you otherwise had to leave the queue and reconcile by hand across the Pipeline
+// drawer and the Network tab. Sourced from the correspondence logs (both books):
+// a LinkedIn invite is logged there too, with a subject isLinkedInInvite detects,
+// so this one pass covers both channels. Each company's list is sorted newest-first.
+function buildCompanyTouchIndex({ ta, rec }) {
+  const idx = new Map();
+  const add = (companyRaw, key, name, msgs) => {
+    const co = normalizeCompany(companyRaw);
+    if (!co) return;
+    for (const m of (msgs || [])) {
+      if (m.direction !== 'Sent') continue;
+      const date = (m.timestamp || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      if (!idx.has(co)) idx.set(co, []);
+      idx.get(co).push({ key, name, date, channel: isLinkedInInvite(m.subject) ? 'linkedin' : 'email' });
+    }
+  };
+  for (const r of (ta || []))  { try { add(r.company, `ta:${r.id}`, `${r.first || ''} ${r.last || ''}`.trim(), readTTCorrespondence(r.id)); } catch { /* skip unreadable */ } }
+  for (const r of (rec || [])) { try { add(r.firm, `recruiter:${r.id}`, `${r.first || ''} ${r.last || ''}`.trim(), readRecruiterCorrespondence(r.id)); } catch { /* skip unreadable */ } }
+  for (const arr of idx.values()) arr.sort((a, b) => b.date.localeCompare(a.date));
+  return idx;
+}
+
+// One row shape for both queues. `email` is the clean address (verified.address),
+// empty on connect-queue rows. hasEmail/emailState keep the connect UI's "no email
+// on file" vs "email unverified" distinction.
+// baselineId is the "NEW since last reconcile" watermark (see target-talent.mjs).
+// isNew flags a contact added after the last reconcile opened; notContacted flags
+// one you have not reached out to yet. They are independent signals — a contact can
+// be new, not-contacted, both, or neither — so the UI badges them separately.
+// companyOutreach.lastTouch/touchedToday describe outreach to OTHER contacts at the
+// same company (this contact's own touches are excluded), so you can decide inside
+// the queue whether reaching a second person there today is doubling up.
+function _queueRow(row, source, baselineId = null, companyTouches = null, today = null) {
   const company = source === 'recruiter' ? row.firm : row.company;
   const status = row.status || '';
+  const selfKey = `${source}:${row.id}`;
+  let lastTouch = null;
+  if (Array.isArray(companyTouches)) {
+    const t = companyTouches.find(x => x.key !== selfKey);   // newest-first; first non-self wins
+    if (t) lastTouch = { name: t.name, date: t.date, channel: t.channel };
+  }
+  const touchedToday = (lastTouch && today && lastTouch.date === today)
+    ? { name: lastTouch.name, channel: lastTouch.channel }
+    : null;
   return {
     source,                                       // 'ta' | 'recruiter'
     id: row.id,
@@ -438,6 +490,7 @@ function _queueRow(row, source, baselineId = null) {
     reason: (row.notes || '').replace(/\s+/g, ' ').trim().slice(0, 160),
     isNew: baselineId != null && Number.isFinite(row.id) && row.id > baselineId,
     notContacted: !status.trim() || /^\s*not\s*contacted\s*$/i.test(status),
+    companyOutreach: { lastTouch, touchedToday },
   };
 }
 
@@ -455,6 +508,8 @@ function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
   const { ta, rec } = _bothBooks({ taRows, recruiterRows });
   const applied = appliedCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const baselineId = getNewBaselineId();
+  const touchIdx = buildCompanyTouchIndex({ ta, rec });
+  const today = _localToday();
   const out = [];
   const consider = (row, source) => {
     if (!_hasLinkedIn(row)) return;              // no LinkedIn handle → not reachable here
@@ -462,7 +517,7 @@ function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
     if (CONNECT_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
     const company = source === 'recruiter' ? row.firm : row.company;
     if (!applied.has(normalizeCompany(company))) return;   // only companies you've applied to
-    out.push(_queueRow(row, source, baselineId));
+    out.push(_queueRow(row, source, baselineId, touchIdx.get(normalizeCompany(company)), today));
   };
   for (const r of ta)  consider(r, 'ta');
   for (const r of rec) consider(r, 'recruiter');
@@ -477,13 +532,15 @@ function computeEmailQueue({ taRows, recruiterRows, apps } = {}) {
   const { ta, rec } = _bothBooks({ taRows, recruiterRows });
   const applied = appliedCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const baselineId = getNewBaselineId();
+  const touchIdx = buildCompanyTouchIndex({ ta, rec });
+  const today = _localToday();
   const out = [];
   const consider = (row, source) => {
     if (!isSendable(row)) return;                // MUST have a sendable email
     if (EMAIL_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
     const company = source === 'recruiter' ? row.firm : row.company;
     if (!applied.has(normalizeCompany(company))) return;
-    out.push(_queueRow(row, source, baselineId));
+    out.push(_queueRow(row, source, baselineId, touchIdx.get(normalizeCompany(company)), today));
   };
   for (const r of ta)  consider(r, 'ta');
   for (const r of rec) consider(r, 'recruiter');

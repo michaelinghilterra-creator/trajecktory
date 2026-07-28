@@ -576,6 +576,7 @@ function App() {
         <div className="content" data-screen-label={`trajecktory · ${tab}`} data-tab={tab}>
           {!updateHidden && window.UpdateBanner ? <window.UpdateBanner info={updateInfo} toast={toast} onDismiss={() => setUpdateHidden(true)} /> : null}
           {tab === "focus"     && <window.FocusTab toast={toast} onFocusDataChanged={refreshFocusBadge} />}
+          {tab === "coach"     && window.CoachTab && <window.CoachTab toast={toast} />}
           {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} onQuickAction={handleAction} onDataChanged={refreshApps} search={search} compTweaks={compBands(setupState, tweaks)} />}
           {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} toast={toast} />}
           {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} toast={toast} />}
@@ -601,6 +602,7 @@ function App() {
           onClose={(saved) => { setDebriefPrompt(null); if (saved) refreshApps(); }} />
       )}
       <window.CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={commands} />
+      {window.CoachFloating && <window.CoachFloating toast={toast} />}
       <window.ToastStack toasts={toasts} />
     </div>
   );
