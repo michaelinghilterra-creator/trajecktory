@@ -114,6 +114,30 @@ function evalBatchSize(power) {
   return parseInt(process.env.TJK_EVAL_BATCH, 10) || 5;
 }
 
+// How many pending postings are actually queued for evaluation: the unchecked
+// "- [ ]" lines in data/pipeline.md. The eval agent takes its work from exactly
+// these, best-fit first. Returns null (not 0) when the file cannot be read, so
+// callers can tell "no pending" from "unknown".
+function countPipelinePending() {
+  try {
+    const txt = fs.readFileSync(path.join(ROOT_DIR, 'data/pipeline.md'), 'utf8');
+    const m = txt.match(/^\s*-\s*\[ \]/gm);
+    return m ? m.length : 0;
+  } catch { return null; }
+}
+
+// The Evaluate meter's denominator. It must be the number of postings the run
+// will REALLY attempt — min(batch cap, pending) — not the raw cap. Showing the
+// cap made "0 of 8" appear when only 3 URLs were pending, so the denominator
+// never tied off with what the run produced. A number the user cannot reconcile
+// reads as the tool lying, even when every posting was handled correctly. Fall
+// back to the cap only when the pipeline is unreadable.
+function pipelineEvalTotal(power) {
+  const cap = evalBatchSize(power);
+  const pending = countPipelinePending();
+  return pending === null ? cap : Math.min(cap, pending);
+}
+
 function dashboardConstraints(mode, opts) {
   const power = effectivePower(opts, mode);
   // Power pipeline runs bill the user's API key (separate from the flat plan
@@ -141,7 +165,7 @@ function dashboardConstraints(mode, opts) {
   // document the rest of the pipeline is about.
   const snapshotJd =
     ' Before writing each report, save the job posting text you read to jds/{report-number}-{company-slug}.md ' +
-    '(create the jds/ directory if needed) and put that relative path in the report frontmatter as "jdSnapshot". ' +
+    '(create the jds/ directory if needed) and put that relative path in the report frontmatter under the jdSnapshot key.' +
     'Save the description, requirements, and any comp or location detail as plain text; skip page furniture. ' +
     'Postings are taken down as soon as they are filled, and this snapshot is what the user still has to prepare ' +
     'from weeks later, so do not skip it even when the posting looks permanent.';
@@ -161,7 +185,7 @@ function dashboardConstraints(mode, opts) {
     return ' ' + common +
       ' Evaluate only the URLs already pending in data/pipeline.md and do not scan for new roles.' +
       ` Evaluate at most ${evalCap} pending unchecked URLs this run (${capWhy}). They are ordered best-fit first, so take them from the TOP of the pending list; once you have evaluated ${evalCap}, STOP even if more remain and tell me how many pending URLs are left so I can run Evaluate again for the next batch.` +
-      ' Do not run gate-pipeline.mjs or any browser tool; just evaluate the pending unchecked URLs as they are. To read each job description, your FIRST step is to run `node fetch-jd.mjs "<url>"` from the repo root. it returns the full JD straight from the ATS API (Ashby, Greenhouse, Lever) and works where WebFetch cannot, because those postings are JavaScript single-page apps that a raw fetch sees as an empty shell. Evaluate ONLY from the text it prints. If fetch-jd.mjs exits non-zero (no ATS API available for that URL, e.g. a Workday posting), THEN try WebFetch. Only if BOTH fail do you defer: do NOT reconstruct the JD from WebSearch or aggregator mirrors — a stitched-together JD produces a confident score for a posting you never actually read, and that has shipped CLOSED roles as high scores. Instead append one tab-separated line (url, company, role) to data/needs-manual-jd.tsv (create it with that exact header row if it is missing), mark that URL done in data/pipeline.md ([ ] to [x]), and write NO report and NO tracker TSV for it. The user will confirm the posting is live and paste the JD text themselves.' +
+      ' Do not run gate-pipeline.mjs or any browser tool; just evaluate the pending unchecked URLs as they are. To read each job description, your FIRST step is to run node fetch-jd.mjs from the repo root, passing the posting URL as its only argument (quote the URL in your own shell). it returns the full JD straight from the ATS API (Ashby, Greenhouse, Lever) and works where WebFetch cannot, because those postings are JavaScript single-page apps that a raw fetch sees as an empty shell. Evaluate ONLY from the text it prints. If fetch-jd.mjs exits non-zero (no ATS API available for that URL, e.g. a Workday posting), THEN try WebFetch. Only if BOTH fail do you defer: do NOT reconstruct the JD from WebSearch or aggregator mirrors — a stitched-together JD produces a confident score for a posting you never actually read, and that has shipped CLOSED roles as high scores. Instead append one tab-separated line (url, company, role) to data/needs-manual-jd.tsv (create it with that exact header row if it is missing), mark that URL done in data/pipeline.md ([ ] to [x]), and write NO report and NO tracker TSV for it. The user will confirm the posting is live and paste the JD text themselves.' +
       ' After you have FULLY written a report for a URL (all required sections, not a partial), mark that URL done in data/pipeline.md by switching its leading checkbox from unchecked to checked (- [ ] becomes - [x]), so the next Evaluate run continues with the next batch instead of re-scoring the same roles. Never mark a URL done before its report is complete.' +
       ' Record every evaluation as a single line nine column TSV in batch/tracker-additions/ and do not edit data/applications.md directly. Always write the report to reports/ even for a low score so the result is visible. Write each report in the trajecktory-report/v1 format (JSON frontmatter then narrative body) and you MUST populate the optional frontmatter sections so the dashboard drawer is complete, not just the score: include customizationCV and customizationLI (the CV and LinkedIn personalization plan), starStories plus a leadStory (interview prep, with the single story to lead with), and a legitimacy object with a tier and signals. Base EVERY section only on the JD text you actually fetched — never fabricate or infer missing content from search results. Legitimacy is assessed from the fetched posting (freshness, description quality, reposting, prompt-injection); set verification to unconfirmed (no live browser). If you could not fetch the posting, it does not belong here at all — it goes to data/needs-manual-jd.tsv per the rule above, not into a report. When done, the user will run Merge Tracker to fold your TSVs into the pipeline.' + snapshotJd;
   }
@@ -179,7 +203,7 @@ function dashboardConstraints(mode, opts) {
   // landed. Do not "clean up" this now-working instruction.
   if (mode === 'scan') {
     const cap = limit > 0 ? ` TEST MODE (TJK_TEST_LIMIT=${limit}): add at most ${limit} new postings to data/pipeline.md, then stop.` : '';
-    return ' ' + common + ' Use only the ATS API tier and the WebSearch tier, and skip the Playwright tier. Pace the searches a few at a time. Add new live postings to data/pipeline.md as usual. Before adding any URL, dedup it against data/scan-history.tsv, data/pipeline.md, and data/applications.md, and skip anything already there. When you find a company via WebSearch that has a Greenhouse, Ashby, or Lever job board and is not already in portals.yml tracked_companies, append it there with its careers_url and api endpoint (merge only: preserve every existing entry and comment byte for byte), so the free zero-token API Scan catches its postings next time instead of paying Claude to re-discover it.' + cap;
+    return ' ' + common + ' Your FIRST and mandatory step is to run `node scan.mjs` from the repo root ONCE. That script IS the entire ATS API tier: it hits every tracked_companies Greenhouse/Ashby/Lever board, applies the portals.yml title_filter, dedups against data/scan-history.tsv + data/pipeline.md + data/applications.md, and writes every new live posting into data/pipeline.md itself — all zero-token. Do NOT WebFetch ATS boards by hand, do NOT re-implement the title filter, and do NOT write any test/helper script (buildTitleFilter and the whole API tier already live in scan.mjs); doing so wastes the turn budget for no gain. After scan.mjs finishes, spend the REST of this run on the one thing it cannot do: use WebSearch to discover companies NOT yet in portals.yml tracked_companies. Pace the searches a few at a time. For each genuinely new company you find that has a Greenhouse, Ashby, or Lever job board, append it to portals.yml tracked_companies with its careers_url and api endpoint (merge only: preserve every existing entry and comment byte for byte) so the next zero-token scan.mjs catches its postings for free; if it has a live matching posting right now, dedup it against the three sources above and add it to data/pipeline.md too. Skip the Playwright tier entirely.' + cap;
   }
   if (mode === 'triage') {
     const tcap = parseInt(process.env.TJK_TRIAGE_MAX, 10) || 15;
@@ -343,7 +367,17 @@ function runClaudeAgent(jobId, mode, target) {
     // other Bash command is denied for want of an allow entry. --settings merges with
     // the project allow list, and deny wins.
     const evalSandboxSettings = fileURLToPath(new URL('../eval-agent-sandbox.settings.json', import.meta.url));
-    const args = ['-p', isWin ? `"${prompt}"` : prompt,
+    // Windows spawns `claude` through the cmd shell (the .cmd shim needs it), and
+    // this whole prompt is wrapped in one pair of double-quotes. A double-quote
+    // INSIDE the prompt closes that wrapper early; whatever follows is then parsed
+    // by cmd, so a `<` becomes input-redirection and the run dies with "The system
+    // cannot find the file specified" before a single tool call — deterministically,
+    // not intermittently. This bit the eval prompt (`fetch-jd.mjs "<url>"`) and the
+    // jdSnapshot instruction. No prompt here ever needs the agent to receive a
+    // literal ", so collapse embedded quotes to apostrophes rather than trust every
+    // future prompt edit to stay quote-free (nothing tests a prompt string).
+    const winPrompt = prompt.replace(/"/g, "'");
+    const args = ['-p', isWin ? `"${winPrompt}"` : prompt,
                   ...modelFlag,
                   '--output-format', 'stream-json', '--verbose',
                   '--permission-mode', 'acceptEdits',
@@ -549,7 +583,7 @@ async function runAgent(jobId, mode, target) {
   agentJobs.set(jobId, { mode, status: 'running', activity: 'Starting agent…', toolCalls: [], toolCount: 0, output: '', startedAt: Date.now(),
     // Progress meter: pipeline has a known batch size; deep is a single eval; scan
     // and triage are open-ended, so they show elapsed only (progressTotal null).
-    progressTotal: mode === 'pipeline' ? evalBatchSize(effectivePower(target, mode)) : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
+    progressTotal: mode === 'pipeline' ? pipelineEvalTotal(effectivePower(target, mode)) : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
   persistJobs();   // capture the running record immediately so a restart can mark it interrupted
   const before = probeArtifacts(mode);
   const res = await runClaudeAgent(jobId, mode, target);

@@ -208,7 +208,33 @@ function findRelatedApps(companyName) {
   } catch { return []; }
 }
 
+// ── "NEW since last reconcile" baseline ──────────────────────────────────────
+// Contacts are numbered by a monotonic max+1 id and reconcile is the only add
+// path, so "added after the last reconcile started" == "id greater than the max
+// id that existed when that reconcile opened". We persist that watermark in a
+// sidecar next to the contact file. The reconcile preview (its opening step)
+// stamps the current max; the queues badge any contact whose id exceeds it. The
+// next reconcile re-stamps a higher watermark, so the previous batch stops being
+// "new" automatically — no per-contact date column needed.
+function _newStatePath() { return path.join(path.dirname(TARGET_TALENT_MD), 'tt-new-state.json'); }
+
+function maxTTId() {
+  const rows = parseTargetTalentMd();
+  return rows.length ? Math.max(...rows.map(r => r.id)) : 0;
+}
+
+function getNewBaselineId() {
+  try {
+    const j = JSON.parse(fs.readFileSync(_newStatePath(), 'utf8'));
+    return Number.isFinite(j.baselineId) ? j.baselineId : null;
+  } catch { return null; }
+}
+
+function setNewBaselineId(id) {
+  try { fs.writeFileSync(_newStatePath(), JSON.stringify({ baselineId: id }), 'utf8'); } catch { /* best-effort: a missing badge is not worth failing reconcile over */ }
+}
+
 // GET /api/target-talent — list all
 
-export { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, appendTTRows, matchByCompany, findRelatedApps, TT_STATUSES };
+export { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, appendTTRows, matchByCompany, findRelatedApps, TT_STATUSES, maxTTId, getNewBaselineId, setNewBaselineId };
 

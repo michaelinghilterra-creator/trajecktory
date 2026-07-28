@@ -7,7 +7,7 @@ import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute } from '../lib/sidecars.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeGhostedCandidates, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeGhostedCandidates, computeEmailQueue, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
@@ -42,6 +42,17 @@ router.get('/api/followups/withheld', (req, res) => {
   try {
     const hasKeys = !!((process.env.HUNTER_API_KEY || '').trim() && (process.env.MILLIONVERIFIER_API_KEY || '').trim());
     res.json({ withheld: countWithheldContacts(), hasVerifierKeys: hasKeys });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/followups/email-queue — the email counterpart of the connect queue.
+// Contacts with a sendable, verified email at companies you've applied to, that
+// you haven't emailed yet. Working it logs verified email touches (the floor).
+router.get('/api/followups/email-queue', (req, res) => {
+  try {
+    res.json({ queue: computeEmailQueue() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

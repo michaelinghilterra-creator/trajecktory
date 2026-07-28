@@ -68,6 +68,27 @@ const taRows = [
   // an address" case that must read differently from "address present, unverified"
   ta({ id: 8, first: 'Tay', last: 'Okonkwo', title: 'Head of People', company: 'Meridian AI',
        linkedin: 'linkedin.com/in/tay-okonkwo-ex', status: 'Not Contacted' }),
+  // no email, only a LinkedIn handle, BUT the invite already went out (status Sent)
+  // → excluded: the queue is a to-do list, and a sent invite is done, not pending.
+  ta({ id: 9, first: 'Noa', last: 'Bergman', title: 'Talent Partner', company: 'Solstice Data',
+       linkedin: 'linkedin.com/in/noa-bergman-ex', status: 'Sent' }),
+  // no email + LinkedIn + active, BUT the company was only EVALUATED (never applied)
+  // → excluded by the applied-gate: don't spend a contact before you've committed.
+  ta({ id: 10, first: 'Rae', last: 'Nolan', title: 'Head of TA', company: 'Nimbus Health',
+       linkedin: 'linkedin.com/in/rae-nolan-ex', status: 'Not Contacted' }),
+];
+
+// Applications gate: a contact only surfaces if its company reached >= Applied.
+// `reached` is the furthest funnel rung (Evaluated=0, Applied=1). Nimbus Health is
+// Evaluated-only, so ta:10 must NOT appear even though it is otherwise queue-eligible.
+const apps = [
+  { company: 'Northwind Robotics', reached: 'Applied' },
+  { company: 'Cobalt Systems',     reached: 'Phone Screen' }, // past Applied, still counts
+  { company: 'Aster Grid',         reached: 'Applied' },
+  { company: 'Meridian AI',        reached: 'Applied' },
+  { company: 'Halcyon Partners',   reached: 'Applied' },
+  { company: 'Solstice Data',      reached: 'Applied' },       // ta:9 excluded by status, not gate
+  { company: 'Nimbus Health',      reached: 'Evaluated' },     // ta:10 excluded by the gate
 ];
 
 const recruiterRows = [
@@ -82,7 +103,7 @@ const recruiterRows = [
 ];
 
 // ── computeConnectQueue ──────────────────────────────────────────────────────
-const q = computeConnectQueue({ taRows, recruiterRows });
+const q = computeConnectQueue({ taRows, recruiterRows, apps });
 const ids = q.map(r => `${r.source}:${r.id}`);
 
 check(q.length === 5, `queue holds exactly the 5 reachable-only contacts (got ${q.length})`);
@@ -96,6 +117,8 @@ check(!ids.includes('recruiter:101'), 'recruiter with a risky-but-sendable email
 check(!ids.includes('ta:4'), 'already-Connected contact is NOT queued');
 check(!ids.includes('ta:5'), 'Archived (dead-opp) contact is NOT queued');
 check(!ids.includes('ta:6'), 'contact with no LinkedIn handle is NOT queued');
+check(!ids.includes('ta:9'), 'contact whose invite already went out (status Sent) is NOT queued');
+check(!ids.includes('ta:10'), 'contact at an Evaluated-only company is NOT queued (must have applied)');
 
 const robin = q.find(r => r.id === 102);
 check(robin && robin.company === 'Halcyon Partners', 'recruiter company is taken from `firm`');

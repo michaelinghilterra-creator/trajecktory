@@ -15,11 +15,16 @@ function readConnects() {
 
 function logConnect({ name = '', source = '', date = null } = {}) {
   const list = readConnects() || [];
-  list.push({
+  const entry = {
     date: date || new Date().toISOString().slice(0, 10),
     name: String(name).slice(0, 120),
     source: String(source).slice(0, 40),
-  });
+  };
+  // Idempotent on (date, name, source): marking the same invite sent twice (e.g.
+  // after a page reload re-enables the button) must not inflate the connect tally.
+  const dup = list.some(e => e.date === entry.date && e.name === entry.name && e.source === entry.source);
+  if (dup) return list;
+  list.push(entry);
   fs.writeFileSync(CONNECTS_PATH, JSON.stringify(list, null, 2) + '\n');
   return list;
 }

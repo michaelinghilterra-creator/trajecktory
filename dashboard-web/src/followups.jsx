@@ -451,6 +451,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   const SUBTABS = [
     { id: 'overview', label: 'Overview',         n: null,        icon: window.ICON.pulse },
     { id: 'connect',  label: 'Connect',          n: null,        icon: window.ICON.userPlus },
+    { id: 'email',    label: 'Email queue',      n: null,        icon: window.ICON.mail },
     { id: 'warm',     label: 'Warm threads',     n: warm.length, icon: window.ICON.send },
     { id: 'cold',     label: 'Applications out',  n: cold.length, icon: window.ICON.briefcase },
   ];
@@ -527,6 +528,9 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
 
       {/* ── Connect: the by-hand LinkedIn queue (moved here from the sidebar) ── */}
       {subView === 'connect' && <window.ConnectTab toast={toast} />}
+
+      {/* ── Email queue: emailable contacts at applied companies ───────────── */}
+      {subView === 'email' && <window.EmailQueueTab toast={toast} />}
 
       {/* ── Warm threads: the actionable queue ─────────────────────────────── */}
       {subView === 'warm' && (

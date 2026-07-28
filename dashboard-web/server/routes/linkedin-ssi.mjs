@@ -7,6 +7,7 @@ import {
   readInfluencers, writeInfluencers, nextInfluencerId, normalizeInfluencer,
   parseCsvInfluencers, INFLUENCERS_TEMPLATE_CSV,
 } from '../lib/linkedin-ssi.mjs';
+import { readEngagementLog } from '../lib/engagement-log.mjs';
 
 export const router = express.Router();
 
@@ -124,40 +125,9 @@ router.patch('/api/linkedin-ssi/influencers/:id', (req, res) => {
 router.get('/api/linkedin-ssi/engagement-log', (req, res) => {
   try {
     ensureLikedinSsiDir();
-    const logPath = path.join(LINKEDIN_SSI_DIR, 'engagement-log.md');
-    if (!fs.existsSync(logPath)) {
-      return res.json([]);
-    }
-    const content = fs.readFileSync(logPath, 'utf8');
-    // Parse markdown table into JSON
-    const lines = content.split('\n');
-    const entries = [];
-    let inTable = false;
-    for (const line of lines) {
-      if (line.startsWith('---') || line.startsWith('```')) { inTable = false; continue; }
-      if (line.includes('|') && !line.includes('---')) {
-        if (inTable && !line.startsWith('|')) inTable = false;
-        if (inTable && line.trim().length > 0) {
-          const cols = line.split('|').slice(1, -1).map(c => c.trim());
-          // Accept legacy 8-col rows and 9-col rows (trailing Logged At timestamp).
-          if (cols.length >= 8 && /^\d{4}-\d{2}-\d{2}$/.test(cols[0])) {
-            entries.push({
-              date: cols[0],
-              influencer: cols[1],
-              actionType: cols[2],
-              topic: cols[3],
-              message: cols[4],
-              responseReceived: cols[5],
-              connectionMade: cols[6],
-              notes: cols[7],
-              loggedAt: cols[8] || ''
-            });
-          }
-        }
-        if (line.includes('Date') && line.includes('Influencer')) inTable = true;
-      }
-    }
-    res.json(entries);
+    // Shared parser (lib/engagement-log.mjs) so this display and the weekly-review
+    // connect count read the log the same way and can never disagree.
+    res.json(readEngagementLog());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -216,36 +186,9 @@ router.post('/api/linkedin-ssi/engagement-log', (req, res) => {
       content = fileLines.join('\n');
     }
     fs.writeFileSync(logPath, content);
-    // Re-parse and return — mirror the GET parser exactly: reset on the `---`/``` ```
-    // boundaries and require a real date in col 0, so the trailing template row (which
-    // has the right column count but a `YYYY-MM-DD` placeholder) isn't counted.
-    const lines = content.split('\n');
-    const entries = [];
-    let inTable = false;
-    for (const line of lines) {
-      if (line.startsWith('---') || line.startsWith('```')) { inTable = false; continue; }
-      if (line.includes('|') && !line.includes('---')) {
-        if (inTable && !line.startsWith('|')) inTable = false;
-        if (inTable && line.trim().length > 0) {
-          const cols = line.split('|').slice(1, -1).map(c => c.trim());
-          if (cols.length >= 8 && /^\d{4}-\d{2}-\d{2}$/.test(cols[0])) {
-            entries.push({
-              date: cols[0],
-              influencer: cols[1],
-              actionType: cols[2],
-              topic: cols[3],
-              message: cols[4],
-              responseReceived: cols[5],
-              connectionMade: cols[6],
-              notes: cols[7],
-              loggedAt: cols[8] || ''
-            });
-          }
-        }
-        if (line.includes('Date') && line.includes('Influencer')) inTable = true;
-      }
-    }
-    res.json(entries);
+    // Re-read through the ONE shared parser so what we return after a write matches
+    // exactly what GET returns (and what the weekly review counts).
+    res.json(readEngagementLog());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
