@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.4.0...v2.4.1) (2026-07-28)
+
+
+### Bug Fixes
+
+* widen the AI Coach and add quick-start prompts beside the chat ([#111](https://github.com/michaelinghilterra-creator/trajecktory/issues/111)) ([294e5d3](https://github.com/michaelinghilterra-creator/trajecktory/commit/294e5d353882a9e690f99cd2108c206dcad10026))
+
 ## [2.4.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.3.0...v2.4.0) (2026-07-28)
 
 
