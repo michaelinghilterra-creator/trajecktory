@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.3.0...v2.4.0) (2026-07-28)
+
+
+### Features
+
+* AI Coach, plus same-company outreach context in the queues ([#109](https://github.com/michaelinghilterra-creator/trajecktory/issues/109)) ([a5e2b0c](https://github.com/michaelinghilterra-creator/trajecktory/commit/a5e2b0c6e84301caf6040d6adec00f3308b0c0ae))
+
 ## [2.3.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.2.0...v2.3.0) (2026-07-28)
 
 
