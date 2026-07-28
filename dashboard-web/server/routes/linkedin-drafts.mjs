@@ -8,6 +8,7 @@ import { computeConnectQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { parseRecruitersMd, updateRecruiterLine } from '../lib/recruiters.mjs';
 import { getIdentity } from '../lib/profile.mjs';
+import { readEngagementLog } from '../lib/engagement-log.mjs';
 
 export const router = express.Router();
 
@@ -62,6 +63,74 @@ Return ONLY the comment text, ready to paste. No quotes, no preface, no explanat
     res.json({ response: response.trim() });
   } catch (err) {
     console.error('Error generating response:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/linkedin-ssi/generate-reply — draft the NEXT message in an ongoing 1:1
+// LinkedIn conversation with a connected influencer. Unlike generate-response (a
+// public comment on a post), this is a private reply, and it reads the contact's
+// prior engagement history so the draft builds on the thread instead of resetting
+// it. Relationship-building only: the prompt forbids any pitch or job-search ask.
+router.post('/api/linkedin-ssi/generate-reply', async (req, res) => {
+  try {
+    const { theirMessage, influencerId, influencerName, tone = 'Curious' } = req.body;
+    if (!theirMessage || !theirMessage.trim()) {
+      return res.status(400).json({ error: 'Paste the message you want to reply to.' });
+    }
+    const influencer = loadInfluencer({ influencerId, influencerName });
+    if (!influencer) return res.status(400).json({ error: 'Open this from an influencer.' });
+
+    const id = getIdentity();
+    let cvMd = '';
+    try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
+    const cvExcerpt = cvMd ? cvMd.slice(0, 3000) : '(CV not available)';
+
+    // The prior thread with THIS contact, oldest→newest, compact. Matched on name
+    // (the engagement log keys by influencer name). Cap the tail so the prompt stays
+    // bounded on a long relationship.
+    const wanted = (influencer.name || '').trim().toLowerCase();
+    const history = readEngagementLog()
+      .filter(e => (e.influencer || '').trim().toLowerCase() === wanted)
+      .slice(-8)
+      .map(e => `- ${e.date} [${e.actionType}] ${e.topic ? e.topic + ' — ' : ''}${(e.message || '').slice(0, 200)}`)
+      .join('\n');
+
+    const prompt = `You are helping ${id.fullName} (${id.headline}, based in ${id.location}) write the NEXT message in an ONGOING 1:1 LinkedIn conversation. This is a private direct reply to a message they received, NOT a public comment on a post.
+
+WHO ${id.firstName} IS TALKING TO:
+- Name: ${influencer.name}
+- Role: ${influencer.role || '(unknown)'}
+- Why ${id.firstName} follows them: ${influencer.engagementTip || influencer.track || '(not specified)'}
+
+CONVERSATION HISTORY SO FAR (oldest first; use for continuity, do NOT repeat points already made):
+${history || '(no prior logged exchanges)'}
+
+THE MESSAGE ${id.firstName} IS REPLYING TO RIGHT NOW (reply to THIS, directly and specifically):
+"""
+${theirMessage.trim()}
+"""
+
+ABOUT ${id.firstName.toUpperCase()} (ground the reply in this, never copy verbatim):
+${cvExcerpt}
+
+TONE DIRECTIVE (${tone}): ${toneInstruction(tone)}
+
+HARD RULES:
+- This is a warm 1:1 reply. Engage specifically with what they just said, and build on the prior thread when it is relevant.
+- 2 to 4 short sentences. A real direct message, not an essay.
+- Advance the RELATIONSHIP, never an agenda. NO pitch, NO mention of looking for a job, NO referral or intro ask. This is rapport only.
+- Keep the conversation open with a genuine question or a specific thread to pull, but only when it feels natural. Do not force it.
+- NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
+- No corporate filler ("hope this finds you well"), no "Great point", no generic openers.
+- No signature or sign-off. The UI handles that.
+
+Return ONLY the reply text, ready to paste. No quotes, no preface, no explanation.`;
+
+    const response = await generateText(prompt, { model: draftModel(), maxTokens: 400 });
+    res.json({ response: response.trim() });
+  } catch (err) {
+    console.error('Error generating reply:', err);
     res.status(500).json({ error: err.message });
   }
 });

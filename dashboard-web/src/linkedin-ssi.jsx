@@ -1357,10 +1357,132 @@ function AIConnectView({ influencers, lockedInfluencer, onLog }) {
   );
 }
 
+// AI Reply — the ongoing-conversation tab. Once you're connected and they write
+// back, paste their message here: log it (their inbound reply, timestamped), then
+// draft your response. The backend reads this contact's prior history so the reply
+// builds on the thread. Two explicit log steps (their reply, then yours) keep the
+// timeline honest and under your control. lockedInfluencer is always set (this tab
+// only exists inside an influencer's drawer).
+function AIReplyView({ lockedInfluencer, onLogTheirReply, onLogMyReply }) {
+  const [theirMsg, setTheirMsg] = useState("");
+  const [tone, setTone] = useState("Curious");
+  const [out, setOut] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [theirLogged, setTheirLogged] = useState(false);
+  const [loggingTheir, setLoggingTheir] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const TONES = ["Curious", "Insightful", "Warm", "Supportive"];
+  const who = lockedInfluencer?.name || "";
+
+  const logTheir = async () => {
+    if (!theirMsg.trim()) { setError("Paste their message first."); return; }
+    setError(""); setLoggingTheir(true);
+    try { await onLogTheirReply({ message: theirMsg.trim() }); setTheirLogged(true); }
+    catch (e) { setError(e.message || "Failed to log their reply."); }
+    finally { setLoggingTheir(false); }
+  };
+
+  const generate = async () => {
+    setError("");
+    if (!theirMsg.trim()) { setError("Paste their message first."); return; }
+    if (!who) { setError("Open this from an influencer."); return; }
+    setBusy(true);
+    try {
+      const res = await window.tjkMutate('/api/linkedin-ssi/generate-reply', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ influencerName: who, theirMessage: theirMsg, tone }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      setOut(data.response || '');
+    } catch (e) { setError(e.message || 'Generation failed.'); }
+    finally { setBusy(false); }
+  };
+
+  const markSent = async () => {
+    if (!out.trim() || sending || sent) return;
+    setSending(true); setError("");
+    try { await onLogMyReply({ message: out.trim() }); setSent(true); }
+    catch (e) { setError(e.message || "Failed to log your reply."); setSending(false); }
+  };
+
+  return (
+    <div className="grid fade-up" style={{ gridTemplateColumns: "1fr", alignItems: "start", gap: 14 }}>
+      <div className="card">
+        <div className="card-head">
+          <div className="card-title"><span className="dot" />Their message{who ? " · " + who : ""}</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="field"><label>Paste what they sent you</label>
+            <textarea className="ta" style={{ minHeight: 120 }} value={theirMsg}
+              onChange={(e) => { setTheirMsg(e.target.value); setTheirLogged(false); }}
+              placeholder="Paste their reply or DM here…" />
+          </div>
+          <div className="field"><label>Tone of your reply</label>
+            <div className="chips">
+              {TONES.map((t) => (
+                <button key={t} className={"chip" + (tone === t ? " on" : "")} onClick={() => setTone(t)} style={{ border: "none", background: "none", cursor: "pointer" }}>{t}</button>
+              ))}
+            </div>
+          </div>
+          {error && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)" }}>{error}</div>}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {theirLogged
+              ? <span className="btn sm" style={{ pointerEvents: "none", color: "var(--green)", fontWeight: 600 }}>✓ Their reply logged</span>
+              : <button className="btn" onClick={logTheir} disabled={loggingTheir} title="Timestamp their inbound message into the timeline and mark them Connected + engaged.">{loggingTheir ? "Logging…" : "Log their reply"}</button>}
+            <button className="btn primary" style={{ flex: 1, minWidth: 160 }} onClick={generate} disabled={busy}>{busy ? "Drafting with Claude…" : "Generate my reply"}</button>
+            <button className="btn" onClick={() => { setTheirMsg(""); setOut(""); setError(""); setTheirLogged(false); setSent(false); }}>Clear</button>
+          </div>
+          <div className="dim" style={{ fontSize: 11 }}>
+            The draft reads your prior logged history with {who || "this contact"} so it builds on the thread. It never pitches or asks for anything. Edit it before you send.
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <div className="card-title"><span className="dot" />Your reply</div>
+          {out && <button className="btn ghost sm" onClick={() => navigator.clipboard.writeText(out)}>Copy</button>}
+        </div>
+        {!out && !busy && (
+          <div style={{ minHeight: 160, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 20 }}>
+            <div className="empty">Paste their message and hit Generate. Claude drafts a {tone.toLowerCase()} reply grounded in what they said and your history together.</div>
+          </div>
+        )}
+        {busy && (
+          <div style={{ minHeight: 160, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontFamily: "var(--mono)", fontSize: 12 }}>
+            drafting a {tone.toLowerCase()} reply with Claude…
+          </div>
+        )}
+        {out && !busy && (
+          <div>
+            <textarea className="ta" value={out} onChange={(e) => { setOut(e.target.value); setSent(false); }} aria-label="Editable reply draft"
+              style={{ width: "100%", minHeight: 130, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)", resize: "vertical", fontFamily: "inherit" }} />
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <button className="btn sm" onClick={generate}>Regenerate</button>
+              <button className="btn sm" onClick={() => navigator.clipboard.writeText(out)}>Copy reply</button>
+              {sent
+                ? <span className="btn primary sm" style={{ pointerEvents: "none" }}>✓ Sent logged</span>
+                : <button className="btn primary sm" onClick={markSent} disabled={sending} title="Send it on LinkedIn first, then log it here as your outbound touch.">{sending ? "Logging…" : "Mark sent"}</button>}
+            </div>
+            <div className="dim" style={{ fontSize: 11, marginTop: 8 }}>
+              Send it from LinkedIn yourself, then Mark sent to log the touch. Nothing is sent from here.
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Influencer Drawer ─────────────────────────────────────────────────────
 // Slide-in side panel that mirrors the TA Outreach drawer (.drawer.wide) so
-// the look-and-feel matches across the dashboard. Three inner tabs:
-// Overview (intel + per-influencer activity) · AI Response · AI Connect.
+// the look-and-feel matches across the dashboard. Inner tabs:
+// Overview (intel + per-influencer activity) · AI Response · AI Connect · AI Reply.
+// Tab order follows the real motion: comment on a post, send a connect request,
+// then once they respond, carry the conversation forward in AI Reply.
 function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagementLog, onClose, onUpdate }) {
   const [tab, setTab] = useState("overview");
   const [busy, setBusy] = useState(false);
@@ -1418,7 +1540,11 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
   // Log a generated AI draft (comment reply or connection note) straight into the
   // shared engagement log, which surfaces in the Overview timeline. Then advance the
   // influencer's status + last touch, and flip to Overview so the new entry is visible.
-  const logToTimeline = async ({ actionType, topic, message, statusUpdates = {} }) => {
+  // responseReceived/connectionMade/notes override the defaults so the AI Reply tab
+  // can log an INBOUND message (they wrote back → responseReceived "Yes"). stay keeps
+  // the current tab instead of snapping to Overview, so a multi-step flow (log their
+  // reply, then draft yours) is not interrupted.
+  const logToTimeline = async ({ actionType, topic, message, responseReceived, connectionMade, notes = "", statusUpdates = {}, stay = false }) => {
     const today = new Date().toISOString().split("T")[0];
     const res = await window.tjkMutate("/api/linkedin-ssi/engagement-log", {
       method: "POST",
@@ -1429,9 +1555,9 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
         actionType,
         topic: topic || "",
         message: message || "",
-        responseReceived: "No",
-        connectionMade: influencer.connected ? "Connected" : "Pending",
-        notes: "",
+        responseReceived: responseReceived || "No",
+        connectionMade: connectionMade || (influencer.connected ? "Connected" : "Pending"),
+        notes: notes || "",
       }),
     });
     if (!res.ok) {
@@ -1448,7 +1574,7 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
       engagementCount: (influencer.engagementCount || 0) + 1,
       ...statusUpdates,
     });
-    setTab("overview");
+    if (!stay) setTab("overview");
   };
 
   return (
@@ -1497,6 +1623,10 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
             <button className={"subtab" + (tab === "ai-connect" ? " active" : "")} onClick={() => setTab("ai-connect")} style={{ background: "transparent", border: "none", cursor: "pointer" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px", display: "inline-block" }}><path d={window.ICON.users} /></svg>
               AI Connect
+            </button>
+            <button className={"subtab" + (tab === "ai-reply" ? " active" : "")} onClick={() => setTab("ai-reply")} style={{ background: "transparent", border: "none", cursor: "pointer" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "6px", display: "inline-block" }}><path d={window.ICON.inbound} /></svg>
+              AI Reply
             </button>
           </div>
 
@@ -1631,6 +1761,29 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
               influencers={influencers}
               lockedInfluencer={influencer}
               onLog={({ topic, message }) => logToTimeline({ actionType: "Commented", topic, message, statusUpdates: { engaged: true } })}
+            />
+          )}
+
+          {tab === "ai-reply" && (
+            <AIReplyView
+              lockedInfluencer={influencer}
+              onLogTheirReply={({ message }) => logToTimeline({
+                actionType: "Responded",
+                topic: "Their reply" + (message ? ": " + message.slice(0, 40) + (message.length > 40 ? "…" : "") : ""),
+                message,
+                responseReceived: "Yes",
+                connectionMade: "Connected",
+                notes: "Inbound reply",
+                statusUpdates: { connected: true, engaged: true },
+                stay: true,
+              })}
+              onLogMyReply={({ message }) => logToTimeline({
+                actionType: "Messaged",
+                topic: "My reply",
+                message,
+                notes: "Outbound reply",
+                statusUpdates: { engaged: true },
+              })}
             />
           )}
 
