@@ -32,8 +32,34 @@ function scanSummary(output) {
   const stale    = grab(/Stale[^:]*:\s*(\d+)/i);
   const dupes    = grab(/Duplicates:\s*(\d+)/i);
   const added    = grab(/New offers added:\s*(\d+)/i);
+
+  // GUARD: nothing was even queried because no ENABLED company has a scannable
+  // ATS API. Without this the summary read "0 new (of 0 found)", which looks like
+  // a scan that ran and found nothing — indistinguishable from a config problem.
+  // An agent that disables the Greenhouse/Ashby/Lever companies (leaving only
+  // Workday/websearch ones) silently neuters the free API Scan, exactly the case
+  // that stumped a beta tester. Name the cause and the two fixes.
+  const scanned  = grab(/Companies scanned:\s*(\d+)/i);
+  const hdr      = output.match(/Scanning\s+(\d+)\s+companies via API\s*\((\d+)\s+skipped/i);
+  const scannedN = scanned != null ? scanned : (hdr ? Number(hdr[1]) : null);
+  const skippedNoApi = hdr ? Number(hdr[2]) : null;
+  if (scannedN === 0) {
+    const why = skippedNoApi
+      ? `all ${skippedNoApi} enabled ${skippedNoApi === 1 ? 'company has' : 'companies have'} no scannable ATS API`
+      : 'no enabled company has a scannable ATS API';
+    return `⚠ 0 companies scanned — ${why}. Enable Greenhouse/Ashby/Lever companies in portals.yml, or run Agent Scan.`;
+  }
+
   if (found == null && added == null) return tailLines(output);
   const n = (x) => (x == null ? '?' : x.toLocaleString('en-US'));
+
+  // Scanned real companies but every board came back empty — dead slugs, empty
+  // boards, or blocked fetches. Distinct from "0 companies scanned" above: here
+  // the config is fine, the fetches are not, so point at the per-company errors.
+  if (found === 0) {
+    return `⚠ 0 jobs found across ${n(scannedN)} ${scannedN === 1 ? 'company' : 'companies'} — boards may be empty, ATS slugs dead, or fetches blocked. Check the per-company errors.`;
+  }
+
   const filtered = [];
   if (offTitle) filtered.push(`${n(offTitle)} off-title`);
   if (dupes)    filtered.push(`${n(dupes)} duplicates`);

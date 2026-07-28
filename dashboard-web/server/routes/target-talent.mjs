@@ -4,6 +4,8 @@ import { parseApplicationsMd } from '../lib/applications.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, TT_STATUSES } from '../lib/target-talent.mjs';
 import { appendFollowupRow } from '../lib/followups.mjs';
+import { logConnect } from '../lib/connects.mjs';
+import { isLinkedInInvite } from '../lib/channels.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
 
@@ -109,6 +111,13 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     else if (direction === 'Received' && curStage < 3) newStatus = 'Replied';
     if (newStatus !== r.status || direction !== 'Draft') {
       updateTTLine(id, { status: newStatus, lastTouch: today });
+    }
+
+    // A LinkedIn connection request is a connect, NOT an email touch. Tally it in
+    // the connects log so "LinkedIn connects" counts it and "verified touches"
+    // (email only) does not. Idempotent on (date, name, source).
+    if (direction === 'Sent' && isLinkedInInvite(subject)) {
+      logConnect({ name: `${r.first || ''} ${r.last || ''}`.trim(), source: 'ta', date: ts.slice(0, 10) });
     }
 
     // Cross-log to applications follow-ups if requested (only for outbound Sent).

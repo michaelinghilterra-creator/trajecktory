@@ -96,6 +96,37 @@ function StatusBreakdown({ contacts, filter, setFilter }) {
 // Consolidated Contacts + Companies into one sortable table (SSI-influencer
 // look & feel). Company is a sortable column, so grouping/coverage is reachable
 // by sorting on it — no separate Companies subtab needed.
+// Live Hunter (email-finder searches) + MillionVerifier (verifications) credit
+// balances, so you know when to top up before a reconcile drains them. Fetched
+// once on mount. Each side is { configured, left }: no key, unknown (key set but
+// balance unreadable), or a number that goes orange when low and red at zero.
+function CreditBalances() {
+  const [bal, setBal] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/tt-reconcile/credit-balances").then(r => r.json())
+      .then(d => { if (alive && d && !d.error) setBal(d); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  if (!bal) return null;
+  const chip = (label, info) => {
+    if (!info || !info.configured) return <span style={{ color: "var(--text-mute)" }} title={`${label} API key not set in dashboard-web/.env`}>{label}: <span className="mono">no key</span></span>;
+    if (info.left == null) return <span style={{ color: "var(--text-mute)" }} title="Balance couldn't be read right now">{label}: <span className="mono">unknown</span></span>;
+    const n = info.left;
+    const color = n <= 0 ? "var(--red)" : n <= 25 ? "var(--orange)" : "var(--text-mute)";
+    return <span style={{ color }} title={n <= 0 ? `${label} is out — top up the account` : n <= 25 ? `${label} running low — consider topping up` : `${label} credits remaining`}>{label}: <span className="mono" style={{ fontWeight: 600 }}>{n.toLocaleString()}</span>{n <= 0 ? " — out" : ""}</span>;
+  };
+  return (
+    <div className="sub" style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 3, flexWrap: "wrap" }}>
+      <span style={{ opacity: .7 }}>Email-finder credits:</span>
+      {chip("Hunter", bal.hunter)}
+      <span style={{ opacity: .4 }}>·</span>
+      {chip("MillionVerifier", bal.millionVerifier)}
+    </div>
+  );
+}
+
 function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImported }) {
   const [showArchived, setShowArchived] = useState(false);
   const [statusFilter, setStatusFilter] = useState(null);
@@ -191,6 +222,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
         <div>
           <h1>TA Outreach</h1>
           <div className="sub">{active.length} active contacts &middot; {companies.length} companies &middot; {archivedCount} archived</div>
+          <CreditBalances />
         </div>
         <div className="act">
           <label className="btn" style={{ cursor: "pointer" }}>
