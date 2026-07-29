@@ -91,7 +91,7 @@ function ConnectRow({ c, toast, onDone }) {
       ? `/api/recruiters/${c.id}/correspondence`
       : `/api/target-talent/${c.id}/correspondence`;
     const body = (note?.response || '').trim() || `LinkedIn connection request sent to ${c.name || 'this contact'}.`;
-    fetch(url, {
+    window.tjkMutate(url, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ direction: 'Sent', subject: 'LinkedIn connection request', body }),
     }).then(r => r.json())
@@ -111,7 +111,7 @@ function ConnectRow({ c, toast, onDone }) {
   const archive = (reason) => {
     if (sending || done) return;
     setSending(true);
-    fetch('/api/linkedin-drafts/archive-contact', {
+    window.tjkMutate('/api/linkedin-drafts/archive-contact', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: c.source, id: c.id, reason }),
     }).then(r => r.json())
@@ -125,7 +125,7 @@ function ConnectRow({ c, toast, onDone }) {
 
   const draft = () => {
     setLoading(true);
-    fetch('/api/linkedin-drafts/connect-note', {
+    window.tjkMutate('/api/linkedin-drafts/connect-note', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: c.source, id: c.id }),
     }).then(r => r.json())
@@ -272,7 +272,7 @@ function EmailRow({ c, toast, onDone }) {
   const archive = (reason) => {
     if (sending || done) return;
     setSending(true);
-    fetch('/api/linkedin-drafts/archive-contact', {
+    window.tjkMutate('/api/linkedin-drafts/archive-contact', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: c.source, id: c.id, reason }),
     }).then(r => r.json())
@@ -286,7 +286,7 @@ function EmailRow({ c, toast, onDone }) {
 
   const gen = () => {
     setLoading(true);
-    fetch(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       .then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); return; }
@@ -323,7 +323,7 @@ function EmailRow({ c, toast, onDone }) {
     if (sending || done) return;
     setSending(true);
     const sentBody = (body || '').trim() || `Emailed ${c.name || 'this contact'}${c.company ? ` at ${c.company}` : ''}.`;
-    fetch(`${base}/correspondence`, {
+    window.tjkMutate(`${base}/correspondence`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ direction: 'Sent', subject: subject || 'Outreach email', body: sentBody }),
     }).then(r => r.json())
