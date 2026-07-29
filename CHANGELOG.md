@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.4.1...v2.4.2) (2026-07-29)
+
+
+### Bug Fixes
+
+* reconcile keeps No-Response TA contacts instead of archiving them ([d66928f](https://github.com/michaelinghilterra-creator/trajecktory/commit/d66928ffabd897224b84987675ac4af6252c4264))
+* self-heal rotated auth token in connect/email queue outreach ([a594332](https://github.com/michaelinghilterra-creator/trajecktory/commit/a594332aae0fb13207c61f07114a6a1fdc212316))
+
 ## [2.4.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.4.0...v2.4.1) (2026-07-28)
 
 
