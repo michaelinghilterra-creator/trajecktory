@@ -18,10 +18,12 @@ export const router = express.Router();
 //   2) Discover — Claude + WebSearch for missing contacts at active companies
 //   3) Apply — write archive flips and/or new contact rows
 //
-// ACTIVE app statuses (keep TA contacts engaged):
-//   Evaluated, Applied, Responded, interview rounds, Offer (from states.yml funnel)
-// CLOSED app statuses (archive related TA contacts when ALL related apps closed):
-//   Rejected, Discarded, SKIP, No Response
+// KEEP app statuses (keep TA contacts engaged):
+//   Evaluated, Applied, Responded, interview rounds, Offer (the funnel), PLUS
+//   No Response — a ghosted app is still worth chasing via a TA contact, and the
+//   connect/email queues already treat it as applied, so reconcile agrees.
+// DEAD app statuses (archive related TA contacts when ALL related apps are dead):
+//   Rejected, Discarded, SKIP, Closed
 
 // The archive decision + companies-needing-contacts live in
 // lib/tt-reconcile-core.mjs (reconcilePreview), shared with the reconcile-ta.mjs
