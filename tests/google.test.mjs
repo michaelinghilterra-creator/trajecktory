@@ -363,6 +363,21 @@ check((await fetchMessagesConcurrent([], { accessToken: 'x', getImpl })).length 
   logReplyToContact({ source: 'ta', id: 360, company: 'Acme Corp' }, { subject: 'x', body: 'y' });
   check(parseTargetTalentMd().find(r => r.id === 360)?.status === 'Connected', 'a reply never regresses a contact past Replied');
 
+  // Never resurrect a terminal status: a reply into an Archived contact records
+  // the correspondence but leaves them Archived (the old stage map flipped it).
+  fs.writeFileSync(TARGET_TALENT_MD, mdFor('Archived'));
+  const arcBefore = readTTCorrespondence(360).length;
+  logReplyToContact({ source: 'ta', id: 360, company: 'Acme Corp' }, { subject: 'Automatic reply', body: 'ooo' });
+  check(parseTargetTalentMd().find(r => r.id === 360)?.status === 'Archived', 'a reply never resurrects an Archived contact');
+  check(readTTCorrespondence(360).length === arcBefore + 1, 'the Received entry is still recorded for an Archived contact');
+
+  // advanceStatus:false appends the entry but leaves the status line untouched (the backfill path).
+  fs.writeFileSync(TARGET_TALENT_MD, mdFor('Sent'));
+  const bfBefore = readTTCorrespondence(360).length;
+  logReplyToContact({ source: 'ta', id: 360, company: 'Acme Corp' }, { subject: 'backfilled', body: 'b', advanceStatus: false });
+  check(parseTargetTalentMd().find(r => r.id === 360)?.status === 'Sent', 'advanceStatus:false leaves status at Sent (pure correspondence insert)');
+  check(readTTCorrespondence(360).length === bfBefore + 1, 'advanceStatus:false still appends the Received entry');
+
   check(logReplyToContact({ source: 'ta', id: 99999 }, { subject: 's', body: 'b' }) === false, 'an unknown contact id returns false, not a throw');
   check(logReplyToContact(null, {}) === false, 'a null contact returns false');
 }

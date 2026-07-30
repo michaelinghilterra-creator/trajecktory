@@ -599,9 +599,20 @@ function scanDecisions({ messages = [], taRows = [], recruiterRows = [], apps = 
 // dropped the message. This writes the received email onto that contact's book.
 //
 // Mirrors the 'Received' branch of the correspondence routes: append the message
-// and advance the contact to Replied, never regressing a further stage. Stage map
-// is intentionally identical to routes/target-talent.mjs and routes/recruiters.mjs.
-const CONTACT_STAGE = { 'Not Contacted': 0, '': 0, 'Drafted': 1, 'Sent': 2, 'Replied': 3, 'Meeting Scheduled': 4, 'Connected': 5 };
+// and advance the contact to Replied. What status a received reply implies:
+//   - a real pre-Replied ladder stage (Not Contacted / Drafted / Sent) advances to Replied
+//   - a stage already at/after Replied keeps its stage; only lastTouch moves
+//   - anything else (Archived / Bounced / Blocked / unknown) is left UNTOUCHED —
+//     a reply, often just an out-of-office auto-response, must never silently
+//     resurrect a contact the user deliberately archived (the old `?? 0` map did
+//     exactly that: an unknown status scored 0 and got flipped to Replied).
+const ADVANCE_FROM = new Set(['', 'Not Contacted', 'Drafted', 'Sent']);
+const PAST_REPLIED = new Set(['Replied', 'Meeting Scheduled', 'Connected']);
+function replyStatusUpdate(status, today) {
+  if (ADVANCE_FROM.has(status)) return { status: 'Replied', lastTouch: today };
+  if (PAST_REPLIED.has(status)) return { lastTouch: today };
+  return null; // terminal / archived / unknown — do not touch the status line
+}
 
 // Email Date headers are RFC 2822; the correspondence store uses 'YYYY-MM-DD HH:MM'.
 // Normalize, falling back to now for an absent or unparseable date.
@@ -616,7 +627,11 @@ function normalizeCorrTimestamp(date) {
 // contact could not be resolved (so the caller can fall back to the app note
 // alone). Best-effort by contract: callers wrap it so a write failure never sinks
 // the surrounding action.
-function logReplyToContact(contact, { subject, body, timestamp } = {}) {
+// opts.advanceStatus (default true): update the contact's status/lastTouch per
+// replyStatusUpdate. Pass false to append the correspondence ONLY and leave the
+// status line completely untouched — used by the historical backfill, which
+// restores the record without moving anyone's stage or recency after the fact.
+function logReplyToContact(contact, { subject, body, timestamp, advanceStatus = true } = {}) {
   if (!contact || contact.id == null || !contact.source) return false;
   const id = parseInt(contact.id, 10);
   if (Number.isNaN(id)) return false;
@@ -631,14 +646,16 @@ function logReplyToContact(contact, { subject, body, timestamp } = {}) {
     const r = parseTargetTalentMd().find(x => x.id === id);
     if (!r) return false;
     const messages = readTTCorrespondence(id); messages.push(entry); writeTTCorrespondence(id, messages);
-    updateTTLine(id, (CONTACT_STAGE[r.status || ''] ?? 0) < 3 ? { status: 'Replied', lastTouch: today } : { lastTouch: today });
+    const upd = advanceStatus ? replyStatusUpdate(r.status || '', today) : null;
+    if (upd) updateTTLine(id, upd);
     return true;
   }
   if (contact.source === 'recruiter') {
     const r = parseRecruitersMd().find(x => x.id === id);
     if (!r) return false;
     const messages = readRecruiterCorrespondence(id); messages.push(entry); writeRecruiterCorrespondence(id, messages);
-    updateRecruiterLine(id, (CONTACT_STAGE[r.status || ''] ?? 0) < 3 ? { status: 'Replied', lastTouch: today } : { lastTouch: today });
+    const upd = advanceStatus ? replyStatusUpdate(r.status || '', today) : null;
+    if (upd) updateRecruiterLine(id, upd);
     return true;
   }
   return false;
