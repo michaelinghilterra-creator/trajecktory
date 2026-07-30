@@ -915,9 +915,9 @@ body {
 
 /* Toast */
 .toast-stack {
-  position: fixed; bottom: 18px; right: 18px;
+  position: fixed; bottom: 92px; right: 18px;
   display: flex; flex-direction: column; gap: 8px;
-  z-index: 70;
+  z-index: 950;
 }
 .toast {
   background: var(--panel); border: 1px solid var(--border-2);
@@ -1696,8 +1696,10 @@ body {
 .funnel-fill { height: 100%; border-radius: 6px; display: flex; align-items: center; padding-left: 10px; font-family: var(--mono); font-size: 11px; font-weight: 700; color: #0d0d11; min-width: 28px; }
 .funnel-val { font-family: var(--mono); font-size: 12px; text-align: right; color: var(--text); }
 
-/* toast stack */
-.toast-stack { position: fixed; bottom: 18px; right: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 80; }
+/* toast stack — lifted above the Coach floating button (52px @ bottom:20) so
+   toasts in the bottom-right corner are never hidden behind it, and given a
+   z-index above the FAB/panel (z-index 900) so an overlapping toast still shows. */
+.toast-stack { position: fixed; bottom: 92px; right: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 950; }
 
 /* ============================================================
    RECRUITERS REDESIGN — module-specific components.
