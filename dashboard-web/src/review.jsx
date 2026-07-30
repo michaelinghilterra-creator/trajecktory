@@ -465,6 +465,21 @@ const ROLL_STATE = {
   'no-data': { color: 'var(--text-mute)', label: 'No touches yet',     gate: 'Floor not enforced yet.' },
 };
 
+// "On pace" undersells someone running well above the floor: at several times
+// the floor the card was still flatly saying "On pace". When the floor is met,
+// reflect the actual multiple so heavy overperformance reads as recognition
+// instead of "you cleared the minimum". Only the met state gets this; behind /
+// grace / ramp-in keep their own wording.
+function paceLabel(st, fallback) {
+  if (st.state !== 'met' || !st.floor) return fallback;
+  const r = st.trailingCount / st.floor;
+  const mult = r >= 10 ? `${Math.round(r)}x` : `${r.toFixed(1)}x`;
+  if (r >= 3)   return `Crushing it · ${mult} floor`;
+  if (r >= 2)   return `Well ahead · ${mult} floor`;
+  if (r >= 1.3) return `Ahead of pace · ${mult} floor`;
+  return fallback; // right at the floor: plain "On pace" is honest
+}
+
 function RollingFloor({ toast }) {
   const [st, setSt] = useStateRv(null);
   const [ptoDate, setPtoDate] = useStateRv('');
@@ -503,7 +518,7 @@ function RollingFloor({ toast }) {
           <div className="mono" style={{ fontSize: 22, fontWeight: 700, color: s.color }}>
             {st.trailingCount} <span className="dim" style={{ fontSize: 14 }}>/ {st.floor}</span>
           </div>
-          <div className="mono" style={{ fontSize: 11, color: s.color }}>{s.label}</div>
+          <div className="mono" style={{ fontSize: 11, color: s.color }}>{paceLabel(st, s.label)}</div>
         </div>
       </div>
 
@@ -628,15 +643,22 @@ window.ReviewTab = function ReviewTab({ toast }) {
         {floors.map(r => <ReviewFloor key={r.key} r={r} />)}
       </div>
 
-      <WeekOverWeek history={history} />
-
-      <h3 style={{ margin: '0 0 4px' }}>Leading indicators</h3>
-      <div className="card" style={{ padding: '4px 16px', marginBottom: 24 }}>
-        <ReviewIndicator label="Replies on delivered mail" m={m.replies} />
-        <ReviewIndicator label="Delivered reply rate % (cumulative)" m={m.deliveredReplyRatePct} />
-        <ReviewIndicator label="Screens booked" m={m.screensBooked} />
-        <ReviewIndicator label="Screen objections logged" m={m.objectionsLogged} />
-        <ReviewIndicator label="Unserviced applications (WIP)" m={m.unservicedApplications} />
+      {/* Week-over-week takes ~65%, Leading indicators fill the space to its
+          right. Both wrap to full width on a narrow viewport. */}
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 62%', minWidth: 340 }}>
+          <WeekOverWeek history={history} />
+        </div>
+        <div style={{ flex: '1 1 32%', minWidth: 260 }}>
+          <h3 style={{ margin: '0 0 4px' }}>Leading indicators</h3>
+          <div className="card" style={{ padding: '4px 16px', marginBottom: 24 }}>
+            <ReviewIndicator label="Replies on delivered mail" m={m.replies} />
+            <ReviewIndicator label="Delivered reply rate % (cumulative)" m={m.deliveredReplyRatePct} />
+            <ReviewIndicator label="Screens booked" m={m.screensBooked} />
+            <ReviewIndicator label="Screen objections logged" m={m.objectionsLogged} />
+            <ReviewIndicator label="Unserviced applications (WIP)" m={m.unservicedApplications} />
+          </div>
+        </div>
       </div>
 
       <DebriefsDue pending={pending} onOpen={setDebrief} />
