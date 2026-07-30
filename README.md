@@ -19,22 +19,37 @@
 </p>
 
 <p align="center">
-  <img src="docs/dashboard-overview.png" alt="Overview: a weekly scorecard of your inputs against floors and your outcomes against sourced benchmarks" width="820">
+  <img src="docs/screenshots/01-pipeline-overview.png" alt="Daily command center: KPI cards, activity and intake trends, and this-week floors" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/dashboard-pipeline.png" alt="Pipeline: every role scored against your CV, tracked in one place" width="405">
-  <img src="docs/dashboard-insights.png" alt="Insights: honest analytics with confidence ranges, not fabricated benchmarks" width="405">
+  <img src="docs/screenshots/02-pipeline-active.png" alt="Active deal board across the full stage taxonomy, Evaluated to Offer" width="405">
+  <img src="docs/screenshots/04-pipeline-analytics.png" alt="Diagnostics: stage conversion, source effectiveness, archetype conversion, and comp positioning" width="405">
 </p>
 
 <p align="center">
-  <img src="docs/dashboard-followups.png" alt="Follow-Ups: who has gone quiet, who is overdue, and the nudge already drafted" width="405">
-  <img src="docs/dashboard-drawer.png" alt="Per-role drawer: the full evaluation as a decision, not a wall of text" width="405">
+  <img src="docs/screenshots/11-drawer-overview.png" alt="Per-role agentic evaluation: a TL;DR, the score and its breakdown, and the stage tracker" width="405">
+  <img src="docs/screenshots/12-drawer-cvmatch.png" alt="The role's requirements mapped to real evidence from your CV" width="405">
 </p>
 
 <p align="center">
-  <img src="docs/dashboard-recruiters.png" alt="Recruiters CRM: track every contact and draft outreach in your voice" width="405">
-  <img src="docs/dashboard-posts.png" alt="Posts: draft LinkedIn and X posts, edit them, queue them, schedule through Buffer" width="405">
+  <img src="docs/screenshots/13-drawer-comp.png" alt="Compensation analysis for the role against your target band" width="405">
+  <img src="docs/screenshots/14-drawer-interview.png" alt="Interview prep: a lead story plus STAR stories tuned to the role" width="405">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/05-followups.png" alt="Follow-Ups: warm threads with speed-to-lead and ghosting cues, the nudge already drafted" width="405">
+  <img src="docs/screenshots/09-insights.png" alt="Insights: an honest weekly coaching read that cites specific roles, not fabricated benchmarks" width="405">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/25-crm-overview.png" alt="Network hub: referrals, talent acquisition, and recruiters tracked in one place" width="405">
+  <img src="docs/screenshots/21-outreach-composer.png" alt="Connect queue with a live AI-drafted note you edit before sending. Nothing auto-sends" width="405">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/27-today-tab.png" alt="Today: a weekly cadence, pomodoro timer, streak, and to-dos linked to your applications" width="405">
+  <img src="docs/screenshots/24-gmail-capture.png" alt="Read-only Gmail sync that catches replies and bounces, with weekly leading indicators" width="405">
 </p>
 
 ---
