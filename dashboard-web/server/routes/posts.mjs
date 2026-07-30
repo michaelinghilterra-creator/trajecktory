@@ -25,12 +25,13 @@ router.get('/api/posts/queue', (req, res) => {
   }
 });
 
-// POST /api/posts { text, source?, lane?, channel?, linkComment? } — create a draft
+// POST /api/posts { text, source?, lane?, channel?, linkComment?, type?, title?,
+// metrics?, status? } — create a post/tracker entry
 router.post('/api/posts', (req, res) => {
   try {
-    const { text, source, lane, channel, linkComment } = req.body || {};
+    const { text, source, lane, channel, linkComment, type, title, metrics, status } = req.body || {};
     if (!text || !String(text).trim()) return res.status(400).json({ error: 'text is required' });
-    res.json(createPost({ text, source, lane, channel, linkComment }));
+    res.json(createPost({ text, source, lane, channel, linkComment, type, title, metrics, status }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -114,6 +115,43 @@ HARD RULES:
     res.json(post);
   } catch (err) {
     console.error('Error generating post:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/posts/reply { comment, postText?, tone? } — draft an on-message reply
+// to a comment on one of the user's posts, in the content-series voice. Returns
+// the reply text only; nothing is persisted (the user copies it to the platform).
+router.post('/api/posts/reply', async (req, res) => {
+  try {
+    const { comment, postText = '', tone = '' } = req.body || {};
+    if (!comment || !String(comment).trim()) return res.status(400).json({ error: 'comment is required' });
+
+    const id = getIdentity();
+    const ctx = String(postText || '').trim();
+    const toneLine = tone && String(tone).trim() ? `- Extra tone note from the author: ${String(tone).trim()}.\n` : '';
+
+    const prompt = `You are drafting ${id.fullName}'s reply to a comment on one of their LinkedIn/X posts. ${id.firstName}${id.headline ? ` (${id.headline})` : ''} is running a public content series about their job search, told with an operator's eye, using an open-source tool they built called trajecktory.
+
+${ctx ? `THE POST the comment is on (reply in this context):\n"""\n${ctx.slice(0, 1500)}\n"""\n` : 'No post context was provided; reply to the comment on its own terms.\n'}
+THE COMMENT to reply to:
+"""
+${String(comment).trim().slice(0, 1200)}
+"""
+
+VOICE AND MESSAGE RULES (follow every one):
+- Senior operator voice. Warm, direct, specific. No corporate filler, no "Great question!", no "Thanks for sharing!".
+- Keep the series message straight: trajecktory is the tool that made the search measurable, never a magic job-getter. NEVER state or imply an offer count, a screen count, or an application total. If a number helps, use a ratio or general framing, never a personal scoreboard.
+- Add something specific or genuinely useful; do not just thank and agree. If the commenter disagrees, engage honestly. If they ask about the tool, it is free and open source.
+- Never invent a fact, metric, or claim that is not in the post above.
+- Under 60 words. NO em dashes; use periods, commas, colons, semicolons, or parentheses.
+${toneLine}- Return ONLY the reply text, ready to paste. No quotes, no preface, no explanation.`;
+
+    const reply = (await generateText(prompt, { model: draftModel(), maxTokens: 320 })).trim();
+    if (!reply) return res.status(502).json({ error: 'The model returned an empty reply. Try again.' });
+    res.json({ ok: true, reply });
+  } catch (err) {
+    console.error('Error generating comment reply:', err);
     res.status(500).json({ error: err.message });
   }
 });

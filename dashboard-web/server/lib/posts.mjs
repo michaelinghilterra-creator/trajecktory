@@ -25,6 +25,31 @@ const STATUSES  = new Set(['draft', 'queued', 'scheduled', 'published']);
 const LANE_CHANNEL = { professional: 'linkedin', trajecktory: 'x' };
 const MAX_ACTIVITY = 200; // keep the log bounded; oldest events fall off
 
+// Content-series post types (the recurring "lens" of each post) and the
+// performance metrics the Content tab tracks. A post may carry an optional
+// `type`, a short `title`/label, and a `metrics` object filled in after it is
+// published. All are additive: older posts simply lack them.
+const TYPES = new Set(['origin', 'builder', 'myth', 'rigor', 'craft', 'service', 'journey', 'product', 'serial']);
+const METRIC_NUM_KEYS = ['impressions', 'reactions', 'comments', 'reposts', 'saves', 'linkClicks', 'profileViews', 'followers', 'connReqs', 'inboundDms', 'repoClicks', 'repoStars'];
+
+function normType(type) { return TYPES.has(type) ? type : ''; }
+function toNum(v) { const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.round(n) : 0; }
+
+// Merge a metrics patch onto an existing metrics object (or a fresh one).
+// Numeric fields are coerced to non-negative integers; whoEngaged/notes are
+// free text; checkedAt is stamped every time metrics are saved.
+function normMetrics(patch = {}, existing = null) {
+  const base = existing && typeof existing === 'object' ? { ...existing } : {};
+  for (const k of METRIC_NUM_KEYS) {
+    if (patch[k] !== undefined) base[k] = toNum(patch[k]);
+    else if (base[k] === undefined) base[k] = 0;
+  }
+  base.whoEngaged = patch.whoEngaged !== undefined ? String(patch.whoEngaged == null ? '' : patch.whoEngaged) : (base.whoEngaged || '');
+  base.notes = patch.notes !== undefined ? String(patch.notes == null ? '' : patch.notes) : (base.notes || '');
+  base.checkedAt = new Date().toISOString();
+  return base;
+}
+
 function newPostId()     { return 'p_' + randomBytes(4).toString('hex'); }
 function newActivityId()  { return 'a_' + randomBytes(4).toString('hex'); }
 
@@ -75,7 +100,7 @@ function listQueued() {
   return readStore().posts.filter(p => p.status === 'queued');
 }
 
-function createPost({ text, source = 'user', lane = 'professional', channel, linkComment = '' } = {}) {
+function createPost({ text, source = 'user', lane = 'professional', channel, linkComment = '', type = '', title = '', metrics = null, status = 'draft' } = {}) {
   const clean = String(text == null ? '' : text).trim();
   if (!clean) throw new Error('Post text is required');
   const store = readStore();
@@ -86,10 +111,13 @@ function createPost({ text, source = 'user', lane = 'professional', channel, lin
     source: SOURCES.has(source) ? source : 'user',
     lane: normLane(lane),
     channel: normChannel(channel, lane),
+    type: normType(type),
+    title: String(title == null ? '' : title).trim(),
     text: clean,
     linkComment: String(linkComment == null ? '' : linkComment).trim(),
-    status: 'draft',
+    status: STATUSES.has(status) ? status : 'draft',
     scheduledFor: null,
+    metrics: metrics ? normMetrics(metrics, null) : null,
     createdAt: now,
     updatedAt: now,
     order: maxOrder + 1,
@@ -126,6 +154,18 @@ function updatePost(id, patch = {}) {
     const lc = String(patch.linkComment == null ? '' : patch.linkComment).trim();
     if (lc !== p.linkComment) { p.linkComment = lc; edited = true; }
   }
+  if (patch.type !== undefined) {
+    const t = normType(patch.type);
+    if (t !== (p.type || '')) { p.type = t; edited = true; }
+  }
+  if (patch.title !== undefined) {
+    const tt = String(patch.title == null ? '' : patch.title).trim();
+    if (tt !== (p.title || '')) { p.title = tt; edited = true; }
+  }
+  if (patch.metrics !== undefined && patch.metrics && typeof patch.metrics === 'object') {
+    p.metrics = normMetrics(patch.metrics, p.metrics || null);
+    edited = true;
+  }
   if (patch.scheduledFor !== undefined) {
     p.scheduledFor = patch.scheduledFor ? String(patch.scheduledFor) : null;
     edited = true;
@@ -156,5 +196,5 @@ function deletePost(id) {
 export {
   readStore, writeStore, listPosts, listQueued,
   createPost, updatePost, deletePost,
-  newPostId, LANE_CHANNEL, LANES, CHANNELS, STATUSES,
+  newPostId, LANE_CHANNEL, LANES, CHANNELS, STATUSES, TYPES,
 };

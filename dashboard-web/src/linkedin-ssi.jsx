@@ -191,6 +191,10 @@ function LinkedInSSITab({ toast }) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: "6px", display: "inline-block"}}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             Posts
           </button>
+          <button className={"subtab" + (activeView === "content" ? " active" : "")} onClick={() => setActiveView("content")}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: "6px", display: "inline-block"}}><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>
+            Content
+          </button>
           <button className={"subtab" + (activeView === "influencers" ? " active" : "")} onClick={() => setActiveView("influencers")}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight: "6px", display: "inline-block"}}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             Influencers
@@ -403,6 +407,11 @@ function LinkedInSSITab({ toast }) {
         {/* POSTS */}
         {activeView === "posts" && window.PostsTab && (
           <window.PostsTab toast={toast} />
+        )}
+
+        {/* CONTENT — performance tracking + comment replies */}
+        {activeView === "content" && window.ContentTab && (
+          <window.ContentTab toast={toast} />
         )}
 
         {/* INFLUENCERS */}
