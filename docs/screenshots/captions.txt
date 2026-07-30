@@ -1,0 +1,38 @@
+trajecktory case-study screenshots — 2880x2000, dark theme, fictional persona "Jordan Avery" (RevOps + Sales Development leader). No real data.
+
+01-pipeline-overview      Daily command center: KPI cards, activity/intake trends, this-week floors (on track).
+02-pipeline-active        Active deal board across the full stage taxonomy (Evaluated -> Offer).
+03-pipeline-all           Full master list with the complete status taxonomy.
+04-pipeline-analytics     Diagnostics: stage conversion, source effectiveness, archetype conversion, comp positioning.
+05-followups              Warm threads queue with speed-to-lead / ghosting cues.
+05b-followups-overview    Follow-ups cockpit (aging, by source).
+05c-followups-cold        "Applications out" cold ledger (overdue, no-contact portal apps).
+06-ta-outreach            In-house talent-acquisition contact list.
+06b-ta-contact-detail     Contact record: stage, related role, notes, correspondence thread, draft-outreach action.
+07-linkedin-ssi           LinkedIn SSI tracker (four pillars, incremental target).
+07b-linkedin-influencers  Influencer / engagement target list.
+07d-linkedin-weekly-tracker  Weekly SSI trend.
+08-recruiters             Recruiters overview.
+08b-recruiters-directory  Recruiter/firm directory.
+08d-recruiter-detail      Single recruiter record.
+09-insights               AI weekly coaching read, citing specific roles.
+10-setup-launchpad        Onboarding / readiness gate at 100% ready.
+11-drawer-overview        Per-role agentic eval: TL;DR, score, score breakdown, stage tracker.
+12-drawer-cvmatch         Requirements mapped to evidence.
+13-drawer-comp            Comp analysis vs target band.
+14-drawer-interview       Interview prep: lead story + STAR stories.
+15-drawer-customize       Resume / LinkedIn tailoring for the role.
+16-drawer-legitimacy      Listing legitimacy check.
+17-drawer-notes           Notes tab.
+18-drawer-contacts        Contacts tab.
+19-command-palette        Command palette (Cmd/Ctrl-K).
+20-tweaks-panel           Theme / density / view controls (palette + top-bar theme selector).
+21-outreach-composer      Connect queue with a live AI-drafted LinkedIn note (edit / Copy / Redraft; nothing auto-sends).
+21b-connect-queue         Connect queue populated with LinkedIn-only contacts.
+22-social-scheduler       Post composer + lane selector (Professional->LinkedIn, trajecktory->X), Draft with Claude.
+23-social-queue           Scheduled / queued posts + activity log (scheduled to Buffer after approval).
+24-gmail-capture          Read-only Gmail sync + weekly leading indicators.
+25-crm-overview           Network hub (Referrals / TA Outreach / Recruiters).
+26-interview-tab          Interview tracker with prep across all active rounds (Phone Screen -> Offer).
+27-today-tab              Weekly cadence, pomodoro, streak, to-dos linked to applications.
+28-drawer-posting         Posting tab (raw JD view).
