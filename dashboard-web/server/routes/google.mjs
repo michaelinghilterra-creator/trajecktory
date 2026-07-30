@@ -5,6 +5,7 @@ import {
   readTokens, writeTokens, readSync, writeSync, googleStatus, checkHealth, clientConfigured,
   getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions,
   buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, candidateAppsFor, createDraft,
+  logReplyToContact,
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { parseRecruitersMd, updateRecruiterLine } from '../lib/recruiters.mjs';
@@ -332,7 +333,7 @@ router.get('/api/google/replies', async (req, res) => {
 router.post('/api/google/replies/:msgId/:action', (req, res) => {
   try {
     const { msgId, action } = req.params;
-    const { appId, note, company } = req.body || {};
+    const { appId, note, company, contact, subject, snippet, date } = req.body || {};
     const today = new Date().toISOString().slice(0, 10);
     // Best-effort: the log/status may already be written, so a sync failure must not 500.
     const markHandled = (rec) => {
@@ -375,8 +376,19 @@ router.post('/api/google/replies/:msgId/:action', (req, res) => {
 
     if (statusFlip) patchRowInMd(id, { status: statusFlip }, { company });
 
+    // Record the received email on the CONTACT's own correspondence timeline too,
+    // so the reply shows on their card in Network → TA Outreach / Recruiters, not
+    // only as a note on the application. Best-effort: the app note and status flip
+    // already stand, and a reply with no matched contact (company-guess only) has
+    // no card to log to, so this simply no-ops.
+    let contactLogged = false;
+    if (contact) {
+      try { contactLogged = logReplyToContact(contact, { subject, body: snippet, timestamp: date }); }
+      catch { /* contact correspondence logging is best-effort */ }
+    }
+
     markHandled({ action, appId: id, date: today });
-    res.json({ ok: true, appId: id, statusFlip });
+    res.json({ ok: true, appId: id, statusFlip, contactLogged });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

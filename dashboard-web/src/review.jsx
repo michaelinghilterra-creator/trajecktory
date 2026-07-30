@@ -138,7 +138,9 @@ function ReplyRow({ reply, toast }) {
     const note = `${reply.from}: ${reply.subject || '(no subject)'} [${sentiment}]`;
     const body = action === 'dismiss' ? {}
       : action === 'not-related' ? { from: reply.from }   // sender, so future emails from them are suppressed too
-      : { appId, note, company };
+      // contact + email details let the server log this received reply onto the
+      // contact's correspondence card, not just as a note on the application.
+      : { appId, note, company, contact: reply.contact, subject: reply.subject, snippet: reply.snippet, date: reply.date };
     fetch(`/api/google/replies/${encodeURIComponent(reply.msgId)}/${action}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
