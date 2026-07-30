@@ -87,6 +87,18 @@ check(canonicalUrl(sharedHostA) !== canonicalUrl(sharedHostB),
 check(canonicalUrl('https://x.com/r?jobId=9') === canonicalUrl('https://x.com/r?jobid=9'),
   'id query keys match case-insensitively');
 
+// THE REGRESSION PIN: one Greenhouse requisition surfaces as a branded page
+// (?gh_jid=N) and the raw board (greenhouse.io/.../jobs/N) — different host AND
+// path, so host+path canonicalization evaluated it twice. Both forms must
+// collapse to one key.
+check(canonicalUrl('https://jobs.exampleco.com/listing/5550001?gh_jid=5550001')
+    === canonicalUrl('https://job-boards.greenhouse.io/exampleco/jobs/5550001'),
+  'branded gh_jid page and raw greenhouse board of one req collapse to one key');
+// Different Greenhouse ids stay distinct across the two forms.
+check(canonicalUrl('https://jobs.exampleco.com/listing/5550001?gh_jid=5550001')
+    !== canonicalUrl('https://job-boards.greenhouse.io/exampleco/jobs/9999999'),
+  'different greenhouse ids do not collapse');
+
 // ── normalizeCompany / sameRole ───────────────────────────────────────────────
 console.log('\n2. company and role identity');
 

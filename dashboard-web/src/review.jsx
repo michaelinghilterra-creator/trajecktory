@@ -132,18 +132,23 @@ function ReplyRow({ reply, toast }) {
   const tag = reply.companyGuess ? `≈ ${reply.companyGuess.company}` : (reply.contact ? reply.contact.company : '');
 
   const act = (action) => {
-    if (action !== 'dismiss' && !appId) { toast && toast('Pick which application this reply belongs to.', 'error'); return; }
+    const noApp = action === 'dismiss' || action === 'not-related';
+    if (!noApp && !appId) { toast && toast('Pick which application this reply belongs to.', 'error'); return; }
     setBusy(true);
     const note = `${reply.from}: ${reply.subject || '(no subject)'} [${sentiment}]`;
-    const body = action === 'dismiss' ? {} : { appId, note, company };
+    const body = action === 'dismiss' ? {}
+      : action === 'not-related' ? { from: reply.from }   // sender, so future emails from them are suppressed too
+      // contact + email details let the server log this received reply onto the
+      // contact's correspondence card, not just as a note on the application.
+      : { appId, note, company, contact: reply.contact, subject: reply.subject, snippet: reply.snippet, date: reply.date };
     fetch(`/api/google/replies/${encodeURIComponent(reply.msgId)}/${action}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }).then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); return; }
-        setDone(action === 'dismiss' ? 'dismissed' : (res.statusFlip || 'logged'));
-        toast && toast(action === 'dismiss' ? 'Dismissed' : (res.statusFlip ? `Marked ${res.statusFlip}` : 'Reply logged'), 'success');
+        setDone(action === 'dismiss' ? 'dismissed' : action === 'not-related' ? 'not-related' : (res.statusFlip || 'logged'));
+        toast && toast(action === 'dismiss' ? 'Dismissed' : action === 'not-related' ? 'Marked not job-related' : (res.statusFlip ? `Marked ${res.statusFlip}` : 'Reply logged'), 'success');
       })
       .catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(false));
   };
@@ -166,11 +171,12 @@ function ReplyRow({ reply, toast }) {
         </div>
       </div>
       {done ? (
-        <div style={{ marginTop: 4, color: 'var(--green)' }}>✓ {done === 'logged' ? 'Logged' : done === 'dismissed' ? 'Dismissed' : `Marked ${done}`}{picked ? ` · ${picked.role}` : ''}</div>
+        <div style={{ marginTop: 4, color: 'var(--green)' }}>✓ {done === 'logged' ? 'Logged' : done === 'dismissed' ? 'Dismissed' : done === 'not-related' ? 'Not job-related' : `Marked ${done}`}{picked && done !== 'not-related' ? ` · ${picked.role}` : ''}</div>
       ) : cands.length === 0 ? (
         <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="dim">No matching application on file{company ? ` for ${company}` : ''}.</span>
-          <button className="btn ghost sm" onClick={() => act('dismiss')} disabled={busy}>Dismiss</button>
+          <button className="btn ghost sm" onClick={() => act('dismiss')} disabled={busy} title="Hide just this email.">Dismiss</button>
+          <button className="btn ghost sm" onClick={() => act('not-related')} disabled={busy} title="Not about your job search. Hide it and stop surfacing future emails from this sender.">Not job-related</button>
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 6, marginTop: 5, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -185,6 +191,7 @@ function ReplyRow({ reply, toast }) {
           <button className="btn sm" onClick={() => act('log')} disabled={busy}>Log</button>
           <button className="btn sm" onClick={() => act('responded')} disabled={busy}>Responded</button>
           <button className="btn ghost sm" onClick={() => act('rejected')} disabled={busy}>Rejected</button>
+          <button className="btn ghost sm" onClick={() => act('not-related')} disabled={busy} title="This email isn't about your job search. Hide it and stop surfacing future emails from this sender.">Not job-related</button>
         </div>
       )}
     </div>
@@ -243,11 +250,16 @@ function GmailSweep({ sweep, onApplyBounces, busy, toast }) {
   );
 }
 
-// How long to wait before auto-running the sweep again on Review open. Flipping
-// between tabs should not re-sweep the whole backlog each time; a fresh open (or a
-// new day) should. Tracked in localStorage so it survives re-mounts within a session.
+// How long to wait before auto-running the sweep again on Review open, and how
+// often to re-poll while Review stays open. The user wanted Gmail checked on a
+// regular ~5-minute cadence rather than only on demand, so both are 5 min: a
+// fresh open re-checks if it has been that long, and an open panel re-polls at
+// that interval. (Polling runs while the dashboard's Review tab is open; a check
+// that runs when the app is closed would be a server-side timer.) Tracked in
+// localStorage so the open-throttle survives re-mounts within a session.
 const GMAIL_AUTOSCAN_KEY = 'tjk_gmail_autoscan_at';
-const GMAIL_AUTOSCAN_THROTTLE_MS = 2 * 60 * 60 * 1000; // 2 hours
+const GMAIL_AUTOSCAN_THROTTLE_MS = 5 * 60 * 1000; // 5 min
+const GMAIL_POLL_MS = 5 * 60 * 1000;              // 5 min recurring poll while open
 
 function lastCheckedLabel(days) {
   if (days == null) return null;
@@ -309,6 +321,21 @@ function GmailPanel({ toast }) {
     // launch the sweep twice.
     try { localStorage.setItem(GMAIL_AUTOSCAN_KEY, String(Date.now())); } catch { /* private mode */ }
     checkEmail();
+  }, [st && st.healthy]);
+
+  // Recurring poll: while the connection is healthy and this panel is open, re-run
+  // the read-only sweep every ~5 minutes so new replies and bounces surface without
+  // a manual click. Cleared on unmount (leaving Review) so it never runs detached.
+  // Stamp the throttle key on each poll so re-opening Review right after doesn't
+  // immediately double-sweep. Skipped while the browser tab is backgrounded.
+  useEffectRv(() => {
+    if (!st || !st.connected || !st.healthy) return undefined;
+    const iv = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      try { localStorage.setItem(GMAIL_AUTOSCAN_KEY, String(Date.now())); } catch { /* private mode */ }
+      checkEmail();
+    }, GMAIL_POLL_MS);
+    return () => clearInterval(iv);
   }, [st && st.healthy]);
 
   if (st === undefined) return null; // loading — stay quiet, no flash
