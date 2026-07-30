@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.4.2...v2.5.0) (2026-07-30)
+
+
+### Features
+
+* reply drafting and follow-up dashboard improvements ([#115](https://github.com/michaelinghilterra-creator/trajecktory/issues/115)) ([90a7a69](https://github.com/michaelinghilterra-creator/trajecktory/commit/90a7a69a726f208b466069c43c24b88000b7e759))
+
 ## [2.4.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.4.1...v2.4.2) (2026-07-29)
 
 
