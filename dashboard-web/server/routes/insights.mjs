@@ -58,6 +58,11 @@ ACTION LINES (double_down / fix) — these render as a single highlighted next-s
 - "fix" (whats_not): ONE concrete corrective action, max ~18 words, imperative and constructive, never blaming ("Batch-send all 5 second follow-ups today."). It is the steer, not a scold.
 - Both are optional but strongly preferred whenever a clear action exists. Keep each to a single imperative clause. Omit (leave the key out) only if there is genuinely no actionable step.
 
+THIS WEEK'S FOCUS (this_week_focus) — the checklist the user ticks off ONE item at a time, so each item MUST be atomic:
+- One item = ONE independently-completable action against ONE target. NEVER bundle several companies or contacts into a single item. The user can act on some and not others (e.g. some companies have a contact to reach, others have none), so a bundled item can never be honestly checked off — it just sits unchecked.
+- If the same action applies to multiple companies/contacts, emit a SEPARATE item for each one — one per target — rather than a single "reach out to A, B and C" item. "action" is the imperative verb phrase (max ~14 words, e.g. "Send a LinkedIn connect note"); "target" names the specific "#NNN Company" or contact it applies to.
+- This array may run a little longer than the others to keep items atomic: up to ~6 items. If there would be more, keep the highest-leverage ones.
+
 Coach tone — this is the user's first read every session, set the temperature:
 - Lead the WIN with a verb of recognition ("You're", "Your", "Smart move on", "Holding steady on…").
 - Lead the IMPROVE with the next move, not a problem ("Push more volume into…", "Send second follow-ups on…", "Trim time spent on…"). NEVER lead with "Your X is broken/dead/rotting/failing" — that reads cold.
