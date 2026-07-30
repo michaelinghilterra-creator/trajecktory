@@ -270,9 +270,16 @@ router.post('/api/google/scan-bounces', async (req, res) => {
 // A From header is "Name <addr@host>" or a bare address. Reduce it to the
 // lowercased address so a "not job-related" suppression matches future emails
 // from the same sender regardless of how the display name is formatted.
+//
+// The bracket extraction is done with indexOf, NOT a `<([^>]+)>` regex: that
+// pattern is polynomial (ReDoS) on a From header full of '<' with no '>', and
+// the header is uncontrolled input (it comes from the inbox). indexOf is linear.
 function senderAddress(from) {
-  const m = String(from || '').match(/<([^>]+)>/);
-  return (m ? m[1] : String(from || '')).trim().toLowerCase();
+  const s = String(from || '');
+  const lt = s.indexOf('<');
+  const gt = lt === -1 ? -1 : s.indexOf('>', lt + 1);
+  const addr = (lt !== -1 && gt !== -1) ? s.slice(lt + 1, gt) : s;
+  return addr.trim().toLowerCase();
 }
 
 // GET /api/google/replies — recent human replies from known contacts since
