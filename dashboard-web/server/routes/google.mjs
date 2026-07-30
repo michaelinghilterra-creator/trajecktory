@@ -266,6 +266,14 @@ router.post('/api/google/scan-bounces', async (req, res) => {
   }
 });
 
+// A From header is "Name <addr@host>" or a bare address. Reduce it to the
+// lowercased address so a "not job-related" suppression matches future emails
+// from the same sender regardless of how the display name is formatted.
+function senderAddress(from) {
+  const m = String(from || '').match(/<([^>]+)>/);
+  return (m ? m[1] : String(from || '')).trim().toLowerCase();
+}
+
 // GET /api/google/replies — recent human replies from known contacts since
 // `since`, each with a suggested sentiment. Read-only: this lists, it does not
 // write. The UI turns each into a one-click action below.
@@ -295,7 +303,11 @@ router.get('/api/google/replies', async (req, res) => {
     // the handled record so an already-logged reply is hidden on the next sweep.
     const sync = readSync();
     const handled = sync.handledReplies || {};
-    const withMeta = (rows, companyOf) => rows.map(r => ({ ...r, candidateApps: candidateAppsFor(companyOf(r), apps), handled: handled[r.msgId] || null }));
+    // Senders the user marked "not job-related" are dropped from every sweep going
+    // forward, so a random email that got picked up once stops resurfacing.
+    const notRelated = sync.notRelatedSenders || {};
+    const notSuppressed = (r) => { const a = senderAddress(r.from); return !(a && notRelated[a]); };
+    const withMeta = (rows, companyOf) => rows.filter(notSuppressed).map(r => ({ ...r, candidateApps: candidateAppsFor(companyOf(r), apps), handled: handled[r.msgId] || null }));
     // Stamp that a preview sweep ran (manual "Check email" or the auto-scan on
     // Review open), so /health can show "last checked …" and nudge when it has
     // been a while. Best-effort: a freshness write must never fail the read.
@@ -303,7 +315,7 @@ router.get('/api/google/replies', async (req, res) => {
     res.json({
       replies: withMeta(replies, r => r.contact?.company),
       byCompany: withMeta(byCompany, r => r.companyGuess?.company),
-      unknown,
+      unknown: unknown.filter(notSuppressed),
       unmatched: other.length,
     });
   } catch (err) {
@@ -334,6 +346,19 @@ router.post('/api/google/replies/:msgId/:action', (req, res) => {
     if (action === 'dismiss') {
       markHandled({ action: 'dismiss', appId: null, date: today });
       return res.json({ ok: true, dismissed: true });
+    }
+
+    // Not job-related: hide this message like dismiss, AND remember the SENDER so
+    // future sweeps drop their emails too — the user teaching the filter after a
+    // random email got picked up. No application, no note, no status change.
+    if (action === 'not-related') {
+      markHandled({ action: 'not-related', appId: null, date: today });
+      const addr = senderAddress(req.body?.from);
+      if (addr) {
+        try { const s = readSync(); s.notRelatedSenders = s.notRelatedSenders || {}; s.notRelatedSenders[addr] = { date: today }; writeSync(s); }
+        catch { /* suppression is best-effort */ }
+      }
+      return res.json({ ok: true, notRelated: true });
     }
 
     const id = parseInt(appId, 10);
