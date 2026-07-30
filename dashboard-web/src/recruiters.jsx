@@ -1193,21 +1193,24 @@ function RecPipelineUI({ contact, onChange, style }) {
   );
 }
 
-function RecAICompose({ contact, contactId, onSaveDraft, onLogSent, onToast }) {
+function RecAICompose({ contact, contactId, hasReceived, onSaveDraft, onLogSent, onToast }) {
   const [tone, setTone] = useStateR('Warm');
   const [busy, setBusy] = useStateR(false);
+  const [mode, setMode] = useStateR('outreach');   // 'outreach' | 'reply'
   const [out, setOut] = useStateR('');
   const [subject, setSubject] = useStateR(`Intro: ${contact.first}, exploring leadership mandates`);
   // Editable assembled email, seeded from the AI draft so the user can tweak it
   // before copying, logging, or saving.
   const [email, setEmail] = useStateR('');
 
-  const gen = useCallbackR(() => {
-    setBusy(true); setOut('');
+  // gen('reply') responds to the recruiter's last received email; gen() (or
+  // gen('outreach')) drafts fresh outreach in the selected tone.
+  const gen = useCallbackR((genMode = 'outreach') => {
+    setBusy(true); setOut(''); setMode(genMode);
     window.tjkMutate(`/api/recruiters/${contactId}/draft`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tone }),
+      body: JSON.stringify(genMode === 'reply' ? { mode: 'reply' } : { tone }),
     })
       .then(r => r.json())
       .then(d => {
@@ -1232,14 +1235,20 @@ function RecAICompose({ contact, contactId, onSaveDraft, onLogSent, onToast }) {
         {REC_TONES.map(t => (
           <button key={t} className={'chip' + (tone === t ? ' on' : '')} onClick={() => setTone(t)}>{t}</button>
         ))}
-        <button className="btn ghost sm" onClick={gen} style={{ marginLeft: 'auto' }}>
+        {hasReceived && (
+          <button className="btn sm" onClick={() => gen('reply')} style={{ marginLeft: 'auto' }}
+            title="Draft a reply to this recruiter's most recent email, using the thread for context">
+            <RecIcon d={REC_I.inbound} size={12} /> Reply to last email
+          </button>
+        )}
+        <button className="btn ghost sm" onClick={() => gen(mode)} style={{ marginLeft: hasReceived ? 0 : 'auto' }}>
           <RecIcon d={REC_I.refresh} size={12} /> Regenerate
         </button>
       </div>
       {busy && (
         <div className="ai-loading">
           <span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} />
-          drafting a {tone.toLowerCase()} outreach…
+          {mode === 'reply' ? 'drafting a reply…' : `drafting a ${tone.toLowerCase()} outreach…`}
         </div>
       )}
       {out && !busy && (
@@ -1622,6 +1631,7 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
             ) : (
               <RecAICompose
                 contact={data} contactId={id}
+                hasReceived={corr.some(m => m.direction === 'Received')}
                 onSaveDraft={(subject, body) => saveCorrespondence('Draft', subject, body)}
                 onLogSent={(subject, body) => setLog({ direction: 'Sent', subject, body })}
                 onToast={showToast}

@@ -211,17 +211,23 @@ window.ConnectTab = function ConnectTab({ toast }) {
   const [queue, setQueue] = useStateCq(null);
   const [err, setErr] = useStateCq(null);
 
-  useEffectCq(() => {
+  const load = () =>
     fetch('/api/linkedin-drafts/connect-queue').then(r => r.json())
       .then(d => { if (d && d.error) setErr(d.error); else setQueue(d.queue || []); })
       .catch(e => setErr(e.message));
-  }, []);
+
+  useEffectCq(() => { load(); }, []);
 
   // A row leaves the queue two ways: you sent the invite, or you archived a stale
-  // contact. Both drop it from view here; the server also stops returning it, so a
-  // reload stays consistent.
-  const dropRow = (source, id) =>
+  // contact. Drop it optimistically for an instant response, THEN re-fetch so the
+  // OTHER rows at the same company pick up the fresh "already reached out today"
+  // warning — their companyOutreach was computed at load time and is now stale.
+  // React keeps each sibling row's own state (stable source:id keys), so an
+  // in-progress draft survives and the user never has to reload the page.
+  const dropRow = (source, id) => {
     setQueue(q => (q || []).filter(c => !(c.source === source && String(c.id) === String(id))));
+    load();
+  };
 
   if (err) return <div className="dim" style={{ padding: 28 }}>Could not load the connect queue: {err}</div>;
   if (!queue) return <div className="dim" style={{ padding: 28 }}>Loading connect queue…</div>;
@@ -411,14 +417,20 @@ window.EmailQueueTab = function EmailQueueTab({ toast }) {
   const [queue, setQueue] = useStateCq(null);
   const [err, setErr] = useStateCq(null);
 
-  useEffectCq(() => {
+  const load = () =>
     fetch('/api/followups/email-queue').then(r => r.json())
       .then(d => { if (d && d.error) setErr(d.error); else setQueue(d.queue || []); })
       .catch(e => setErr(e.message));
-  }, []);
 
-  const dropRow = (source, id) =>
+  useEffectCq(() => { load(); }, []);
+
+  // Drop the sent/archived row optimistically, then re-fetch so siblings at the
+  // same company refresh their "already reached out today" warning in place — no
+  // page reload, and in-progress drafts on other rows survive (stable keys).
+  const dropRow = (source, id) => {
     setQueue(q => (q || []).filter(c => !(c.source === source && String(c.id) === String(id))));
+    load();
+  };
 
   if (err) return <div className="dim" style={{ padding: 28 }}>Could not load the email queue: {err}</div>;
   if (!queue) return <div className="dim" style={{ padding: 28 }}>Loading email queue…</div>;

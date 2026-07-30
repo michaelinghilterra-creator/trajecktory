@@ -671,9 +671,11 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
         <div className="ds-section">
           <div className="ds-label">
             <TIcon d={TI.spark} size={12} /> Outreach
-            <select value={draftStage} onChange={e => setDraftStage(e.target.value)} title="Tune the draft for where you are in the process"
+            <select value={draftStage} onChange={e => setDraftStage(e.target.value)} title="Tune the draft: Reply responds to their last email; the stages tune fresh outreach"
               style={{ marginLeft: "auto", fontSize: 11, padding: "3px 6px", borderRadius: 5, background: "var(--panel-2)", color: "var(--text-dim)", border: "1px solid var(--border)" }}>
-              {TT_STAGE_OPTS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+              {/* Reply is offered only when there is an inbound email to reply to. */}
+              {(corr.some(m => m.direction === "Received") ? [{ v: "reply", l: "↩ Reply to last email" }, ...TT_STAGE_OPTS] : TT_STAGE_OPTS)
+                .map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
             </select>
           </div>
           {!composing && !draftResult && (

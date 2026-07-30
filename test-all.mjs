@@ -485,6 +485,7 @@ for (const suite of [
   'tests/email-queue.test.mjs',
   'tests/debrief.test.mjs',
   'tests/google.test.mjs',
+  'tests/reply-draft.test.mjs',
   'tests/google-connect.test.mjs',
   'tests/google-sync.test.mjs',
   'tests/google-draft.test.mjs',

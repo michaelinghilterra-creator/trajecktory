@@ -134,11 +134,31 @@ function useTweaks(defaults) {
   return [values, setTweak];
 }
 
+// Persist the active tab + subtabs so a browser reload keeps the user where they
+// were rather than dropping them back on the default (Pipeline). Only the nav
+// POSITION persists — data always refetches on mount — and firstRun + the OAuth
+// callback still override it afterward (both run in their own effects post-mount).
+const NAV_STORAGE_KEY = 'trajecktory.nav';
+const KNOWN_TABS = new Set([
+  "pipeline", "focus", "coach", "analytics", "followups",
+  "interview", "network", "linkedin-ssi", "launchpad",
+]);
+function loadNav() {
+  try {
+    const o = JSON.parse(localStorage.getItem(NAV_STORAGE_KEY) || '{}') || {};
+    return {
+      tab: KNOWN_TABS.has(o.tab) ? o.tab : null,
+      pipelineView: typeof o.pipelineView === 'string' ? o.pipelineView : null,
+      networkSub: typeof o.networkSub === 'string' ? o.networkSub : null,
+    };
+  } catch (e) { return { tab: null, pipelineView: null, networkSub: null }; }
+}
+
 function App() {
   const [apps, setApps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastSync, setLastSync] = useState(null);   // ms timestamp of the last apps refetch
-  const [tab, setTab] = useState("pipeline");
+  const [tab, setTab] = useState(() => loadNav().tab || "pipeline");
   const [debriefPrompt, setDebriefPrompt] = useState(null);
   const [search, setSearch] = useState("");
   const [drawerApp, setDrawerApp] = useState(null);
@@ -149,9 +169,9 @@ function App() {
   // Network parent-tab subtab (referrals | recruiters | ta), lifted here so the
   // command palette and the Follow-Ups→TA jump can target a specific subtab,
   // mirroring pipelineView. Defaults to Referrals (warmest channel).
-  const [networkSub, setNetworkSub] = useState("referrals");
+  const [networkSub, setNetworkSub] = useState(() => loadNav().networkSub || "referrals");
   const openTaContact = (id) => { setPendingTaOpen(id); setNetworkSub("ta"); setTab("network"); };
-  const [pipelineView, setPipelineView] = useState("overview");
+  const [pipelineView, setPipelineView] = useState(() => loadNav().pipelineView || "overview");
 
   // Reset Pipeline's subtab whenever the user navigates away. Otherwise
   // pipelineView persists at app level and re-mounting PipelineTab keeps
@@ -169,6 +189,13 @@ function App() {
       setNetworkSub("referrals");
     }
   }, [tab]);
+
+  // Persist nav position (tab + subtabs) on every change so a browser reload
+  // restores where the user was instead of resetting to Pipeline.
+  useEffect(() => {
+    try { localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ tab, pipelineView, networkSub })); }
+    catch (e) { /* storage unavailable (private mode, quota); stays session-only */ }
+  }, [tab, pipelineView, networkSub]);
   const [filters, setFilters] = useState({ statuses: [], archetypes: [], scoreMin: 0 });
   const [cmdOpen, setCmdOpen] = useState(false);
   const [toasts, setToasts] = useState([]);

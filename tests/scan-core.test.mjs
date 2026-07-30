@@ -47,29 +47,31 @@ check(normalizeUrl('https://jobs.lever.co/applyworks/be70d3cb-2d5e-4b59') === 'h
 check(normalizeUrl('https://apply.workable.com/northwind/j/BA4D0137BF/') === 'https://apply.workable.com/northwind/j/BA4D0137BF',
   'does NOT strip the apply.workable.com host (apply only in hostname)');
 
-// gh_jid is the ONLY thing distinguishing postings on a Greenhouse board
-// proxied through a shared-path custom domain. Stripping it collapsed every
-// posting from that company to one dedup key (audit 2026-07-15). It must
-// survive normalization, and two different job ids must NOT normalize to the
-// same key.
-check(normalizeUrl('https://contoso.com/company/careers/open-positions/job?gh_jid=4001001001') === 'https://contoso.com/company/careers/open-positions/job?gh_jid=4001001001',
-  'preserves gh_jid on a shared-path Greenhouse proxy URL');
+// A Greenhouse job id is a globally-unique posting identity, so any URL that
+// carries one canonicalizes to a single `gh:{id}` key — collapsing the branded
+// (?gh_jid=N) and raw-board (greenhouse.io/.../jobs/N) forms of ONE requisition
+// that share no host or path (JD #1226/#1234 dupe, 2026-07-30). The id must
+// survive tracking params and apply segments, and two different ids must NOT
+// collapse (the shared-path-proxy audit, 2026-07-15).
+check(normalizeUrl('https://contoso.com/company/careers/open-positions/job?gh_jid=4001001001') === 'gh:4001001001',
+  'a gh_jid URL canonicalizes to its gh:{id} key');
 check(normalizeUrl('https://contoso.com/company/careers/open-positions/job?gh_jid=1111') !==
       normalizeUrl('https://contoso.com/company/careers/open-positions/job?gh_jid=2222'),
   'two different gh_jid values do NOT collapse to the same dedup key');
-check(normalizeUrl('https://northwind.com/job?gh_jid=4002002002&utm_source=indeed&utm_medium=cpc') === 'https://northwind.com/job?gh_jid=4002002002',
-  'strips utm_* tracking params while keeping gh_jid');
-check(normalizeUrl('https://www.acme.com/careers?utm_source=x&gh_jid=4003003003') === 'https://www.acme.com/careers?gh_jid=4003003003',
-  'keeps gh_jid regardless of its position in the query string');
-check(normalizeUrl('https://x.com/jobs/1/application?gh_jid=555') === 'https://x.com/jobs/1?gh_jid=555',
-  'strips /application segment while still preserving gh_jid');
-check(normalizeUrl('https://x.com/jobs/1/apply?gh_jid=555') === 'https://x.com/jobs/1?gh_jid=555',
-  'strips /apply segment while still preserving gh_jid');
-// A board that already bakes the job id into the PATH (boards.greenhouse.io
-// style) has no query-string ambiguity, so a bare gh_jid with no other
-// tracking params round-trips unchanged.
-check(normalizeUrl('https://boards.greenhouse.io/exampleco/jobs/5550001?gh_jid=5550001') === 'https://boards.greenhouse.io/exampleco/jobs/5550001?gh_jid=5550001',
-  'path-unique Greenhouse URL keeps its gh_jid too (harmless — key stays unique either way)');
+check(normalizeUrl('https://northwind.com/job?gh_jid=4002002002&utm_source=indeed&utm_medium=cpc') === 'gh:4002002002',
+  'strips utm_* tracking params while resolving the gh id');
+check(normalizeUrl('https://www.acme.com/careers?utm_source=x&gh_jid=4003003003') === 'gh:4003003003',
+  'resolves gh_jid regardless of its position in the query string');
+check(normalizeUrl('https://x.com/jobs/1/application?gh_jid=555') === 'gh:555',
+  'apply/application segments do not affect the resolved gh id');
+check(normalizeUrl('https://x.com/jobs/1/apply?gh_jid=555') === 'gh:555',
+  'strips /apply segment; gh id still resolves');
+// A raw greenhouse.io board bakes the id into the PATH; it resolves to the SAME
+// key as the branded page, whether or not a redundant gh_jid param rides along.
+check(normalizeUrl('https://boards.greenhouse.io/exampleco/jobs/5550001?gh_jid=5550001') === 'gh:5550001',
+  'raw greenhouse board path resolves to the same gh:{id} key');
+check(normalizeUrl('https://boards.greenhouse.io/exampleco/jobs/5550001') === 'gh:5550001',
+  'raw greenhouse board path resolves even with no gh_jid param present');
 // Non-identifying query strings with no gh_jid still fully strip, unaffected
 // by the new allowlist logic.
 check(normalizeUrl('https://x.com/jobs/1?utm_source=a&utm_medium=b') === 'https://x.com/jobs/1',

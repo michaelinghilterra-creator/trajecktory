@@ -3,6 +3,7 @@ import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, TT_STATUSES } from '../lib/target-talent.mjs';
+import { buildReplyPrompt, lastReceived, collapseRe } from '../lib/reply-draft.mjs';
 import { appendFollowupRow } from '../lib/followups.mjs';
 import { logConnect } from '../lib/connects.mjs';
 import { isLinkedInInvite } from '../lib/channels.mjs';
@@ -179,6 +180,25 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
     const prior = readTTCorrespondence(id);
     const isFirstTouch = prior.length === 0;
     const messageType = req.body?.messageType || (isFirstTouch ? 'first-touch' : 'follow-up');
+
+    // REPLY mode: respond to the contact's most recent received email instead of
+    // drafting fresh outreach. Requires an inbound message to reply to.
+    if (req.body?.mode === 'reply' || req.body?.interviewStage === 'reply') {
+      const inbound = lastReceived(prior);
+      if (!inbound) return res.status(400).json({ error: 'No received email from this contact yet — nothing to reply to.' });
+      const me = getIdentity();
+      const contactBlock = `Company:  ${r.company}\nName:     ${r.salute || ''} ${r.first} ${r.last}\nTitle:    ${r.title}\nEmail:    ${r.email}`;
+      const prompt = buildReplyPrompt({ me, cvMd, profileMd, prior, contactLabel: `an internal Talent Acquisition / People-team contact at ${r.company}`, contactBlock, firstName: r.first });
+      const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return res.status(500).json({ error: 'Could not parse reply draft from model output', raw });
+      const draft = JSON.parse(jsonMatch[0]);
+      draft.body = _stripLeadingSalutation(draft.body, r.first);
+      draft.body = _stripTrailingSignature(draft.body);
+      draft.body = _replaceEmDashes(draft.body);
+      draft.subject = _replaceEmDashes(collapseRe(draft.subject, inbound.subject));
+      return res.json({ ok: true, draft, messageType: 'reply', relatedApp: null });
+    }
 
     // Interview-stage tuning: the drawer passes where the user is in the loop so
     // the draft's framing matches. 'general' (or unset) keeps the default

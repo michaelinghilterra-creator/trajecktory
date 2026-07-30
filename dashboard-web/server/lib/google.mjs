@@ -28,6 +28,8 @@ import crypto from 'crypto';
 import { GOOGLE_TOKENS_PATH, GOOGLE_SYNC_PATH } from '../config.mjs';
 import { classifyBounce } from '../../../lib/bounce-parse.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
+import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from './target-talent.mjs';
+import { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine } from './recruiters.mjs';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -578,7 +580,7 @@ function scanDecisions({ messages = [], taRows = [], recruiterRows = [], apps = 
     let companyGuess = !contact ? matchByCompanyDomain(fromAddr, apps) : null;
     if (!contact && !companyGuess) companyGuess = matchBySubject(msg.subject, apps);
     const entry = {
-      msgId: msg.id, from: fromAddr, subject: msg.subject,
+      msgId: msg.id, from: fromAddr, subject: msg.subject, date: msg.date,
       sentiment: classifyReply({ subject: msg.subject, text: msg.text }),
       contact, companyGuess, snippet: msg.snippet,
     };
@@ -587,9 +589,81 @@ function scanDecisions({ messages = [], taRows = [], recruiterRows = [], apps = 
   return { bounces, replies, other };
 }
 
+// ── Logging a detected reply onto the CONTACT's timeline ─────────────────────
+// The whole promise of the sweep is that a reply we detect and ask the user to
+// log actually LANDS somewhere they trust. The reply action already writes a note
+// on the matching application and can flip its status, but the contact's own
+// correspondence card (Network → TA Outreach / Recruiters) showed only the Sent
+// outreach, never the Received reply. So a user who chased a ghosted application,
+// got a reply, and opened the contact card saw nothing — the CRM looked like it
+// dropped the message. This writes the received email onto that contact's book.
+//
+// Mirrors the 'Received' branch of the correspondence routes: append the message
+// and advance the contact to Replied. What status a received reply implies:
+//   - a real pre-Replied ladder stage (Not Contacted / Drafted / Sent) advances to Replied
+//   - a stage already at/after Replied keeps its stage; only lastTouch moves
+//   - anything else (Archived / Bounced / Blocked / unknown) is left UNTOUCHED —
+//     a reply, often just an out-of-office auto-response, must never silently
+//     resurrect a contact the user deliberately archived (the old `?? 0` map did
+//     exactly that: an unknown status scored 0 and got flipped to Replied).
+const ADVANCE_FROM = new Set(['', 'Not Contacted', 'Drafted', 'Sent']);
+const PAST_REPLIED = new Set(['Replied', 'Meeting Scheduled', 'Connected']);
+function replyStatusUpdate(status, today) {
+  if (ADVANCE_FROM.has(status)) return { status: 'Replied', lastTouch: today };
+  if (PAST_REPLIED.has(status)) return { lastTouch: today };
+  return null; // terminal / archived / unknown — do not touch the status line
+}
+
+// Email Date headers are RFC 2822; the correspondence store uses 'YYYY-MM-DD HH:MM'.
+// Normalize, falling back to now for an absent or unparseable date.
+function normalizeCorrTimestamp(date) {
+  const t = date ? Date.parse(date) : NaN;
+  const ms = Number.isNaN(t) ? Date.now() : t;
+  return new Date(ms).toISOString().replace('T', ' ').slice(0, 16);
+}
+
+// Append a Received correspondence entry to a matched contact ({ source:'ta'|'recruiter', id })
+// and advance its status to Replied. Returns true if it wrote, false if the
+// contact could not be resolved (so the caller can fall back to the app note
+// alone). Best-effort by contract: callers wrap it so a write failure never sinks
+// the surrounding action.
+// opts.advanceStatus (default true): update the contact's status/lastTouch per
+// replyStatusUpdate. Pass false to append the correspondence ONLY and leave the
+// status line completely untouched — used by the historical backfill, which
+// restores the record without moving anyone's stage or recency after the fact.
+function logReplyToContact(contact, { subject, body, timestamp, advanceStatus = true } = {}) {
+  if (!contact || contact.id == null || !contact.source) return false;
+  const id = parseInt(contact.id, 10);
+  if (Number.isNaN(id)) return false;
+  const entry = {
+    timestamp: normalizeCorrTimestamp(timestamp),
+    direction: 'Received',
+    subject: String(subject || '(no subject)').trim() || '(no subject)',
+    body: String(body || '').trim() || '(no preview available)',
+  };
+  const today = new Date().toISOString().slice(0, 10);
+  if (contact.source === 'ta') {
+    const r = parseTargetTalentMd().find(x => x.id === id);
+    if (!r) return false;
+    const messages = readTTCorrespondence(id); messages.push(entry); writeTTCorrespondence(id, messages);
+    const upd = advanceStatus ? replyStatusUpdate(r.status || '', today) : null;
+    if (upd) updateTTLine(id, upd);
+    return true;
+  }
+  if (contact.source === 'recruiter') {
+    const r = parseRecruitersMd().find(x => x.id === id);
+    if (!r) return false;
+    const messages = readRecruiterCorrespondence(id); messages.push(entry); writeRecruiterCorrespondence(id, messages);
+    const upd = advanceStatus ? replyStatusUpdate(r.status || '', today) : null;
+    if (upd) updateRecruiterLine(id, upd);
+    return true;
+  }
+  return false;
+}
+
 export {
   readTokens, writeTokens, readSync, writeSync, tokenScopes,
   clientConfigured, googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
   parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions,
-  exchangeCode, fetchProfileEmail, candidateAppsFor, createDraft,
+  exchangeCode, fetchProfileEmail, candidateAppsFor, createDraft, logReplyToContact,
 };

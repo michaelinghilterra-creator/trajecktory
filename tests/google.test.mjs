@@ -35,9 +35,10 @@ process.env.TJK_DATA_DIR = tmp;
 const {
   getAccessToken, googleStatus, checkHealth, parseGmailMessage, extractEmail,
   classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, tokenScopes,
-  candidateAppsFor, fetchMessagesConcurrent,
+  candidateAppsFor, fetchMessagesConcurrent, logReplyToContact,
 } = await import('../dashboard-web/server/lib/google.mjs');
-const { GOOGLE_TOKENS_PATH } = await import('../dashboard-web/server/config.mjs');
+const { GOOGLE_TOKENS_PATH, TARGET_TALENT_MD } = await import('../dashboard-web/server/config.mjs');
+const { parseTargetTalentMd, readTTCorrespondence } = await import('../dashboard-web/server/lib/target-talent.mjs');
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -323,6 +324,63 @@ const fetched = await fetchMessagesConcurrent(ids20, { accessToken: 'x', concurr
 check(fetched.length === 19, 'fetches every id, skipping the one that throws (20 → 19)');
 check(peak <= 5, `respects the concurrency cap (peak inflight ${peak} <= 5)`);
 check((await fetchMessagesConcurrent([], { accessToken: 'x', getImpl })).length === 0, 'empty id list → empty result, no throw');
+
+// ── logReplyToContact: a detected reply lands on the CONTACT's timeline ────────
+// The trust bug: the reply action wrote a note on the application and flipped its
+// status, but never recorded the received email on the contact's correspondence
+// card, so a chased reply looked dropped. Pin that it now writes a Received entry
+// and advances the contact to Replied, without regressing a further stage.
+{
+  const fields = ['360', 'Acme Corp', 'Rivera', 'Mark', '', '', '', '', '', '', 'mark@example.com', '', 'Sent', '2026-07-20', '', ''];
+  const rowFor = (status) => '| ' + fields.map((f, i) => i === 12 ? status : f).join(' | ') + ' |';
+  const mdFor = (status) => [
+    '# Target Talent', '',
+    '| # | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    rowFor(status), '',
+  ].join('\n');
+
+  fs.writeFileSync(TARGET_TALENT_MD, mdFor('Sent'));
+  const before = parseTargetTalentMd().find(r => r.id === 360);
+  check(before && before.status === 'Sent', 'fixture: TA contact #360 starts at Sent');
+
+  const wrote = logReplyToContact(
+    { source: 'ta', id: 360, company: 'Acme Corp' },
+    { subject: 'Re: Following up on the Analytics role', body: 'Thanks, but we decided to go another direction.', timestamp: 'Wed, 29 Jul 2026 10:15:00 -0400' },
+  );
+  check(wrote === true, 'logReplyToContact reports it wrote to the contact');
+
+  const received = readTTCorrespondence(360).find(m => m.direction === 'Received');
+  check(!!received, 'a Received entry is written to the contact card');
+  check(!!received && /Following up/.test(received.subject), 'the received entry keeps the email subject');
+  check(!!received && /another direction/.test(received.body), 'the received entry keeps the email body');
+  check(!!received && /^2026-07-29/.test(received.timestamp), 'the received entry is stamped with the email date, not today');
+
+  check(parseTargetTalentMd().find(r => r.id === 360)?.status === 'Replied', 'the contact advances Sent → Replied');
+
+  // Never regress a further stage: a reply into a Connected contact keeps Connected.
+  fs.writeFileSync(TARGET_TALENT_MD, mdFor('Connected'));
+  logReplyToContact({ source: 'ta', id: 360, company: 'Acme Corp' }, { subject: 'x', body: 'y' });
+  check(parseTargetTalentMd().find(r => r.id === 360)?.status === 'Connected', 'a reply never regresses a contact past Replied');
+
+  // Never resurrect a terminal status: a reply into an Archived contact records
+  // the correspondence but leaves them Archived (the old stage map flipped it).
+  fs.writeFileSync(TARGET_TALENT_MD, mdFor('Archived'));
+  const arcBefore = readTTCorrespondence(360).length;
+  logReplyToContact({ source: 'ta', id: 360, company: 'Acme Corp' }, { subject: 'Automatic reply', body: 'ooo' });
+  check(parseTargetTalentMd().find(r => r.id === 360)?.status === 'Archived', 'a reply never resurrects an Archived contact');
+  check(readTTCorrespondence(360).length === arcBefore + 1, 'the Received entry is still recorded for an Archived contact');
+
+  // advanceStatus:false appends the entry but leaves the status line untouched (the backfill path).
+  fs.writeFileSync(TARGET_TALENT_MD, mdFor('Sent'));
+  const bfBefore = readTTCorrespondence(360).length;
+  logReplyToContact({ source: 'ta', id: 360, company: 'Acme Corp' }, { subject: 'backfilled', body: 'b', advanceStatus: false });
+  check(parseTargetTalentMd().find(r => r.id === 360)?.status === 'Sent', 'advanceStatus:false leaves status at Sent (pure correspondence insert)');
+  check(readTTCorrespondence(360).length === bfBefore + 1, 'advanceStatus:false still appends the Received entry');
+
+  check(logReplyToContact({ source: 'ta', id: 99999 }, { subject: 's', body: 'b' }) === false, 'an unknown contact id returns false, not a throw');
+  check(logReplyToContact(null, {}) === false, 'a null contact returns false');
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
