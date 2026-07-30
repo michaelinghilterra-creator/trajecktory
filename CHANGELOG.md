@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.5.0...v2.6.0) (2026-07-30)
+
+
+### Features
+
+* **content:** track post performance and draft AI replies to comments ([#119](https://github.com/michaelinghilterra-creator/trajecktory/issues/119)) ([74c8d8b](https://github.com/michaelinghilterra-creator/trajecktory/commit/74c8d8b884d674a319be773e497fc13db9154478))
+
 ## [2.5.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.4.2...v2.5.0) (2026-07-30)
 
 
