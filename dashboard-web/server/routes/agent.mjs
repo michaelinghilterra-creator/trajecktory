@@ -4,7 +4,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'node:url';
 import { ROOT_DIR } from '../config.mjs';
-import { logAgentRun } from '../lib/agent-log.mjs';
+import { logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
 import { record as recordActivation } from '../lib/activation.mjs';
@@ -498,7 +498,19 @@ function runClaudeAgent(jobId, mode, target) {
       if (ev.type === 'result') {
         resultText = (ev.result != null ? ev.result : (ev.subtype || '')).toString();
         isError = !!ev.is_error || ev.subtype === 'error_max_turns' || ev.subtype === 'error_during_execution';
-        update({ turns: ev.num_turns, cost: ev.total_cost_usd });
+        // The CLI's result event carries the run's real wall-clock time
+        // (duration_ms) and the portion spent in Anthropic API calls
+        // (duration_api_ms). Capture both so each log line records machine time
+        // and the weekly post-mortem never has to estimate it from the gaps
+        // between run timestamps. Coerce to a finite number or drop the field.
+        const durMs = Number(ev.duration_ms);
+        const durApiMs = Number(ev.duration_api_ms);
+        update({
+          turns: ev.num_turns,
+          cost: ev.total_cost_usd,
+          durationMs: Number.isFinite(durMs) ? durMs : undefined,
+          durationApiMs: Number.isFinite(durApiMs) ? durApiMs : undefined,
+        });
         return;
       }
       // Genuine pressure surfaces in `system` events (or stderr, handled above)
@@ -538,6 +550,8 @@ function runClaudeAgent(jobId, mode, target) {
         status: ok ? 'done' : 'error',
         turns: job.turns,
         cost: job.cost,
+        durationMs: job.durationMs ?? null,
+        durationApiMs: job.durationApiMs ?? null,
         model: job.evalModel || null,
         billedTo: job.billedTo || null,
         warning: job.warning || null,
@@ -740,28 +754,39 @@ router.get('/api/agent/active', (req, res) => {
 
 
 // GET /api/agent/cost-history — recent real per-run costs, read from the
-// rotating logs/agent-runs.*.log files (written by agent-log.mjs). Powers the
-// "recent actual runs" table in the Models & Cost settings, so the user sees
-// what runs really cost (from the CLI's total_cost_usd) next to the estimates.
+// rotating logs/agent-runs.*.log files (via agent-log.mjs, the single reader).
+// Powers the "recent actual runs" table in the Models & Cost settings, so the
+// user sees what runs really cost (from the CLI's total_cost_usd) next to the
+// estimates.
+//
+// ?groupBy=day switches to the per-day cost/machine-time rollup that the weekly
+// post-mortem reads: { days: [...], total, from, to }, one day per bucket with
+// cost, machine time (wall + API), run count, and a per-mode split. Optional
+// inclusive `from`/`to` (YYYY-MM-DD) scope it to a week or any range. This is the
+// one lookup that replaces hand-parsing the logs for the post-mortem's numbers.
 router.get('/api/agent/cost-history', (req, res) => {
-  const dir = path.join(ROOT_DIR, 'logs');
+  const records = readAgentRuns();
+
+  if (String(req.query.groupBy || '') === 'day') {
+    const iso = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : undefined);
+    const from = iso(req.query.from);
+    const to = iso(req.query.to);
+    const days = rollupByDay(records, { from, to });
+    res.json({ days, total: sumRollup(days), from: from || null, to: to || null });
+    return;
+  }
+
   const out = [];
-  try {
-    const files = fs.readdirSync(dir).filter(f => f.startsWith('agent-runs.') && f.endsWith('.log'));
-    for (const f of files) {
-      let text = '';
-      try { text = fs.readFileSync(path.join(dir, f), 'utf8'); } catch { continue; }
-      for (const line of text.split('\n')) {
-        if (!line.trim()) continue;
-        let rec;
-        try { rec = JSON.parse(line); } catch { continue; }
-        if (rec && typeof rec.cost === 'number') {
-          out.push({ ts: rec.ts, mode: rec.mode, cost: rec.cost, model: rec.model || null, billedTo: rec.billedTo || null, turns: rec.turns ?? null });
-        }
-      }
+  for (const rec of records) {
+    if (rec && typeof rec.cost === 'number') {
+      out.push({
+        ts: rec.ts, mode: rec.mode, cost: rec.cost,
+        model: rec.model || null, billedTo: rec.billedTo || null,
+        turns: rec.turns ?? null, durationMs: rec.durationMs ?? null,
+      });
     }
-  } catch { /* no logs yet — return empty */ }
-  out.sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+  }
+  // readAgentRuns already sorts newest-first; keep the 20 most recent.
   res.json(out.slice(0, 20));
 });
 

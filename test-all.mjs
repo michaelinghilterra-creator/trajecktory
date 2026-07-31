@@ -463,6 +463,7 @@ for (const suite of [
   'tests/backfill-tracker-urls.test.mjs',
   'tests/audit-orphan-reports.test.mjs',
   'tests/agent-prompts.test.mjs',
+  'tests/agent-cost-rollup.test.mjs',
   'tests/portals.test.mjs',
   'tests/liveness-workday.test.mjs',
   'tests/sidecars.test.mjs',
