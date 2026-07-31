@@ -362,16 +362,41 @@ function lpUsd(n) {
   if (n == null || isNaN(n)) return '-';
   return n < 0.01 ? `$${n.toFixed(3)}` : `$${n.toFixed(2)}`;
 }
+// Machine time (ms) → compact human string: "42s", "3m 10s", "1h 5m".
+function lpDur(ms) {
+  if (ms == null || isNaN(ms) || ms <= 0) return '-';
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60), rs = s % 60;
+  if (m < 60) return rs ? `${m}m ${rs}s` : `${m}m`;
+  const h = Math.floor(m / 60), rm = m % 60;
+  return rm ? `${h}h ${rm}m` : `${h}h`;
+}
+// A YYYY-MM-DD bucket key formatted for display, parsed as UTC so the label
+// matches the bucket (the rollup buckets by the UTC date of each run's ISO ts).
+function lpDay(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return date || '-';
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+// A rollup's per-mode split as a compact "Agent Scan: 2 · Evaluate: 3" string,
+// used as the Runs-cell tooltip so the scan-vs-evaluate breakdown stays readable.
+function lpModeBreakdown(byMode) {
+  if (!byMode) return '';
+  return Object.entries(byMode).map(([m, v]) => `${LP_MODE_LABEL[m] || m}: ${v.runs}`).join(' · ');
+}
 function ModelsCostPanel() {
   const { useState, useEffect } = React;
   const [state, setState] = useState(null);
   const [history, setHistory] = useState([]);
+  const [rollup, setRollup] = useState(null);   // { days, total } from ?groupBy=day
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
   useEffect(() => {
     fetch('/api/setup/models').then(r => r.json()).then(setState).catch(() => setMsg('Could not load model settings.'));
     fetch('/api/agent/cost-history').then(r => r.json()).then(d => setHistory(Array.isArray(d) ? d : [])).catch(() => {});
+    fetch('/api/agent/cost-history?groupBy=day').then(r => r.json())
+      .then(d => setRollup(d && Array.isArray(d.days) ? d : null)).catch(() => {});
   }, []);
 
   function save(section, value) {
@@ -507,6 +532,47 @@ function ModelsCostPanel() {
       {history.length > 0 && (
         <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.5 }}>
           Estimates from Claude Code token counts, not your API invoice. The scan/evaluate workflow runs on your Claude subscription (it only bills your API key if the subscription auth is unavailable), so these usually will not appear in your Anthropic console.
+        </div>
+      )}
+
+      {/* Per-day totals — cost + machine time rolled up by day, the numbers the
+          weekly relaunch post-mortem reads without hand-parsing the run logs. */}
+      <div style={{ ...LP_SUB, marginTop: 18 }}>Per-day totals (cost &amp; machine time)</div>
+      {!rollup || rollup.days.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>No runs logged yet. Totals appear once Evaluate or Agent Scan has run.</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="mono" style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ color: 'var(--text-mute)', textAlign: 'left' }}>
+                <th style={{ padding: '4px 8px 4px 0', fontWeight: 500 }}>Day</th>
+                <th style={{ padding: '4px 8px', fontWeight: 500 }}>Runs</th>
+                <th style={{ padding: '4px 8px', fontWeight: 500, textAlign: 'right' }}>Cost</th>
+                <th style={{ padding: '4px 0 4px 8px', fontWeight: 500, textAlign: 'right' }}>Machine time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rollup.days.slice().reverse().map((d) => (
+                <tr key={d.date} style={{ color: 'var(--text-dim)', borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: '4px 8px 4px 0' }}>{lpDay(d.date)}</td>
+                  <td style={{ padding: '4px 8px' }} title={lpModeBreakdown(d.byMode)}>{d.runs}</td>
+                  <td style={{ padding: '4px 8px', textAlign: 'right' }} title="Local estimate from token counts, not your API invoice.">~{lpUsd(d.cost)}</td>
+                  <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }} title={`Wall clock. API portion: ${lpDur(d.machineTimeApiMs)}`}>{lpDur(d.machineTimeMs)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ color: 'var(--text)', borderTop: '2px solid var(--border)', fontWeight: 600 }}>
+                <td style={{ padding: '5px 8px 5px 0' }}>Total</td>
+                <td style={{ padding: '5px 8px' }} title={lpModeBreakdown(rollup.total.byMode)}>{rollup.total.runs}</td>
+                <td style={{ padding: '5px 8px', textAlign: 'right' }}>~{lpUsd(rollup.total.cost)}</td>
+                <td style={{ padding: '5px 0 5px 8px', textAlign: 'right' }}>{lpDur(rollup.total.machineTimeMs)}</td>
+              </tr>
+            </tfoot>
+          </table>
+          <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.5 }}>
+            Machine time is wall-clock per run (hover a row for the API portion and the scan/evaluate split). Cost is the same local token estimate as above.
+          </div>
         </div>
       )}
 
