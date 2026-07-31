@@ -517,10 +517,16 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
   };
   const generateDraft = () => {
     setDrafting(true); setDraftResult(null);
+    // "reply" and "followup-sent" are message MODES (they anchor on a specific
+    // prior message); every other value is an interview-stage tuning of fresh
+    // outreach. Send the right key so the server picks the matching branch.
+    const draftBody = (draftStage === "reply" || draftStage === "followup-sent")
+      ? { mode: draftStage }
+      : { interviewStage: draftStage };
     window.tjkMutate(`/api/target-talent/${id}/draft`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ interviewStage: draftStage }),
+      body: JSON.stringify(draftBody),
     })
       .then(r => r.json())
       .then(d => { setDrafting(false); if (d.draft) setDraftResult(d.draft); })
@@ -671,11 +677,15 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
         <div className="ds-section">
           <div className="ds-label">
             <TIcon d={TI.spark} size={12} /> Outreach
-            <select value={draftStage} onChange={e => setDraftStage(e.target.value)} title="Tune the draft: Reply responds to their last email; the stages tune fresh outreach"
+            <select value={draftStage} onChange={e => setDraftStage(e.target.value)} title="Tune the draft: Reply responds to their last email; Follow up nudges the last email you sent; the stages tune fresh outreach"
               style={{ marginLeft: "auto", fontSize: 11, padding: "3px 6px", borderRadius: 5, background: "var(--panel-2)", color: "var(--text-dim)", border: "1px solid var(--border)" }}>
-              {/* Reply is offered only when there is an inbound email to reply to. */}
-              {(corr.some(m => m.direction === "Received") ? [{ v: "reply", l: "↩ Reply to last email" }, ...TT_STAGE_OPTS] : TT_STAGE_OPTS)
-                .map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+              {/* Reply is offered only when there is an inbound email to reply to;
+                  Follow up on last sent only when you have actually sent one. */}
+              {[
+                ...(corr.some(m => m.direction === "Received") ? [{ v: "reply", l: "↩ Reply to last email" }] : []),
+                ...(corr.some(m => m.direction === "Sent") ? [{ v: "followup-sent", l: "↗ Follow up on last sent" }] : []),
+                ...TT_STAGE_OPTS,
+              ].map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
             </select>
           </div>
           {!composing && !draftResult && (

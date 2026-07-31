@@ -3,7 +3,7 @@ import fs from 'fs';
 import { ROOT_DIR, RECRUITERS_MD } from '../config.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine, appendRecruiterRows, REC_HEADER, RECRUITER_STATUSES } from '../lib/recruiters.mjs';
-import { buildReplyPrompt, lastReceived, collapseRe } from '../lib/reply-draft.mjs';
+import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { logConnect } from '../lib/connects.mjs';
 import { isLinkedInInvite } from '../lib/channels.mjs';
 import { getIdentity } from '../lib/profile.mjs';
@@ -165,6 +165,25 @@ router.post('/api/recruiters/:id/draft', async (req, res) => {
       draft.body = _replaceEmDashes(draft.body);
       draft.subject = _replaceEmDashes(collapseRe(draft.subject, inbound.subject));
       return res.json({ ok: true, draft, messageType: 'reply' });
+    }
+
+    // FOLLOW-UP-ON-LAST-SENT mode: nudge a recruiter thread that went quiet,
+    // built on the last email you sent. Requires a sent message.
+    if (req.body?.mode === 'followup-sent') {
+      const sent = lastSent(prior);
+      if (!sent) return res.status(400).json({ error: 'No email sent to this recruiter yet — nothing to follow up on.' });
+      const meR = getIdentity();
+      const contactBlock = `Firm:  ${r.firm}\nName:  ${r.salute || ''} ${r.first} ${r.last}\nTitle: ${r.title}\nEmail: ${r.email}`;
+      const prompt = buildFollowupFromSentPrompt({ me: meR, cvMd, profileMd, prior, contactLabel: `an executive recruiter at ${r.firm}`, contactBlock, firstName: r.first });
+      const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return res.status(500).json({ error: 'Could not parse follow-up draft from model output', raw });
+      const draft = JSON.parse(jsonMatch[0]);
+      draft.body = _stripLeadingSalutation(draft.body, r.first);
+      draft.body = _stripTrailingSignature(draft.body);
+      draft.body = _replaceEmDashes(draft.body);
+      draft.subject = _replaceEmDashes(collapseRe(draft.subject, sent.subject));
+      return res.json({ ok: true, draft, messageType: 'followup-sent' });
     }
 
     const me = getIdentity();
