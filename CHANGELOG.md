@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.9.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.8.0...v2.9.0) (2026-07-31)
+
+
+### Features
+
+* **dashboard:** add TWC work-search activity report to Setup ([#128](https://github.com/michaelinghilterra-creator/trajecktory/issues/128)) ([eb59b1d](https://github.com/michaelinghilterra-creator/trajecktory/commit/eb59b1dca0a884d0e9ccae20749670e358453e9d))
+* LinkedIn warm-channel reconcile with Stage 1/2 referral subtabs ([#126](https://github.com/michaelinghilterra-creator/trajecktory/issues/126)) ([b98c6ee](https://github.com/michaelinghilterra-creator/trajecktory/commit/b98c6ee00753d81e7141351125532c32f7ad419b))
+
 ## [2.8.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.7.0...v2.8.0) (2026-07-31)
 
 
