@@ -111,38 +111,22 @@ const LP_SECTIONS = [
 ];
 
 const LP_OPTIONAL = [
-  { id: 'apikey',    label: 'AI draft key (optional)',
-    does: 'Adds an Anthropic API key.',
-    sowhat: 'Most people should skip this. Resumes, cover letters, and emails already work on your Claude plan without a key. A key only makes them come back faster, and it costs money each time.',
+  { id: 'apikeys',   label: 'API keys',
+    does: 'One place to paste any optional service keys you want to use.',
+    sowhat: 'All four here are optional. Each one turns on a single extra: faster drafts, web discovery of new employers, checked contact emails, or one-click social posting. Paste only the ones you want; skipping any just means that one runs on your Claude plan or stays off.',
     affectsScore: 'no',
-    ifYouSkip: 'Everything still works. It is a little slower.' },
+    ifYouSkip: 'Nothing breaks. Everything in here is a convenience, not a requirement.' },
   { id: 'models',    label: 'Models & cost',
     does: 'Picks a cheaper or a smarter AI for each part of the work.',
     sowhat: 'Scanning job boards is simple, so a cheap model is fine. Scoring a job is not, so the smarter one is worth it there. This screen is where you trade money for quality.',
     affectsScore: 'no',
     ifYouSkip: 'Sensible defaults are already set.' },
-  { id: 'discovery', label: 'Web discovery keys (optional)',
-    does: 'Lets the app search the open web for employers you have not heard of.',
-    sowhat: 'Without it, the app only checks the companies on your list. With it, it can go and find new ones.',
-    affectsScore: 'no',
-    ifYouSkip: 'Scanning still works. You just have to add companies yourself.' },
-  { id: 'gmail',     label: 'Email replies (optional)',
+  { id: 'gmail',     label: 'Email replies',
     does: 'Watches your inbox for replies to the jobs you applied to.',
     sowhat: 'Replies get logged for you, so none slip past while you are busy. It also spots mail that bounced, which stops a dead address from looking like a firm that ignored you.',
     affectsScore: 'no',
     extra: 'This one takes about 15 minutes to set up, in your own Google account. trajecktory ships no shared mail link on purpose, so your inbox can only ever be read with your own key. It reads mail and writes drafts. It can never send.',
     ifYouSkip: 'You log replies by hand, which is what most people do at first. Nothing else changes.' },
-  { id: 'verify',    label: 'Contact email checking (optional)',
-    does: 'Finds a work email for a contact, and checks that it is real.',
-    sowhat: 'A guessed email that bounces is worse than none. The note goes nowhere, and it reads to you like you were ignored. With this on, you only write to an email that has been checked.',
-    affectsScore: 'no',
-    ifYouSkip: 'You cannot reach those people by email, so follow-ups skip them. The rest still works, and you can still use LinkedIn.' },
-  { id: 'buffer',    label: 'Social posting (optional)',
-    does: 'Sends your saved posts to LinkedIn and X for you.',
-    sowhat: 'You draft and line up posts here. Buffer is the tool that sends them out on a set day. So a week of posts can go out on its own, not one at a time by hand.',
-    affectsScore: 'no',
-    extra: 'Setup is a one-time thing you do in Claude Code, not on this screen. trajecktory ships no shared posting link, so nothing ever goes out without your approval.',
-    ifYouSkip: 'You still write and line up posts here. You just paste them into LinkedIn or X on your own.' },
   { id: 'obsidian',  label: 'Obsidian vault',
     does: 'Copies notes about jobs you applied to into your Obsidian vault.',
     sowhat: 'Useful only if you already keep your notes there.',
@@ -168,6 +152,35 @@ const LP_OPTIONAL = [
     sowhat: 'Only worth doing if you have been tracking a search somewhere else and want the history in one place. A brand new search has nothing to import.',
     affectsScore: 'no',
     ifYouSkip: 'Nothing. Most people never need this.' },
+];
+
+// The four paste-a-key boosters, consolidated into the single "API keys" panel
+// above. They used to each be their own row in the list; a beta note was that the
+// keys were scattered and hard to find. Kept as their own list (not folded into
+// LP_OPTIONAL) so each sub-section can still render its own "why" via LpWhy, while
+// the sidebar shows one entry instead of four.
+const LP_KEYS = [
+  { id: 'apikey',    label: 'AI draft key',
+    does: 'Adds an Anthropic API key.',
+    sowhat: 'Most people should skip this. Resumes, cover letters, and emails already work on your Claude plan without a key. A key only makes them come back faster, and it costs money each time.',
+    affectsScore: 'no',
+    ifYouSkip: 'Everything still works. It is a little slower.' },
+  { id: 'discovery', label: 'Web discovery keys',
+    does: 'Lets the app search the open web for employers you have not heard of.',
+    sowhat: 'Without it, the app only checks the companies on your list. With it, it can go and find new ones.',
+    affectsScore: 'no',
+    ifYouSkip: 'Scanning still works. You just have to add companies yourself.' },
+  { id: 'verify',    label: 'Contact email checking',
+    does: 'Finds a work email for a contact, and checks that it is real.',
+    sowhat: 'A guessed email that bounces is worse than none. The note goes nowhere, and it reads to you like you were ignored. With this on, you only write to an email that has been checked.',
+    affectsScore: 'no',
+    ifYouSkip: 'You cannot reach those people by email, so follow-ups skip them. The rest still works, and you can still use LinkedIn.' },
+  { id: 'buffer',    label: 'Social posting',
+    does: 'Sends your saved posts to LinkedIn and X for you.',
+    sowhat: 'You draft and line up posts here. Buffer is the tool that sends them out on a set day. So a week of posts can go out on its own, not one at a time by hand.',
+    affectsScore: 'no',
+    extra: 'trajecktory ships no shared posting link, so nothing ever goes out without your approval.',
+    ifYouSkip: 'You still write and line up posts here. You just paste them into LinkedIn or X on your own.' },
 ];
 
 // ── What is actually REQUIRED, versus what merely sharpens results ───────────
@@ -2199,23 +2212,99 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                 </div>
               );
             }
-            if (o.id === 'apikey') {
+            if (o.id === 'apikeys') {
+              const km = Object.fromEntries(LP_KEYS.map(k => [k.id, k]));
+              // A plain function that RETURNS JSX (not a <Component/>). Rendered as
+              // a component, a new function identity each render would remount the
+              // controlled inputs and drop focus between keystrokes; called as a
+              // function, its elements reconcile in place and focus is preserved.
+              const sec = (meta, first, body) => (
+                <div style={{ marginTop: first ? 12 : 22, paddingTop: first ? 0 : 20, borderTop: first ? 'none' : '1px solid var(--border)' }}>
+                  <h4 style={{ margin: '0 0 6px', fontSize: 14.5, color: 'var(--text)' }}>{meta.label}</h4>
+                  <LpWhy item={meta} />
+                  {body}
+                </div>
+              );
               return (
                 <div>
-                  <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
-                  <LpWhy item={o} />
-                  {apiKey.has
-                    ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 10 }}>✓ A key is saved. Drafts use the faster API path. Paste a new key to replace it.</div>
-                    : <div style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 10 }}>○ No key set. Drafts run on your Claude plan (the same login as Evaluate and Scan); a key just makes them faster.</div>}
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input type="password" value={apiKey.input} onChange={e => setApiKey(k => ({ ...k, input: e.target.value }))}
-                      placeholder="sk-ant-…" className="inp" style={{ flex: 1 }} autoComplete="off" />
-                    <button className="btn primary" disabled={apiKey.saving} onClick={saveApiKey}>{apiKey.saving ? 'Saving…' : 'Save key'}</button>
-                  </div>
-                  {apiKey.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{apiKey.msg}</div>}
-                  <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>
-                    Get a key at console.anthropic.com → API keys. Stored locally in dashboard-web/.env; only ever sent to Anthropic.
-                  </div>
+                  <h3 style={{ margin: '0 0 6px', fontSize: 16, color: 'var(--text)' }}>API keys</h3>
+                  <p style={{ margin: '0 0 2px', fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+                    Every optional key lives here. All of them are optional. Scroll through, paste the ones you want, and save each section. Each key is stored on this computer and only ever sent to the service it belongs to.
+                  </p>
+
+                  {sec(km.apikey, true, (
+                    <>
+                      {apiKey.has
+                        ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 10 }}>✓ A key is saved. Drafts use the faster API path. Paste a new key to replace it.</div>
+                        : <div style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 10 }}>○ No key set. Drafts run on your Claude plan (the same login as Evaluate and Scan); a key just makes them faster.</div>}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input type="password" value={apiKey.input} onChange={e => setApiKey(k => ({ ...k, input: e.target.value }))}
+                          placeholder="sk-ant-…" className="inp" style={{ flex: 1 }} autoComplete="off" />
+                        <button className="btn primary" disabled={apiKey.saving} onClick={saveApiKey}>{apiKey.saving ? 'Saving…' : 'Save key'}</button>
+                      </div>
+                      {apiKey.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{apiKey.msg}</div>}
+                      <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>
+                        Get a key at console.anthropic.com → API keys. Stored locally in dashboard-web/.env; only ever sent to Anthropic.
+                      </div>
+                    </>
+                  ))}
+
+                  {sec(km.discovery, false, (
+                    <>
+                      <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, margin: '0 0 4px' }}>Brave Search key</div>
+                      {discKeys.brave
+                        ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved. Expand Coverage web search is on.</div>
+                        : <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 8 }}>○ Not set. Expand Coverage only registers companies already in your pipeline.</div>}
+                      <input type="password" value={discKeys.braveInput} onChange={e => setDiscKeys(k => ({ ...k, braveInput: e.target.value }))}
+                        placeholder="Brave Search API key" className="inp" style={{ width: '100%' }} autoComplete="off" />
+                      <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, margin: '14px 0 4px' }}>Muse key <span style={{ color: 'var(--text-mute)', fontWeight: 400 }}>(optional)</span></div>
+                      {discKeys.muse
+                        ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved.</div>
+                        : <div style={{ fontSize: 13, color: 'var(--text-mute)', marginBottom: 8 }}>○ Not set. Adds Director / VP roles from The Muse.</div>}
+                      <input type="password" value={discKeys.museInput} onChange={e => setDiscKeys(k => ({ ...k, museInput: e.target.value }))}
+                        placeholder="The Muse API key" className="inp" style={{ width: '100%' }} autoComplete="off" />
+                      <div style={{ marginTop: 12 }}>
+                        <button className="btn primary" disabled={discKeys.saving} onClick={saveDiscoveryKeys}>{discKeys.saving ? 'Saving…' : 'Save keys'}</button>
+                      </div>
+                      {discKeys.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{discKeys.msg}</div>}
+                      <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>
+                        Brave: brave.com/search/api (free tier available). Muse: themuse.com/developers/api/v2. Stored locally in dashboard-web/.env; only ever sent to those services. Neither is needed for API Scan, Agent Scan, or Evaluate.
+                      </div>
+                    </>
+                  ))}
+
+                  {sec(km.verify, false, (
+                    <>
+                      <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, margin: '0 0 4px' }}>Hunter key</div>
+                      {vfyKeys.hunter
+                        ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved. Addresses are looked up for new contacts.</div>
+                        : <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 8 }}>○ Not set. No address is looked up, so a new contact arrives with none.</div>}
+                      <input type="password" value={vfyKeys.hunterInput} onChange={e => setVfyKeys(k => ({ ...k, hunterInput: e.target.value }))}
+                        placeholder="Hunter API key" className="inp" style={{ width: '100%' }} autoComplete="off" />
+                      <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, margin: '14px 0 4px' }}>MillionVerifier key</div>
+                      {vfyKeys.millionverifier
+                        ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved. Addresses are checked before anything is sent to them.</div>
+                        : <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 8 }}>○ Not set. Nothing can be checked, so contacts stay unverified and follow-ups skip them.</div>}
+                      <input type="password" value={vfyKeys.mvInput} onChange={e => setVfyKeys(k => ({ ...k, mvInput: e.target.value }))}
+                        placeholder="MillionVerifier API key" className="inp" style={{ width: '100%' }} autoComplete="off" />
+                      <div style={{ marginTop: 12 }}>
+                        <button className="btn primary" disabled={vfyKeys.saving} onClick={saveVerifyKeys}>{vfyKeys.saving ? 'Saving…' : 'Save keys'}</button>
+                      </div>
+                      {vfyKeys.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{vfyKeys.msg}</div>}
+                      <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>
+                        Hunter: hunter.io/api-keys (free tier covers roughly 50 lookups and 100 checks a month). MillionVerifier: app.millionverifier.com/api (a few dollars once, credits that do not expire). Stored locally in dashboard-web/.env; only ever sent to those services. Neither is needed for scanning, evaluating, or applying.
+                      </div>
+                    </>
+                  ))}
+
+                  {sec(km.buffer, false, (
+                    <>
+                      {window.BufferConnect ? <window.BufferConnect toast={toast} /> : null}
+                      <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>
+                        Get the key in Buffer &rarr; Settings &rarr; Developers &rarr; Generate API Key (long expiration; account:read, posts:read/write, insights:read). Stored locally in <span className="mono">data/buffer-token.json</span> and only ever sent to Buffer. trajecktory never posts on its own, you approve what gets scheduled.
+                      </div>
+                    </>
+                  ))}
                 </div>
               );
             }
@@ -2243,79 +2332,6 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                     </a>
                   )}
                   <window.GmailSetupSteps />
-                </div>
-              );
-            }
-            if (o.id === 'verify') {
-              return (
-                <div>
-                  <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
-                  <LpWhy item={o} />
-                  <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, margin: '0 0 4px' }}>Hunter key</div>
-                  {vfyKeys.hunter
-                    ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved. Addresses are looked up for new contacts.</div>
-                    : <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 8 }}>○ Not set. No address is looked up, so a new contact arrives with none.</div>}
-                  <input type="password" value={vfyKeys.hunterInput} onChange={e => setVfyKeys(k => ({ ...k, hunterInput: e.target.value }))}
-                    placeholder="Hunter API key" className="inp" style={{ width: '100%' }} autoComplete="off" />
-                  <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, margin: '14px 0 4px' }}>MillionVerifier key</div>
-                  {vfyKeys.millionverifier
-                    ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved. Addresses are checked before anything is sent to them.</div>
-                    : <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 8 }}>○ Not set. Nothing can be checked, so contacts stay unverified and follow-ups skip them.</div>}
-                  <input type="password" value={vfyKeys.mvInput} onChange={e => setVfyKeys(k => ({ ...k, mvInput: e.target.value }))}
-                    placeholder="MillionVerifier API key" className="inp" style={{ width: '100%' }} autoComplete="off" />
-                  <div style={{ marginTop: 12 }}>
-                    <button className="btn primary" disabled={vfyKeys.saving} onClick={saveVerifyKeys}>{vfyKeys.saving ? 'Saving…' : 'Save keys'}</button>
-                  </div>
-                  {vfyKeys.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{vfyKeys.msg}</div>}
-                  <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>
-                    Hunter: hunter.io/api-keys (free tier covers roughly 50 lookups and 100 checks a month). MillionVerifier: app.millionverifier.com/api (a few dollars once, credits that do not expire). Stored locally in dashboard-web/.env; only ever sent to those services. Neither is needed for scanning, evaluating, or applying.
-                  </div>
-                </div>
-              );
-            }
-            if (o.id === 'discovery') {
-              return (
-                <div>
-                  <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
-                  <LpWhy item={o} />
-                  <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, margin: '0 0 4px' }}>Brave Search key</div>
-                  {discKeys.brave
-                    ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved. Expand Coverage web search is on.</div>
-                    : <div style={{ fontSize: 13, color: 'var(--orange)', marginBottom: 8 }}>○ Not set. Expand Coverage only registers companies already in your pipeline.</div>}
-                  <input type="password" value={discKeys.braveInput} onChange={e => setDiscKeys(k => ({ ...k, braveInput: e.target.value }))}
-                    placeholder="Brave Search API key" className="inp" style={{ width: '100%' }} autoComplete="off" />
-                  <div style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600, margin: '14px 0 4px' }}>Muse key <span style={{ color: 'var(--text-mute)', fontWeight: 400 }}>(optional)</span></div>
-                  {discKeys.muse
-                    ? <div style={{ fontSize: 13, color: 'var(--green)', marginBottom: 8 }}>✓ Saved.</div>
-                    : <div style={{ fontSize: 13, color: 'var(--text-mute)', marginBottom: 8 }}>○ Not set. Adds Director / VP roles from The Muse.</div>}
-                  <input type="password" value={discKeys.museInput} onChange={e => setDiscKeys(k => ({ ...k, museInput: e.target.value }))}
-                    placeholder="The Muse API key" className="inp" style={{ width: '100%' }} autoComplete="off" />
-                  <div style={{ marginTop: 12 }}>
-                    <button className="btn primary" disabled={discKeys.saving} onClick={saveDiscoveryKeys}>{discKeys.saving ? 'Saving…' : 'Save keys'}</button>
-                  </div>
-                  {discKeys.msg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-mute)' }}>{discKeys.msg}</div>}
-                  <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5 }}>
-                    Brave: brave.com/search/api (free tier available). Muse: themuse.com/developers/api/v2. Stored locally in dashboard-web/.env; only ever sent to those services. Neither is needed for API Scan, Agent Scan, or Evaluate.
-                  </div>
-                </div>
-              );
-            }
-            if (o.id === 'buffer') {
-              return (
-                <div>
-                  <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>{o.label}</h3>
-                  <LpWhy item={o} />
-                  <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.7 }}>
-                    <b style={{ color: 'var(--text)' }}>One-time connect (in Claude Code, not here):</b>
-                    <ol style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-                      <li>Add the Buffer MCP server to Claude Code and sign in to Buffer once.</li>
-                      <li>Draft and queue posts in <b>LinkedIn → Posts</b>.</li>
-                      <li>In a Claude Code session, ask Claude to schedule your queued posts, then <b>Mark scheduled</b>.</li>
-                    </ol>
-                    <div style={{ marginTop: 8, color: 'var(--text-mute)' }}>
-                      trajecktory never posts on its own; publishing always goes through your approval and your own Buffer account.
-                    </div>
-                  </div>
                 </div>
               );
             }

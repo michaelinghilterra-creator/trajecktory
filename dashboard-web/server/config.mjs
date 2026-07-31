@@ -46,6 +46,9 @@ export const STATUS_EVENTS_PATH = path.join(DATA_DIR, 'status-events.tsv');
 // re-scan is idempotent). Both are gitignored personal data under DATA_DIR.
 export const GOOGLE_TOKENS_PATH = path.join(DATA_DIR, 'google-tokens.json');
 export const GOOGLE_SYNC_PATH = path.join(DATA_DIR, 'google-sync.json');
+// Buffer personal API key (single-user bearer token for api.buffer.com). Same
+// gitignored DATA_DIR home as the Google token; it is a secret, never committed.
+export const BUFFER_TOKEN_PATH = path.join(DATA_DIR, 'buffer-token.json');
 // Weekly review with teeth: the append-only review log and a manual
 // LinkedIn-connects tally (connections are sent by hand, so the count is logged
 // here). All gitignored personal data under DATA_DIR. The old build-lock.json

@@ -1,8 +1,9 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
-import { listPosts, listQueued, createPost, updatePost, deletePost, LANE_CHANNEL } from '../lib/posts.mjs';
+import { listPosts, listQueued, createPost, updatePost, deletePost, getPost, attachBuffer, applyBufferMetrics, LANE_CHANNEL } from '../lib/posts.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { getIdentity } from '../lib/profile.mjs';
+import { listChannels, createScheduledPost, fetchPostMetrics, splitThread, toDueIso, SERVICE_FOR } from '../lib/buffer.mjs';
 
 export const router = express.Router();
 
@@ -54,6 +55,158 @@ router.delete('/api/posts/:id', (req, res) => {
     if (!deletePost(req.params.id)) return res.status(404).json({ error: 'Post not found' });
     res.json({ ok: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/posts/push-to-buffer { ids:[postId], dryRun? } — schedule the selected
+// posts to Buffer (which publishes them to LinkedIn/X at their scheduled time).
+// Idempotent and plan-agnostic:
+//   - LinkedIn posts carry their linkComment as the platform first comment (auto
+//     on paid plans; on free it's deferred to a manual paste, not a hard failure).
+//   - X posts written as numbered threads are split into a real Buffer thread.
+//   - The scheduled-post cap is Buffer's, not ours: we schedule earliest-first and
+//     only stop a channel if Buffer itself returns a queue-full (LimitReachedError),
+//     marking the rest "waiting". So Free (10) and Essentials (5000) both work with
+//     no hardcoded number.
+//   - A post already carrying a Buffer id is skipped, never scheduled twice.
+// dryRun:true validates and reports what WOULD happen without creating anything.
+router.post('/api/posts/push-to-buffer', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const ids = Array.isArray(body.ids) ? body.ids.filter(x => typeof x === 'string') : [];
+    const dryRun = !!body.dryRun;
+    if (!ids.length) return res.status(400).json({ error: 'Select at least one post to push.' });
+
+    // Resolve channels once; this also live-verifies the Buffer key.
+    let channels;
+    try { channels = await listChannels(); }
+    catch (err) { return res.status(400).json({ error: err.message }); }
+
+    const selected = ids.map(getPost).filter(Boolean);
+    const missing = ids.length - selected.length;
+
+    // Group by channel and schedule each group earliest-first.
+    const byChannel = { linkedin: [], x: [] };
+    for (const p of selected) byChannel[p.channel === 'x' ? 'x' : 'linkedin'].push(p);
+    for (const key of ['linkedin', 'x']) {
+      byChannel[key].sort((a, b) => String(a.scheduledFor || '').localeCompare(String(b.scheduledFor || '')));
+    }
+
+    const results = [];
+    for (const key of ['linkedin', 'x']) {
+      const group = byChannel[key];
+      if (!group.length) continue;
+      const label = key === 'x' ? 'X' : 'LinkedIn';
+      const chan = channels[key];
+      if (!chan || !chan.id) {
+        for (const p of group) results.push({ id: p.id, title: p.title, channel: key, ok: false, status: 'no-channel', message: `No ${label} account is connected in Buffer.` });
+        continue;
+      }
+
+      let queueFull = false; // flips once Buffer says this channel's queue is full
+      for (const p of group) {
+        if (p.buffer && p.buffer.id) { results.push({ id: p.id, title: p.title, channel: key, ok: true, status: 'already', message: 'Already scheduled on Buffer.', bufferId: p.buffer.id }); continue; }
+        if (queueFull) { results.push({ id: p.id, title: p.title, channel: key, ok: false, status: 'waiting', message: `${label} queue is full on your Buffer plan. This one waits for a slot to open.` }); continue; }
+
+        // Shape the create input for this channel.
+        let text = p.text, firstComment = '', threadParts = [];
+        if (key === 'x') { const parts = splitThread(p.text); text = parts[0] || p.text; threadParts = parts.slice(1); }
+        else { firstComment = p.linkComment || ''; }
+
+        let dueAtIso;
+        try { dueAtIso = toDueIso(p.scheduledFor); }
+        catch (err) { results.push({ id: p.id, title: p.title, channel: key, ok: false, status: 'error', message: err.message }); continue; }
+
+        if (dryRun) {
+          const extras = [];
+          if (threadParts.length) extras.push(`${threadParts.length + 1}-tweet thread`);
+          if (firstComment) extras.push('first comment');
+          results.push({ id: p.id, title: p.title, channel: key, ok: true, status: 'ready', dueAt: dueAtIso, message: `Ready: schedules for ${dueAtIso}${extras.length ? ' (' + extras.join(', ') + ')' : ''}.` });
+          continue;
+        }
+
+        try {
+          let created, deferredFirstComment = '';
+          try {
+            created = await createScheduledPost({ channelId: chan.id, service: SERVICE_FOR[key], text, dueAtIso, firstComment, threadParts });
+          } catch (err) {
+            // Buffer's auto first-comment is a paid feature. On a plan without it,
+            // still schedule the post body and hand the comment back for a manual
+            // paste, rather than failing the whole post over a comment.
+            if (firstComment && /first comment.*(paid|upgrade|plan)/i.test(err.message)) {
+              created = await createScheduledPost({ channelId: chan.id, service: SERVICE_FOR[key], text, dueAtIso, firstComment: '', threadParts });
+              deferredFirstComment = firstComment;
+            } else {
+              throw err;
+            }
+          }
+          attachBuffer(p.id, created, { pendingFirstComment: deferredFirstComment });
+          results.push({
+            id: p.id, title: p.title, channel: key, ok: true, status: 'scheduled',
+            dueAt: created.dueAt || dueAtIso, bufferId: created.id, permalink: created.externalLink || null,
+            firstCommentDeferred: !!deferredFirstComment,
+            message: deferredFirstComment
+              ? `Scheduled for ${created.dueAt || dueAtIso}. Buffer's auto first-comment isn't on this plan, so add this as the first comment when it posts: ${deferredFirstComment}`
+              : `Scheduled for ${created.dueAt || dueAtIso}.`,
+          });
+        } catch (err) {
+          // Buffer says the queue is full: stop this channel, mark the rest waiting.
+          if (err.bufferType === 'LimitReachedError') {
+            queueFull = true;
+            results.push({ id: p.id, title: p.title, channel: key, ok: false, status: 'waiting', message: `${label} queue is full on your Buffer plan. This one waits for a slot to open.` });
+          } else {
+            results.push({ id: p.id, title: p.title, channel: key, ok: false, status: 'error', message: err.message });
+          }
+        }
+      }
+    }
+
+    const scheduled = results.filter(r => r.ok && (r.status === 'scheduled' || r.status === 'ready')).length;
+    const already = results.filter(r => r.status === 'already').length;
+    const waiting = results.filter(r => r.status === 'waiting').length;
+    const failed = results.filter(r => !r.ok && r.status !== 'waiting').length;
+    res.json({ ok: true, dryRun, scheduled, already, waiting, failed, missing, results });
+  } catch (err) {
+    console.error('push-to-buffer error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/posts/pull-metrics { ids? } — pull live engagement from Buffer for our
+// pushed posts and auto-fill the tracker. With no ids, syncs every post that has a
+// Buffer id. Buffer collects metrics on a daily cadence, so a post shows real
+// numbers up to ~24h after it SENDS; before that it reports 'pending'.
+router.post('/api/posts/pull-metrics', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const onlyIds = Array.isArray(body.ids) ? body.ids.filter(x => typeof x === 'string') : null;
+
+    const all = listPosts().posts || [];
+    const targets = all.filter(p => p.buffer && p.buffer.id && (!onlyIds || onlyIds.includes(p.id)));
+    if (!targets.length) return res.json({ ok: true, synced: 0, pending: 0, failed: 0, results: [], note: 'No posts have been pushed to Buffer yet.' });
+
+    const results = [];
+    for (const p of targets) {
+      try {
+        const m = await fetchPostMetrics(p.buffer.id);
+        if (!m.found) { results.push({ id: p.id, title: p.title, status: 'gone', message: 'Post not found on Buffer (deleted there?).' }); continue; }
+        if (m.filled === 0) {
+          results.push({ id: p.id, title: p.title, status: 'pending', bufferStatus: m.status, message: m.status === 'sent' ? 'Sent; Buffer has not reported metrics yet (up to ~24h).' : `Not published yet (${m.status}).` });
+          continue;
+        }
+        applyBufferMetrics(p.id, { metrics: m.metrics, updatedAt: m.updatedAt });
+        results.push({ id: p.id, title: p.title, status: 'synced', fields: Object.keys(m.metrics), updatedAt: m.updatedAt, message: `Synced ${m.filled} metric(s).` });
+      } catch (err) {
+        results.push({ id: p.id, title: p.title, status: 'error', message: err.message });
+      }
+    }
+    const synced = results.filter(r => r.status === 'synced').length;
+    const pending = results.filter(r => r.status === 'pending').length;
+    const failed = results.filter(r => r.status === 'error' || r.status === 'gone').length;
+    res.json({ ok: true, synced, pending, failed, results });
+  } catch (err) {
+    console.error('pull-metrics error:', err);
     res.status(500).json({ error: err.message });
   }
 });

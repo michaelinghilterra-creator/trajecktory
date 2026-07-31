@@ -193,8 +193,70 @@ function deletePost(id) {
   return true;
 }
 
+// One post by id (or null). Read-only convenience for routes.
+function getPost(id) { return readStore().posts.find(p => p.id === id) || null; }
+
+// Record that a post was pushed to Buffer: stash Buffer's own id/permalink under
+// `p.buffer` (so we never double-schedule it and can pull its metrics later) and
+// move it to 'scheduled'. The user-facing scheduledFor is left untouched — it is
+// the local time they chose; Buffer's confirmed UTC lives in p.buffer.dueAt.
+function attachBuffer(id, buffer = {}, extra = {}) {
+  const store = readStore();
+  const idx = store.posts.findIndex(p => p.id === id);
+  if (idx === -1) return null;
+  const p = store.posts[idx];
+  p.buffer = {
+    id: buffer.id || null,
+    status: buffer.status || null,
+    dueAt: buffer.dueAt || null,
+    externalLink: buffer.externalLink || null,
+    pushedAt: new Date().toISOString(),
+    // A first comment that Buffer's free plan could not auto-attach, so the user
+    // must paste it as the first comment when the post goes live. Empty when the
+    // comment was attached automatically (paid plan) or there was none.
+    pendingFirstComment: extra.pendingFirstComment || '',
+  };
+  p.status = 'scheduled';
+  p.updatedAt = new Date().toISOString();
+  store.posts[idx] = p;
+  logActivity(store, 'pushed', p, buffer.dueAt ? `to Buffer for ${buffer.dueAt}` : 'to Buffer');
+  writeStore(store);
+  return p;
+}
+
+// Fold metrics pulled from Buffer into a post's tracker metrics. Only the
+// Buffer-provided keys are overwritten; the off-platform fields the user tracks
+// by hand (profile views, connection requests, DMs, repo clicks/stars, whoEngaged,
+// notes) are preserved. `autoFields` records which keys came from Buffer so the UI
+// can mark them as synced rather than typed.
+function applyBufferMetrics(id, { metrics = {}, updatedAt = null } = {}) {
+  const store = readStore();
+  const idx = store.posts.findIndex(p => p.id === id);
+  if (idx === -1) return null;
+  const p = store.posts[idx];
+  const base = (p.metrics && typeof p.metrics === 'object') ? { ...p.metrics } : {};
+  const autoFields = [];
+  for (const [k, v] of Object.entries(metrics)) {
+    if (!METRIC_NUM_KEYS.includes(k)) continue;
+    base[k] = Math.max(0, Math.round(Number(v) || 0));
+    autoFields.push(k);
+  }
+  for (const k of METRIC_NUM_KEYS) if (base[k] === undefined) base[k] = 0;
+  base.whoEngaged = base.whoEngaged || '';
+  base.notes = base.notes || '';
+  base.autoFields = autoFields;
+  base.bufferAt = updatedAt || new Date().toISOString();
+  base.checkedAt = new Date().toISOString();
+  p.metrics = base;
+  p.updatedAt = new Date().toISOString();
+  store.posts[idx] = p;
+  logActivity(store, 'metrics', p, `synced ${autoFields.length} metric(s) from Buffer`);
+  writeStore(store);
+  return { post: p, autoFields };
+}
+
 export {
   readStore, writeStore, listPosts, listQueued,
-  createPost, updatePost, deletePost,
+  createPost, updatePost, deletePost, getPost, attachBuffer, applyBufferMetrics,
   newPostId, LANE_CHANNEL, LANES, CHANNELS, STATUSES, TYPES,
 };
