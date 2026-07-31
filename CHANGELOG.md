@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.8.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.7.0...v2.8.0) (2026-07-31)
+
+
+### Features
+
+* **dashboard:** persist agent run duration and add per-day cost/time rollup ([#125](https://github.com/michaelinghilterra-creator/trajecktory/issues/125)) ([1942fd9](https://github.com/michaelinghilterra-creator/trajecktory/commit/1942fd959c83718a6d09721b04cfef4c0638cee8))
+* draft a follow-up from your last sent email to a contact ([#123](https://github.com/michaelinghilterra-creator/trajecktory/issues/123)) ([cd298ed](https://github.com/michaelinghilterra-creator/trajecktory/commit/cd298ed693839cbfdeb8f84be1df07610447f15d))
+
 ## [2.7.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.6.0...v2.7.0) (2026-07-31)
 
 
