@@ -11,7 +11,17 @@
 // below use generic placeholders only — never a real name, company, or metric.
 // The user fills those in per person, which is the point.
 (function () {
-const { useState, useEffect, useMemo, useCallback } = React;
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
+
+// The Stage 1 / Stage 2 subtabs. Stage is derived server-side (a LinkedIn
+// contact inside an active-pipeline company is Stage 1, any other LinkedIn
+// contact is Stage 2, a manually-added person is "other") and returned per row,
+// so these are pure filters. "All" also shows manually-added people.
+const REF_SUBTABS = [
+  { id: 'stage1', label: 'Stage 1', hint: 'Inside a company you are targeting — warm path into a live opening' },
+  { id: 'stage2', label: 'Stage 2', hint: 'Warm referrers elsewhere in your network' },
+  { id: 'all', label: 'All', hint: 'Everyone, including people you added by hand' },
+];
 
 const REF_STATUS_COLORS = {
   'Not Asked': 'var(--text-mute)',
@@ -82,23 +92,33 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: '', how: '', where: '', target: '', notes: '' });
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [subtab, setSubtab] = useState('stage1');
+  const [linkedin, setLinkedin] = useState({ count: 0, importedAt: null });
+  const [reconciling, setReconciling] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileRef = useRef(null);
   const toast = window.tjkToast || (() => {});
 
   const load = useCallback(() => {
     fetch('/api/referrals')
       .then(r => r.json())
-      .then(d => { setRows(d.referrals || []); setStatuses(d.statuses || []); setLoading(false); })
+      .then(d => { setRows(d.referrals || []); setStatuses(d.statuses || []); setLinkedin(d.linkedin || { count: 0 }); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  const stageCounts = useMemo(() => ({
+    stage1: rows.filter(r => r.stage === 'stage1').length,
+    stage2: rows.filter(r => r.stage === 'stage2').length,
+    all: rows.length,
+  }), [rows]);
+
   const filtered = useMemo(() => {
     const q = (search || '').trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(r =>
-      [r.name, r.how, r.where, r.target, r.notes].some(v => (v || '').toLowerCase().includes(q))
-    );
-  }, [rows, search]);
+    let out = subtab === 'all' ? rows : rows.filter(r => r.stage === subtab);
+    if (q) out = out.filter(r => [r.name, r.how, r.where, r.target, r.notes].some(v => (v || '').toLowerCase().includes(q)));
+    return out;
+  }, [rows, search, subtab]);
 
   const stats = useMemo(() => ({
     total: rows.length,
@@ -136,6 +156,36 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
       .catch(() => { toast('Delete failed', 'error'); load(); });
   };
 
+  // Re-scan the stored LinkedIn haystack against the current pipeline and pull in
+  // new Stage-1 warm paths (companies you have sourced since the last run).
+  const reconcileLinkedin = () => {
+    setReconciling(true);
+    window.tjkMutate('/api/referrals/reconcile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+      .then(r => r.json()).then(d => {
+        setReconciling(false);
+        if (d.ok) { toast(d.stage1Added ? `+${d.stage1Added} new Stage-1 warm path${d.stage1Added === 1 ? '' : 's'}` : 'Reconciled — no new matches', 'success'); load(); }
+        else toast(d.error || 'Reconcile failed', 'error');
+      }).catch(() => { setReconciling(false); toast('Reconcile failed', 'error'); });
+  };
+
+  // Upload a fresh LinkedIn Connections.csv: replaces the haystack, then seeds
+  // Stage 1 + Stage 2. Read client-side as text and POSTed (no multipart needed).
+  const importCsv = (file) => {
+    if (!file) return;
+    setImporting(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      window.tjkMutate('/api/referrals/import-linkedin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv: String(reader.result || '') }) })
+        .then(r => r.json()).then(d => {
+          setImporting(false);
+          if (d.ok) { toast(`Imported ${d.imported} connections · +${d.stage1Added} Stage 1, +${d.stage2Added} Stage 2`, 'success'); load(); }
+          else toast(d.error || 'Import failed', 'error');
+        }).catch(() => { setImporting(false); toast('Import failed', 'error'); });
+    };
+    reader.onerror = () => { setImporting(false); toast('Could not read file', 'error'); };
+    reader.readAsText(file);
+  };
+
   const logToday = (row) => {
     const updates = { lastTouch: refLocalToday() };
     // A first touch on a "Not Asked" row is a reconnect: nudge it to Catching Up.
@@ -169,6 +219,24 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
           <RefStat n={stats.intros} label="Intros made" />
           <RefStat n={stats.applied} label="Applied w/ referral" accent="#22c55e" />
         </div>
+
+        {/* LinkedIn warm-channel controls */}
+        <div className="row" style={{ gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          <span className="mono dim" style={{ fontSize: 11 }}>
+            LinkedIn haystack: {linkedin.count ? `${Number(linkedin.count).toLocaleString()} connections` : 'none imported yet'}
+            {linkedin.importedAt ? ` · ${String(linkedin.importedAt).slice(0, 10)}` : ''}
+          </span>
+          <button className="btn sm" onClick={reconcileLinkedin} disabled={reconciling || !linkedin.count}
+            title="Re-scan your stored connections against your current pipeline and pull in new Stage-1 warm paths">
+            {reconciling ? 'Reconciling…' : '↻ Reconcile'}
+          </button>
+          <button className="btn sm" onClick={() => fileRef.current && fileRef.current.click()} disabled={importing}
+            title="Upload a fresh LinkedIn Connections.csv export (Settings → Data Privacy → Get a copy of your data → Connections)">
+            {importing ? 'Importing…' : '⭱ Import LinkedIn CSV'}
+          </button>
+          <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }}
+            onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; importCsv(f); }} />
+        </div>
       </div>
 
       {/* Add form */}
@@ -195,13 +263,27 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
         </div>
       )}
 
+      {/* Stage subtabs */}
+      <div className="subtabs">
+        {REF_SUBTABS.map(s => (
+          <button type="button" key={s.id} className={'subtab' + (subtab === s.id ? ' active' : '')}
+            onClick={() => setSubtab(s.id)} title={s.hint}>
+            {s.label}<span className="mono dim" style={{ marginLeft: 6, fontSize: 10 }}>{stageCounts[s.id] ?? 0}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Table */}
       <div className="card" style={{ overflowX: 'auto' }}>
         {filtered.length === 0 ? (
           <div className="no-data" style={{ padding: 28, textAlign: 'center' }}>
             {rows.length === 0
-              ? 'No one added yet. Start with former colleagues, your alumni network, and anyone from a past role now at a company you are targeting.'
-              : 'No matches for your search.'}
+              ? 'No one added yet. Import your LinkedIn connections to auto-build Stage 1 and Stage 2, or add people by hand.'
+              : subtab === 'stage1'
+                ? 'No Stage-1 paths in view. These are connections already inside a company you are targeting — reconcile after sourcing new JDs, or import a fresh LinkedIn CSV.'
+                : subtab === 'stage2'
+                  ? 'No Stage-2 referrers in view. Import your LinkedIn CSV to seed the warm-referrer pool.'
+                  : 'No matches for your search.'}
           </div>
         ) : (
           <table className="ref-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
