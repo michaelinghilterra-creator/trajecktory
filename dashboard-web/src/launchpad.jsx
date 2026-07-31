@@ -2491,7 +2491,7 @@ window.SetupTab = function SetupTab({ toast, setTab }) {
 
       {view === 'launchpad' && window.LaunchpadTab && <window.LaunchpadTab toast={toast} setTab={setTab} />}
       {view === 'pitch'     && <TellMeAboutYouPanel />}
-      {view === 'twc'       && <TwcPanel />}
+      {view === 'twc'       && <TwcPanel toast={toast} />}
       {view === 'changelog' && <ChangelogPanel />}
       {view === 'about'     && <AboutPanel />}
     </div>
@@ -2608,19 +2608,187 @@ function TellMeAboutYouPanel() {
   );
 }
 
-// ─── TWC placeholder ─────────────────────────────────────────────────────────
-function TwcPanel() {
+// ─── TWC — unemployment work-search activity log ─────────────────────────────
+// Assembles the job-search log a TWC claimant must produce on request, straight
+// from the user's own applications / interviews / follow-ups. Pick a date range,
+// eyeball the activities, download a CSV whose columns mirror the TWC Work Search
+// Log. Employer HQ address + phone are filled by on-demand web search (cached).
+const twcYmd = (d) => d.toISOString().slice(0, 10);
+function twcWeekLabel(wk) {
+  const d = new Date(wk + 'T00:00:00Z');
+  return isNaN(d.getTime()) ? wk : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+const TWC_KIND_LABEL = { application: 'Application', interview: 'Interview', followup: 'Follow-up' };
+
+function TwcPanel({ toast }) {
+  const today = new Date();
+  const [from, setFrom] = useState(twcYmd(new Date(today.getTime() - 13 * 86400000)));
+  const [to, setTo] = useState(twcYmd(today));
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [enriching, setEnriching] = useState(false);
+  const [progress, setProgress] = useState(null);
+
+  function generate() {
+    setLoading(true); setError(null);
+    fetch(`/api/setup/twc?from=${from}&to=${to}`)
+      .then(async r => {
+        // A dashboard that booted before this tab shipped has no /api/setup/twc,
+        // so Express serves the SPA index.html and r.json() would throw a cryptic
+        // "Unexpected token '<'". Detect that and say the real fix in plain words.
+        if (!(r.headers.get('content-type') || '').includes('application/json')) {
+          throw new Error('The TWC endpoints are not loaded on the running dashboard yet. Fully restart the dashboard (stop the server and start it again, not just reload the page), then Generate again.');
+        }
+        const d = await r.json();
+        if (d.error) throw new Error(d.error);
+        return d;
+      })
+      .then(setData)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }
+  useEffect(() => { generate(); }, []); // initial load on the default fortnight
+
+  const employers = data?.employers || [];
+  const uncached = employers.filter(e => !e.cached);
+  const activities = data?.activities || [];
+  const hasApprox = activities.some(a => a.dateApprox);
+
+  async function lookupEmployers() {
+    const targets = uncached.map(e => e.company);
+    if (!targets.length) { toast && toast('Every employer in this range is already looked up.'); return; }
+    setEnriching(true); setError(null); setProgress({ done: 0, total: targets.length });
+    try {
+      for (let i = 0; i < targets.length; i += 15) {
+        const batch = targets.slice(i, i + 15);
+        const r = await window.tjkMutate('/api/setup/twc/enrich', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ companies: batch }),
+        });
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok || body.error) throw new Error(body.error || 'Employer look-up failed.');
+        setProgress({ done: Math.min(i + batch.length, targets.length), total: targets.length });
+      }
+      generate(); // refresh so address/phone show
+      toast && toast('Employer look-up done.');
+    } catch (e) { setError(e.message); }
+    finally { setEnriching(false); }
+  }
+
+  const dateInput = (val, set) => (
+    <input type="date" className="inp" value={val} onChange={e => set(e.target.value)}
+      style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '5px 8px', color: 'var(--text)', fontSize: 12 }} />
+  );
+  const cell = { padding: '6px 8px', verticalAlign: 'top' };
+
   return (
     <div className="col" style={{ gap: 16 }}>
-      <div className="ta-head"><div><h1>TWC</h1><div className="sub">Biweekly unemployment activity log.</div></div></div>
-      <div className="card padded-lg">
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Coming soon.</div>
+      <div className="ta-head"><div><h1>TWC</h1><div className="sub">Your unemployment work-search activity log, built from trajecktory.</div></div></div>
+
+      <div className="card padded-lg col" style={{ gap: 12 }}>
         <div className="dim" style={{ fontSize: 12, lineHeight: 1.55 }}>
-          This module will help you assemble the biweekly work-search activity you report when you file
-          for unemployment, pulled straight from your applications and outreach. Still collecting the data
-          points. Details land soon.
+          Pick the weeks TWC asked about (their weeks run Sunday to Saturday). This pulls every application,
+          interview, and follow-up you logged in that window. Download it as a CSV. TWC accepts the CSV format,
+          so you do not have to retype anything onto their paper form.
+        </div>
+        <div className="row" style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="mono dim" style={{ fontSize: 11 }}>From</span>{dateInput(from, setFrom)}
+          <span className="mono dim" style={{ fontSize: 11 }}>To</span>{dateInput(to, setTo)}
+          <button className="btn primary sm" onClick={generate} disabled={loading}>{loading ? 'Loading…' : 'Generate'}</button>
+          <a className="btn sm" href={`/api/setup/twc/export?from=${from}&to=${to}`} download>Download CSV</a>
         </div>
       </div>
+
+      {error && (
+        <div className="card padded-lg" style={{ borderColor: 'rgba(239,68,68,0.4)' }}>
+          <div className="mono" style={{ color: 'var(--red)', fontSize: 12 }}>{error}</div>
+        </div>
+      )}
+
+      {/* Empty result is a loud, standalone card — an earlier tiny dim line read
+          as "nothing happened" when a range had no activity or From was after To. */}
+      {data && data.count === 0 && (
+        <div className="card padded-lg col" style={{ gap: 6, borderColor: 'rgba(234,179,8,0.5)' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#eab308' }}>No activities in this range</div>
+          <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.55 }}>
+            {from && to && from > to
+              ? <>Your <strong>From</strong> date ({from}) is after your <strong>To</strong> date ({to}). Swap them so the earlier date is on the left, then Generate again.</>
+              : <>Nothing is logged between <strong>{from || 'the start'}</strong> and <strong>{to || 'today'}</strong>. Widen the dates, or log your applies on the Pipeline tab so they count here.</>}
+          </div>
+        </div>
+      )}
+
+      {data && data.count > 0 && (
+        <div className="card padded-lg col" style={{ gap: 10 }}>
+          <div className="card-head">
+            <span className="card-title"><span className="dot" style={{ background: 'var(--accent)' }} />Activities per week</span>
+            <span className="card-meta mono">{data.count} total</span>
+          </div>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            {data.weeks.map(w => (
+              <span key={w.week} className="tag" style={{ fontSize: 11 }}>
+                Week of {twcWeekLabel(w.week)}: <strong style={{ marginLeft: 4 }}>{w.count}</strong>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data && employers.length > 0 && (
+        <div className="card padded-lg col" style={{ gap: 8 }}>
+          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>Employer HQ + phone</span>
+            <span className="mono dim" style={{ fontSize: 11 }}>{employers.length - uncached.length}/{employers.length} looked up</span>
+            <button className="btn primary sm" onClick={lookupEmployers} disabled={enriching || uncached.length === 0}
+              style={{ marginLeft: 'auto' }}>
+              {enriching
+                ? (progress ? `Looking up ${progress.done}/${progress.total}…` : 'Looking up…')
+                : (uncached.length ? `🔍 Fill HQ + phone (${uncached.length})` : '✓ All looked up')}
+            </button>
+          </div>
+          <div className="dim" style={{ fontSize: 11, lineHeight: 1.5 }}>
+            The address and phone columns come from a web search (billed to your Claude plan, a few seconds per company,
+            cached so a re-run does not search again). Web results can be stale or wrong, so give them a glance before you send the log to TWC.
+            Blank address/phone is fine on the TWC form.
+          </div>
+        </div>
+      )}
+
+      {data && activities.length > 0 && (
+        <div className="card padded-lg col" style={{ gap: 8 }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead><tr style={{ textAlign: 'left', color: 'var(--text-mute)' }}>
+                {['Date', 'Activity', 'Company', 'Type of job', 'HQ address', 'Phone', 'Contact', 'Method', 'Result'].map(h => (
+                  <th key={h} style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {activities.map((a, i) => (
+                  <tr key={i} style={{ borderTop: '1px solid var(--border-2)' }}>
+                    <td style={{ ...cell, whiteSpace: 'nowrap' }} className="mono">{a.date}{a.dateApprox ? ' *' : ''}</td>
+                    <td style={cell}>{a.activity}<span className="dim" style={{ marginLeft: 6, fontSize: 10.5 }}>{TWC_KIND_LABEL[a.kind] || ''}</span></td>
+                    <td style={cell}>{a.company}</td>
+                    <td style={cell}>{a.role}</td>
+                    <td style={cell}>{a.employerAddress || <span className="dim">—</span>}</td>
+                    <td style={{ ...cell, whiteSpace: 'nowrap' }} className="mono">{a.employerPhone || <span className="dim">—</span>}</td>
+                    <td style={cell}>{a.contact || <span className="dim">—</span>}</td>
+                    <td style={cell}>{a.method || <span className="dim">—</span>}</td>
+                    <td style={cell}>{a.result}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {hasApprox && (
+            <div className="dim" style={{ fontSize: 11 }}>
+              * This date is the day the role was logged, not a confirmed apply date (no apply date was recorded for it).
+              Fix it by re-logging the apply on the Pipeline tab.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
