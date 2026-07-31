@@ -23,6 +23,78 @@ export function lastReceived(prior = []) {
   return null;
 }
 
+// The most recent message YOU sent in a correspondence log, or null. Mirror of
+// lastReceived, used by the "follow up on my last sent email" draft mode. Only
+// counts a real Sent message — an unsent 'Draft' is not something to follow up
+// on, so it is skipped.
+export function lastSent(prior = []) {
+  for (let i = prior.length - 1; i >= 0; i--) {
+    if (prior[i] && prior[i].direction === 'Sent') return prior[i];
+  }
+  return null;
+}
+
+// Build the "follow up on my last sent email" prompt. Unlike buildReplyPrompt
+// (which answers something they wrote), this nudges a thread that went quiet:
+// the contact received your last email and has NOT replied, and you want a short
+// polite bump that adds a little new value without repeating the whole pitch.
+// Assumes lastSent(prior) is non-null — callers check first and 400 when there
+// is nothing sent to follow up on.
+export function buildFollowupFromSentPrompt({ me, cvMd, profileMd, prior, contactLabel, contactBlock, firstName }) {
+  const sent = lastSent(prior);
+  // Days since that email went out, so the nudge uses honest timing language
+  // instead of defaulting to "yesterday". Best-effort: skip if unparseable.
+  let daysSince = null;
+  const sentMs = Date.parse(sent.timestamp);
+  if (!isNaN(sentMs)) daysSince = Math.max(0, Math.floor((Date.now() - sentMs) / 86400000));
+  const timingLine = daysSince == null
+    ? '(sent date unavailable — avoid specific timing claims)'
+    : daysSince <= 1 ? `${daysSince} day ago (do NOT nudge same-day; if this says 0 days, soften to "the other day")`
+    : daysSince <= 3 ? `${daysSince} days ago (use "a few days ago" or "earlier this week")`
+    : daysSince <= 10 ? `${daysSince} days ago (use "last week" or "about a week ago")`
+    : daysSince <= 21 ? `${daysSince} days ago (use "a couple of weeks ago")`
+    : daysSince <= 45 ? `${daysSince} days ago (use "last month" or "a few weeks back")`
+    : `${daysSince} days ago (reference the earlier note without over-specifying timing)`;
+
+  const thread = prior.slice().reverse()
+    .filter(m => m !== sent)
+    .slice(0, 3)
+    .map(m => `--- ${m.direction} on ${m.timestamp} | Subject: ${m.subject}\n${m.body}`)
+    .join('\n\n');
+
+  return `You are drafting ${me.fullName}'s brief FOLLOW-UP to ${contactLabel}. ${me.firstName} already sent the email below and has NOT heard back. Write a short, polite nudge that revives the thread — NOT a fresh pitch and NOT a reply (they did not write anything to reply to).
+
+== WHO YOU ARE FOLLOWING UP WITH ==
+${contactBlock}
+
+== YOUR LAST EMAIL TO THEM (this is what went unanswered — build the nudge on THIS) ==
+Subject: ${sent.subject}
+Sent:    ${sent.timestamp}
+TIMING LANGUAGE: ${timingLine}
+${sent.body}
+${thread ? `
+== EARLIER IN THE THREAD (context only, most recent first) ==
+${thread}
+` : ''}
+== ${me.firstName.toUpperCase()}'S CV (source of truth — never invent metrics or experience) ==
+${cvMd}
+
+== VOICE RULES (from modes/_profile.md — must follow) ==
+${profileMd}
+
+== HOW TO FOLLOW UP ==
+- Reference the earlier email lightly ("following up on my note from last week about…"), using the exact phrasing from the TIMING LANGUAGE line above. Do NOT invent a different gap.
+- Keep it SHORT — this is a bump, not a re-send. Maximum 90 words.
+- Add ONE small new reason to reply: a fresh proof point from the CV, a relevant update, or a lighter, easier ask. Do NOT just repeat the original email.
+- Assume good faith (they are busy), never guilt-trip or sound impatient. No "I haven't heard back" as an accusation.
+- Warm, direct, senior operator tone. No corporate filler, no "I hope this finds you well".
+- NO em dashes anywhere (use periods, commas, semicolons, colons, or parentheses). Never invent a metric or claim not on the CV.
+- The UI prefills "Hi ${firstName}," so the body MUST begin with substantive content, not a greeting and not their name.
+
+Output ONLY a JSON object — no markdown, no code fences, no explanation:
+{"subject": "<usually \\"RE: ${sent.subject}\\" to keep it on the same thread, unless a fresh subject is clearly better>", "body": "<plain-text follow-up, 1-2 short paragraphs separated by a LITERAL \\n\\n, NO greeting, NO sign-off, NO signature block, NO contact info>"}`;
+}
+
 // Build the reply prompt. `contactLabel` is a short human phrase ("an executive
 // recruiter at Acme"); `contactBlock` is the labeled who-you-are-replying-to
 // block, which differs per channel (company vs firm). Assumes lastReceived(prior)

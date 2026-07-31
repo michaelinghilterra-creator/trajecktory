@@ -3,7 +3,7 @@ import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, TT_STATUSES } from '../lib/target-talent.mjs';
-import { buildReplyPrompt, lastReceived, collapseRe } from '../lib/reply-draft.mjs';
+import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { appendFollowupRow } from '../lib/followups.mjs';
 import { logConnect } from '../lib/connects.mjs';
 import { isLinkedInInvite } from '../lib/channels.mjs';
@@ -198,6 +198,25 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
       draft.body = _replaceEmDashes(draft.body);
       draft.subject = _replaceEmDashes(collapseRe(draft.subject, inbound.subject));
       return res.json({ ok: true, draft, messageType: 'reply', relatedApp: null });
+    }
+
+    // FOLLOW-UP-ON-LAST-SENT mode: nudge a thread that went quiet, built on the
+    // most recent email YOU sent (not one they wrote). Requires a sent message.
+    if (req.body?.mode === 'followup-sent' || req.body?.interviewStage === 'followup-sent') {
+      const sent = lastSent(prior);
+      if (!sent) return res.status(400).json({ error: 'No email sent to this contact yet — nothing to follow up on.' });
+      const me = getIdentity();
+      const contactBlock = `Company:  ${r.company}\nName:     ${r.salute || ''} ${r.first} ${r.last}\nTitle:    ${r.title}\nEmail:    ${r.email}`;
+      const prompt = buildFollowupFromSentPrompt({ me, cvMd, profileMd, prior, contactLabel: `an internal Talent Acquisition / People-team contact at ${r.company}`, contactBlock, firstName: r.first });
+      const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return res.status(500).json({ error: 'Could not parse follow-up draft from model output', raw });
+      const draft = JSON.parse(jsonMatch[0]);
+      draft.body = _stripLeadingSalutation(draft.body, r.first);
+      draft.body = _stripTrailingSignature(draft.body);
+      draft.body = _replaceEmDashes(draft.body);
+      draft.subject = _replaceEmDashes(collapseRe(draft.subject, sent.subject));
+      return res.json({ ok: true, draft, messageType: 'followup-sent', relatedApp: null });
     }
 
     // Interview-stage tuning: the drawer passes where the user is in the loop so
