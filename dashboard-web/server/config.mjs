@@ -111,6 +111,12 @@ export const POSTS_PATH = path.join(DATA_DIR, 'posts.json');
 // AI Coach: the rolling chat transcript + the cached daily brief. One JSON sidecar,
 // same pattern as posts.json. Gitignored personal data under DATA_DIR.
 export const COACH_PATH = path.join(DATA_DIR, 'coach-conversations.json');
+// TWC work-search report: cached employer directory, keyed by normalized company
+// name → { hqAddress, phone, website, source, fetchedAt }. Filled by web search
+// on demand (the TWC tab's "look up employer" action) so a report never re-searches
+// a company it already resolved. One JSON sidecar, same pattern as coach/posts.
+// Gitignored personal data under DATA_DIR (covered by data/* in .gitignore).
+export const EMPLOYER_CACHE_PATH = path.join(DATA_DIR, 'employer-directory.json');
 
 export const PORT = process.env.PORT || 3333;
 // Bind to loopback by default so the dashboard (no auth, can spawn agents and

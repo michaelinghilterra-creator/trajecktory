@@ -35,6 +35,20 @@ export function parseCsvContacts(csv) {
   return rows;
 }
 
+// Serialize rows to an RFC-4180 CSV string. `rows` is an array of arrays (each
+// inner array is one line's cells). A cell is quoted only when it contains a
+// comma, double-quote, CR or LF, with inner quotes doubled — the same escape the
+// client uses in src/pipeline.jsx exportCSV(). This is the first server-side CSV
+// WRITER; everything above only READS CSV. Lines are joined with CRLF so the file
+// opens cleanly in Excel/Sheets, which is where a TWC claimant will open it.
+export function toCsv(rows) {
+  const esc = (v) => {
+    const s = v == null ? '' : String(v);
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return (rows || []).map(row => (row || []).map(esc).join(',')).join('\r\n');
+}
+
 // Applications you tracked somewhere else before trajecktory. Columns match the
 // tracker's own, so a filled-in copy maps across without interpretation.
 //

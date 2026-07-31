@@ -13,6 +13,7 @@ import { cleanNote, fetchReleases, parseReleaseBody } from '../lib/release-notes
 import { generateText } from '../lib/anthropic.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { loadProfileContext } from '../lib/insights.mjs';
+import { buildActivities, weeklyCounts, employersInActivities, toTwcCsv, enrichEmployers, ENRICH_MAX } from '../lib/twc.mjs';
 
 export const router = express.Router();
 
@@ -176,4 +177,60 @@ router.get('/api/setup/changelog', async (req, res) => {
     entries = parseChangelog(md).filter(e => e.date && e.date >= CHANGELOG_SINCE);
   } catch { /* no changelog either */ }
   res.json({ version, entries, source: 'changelog-md' });
+});
+
+// ─── TWC work-search report ───────────────────────────────────────────────────
+// Texas Workforce Commission unemployment work-search log, assembled from the
+// user's own applications / interviews / follow-ups. Data assembly + web-search
+// employer enrichment live in lib/twc.mjs; these routes are thin. Dates are
+// validated against the ISO shape, same as agent.mjs cost-history — a malformed
+// value degrades to open-ended rather than filtering on garbage.
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const isoOrUndef = (v) => (ISO_DATE_RE.test(String(v || '')) ? String(v) : undefined);
+
+// GET /api/setup/twc?from=&to= — activities in the range, per-week counts, and the
+// distinct employers (with whether each is already cached) that drive look-up.
+router.get('/api/setup/twc', (req, res) => {
+  try {
+    const from = isoOrUndef(req.query.from);
+    const to = isoOrUndef(req.query.to);
+    const activities = buildActivities({ from, to });
+    res.json({
+      from: from || null,
+      to: to || null,
+      count: activities.length,
+      activities,
+      weeks: weeklyCounts(activities),
+      employers: employersInActivities(activities),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/setup/twc/export?from=&to= — the same activities as a CSV attachment
+// (the established Content-Disposition download idiom; a GET needs no CSRF token).
+router.get('/api/setup/twc/export', (req, res) => {
+  try {
+    const from = isoOrUndef(req.query.from);
+    const to = isoOrUndef(req.query.to);
+    const csv = toTwcCsv(buildActivities({ from, to }));
+    const stamp = (s) => (s ? String(s) : 'all');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="TWC_Work_Search_${stamp(from)}_to_${stamp(to)}.csv"`);
+    res.send(csv);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/setup/twc/enrich  { companies: [names] } — web-search each un-cached
+// employer's US HQ address + main phone and cache it. Capped per call for
+// rate-limit protection; the client pages through larger sets.
+router.post('/api/setup/twc/enrich', async (req, res) => {
+  try {
+    const body = (req.body && typeof req.body === 'object') ? req.body : {};
+    const companies = Array.isArray(body.companies) ? body.companies.filter(c => typeof c === 'string') : [];
+    if (!companies.length) return res.status(400).json({ error: 'companies[] required' });
+    if (companies.length > ENRICH_MAX) {
+      return res.status(400).json({ error: `Max ${ENRICH_MAX} companies per call (rate-limit protection).` });
+    }
+    res.json(await enrichEmployers(companies));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
