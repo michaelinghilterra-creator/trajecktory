@@ -72,7 +72,7 @@ async function gql(query, variables) {
       body: JSON.stringify({ query, variables }),
     });
   } catch (err) {
-    throw new Error('Could not reach Buffer (' + err.message + ').');
+    throw new Error('Could not reach Buffer (' + err.message + ').', { cause: err });
   }
   let json;
   try { json = await res.json(); } catch { throw new Error('Buffer returned a non-JSON response (HTTP ' + res.status + ').'); }
