@@ -852,6 +852,113 @@ function FollowupRow({ item, onOpen, onSnooze, onMute, onUnmute, onFind }) {
 // as the Pipeline drawer's "Follow-up" tab (window.FollowupPanel) so Follow-Ups
 // and Pipeline share one implementation. Resilient when the app isn't stale:
 // coach is hidden, but logging a touch and the history still work.
+// Per-contact "follow up on my last sent email" composer, shown under each
+// related TA contact in the Follow-Ups drawer. Self-contained: it lazily loads
+// the contact's correspondence to show the last email that went unanswered,
+// asks the server to draft a nudge from it (mode: 'followup-sent'), and hands
+// the editable result to the shared Gmail-draft button. Mirrors the TA Outreach
+// drawer's flow so both surfaces behave identically.
+function TaFollowupComposer({ ta }) {
+  const [open, setOpen] = useStateF(false);
+  const [lastSent, setLastSent] = useStateF(null);   // message | false (none) | null (unloaded)
+  const [loadingCorr, setLoadingCorr] = useStateF(false);
+  const [drafting, setDrafting] = useStateF(false);
+  const [draft, setDraft] = useStateF(null);
+  const [email, setEmail] = useStateF('');
+  const [err, setErr] = useStateF(null);
+
+  // Lazily fetch correspondence on first open — the /by-company payload that
+  // feeds this list does not include messages, so pull the full contact to find
+  // the last thing we sent.
+  useEffectF(() => {
+    if (!open || lastSent !== null || loadingCorr) return;
+    setLoadingCorr(true);
+    fetch(`/api/target-talent/${ta.id}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        const corr = (d && d.correspondence) || [];
+        let s = false;
+        for (let i = corr.length - 1; i >= 0; i--) { if (corr[i].direction === 'Sent') { s = corr[i]; break; } }
+        setLastSent(s);
+        setLoadingCorr(false);
+      })
+      .catch(() => { setLastSent(false); setLoadingCorr(false); });
+  }, [open]);
+
+  const generate = () => {
+    setDrafting(true); setErr(null); setDraft(null);
+    window.tjkMutate(`/api/target-talent/${ta.id}/draft`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'followup-sent' }),
+    })
+      .then(r => r.json())
+      .then(d => {
+        setDrafting(false);
+        if (d.draft) {
+          setDraft(d.draft);
+          setEmail(`Hi ${ta.first || 'there'},\n\n${(d.draft.body || '').replace(/^\s+/, '')}\n\n${window.myEmailSignature()}`);
+        } else { setErr(d.error || 'Draft failed'); }
+      })
+      .catch(e => { setDrafting(false); setErr(e.message); });
+  };
+
+  if (!open) {
+    return (
+      <div style={{ padding: '2px 10px 8px' }}>
+        <button className="btn ghost sm" onClick={() => setOpen(true)}
+          title="Draft a short follow-up built on the last email you sent this contact">
+          ✦ Follow up on last sent
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ai-compose" style={{ margin: '0 0 8px' }}>
+      <div className="ai-head">✦ Follow-up · from your last sent email
+        <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={() => setOpen(false)}>Close</button>
+      </div>
+
+      {loadingCorr && <div className="ai-loading"><span className="scan-ring" style={{ width: 14, height: 14, borderWidth: 2 }} /> loading thread…</div>}
+      {lastSent === false && !loadingCorr && (
+        <div className="dim mono" style={{ fontSize: 11, padding: '4px 2px' }}>
+          No sent email logged for this contact yet, so there is nothing to follow up on. Log a sent message on their TA Outreach card first.
+        </div>
+      )}
+      {lastSent && typeof lastSent === 'object' && (
+        <div className="dim mono" style={{ fontSize: 10.5, padding: '2px 2px 6px' }}>
+          Following up on: <strong>{lastSent.subject || '(no subject)'}</strong>{lastSent.timestamp ? ` · sent ${lastSent.timestamp}` : ''}
+        </div>
+      )}
+
+      {lastSent && (
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: draft ? 8 : 0 }}>
+          <button className="btn primary sm" onClick={generate} disabled={drafting}>
+            {drafting ? '✦ Drafting…' : draft ? '✦ Regenerate' : '✦ Draft follow-up'}
+          </button>
+        </div>
+      )}
+      {err && <div className="dim mono" style={{ fontSize: 11, color: 'var(--red, #e66)', padding: '4px 2px' }}>{err}</div>}
+
+      {draft && (
+        <>
+          <div className="row" style={{ gap: 8, alignItems: 'center', margin: '6px 0' }}>
+            <span className="mono dim" style={{ fontSize: 11 }}>Subject</span>
+            <input className="inp" style={{ flex: 1 }} value={draft.subject || ''} onChange={e => setDraft({ ...draft, subject: e.target.value })} />
+          </div>
+          <textarea className="ta" aria-label="Editable follow-up draft"
+            style={{ width: '100%', minHeight: 130, resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }}
+            value={email} onChange={e => setEmail(e.target.value)} />
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+            <window.GmailDraftBtn to={ta.email} subject={draft.subject} body={email} />
+            <button className="btn ghost sm" onClick={() => navigator.clipboard?.writeText(`Subject: ${draft.subject}\n\n${email}`)}>Copy</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   const appId = app.id;
   const [item, setItem] = useStateF(null);        // stale coach data (may be null)
@@ -958,28 +1065,33 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
             {relatedTalent.map(ta => {
               const checked = crossLogIds.has(ta.id);
               return (
-                <label key={ta.id}
+                <div key={ta.id}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '8px 10px', background: 'var(--panel)',
-                    borderRadius: 4, cursor: 'pointer',
+                    background: 'var(--panel)', borderRadius: 4,
                     borderLeft: `3px solid ${checked ? 'var(--green)' : 'var(--text-mute)'}`,
                   }}>
-                  <input type="checkbox" checked={checked} onChange={() => toggleCrossLog(ta.id)} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600 }}>{ta.first} {ta.last}</div>
-                    <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>{ta.title}</div>
-                    {ta.linkedin && (
-                      <a href={window.safeHref(ta.linkedin)} target="_blank" rel="noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        className="mono"
-                        style={{ fontSize: 10.5, color: 'var(--accent)' }}>LinkedIn ↗</a>
-                    )}
-                  </div>
-                  <span className="mono dim" style={{ fontSize: 10.5 }}>
-                    {ta.status || 'Not Contacted'}{ta.lastTouch ? ` · ${ta.lastTouch}` : ''}
-                  </span>
-                </label>
+                  <label
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 10px', cursor: 'pointer',
+                    }}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleCrossLog(ta.id)} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{ta.first} {ta.last}</div>
+                      <div className="dim" style={{ fontSize: 11, marginTop: 2 }}>{ta.title}</div>
+                      {ta.linkedin && (
+                        <a href={window.safeHref(ta.linkedin)} target="_blank" rel="noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="mono"
+                          style={{ fontSize: 10.5, color: 'var(--accent)' }}>LinkedIn ↗</a>
+                      )}
+                    </div>
+                    <span className="mono dim" style={{ fontSize: 10.5 }}>
+                      {ta.status || 'Not Contacted'}{ta.lastTouch ? ` · ${ta.lastTouch}` : ''}
+                    </span>
+                  </label>
+                  <TaFollowupComposer ta={ta} />
+                </div>
               );
             })}
           </div>
