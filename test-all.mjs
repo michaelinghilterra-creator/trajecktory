@@ -502,6 +502,7 @@ for (const suite of [
   'tests/referrals.test.mjs',
   'tests/linkedin-referrals.test.mjs',
   'tests/rolling-floor.test.mjs',
+  'tests/twc.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);

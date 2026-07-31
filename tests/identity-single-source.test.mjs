@@ -44,8 +44,13 @@ function check(cond, msg, detail) {
 }
 
 // Source files that actually ship. installer/payload is a build artifact (a copy
-// of the tree), so scanning it would double-report every finding.
-const SKIP_DIRS = new Set(['node_modules', '.git', 'installer', 'output', 'data', 'reports', 'dist', 'tests']);
+// of the tree), so scanning it would double-report every finding. `worktrees` is
+// the same case: git worktrees under .claude/worktrees are full checkouts of THIS
+// tree, created when parallel Claude sessions work on the repo, so each carries
+// its own lib/identity.mjs. Scanning one reports every identity function a second
+// time, from a copy nobody edits, and the guard fails on stray worktrees rather
+// than on a real duplicate. A copy of the tree is not a second definition.
+const SKIP_DIRS = new Set(['node_modules', '.git', 'installer', 'output', 'data', 'reports', 'dist', 'tests', 'worktrees']);
 function sources(dir = ROOT, out = []) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (e.name.startsWith('.') && e.name !== '.claude') continue;
