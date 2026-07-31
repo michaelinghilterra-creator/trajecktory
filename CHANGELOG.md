@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.6.0...v2.7.0) (2026-07-31)
+
+
+### Features
+
+* **social:** publish posts to Buffer and auto-sync engagement ([#121](https://github.com/michaelinghilterra-creator/trajecktory/issues/121)) ([46ed5af](https://github.com/michaelinghilterra-creator/trajecktory/commit/46ed5af6099f900be1187b71ddb2f8bc70bb6497))
+
 ## [2.6.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.5.0...v2.6.0) (2026-07-30)
 
 
