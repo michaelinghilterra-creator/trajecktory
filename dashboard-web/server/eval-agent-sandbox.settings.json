@@ -1,24 +1,38 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node next-jd.mjs)",
-      "Bash(node next-jd.mjs --pad)"
+      "Bash(node fetch-jd.mjs:*)",
+      "Bash(node scan.mjs)",
+      "Bash(node scan.mjs:*)"
     ],
     "deny": [
-      "Edit(**/*.mjs)",
-      "Edit(**/*.ps1)",
-      "Edit(**/.env)",
-      "Edit(**/.env.*)",
-      "Edit(**/.claude/**)",
-      "Edit(**/config/**)",
-      "Edit(**/portals.yml)",
-      "Edit(**/package.json)",
-      "Edit(**/package-lock.json)",
-      "Edit(**/installer/**)",
+      "Bash(node -e:*)",      "Bash(node --eval:*)",
+      "Bash(node -p:*)",      "Bash(node --print:*)",
+      "Bash(node -)",         "Bash(node -:*)",
+      "Bash(curl:*)",         "Bash(wget:*)",
+      "Bash(cat:*)",          "Bash(sh:*)",
+      "Bash(bash:*)",         "Bash(zsh:*)",
+      "Bash(python:*)",       "Bash(python3:*)",
+      "Bash(eval:*)",         "Bash(nc:*)",
+      "Edit(**/*.mjs)",  "Write(**/*.mjs)",
+      "Edit(**/*.ps1)",  "Write(**/*.ps1)",
+      "Edit(**/*.cmd)",  "Write(**/*.cmd)",
+      "Edit(**/*.bat)",  "Write(**/*.bat)",
+      "Edit(**/*.sh)",   "Write(**/*.sh)",
+      "Edit(**/.env)",   "Write(**/.env)",
+      "Edit(**/.env.*)", "Write(**/.env.*)",
+      "Edit(**/.claude/**)",       "Write(**/.claude/**)",
+      "Edit(**/config/**)",        "Write(**/config/**)",
+      "Edit(**/portals.yml)",      "Write(**/portals.yml)",
+      "Edit(**/package.json)",     "Write(**/package.json)",
+      "Edit(**/package-lock.json)","Write(**/package-lock.json)",
+      "Edit(**/installer/**)",     "Write(**/installer/**)",
       "Read(**/.env)",
       "Read(**/.env.*)",
       "Read(**/.claude/**)",
       "Read(**/google-tokens.json)",
+      "Read(**/buffer-token.json)",
+      "Read(**/*token*.json)",
       "Read(**/*.pem)"
     ]
   }

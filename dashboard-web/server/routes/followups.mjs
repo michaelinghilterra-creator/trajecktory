@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { ROOT_DIR } from '../config.mjs';
+import { resolveReportPath } from '../lib/safe-path.mjs';
 import { parseApplicationsMd, patchRowInMd } from '../lib/applications.mjs';
 import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
@@ -273,8 +274,13 @@ router.post('/api/followups/:appNum/draft', async (req, res) => {
     let reportContext = '';
     if (app.report) {
       try {
-        const reportText = fs.readFileSync(path.resolve(projectRoot, app.report), 'utf8');
-        reportContext = `\n== ROLE EVALUATION REPORT (excerpt — for grounding the follow-up) ==\n${reportText.slice(0, 3000)}\n`;
+        // Contain to reports/ — the Report cell is agent-written/untrusted, so a
+        // value like [x](dashboard-web/.env) must not read a secret into this prompt.
+        const abs = resolveReportPath(app.report);
+        if (abs) {
+          const reportText = fs.readFileSync(abs, 'utf8');
+          reportContext = `\n== ROLE EVALUATION REPORT (excerpt — for grounding the follow-up) ==\n${reportText.slice(0, 3000)}\n`;
+        }
       } catch { /* report missing, skip */ }
     }
 
@@ -402,8 +408,8 @@ router.get('/api/jd/:id', (req, res) => {
 
     // 1. declared snapshot
     if (row.report) {
-      const rp = path.resolve(ROOT_DIR, row.report);
-      if (fs.existsSync(rp)) {
+      const rp = resolveReportPath(row.report);   // null if the cell escapes reports/
+      if (rp && fs.existsSync(rp)) {
         const md = fs.readFileSync(rp, 'utf8');
         if (hasV1Frontmatter(md)) {
           const hit = safeRead(parseV1(md).data.jdSnapshot);
@@ -439,8 +445,8 @@ router.get('/api/cheatsheets/:id', (req, res) => {
     const row = rows.find(r => r.id === id);
     if (!row || !row.report) return res.status(404).json({ error: 'No report for this id' });
 
-    const reportPath = path.resolve(ROOT_DIR, row.report);
-    if (!fs.existsSync(reportPath)) return res.status(404).json({ error: `Report file not found: ${row.report}` });
+    const reportPath = resolveReportPath(row.report);   // null if the cell escapes reports/
+    if (!reportPath || !fs.existsSync(reportPath)) return res.status(404).json({ error: `Report file not found: ${row.report}` });
 
     const mdText = fs.readFileSync(reportPath, 'utf8');
     // v1 frontmatter → project directly onto the cheat-sheet shape (no regex).

@@ -22,6 +22,7 @@ import { dirname, join } from 'path';
 import { chromium } from 'playwright';
 import yaml from 'js-yaml';
 import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness, workdaySiteFromCareersUrl } from './liveness-core.mjs';
+import { isSafeLivenessUrl } from './lib/safe-url.mjs';
 import { buildDecidedIndex, findDecided, buildActiveRoleIndex, findActiveRepost } from './lib/identity.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -202,6 +203,14 @@ function siteHintsFor(parsedWd) {
 }
 
 async function checkOne(item) {
+  // SSRF guard (CWE-918): pipeline URLs are attacker-influenced (the scanner writes
+  // them from board JSON, the user pastes them), and this function is about to
+  // navigate to one. Refuse anything that is not a public http(s) host BEFORE any
+  // fetch — loopback, private ranges, and the 169.254.169.254 metadata endpoint.
+  // Marked expired with a reason so it is flipped to skipped, never probed.
+  if (!isSafeLivenessUrl(item.url)) {
+    return { ...item, result: 'expired', reason: 'blocked: non-public URL (SSRF guard)' };
+  }
   // Workday job pages 404 / time out on a raw Playwright load even when live, so
   // resolve them via the CXS JSON API. Only a definitive verdict short-circuits;
   // an inconclusive API result (null) falls through to the Playwright path below.
