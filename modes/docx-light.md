@@ -22,7 +22,7 @@ match the title and keywords to this JD." For more aggressive tailoring
 |------|-------------------|-----------------|--------------------|
 | `title` | "Regional Logistics & Freight Operations Director" | ~50 chars | Bold centered role-title line under the name |
 | `subtitle_secondary` | "Carrier Analytics \| Network Optimization \| Cost-to-Serve Strategy" | ~60 chars | 3-keyword centered line below the title |
-| `summary` | starts with "Supply-chain analytics leader who turns" | **~870 chars / ~130 words** | Professional summary paragraph |
+| `summary` | starts with "Supply-chain analytics leader who turns" | **match master `baseline_chars` (cap +15%)** | Professional summary paragraph |
 | `areas_of_expertise` | starts with "Carrier Scorecarding & Tender Analytics" | **~410 chars / ~50 words / 12 phrases** | Comma-separated areas-of-expertise list |
 
 The locators above are fictional examples. Your real slot definitions live in
@@ -72,9 +72,12 @@ the master changes structurally.
      Never default to the BI master title for a non-BI role.
    - `subtitle_secondary`: ~60 chars, three phrases separated by " | ".
      Start from the archetype's `subtitle`, adjust toward the JD's top themes.
-   - `summary`: target ~130 words / ~870 chars. **Open with the archetype's
-     `summary_lead`**, then tailor the remaining sentences to the JD using
-     its vocabulary; do NOT invent skills. For non-BI archetypes, the
+   - `summary`: match the master length — read `baseline_chars` for `summary`
+     in `templates/cv-template-slots.json` (hard cap +15%; the generator BLOCKS
+     anything longer). **Open with the archetype's `summary_lead`**, then
+     reframe the master summary's remaining sentences to the JD using its
+     vocabulary; do NOT invent skills, do NOT lengthen it, and do NOT add proof
+     points the master summary does not already contain. For non-BI archetypes, the
      candidate's BI signature line ("Operates on a single test for every
      dashboard...") becomes supporting evidence, not the lead — it may move
      down or be cut if a stronger archetype-aligned close exists.
