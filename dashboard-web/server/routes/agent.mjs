@@ -356,16 +356,21 @@ function runClaudeAgent(jobId, mode, target) {
     const modelPref = /^(?:opus|sonnet|haiku|claude-[a-z0-9.-]+)$/i.test(rawModelPref) ? rawModelPref : '';
     const modelFlag = modelPref ? ['--model', modelPref] : [];
     // SECURITY (CWE-94): this eval agent WebFetches attacker-controlled job postings,
-    // so a booby-trapped posting can attempt prompt injection. Constrain the blast
-    // radius via a deny list (eval-agent-sandbox.settings.json): it blocks editing
-    // server code / config / .env / .claude / installer and reading the OAuth tokens
-    // and other secrets, enforced by a file-permission hook even when the agent tries
-    // it through Bash (verified). An injected instruction then cannot rewrite a server
-    // module (persist / RCE on the one-click restart) or read secrets to exfiltrate.
-    // Bash is NOT blanket-dropped: the eval needs `node next-jd.mjs` for report
-    // numbering, which the settings file explicitly allows; on a shipped install any
-    // other Bash command is denied for want of an allow entry. --settings merges with
-    // the project allow list, and deny wins.
+    // so a booby-trapped posting can attempt prompt injection. Blast radius is
+    // constrained by eval-agent-sandbox.settings.json, which denies BOTH Edit AND
+    // Write (they are DISTINCT tools, and acceptEdits auto-approves Write — denying
+    // only Edit left a Write-over-a-server-module RCE) to server code / *.ps1 / *.sh /
+    // config / .env / .claude / installer / package*.json, and denies READING .env,
+    // the Google + Buffer token files, and *.pem. deny wins over any allow it merges.
+    // HONEST LIMIT: these are TOOL-level denies; there is NO file-permission hook (an
+    // earlier comment claimed one "verified" — there isn't). So they do NOT stop a
+    // Bash-based read/write such as `node -e "...read .env..."`. That path only opens
+    // if THIS machine's ~/.claude/settings.local.json grants a broad Bash(node *) /
+    // Bash(curl *) allow that --settings merges in. Bash is not blanket-denied because
+    // the eval needs `node next-jd.mjs` for report numbering (a blanket deny would win
+    // over that allow and break numbering). To fully close the residual: avoid broad
+    // local Bash allows for this project, or move numbering server-side and drop the
+    // Bash allowance. Verify Write-vs-Edit deny matching empirically on your CLI build.
     const evalSandboxSettings = fileURLToPath(new URL('../eval-agent-sandbox.settings.json', import.meta.url));
     // Windows spawns `claude` through the cmd shell (the .cmd shim needs it), and
     // this whole prompt is wrapped in one pair of double-quotes. A double-quote

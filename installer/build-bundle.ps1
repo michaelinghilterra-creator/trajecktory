@@ -295,7 +295,12 @@ $secretPatterns = @(
   'gh[pousr]_[A-Za-z0-9]{36,}',              # GitHub token (classic)
   'github_pat_[A-Za-z0-9_]{50,}',            # GitHub fine-grained PAT
   'AKIA[0-9A-Z]{16}',                        # AWS access key id
-  '-----BEGIN [A-Z ]*PRIVATE KEY-----'       # PEM private key
+  '-----BEGIN [A-Z ]*PRIVATE KEY-----',      # PEM private key
+  '1//0[A-Za-z0-9_-]{20,}',                   # Google OAuth refresh token (highest-value artifact)
+  'BSA[A-Za-z0-9]{20,}',                      # Brave Search API key
+  # Prefix-less providers (Buffer / Hunter / MillionVerifier / Brave / Obsidian):
+  # match a known env-var name assigned a long high-entropy value.
+  '(?:HUNTER_API_KEY|MILLIONVERIFIER_API_KEY|BUFFER_ACCESS_TOKEN|BUFFER_API_KEY|BRAVE_API_KEY|OBSIDIAN_API_KEY)[''"]?\s*[:=]\s*[''"]?[A-Za-z0-9_-]{20,}'  # prefix-less provider key
 )
 # Files where the maintainer's name/email legitimately appear (attribution +
 # contact). Mirrors the allowlist in test-all.mjs; matched by file name.
