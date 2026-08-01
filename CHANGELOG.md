@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.9.1...v2.9.2) (2026-08-01)
+
+
+### Bug Fixes
+
+* **docx:** enforce the master summary length cap on tailored resumes ([#134](https://github.com/michaelinghilterra-creator/trajecktory/issues/134)) ([d0cc224](https://github.com/michaelinghilterra-creator/trajecktory/commit/d0cc224c83befc7aed0e2935477c03d2a1990249))
+
 ## [2.9.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.9.0...v2.9.1) (2026-08-01)
 
 
