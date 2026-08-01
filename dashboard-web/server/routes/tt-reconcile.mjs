@@ -37,11 +37,10 @@ export const router = express.Router();
 //   }
 router.get('/api/tt-reconcile/preview', (req, res) => {
   try {
-    // Opening the reconcile flow is the boundary for "NEW since last reconcile":
-    // snapshot the current max contact id as the watermark, so any contact this
-    // reconcile adds (a higher id) is badged NEW in the Connect/Email queues, and
-    // the previous batch stops being new. See setNewBaselineId in target-talent.mjs.
-    setNewBaselineId(maxTTId());
+    // Preview is read-only: it must NOT stamp the "NEW since last reconcile"
+    // watermark, or opening it just to look would strip the NEW badges off the
+    // previous batch's un-worked contacts. The watermark is now snapshotted in
+    // /bulk-add, right before contacts are actually written (see there).
     const apps = parseApplicationsMd();
     const ttRows = parseTargetTalentMd().filter(r => r.status !== 'Archived');
     res.json(reconcilePreview(apps, ttRows));
@@ -272,6 +271,11 @@ router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
       const k = `${normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`;
       return !existingKeys.has(k);
     });
+    // Snapshot the "NEW since last reconcile" watermark HERE, just before writing,
+    // so the rows we are about to add (higher ids) read as NEW and the previous
+    // batch stops being new. Guarded on toWrite.length so an all-duplicate add
+    // does not needlessly advance the watermark.
+    if (toWrite.length) setNewBaselineId(maxTTId());
     const written = appendTTRows(toWrite);   // [{id}], in the same order as toWrite
 
     // Find + verify an email for each newly-added contact via the API feeds

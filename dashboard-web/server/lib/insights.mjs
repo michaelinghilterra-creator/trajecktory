@@ -180,8 +180,12 @@ function buildInsightsContext() {
       responded: responded.length,
       interview: interview.length,
       offer: apps.filter(a => furthestIdx(a) >= OFFER_IDX).length,
-      responseRate: applied.length ? Math.round(responded.length / applied.length * 100) : 0,
-      interviewRate: applied.length ? Math.round(interview.length / applied.length * 100) : 0,
+      // Below MIN_SAMPLE the rate is null, not a number — matching the confidence
+      // gate the rest of the module uses, so the model prose can't cite a "50%"
+      // read off 4 applications. The deterministic UI computes its own rates and
+      // never reads these, and the internal comparison at :overall uses `?? 0`.
+      responseRate: rateStat(responded.length, applied.length).sufficient ? Math.round(responded.length / applied.length * 100) : null,
+      interviewRate: rateStat(interview.length, applied.length).sufficient ? Math.round(interview.length / applied.length * 100) : null,
       responseConf: rateStat(responded.length, applied.length),
       interviewConf: rateStat(interview.length, applied.length),
     },
@@ -279,27 +283,33 @@ export function stageFunnelStats() {
     conversion.push({ from, to, fromN: reached[from], toN: reached[to], rate: reached[from] ? Math.round(reached[to] / reached[from] * 100) : 0 });
   }
 
-  const ivIndex = s => INTERVIEW_STAGES.indexOf(s);
-
+  // Attribute each terminal loss to the FURTHEST rung it reached, across the whole
+  // funnel — Responded and Offer included, not just the interview rounds. Uses the
+  // shared furthestIdx (events + the [reached:] tag) so this agrees with the
+  // "reached each stage" panel. Previously a Responded loss and an Offer loss both
+  // fell into "Pre-interview", which mislabeled the deepest reach as the shallowest.
+  const RESPONDED_STAGE = 'Responded', OFFER_STAGE = 'Offer';
   const rejectedAtStage = {};
   for (const s of INTERVIEW_STAGES) rejectedAtStage[s] = 0;
-  let rejectedPreInterview = 0;  // lost before reaching any interview round
+  rejectedAtStage[RESPONDED_STAGE] = 0;  // lost after a reply, before any interview
+  rejectedAtStage[OFFER_STAGE] = 0;      // lost at/after an offer (deepest reach)
+  let rejectedPreInterview = 0;  // reached Applied only — lost before any reply
   let rejectedUnknownStage = 0;  // terminal but no signal to attribute a stage
 
   const terminal = apps.filter(a => a.status === 'Rejected' || a.status === 'No Response');
   for (const a of terminal) {
-    let furthest = null;
-    for (const e of (eventsByApp.get(String(a.id)) || [])) {
-      if (isInterviewStage(e.status) && (!furthest || ivIndex(e.status) > ivIndex(furthest))) furthest = e.status;
-    }
-    // Fold the [reached: X] tag into the max, not just as a fallback when there
-    // are zero interview events. A manual tag can name a deeper round than the
-    // dated events do, and this must agree with makeFurthestIdx (which maxes
-    // events AND the tag) so the two funnel panels don't disagree.
-    const r = reachedStage(a.notes);
-    if (r && isInterviewStage(r) && (!furthest || ivIndex(r) > ivIndex(furthest))) furthest = r;
-    if (furthest) rejectedAtStage[furthest]++;
-    else if ((eventsByApp.get(String(a.id)) || []).length || reachedStage(a.notes)) rejectedPreInterview++;
+    const fi = furthestIdx(a);
+    const rung = FUNNEL_ORDER[fi];
+    // A deeper rung (Responded / interview / Offer) always came from a real event
+    // or the [reached:] tag. At the Applied floor, distinguish a genuine signal
+    // (an event or tag exists) from a row that pre-dates the event log entirely —
+    // the latter stays "unknown" rather than being claimed as pre-interview, since
+    // it may actually have reached deeper without any tracked progression.
+    const hasSignal = (eventsByApp.get(String(a.id)) || []).length > 0 || !!reachedStage(a.notes);
+    if (rung === OFFER_STAGE) rejectedAtStage[OFFER_STAGE]++;
+    else if (isInterviewStage(rung)) rejectedAtStage[rung]++;
+    else if (rung === RESPONDED_STAGE) rejectedAtStage[RESPONDED_STAGE]++;
+    else if (hasSignal) rejectedPreInterview++;
     else rejectedUnknownStage++;
   }
 

@@ -909,9 +909,13 @@ window.StageFunnel = function StageFunnel() {
 
   const rej = data.rejections || { byStage: {}, preInterview: 0, unknownStage: 0, total: 0 };
   const ivStages = data.interviewStages || [];
+  // Shallow -> deep: applied-but-no-reply, then Responded, the interview rounds,
+  // then Offer (the deepest reach), then the un-attributable bucket.
   const rejRows = [
-    ...ivStages.map(s => ({ label: s, n: (rej.byStage || {})[s] || 0, color: (meta[s] && meta[s].color) || '#f59e0b' })),
     { label: 'Pre-interview', n: rej.preInterview || 0, color: '#60a5fa' },
+    { label: 'Responded', n: (rej.byStage || {})['Responded'] || 0, color: '#38bdf8' },
+    ...ivStages.map(s => ({ label: s, n: (rej.byStage || {})[s] || 0, color: (meta[s] && meta[s].color) || '#f59e0b' })),
+    { label: 'Offer', n: (rej.byStage || {})['Offer'] || 0, color: '#22c55e' },
     { label: 'Stage unknown', n: rej.unknownStage || 0, color: '#71717a' },
   ];
   const maxRej = Math.max(1, ...rejRows.map(r => r.n));
