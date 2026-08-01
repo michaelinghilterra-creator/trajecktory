@@ -49,7 +49,7 @@ window.DebriefModal = function DebriefModal({ prompt, onClose, toast }) {
           <div key={fl.key} style={{ marginBottom: 10 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: fl.emphasize ? 'var(--accent)' : 'var(--text)' }}>{fl.label}</label>
             <textarea value={f[fl.key] || ''} onChange={e => set(fl.key, e.target.value)} placeholder={fl.placeholder} rows={fl.rows}
-              style={{ width: '100%', marginTop: 4, padding: '7px 9px', background: 'var(--panel-2)', border: `1px solid ${fl.emphasize ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 6, color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }} />
+              style={{ width: '100%', marginTop: 4, padding: '6px 8px', background: 'var(--panel-2)', border: `1px solid ${fl.emphasize ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 6, color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }} />
           </div>
         ))}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>

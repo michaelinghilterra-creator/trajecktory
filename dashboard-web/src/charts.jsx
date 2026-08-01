@@ -926,7 +926,7 @@ window.StageFunnel = function StageFunnel() {
     <div className="row" style={{ gap: 18, flexWrap: 'wrap' }}>
       <div style={{ flex: 1, minWidth: 280 }}>
         <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>Reached each stage</div>
-        <div className="col" style={{ gap: 7 }}>
+        <div className="col" style={{ gap: 6 }}>
           {order.map(s => {
             const n = reached[s] || 0;
             const conv = convByTo[s];
@@ -944,7 +944,7 @@ window.StageFunnel = function StageFunnel() {
       </div>
       <div style={{ flex: 1, minWidth: 280 }}>
         <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>Where we lose them · {rej.total} closed</div>
-        <div className="col" style={{ gap: 7 }}>
+        <div className="col" style={{ gap: 6 }}>
           {rejRows.map(r => (
             <div key={r.label}>
               <div className="row" style={{ justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>

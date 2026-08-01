@@ -92,6 +92,15 @@ function WeekTrend({ weeks, target, height = 120 }) {
     return parts.some((x) => x == null) ? null : parts.reduce((a, b) => a + b, 0);
   });
   const max = 100;
+  // Stacked pillar segments so each bar encodes the four series shown in the
+  // legend (was a single gradient) and uses solid colors (was a fade-to-
+  // transparent gradient that dissolved at the baseline on light themes).
+  const PILLAR_SEG = [
+    { key: "brand",  color: "var(--accent)" },
+    { key: "people", color: "var(--blue)" },
+    { key: "engage", color: "var(--cyan)" },
+    { key: "rel",    color: "var(--green)" },
+  ];
   return (
     <div style={{ position: "relative", height }}>
       <div style={{ position: "absolute", left: 0, right: 0, bottom: (target / max) * height,
@@ -111,8 +120,14 @@ function WeekTrend({ weeks, target, height = 120 }) {
               ) : (
                 <div style={{
                   width: "100%", height: `${hPct}%`, minHeight: 4, borderRadius: "4px 4px 2px 2px",
-                  background: "linear-gradient(180deg, var(--accent), rgba(167,139,250,.35))",
-                }} />
+                  overflow: "hidden", display: "flex", flexDirection: "column-reverse",
+                }}>
+                  {PILLAR_SEG.map((p) => {
+                    const v = w[p.key] || 0;
+                    const segPct = t ? (v / t) * 100 : 0;
+                    return v > 0 ? <div key={p.key} title={`${p.key}: ${v}`} style={{ height: `${segPct}%`, background: p.color }} /> : null;
+                  })}
+                </div>
               )}
               <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{w.wk}</span>
             </div>
@@ -289,7 +304,7 @@ function LinkedInSSITab({ toast }) {
 
                       {hasScore ? (
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                               <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-mute)", letterSpacing: ".1em" }}>TARGET {target}</span>
                               {delta != null && (
@@ -376,7 +391,7 @@ function LinkedInSSITab({ toast }) {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {(engagementLog || []).slice(0, 3).map((a, i) => (
-                    <div key={i} style={{ display: "flex", gap: 11, alignItems: "flex-start", minWidth: 0 }}>
+                    <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", minWidth: 0 }}>
                       <div className="mono-av sm" style={{ flex: "none" }}>
                         {(a.influencer || "?").split(" ").filter(Boolean).map((w,i,a) => i===0||i===a.length-1?w[0]:"").join("").toUpperCase()}
                       </div>
@@ -600,7 +615,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
         {adding && (
           <div className="card" style={{ padding: "12px 14px", margin: "6px 0 12px" }}>
             <div className="mono" style={{ fontSize: 10.5, color: "var(--text-mute)", letterSpacing: ".08em", marginBottom: 9 }}>NEW INFLUENCER</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 9 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 8 }}>
               <input className="inp" aria-label="Contact name" placeholder="Name (required)" value={draft.name}
                 onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
                 onKeyDown={e => { if (e.key === "Enter") submitNew(); }} autoFocus />
@@ -688,11 +703,11 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
                       <span style={{ fontSize: 12, color: "var(--text-dim)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.role || "-"}</span>
                     </td>
                     <td>
-                      <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: tm.color, border: `1px solid ${tm.color}`, padding: "2px 7px", borderRadius: 5, opacity: .9, whiteSpace: "nowrap" }}>{tm.label}</span>
+                      <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: tm.color, border: `1px solid ${tm.color}`, padding: "2px 6px", borderRadius: 5, opacity: .9, whiteSpace: "nowrap" }}>{tm.label}</span>
                     </td>
                     <td>{p.track ? <span className="tag">{p.track}</span> : <span style={{ color: "var(--text-mute)" }}>—</span>}</td>
                     <td>
-                      <div style={{ display: "flex", gap: 5 }}>
+                      <div style={{ display: "flex", gap: 4 }}>
                         {[
                           { ltr: "F", on: p.following, c: "var(--accent)", title: "Following" },
                           { ltr: "C", on: p.connected, c: "var(--green)",  title: "Connected" },
@@ -708,7 +723,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
                     </td>
                     <td><span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: lt ? "var(--text-dim)" : "var(--text-mute)" }}>{lt ? lt.slice(5) : "-"}</span></td>
                     <td>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--text-dim)" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-dim)" }}>
                         <span style={{ width: 6, height: 6, borderRadius: 99, background: motion.color, flex: "none" }} />
                         {motion.text}
                       </span>
@@ -790,7 +805,7 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
         <div className="card-head">
           <div className="card-title"><span className="dot" />Log New Activity</div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div className="grid cols-2" style={{ gap: 10 }}>
             <div className="field"><label>Date</label><input className="inp" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
             <div className="field"><label>Influencer</label>
@@ -850,9 +865,9 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
                   </div>
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{a.influencer}</span>
-                    <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".06em", textTransform: "uppercase", color: typeColor(a.actionType), border: `1px solid ${typeColor(a.actionType)}`, opacity: .85, padding: "1px 7px", borderRadius: 5 }}>{a.actionType}</span>
+                    <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".06em", textTransform: "uppercase", color: typeColor(a.actionType), border: `1px solid ${typeColor(a.actionType)}`, opacity: .85, padding: "2px 6px", borderRadius: 5 }}>{a.actionType}</span>
                     <span className="tag">{a.topic}</span>
                     <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{a.date}</span>
                   </div>
@@ -1055,12 +1070,12 @@ function WeeklyView({ weeks, target, setSsiData }) {
         </div>
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+      <div className="grid" style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
         {weekOptions.map((w, i) => {
           const recorded = w.brand != null;
           const total = recorded ? w.brand + w.people + w.engage + w.rel : null;
           return (
-            <div key={w.wk} className="card" style={{ padding: 13, display: "flex", flexDirection: "column", gap: 10, opacity: recorded ? 1 : 0.66 }}>
+            <div key={w.wk} className="card" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10, opacity: recorded ? 1 : 0.66 }}>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
                 <span style={{ fontFamily: "var(--mono)", fontSize: 11, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: recorded ? "var(--text)" : "var(--text-dim)" }}>Week {w.wk}</span>
                 <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{w.date?.slice(5) || ""}</span>
@@ -1179,13 +1194,13 @@ function AIResponseView({ influencers, lockedInfluencer, onLog }) {
           </div>
         )}
         {busy && (
-          <div style={{ minHeight: 200, display: "flex", alignItems: "center", justifyContent: "center", gap: 9, color: "var(--text-dim)", fontFamily: "var(--mono)", fontSize: 12 }}>
+          <div style={{ minHeight: 200, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--text-dim)", fontFamily: "var(--mono)", fontSize: 12 }}>
             drafting a {tone.toLowerCase()} reply with Claude…
           </div>
         )}
         {out && !busy && (
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <div className="mono-av sm">{who ? who.split(" ").filter(Boolean).map((w,i,a) => i===0||i===a.length-1?w[0]:"").join("") : "??"}</div>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 600 }}>{who || "Unspecified"}</div>
@@ -1193,7 +1208,7 @@ function AIResponseView({ influencers, lockedInfluencer, onLog }) {
               </div>
             </div>
             <textarea className="ta" value={out} onChange={(e) => setOut(e.target.value)} aria-label="Editable draft, tweak it before you copy or log"
-              style={{ width: "100%", minHeight: 120, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)", resize: "vertical", fontFamily: "inherit" }} />
+              style={{ width: "100%", minHeight: 120, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 14px", fontSize: 13, lineHeight: 1.65, color: "var(--text)", resize: "vertical", fontFamily: "inherit" }} />
             {logErr && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)", marginTop: 10 }}>{logErr}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               {onLog && lockedInfluencer && (
@@ -1336,13 +1351,13 @@ function AIConnectView({ influencers, lockedInfluencer, onLog }) {
           </div>
         )}
         {busy && (
-          <div style={{ minHeight: 200, display: "flex", alignItems: "center", justifyContent: "center", gap: 9, color: "var(--text-dim)", fontFamily: "var(--mono)", fontSize: 12 }}>
+          <div style={{ minHeight: 200, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--text-dim)", fontFamily: "var(--mono)", fontSize: 12 }}>
             drafting a {tone.toLowerCase()} connection note…
           </div>
         )}
         {out && !busy && (
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
               <div className="mono-av sm">{who ? who.split(" ").filter(Boolean).map((w,i,a) => i===0||i===a.length-1?w[0]:"").join("") : "??"}</div>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 600 }}>{who || "Unspecified"}</div>
@@ -1350,7 +1365,7 @@ function AIConnectView({ influencers, lockedInfluencer, onLog }) {
               </div>
             </div>
             <textarea className="ta" value={out} onChange={(e) => setOut(e.target.value)} aria-label="Editable draft, tweak it before you copy or log"
-              style={{ width: "100%", minHeight: 120, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)", resize: "vertical", fontFamily: "inherit" }} />
+              style={{ width: "100%", minHeight: 120, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 14px", fontSize: 13, lineHeight: 1.65, color: "var(--text)", resize: "vertical", fontFamily: "inherit" }} />
             {logErr && <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)", marginTop: 10 }}>{logErr}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               {onLog && lockedInfluencer && (
@@ -1468,7 +1483,7 @@ function AIReplyView({ lockedInfluencer, onLogTheirReply, onLogMyReply }) {
         {out && !busy && (
           <div>
             <textarea className="ta" value={out} onChange={(e) => { setOut(e.target.value); setSent(false); }} aria-label="Editable reply draft"
-              style={{ width: "100%", minHeight: 130, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 15px", fontSize: 13, lineHeight: 1.65, color: "var(--text)", resize: "vertical", fontFamily: "inherit" }} />
+              style={{ width: "100%", minHeight: 130, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 9, padding: "14px 14px", fontSize: 13, lineHeight: 1.65, color: "var(--text)", resize: "vertical", fontFamily: "inherit" }} />
             <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
               <button className="btn sm" onClick={generate}>Regenerate</button>
               <button className="btn sm" onClick={() => navigator.clipboard.writeText(out)}>Copy reply</button>
@@ -1598,15 +1613,15 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
         style={{ transform: open ? "translateX(0)" : "translateX(100%)" }}
       >
         <div className="drawer-head">
-          <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
             <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-mute)" }}>#{influencer.id}</span>
-            <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: tierColor, border: `1px solid ${tierColor}`, padding: "2px 7px", borderRadius: 5, opacity: .9 }}>{tierLabel}</span>
+            <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".08em", textTransform: "uppercase", color: tierColor, border: `1px solid ${tierColor}`, padding: "2px 6px", borderRadius: 5, opacity: .9 }}>{tierLabel}</span>
             {influencer.track && <span className="tag accent">{influencer.track}</span>}
             <button className="icon-btn" onClick={onClose} style={{ marginLeft: "auto" }} title="Close (Esc)">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>
           </div>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 13 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
             <span className="mono-av" style={{ width: 44, height: 44, fontSize: 14, borderRadius: 10, borderColor: tierColor, color: tierColor, flex: "none" }}>{initials}</span>
             <div style={{ minWidth: 0 }}>
               <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>{influencer.name}</h3>
@@ -1746,9 +1761,9 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {myEngagement.map((a, i) => (
-                      <div key={i} style={{ padding: "11px 13px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--panel)" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 5 }}>
-                          <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--accent-2)", border: "1px solid var(--border)", padding: "1px 7px", borderRadius: 5 }}>{a.actionType}</span>
+                      <div key={i} style={{ padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--panel)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 5 }}>
+                          <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--accent-2)", border: "1px solid var(--border)", padding: "2px 6px", borderRadius: 5 }}>{a.actionType}</span>
                           {a.topic && <span className="tag">{a.topic}</span>}
                           <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{a.date}</span>
                         </div>

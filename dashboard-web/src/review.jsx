@@ -28,7 +28,7 @@ function ReviewFloor({ r }) {
 function ReviewIndicator({ label, m }) {
   const avail = m && m.available;
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 2px', borderBottom: '1px solid var(--border)' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 2px', borderBottom: '1px solid var(--border)' }}>
       <span style={{ fontSize: 13 }}>{label}</span>
       <span className="mono" style={{ fontSize: 13, fontWeight: 600, color: avail ? 'var(--text)' : 'var(--text-mute)' }}>
         {avail ? m.value : 'not logged'}
@@ -57,10 +57,10 @@ function wowCellColor(f) {
   if (!f || !f.available) return 'var(--text-mute)';
   return f.met ? 'var(--green)' : 'var(--red)';
 }
-const WOW_TH = { textAlign: 'right', padding: '7px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', whiteSpace: 'nowrap' };
+const WOW_TH = { textAlign: 'right', padding: '6px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', whiteSpace: 'nowrap' };
 const WOW_TH_L = { ...WOW_TH, textAlign: 'left' };
-const WOW_TD = { textAlign: 'right', padding: '7px 12px', whiteSpace: 'nowrap' };
-const WOW_TD_L = { textAlign: 'left', padding: '7px 12px', fontSize: 13 };
+const WOW_TD = { textAlign: 'right', padding: '6px 12px', whiteSpace: 'nowrap' };
+const WOW_TD_L = { textAlign: 'left', padding: '6px 12px', fontSize: 13 };
 
 // Debriefs due: interview rounds on file whose current status is an interview
 // stage with no debrief note yet (GET /api/interview/debriefs/pending). This is
@@ -81,7 +81,7 @@ function DebriefsDue({ pending, onOpen }) {
       ) : (
         <div className="card" style={{ padding: '4px 16px', marginBottom: 24, borderLeft: '3px solid var(--accent)' }}>
           {pending.map(p => (
-            <div key={`${p.id}:${p.stage}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '9px 2px', borderBottom: '1px solid var(--border)' }}>
+            <div key={`${p.id}:${p.stage}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '8px 2px', borderBottom: '1px solid var(--border)' }}>
               <div style={{ minWidth: 0 }}>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>{p.company}</span>{' '}
                 <span className="dim" style={{ fontSize: 12 }}>· {p.role || 'role n/a'} · {p.stage}</span>
@@ -154,14 +154,14 @@ function ReplyRow({ reply, toast }) {
   };
 
   return (
-    <div style={{ padding: '7px 2px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+    <div style={{ padding: '6px 2px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{reply.from} · {reply.subject || '(no subject)'}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <select value={sentiment} onChange={e => setSentiment(e.target.value)}
             title="Auto-detected sentiment is a rough keyword guess. Override it if wrong; the value you set is recorded with the logged note."
             className="mono"
-            style={{ fontSize: 12, padding: '1px 4px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
+            style={{ fontSize: 12, padding: '2px 4px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
               color: sentiment === 'negative' ? 'var(--red)' : sentiment === 'positive' ? 'var(--green)' : 'var(--text-mute)' }}>
             <option value="negative">negative</option>
             <option value="positive">positive</option>
@@ -182,7 +182,7 @@ function ReplyRow({ reply, toast }) {
         <div style={{ display: 'flex', gap: 6, marginTop: 5, alignItems: 'center', flexWrap: 'wrap' }}>
           {cands.length > 1 ? (
             <select value={appId || ''} onChange={e => setAppId(parseInt(e.target.value, 10))}
-              style={{ fontSize: 12, padding: '3px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
+              style={{ fontSize: 12, padding: '2px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
               {cands.map(a => <option key={a.id} value={a.id}>{a.role} — {a.status}</option>)}
             </select>
           ) : (
@@ -670,7 +670,7 @@ window.ReviewTab = function ReviewTab({ toast }) {
       <div style={{ display: 'flex', gap: 8, maxWidth: 480 }}>
         <input value={name} onChange={e => setName(e.target.value)} placeholder="Name or note (optional)"
           onKeyDown={e => { if (e.key === 'Enter') logConnect(); }}
-          style={{ flex: 1, padding: '7px 10px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontSize: 13 }} />
+          style={{ flex: 1, padding: '6px 10px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', fontSize: 13 }} />
         <button className="btn primary" onClick={logConnect}>+ Log connect</button>
       </div>
 
