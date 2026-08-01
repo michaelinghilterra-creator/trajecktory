@@ -329,12 +329,18 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
   const toggleStatus = (s) => setFilters(f => ({ ...f, statuses: f.statuses.includes(s) ? f.statuses.filter(x => x !== s) : [...f.statuses, s] }));
   const active = filters.statuses.length || filters.archetype || filters.scoreMin || (search && search.trim());
   const scoreSteps = [0, 3.0, 3.5, 4.0, 4.5];
+  // One pass over apps instead of one filter per status on every render/keystroke.
+  const statusCounts = useMemoP(() => {
+    const m = {};
+    for (const a of apps) m[a.status] = (m[a.status] || 0) + 1;
+    return m;
+  }, [apps]);
   return (
     <div className="pl-toolbar">
       <div className="tb-row">
         <div className="statline">
           {STATUS.map(s => {
-            const n = apps.filter(a => a.status === s.id).length;
+            const n = statusCounts[s.id] || 0;
             const on = filters.statuses.includes(s.id);
             return (
               <button key={s.id} className={'stat-chip' + (on ? ' on' : '') + (n === 0 ? ' zero' : '')} onClick={() => toggleStatus(s.id)}>
@@ -1249,7 +1255,8 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   return (
     <div className="pl-drawer-overlay">
       <div className={'drawer-backdrop' + (app ? ' open' : '')} onClick={onClose}></div>
-      <div className={'pl-drawer' + (app ? ' open' : '')}>
+      <div className={'pl-drawer' + (app ? ' open' : '')} role="dialog" aria-modal="true"
+        aria-label={app ? `${app.company} — ${app.role || 'role'} details` : 'Application details'}>
         <div className="drawer-head">
           <div style={{ minWidth: 0, flex: 1 }}>
             <div className="row" style={{ gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
@@ -2217,6 +2224,25 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
     { k: 'score',      label: 'Score',     w: 80 },
     { k: 'source',     label: 'Source',    w: 92 },
   ];
+  // Windowing: render only the first `limit` rows and grow as the user scrolls.
+  // The full tracker (~600+ rows incl. closed) otherwise mounts ~12k DOM nodes,
+  // and every sort/filter reconciled all of them. Reset the window on a sort or
+  // row-count change (robust to `rows` array-reference churn from any caller).
+  const STEP = 150;
+  const [limit, setLimit] = useStateP(STEP);
+  useEffectP(() => { setLimit(STEP); }, [sortKey, sortDir, rows.length]);
+  const shown = rows.length > limit ? rows.slice(0, limit) : rows;
+  const sentinelRef = useRefP(null);
+  useEffectP(() => {
+    if (rows.length <= limit) return;
+    const el = sentinelRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => { if (entries.some(e => e.isIntersecting)) setLimit(l => l + STEP); },
+      { root: el.closest('.tbl-wrap'), rootMargin: '600px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [rows.length, limit]);
   return (
     <div className="tbl-wrap" style={{
       maxHeight: 'calc(100vh - ' + (flat ? '360px' : '280px') + ')',
@@ -2237,7 +2263,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
           {rows.length === 0 && (
             <tr><td colSpan={cols.length}><div className="no-data">No matches. Try clearing filters.</div></td></tr>
           )}
-          {rows.map(a => {
+          {shown.map(a => {
             const stale = isStale(a);
             return (
             <tr key={a.id} className={stale ? 'stale' : ''}
@@ -2280,6 +2306,15 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
             </tr>
             );
           })}
+          {rows.length > limit && (
+            <tr ref={sentinelRef} className="tbl-more">
+              <td colSpan={cols.length} style={{ textAlign: 'center', padding: '10px 0' }}>
+                <button type="button" className="btn ghost sm" onClick={() => setLimit(l => l + STEP)}>
+                  Show more — {rows.length - limit} of {rows.length} hidden
+                </button>
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

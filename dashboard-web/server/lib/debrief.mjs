@@ -1,4 +1,4 @@
-import { INTERVIEW_STAGES } from './statuses.mjs';
+import { INTERVIEW_STAGES, reachedStage } from './statuses.mjs';
 
 // ── Interview-round debriefs ─────────────────────────────────────────────────
 // A debrief is a structured, timestamped app-note capturing what happened in an
@@ -94,18 +94,31 @@ function formatDebriefNote(stage, fields = {}, { date = '', company = '', role =
   return out.join('\n');
 }
 
-// Which interview rounds still need a debrief: an app whose CURRENT status is an
-// interview stage with no debrief note for that stage. `apps` are parsed tracker
-// rows; `notes` is the app-notes map ({ "<id>": [{ text }] }). Injectable so this
-// is unit-tested without reading the real (gitignored) tracker and notes.
+// Which interview rounds still need a debrief. A debrief is owed for every round
+// the app has CONCLUDED (left) without one — not just its current stage, so a
+// round you skipped and then advanced past keeps surfacing until you write it.
+// `apps` are parsed tracker rows (a.status + a.notes carry the [reached:] tag);
+// `notes` is the app-notes map ({ "<id>": [{ text }] }). Injectable for tests.
 function pendingDebriefs({ apps = [], notes = {} } = {}) {
-  const stages = new Set(INTERVIEW_STAGES);
+  const ladder = INTERVIEW_STAGES;            // ordered Phone Screen -> 4th Interview
+  const stageSet = new Set(ladder);
   const out = [];
   for (const a of apps) {
-    if (!stages.has(a.status)) continue;
+    // Furthest interview round reached: the current stage if still interviewing,
+    // else the [reached: X] tag stamped when the row closed.
+    let furthest = -1;
+    if (stageSet.has(a.status)) furthest = ladder.indexOf(a.status);
+    else { const r = reachedStage(a.notes); if (r && stageSet.has(r)) furthest = ladder.indexOf(r); }
+    if (furthest < 0) continue;
+    // A round still in progress (the current interview stage) isn't concluded yet;
+    // a terminal row has concluded its furthest reached round too.
+    const concludedUpto = stageSet.has(a.status) ? furthest - 1 : furthest;
     const list = notes[String(a.id)] || [];
-    if (list.some(n => isDebriefFor(n.text, a.status))) continue;
-    out.push({ id: a.id, company: a.company, role: a.role, stage: a.status });
+    for (let i = 0; i <= concludedUpto; i++) {
+      const stage = ladder[i];
+      if (list.some(n => isDebriefFor(n.text, stage))) continue;
+      out.push({ id: a.id, company: a.company, role: a.role, stage });
+    }
   }
   return out;
 }

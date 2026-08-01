@@ -116,7 +116,11 @@ function _businessDaysAgo(iso) {
   if (!iso) return null;
   const start = new Date(iso + 'T00:00:00');
   if (isNaN(start.getTime())) return null;
-  const today = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00');
+  // "today" must be LOCAL midnight, not the UTC date: `toISOString().slice(0,10)`
+  // is already tomorrow during the US evening, which inflated the day count and
+  // tripped stale thresholds a day early. (cadence.mjs documents the same hazard.)
+  const n = new Date();
+  const today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
   if (today <= start) return 0;
   let count = 0;
   const cur = new Date(start);

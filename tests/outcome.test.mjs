@@ -25,16 +25,20 @@ function check(cond, msg) {
 console.log('outcome.test.mjs');
 
 // ── classifyOutcome buckets ───────────────────────────────────────────────────
-check(classifyOutcome('Applied') === 'positive', 'Applied is positive');
-check(classifyOutcome('Interview') === 'positive', 'Interview is positive');
-check(classifyOutcome('Offer') === 'positive', 'Offer is positive');
+// 'positive' is a WIN and only an Offer earns it. Applied / Responded and every
+// interview round are in-flight (pending), NOT wins — so the win rate never
+// counts a still-open application as a win.
+check(classifyOutcome('Applied') === 'pending', 'Applied is in-flight (pending), not a win');
+check(classifyOutcome('Responded') === 'pending', 'Responded is in-flight (pending)');
+check(classifyOutcome('Interview') === 'pending', 'Interview is in-flight (pending)');
+check(classifyOutcome('Offer') === 'positive', 'Offer is the only win (positive)');
 
-// ── Interview ladder: every round classifies as a positive outcome ──────────────
-check(classifyOutcome('Phone Screen') === 'positive', 'Phone Screen is positive');
-check(classifyOutcome('1st Interview') === 'positive', '1st Interview is positive');
-check(classifyOutcome('2nd Interview') === 'positive', '2nd Interview is positive');
-check(classifyOutcome('3rd Interview') === 'positive', '3rd Interview is positive');
-check(classifyOutcome('4th Interview') === 'positive', '4th Interview is positive');
+// ── Interview ladder: every round is in-flight until a terminal outcome ─────────
+check(classifyOutcome('Phone Screen') === 'pending', 'Phone Screen is pending');
+check(classifyOutcome('1st Interview') === 'pending', '1st Interview is pending');
+check(classifyOutcome('2nd Interview') === 'pending', '2nd Interview is pending');
+check(classifyOutcome('3rd Interview') === 'pending', '3rd Interview is pending');
+check(classifyOutcome('4th Interview') === 'pending', '4th Interview is pending');
 check(normalizeStatus('Interview') === '1st interview', 'legacy Interview folds into 1st interview');
 check(normalizeStatus('Round 2') === '2nd interview', 'Round 2 alias maps to 2nd interview');
 check(normalizeStatus('TA Screen') === 'phone screen', 'TA Screen alias maps to phone screen');

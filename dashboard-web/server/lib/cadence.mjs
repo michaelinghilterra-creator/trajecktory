@@ -49,11 +49,20 @@ function starterTemplate() {
   };
 }
 
+// Every task carries a `since` (YYYY-MM-DD) = the date it started counting toward
+// the streak. Legacy tasks predate the field; treat them as always-existing
+// ('1970-01-01') so their historical completeness is unchanged. New tasks get
+// today's date on save (see saveTemplate), so ADDING a task never retroactively
+// marks past days incomplete and collapses a valid streak.
+function withSince(tasks) {
+  return (Array.isArray(tasks) ? tasks : []).map(t =>
+    ({ ...t, since: /^\d{4}-\d{2}-\d{2}$/.test(t.since) ? t.since : '1970-01-01' }));
+}
 function readTemplate() {
   try {
     const raw = JSON.parse(fs.readFileSync(CADENCE_PATH, 'utf8'));
-    return { version: raw.version || 1, tasks: Array.isArray(raw.tasks) ? raw.tasks : [] };
-  } catch { return starterTemplate(); }
+    return { version: raw.version || 1, tasks: withSince(raw.tasks) };
+  } catch { const s = starterTemplate(); return { ...s, tasks: withSince(s.tasks) }; }
 }
 function writeTemplate(tpl) {
   fs.writeFileSync(CADENCE_PATH, JSON.stringify({ version: 1, tasks: tpl.tasks || [] }, null, 2) + '\n');
@@ -63,6 +72,9 @@ function writeTemplate(tpl) {
 // rows, clamps/typecasts fields, drops blank-labeled rows, and keeps a stable
 // order index. Returns the saved template.
 function saveTemplate(tasks) {
+  // Preserve each existing task's `since`; a brand-new task starts counting today.
+  const existingSince = new Map(readTemplate().tasks.map(t => [t.id, t.since]));
+  const today = localToday();
   const clean = (Array.isArray(tasks) ? tasks : [])
     .map((t, i) => {
       const label = String(t.label == null ? '' : t.label).trim();
@@ -72,8 +84,12 @@ function saveTemplate(tasks) {
       const start = /^\d{2}:\d{2}$/.test(t.start) ? t.start : '09:00';
       const durationMin = Math.max(1, Math.min(240, parseInt(t.durationMin, 10) || 25));
       const pomodoros = Math.max(0, Math.min(12, parseInt(t.pomodoros, 10) || 0));
+      const id = t.id && String(t.id).startsWith('t_') ? String(t.id) : newTaskId();
+      // Keep an existing task's start date; a new id starts counting from today.
+      const since = /^\d{4}-\d{2}-\d{2}$/.test(t.since) ? t.since : (existingSince.get(id) || today);
       return {
-        id: t.id && String(t.id).startsWith('t_') ? String(t.id) : newTaskId(),
+        id,
+        since,
         label,
         days,
         start,
@@ -184,7 +200,9 @@ function computeStreak() {
   for (let i = 0; i < WINDOW; i++) {
     const dstr = ymd(cur);
     const dow = dowOf(cur);
-    const scheduled = scheduledForDow(template, dow);
+    // Only require a task on a past day if it already existed then (since <= day),
+    // so adding a task today doesn't retroactively break older days.
+    const scheduled = scheduledForDow(template, dow).filter(t => (t.since || '1970-01-01') <= dstr);
     let kind;
     if (scheduled.length === 0) {
       kind = 'rest';
@@ -220,7 +238,7 @@ function computeStreak() {
   const d7 = new Date(); d7.setHours(0, 0, 0, 0); d7.setDate(d7.getDate() - 6);
   for (let i = 0; i < 7; i++) {
     const dstr = ymd(d7);
-    const scheduled = scheduledForDow(template, dowOf(d7));
+    const scheduled = scheduledForDow(template, dowOf(d7)).filter(t => (t.since || '1970-01-01') <= dstr);
     if (scheduled.length === 0) {
       last7.push({ date: dstr, pct: null, rest: true });
     } else {
