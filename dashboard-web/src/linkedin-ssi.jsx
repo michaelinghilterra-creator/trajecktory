@@ -230,7 +230,7 @@ function LinkedInSSITab({ toast }) {
           <div>
             <h1>LinkedIn SSI</h1>
             <div className="sub">
-              score {ssiData?.score ?? '-'} / 100 · target {ssiData?.target ?? 60} · {influencers.length} influencers tracked · {engagementLog.filter(a => new Date(a.date) >= new Date(Date.now() - 7*24*60*60*1000)).length} touchpoints this week
+              score {ssiData?.score ?? '-'} / 100 · target {ssiData?.target ?? 60} · {influencers.length} influencers tracked · {(() => { const d = new Date(); d.setDate(d.getDate() - 6); const cutoff = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; return engagementLog.filter(a => String(a.date || '') >= cutoff).length; })()} touchpoints this week
             </div>
           </div>
         </div>

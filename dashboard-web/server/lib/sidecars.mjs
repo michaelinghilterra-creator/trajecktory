@@ -14,8 +14,14 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 // follow-up cadence clock keeps running underneath (when it returns, it still
 // reads the true "Xd since last touch"). Separate file → never perturbs the
 // applications.md schema or the follow-up touch-log / analytics.
-function snoozeToday() { return new Date().toISOString().slice(0, 10); }
-function snoozeDateIn(days) { return new Date(Date.now() + days * 86400000).toISOString().slice(0, 10); }
+// LOCAL date, not the UTC date: toISOString() is already tomorrow during the US
+// evening, which expired a snooze (and re-surfaced the alert) the night before
+// its intended date. snoozeToday and the prune comparison must share this basis.
+function localYmd(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function snoozeToday() { return localYmd(); }
+function snoozeDateIn(days) { const d = new Date(); d.setDate(d.getDate() + days); return localYmd(d); }
 
 function readSnooze() {
   try {

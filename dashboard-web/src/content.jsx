@@ -579,7 +579,13 @@ window.ContentTab = function ContentTab({ toast }) {
   useEffectC(() => { load(); }, []);
 
   const withMetrics = posts.filter(p => engRateOf(p.metrics) != null);
-  const avgER = withMetrics.length ? withMetrics.reduce((s, p) => s + engRateOf(p.metrics), 0) / withMetrics.length : null;
+  // Impression-weighted, not a plain mean of per-post ratios: a 10-impression
+  // post must not weigh the same as a 10,000-impression one (that inflated the
+  // headline rate to a figure the underlying totals never supported).
+  const _imprSum = withMetrics.reduce((s, p) => s + ((p.metrics && p.metrics.impressions) || 0), 0);
+  const avgER = _imprSum > 0
+    ? withMetrics.reduce((s, p) => s + engRateOf(p.metrics) * ((p.metrics && p.metrics.impressions) || 0), 0) / _imprSum
+    : null;
   const totalDms = posts.reduce((s, p) => s + ((p.metrics && p.metrics.inboundDms) || 0), 0);
 
   const goReply = (post) => { setReplyPostId(post.id); setSub('reply'); };
