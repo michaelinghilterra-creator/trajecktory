@@ -129,7 +129,10 @@ function buildInsightsContext() {
   // an application's live status instead of the furthest rung it ever reached.
   const taActive = taContacts.filter(c => c.status !== 'Archived');   // still the honest "open contacts" count
   const REPLIED_SET = ['Replied', 'Meeting Scheduled', 'Connected'];
-  const TA_CONTACTED = ['Sent', 'Dormant', ...REPLIED_SET];
+  // Bounced is a post-send state (per the comment below), so it belongs in the
+  // "sent" denominator — matching RECRUITER_CONTACTED, so the TA and Recruiter
+  // reply rates the user compares side-by-side are computed by the same rule.
+  const TA_CONTACTED = ['Sent', 'Dormant', 'Bounced', ...REPLIED_SET];
   // Archiving OVERWRITES the outreach status in place, so an archived contact's
   // prior state is unrecoverable — but `lastTouch` survives and is only ever
   // stamped when a message actually went out. It is therefore valid evidence for
@@ -285,10 +288,12 @@ export function stageFunnelStats() {
     for (const e of (eventsByApp.get(String(a.id)) || [])) {
       if (isInterviewStage(e.status) && (!furthest || ivIndex(e.status) > ivIndex(furthest))) furthest = e.status;
     }
-    if (!furthest) {
-      const r = reachedStage(a.notes);
-      if (r && isInterviewStage(r)) furthest = r;
-    }
+    // Fold the [reached: X] tag into the max, not just as a fallback when there
+    // are zero interview events. A manual tag can name a deeper round than the
+    // dated events do, and this must agree with makeFurthestIdx (which maxes
+    // events AND the tag) so the two funnel panels don't disagree.
+    const r = reachedStage(a.notes);
+    if (r && isInterviewStage(r) && (!furthest || ivIndex(r) > ivIndex(furthest))) furthest = r;
     if (furthest) rejectedAtStage[furthest]++;
     else if ((eventsByApp.get(String(a.id)) || []).length || reachedStage(a.notes)) rejectedPreInterview++;
     else rejectedUnknownStage++;

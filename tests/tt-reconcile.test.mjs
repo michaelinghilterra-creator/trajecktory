@@ -52,8 +52,15 @@ check(!needCos.includes('Northwind'), 'Northwind not flagged — it already has 
 check(!needCos.includes('Crestline'), 'Crestline not flagged — its app is closed (not active)');
 check(!needCos.includes('Acme Labs'), 'Acme not flagged — closed + already has contacts');
 
-check(normCompany('ADT, Inc.') === 'adtinc', 'normCompany strips punctuation + lowercases');
+check(normCompany('ADT, Inc.') === 'adt', 'normCompany strips punctuation, legal suffix, lowercases');
 check(normCompany('') === '', 'normCompany handles empty');
+// Suffix + " — City" variants must normalize to the same key so a contact at
+// "Stripe, Inc." reconciles against applications logged under "Stripe".
+check(normCompany('Stripe') === normCompany('Stripe, Inc.'), 'normCompany matches legal-suffix variant');
+check(normCompany('Grow Therapy') === normCompany('Grow Therapy — New York'), 'normCompany drops " — City" suffix');
+// Distinct companies must stay distinct, and a suffix token inside a word is kept.
+check(normCompany('Stripe') !== normCompany('Square'), 'normCompany keeps distinct companies distinct');
+check(normCompany('Costco') === 'costco', 'normCompany does not strip a suffix inside a word');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

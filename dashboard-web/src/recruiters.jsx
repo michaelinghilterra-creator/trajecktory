@@ -629,7 +629,7 @@ function RecKpi({ label, value, sub, tone = 'neutral' }) {
 }
 
 function RecBar({ label, n, total, color }) {
-  const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+  const pct = total > 0 ? Math.min(100, Math.round((n / total) * 100)) : 0;
   return (
     <div className="col" style={{ gap: 4 }}>
       <div className="row" style={{ justifyContent: 'space-between', fontSize: 11 }}>
@@ -776,7 +776,7 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
           <div className="col" style={{ gap: 10 }}>
             {byFirm.length === 0 && <span className="dim" style={{ fontSize: 12 }}>No firm data yet.</span>}
             {byFirm.map(v => (
-              <RecBar key={v.key} label={`${v.key} · ${v.engaged}/${v.total} engaged`} n={v.total} total={(cum[0]?.reached) || 1} color="#a78bfa" />
+              <RecBar key={v.key} label={`${v.key} · ${v.engaged}/${v.total} engaged`} n={v.engaged} total={v.total} color="#a78bfa" />
             ))}
           </div>
           <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>{firmInsight}</div>

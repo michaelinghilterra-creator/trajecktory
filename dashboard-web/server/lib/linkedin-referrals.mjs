@@ -119,9 +119,19 @@ export function matchConnections({ connections, active = activeCompanies(), exis
   const seenInBatch = new Set();
   const dupe = (c) => {
     const nm = norm(`${c.first} ${c.last}`);
-    const key = (c.url && c.url.trim()) ? c.url.trim().toLowerCase() : nm;
-    if (existing.urls.has(key) || existing.names.has(nm) || seenInBatch.has(key)) return true;
-    seenInBatch.add(key); return false;
+    const url = (c.url && c.url.trim()) ? c.url.trim().toLowerCase() : null;
+    // A LinkedIn URL is the reliable identity. When the connection has one, dedup
+    // on URL ONLY — matching on name would drop a distinct person who happens to
+    // share a name with an existing referral (a real warm path silently lost).
+    // Fall back to name matching only when there is no URL to key on. (Tradeoff:
+    // re-importing a urless existing referral that now carries a URL can create
+    // one visible duplicate row, which is far cheaper than dropping a warm path.)
+    if (url) {
+      if (existing.urls.has(url) || seenInBatch.has(url)) return true;
+      seenInBatch.add(url); return false;
+    }
+    if (existing.names.has(nm) || seenInBatch.has(nm)) return true;
+    seenInBatch.add(nm); return false;
   };
   const stage1 = [], stage2 = [];
   for (const c of connections) {
