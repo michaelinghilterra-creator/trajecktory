@@ -271,7 +271,7 @@ window.PostingPanel = function PostingPanel({ app }) {
         {app.url && <a className="btn sm" href={window.safeHref(app.url)} target="_blank" rel="noreferrer">Original ↗</a>}
       </div>
       <div className="mono dim" style={{ fontSize: 10.5 }}>{state.path}</div>
-      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, lineHeight: 1.6, color: 'var(--text)', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 'var(--r-card)', padding: 13, margin: 0, maxHeight: '60vh', overflowY: 'auto' }}>{state.text}</pre>
+      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, lineHeight: 1.6, color: 'var(--text)', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 'var(--r-card)', padding: 12, margin: 0, maxHeight: '60vh', overflowY: 'auto' }}>{state.text}</pre>
     </div>
   );
 }
@@ -768,7 +768,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         ) : (
           <button onClick={signInClaude}
             title="One-time sign-in so Agent Scan and Evaluate Pipeline can run"
-            style={{ background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', width: '100%' }}>
+            style={{ background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: 'pointer', width: '100%' }}>
             Sign in to Claude ⧉
           </button>
         )}
@@ -791,7 +791,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           </div>
           <button onClick={fixWorkspaceTrust} disabled={trustBusy}
             title="Marks this folder as trusted in your Claude Code config (a backup is saved first)"
-            style={{ marginTop: 6, background: 'none', border: '1px solid var(--warn, #ffb020)', color: 'var(--warn, #ffb020)', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: trustBusy ? 'default' : 'pointer', width: '100%', opacity: trustBusy ? 0.6 : 1 }}>
+            style={{ marginTop: 6, background: 'none', border: '1px solid var(--warn, #ffb020)', color: 'var(--warn, #ffb020)', borderRadius: 6, padding: '2px 8px', fontSize: 11, cursor: trustBusy ? 'default' : 'pointer', width: '100%', opacity: trustBusy ? 0.6 : 1 }}>
             {trustBusy ? 'Trusting…' : 'Trust this folder'}
           </button>
           {trust.fixMsg && <div style={{ marginTop: 6, color: 'var(--text-mute)', lineHeight: 1.4 }}>{trust.fixMsg}</div>}
@@ -802,7 +802,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           mode) and billing are configured in Setup → Models & cost. */}
       <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4 }}>
         {hasKey ? (
-          <div style={{ color: 'var(--accent)' }}>API key active: Evaluate uses a bigger, faster batch. Runs still go to your Claude plan; your API key is only a fallback if the plan auth is unavailable.</div>
+          <div style={{ color: 'var(--text-mute)' }}>API key active: Evaluate uses a bigger, faster batch. Runs still go to your Claude plan; your API key is only a fallback if the plan auth is unavailable.</div>
         ) : (
           <span>Runs on your Claude plan. Set models &amp; billing in Setup → Models &amp; cost.</span>
         )}
@@ -982,7 +982,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                 {(it.company || it.url) + (it.role ? ` · ${it.role}` : '')} ↗
               </a>
               <button onClick={() => resolveNeedsManual(it.url)} title="Clear once you've pasted the JD"
-                style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-mute)', borderRadius: 4, padding: '1px 6px', fontSize: 10, cursor: 'pointer', flexShrink: 0 }}>clear</button>
+                style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-mute)', borderRadius: 4, padding: '2px 6px', fontSize: 10, cursor: 'pointer', flexShrink: 0 }}>clear</button>
             </div>
           ))}
         </div>
@@ -1323,7 +1323,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
   };
   const row = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' };
   const btn = {
-    fontFamily: 'var(--mono)', fontSize: 12, padding: '5px 12px',
+    fontFamily: 'var(--mono)', fontSize: 12, padding: '4px 12px',
     borderRadius: 6, border: '1px solid var(--border, rgba(127,127,127,0.3))',
     cursor: 'pointer', background: 'transparent', color: 'inherit',
   };
@@ -1448,7 +1448,7 @@ window.UpdateBanner = function UpdateBanner({ info, toast, onDismiss }) {
                 </div>
               ) : null}
               {sec.items.map((it, j) => it.type === 'bullet' ? (
-                <div key={j} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', marginBottom: 2 }}>
+                <div key={j} style={{ display: 'flex', gap: 6, alignItems: 'flex-start', marginBottom: 2 }}>
                   <span style={{ color: 'var(--accent)', flexShrink: 0 }}>•</span><span>{it.text}</span>
                 </div>
               ) : (

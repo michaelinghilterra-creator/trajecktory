@@ -15,11 +15,11 @@ function OutreachPills({ c }) {
     <>
       {c.isNew ? (
         <span title="Added by your most recent Reconcile. Clears the next time you reconcile."
-          style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.4px', padding: '1px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff', verticalAlign: 'middle' }}>NEW</span>
+          style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.4px', padding: '2px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff', verticalAlign: 'middle' }}>NEW</span>
       ) : null}
       {c.notContacted ? (
         <span title="You haven't reached out to this contact yet."
-          style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 4, background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text-mute)', verticalAlign: 'middle' }}>Not contacted</span>
+          style={{ marginLeft: 6, fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text-mute)', verticalAlign: 'middle' }}>Not contacted</span>
       ) : null}
     </>
   );
@@ -49,7 +49,7 @@ function CompanyOutreach({ c }) {
   if (!o) return null;
   if (o.touchedToday) {
     return (
-      <div style={{ fontSize: 11, marginTop: 5, padding: '2px 8px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 5,
+      <div style={{ fontSize: 11, marginTop: 5, padding: '2px 8px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 4,
         background: 'color-mix(in srgb, var(--orange) 15%, transparent)', color: 'var(--orange)', border: '1px solid color-mix(in srgb, var(--orange) 40%, transparent)' }}
         title={`You already reached out at ${c.company} today (${chLabel(o.touchedToday.channel)} to ${o.touchedToday.name}). Reaching a second contact there today may read as over-contacting — consider holding off.`}>
         ⚠ Already reached out at {c.company} today — {chLabel(o.touchedToday.channel)} to {o.touchedToday.name}
@@ -162,13 +162,13 @@ function ConnectRow({ c, toast, onDone }) {
           {!done && (
             <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               {!showArchive
-                ? <button className="btn ghost sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => setShowArchive(true)} disabled={sending}
+                ? <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setShowArchive(true)} disabled={sending}
                     title="Contact left the company or changed to an unrelated role? Archive them so they drop off and never get outreach.">Not reachable?</button>
                 : <>
                     <span>Archive — reason:</span>
-                    <button className="btn sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => archive('left-company')} disabled={sending}>Left company</button>
-                    <button className="btn sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => archive('changed-role')} disabled={sending}>Changed role</button>
-                    <button className="btn ghost sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => setShowArchive(false)} disabled={sending}>Cancel</button>
+                    <button className="btn sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => archive('left-company')} disabled={sending}>Left company</button>
+                    <button className="btn sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => archive('changed-role')} disabled={sending}>Changed role</button>
+                    <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setShowArchive(false)} disabled={sending}>Cancel</button>
                   </>}
             </div>
           )}
@@ -359,13 +359,13 @@ function EmailRow({ c, toast, onDone }) {
           {!done && (
             <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               {!showArchive
-                ? <button className="btn ghost sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => setShowArchive(true)} disabled={sending}
+                ? <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setShowArchive(true)} disabled={sending}
                     title="Contact left the company or changed to an unrelated role? Archive them so they drop off and never get emailed.">Not reachable?</button>
                 : <>
                     <span>Archive — reason:</span>
-                    <button className="btn sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => archive('left-company')} disabled={sending}>Left company</button>
-                    <button className="btn sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => archive('changed-role')} disabled={sending}>Changed role</button>
-                    <button className="btn ghost sm" style={{ fontSize: 11, padding: '1px 6px' }} onClick={() => setShowArchive(false)} disabled={sending}>Cancel</button>
+                    <button className="btn sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => archive('left-company')} disabled={sending}>Left company</button>
+                    <button className="btn sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => archive('changed-role')} disabled={sending}>Changed role</button>
+                    <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setShowArchive(false)} disabled={sending}>Cancel</button>
                   </>}
             </div>
           )}

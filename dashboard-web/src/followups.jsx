@@ -35,7 +35,7 @@ function CoachPill({ level }) {
   return (
     <span className="mono" style={{
       background: s.bg, color: s.color,
-      padding: '2px 7px', borderRadius: 4,
+      padding: '2px 6px', borderRadius: 4,
       fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap',
     }}>{s.label}</span>
   );
@@ -46,7 +46,7 @@ function FUStatusPill({ status }) {
   return (
     <span className="mono" style={{
       background: s.bg, color: s.color,
-      padding: '2px 7px', borderRadius: 4,
+      padding: '2px 6px', borderRadius: 4,
       fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap',
     }}>{status}</span>
   );
@@ -66,7 +66,7 @@ function ChannelBadge({ channel }) {
   return (
     <span className="mono" style={{
       background: m.bg, color: m.color,
-      padding: '2px 7px', borderRadius: 4,
+      padding: '2px 6px', borderRadius: 4,
       fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap',
     }}>{m.label}</span>
   );
@@ -254,7 +254,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
           <span className="card-title"><span className="dot" />Needs Attention</span>
           <span className="card-meta mono">{orderedActions.length} items</span>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {orderedActions.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>You're caught up. Nothing urgent.</div>}
           {orderedActions.map(it => {
             const isTA = it.source === 'ta';
@@ -266,7 +266,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
             return (
               <div key={`${it.source || 'app'}-${it.id}`} onClick={() => onOpen(it)} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(it))}
                 style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto auto', gap: 12, alignItems: 'center',
-                  padding: '9px 11px', borderRadius: 9, cursor: 'pointer',
+                  padding: '8px 10px', borderRadius: 9, cursor: 'pointer',
                   background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
                 <span style={{ width: 28, height: 28, borderRadius: 7, display: 'grid', placeItems: 'center',
                   background: 'var(--panel)', border: '1px solid var(--border)', color }}>
@@ -787,7 +787,7 @@ function SourcePill({ source }) {
   const label = isTA ? 'TA' : 'App';
   return (
     <span className="mono" style={{
-      background: bg, color: fg, padding: '2px 7px', borderRadius: 4,
+      background: bg, color: fg, padding: '2px 6px', borderRadius: 4,
       fontSize: 10.5, fontWeight: 700, whiteSpace: 'nowrap',
     }}>{label}</span>
   );
@@ -809,7 +809,7 @@ function FollowupRow({ item, onOpen, onSnooze, onMute, onUnmute, onFind }) {
             <span className="action-card-co">{item.company}</span>
             <FUStatusPill status={item.status} />
             {!isTA && item.channel && <ChannelBadge channel={item.channel} />}
-            {item.muted && <span className="mono" style={{ background: 'rgba(113,113,122,0.18)', color: '#a1a1aa', padding: '2px 7px', borderRadius: 4, fontSize: 10.5, fontWeight: 700 }}>AWAITING</span>}
+            {item.muted && <span className="mono" style={{ background: 'rgba(113,113,122,0.18)', color: '#a1a1aa', padding: '2px 6px', borderRadius: 4, fontSize: 10.5, fontWeight: 700 }}>AWAITING</span>}
             <CoachPill level={item.coachLevel} />
             {item.fuCount > 0 && (
               <span className="mono dim" style={{ fontSize: 10.5 }}>· {item.fuCount} prior touch{item.fuCount === 1 ? '' : 'es'}</span>

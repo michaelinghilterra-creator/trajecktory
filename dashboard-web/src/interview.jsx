@@ -330,14 +330,14 @@ function CalibrationPanel({ cam, setCam }) {
           {(typeof screen !== 'undefined' ? screen.width + '×' + screen.height : 'display')}
         </span>
       </div>
-      <label className="col" style={{ gap: 3, marginBottom: 8 }}>
+      <label className="col" style={{ gap: 2, marginBottom: 8 }}>
         <span className="dim" style={{ fontSize: 11 }}>
           Answer box top — <span className="mono">{cam.boxTopVh}vh</span> · bigger = box sits lower
         </span>
         <input type="range" min="10" max="70" step="1" value={cam.boxTopVh}
           onChange={e => set({ boxTopVh: parseInt(e.target.value, 10) })} />
       </label>
-      <label className="col" style={{ gap: 3 }}>
+      <label className="col" style={{ gap: 2 }}>
         <span className="dim" style={{ fontSize: 11 }}>
           Camera gap — <span className="mono">{cam.camGapPx}px</span> · clearance so the camera misses a panel title
         </span>
@@ -832,7 +832,7 @@ function PrintMenu({ onPick, cram = true }) {
       {open && (
         <div className="card" style={{
           position: 'absolute', right: 0, top: 'calc(100% + 6px)', zIndex: 40,
-          padding: 5, minWidth: 232, boxShadow: 'var(--shadow)',
+          padding: 4, minWidth: 232, boxShadow: 'var(--shadow)',
         }}>
           <div className="ib-navitem" onClick={() => pick('full')} style={{ borderLeft: 'none' }}>
             <span className="lb" style={{ color: 'var(--text)' }}>

@@ -392,7 +392,7 @@ function MovesPanel({ insights, apps, onOpen }) {
         {items.length === 0 && <div className="dim" style={{ fontSize: 12 }}>Nothing surfaced.</div>}
         {items.map((it, i) => (
           <div key={i} className="ins-item" style={{ borderLeft: '3px solid var(--accent)' }}>
-            <div className="row" style={{ gap: 11, alignItems: 'flex-start' }}>
+            <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
               <span className="mono" style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700, flexShrink: 0 }}>{String(i + 1).padStart(2, '0')}</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}><Linkify text={it.move} apps={apps} onOpen={onOpen} /></div>
@@ -488,7 +488,7 @@ function CoachLine({ kind, text, apps, onOpen }) {
       <span className="mono" style={{
         fontSize: 10.5, letterSpacing: '0.12em',
         color, border: `1px solid ${color}`,
-        padding: '2px 7px', borderRadius: 4,
+        padding: '2px 6px', borderRadius: 4,
         flexShrink: 0, marginTop: 2,
       }}>{label}</span>
       <div style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--text)' }}>
@@ -571,7 +571,7 @@ function Citations({ items, apps, onOpen }) {
               color: clickable ? 'var(--accent)' : 'var(--text-mute)',
               background: clickable ? 'rgba(167,139,250,0.14)' : 'var(--panel-2)',
               border: '1px solid ' + (clickable ? 'rgba(167,139,250,0.55)' : 'var(--border)'),
-              padding: '2px 7px',
+              padding: '2px 6px',
               borderRadius: 4,
               cursor: clickable ? 'pointer' : 'default',
               fontWeight: clickable ? 600 : 400,

@@ -103,3 +103,6 @@ templates/cv-template-slots.json
 # User-layer: bullet-group ordinals + baselines derived from the user's master.
 # The shipped default is cv-bullet-groups.example.json.
 templates/cv-bullet-groups.json
+
+# UI/UX audit working dir — contains PII screenshots, never commit
+audit/

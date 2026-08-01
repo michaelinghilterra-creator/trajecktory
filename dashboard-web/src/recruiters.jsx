@@ -759,7 +759,10 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
               <div className="funnel-row" key={s.id}>
                 <span className="funnel-lbl"><span style={{ width: 7, height: 7, borderRadius: 99, background: s.color, display: 'inline-block' }} />{s.id}</span>
                 <div className="funnel-track">
-                  <div className="funnel-fill" style={{ width: `${Math.max(pct, reached ? 7 : 0)}%`, background: s.color }}>{reached > 0 ? reached : ''}</div>
+                  {/* No fill for a stage nothing reached: .funnel-fill has a 28px
+                      min-width, so a 0-count stage otherwise shows a full-color
+                      swatch implying a nonzero value. */}
+                  {reached > 0 && <div className="funnel-fill" style={{ width: `${Math.max(pct, 7)}%`, background: s.color }}>{reached}</div>}
                 </div>
                 <span className="funnel-val">{pct}%</span>
               </div>
@@ -796,7 +799,7 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
           <span className="card-title"><span className="dot" />Needs Attention</span>
           <span className="card-meta mono">{actions.length} items</span>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {actions.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>No prioritized actions. Start a draft for a top firm.</div>}
           {actions.map(c => {
             const status = c.status;
@@ -813,7 +816,7 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
             return (
               <div key={c.id} onClick={() => onOpen(c)} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(c))}
                 style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto auto', gap: 12, alignItems: 'center',
-                  padding: '9px 11px', borderRadius: 9, cursor: 'pointer',
+                  padding: '8px 10px', borderRadius: 9, cursor: 'pointer',
                   background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
                 <span style={{ width: 28, height: 28, borderRadius: 7, display: 'grid', placeItems: 'center',
                   background: 'var(--panel)', border: '1px solid var(--border)', color }}>
@@ -1566,10 +1569,10 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
               <RecIcon d={REC_I.trend} size={12} /> Pipeline stage
               <span className="r" style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
                 <button className={'btn ghost sm' + (pipeStyle === 'stepper' ? '' : '')}
-                  style={{ fontSize: 10.5, padding: '2px 7px', opacity: pipeStyle === 'stepper' ? 1 : 0.55 }}
+                  style={{ fontSize: 10.5, padding: '2px 6px', opacity: pipeStyle === 'stepper' ? 1 : 0.55 }}
                   onClick={() => setPipeStyle('stepper')}>Stepper</button>
                 <button className="btn ghost sm"
-                  style={{ fontSize: 10.5, padding: '2px 7px', opacity: pipeStyle === 'track' ? 1 : 0.55 }}
+                  style={{ fontSize: 10.5, padding: '2px 6px', opacity: pipeStyle === 'track' ? 1 : 0.55 }}
                   onClick={() => setPipeStyle('track')}>Track</button>
               </span>
             </div>

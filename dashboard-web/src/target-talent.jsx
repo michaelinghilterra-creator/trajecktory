@@ -559,7 +559,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
   return (
     <>
       <div className={embedded ? "" : "drawer-head"} style={headStyle}>
-        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
           <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-mute)" }}>#{data.id}</span>
           <StatusBadge status={data.status} size="sm" />
           {data.relatedApps?.length > 0 && (
@@ -569,7 +569,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
             ? <button className="btn ghost sm" onClick={onClose} style={{ marginLeft: "auto" }}>← Back</button>
             : <button className="icon-btn" onClick={onClose} style={{ marginLeft: "auto" }}><TIcon d={TI.x} size={15} /></button>)}
         </div>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 13 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
           <span className="mono-av" style={{ width: 44, height: 44, fontSize: 14, borderRadius: 10, borderColor: (TT_STATUS_MAP[data.status] || {}).color, color: (TT_STATUS_MAP[data.status] || {}).color }}>{ttInitials(data.first + " " + data.last)}</span>
           <div>
             <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>{data.salute} {data.first} {data.last}</h3>
@@ -614,8 +614,8 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
                   const bounced  = /EMAIL BOUNCED|bounced/i.test(n);
                   const unverified = !bounced && /email unverified|pattern-med|pattern-low|auto-synthesized/i.test(n);
                   if (!data.email && !bounced) return null;
-                  if (bounced) return <span style={{ marginLeft: 8, padding: "1px 6px", borderRadius: 4, background: "rgba(239,68,68,0.18)", color: "#fca5a5", fontSize: 10.5, fontWeight: 600, letterSpacing: 0.4 }} title="See notes for details">BOUNCED</span>;
-                  if (unverified) return <span style={{ marginLeft: 8, padding: "1px 6px", borderRadius: 4, background: "rgba(234,179,8,0.18)", color: "#fde68a", fontSize: 10.5, fontWeight: 600, letterSpacing: 0.4 }} title="Auto-synthesized. Confirm before sending">UNVERIFIED</span>;
+                  if (bounced) return <span style={{ marginLeft: 8, padding: "2px 6px", borderRadius: 4, background: "rgba(239,68,68,0.18)", color: "#fca5a5", fontSize: 10.5, fontWeight: 600, letterSpacing: 0.4 }} title="See notes for details">BOUNCED</span>;
+                  if (unverified) return <span style={{ marginLeft: 8, padding: "2px 6px", borderRadius: 4, background: "rgba(234,179,8,0.18)", color: "#fde68a", fontSize: 10.5, fontWeight: 600, letterSpacing: 0.4 }} title="Auto-synthesized. Confirm before sending">UNVERIFIED</span>;
                   return null;
                 })()}
               </span>
@@ -678,7 +678,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
           <div className="ds-label">
             <TIcon d={TI.spark} size={12} /> Outreach
             <select value={draftStage} onChange={e => setDraftStage(e.target.value)} title="Tune the draft: Reply responds to their last email; Follow up nudges the last email you sent; the stages tune fresh outreach"
-              style={{ marginLeft: "auto", fontSize: 11, padding: "3px 6px", borderRadius: 5, background: "var(--panel-2)", color: "var(--text-dim)", border: "1px solid var(--border)" }}>
+              style={{ marginLeft: "auto", fontSize: 11, padding: "2px 6px", borderRadius: 5, background: "var(--panel-2)", color: "var(--text-dim)", border: "1px solid var(--border)" }}>
               {/* Reply is offered only when there is an inbound email to reply to;
                   Follow up on last sent only when you have actually sent one. */}
               {[
@@ -758,14 +758,14 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
                   <div className="dim mono" style={{ fontSize: 10.5, marginBottom: 8 }}>
                     This touch will also be logged as a follow-up on each selected application. Active roles pre-checked.
                   </div>
-                  <div className="col" style={{ gap: 5 }}>
+                  <div className="col" style={{ gap: 4 }}>
                     {data.relatedApps.map(a => {
                       const checked = crossLogAppIds.has(a.id);
                       return (
                         <label key={a.id}
                           style={{
                             display: "flex", alignItems: "center", gap: 10,
-                            padding: "7px 9px", background: "var(--panel-2)",
+                            padding: "6px 8px", background: "var(--panel-2)",
                             borderRadius: 4, cursor: "pointer",
                             borderLeft: `3px solid ${checked ? "var(--green)" : "var(--text-mute)"}`,
                           }}>

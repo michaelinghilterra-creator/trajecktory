@@ -225,7 +225,7 @@ window.PostsTab = function PostsTab({ toast }) {
           ? React.createElement("div", { style: { fontSize: 12, color: "var(--text-mute)" } }, "Your edits and status changes show up here.")
           : React.createElement("div", { className: "card", style: { borderColor: "var(--border)", padding: 10 } },
             recentActivity.map((a) => React.createElement("div", {
-              key: a.id, style: { fontSize: 11.5, padding: "5px 0", borderBottom: "1px solid var(--border)", color: "var(--text-dim)" },
+              key: a.id, style: { fontSize: 11.5, padding: "4px 0", borderBottom: "1px solid var(--border)", color: "var(--text-dim)" },
             },
               React.createElement("span", { style: { fontWeight: 700, color: "var(--text)" } }, a.action),
               a.snippet ? React.createElement("span", null, `: ${a.snippet}${a.snippet.length >= 80 ? "…" : ""}`) : null,

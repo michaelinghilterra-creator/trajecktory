@@ -241,12 +241,12 @@ function NeedsAttention({ apps, onOpen, selId, isStale = () => false, staleDays 
         <span className="card-title"><span className="dot" />Needs Attention</span>
         <span className="card-meta mono">{queue.length} items</span>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {queue.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>Nothing urgent. Pipeline is clear.</div>}
         {queue.map(({ a, label, icon, color }) => (
           <div key={a.id} onClick={() => onOpen(a)} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(a))}
             style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto auto', gap: 12, alignItems: 'center',
-              padding: '9px 11px', borderRadius: 9, cursor: 'pointer',
+              padding: '8px 10px', borderRadius: 9, cursor: 'pointer',
               background: selId === a.id ? 'var(--accent-bg)' : 'var(--panel-2)',
               border: '1px solid var(--border)' }}>
             <span style={{ width: 28, height: 28, borderRadius: 7, display: 'grid', placeItems: 'center',
@@ -278,10 +278,10 @@ function FunnelSnapshot({ apps }) {
         <span className="card-title"><span className="dot" />Funnel Snapshot</span>
         <span className="card-meta mono">active stages</span>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginTop: 2 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 2 }}>
         {counts.map(({ s, n }) => (
-          <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 34px', gap: 11, alignItems: 'center' }}>
-            <span className="mono" style={{ fontSize: 11, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 7 }}>
+          <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 34px', gap: 10, alignItems: 'center' }}>
+            <span className="mono" style={{ fontSize: 11, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 7, height: 7, borderRadius: 99, background: s.color }} />{s.id}
             </span>
             <div style={{ height: 10, borderRadius: 99, background: 'var(--panel-2)', overflow: 'hidden' }}>
@@ -431,7 +431,7 @@ function TriageRowActions({ row, job, onDeep, onDismiss }) {
         <a className="btn ghost sm" style={{ padding: '2px 8px', fontSize: 10.5 }} href={window.safeHref(row.url)} target="_blank" rel="noreferrer"
           onClick={e => e.stopPropagation()}>open JD <PIcon d={PI.arrowR} size={10} /></a>
       )}
-      <button className="btn ghost sm" style={{ padding: '2px 7px', fontSize: 10.5 }}
+      <button className="btn ghost sm" style={{ padding: '2px 6px', fontSize: 10.5 }}
         title="Not a match. Dismiss (it won't come back on the next scan)" onClick={() => onDismiss(row)}>✕ dismiss</button>
       {s === 'error' && <span className="mono" style={{ fontSize: 10.5, color: 'var(--red)' }} title={job.error}>failed, retry</span>}
     </div>
@@ -1390,8 +1390,8 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                   <div className="rp-snap-sub">
                     {scoreBucket(app.score) === 'na' ? 'unscored' : scoreBucket(app.score) + ' match'}
                     {cs && (cs.scoreSource === 'derived'
-                      ? <span title="Computed from the dimensions below times your saved weights, minus the red-flag penalty." style={{ marginLeft: 6, padding: '0 5px', borderRadius: 4, background: 'var(--accent-bg)', color: 'var(--accent)', fontSize: 10.5, fontWeight: 600 }}>derived</span>
-                      : <span title="Authored under the older rubric. Kept as-is and not recomputed, so it is not directly comparable to a derived score." style={{ marginLeft: 6, padding: '0 5px', borderRadius: 4, background: 'var(--panel)', color: 'var(--text-mute)', fontSize: 10.5, fontWeight: 600, border: '1px solid var(--border)' }}>legacy</span>)}
+                      ? <span title="Computed from the dimensions below times your saved weights, minus the red-flag penalty." style={{ marginLeft: 6, padding: '0 4px', borderRadius: 4, background: 'var(--accent-bg)', color: 'var(--accent)', fontSize: 10.5, fontWeight: 600 }}>derived</span>
+                      : <span title="Authored under the older rubric. Kept as-is and not recomputed, so it is not directly comparable to a derived score." style={{ marginLeft: 6, padding: '0 4px', borderRadius: 4, background: 'var(--panel)', color: 'var(--text-mute)', fontSize: 10.5, fontWeight: 600, border: '1px solid var(--border)' }}>legacy</span>)}
                   </div>
                 </div>
                 <div className="rp-snap">
