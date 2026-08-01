@@ -38,7 +38,14 @@ function createTodo({ text, notes = '', priority = 'med', dueDate = null, appId 
     done: false,
     priority: PRIORITIES.has(priority) ? priority : 'med',
     createdAt: new Date().toISOString(),
-    dueDate: /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? dueDate : null,
+    // Reject a shape-valid but impossible date (e.g. 2026-13-45): those sort as
+    // far-future and never go overdue. Verify the parsed parts round-trip.
+    dueDate: (() => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) return null;
+      const [y, m, d] = String(dueDate).split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      return (dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d) ? dueDate : null;
+    })(),
     completedAt: null,
     order: maxOrder + 1,
     source: appId != null ? 'app' : 'manual',

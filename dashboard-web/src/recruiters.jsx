@@ -58,7 +58,13 @@ function firmMono(name) {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 function firmIdFromName(name) {
-  return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  // Drop a trailing " — City" / " - City" suffix so the SAME firm doesn't split
+  // into two ids when some rows carry a location and others don't. (The display
+  // already splits on " — ", so this keeps the id and the label in agreement.)
+  // Generic words like "Partners"/"Group" are left intact — they are part of real
+  // recruiter-firm names and stripping them would mis-split distinct firms.
+  return String(name).toLowerCase().split(/\s[—–-]\s/)[0]
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 function locStr(c) {
   if (!c.city) return '-';
@@ -629,7 +635,7 @@ function RecKpi({ label, value, sub, tone = 'neutral' }) {
 }
 
 function RecBar({ label, n, total, color }) {
-  const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+  const pct = total > 0 ? Math.min(100, Math.round((n / total) * 100)) : 0;
   return (
     <div className="col" style={{ gap: 4 }}>
       <div className="row" style={{ justifyContent: 'space-between', fontSize: 11 }}>
@@ -776,7 +782,7 @@ function RecOverviewView({ recruiters, firms, onOpen, jumpView }) {
           <div className="col" style={{ gap: 10 }}>
             {byFirm.length === 0 && <span className="dim" style={{ fontSize: 12 }}>No firm data yet.</span>}
             {byFirm.map(v => (
-              <RecBar key={v.key} label={`${v.key} · ${v.engaged}/${v.total} engaged`} n={v.total} total={(cum[0]?.reached) || 1} color="#a78bfa" />
+              <RecBar key={v.key} label={`${v.key} · ${v.engaged}/${v.total} engaged`} n={v.engaged} total={v.total} color="#a78bfa" />
             ))}
           </div>
           <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>{firmInsight}</div>

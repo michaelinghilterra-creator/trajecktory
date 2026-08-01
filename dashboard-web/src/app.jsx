@@ -239,9 +239,12 @@ function App() {
       });
   }, []);
   useEffect(() => { refreshApps(); }, [refreshApps]);
-  // Re-sync when the user tabs back to the dashboard.
+  // Re-sync when the user tabs back to the dashboard. Throttled: a full tracker
+  // re-parse + enrichApps on every focus event hammered the API on rapid
+  // alt-tabbing. 15s keeps the sync-on-return behavior without the churn.
   useEffect(() => {
-    const onFocus = () => refreshApps();
+    let last = 0;
+    const onFocus = () => { const now = Date.now(); if (now - last < 15000) return; last = now; refreshApps(); };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [refreshApps]);

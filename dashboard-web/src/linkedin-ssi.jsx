@@ -230,7 +230,7 @@ function LinkedInSSITab({ toast }) {
           <div>
             <h1>LinkedIn SSI</h1>
             <div className="sub">
-              score {ssiData?.score ?? '-'} / 100 · target {ssiData?.target ?? 60} · {influencers.length} influencers tracked · {engagementLog.filter(a => new Date(a.date) >= new Date(Date.now() - 7*24*60*60*1000)).length} touchpoints this week
+              score {ssiData?.score ?? '-'} / 100 · target {ssiData?.target ?? 60} · {influencers.length} influencers tracked · {(() => { const d = new Date(); d.setDate(d.getDate() - 6); const cutoff = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; return engagementLog.filter(a => String(a.date || '') >= cutoff).length; })()} touchpoints this week
             </div>
           </div>
         </div>
@@ -312,7 +312,7 @@ function LinkedInSSITab({ toast }) {
                               )}
                             </div>
                             <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-dim)" }}>
-                              <span style={{ color: "var(--accent-2)" }}>{Math.round((ssiData.score / target) * 100)}%</span> to goal &middot; {Math.max(0, target - ssiData.score)} pts to go
+                              <span style={{ color: "var(--accent-2)" }}>{Math.min(100, Math.round((ssiData.score / target) * 100))}%</span> to goal &middot; {Math.max(0, target - ssiData.score)} pts to go
                             </div>
                           </div>
                           {totals.length >= 2 && (
@@ -336,9 +336,15 @@ function LinkedInSSITab({ toast }) {
               </div>
 
               {(() => {
-                const recorded = (ssiData?.weeks || []).filter(w => w.brand != null);
-                const lastWeek = recorded.slice(-1)[0] || { brand: 0, people: 0, engage: 0, rel: 0 };
-                const prevWeek = recorded.length >= 2 ? recorded.slice(-2)[0] : lastWeek;
+                // Use the latest FULLY-recorded week (all four pillars), matching the
+                // gauge score. Keying on `brand != null` alone let a half-entered week
+                // qualify and rendered un-entered pillars as "0/25", contradicting the
+                // gauge and the "a blank source must never read 0" rule.
+                const complete = (ssiData?.weeks || []).filter(w =>
+                  w.brand != null && w.people != null && w.engage != null && w.rel != null);
+                const lastWeek = complete.slice(-1)[0];
+                if (!lastWeek) return null;  // no complete week: the gauge's empty state covers it
+                const prevWeek = complete.length >= 2 ? complete.slice(-2)[0] : lastWeek;
 
                 const pillars = [
                   { key: "brand", label: "Establish Brand", color: "var(--accent)", value: lastWeek.brand || 0, hint: "Profile, content, thought leadership" },

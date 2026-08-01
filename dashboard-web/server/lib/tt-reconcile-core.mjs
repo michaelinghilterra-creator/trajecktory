@@ -20,7 +20,16 @@ import { ACTIVE_STATUSES } from './statuses.mjs';
 const KEEP_STATUSES = [...ACTIVE_STATUSES, 'No Response'];
 
 export function normCompany(s) {
-  return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  // Drop a " — City" / " - City" suffix and common legal suffixes before
+  // stripping non-alphanumerics, so "Stripe" and "Stripe, Inc." normalize to the
+  // same key. This stays an EXACT match on the normalized form (not loose token
+  // matching), so it fixes suffix variants without risking archiving a contact
+  // whose company only loosely resembles a dead application's company.
+  return (s || '')
+    .toLowerCase()
+    .split(/\s[—–-]\s/)[0]
+    .replace(/\b(inc|llc|l\.l\.c|ltd|limited|corp|corporation|company|co|plc|gmbh|s\.a|sa|ag|nv|bv|pty)\b\.?/g, ' ')
+    .replace(/[^a-z0-9]/g, '');
 }
 
 // apps: parseApplicationsMd() output. ttRows: parseTargetTalentMd() output ALREADY

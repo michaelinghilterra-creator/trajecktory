@@ -1,10 +1,27 @@
 // Charts — pure SVG, no external lib. Bloomberg-flavored.
-const { useMemo, useState } = React;
+const { useMemo, useState, useRef, useCallback, useEffect } = React;
+
+// Hover state throttled to one update per animation frame (latest value wins).
+// onMouseMove fires far faster than the browser paints, and each setHover
+// reconciles the whole SVG subtree (the Sankey re-emits a gradient per link),
+// so coalescing to one update per frame removes the hover jank on dense charts.
+function useRafState(initial) {
+  const [state, setState] = useState(initial);
+  const raf = useRef(0);
+  const latest = useRef(initial);
+  const set = useCallback((v) => {
+    latest.current = v;
+    if (raf.current) return;
+    raf.current = requestAnimationFrame(() => { raf.current = 0; setState(latest.current); });
+  }, []);
+  useEffect(() => () => { if (raf.current) cancelAnimationFrame(raf.current); }, []);
+  return [state, set];
+}
 
 // ---------- Funnel ----------
 window.FunnelChart = function FunnelChart({ data, height = 220 }) {
   // data: [{label, value, color, apps?: []}]
-  const [hover, setHover] = useState(null);
+  const [hover, setHover] = useRafState(null);
   const wrapRef = React.useRef(null);
   const max = Math.max(...data.map(d => d.value), 1);
   const W = 520, H = height;
@@ -74,7 +91,7 @@ window.FunnelChart = function FunnelChart({ data, height = 220 }) {
 
 // ---------- Histogram ----------
 window.Histogram = function Histogram({ apps, height = 180 }) {
-  const [hover, setHover] = useState(null);
+  const [hover, setHover] = useRafState(null);
   const wrapRef = React.useRef(null);
 
   const buckets = useMemo(() => {
@@ -159,7 +176,7 @@ window.Histogram = function Histogram({ apps, height = 180 }) {
 
 // ---------- Activity Timeline (daily counts) ----------
 window.Timeline = function Timeline({ apps, days = 28, height = 160 }) {
-  const [hover, setHover] = useState(null);
+  const [hover, setHover] = useRafState(null);
   const wrapRef = React.useRef(null);
 
   const data = useMemo(() => {
@@ -287,7 +304,7 @@ window.Timeline = function Timeline({ apps, days = 28, height = 160 }) {
 window.HBars = function HBars({ data, height = 200, format = (v) => v.toFixed(2), tooltipMeta }) {
   // data: [{label, value, sub?, color?, items?: []}]
   // tooltipMeta: { kind: "score" | "response", unit?: string }
-  const [hover, setHover] = useState(null);
+  const [hover, setHover] = useRafState(null);
   const wrapRef = React.useRef(null);
   const max = Math.max(...data.map(d => d.value), 1);
   const rowH = height / data.length;
@@ -406,7 +423,7 @@ window.HBars = function HBars({ data, height = 200, format = (v) => v.toFixed(2)
 
 // ---------- Velocity (rolling N-day) ----------
 window.Velocity = function Velocity({ apps, windowDays = 7, color = "var(--cyan)" }) {
-  const [hover, setHover] = useState(null);
+  const [hover, setHover] = useRafState(null);
   const wrapRef = React.useRef(null);
   const points_to_plot = windowDays === 7 ? 28 : 45; // longer trail for 30d
 
@@ -508,7 +525,7 @@ window.Velocity = function Velocity({ apps, windowDays = 7, color = "var(--cyan)
 
 // ---------- Comp gap horizontal scatter ----------
 window.CompGap = function CompGap({ apps }) {
-  const [hover, setHover] = useState(null);
+  const [hover, setHover] = useRafState(null);
   const wrapRef = React.useRef(null);
   const W = 520, H = 220;
   const padL = 28, padR = 12, padT = 12, padB = 28;
@@ -606,7 +623,7 @@ window.CompGap = function CompGap({ apps }) {
 
 // ---------- Sankey: Identified → Offer ----------
 window.Sankey = function Sankey({ apps }) {
-  const [hover, setHover] = useState(null);
+  const [hover, setHover] = useRafState(null);
   const wrapRef = React.useRef(null);
 
   // Per-rung flow, fully derived from window.FUNNEL_ORDER so the interview ladder
@@ -909,9 +926,13 @@ window.StageFunnel = function StageFunnel() {
 
   const rej = data.rejections || { byStage: {}, preInterview: 0, unknownStage: 0, total: 0 };
   const ivStages = data.interviewStages || [];
+  // Shallow -> deep: applied-but-no-reply, then Responded, the interview rounds,
+  // then Offer (the deepest reach), then the un-attributable bucket.
   const rejRows = [
-    ...ivStages.map(s => ({ label: s, n: (rej.byStage || {})[s] || 0, color: (meta[s] && meta[s].color) || '#f59e0b' })),
     { label: 'Pre-interview', n: rej.preInterview || 0, color: '#60a5fa' },
+    { label: 'Responded', n: (rej.byStage || {})['Responded'] || 0, color: '#38bdf8' },
+    ...ivStages.map(s => ({ label: s, n: (rej.byStage || {})[s] || 0, color: (meta[s] && meta[s].color) || '#f59e0b' })),
+    { label: 'Offer', n: (rej.byStage || {})['Offer'] || 0, color: '#22c55e' },
     { label: 'Stage unknown', n: rej.unknownStage || 0, color: '#71717a' },
   ];
   const maxRej = Math.max(1, ...rejRows.map(r => r.n));

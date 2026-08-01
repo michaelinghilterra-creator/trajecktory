@@ -39,7 +39,9 @@ const FUNC = /revenue oper|revops|rev ops|sales oper|salesops|business oper|gtm|
 const stripGeneric = (c) => c.replace(/\s+(labs|inc|technologies|software|hq)\.?$/i, '');
 function companyForms(company) {
   const forms = new Set([norm(company), norm(stripGeneric(company))]);
-  return [...forms].filter((f) => f.length >= 4);
+  // Floor of 2 (was 4) so short real companies (IBM, GE, HP) still key the index;
+  // 1-char leftovers from suffix stripping are dropped as noise.
+  return [...forms].filter((f) => f.length >= 2);
 }
 
 // ── active pipeline companies (the targets a warm path is worth having) ──────
@@ -69,7 +71,9 @@ function activeFormIndex(active = activeCompanies()) {
 export function stageForRow(row, activeSet) {
   const isLinkedIn = /linkedin/i.test(row.how || '') || /linkedin\.com/i.test(row.notes || '');
   if (!isLinkedIn) return 'other';
-  return activeSet.has(norm(row.where)) ? 'stage1' : 'stage2';
+  // Match the connection's company via its forms too (strip its generic suffix),
+  // so "Acme Technologies" reaches an active company stored as "Acme".
+  return companyForms(row.where).some(f => activeSet.has(f)) ? 'stage1' : 'stage2';
 }
 export function activeFormSet() { return activeFormIndex().set; }
 
@@ -119,13 +123,25 @@ export function matchConnections({ connections, active = activeCompanies(), exis
   const seenInBatch = new Set();
   const dupe = (c) => {
     const nm = norm(`${c.first} ${c.last}`);
-    const key = (c.url && c.url.trim()) ? c.url.trim().toLowerCase() : nm;
-    if (existing.urls.has(key) || existing.names.has(nm) || seenInBatch.has(key)) return true;
-    seenInBatch.add(key); return false;
+    const url = (c.url && c.url.trim()) ? c.url.trim().toLowerCase() : null;
+    // A LinkedIn URL is the reliable identity. When the connection has one, dedup
+    // on URL ONLY — matching on name would drop a distinct person who happens to
+    // share a name with an existing referral (a real warm path silently lost).
+    // Fall back to name matching only when there is no URL to key on. (Tradeoff:
+    // re-importing a urless existing referral that now carries a URL can create
+    // one visible duplicate row, which is far cheaper than dropping a warm path.)
+    if (url) {
+      if (existing.urls.has(url) || seenInBatch.has(url)) return true;
+      seenInBatch.add(url); return false;
+    }
+    if (existing.names.has(nm) || seenInBatch.has(nm)) return true;
+    seenInBatch.add(nm); return false;
   };
   const stage1 = [], stage2 = [];
   for (const c of connections) {
-    const hit = map.get(norm(c.company));
+    // Match via the connection's company forms (suffix stripped) too, symmetric
+    // with the active index, so a suffix-only difference doesn't miss a Stage-1.
+    const hit = companyForms(c.company).map(f => map.get(f)).find(Boolean);
     if (hit) { if (!dupe(c)) stage1.push({ ...c, target: hit }); continue; }
     const senior = (SENIOR.test(c.position) || DIRECTOR.test(c.position)) && FUNC.test(c.position);
     if (senior && !dupe(c)) stage2.push(c);

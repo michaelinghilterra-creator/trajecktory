@@ -75,11 +75,13 @@ function ChannelBadge({ channel }) {
 // Bucket by days since last touch. Tiered thresholds (Applied 10d, Responded
 // 5d, Interview 3d) mean items can arrive on this list well under 14d, so the
 // buckets start at 0d and step up from there.
+// `days` is BUSINESS days (weekends excluded), so the labels say so — a "45+"
+// here is ~9 calendar weeks, and reading it as calendar days undersells the gap.
 function ageBucket(days) {
-  if (days >= 45) return { key: '45d+',  label: '45d+: likely ghosted',         color: '#ef4444' };
-  if (days >= 21) return { key: '21-45d', label: '21-45d: write-off candidates', color: '#f59e0b' };
-  if (days >= 10) return { key: '10-21d', label: '10-21d: aging, push hard',     color: '#a78bfa' };
-  return                  { key: '0-10d', label: '0-10d: fresh stale, due now',   color: '#60a5fa' };
+  if (days >= 45) return { key: '45d+',  label: '45+ business days: likely ghosted',   color: '#ef4444' };
+  if (days >= 21) return { key: '21-45d', label: '21-45 business days: write-off',       color: '#f59e0b' };
+  if (days >= 10) return { key: '10-21d', label: '10-21 business days: aging, push hard', color: '#a78bfa' };
+  return                  { key: '0-10d', label: '0-10 business days: fresh stale',        color: '#60a5fa' };
 }
 
 // ─── Follow-Ups Overview ─────────────────────────────────────────────────
@@ -155,7 +157,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>You're all caught up.</div>
         <div className="dim" style={{ fontSize: 12 }}>
           Nothing inside the touch window has gone stale. New rows surface here when an Applied/Responded/interview-round entry
-          crosses {thresholds?.Applied || 10}/{thresholds?.Responded || 5}/{thresholds?.['1st Interview'] || 3}d, or a TA contact crosses {taThreshold || 14}d.
+          crosses {thresholds?.Applied || 7}/{thresholds?.Responded || 5}/{thresholds?.['1st Interview'] || 3}d, or a TA contact crosses {taThreshold || 14}d.
         </div>
       </div>
     );

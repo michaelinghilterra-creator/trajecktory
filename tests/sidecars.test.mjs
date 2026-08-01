@@ -37,7 +37,10 @@ const { logStatusEvent, parseStatusEvents, recordApplyDate, readApplyDates } =
 const { STATUS_EVENTS_PATH, APPLY_DATES_PATH } =
   await import('../dashboard-web/server/config.mjs');
 
-const today = new Date().toISOString().slice(0, 10);
+// LOCAL date: status-event dates and the "logged" column use the local day
+// (snoozeToday), so a status change during the US evening is dated to the local
+// day, not UTC's already-tomorrow. Match that here.
+const today = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
 const readRows = () => fs.readFileSync(STATUS_EVENTS_PATH, 'utf8').trim().split('\n');
 
 try {

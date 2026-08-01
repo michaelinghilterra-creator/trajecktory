@@ -27,9 +27,24 @@ router.get('/api/setup/state', (req, res) => {
 
 // POST /api/setup/preflight — run doctor.mjs --json and return parsed checks.
 router.post('/api/setup/preflight', (req, res) => {
-  exec('node doctor.mjs --json', { cwd: SETUP_ROOT, maxBuffer: 2 * 1024 * 1024 }, (err, stdout) => {
-    try { res.json(JSON.parse((stdout || '').trim())); }
-    catch { res.status(500).json({ ok: false, error: 'preflight parse failed', raw: (stdout || '').slice(0, 500) }); }
+  // Use the running server's own node binary (process.execPath) rather than
+  // relying on `node` being resolvable on the exec shell's PATH — that mismatch
+  // produced empty stdout and an opaque 500. And surface the real cause (err /
+  // exit code / stderr) instead of blindly parsing empty output.
+  const cmd = `"${process.execPath}" doctor.mjs --json`;
+  exec(cmd, { cwd: SETUP_ROOT, maxBuffer: 2 * 1024 * 1024 }, (err, stdout, stderr) => {
+    const raw = (stdout || '').trim();
+    if (err || !raw) {
+      return res.status(500).json({
+        ok: false,
+        error: err ? `doctor failed to run: ${err.message}` : 'doctor produced no output',
+        code: err && err.code != null ? err.code : null,
+        stderr: (stderr || '').slice(0, 500),
+        raw: raw.slice(0, 500),
+      });
+    }
+    try { res.json(JSON.parse(raw)); }
+    catch (e) { res.status(500).json({ ok: false, error: 'preflight output was not valid JSON', parseError: e.message, raw: raw.slice(0, 500) }); }
   });
 });
 

@@ -1264,7 +1264,7 @@ window.CommandPalette = function CommandPalette({ open, onClose, commands }) {
 
   return (
     <div className="cmdk-back" onClick={onClose}>
-      <div className="cmdk" onClick={e => e.stopPropagation()}>
+      <div className="cmdk" role="dialog" aria-modal="true" aria-label="Command palette" onClick={e => e.stopPropagation()}>
         <input ref={inputRef} className="cmdk-input" aria-label="Command palette search" placeholder="Type a command or search…" value={q} onChange={e => { setQ(e.target.value); setIdx(0); }} />
         <div className="cmdk-list">
           {filtered.length === 0 && <div className="no-data">No matches</div>}
@@ -1294,7 +1294,9 @@ window.CommandPalette = function CommandPalette({ open, onClose, commands }) {
 // ---------- Toasts ----------
 window.ToastStack = function ToastStack({ toasts }) {
   return (
-    <div className="toast-stack">
+    // aria-live so a screen reader announces each toast (action succeeded/failed)
+    // instead of the status change passing silently.
+    <div className="toast-stack" role="status" aria-live="polite" aria-atomic="false">
       {toasts.map(t => (
         <div key={t.id} className={`toast ${t.kind || ""}`}>
           <span className="mono" style={{ color: t.kind === "success" ? "var(--green)" : t.kind === "warn" ? "var(--orange)" : "var(--accent)" }}>{t.kind === "success" ? "✓" : t.kind === "warn" ? "!" : "›"}</span>

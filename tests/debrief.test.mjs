@@ -52,25 +52,32 @@ const apps = [
   { id: 11, company: 'Cobalt Systems',    role: 'Sr Director RevOps', status: '2nd Interview' },
   { id: 12, company: 'Aster Grid',        role: 'Director SalesOps', status: 'Applied' },
   { id: 13, company: 'Vela Analytics',    role: 'Director BI',       status: '1st Interview' },
+  // Terminal row that reached 2nd Interview: every concluded round is owed a debrief.
+  { id: 14, company: 'Helio Labs',        role: 'VP RevOps',         status: 'Rejected', notes: '[reached: 2nd Interview] tough final panel' },
 ];
 const notes = {
-  // 10 already has its Phone Screen debrief → satisfied
+  // 10 is still at Phone Screen (nothing concluded yet), and it is debriefed anyway → not pending
   '10': [{ timestamp: '2026-07-20T00:00:00Z', text: '### Debrief: Phone Screen (2026-07-20)\n**Objection:** none raised' }],
-  // 11 has only a Phone Screen debrief, but is now at 2nd Interview → still pending for THIS round
+  // 11 debriefed Phone Screen but SKIPPED 1st Interview before reaching 2nd → 1st Interview stays pending
   '11': [{ timestamp: '2026-07-18T00:00:00Z', text: '### Debrief: Phone Screen (2026-07-18)\n**Outcome:** advanced' }],
-  // 13 has a plain note, not a debrief → pending
+  // 13 has a plain note, not a debrief → its concluded Phone Screen round is pending
   '13': [{ timestamp: '2026-07-21T00:00:00Z', text: 'Nice chat, felt good' }],
 };
 const pend = pendingDebriefs({ apps, notes });
 const pendIds = pend.map(p => p.id);
 
-check(!pendIds.includes(10), 'round with a matching debrief is not pending');
-check(pendIds.includes(11), 'later round is pending even when an earlier round was debriefed');
-check(!pendIds.includes(12), 'a non-interview status is never pending');
-check(pendIds.includes(13), 'an interview round with only a plain note is pending');
-const p11 = pend.find(p => p.id === 11);
-check(p11 && p11.stage === '2nd Interview', 'pending entry carries the current stage');
-check(p11 && p11.company === 'Cobalt Systems', 'pending entry carries company/role for the prompt');
+check(!pendIds.includes(10), 'a still-in-progress round with its debrief is not pending');
+check(pendIds.includes(11), 'a concluded round skipped before advancing stays pending');
+check(!pendIds.includes(12), 'a non-interview status with no reached tag is never pending');
+check(pendIds.includes(13), 'a concluded round with only a plain note is pending');
+const p11 = pend.filter(p => p.id === 11);
+check(p11.length === 1 && p11[0].stage === '1st Interview',
+  'pending entry carries the CONCLUDED round (1st Interview), not the in-progress current stage');
+check(p11[0] && p11[0].company === 'Cobalt Systems', 'pending entry carries company/role for the prompt');
+// Terminal row: Phone Screen + 1st + 2nd Interview all concluded, none debriefed → all three pending.
+const p14 = pend.filter(p => p.id === 14).map(p => p.stage).sort();
+check(p14.length === 3 && p14.join(',') === '1st Interview,2nd Interview,Phone Screen',
+  'terminal row owes a debrief for every reached round (via the [reached:] tag)');
 check(pendingDebriefs({}).length === 0, 'empty input is safe');
 
 // ── formatDebriefNote ────────────────────────────────────────────────────────

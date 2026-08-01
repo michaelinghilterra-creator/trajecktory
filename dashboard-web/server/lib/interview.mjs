@@ -186,9 +186,12 @@ function buildSession(folder, row) {
   const rounds = folder.rounds.map(r => ({
     round: r.round,
     // A run sheet states its own stage, per round, and is authoritative. Failing
-    // that, the gated tracker fallback above. Failing that, null — the UI shows
-    // "Round N", which is true, rather than a stage that is false.
-    stage: r.stage || (r.round === latest ? trackerStage : null),
+    // that, the tracker fallback ONLY when there is exactly one round on disk, so
+    // it is unambiguous which round the live status describes. With multiple
+    // rounds the highest-numbered file may be a future round prepped early, so
+    // stamping the current (shallower) status onto it would mislabel it — null
+    // instead, and the UI shows "Round N", which is true.
+    stage: r.stage || (folder.rounds.length === 1 ? trackerStage : null),
     descriptor: r.descriptor,
     prepPath: r.prepPath,
     runPath: r.runPath,

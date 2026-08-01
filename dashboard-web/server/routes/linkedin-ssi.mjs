@@ -205,7 +205,15 @@ router.post('/api/linkedin-ssi/tracker', (req, res) => {
     }
     if (!Array.isArray(data.weeks)) data.weeks = [];
     // Update week. Treat null/undefined/'' as "not set"; 0 is a valid score.
-    const pillar = (v) => (v === null || v === undefined || v === '') ? null : parseInt(v, 10);
+    // Clamp to [0,25]: the input's max="25" is not enforced on keyboard entry, and
+    // an out-of-range pillar produced totals over 100 ("125/100"), a 200%-wide
+    // Score Breakdown bar, and "208% to goal".
+    const pillar = (v) => {
+      if (v === null || v === undefined || v === '') return null;
+      const n = parseInt(v, 10);
+      if (!Number.isFinite(n)) return null;
+      return Math.max(0, Math.min(25, n));
+    };
     // Upsert. This used to only update a week that already existed, so on a fresh
     // install (weeks: []) every save silently wrote the file back unchanged and
     // the tracker could never be started at all.
@@ -226,7 +234,10 @@ router.post('/api/linkedin-ssi/tracker', (req, res) => {
       week.engageInsights = pillar(req.body.engageInsights);
       week.relationships = pillar(req.body.relationships);
       week.notes = req.body.notes || '';
-      // Recalculate current SSI (use latest completed week)
+      // Recalculate current SSI (use latest completed week). Reset first so that
+      // if an edit leaves NO fully-recorded week, the gauge returns to "not
+      // measured" instead of keeping a stale score from a now-incomplete week.
+      data.currentSsi = null;
       for (let i = data.weeks.length - 1; i >= 0; i--) {
         const w = data.weeks[i];
         if (w.brand !== null && w.findPeople !== null && w.engageInsights !== null && w.relationships !== null) {
