@@ -58,7 +58,13 @@ function firmMono(name) {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 function firmIdFromName(name) {
-  return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  // Drop a trailing " — City" / " - City" suffix so the SAME firm doesn't split
+  // into two ids when some rows carry a location and others don't. (The display
+  // already splits on " — ", so this keeps the id and the label in agreement.)
+  // Generic words like "Partners"/"Group" are left intact — they are part of real
+  // recruiter-firm names and stripping them would mis-split distinct firms.
+  return String(name).toLowerCase().split(/\s[—–-]\s/)[0]
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 function locStr(c) {
   if (!c.city) return '-';

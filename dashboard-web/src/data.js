@@ -137,8 +137,11 @@ window.parseComp = function parseComp(s) {
     .filter(n => n >= 30000 && n <= 2_000_000); // sanity filter — drop equity grants, signing bonuses, etc.
   if (!nums.length) return { display: clean, salary: null };
   if (nums.length === 1) return { display: clean, salary: Math.round(nums[0] / 1000) };
-  // Use the midpoint of the first two numbers (the stated range), rounded to nearest $K.
-  return { display: clean, salary: Math.round((nums[0] + nums[1]) / 2000) };
+  // Two figures = a stated range -> midpoint.
+  if (nums.length === 2) return { display: clean, salary: Math.round((nums[0] + nums[1]) / 2000) };
+  // Three or more (e.g. "$150K base + $50K bonus, $200K OTE") -> the highest is
+  // the headline total (OTE), not the average of base + bonus.
+  return { display: clean, salary: Math.round(Math.max(...nums) / 1000) };
 };
 
 // `[reached: <stage>]` convention: when a role closes after we advance past

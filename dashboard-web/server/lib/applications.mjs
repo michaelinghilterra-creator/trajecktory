@@ -234,7 +234,11 @@ function parseApplicationsMd() {
     // Parse with the single canonical tracker parser (lib/tracker.mjs).
     const base = parseTrackerLine(line);
     if (!base) continue; // header, separator, blank, or sub-9-column row
-    if (base.columns < 10) {
+    // Legacy 9-column rows (pre-Resume-column installs) parse correctly via the
+    // canonical parser, so keep them — dropping them silently removed real
+    // applications from every count. parseTrackerLine already returns null for a
+    // genuinely malformed sub-9-column row.
+    if (base.columns < 9) {
       console.warn(`[parse] applications.md row #${base.num} SKIPPED: ${base.cellCount} columns, expected 10 — check for missing/extra pipes in that line`);
       continue;
     }

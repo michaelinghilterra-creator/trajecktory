@@ -264,9 +264,13 @@ export function stageFunnelStats() {
     // evaluated. See enteredFunnel() in statuses.mjs for why asking
     // `furthestIdx >= Evaluated` here collapsed rung 1 onto rung 2 and printed a
     // 100% first conversion.
+    // Every rung is a subset of rung 1 (entered the funnel): require enteredFunnel
+    // on the deeper rungs too, so a Closed row that carries an Applied event isn't
+    // counted at Applied while being excluded from the Evaluated base — which let
+    // a conversion read above 100%.
     reached[stage] = stage === FUNNEL_ORDER[0]
       ? apps.filter(enteredFunnel).length
-      : apps.filter(a => furthestIdx(a) >= si).length;
+      : apps.filter(a => enteredFunnel(a) && furthestIdx(a) >= si).length;
   }
 
   const conversion = [];
