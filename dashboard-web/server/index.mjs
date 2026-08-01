@@ -66,6 +66,20 @@ const app = express();
 const AUTH_TOKEN = randomBytes(24).toString('hex');
 const AUTH_COOKIE = 'tjk_token';
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+// GET endpoints that LOOK like reads but carry a side effect: each reaches out to
+// an external API (Claude, Google, Buffer, TrueTalent) and so spends quota or makes
+// a network call. A plain <img>/simple-GET from any page the user is browsing would
+// otherwise trigger these cross-origin (CSRF), because GET normally skips the token
+// guard below. They demand the token too — and the SameSite=Strict cookie is not
+// sent on a cross-site subresource request, so a drive-by is refused while the
+// same-origin dashboard fetch (cookie present) still works.
+const SIDE_EFFECT_GETS = new Set([
+  '/api/coach/brief',
+  '/api/google/replies',
+  '/api/google/health',
+  '/api/buffer/channels',
+  '/api/tt-reconcile/credit-balances',
+]);
 
 // Host-header allow-list — the DNS-rebinding defense (security: CWE-346). The
 // CORS/token guards below key on Origin, but a rebound domain becomes same-origin
@@ -118,7 +132,9 @@ app.use((req, res, next) => {
 // Require the token on state-changing requests (which include the agent-spawn
 // and workflow routes, all POST). Reads stay open so the UI loads cleanly.
 app.use((req, res, next) => {
-  if (!MUTATING_METHODS.has(req.method)) return next();
+  const needsToken = MUTATING_METHODS.has(req.method) ||
+    (req.method === 'GET' && SIDE_EFFECT_GETS.has(req.path));
+  if (!needsToken) return next();
   const provided = readCookie(req, AUTH_COOKIE) || req.headers['x-tjk-token'];
   if (provided === AUTH_TOKEN) return next();
   res.status(403).json({
