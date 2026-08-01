@@ -155,7 +155,7 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>You're all caught up.</div>
         <div className="dim" style={{ fontSize: 12 }}>
           Nothing inside the touch window has gone stale. New rows surface here when an Applied/Responded/interview-round entry
-          crosses {thresholds?.Applied || 10}/{thresholds?.Responded || 5}/{thresholds?.['1st Interview'] || 3}d, or a TA contact crosses {taThreshold || 14}d.
+          crosses {thresholds?.Applied || 7}/{thresholds?.Responded || 5}/{thresholds?.['1st Interview'] || 3}d, or a TA contact crosses {taThreshold || 14}d.
         </div>
       </div>
     );
