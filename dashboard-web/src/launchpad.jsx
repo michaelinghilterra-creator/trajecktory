@@ -422,7 +422,7 @@ function ModelsCostPanel() {
       <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>
         Choose which Claude model runs each step and see the approximate cost per run. Cheaper defaults are already applied; every step stays overridable.
       </p>
-      <div style={{ fontSize: 12, marginBottom: 14, padding: '9px 12px', borderRadius: 'var(--r-ctl)',
+      <div style={{ fontSize: 12, marginBottom: 14, padding: '8px 12px', borderRadius: 'var(--r-ctl)',
         background: showCost ? 'rgba(34,197,94,0.07)' : 'var(--panel-2)', border: `1px solid ${showCost ? 'rgba(34,197,94,0.22)' : 'var(--border)'}`,
         color: 'var(--text-dim)', lineHeight: 1.5 }}>
         {showCost ? '● API key saved. '
@@ -563,10 +563,10 @@ function ModelsCostPanel() {
             </tbody>
             <tfoot>
               <tr style={{ color: 'var(--text)', borderTop: '2px solid var(--border)', fontWeight: 600 }}>
-                <td style={{ padding: '5px 8px 5px 0' }}>Total</td>
-                <td style={{ padding: '5px 8px' }} title={lpModeBreakdown(rollup.total.byMode)}>{rollup.total.runs}</td>
-                <td style={{ padding: '5px 8px', textAlign: 'right' }}>~{lpUsd(rollup.total.cost)}</td>
-                <td style={{ padding: '5px 0 5px 8px', textAlign: 'right' }}>{lpDur(rollup.total.machineTimeMs)}</td>
+                <td style={{ padding: '4px 8px 4px 0' }}>Total</td>
+                <td style={{ padding: '4px 8px' }} title={lpModeBreakdown(rollup.total.byMode)}>{rollup.total.runs}</td>
+                <td style={{ padding: '4px 8px', textAlign: 'right' }}>~{lpUsd(rollup.total.cost)}</td>
+                <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }}>{lpDur(rollup.total.machineTimeMs)}</td>
               </tr>
             </tfoot>
           </table>
@@ -640,7 +640,7 @@ const LP_COMP_STEPS = (() => {
 })();
 function lpPillStyle(on) {
   return { background: on ? 'var(--accent-bg)' : 'var(--panel-2)', color: on ? 'var(--accent)' : 'var(--text-dim)',
-    border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 999, padding: '5px 13px', fontSize: 12, cursor: 'pointer' };
+    border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 999, padding: '4px 12px', fontSize: 12, cursor: 'pointer' };
 }
 function lpChipStyle() {
   return { display: 'inline-flex', alignItems: 'center', background: 'var(--accent-bg)', color: 'var(--accent)', borderRadius: 999, padding: '4px 10px', fontSize: 12 };
@@ -1288,7 +1288,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     return (
       <div>
         {isDone && !prompt && (
-          <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+          <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5 }}>
             <span style={{ color: 'var(--green)', fontWeight: 500 }}>✓ This is set up.</span> Claude Code saved it from your inputs, so nothing more is required here. To see exactly what it set or change it, re-run below, or ask Claude Code in chat to "show me my current {section.label.toLowerCase()}."
           </div>
         )}
@@ -1326,7 +1326,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           </button>
         </div>
         {c && c !== 'checking' && !c.ok && (
-          <div style={{ marginTop: 8, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(234,179,8,0.09)', border: '1px solid rgba(234,179,8,0.3)', fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55 }}>
+          <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(234,179,8,0.09)', border: '1px solid rgba(234,179,8,0.3)', fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55 }}>
             <b style={{ color: 'var(--yellow)' }}>Not saved yet.</b> {c.text}
             <div style={{ marginTop: 7 }}>
               <button className="btn ghost sm" onClick={() => forceAck(id)}>Dismiss anyway</button>
@@ -1369,7 +1369,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               onChange={e => setTracked(t => ({ ...t, q: e.target.value }))} style={{ width: '100%', marginBottom: 8 }} />
             <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4, paddingRight: 4 }}>
               {shown.slice(0, 400).map((co) => (
-                <div key={co.careers_url} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 9px', borderRadius: 'var(--r-ctl)', border: '1px solid var(--border)', background: co.enabled ? 'var(--panel)' : 'var(--panel-2)', opacity: co.enabled ? 1 : 0.6 }}>
+                <div key={co.careers_url} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 'var(--r-ctl)', border: '1px solid var(--border)', background: co.enabled ? 'var(--panel)' : 'var(--panel-2)', opacity: co.enabled ? 1 : 0.6 }}>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 12, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{co.name}</span>
                     {co.note && <span style={{ display: 'block', fontSize: 10.5, color: 'var(--text-mute)' }}>{co.note}</span>}
@@ -1405,7 +1405,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
 
     if (!goalEditing && !filled) {
       return (
-        <div style={{ marginBottom: 12, padding: '10px 13px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px dashed var(--border)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ flex: 1, minWidth: 220, fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55 }}>
             What are you actually after? One line, and everything below has a point of reference.
           </span>
@@ -1416,7 +1416,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
 
     if (!goalEditing) {
       return (
-        <div style={{ marginBottom: 12, padding: '10px 13px', borderRadius: 'var(--r-card)', background: 'var(--accent-bg)', border: '1px solid rgba(var(--accent-rgb),0.3)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 'var(--r-card)', background: 'var(--accent-bg)', border: '1px solid rgba(var(--accent-rgb),0.3)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ flex: 1, minWidth: 220, fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>
             <span style={{ color: 'var(--text-mute)', fontSize: 11 }}>Going for</span><br />
             {[g.role, g.comp, g.by && `by ${g.by}`].filter(Boolean).join(' · ')}
@@ -1461,7 +1461,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           Replaces your companies, job-title keywords and location rules with the ones a new install gets.
           Useful if setup left you with a config that finds nothing and you would rather begin again than unpick it.
           {r.counts && (
-            <div style={{ marginTop: 8, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(234,179,8,0.09)', border: '1px solid rgba(234,179,8,0.3)', color: 'var(--text)' }}>
+            <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(234,179,8,0.09)', border: '1px solid rgba(234,179,8,0.3)', color: 'var(--text)' }}>
               You would be replacing <b>{r.counts.companies} companies</b> ({r.counts.disabled} of them switched off) and <b>{r.counts.keywords} search words</b>.
               A copy is saved first, and you can put it back from the list below.
             </div>
@@ -1484,7 +1484,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             <div style={LP_SUB}>Saved copies</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto' }}>
               {r.backups.map(b => (
-                <div key={b.file} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 9px', border: '1px solid var(--border)', borderRadius: 'var(--r-ctl)' }}>
+                <div key={b.file} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 'var(--r-ctl)' }}>
                   <span className="mono" style={{ flex: 1, minWidth: 0, fontSize: 10.5, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.file}</span>
                   <button className="btn ghost sm" disabled={r.busy} onClick={() => doRestore(b.file)}>Put this back</button>
                 </div>
@@ -1508,7 +1508,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     if (!next) return null;
     const done = sectionStatus(currentId) === 'complete';
     return (
-      <div style={{ marginTop: 16, paddingTop: 13, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
           {done ? 'Done here. Next up:' : 'When you are finished here, go to:'}
         </span>
@@ -1571,9 +1571,9 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         {list.length > 0 && (
           <details style={{ marginTop: 8 }}>
             <summary style={{ fontSize: 11, color: 'var(--accent)', cursor: 'pointer' }}>See the {list.length} search {list.length === 1 ? 'word' : 'words'}</summary>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
               {list.map((k, i) => (
-                <span key={i} className="mono" style={{ fontSize: 11, padding: '2px 7px', borderRadius: 999, background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}>{k}</span>
+                <span key={i} className="mono" style={{ fontSize: 11, padding: '2px 6px', borderRadius: 999, background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}>{k}</span>
               ))}
             </div>
           </details>
@@ -1589,7 +1589,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
   function lpPreview() {
     const p = preview;
     return (
-      <div style={{ marginTop: 4, padding: '11px 13px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
+      <div style={{ marginTop: 4, padding: '10px 12px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <button className="btn" disabled={p?.running} onClick={runPreview}>
             {p?.running ? 'Checking live postings…' : 'Preview what this finds'}
@@ -1642,7 +1642,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             {p.examples?.length > 0 && (
               <div style={{ marginTop: 9 }}>
                 <div style={{ fontSize: 11, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 5 }}>Examples that got through</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {p.examples.slice(0, 6).map((e, i) => (
                     <div key={i} style={{ fontSize: 12, color: 'var(--text-dim)' }}>
                       <span style={{ color: 'var(--text)' }}>{e.title}</span>
@@ -1713,7 +1713,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               {suggestions.map((s, i) => {
                 const on = titles.includes(s.title);
                 return (
-                  <button key={i} onClick={() => toggleSug(s.title)} style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', border: `1px solid ${on ? 'var(--green)' : 'var(--border)'}`, background: on ? 'rgba(34,197,94,0.10)' : 'var(--panel)', borderRadius: 'var(--r-ctl)', padding: '8px 11px', cursor: 'pointer' }}>
+                  <button key={i} onClick={() => toggleSug(s.title)} style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', border: `1px solid ${on ? 'var(--green)' : 'var(--border)'}`, background: on ? 'rgba(34,197,94,0.10)' : 'var(--panel)', borderRadius: 'var(--r-ctl)', padding: '8px 10px', cursor: 'pointer' }}>
                     <LpCheck on={on} />
                     <span style={{ flex: 1 }}>
                       <span style={{ display: 'block', fontSize: 13, color: on ? 'var(--green)' : 'var(--text)' }}>{s.title}</span>
@@ -1749,12 +1749,12 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
     const removePick = (n) => saveStage('companies', { ...c, picks: picks.filter(x => x !== n) });
     const toggleSug = (n) => saveStage('companies', { ...c, picks: picks.includes(n) ? picks.filter(x => x !== n) : [...picks, n] });
     const badge = (api) => (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, padding: '3px 8px', borderRadius: 999, whiteSpace: 'nowrap', background: api ? 'rgba(34,197,94,0.14)' : 'rgba(245,158,11,0.14)', color: api ? 'var(--green)' : 'var(--orange)' }}><LpIcon name={api ? 'bolt' : 'globe'} size={11} />{api ? 'free' : 'web'}</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap', background: api ? 'rgba(34,197,94,0.14)' : 'rgba(245,158,11,0.14)', color: api ? 'var(--green)' : 'var(--orange)' }}><LpIcon name={api ? 'bolt' : 'globe'} size={11} />{api ? 'free' : 'web'}</span>
     );
     const sugRow = (s, i) => {
       const on = picks.includes(s.name);
       return (
-        <button key={i} onClick={() => toggleSug(s.name)} style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', border: `1px solid ${on ? 'var(--green)' : 'var(--border)'}`, background: on ? 'rgba(34,197,94,0.10)' : 'var(--panel)', borderRadius: 'var(--r-ctl)', padding: '8px 11px', cursor: 'pointer' }}>
+        <button key={i} onClick={() => toggleSug(s.name)} style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', border: `1px solid ${on ? 'var(--green)' : 'var(--border)'}`, background: on ? 'rgba(34,197,94,0.10)' : 'var(--panel)', borderRadius: 'var(--r-ctl)', padding: '8px 10px', cursor: 'pointer' }}>
           <LpCheck on={on} />
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ display: 'block', fontSize: 13, color: on ? 'var(--green)' : 'var(--text)' }}>{s.name}</span>
@@ -1770,7 +1770,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <LpLegend />
         <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>A broad starter set of 123 employers ships by default, spread across 15 industries. It is a starting point, not a list picked for you, so expect to replace most of it. Add your own below, or pick from Claude Code's suggestions.</div>
-        <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5, padding: '8px 11px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>💡 Tip: add a few companies you already care about <i>before</i> you run the suggestions. Claude Code uses them to tune what it recommends, so you'll get sharper local and industry matches.</div>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5, padding: '8px 10px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)' }}>💡 Tip: add a few companies you already care about <i>before</i> you run the suggestions. Claude Code uses them to tune what it recommends, so you'll get sharper local and industry matches.</div>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={LP_SUB}>Commute radius</div>
           <input type="number" min="5" max="200" step="5" className="inp" value={radius} style={{ width: 90 }} onChange={e => saveStage('companies', { ...c, radiusMiles: parseInt(e.target.value || '0', 10) })} />
@@ -1840,7 +1840,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
         ? saveStage('certs', { ...cert, items: items.filter(it => it.name !== d.name) })
         : saveStage('certs', { ...cert, items: [...items, { name: d.name, org: d.issuer || '' }] });
       const linkRow = (icon, label, key, placeholder, optional) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ width: 18, display: 'inline-flex', justifyContent: 'center', color: key === 'portfolio_url' ? 'var(--accent)' : 'var(--text-dim)' }}><LpIcon name={icon} size={16} /></span>
           <span style={{ width: 150, flexShrink: 0, fontSize: 12, color: key === 'portfolio_url' ? 'var(--accent)' : 'var(--text)' }}>{label}{optional ? <span style={{ color: 'var(--text-mute)', fontSize: 11 }}> optional</span> : null}</span>
           <input className="inp" style={{ flex: 1 }} value={c[key] || ''} aria-label={placeholder} placeholder={placeholder} onChange={e => setFormVal('candidate', key, e.target.value)} />
@@ -1899,7 +1899,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                 {detected.map((d, i) => {
                   const on = hasItem(d.name);
                   return (
-                    <button key={i} onClick={() => toggleDetected(d)} style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', border: `1px solid ${on ? 'var(--green)' : 'var(--border)'}`, background: on ? 'rgba(34,197,94,0.10)' : 'var(--panel)', borderRadius: 'var(--r-ctl)', padding: '8px 11px', cursor: 'pointer' }}>
+                    <button key={i} onClick={() => toggleDetected(d)} style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', border: `1px solid ${on ? 'var(--green)' : 'var(--border)'}`, background: on ? 'rgba(34,197,94,0.10)' : 'var(--panel)', borderRadius: 'var(--r-ctl)', padding: '8px 10px', cursor: 'pointer' }}>
                       <LpCheck on={on} />
                       <span style={{ flex: 1 }}><span style={{ display: 'block', fontSize: 13, color: on ? 'var(--green)' : 'var(--text)' }}>{d.name}</span>{d.issuer && <span style={{ display: 'block', fontSize: 11, color: 'var(--text-mute)' }}>{d.issuer}</span>}</span>
                     </button>
@@ -2028,7 +2028,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       const c = forms.outputs || {};
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55 }}>
+          <div style={{ padding: '8px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55 }}>
             This is where trajecktory saves the files it generates for you: every <b>tailored resume</b> (when you apply to a role) lands in the resume folder, and every <b>interview-prep note</b> lands in the prep folder. Check these folders after you apply or prep for an interview, that is where your documents are. <b>You can leave these as they are;</b> they default to your Documents folder (<span className="mono">Documents\trajecktory resumes</span> and <span className="mono">Documents\trajecktory interview prep</span>) and are created automatically. Only change them if you want the files somewhere specific.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>
@@ -2093,7 +2093,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             <div style={{ marginTop: 12 }}>
               <div style={{ fontSize: 13, color: health.ok ? 'var(--green)' : 'var(--orange)', marginBottom: 6 }}>{health.ok ? '✓ Everything looks good' : 'Found a few formatting nits'}</div>
               {!health.ok && (
-                <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 8, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.25)' }}>
+                <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55, marginBottom: 8, padding: '8px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.25)' }}>
                   These are data-formatting issues, not crashes, and they usually clear up once evaluations run through the normal flow. Safe to ignore for now, or paste <span className="mono">fix the trajecktory pipeline health issues</span> into Claude Code and it will read the details below and clean them up.
                 </div>
               )}
@@ -2132,7 +2132,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           page: it tells the user the product is usable BEFORE they grind through
           the remaining steps. Its absence cost a beta tester ~2 hours. */}
       {canStart && !allReady && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12, padding: '11px 13px', borderRadius: 'var(--r-card)', background: 'rgba(34,197,94,0.09)', border: '1px solid rgba(34,197,94,0.3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12, padding: '10px 12px', borderRadius: 'var(--r-card)', background: 'rgba(34,197,94,0.09)', border: '1px solid rgba(34,197,94,0.3)' }}>
           <span style={{ fontSize: 15 }}>✓</span>
           <span style={{ flex: 1, minWidth: 220, fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.55 }}>
             <b style={{ color: 'var(--text)' }}>You are ready to use trajecktory.</b> Your resume is in, so you can start evaluating real jobs right now. The steps below are refinements, not requirements. Most people get more out of them after seeing a few scores, so feel free to come back later.
@@ -2157,14 +2157,14 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
       {/* rail + panel — flex-wrap so the panel drops below the rail on narrow
           widths instead of being crushed by a fixed grid column. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'flex-start' }}>
-        <div style={{ flex: '0 0 234px', minWidth: 200, display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <div style={{ flex: '0 0 234px', minWidth: 200, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {LP_SECTIONS.map(s => {
             const isActive = s.id === active;
             const isGated = gated(s.id);
             const isNext = s.id === nextStepId && !isActive;
             return (
               <button key={s.id} onClick={() => selectStep(s.id)} disabled={isGated}
-                style={{ textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
+                style={{ textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
                   borderRadius: 'var(--r-ctl)', cursor: isGated ? 'not-allowed' : 'pointer', opacity: isGated ? 0.5 : 1,
                   border: `1px solid ${isActive ? 'var(--accent)' : isNext ? 'var(--green)' : 'var(--border)'}`,
                   background: isActive ? 'var(--accent-bg)' : isNext ? 'rgba(34,197,94,0.07)' : 'var(--panel)' }}>
@@ -2182,7 +2182,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           <div style={{ fontSize: 10.5, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: 0.4, margin: '10px 0 2px 4px' }}>Optional boosters</div>
           {LP_OPTIONAL.map(o => (
             <button key={o.id} onClick={() => selectStep('opt:' + o.id)} disabled={!preflightOk}
-              style={{ textAlign: 'left', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px',
+              style={{ textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px',
                 borderRadius: 'var(--r-ctl)', cursor: 'pointer', opacity: preflightOk ? 1 : 0.5,
                 border: `1px solid ${active === 'opt:' + o.id ? 'var(--accent)' : 'var(--border)'}`, background: 'var(--panel)' }}>
               <span style={{ color: 'var(--text-mute)', width: 16, display: 'inline-flex', justifyContent: 'center' }}><LpIcon name="plus" size={13} /></span>
@@ -2216,7 +2216,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                       basis for asking. A privacy promise nobody can check is
                       worth nothing, so the export below is plain text the user
                       can read in full before sending it anywhere. */}
-                  <div style={{ padding: '11px 13px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12, lineHeight: 1.6, marginBottom: 12 }}>
+                  <div style={{ padding: '10px 12px', borderRadius: 'var(--r-card)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12, lineHeight: 1.6, marginBottom: 12 }}>
                     <div style={{ color: 'var(--text)', marginBottom: 5 }}>What it records</div>
                     <div style={{ color: 'var(--text-dim)' }}>Which setup step you were on, how long it took, and whether a scan or an application produced anything. Times and counts, nothing else.</div>
                     <div style={{ color: 'var(--text)', margin: '9px 0 5px' }}>What it never records</div>
@@ -2253,7 +2253,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               // touch. A blank sheet you fill in and hand back is a contract you
               // can see; a prompt that rewrites your tracker is not.
               const tpl = (kind, label, note) => (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '9px 11px', border: '1px solid var(--border)', borderRadius: 'var(--r-ctl)', background: 'var(--panel)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--r-ctl)', background: 'var(--panel)' }}>
                   <span style={{ flex: 1, minWidth: 180 }}>
                     <span style={{ display: 'block', fontSize: 13, color: 'var(--text)' }}>{label}</span>
                     <span style={{ display: 'block', fontSize: 11, color: 'var(--text-mute)' }}>{note}</span>
@@ -2417,7 +2417,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             );
           })() : (
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{ width: 30, height: 30, borderRadius: 'var(--r-ctl)', background: 'var(--accent-bg)', color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><LpIcon name={sec.icon} size={16} /></span>
                 <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text)' }}>{sec.title}</h3>
                 {st === 'complete' && <span className="pill" style={{ background: 'var(--accent-bg)', color: 'var(--green)', marginLeft: 'auto' }}>done</span>}
@@ -2425,7 +2425,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
               <LpWhy item={sec} />
               <LpSummaryBox id={sec.id} configured={state.values && state.values.configured} />
               {sec.id === 'cv' && state.sections?.cv?.warning === 'no-master-docx' && (
-                <div style={{ marginBottom: 12, padding: '9px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(234,179,8,0.12)', color: 'var(--yellow)', fontSize: 12, lineHeight: 1.5 }}>
+                <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 'var(--r-ctl)', background: 'rgba(234,179,8,0.12)', color: 'var(--yellow)', fontSize: 12, lineHeight: 1.5 }}>
                   Your <span className="mono">cv.md</span> exists, but no Word master was found. Upload a <span className="mono">.docx</span> so tailored Word resumes can be generated.
                 </div>
               )}
@@ -2576,7 +2576,7 @@ function TellMeAboutYouPanel() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span className="mono dim" style={{ fontSize: 11, minWidth: 100 }}>Industry</span>
           <input value={industry} onChange={e => setIndustry(e.target.value)} placeholder="blank = from your profile"
-            style={{ flex: 1, minWidth: 160, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '5px 8px', color: 'var(--text)', fontSize: 12 }} />
+            style={{ flex: 1, minWidth: 160, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', color: 'var(--text)', fontSize: 12 }} />
         </div>
         <div className="row" style={{ gap: 10 }}>
           <button className="btn primary" onClick={generate} disabled={loading}>{loading ? 'Writing…' : (pitch ? '↻ Regenerate' : 'Generate pitch')}</button>
@@ -2678,7 +2678,7 @@ function TwcPanel({ toast }) {
 
   const dateInput = (val, set) => (
     <input type="date" className="inp" value={val} onChange={e => set(e.target.value)}
-      style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '5px 8px', color: 'var(--text)', fontSize: 12 }} />
+      style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', color: 'var(--text)', fontSize: 12 }} />
   );
   const cell = { padding: '6px 8px', verticalAlign: 'top' };
 
@@ -2813,7 +2813,7 @@ function ChangelogPanel() {
       {/* Say when these are commit subjects rather than notes written for a reader,
           instead of letting the raw fallback pass as the real thing. */}
       {data && data.source === 'changelog-md' && (data.entries || []).length > 0 && (
-        <div className="card" style={{ padding: '9px 13px' }}>
+        <div className="card" style={{ padding: '8px 12px' }}>
           <div className="mono dim" style={{ fontSize: 11 }}>
             Showing the local changelog. Release notes could not be reached, so these are commit summaries rather than the written notes.
           </div>
@@ -2828,7 +2828,7 @@ function ChangelogPanel() {
             <span className="mono dim" style={{ fontSize: 11, marginLeft: 'auto' }}>{e.date}</span>
           </div>
           {e.sections.map((sec, j) => (
-            <div key={j} className="col" style={{ gap: 5 }}>
+            <div key={j} className="col" style={{ gap: 4 }}>
               {sec.heading && <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.08em', color: 'var(--text-dim)' }}>{sec.heading.toUpperCase()}</div>}
               {/* A paragraph renders as a paragraph. Bulleting written prose turned
                   every sentence into a list item, which is exactly the look the

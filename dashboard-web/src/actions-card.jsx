@@ -123,7 +123,7 @@ window.ActionsCard = function ActionsCard() {
                   return (
                     <tr key={w.week} style={{ textAlign: 'right', color: tooYoung ? 'var(--text-mute)' : 'var(--text-dim)' }}
                       title={tooYoung ? 'Less than a week old. Replies arrive within days, so this cannot be judged yet.' : undefined}>
-                      <td style={{ textAlign: 'left', padding: '3px 0' }}>
+                      <td style={{ textAlign: 'left', padding: '2px 0' }}>
                         {w.week}{tooYoung ? ' ·  in flight' : ''}
                       </td>
                       <td>{w.sent}</td>

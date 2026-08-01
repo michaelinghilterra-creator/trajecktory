@@ -28,7 +28,7 @@ const METRIC_FIELDS = [
   { k: 'repoStars', label: 'Repo stars' },
 ];
 
-const cInput = { background: 'transparent', border: '1px solid var(--border-2)', borderRadius: 6, padding: '5px 8px', color: 'inherit', font: 'inherit' };
+const cInput = { background: 'transparent', border: '1px solid var(--border-2)', borderRadius: 6, padding: '4px 8px', color: 'inherit', font: 'inherit' };
 
 function engRateOf(m) {
   if (!m || !m.impressions) return null;
@@ -124,18 +124,18 @@ function ContentPostCard({ post, onChanged, onReply, toast }) {
           {autoFields.length ? <div className="dim" style={{ fontSize: 11 }}>Fields marked <span style={{ color: 'var(--accent)' }}>⟳</span> were synced from Buffer. You can still edit any of them; the rest you fill in by hand.</div> : null}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
             {METRIC_FIELDS.map(f => (
-              <label key={f.k} className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <label key={f.k} className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span>{f.label}{autoFields.includes(f.k) ? <span style={{ color: 'var(--accent)' }} title="Synced from Buffer"> ⟳</span> : null}</span>
                 <input type="number" min="0" style={cInput} value={m[f.k]}
                   onChange={e => setM(s => ({ ...s, [f.k]: e.target.value }))} />
               </label>
             ))}
           </div>
-          <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
             Who engaged (titles / companies of the people who reacted or viewed — your hire-me signal)
             <input type="text" style={cInput} value={m.whoEngaged} onChange={e => setM(s => ({ ...s, whoEngaged: e.target.value }))} />
           </label>
-          <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
             Notes (what worked / flopped)
             <input type="text" style={cInput} value={m.notes} onChange={e => setM(s => ({ ...s, notes: e.target.value }))} />
           </label>
@@ -175,25 +175,25 @@ function AddPostForm({ onAdded, toast }) {
   return (
     <div className="card" style={{ padding: 12 }}>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3, flex: 2, minWidth: 200 }}>
+        <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2, flex: 2, minWidth: 200 }}>
           Post label / hook
           <input type="text" style={cInput} value={label} placeholder="Short label for this post" onChange={e => setLabel(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} />
         </label>
-        <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
           Type
           <select style={cInput} value={type} onChange={e => setType(e.target.value)}>
             <option value="">(none)</option>
             {CONTENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </label>
-        <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
           Channel
           <select style={cInput} value={channel} onChange={e => setChannel(e.target.value)}>
             <option value="linkedin">LinkedIn</option>
             <option value="x">X</option>
           </select>
         </label>
-        <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minWidth: 140 }}>
+        <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 140 }}>
           Link (optional)
           <input type="text" style={cInput} value={link} placeholder="tracked repo link" onChange={e => setLink(e.target.value)} />
         </label>
@@ -267,18 +267,18 @@ function ReplyTool({ posts, initialPostId, toast }) {
     <div className="col" style={{ gap: 12 }}>
       <div className="card" style={{ padding: 12 }}>
         <div className="col" style={{ gap: 10 }}>
-          <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
             Which post is the comment on? (gives the reply context — optional)
             <select style={cInput} value={postId} onChange={e => setPostId(e.target.value)}>
               <option value="">(no specific post)</option>
               {posts.map(p => <option key={p.id} value={p.id}>{postLabel(p)} · {p.channel === 'x' ? 'X' : 'LinkedIn'}</option>)}
             </select>
           </label>
-          <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
             Paste the comment you want to reply to
             <textarea style={{ ...cInput, minHeight: 90, resize: 'vertical' }} value={comment} onChange={e => setComment(e.target.value)} placeholder="Paste the exact comment here…" />
           </label>
-          <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
             Tone note (optional, e.g. "extra warm", "they disagree, stay gracious")
             <input type="text" style={cInput} value={tone} onChange={e => setTone(e.target.value)} />
           </label>
@@ -509,7 +509,7 @@ function PublishTool({ posts, onChanged, toast }) {
                   <span style={{ flex: 1 }}>{postLabel(p)} <span className="dim">({p.channel === 'x' ? 'X' : 'LinkedIn'})</span> — {fmtWhen(p.buffer.dueAt || p.scheduledFor)}</span>
                 </div>
                 {p.buffer.pendingFirstComment ? (
-                  <div className="row" style={{ gap: 6, fontSize: 11, alignItems: 'baseline', paddingLeft: 86, color: 'var(--orange)' }}>
+                  <div className="row" style={{ gap: 6, fontSize: 11, alignItems: 'baseline', paddingLeft: 80, color: 'var(--orange)' }}>
                     <span>↳ add as first comment when it posts:</span>
                     <span className="mono" style={{ wordBreak: 'break-all' }}>{p.buffer.pendingFirstComment}</span>
                   </div>

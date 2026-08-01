@@ -97,10 +97,10 @@ window.RunWizardTab = function RunWizardTab({ toast }) {
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
                 <span className="mono" style={{ color: g.color, fontSize: 15, width: 16, textAlign: 'center', flexShrink: 0 }}>{g.ch}</span>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <strong style={{ fontSize: 14, color: 'var(--text)' }}>{i + 1}. {phase.title}</strong>
                     {phase.usesClaude && <span title="Uses your Claude Code plan" style={{ color: 'var(--accent)', fontSize: 12 }}>✦</span>}
-                    {phase.optional && <span className="pill" style={{ fontSize: 10.5, padding: '1px 6px', color: 'var(--text-mute)' }}>optional</span>}
+                    {phase.optional && <span className="pill" style={{ fontSize: 10.5, padding: '2px 6px', color: 'var(--text-mute)' }}>optional</span>}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5, marginTop: 3 }}>{phase.desc}</div>
 
