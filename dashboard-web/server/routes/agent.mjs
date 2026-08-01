@@ -8,6 +8,7 @@ import { logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent
 import { apiKeyActive } from '../lib/anthropic.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
 import { record as recordActivation } from '../lib/activation.mjs';
+import { issueJd } from '../../../next-jd.mjs';
 
 export const router = express.Router();
 
@@ -138,6 +139,22 @@ function pipelineEvalTotal(power) {
   return pending === null ? cap : Math.min(cap, pending);
 }
 
+// Reserve report numbers SERVER-SIDE and hand them to the eval agent in the
+// prompt, so the agent never needs `Bash(node next-jd.mjs)`. Numbering used to
+// be the ONLY Bash allowance the sandbox granted, which kept the door open for a
+// prompt-injected posting to reach a broad Bash(node *) allow (from a local
+// settings.local.json) and run `node -e`. issueJd() is imported straight from
+// next-jd.mjs and advances the SAME persistent monotonic counter, so numbers are
+// still unique and never reused. Numbers reserved but not used (the agent wrote
+// fewer reports than the batch cap) simply leave a gap — harmless, since the
+// counter only ever moves forward. Returns padded 3-wide strings to match the
+// {###}-{slug}-{date}.md report filename convention.
+function reserveReportNumbers(n) {
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(String(issueJd()).padStart(3, '0'));
+  return out;
+}
+
 function dashboardConstraints(mode, opts) {
   const power = effectivePower(opts, mode);
   // Power pipeline runs bill the user's API key (separate from the flat plan
@@ -182,7 +199,14 @@ function dashboardConstraints(mode, opts) {
   const evalCap = evalBatchSize(power);
   if (mode === 'pipeline') {
     const capWhy = limit > 0 ? `TJK_TEST_LIMIT=${limit}` : `the per-run batch size is ${evalCap}`;
-    return ' ' + common +
+    // Pre-reserve one report number per posting this run will really attempt
+    // (min of the batch cap and the pending count), so the agent numbers reports
+    // from this list instead of shelling out to next-jd.mjs.
+    const reserved = reserveReportNumbers(pipelineEvalTotal(power));
+    const reservedLine = reserved.length
+      ? ` Report numbers are PRE-RESERVED for this run: ${reserved.join(', ')}. Use them IN ORDER, one per report you write — as both the report filename number ({num}-{slug}-{date}.md) and the matching tracker id in your TSV. Do NOT run node next-jd.mjs; numbering is handled for you here. If you write fewer reports than numbers listed, leave the extras unused.`
+      : '';
+    return ' ' + common + reservedLine +
       ' Evaluate only the URLs already pending in data/pipeline.md and do not scan for new roles.' +
       ` Evaluate at most ${evalCap} pending unchecked URLs this run (${capWhy}). They are ordered best-fit first, so take them from the TOP of the pending list; once you have evaluated ${evalCap}, STOP even if more remain and tell me how many pending URLs are left so I can run Evaluate again for the next batch.` +
       ' Do not run gate-pipeline.mjs or any browser tool; just evaluate the pending unchecked URLs as they are. To read each job description, your FIRST step is to run node fetch-jd.mjs from the repo root, passing the posting URL as its only argument (quote the URL in your own shell). it returns the full JD straight from the ATS API (Ashby, Greenhouse, Lever) and works where WebFetch cannot, because those postings are JavaScript single-page apps that a raw fetch sees as an empty shell. Evaluate ONLY from the text it prints. If fetch-jd.mjs exits non-zero (no ATS API available for that URL, e.g. a Workday posting), THEN try WebFetch. Only if BOTH fail do you defer: do NOT reconstruct the JD from WebSearch or aggregator mirrors — a stitched-together JD produces a confident score for a posting you never actually read, and that has shipped CLOSED roles as high scores. Instead append one tab-separated line (url, company, role) to data/needs-manual-jd.tsv (create it with that exact header row if it is missing), mark that URL done in data/pipeline.md ([ ] to [x]), and write NO report and NO tracker TSV for it. The user will confirm the posting is live and paste the JD text themselves.' +
@@ -212,7 +236,8 @@ function dashboardConstraints(mode, opts) {
   }
   if (mode === 'deep') {
     const tgt = (opts && opts.url) || '';
-    return ' ' + common + ` Deep evaluation of ONE posting only: ${tgt}. Read its job description with WebFetch first and WebSearch as a fallback (for a local:jds/ path, read that file directly). Produce the FULL A-G evaluation as a report in reports/ using the trajecktory-report/v1 format (JSON frontmatter then narrative) and populate every section: summary, cvMatch, gaps, levelMatch, comp, customizationCV, customizationLI, starStories with a leadStory, and a legitimacy object with a tier and signals (Playwright is unavailable here, so assess legitimacy from the fetched page and set verification to unconfirmed). Record the evaluation as a single nine-column TSV in batch/tracker-additions/. This posting was entered directly by the user (the dashboard paste box), not found by a scan, so set the tracker note to include [self-sourced]. Evaluate ONLY this one posting — do not scan for or evaluate any other URL. If it cannot be read, say so and stop.` + snapshotJd;
+    const [num] = reserveReportNumbers(1);
+    return ' ' + common + ` Report number is PRE-RESERVED for this run: ${num}. Use it as the report filename number ({num}-{slug}-{date}.md) and the matching tracker id. Do NOT run node next-jd.mjs; numbering is handled for you here.` + ` Deep evaluation of ONE posting only: ${tgt}. Read its job description with WebFetch first and WebSearch as a fallback (for a local:jds/ path, read that file directly). Produce the FULL A-G evaluation as a report in reports/ using the trajecktory-report/v1 format (JSON frontmatter then narrative) and populate every section: summary, cvMatch, gaps, levelMatch, comp, customizationCV, customizationLI, starStories with a leadStory, and a legitimacy object with a tier and signals (Playwright is unavailable here, so assess legitimacy from the fetched page and set verification to unconfirmed). Record the evaluation as a single nine-column TSV in batch/tracker-additions/. This posting was entered directly by the user (the dashboard paste box), not found by a scan, so set the tracker note to include [self-sourced]. Evaluate ONLY this one posting — do not scan for or evaluate any other URL. If it cannot be read, say so and stop.` + snapshotJd;
   }
   return '';
 }
@@ -362,15 +387,19 @@ function runClaudeAgent(jobId, mode, target) {
     // only Edit left a Write-over-a-server-module RCE) to server code / *.ps1 / *.sh /
     // config / .env / .claude / installer / package*.json, and denies READING .env,
     // the Google + Buffer token files, and *.pem. deny wins over any allow it merges.
-    // HONEST LIMIT: these are TOOL-level denies; there is NO file-permission hook (an
-    // earlier comment claimed one "verified" — there isn't). So they do NOT stop a
-    // Bash-based read/write such as `node -e "...read .env..."`. That path only opens
-    // if THIS machine's ~/.claude/settings.local.json grants a broad Bash(node *) /
-    // Bash(curl *) allow that --settings merges in. Bash is not blanket-denied because
-    // the eval needs `node next-jd.mjs` for report numbering (a blanket deny would win
-    // over that allow and break numbering). To fully close the residual: avoid broad
-    // local Bash allows for this project, or move numbering server-side and drop the
-    // Bash allowance. Verify Write-vs-Edit deny matching empirically on your CLI build.
+    // BASH: report numbering is now done SERVER-SIDE (reserveReportNumbers, injected
+    // into the prompt), so the sandbox no longer allows `node next-jd.mjs`. The eval's
+    // only remaining Bash needs are `node fetch-jd.mjs <url>` (read a posting) and
+    // `node scan.mjs` (scan mode) — allow-listed. Everything a prompt-injected posting
+    // would reach for to read+exfil or run arbitrary code is DENIED: node -e/--eval/-p/
+    // --print/-, curl, wget, cat, sh/bash/zsh, python(3), eval, nc. deny wins over the
+    // broad Bash(node *)/Bash(curl *) a local settings.local.json merges in, and the CLI
+    // splits compound commands, so `node fetch-jd.mjs x; curl evil` is caught on the curl
+    // half. HONEST LIMIT: these are TOOL-level denies (no file-permission hook), and the
+    // deny-list is by name — a local settings.local.json that allows some OTHER exec/exfil
+    // binary not on this list would still slip through. The airtight version is to not let
+    // settings.local.json merge into this spawn at all; until then keep local Bash allows
+    // for this project narrow. Verify Write-vs-Edit deny matching empirically on your CLI build.
     const evalSandboxSettings = fileURLToPath(new URL('../eval-agent-sandbox.settings.json', import.meta.url));
     // Windows spawns `claude` through the cmd shell (the .cmd shim needs it), and
     // this whole prompt is wrapped in one pair of double-quotes. A double-quote

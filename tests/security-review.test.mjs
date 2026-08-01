@@ -183,16 +183,28 @@ for (const pat of ['Edit(**/*.mjs)', 'Edit(**/.env)', 'Edit(**/.claude/**)', 'Ed
 for (const pat of ['Read(**/.env)', 'Read(**/google-tokens.json)', 'Read(**/*.pem)']) {
   check(deny.includes(pat), `sandbox denies reading ${pat}`);
 }
-// Allow is minimal and specific: only report numbering, never a blanket Bash.
-check(allow.length > 0 && allow.every(a => /^Bash\(node next-jd\.mjs/.test(a)),
-  'sandbox allows ONLY the report-numbering command, nothing broader');
+// Allow is minimal and specific: ONLY the two scripts the eval genuinely needs
+// (read a posting, run a scan), each a distinct node entrypoint — never a blanket
+// Bash, and never `node next-jd.mjs` (report numbering moved server-side).
+check(allow.length > 0 && allow.every(a => /^Bash\(node (fetch-jd|scan)\.mjs/.test(a)),
+  'sandbox allows ONLY the two eval scripts (fetch-jd.mjs, scan.mjs), nothing broader');
+check(!allow.some(a => /next-jd/.test(a)), 'sandbox no longer allows next-jd.mjs (numbering is server-side)');
 check(!allow.includes('Bash') && !allow.includes('Bash(*)'), 'no blanket Bash allow');
+// The exec/exfil forms a broad local Bash(node *)/Bash(curl *) would otherwise
+// reach are explicitly denied, so deny wins over that merged allow.
+for (const pat of ['Bash(node -e:*)', 'Bash(node --eval:*)', 'Bash(curl:*)', 'Bash(wget:*)', 'Bash(cat:*)', 'Bash(sh:*)', 'Bash(bash:*)', 'Bash(python:*)']) {
+  check(deny.includes(pat), `sandbox denies exec/exfil Bash ${pat}`);
+}
 
 const agentSrc = read('dashboard-web/server/routes/agent.mjs');
 check(/eval-agent-sandbox\.settings\.json/.test(agentSrc) && /--settings/.test(agentSrc),
   'agent.mjs loads the sandbox settings file');
 check(!/'--disallowedTools',\s*'Bash'/.test(agentSrc),
-  'agent.mjs no longer blanket-drops Bash (that broke next-jd; file-level denies are the control now)');
+  'agent.mjs no longer blanket-drops Bash (file-level denies + a narrow allow are the control now)');
+// Report numbering is reserved server-side and injected, so the agent never needs
+// the next-jd.mjs Bash allow that was the sandbox's last remaining exec foothold.
+check(/reserveReportNumbers/.test(agentSrc) && /issueJd/.test(agentSrc),
+  'agent.mjs reserves report numbers server-side (issueJd) instead of shelling out');
 
 // ── C5: loopback-only Host-header allow-list ahead of routing ─────────────────
 const idxSrc = read('dashboard-web/server/index.mjs');
