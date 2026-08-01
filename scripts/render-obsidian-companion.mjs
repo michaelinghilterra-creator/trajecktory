@@ -368,7 +368,10 @@ function processSource(reportFile, appliedDate) {
   const dateMDY = report.date.split('-');
   const dateMMDDYYYY = `${dateMDY[1]}-${dateMDY[2]}-${dateMDY[0]}`;
   const safeRole = report.role.replace(/[/\\:*?"<>|]/g, '-');
-  const noteName = `${dateMMDDYYYY} - ${report.company} - ${safeRole}.md`;
+  // Company is part of the filename too — strip path separators / reserved chars
+  // so a company name cannot traverse out of the vault directory.
+  const safeCompany = String(report.company || '').replace(/[/\\:*?"<>|]/g, '-');
+  const noteName = `${dateMMDDYYYY} - ${safeCompany} - ${safeRole}.md`;
   const outPath = path.join(VAULT_DIR, noteName);
 
   const rendered = render(report, { appliedDate, status: 'applied' });
