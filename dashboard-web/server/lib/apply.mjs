@@ -274,6 +274,19 @@ async function runApplyJob(jobId, row, mode) {
   // italics, fonts, page breaks, tabs — everything else stays byte-identical
   // to the master Word resume.
   if (!fs.existsSync(docxAbs)) {
+    // Anchor the length targets to the LOCKED master, never a hardcoded number.
+    // The master summary was relocked tighter than the old ~870 default; reading
+    // the real baseline_chars keeps the prompt target and the hard cap in sync
+    // with cv-master.docx, so a future relock does not silently reintroduce the
+    // "summary balloons and re-adds cut content" bug this replaced.
+    let sumBase = 599, aoeBase = 322;
+    try {
+      const sd = JSON.parse(fs.readFileSync(path.join(projectRoot, 'templates/cv-template-slots.json'), 'utf8'));
+      if (sd.summary?.baseline_chars) sumBase = sd.summary.baseline_chars;
+      if (sd.areas_of_expertise?.baseline_chars) aoeBase = sd.areas_of_expertise.baseline_chars;
+    } catch { /* fall back to the locked defaults above */ }
+    const sumMax = Math.round(sumBase * 1.15);
+    const aoeMax = Math.round(aoeBase * 1.15);
     const cvJsonPrompt = `You are generating tailored CV content for a Word resume that uses a template-swap pipeline.
 
 Role: ${row.company} — ${row.role}
@@ -293,9 +306,9 @@ The JSON must have exactly these four keys with strict length targets:
 
 2. "subtitle_secondary" (~60 chars) — Three role themes separated by " | " (e.g. "Pipeline & Forecasting | Sales Enablement | Field Strategy"). Pull themes from the JD's top requirements.
 
-3. "summary" (~870 chars / ~130 words) — Professional summary paragraph reframed through the JD's lens. Use ${id.firstName}'s voice. Reuse the proof points from the CV above (verbatim metrics only, never invented or rounded) but reorder by JD relevance. Do NOT start with "I". Do NOT invent skills. Stay within ±15% of the 870-char baseline — going short or long shifts page break geometry.
+3. "summary" (target ~${sumBase} chars, HARD MAX ${sumMax} chars) — Start from ${id.firstName}'s EXISTING professional summary (the Summary section of the CV above) and REFRAME it through the JD's lens: reorder and reword its existing points for JD relevance, in ${id.firstName}'s voice, verbatim metrics only. CRITICAL: do NOT lengthen it and do NOT pull in achievements, systems, or detail from the CV body that are not already in that professional summary — this is reframing, never re-adding. Do NOT start with "I". Do NOT invent skills. The result MUST NOT exceed ${sumMax} characters; if in doubt, cut, do not pad.
 
-4. "areas_of_expertise" (~410 chars / ~50 words, exactly 12 comma-separated phrases) — Rebuild the list from JD requirements. Every phrase must trace to a real bullet in ${id.firstName}'s CV above. If you cannot point to a bullet, drop the phrase. Stay within ±15% of the 410-char baseline.
+4. "areas_of_expertise" (target ~${aoeBase} chars, HARD MAX ${aoeMax} chars, ~12 comma-separated phrases) — Reprioritize the master's expertise phrases toward the JD's requirements. Every phrase must trace to a real bullet in ${id.firstName}'s CV above; if you cannot point to a bullet, drop it. Do NOT exceed ${aoeMax} characters.
 
 ${STYLE_RULES}
 
@@ -323,28 +336,46 @@ Output format (raw JSON only, no wrapping):
           areas_of_expertise: cvJson.areas_of_expertise,
         };
         fs.writeFileSync(swapsPath, JSON.stringify(swaps, null, 2), 'utf8');
-        await new Promise((resolve) => {
-          // --allow-length-drift keeps the page-break check non-fatal so a tight
-          // Apply flow still produces a document; the prompt already asks for
-          // ±15% adherence. That trade is deliberate, but it is also why a
-          // tailored resume can quietly spill onto a second page: the guard fires
-          // and the run carries on. So the warning has to be worth reading.
-          //
-          // Note what this is NOT: page margins come from the user's own
-          // cv-master.docx and are preserved byte for byte, so overflow here is a
-          // length problem, not a margin one. Changing margins would mean editing
-          // the user's Word file, which this tool deliberately never does.
-          execFile(process.execPath, ['generate-docx-from-template.mjs', '--swaps', swapsPath, '--output', docxRel, '--allow-length-drift'],
-            { cwd: projectRoot },
-            (err, _stdout, stderr) => {
-              if (err) errors.push(`Resume DOCX: ${err.message}`);
-              if (stderr && /LENGTH WARNING/.test(stderr)) {
-                errors.push('Tailored resume runs more than 15% longer than your master, so it may spill onto an extra page. Open it and check the page count before you send it.');
-              }
-              resolve();
-            }
-          );
+        // Enforce the master length cap instead of disabling it. The generator
+        // writes the .docx BEFORE its length gate, so a blocked run still yields
+        // a file (exit 2) — we keep the gate FATAL (no --allow-length-drift) so a
+        // ballooned summary is CAUGHT, auto-compress ONCE, and only then accept
+        // the document with a loud warning. Page margins come from the user's own
+        // cv-master.docx and are preserved byte for byte, so this is purely a
+        // length problem; the tool never edits the user's Word file.
+        const runGen = () => new Promise((resolve) => {
+          execFile(process.execPath, ['generate-docx-from-template.mjs', '--swaps', swapsPath, '--output', docxRel],
+            { cwd: projectRoot }, (err, _o, stderr) => resolve({ err, stderr: stderr || '' }));
         });
+        const isLenBlock = (g) => g.err && /LENGTH WARNING/.test(g.stderr);
+        let gen = await runGen();
+        if (isLenBlock(gen)) {
+          // The model overshot the cap. Re-prompt to compress the offending slots
+          // to the hard max — cutting the least JD-relevant wording, never adding —
+          // then regenerate. This is what makes the cap self-heal instead of
+          // either shipping bloat or failing with no resume.
+          try {
+            const compressPrompt = `A tailored resume's summary and/or areas-of-expertise ran longer than the master and must be compressed. Return ONLY a raw JSON object with the same four keys. Keep "title" and "subtitle_secondary" unchanged. Rewrite "summary" to AT MOST ${sumMax} characters and "areas_of_expertise" to AT MOST ${aoeMax} characters, compressing by cutting the least JD-relevant wording and ANY detail not present in the master professional summary. Do NOT invent and do NOT add. Current values:\n${JSON.stringify(swaps, null, 2)}`;
+            const raw2 = await runClaudeSubprocess(compressPrompt);
+            const m2 = raw2.match(/\{[\s\S]*\}/);
+            const c2 = m2 ? JSON.parse(m2[0]) : null;
+            if (c2 && c2.summary && c2.areas_of_expertise) {
+              const swaps2 = {
+                title: c2.title || swaps.title,
+                subtitle_secondary: c2.subtitle_secondary || swaps.subtitle_secondary,
+                summary: c2.summary,
+                areas_of_expertise: c2.areas_of_expertise,
+              };
+              fs.writeFileSync(swapsPath, JSON.stringify(swaps2, null, 2), 'utf8');
+              gen = await runGen();
+            }
+          } catch { /* keep the first attempt's file */ }
+        }
+        if (isLenBlock(gen)) {
+          errors.push('Tailored resume summary still ran over your master length after an automatic compress, so it may spill onto an extra page. Open it and check the page count before you send it.');
+        } else if (gen.err) {
+          errors.push(`Resume DOCX: ${gen.err.message}`);
+        }
       } catch (err) {
         errors.push(`Resume DOCX swap write: ${err.message}`);
       }

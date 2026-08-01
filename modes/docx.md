@@ -36,7 +36,7 @@ Same four slots as `docx-light`:
 |------|-----------------|------------------|
 | `title` | ~50 chars | Mirror JD's exact role title (truthful match required) |
 | `subtitle_secondary` | ~60 chars | JD's three top role themes, " | " separated |
-| `summary` | ~870 chars / ~130 words | **Substantive rewrite** through the JD's lens; reuse candidate's proof points but reframe priorities |
+| `summary` | match the master — read `baseline_chars` for `summary` in `templates/cv-template-slots.json`; hard cap is +15% | **Reframe** through the JD's lens: reorder and reword the master summary's own points. Do NOT exceed the master length and do NOT pull in proof points the master summary does not already contain (the generator BLOCKS a summary over the cap) |
 | `areas_of_expertise` | ~410 chars / ~50 words / 12 phrases | **Rebuild from JD requirements**; every phrase must trace to a real bullet |
 
 ## What this mode NEVER touches
@@ -99,7 +99,9 @@ archetype rather than the BI-default master.
   archetype's `preferred_title` (or a more specific truthful JD title); do
   not let the substantive rewrite drift the title back toward BI for a
   non-BI role. Open the summary with the archetype's `summary_lead`, then
-  rewrite the body substantively through the JD's lens. The candidate's
+  reframe the remaining sentences of the MASTER summary through the JD's lens
+  (reorder and reword its existing points), staying within the master length
+  and adding no detail the master summary does not already contain. The candidate's
   signature line ("Operates on a single test for every dashboard...") may
   be replaced or repositioned if a better JD-tailored closing exists in the
   candidate's real experience. Rebuild the Areas of Expertise list around
