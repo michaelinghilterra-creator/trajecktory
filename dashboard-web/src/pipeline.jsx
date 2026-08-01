@@ -329,12 +329,18 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
   const toggleStatus = (s) => setFilters(f => ({ ...f, statuses: f.statuses.includes(s) ? f.statuses.filter(x => x !== s) : [...f.statuses, s] }));
   const active = filters.statuses.length || filters.archetype || filters.scoreMin || (search && search.trim());
   const scoreSteps = [0, 3.0, 3.5, 4.0, 4.5];
+  // One pass over apps instead of one filter per status on every render/keystroke.
+  const statusCounts = useMemoP(() => {
+    const m = {};
+    for (const a of apps) m[a.status] = (m[a.status] || 0) + 1;
+    return m;
+  }, [apps]);
   return (
     <div className="pl-toolbar">
       <div className="tb-row">
         <div className="statline">
           {STATUS.map(s => {
-            const n = apps.filter(a => a.status === s.id).length;
+            const n = statusCounts[s.id] || 0;
             const on = filters.statuses.includes(s.id);
             return (
               <button key={s.id} className={'stat-chip' + (on ? ' on' : '') + (n === 0 ? ' zero' : '')} onClick={() => toggleStatus(s.id)}>
@@ -1249,7 +1255,8 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   return (
     <div className="pl-drawer-overlay">
       <div className={'drawer-backdrop' + (app ? ' open' : '')} onClick={onClose}></div>
-      <div className={'pl-drawer' + (app ? ' open' : '')}>
+      <div className={'pl-drawer' + (app ? ' open' : '')} role="dialog" aria-modal="true"
+        aria-label={app ? `${app.company} — ${app.role || 'role'} details` : 'Application details'}>
         <div className="drawer-head">
           <div style={{ minWidth: 0, flex: 1 }}>
             <div className="row" style={{ gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
