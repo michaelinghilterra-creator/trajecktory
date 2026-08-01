@@ -2217,6 +2217,25 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
     { k: 'score',      label: 'Score',     w: 80 },
     { k: 'source',     label: 'Source',    w: 92 },
   ];
+  // Windowing: render only the first `limit` rows and grow as the user scrolls.
+  // The full tracker (~600+ rows incl. closed) otherwise mounts ~12k DOM nodes,
+  // and every sort/filter reconciled all of them. Reset the window on a sort or
+  // row-count change (robust to `rows` array-reference churn from any caller).
+  const STEP = 150;
+  const [limit, setLimit] = useStateP(STEP);
+  useEffectP(() => { setLimit(STEP); }, [sortKey, sortDir, rows.length]);
+  const shown = rows.length > limit ? rows.slice(0, limit) : rows;
+  const sentinelRef = useRefP(null);
+  useEffectP(() => {
+    if (rows.length <= limit) return;
+    const el = sentinelRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => { if (entries.some(e => e.isIntersecting)) setLimit(l => l + STEP); },
+      { root: el.closest('.tbl-wrap'), rootMargin: '600px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [rows.length, limit]);
   return (
     <div className="tbl-wrap" style={{
       maxHeight: 'calc(100vh - ' + (flat ? '360px' : '280px') + ')',
@@ -2237,7 +2256,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
           {rows.length === 0 && (
             <tr><td colSpan={cols.length}><div className="no-data">No matches. Try clearing filters.</div></td></tr>
           )}
-          {rows.map(a => {
+          {shown.map(a => {
             const stale = isStale(a);
             return (
             <tr key={a.id} className={stale ? 'stale' : ''}
@@ -2280,6 +2299,15 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
             </tr>
             );
           })}
+          {rows.length > limit && (
+            <tr ref={sentinelRef} className="tbl-more">
+              <td colSpan={cols.length} style={{ textAlign: 'center', padding: '10px 0' }}>
+                <button type="button" className="btn ghost sm" onClick={() => setLimit(l => l + STEP)}>
+                  Show more — {rows.length - limit} of {rows.length} hidden
+                </button>
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
