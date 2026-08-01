@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.9.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.9.0...v2.9.1) (2026-08-01)
+
+
+### Bug Fixes
+
+* **dashboard:** campaign-readiness UI polish across all themes ([#129](https://github.com/michaelinghilterra-creator/trajecktory/issues/129)) ([03ac149](https://github.com/michaelinghilterra-creator/trajecktory/commit/03ac149b98d91f6b6b3b7c1712e9182bdc327296))
+* **dashboard:** data-logic and reliability audit fixes ([#130](https://github.com/michaelinghilterra-creator/trajecktory/issues/130)) ([27f327f](https://github.com/michaelinghilterra-creator/trajecktory/commit/27f327f69487596f9313a3bc8e2c24928f75c96d))
+* **security:** eval-sandbox, SSRF, CSRF-GET, CSV, token and path-traversal hardening ([#133](https://github.com/michaelinghilterra-creator/trajecktory/issues/133)) ([db145de](https://github.com/michaelinghilterra-creator/trajecktory/commit/db145de475b2968f2db07240589123cc4e78cb1d))
+
 ## [2.9.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.8.0...v2.9.0) (2026-07-31)
 
 
