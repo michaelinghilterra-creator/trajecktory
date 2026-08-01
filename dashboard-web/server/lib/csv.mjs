@@ -43,7 +43,11 @@ export function parseCsvContacts(csv) {
 // opens cleanly in Excel/Sheets, which is where a TWC claimant will open it.
 export function toCsv(rows) {
   const esc = (v) => {
-    const s = v == null ? '' : String(v);
+    let s = v == null ? '' : String(v);
+    // CSV formula-injection guard (CWE-1236): a cell a spreadsheet would evaluate
+    // as a formula (leading = + - @ TAB CR) gets a leading apostrophe so Excel and
+    // Sheets treat it as text, not executable content.
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return (rows || []).map(row => (row || []).map(esc).join(',')).join('\r\n');

@@ -23,7 +23,12 @@ export function readToken() {
 export function saveToken(token) {
   const t = String(token == null ? '' : token).trim();
   if (!t) throw new Error('Buffer API key is required');
-  fs.writeFileSync(BUFFER_TOKEN_PATH, JSON.stringify({ token: t, connectedAt: new Date().toISOString() }, null, 2) + '\n');
+  // Owner-only (0600): this file holds a live Buffer access token. mode on
+  // writeFileSync only applies when the file is CREATED, so also chmod an existing
+  // one down. chmod is a no-op on Windows, which is fine — POSIX hosts are where
+  // group/other read matters.
+  fs.writeFileSync(BUFFER_TOKEN_PATH, JSON.stringify({ token: t, connectedAt: new Date().toISOString() }, null, 2) + '\n', { mode: 0o600 });
+  try { fs.chmodSync(BUFFER_TOKEN_PATH, 0o600); } catch { /* windows / unsupported fs */ }
   return true;
 }
 

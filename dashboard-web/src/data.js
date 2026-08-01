@@ -120,8 +120,8 @@ window.parseComp = function parseComp(s) {
     .trim();
   // Extract dollar amounts. Supports "$165,000", "$150K", "150k".
   // A shorthand range where only the UPPER bound carries K applies the K to both
-  // bounds: "$180-250K" means 180K-250K, not $180 (which the sanity filter drops,
-  // leaving only 250 -> a wrong top-of-range salary instead of the 215 midpoint).
+  // bounds: "$120-160K" means 120K-160K, not $120 (which the sanity filter drops,
+  // leaving only 160 -> a wrong top-of-range salary instead of the 140 midpoint).
   // Done on a number-extraction copy only, so the displayed string is untouched.
   const numSrc = clean.replace(
     /(\$?\s*[\d,]+(?:\.\d+)?)\s*(?:[-–—]|to)\s*(\$?\s*[\d,]+(?:\.\d+)?)\s*[kK]\b/g,
@@ -139,7 +139,7 @@ window.parseComp = function parseComp(s) {
   if (nums.length === 1) return { display: clean, salary: Math.round(nums[0] / 1000) };
   // Two figures = a stated range -> midpoint.
   if (nums.length === 2) return { display: clean, salary: Math.round((nums[0] + nums[1]) / 2000) };
-  // Three or more (e.g. "$150K base + $50K bonus, $200K OTE") -> the highest is
+  // Three or more (e.g. "$110K base + $30K bonus, $140K OTE") -> the highest is
   // the headline total (OTE), not the average of base + bonus.
   return { display: clean, salary: Math.round(Math.max(...nums) / 1000) };
 };

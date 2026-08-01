@@ -852,7 +852,10 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
 function exportCSV(rows) {
   const cols = ['id', 'date', 'company', 'role', 'archetype', 'score', 'status', 'compStated', 'salary', 'target', 'sector', 'source', 'resume'];
   const esc = (v) => {
-    const s = v == null ? '' : String(v);
+    let s = v == null ? '' : String(v);
+    // CSV formula-injection guard: neutralize a leading = + - @ TAB CR so a cell
+    // like "=HYPERLINK(...)" opens as text in Excel/Sheets, not as a formula.
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const lines = [cols.join(',')];

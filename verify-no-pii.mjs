@@ -460,6 +460,32 @@ function commitMessages() {
 const COMP_WORD = /\b(walk[- ]?away|OTE|target(Low|High)?|comp|compensation|salary|base pay|floor|ceiling|band)\b/i;
 const COMP_PROSE = /\b[1-9]\d{2}\s*\/\s*[1-9]\d{2}(?:\s*\/\s*[1-9]\d{2})?\b/;
 
+// Secret / credential patterns — mirrors installer/build-bundle.ps1 §7. A tracked
+// file OR a commit message must carry NO real key: the repo is public and the
+// git-archive payload ships tracked files verbatim, so a committed credential is
+// published AND distributed (CWE-540). Defined here (above scanMessages) so BOTH
+// the message scan and the file sweep can use it. Each pattern requires a realistic
+// key body, so these definition strings never match themselves.
+const SECRET_PATTERNS = [
+  [/sk-ant-api[0-9]{2}-[A-Za-z0-9_-]{20,}/, 'Anthropic API key'],
+  [/sk-proj-[A-Za-z0-9_-]{20,}/, 'OpenAI project key'],
+  [/GOCSPX-[A-Za-z0-9_-]{10,}/, 'Google OAuth client secret'],
+  [/ya29[.][A-Za-z0-9_-]{20,}/, 'Google OAuth access token'],
+  [/gh[pousr]_[A-Za-z0-9]{36,}/, 'GitHub token'],
+  [/github_pat_[A-Za-z0-9_]{50,}/, 'GitHub fine-grained PAT'],
+  [/AKIA[0-9A-Z]{16}/, 'AWS access key id'],
+  [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, 'PEM private key'],
+  // Google OAuth REFRESH token — the highest-value artifact on an install (it mints
+  // access tokens for the connected Gmail account). Shape: 1//0 then base64url body.
+  [/1\/\/0[A-Za-z0-9_-]{20,}/, 'Google OAuth refresh token'],
+  // Brave Search API key.
+  [/BSA[A-Za-z0-9]{20,}/, 'Brave Search API key'],
+  // Prefix-less provider keys (Buffer / Hunter / MillionVerifier / Brave / Obsidian)
+  // have no distinctive prefix, so key off a known env-var name assigned a long
+  // high-entropy value — the shape a leaked literal would take in a tracked file.
+  [/(?:HUNTER_API_KEY|MILLIONVERIFIER_API_KEY|BUFFER_ACCESS_TOKEN|BUFFER_API_KEY|BRAVE_API_KEY|OBSIDIAN_API_KEY)["']?\s*[:=]\s*["']?[A-Za-z0-9_-]{20,}/, 'API key assignment (prefix-less provider)'],
+];
+
 function scanMessages() {
   const msgs = commitMessages();
   for (const { id, body } of msgs) {
@@ -484,6 +510,9 @@ function scanMessages() {
       leak(where, 'COMP IN PROSE',
         `${(body.match(COMP_PROSE) || [''])[0]} next to a compensation word. A real band or walk-away does not belong in a published message; describe the shape, not the numbers.`);
     }
+    // A commit message is published exactly like a tracked file, so run the same
+    // secret patterns over it (the message path skipped these before).
+    for (const [re, label] of SECRET_PATTERNS) if (re.test(body)) leak(where, 'SECRET', `${label} in a commit message`);
   }
   return msgs.length;
 }
@@ -544,23 +573,7 @@ if (health.length) {
 }
 
 // ── the sweep ──────────────────────────────────────────────────────────────
-// Secret / credential patterns — mirrors installer/build-bundle.ps1 §7. A tracked
-// file must carry NO real key: the repo is public and the git-archive payload ships
-// tracked files verbatim, so a committed credential is published AND distributed.
-// build-bundle.ps1 scanned only the built payload and CI never runs it, so the same
-// regex set now runs here at the tracked-tree gate (security: CWE-540). Each pattern
-// requires a realistic key body, so these definition strings never match themselves.
-const SECRET_PATTERNS = [
-  [/sk-ant-api[0-9]{2}-[A-Za-z0-9_-]{20,}/, 'Anthropic API key'],
-  [/sk-proj-[A-Za-z0-9_-]{20,}/, 'OpenAI project key'],
-  [/GOCSPX-[A-Za-z0-9_-]{10,}/, 'Google OAuth client secret'],
-  [/ya29[.][A-Za-z0-9_-]{20,}/, 'Google OAuth access token'],
-  [/gh[pousr]_[A-Za-z0-9]{36,}/, 'GitHub token'],
-  [/github_pat_[A-Za-z0-9_]{50,}/, 'GitHub fine-grained PAT'],
-  [/AKIA[0-9A-Z]{16}/, 'AWS access key id'],
-  [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, 'PEM private key'],
-];
-
+// (SECRET_PATTERNS is defined above scanMessages so both surfaces share it.)
 const files = targets();
 for (const abs of files) {
   const name = basename(abs);

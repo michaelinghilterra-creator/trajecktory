@@ -75,7 +75,11 @@ async function runByoApplyJob(jobId, row) {
     const [y, m, d2] = today.split('-');
     const dateMDY = `${m}-${d2}-${y}`;
     const safeRole = row.role.replace(/[/\\:*?"<>|]/g, '-');
-    const noteName = `${dateMDY} - ${row.company} - ${safeRole}`;
+    // Company, like role, becomes part of the note FILENAME, so strip path
+    // separators and reserved chars — otherwise a company with a "/" or "\"
+    // escapes the applied-notes folder (path traversal).
+    const safeCompany = String(row.company || '').replace(/[/\\:*?"<>|]/g, '-');
+    const noteName = `${dateMDY} - ${safeCompany} - ${safeRole}`;
     const notePath = `${getObsidianAppliedFolder()}/${noteName}.md`;
 
     const byoFallbackHeader = `# ${row.company} — ${row.role}\n\n**Applied:** ${todayFormal}\n**Score:** ${row.scoreRaw || 'N/A'}\n**Status:** Applied\n**Assets:** Bring-your-own (no trajecktory-generated CV or cover letter)\n`;
@@ -381,7 +385,11 @@ ${STYLE_RULES}`;
     const [y, m, d2] = today.split('-');
     const dateMDY = `${m}-${d2}-${y}`;
     const safeRole = row.role.replace(/[/\\:*?"<>|]/g, '-');
-    const noteName = `${dateMDY} - ${row.company} - ${safeRole}`;
+    // Company, like role, becomes part of the note FILENAME, so strip path
+    // separators and reserved chars — otherwise a company with a "/" or "\"
+    // escapes the applied-notes folder (path traversal).
+    const safeCompany = String(row.company || '').replace(/[/\\:*?"<>|]/g, '-');
+    const noteName = `${dateMDY} - ${safeCompany} - ${safeRole}`;
     const notePath = `${getObsidianAppliedFolder()}/${noteName}.md`;
 
     // Build note content from report (or minimal fallback)
