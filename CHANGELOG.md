@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.9.2...v2.9.3) (2026-08-02)
+
+
+### Bug Fixes
+
+* post scheduling, Visibility de-brand, and capture tooling ([#136](https://github.com/michaelinghilterra-creator/trajecktory/issues/136)) ([4923a13](https://github.com/michaelinghilterra-creator/trajecktory/commit/4923a13719fca1392d7c689cedd15fcbf9295bcb))
+
 ## [2.9.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.9.1...v2.9.2) (2026-08-01)
 
 
