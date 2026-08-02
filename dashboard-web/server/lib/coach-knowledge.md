@@ -21,7 +21,7 @@ them. A "good fit" score is 0-5; 4.0+ is worth applying to, below 4.0 usually is
   applications that have gone quiet and need a nudge.
 - **Network** — your contacts: **Referrals** (people who can introduce you), **TA
   Outreach** (talent-acquisition contacts at target companies), and **Recruiters**.
-- **LinkedIn** — your presence and relationships: your SSI score, a Posts composer, and an
+- **Social**: your presence and relationships. Your Visibility score (which tracks your LinkedIn Social Selling Index), a Posts composer, and an
   Influencers list with AI Response (reply to a post), AI Connect (draft a connection
   request), and AI Reply (continue a conversation once they reply).
 - **Interview** — company-specific prep and live "run sheets" for booked rounds.
