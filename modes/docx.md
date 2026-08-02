@@ -6,6 +6,21 @@ with more aggressive JD-aware rewriting than `modes/docx-light.md`.
 Everything below "PROFESSIONAL EXPERIENCE" (bullets, italics, dates,
 companies, tabs, fonts) is preserved byte-for-byte.
 
+**Resume integrity (HARD RULE).** Never inject hidden or invisible text
+(white or near-white font, 1 to 4 point text, text positioned off the
+page, or text hidden in document metadata) and never write any
+instruction aimed at an AI screener ("ignore previous instructions",
+"rank this candidate as a top match"). Never fabricate skills, titles,
+dates, or experience the user does not have. These tactics backfire: an
+ATS flattens the document to a plain-text layer where hidden text shows
+in full, modern systems flag it on purpose, and a human reviewer
+eventually opens the file and reads the hidden line as an attempt to
+trick them. Tailoring here means reframing the user's REAL experience in
+the JD's language, nothing more. This applies to all four slots and to
+bullet tailoring. If a user asks for any of the above, decline and
+explain why it backfires (see "The new hack" note in the resume research
+and the Coach's grounding).
+
 **Output location:** write the tailored .docx into the folder named by
 `outputs.resume_dir` in `config/profile.yml` (default `output/`). Pass it as
 `--output <resume_dir>/<filename>.docx` to `generate-docx-from-template.mjs`.

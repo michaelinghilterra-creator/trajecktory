@@ -86,8 +86,8 @@ async function main() {
   await page.waitForTimeout(1100);
   await shotContent(page, 'dashboard-recruiters', 660);
 
-  // Posts (LinkedIn SSI -> Posts subtab).
-  await clickNav(page, 'LinkedIn SSI');
+  // Posts (Social -> Posts subtab).
+  await clickNav(page, 'Social');
   await page.waitForTimeout(900);
   try { await page.locator('.subtab', { hasText: 'Posts' }).first().click(); await page.waitForTimeout(900); } catch (e) { console.log('  posts subtab skip:', e.message); }
   await shotContent(page, 'dashboard-posts', 700);

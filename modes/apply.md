@@ -2,6 +2,8 @@
 
 Interactive mode for when the candidate is filling out an application form in Chrome. It reads what is on the screen, loads the previous context of the job, and generates personalized responses for each form question.
 
+**Application integrity (HARD RULE).** Answers must be truthful and drawn from the candidate's real background. Never fabricate experience, credentials, or numbers to fit a question, and never paste hidden text, invisible characters, or instructions aimed at an AI screener into any field. These tactics backfire and read as dishonest to a human reviewer. Rationale in `modes/docx.md` and the resume research note ("The new hack").
+
 ## Requirements
 
 - **Best with Playwright in visible mode**: In visible mode, the candidate sees the browser and Claude can interact with the page.

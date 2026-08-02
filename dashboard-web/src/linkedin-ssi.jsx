@@ -1,4 +1,4 @@
-/* LinkedIn SSI Management Module — Redesigned per design handoff */
+/* Visibility module: tracks the user's LinkedIn Social Selling Index (a LinkedIn metric). */
 const { useState, useEffect, useMemo, useCallback } = React;
 
 // Order activity newest-first by when it was logged (loggedAt), falling back to the
@@ -190,8 +190,8 @@ function LinkedInSSITab({ toast }) {
     };
   }, [influencers]);
 
-  if (loading) return <div style={{ padding: "20px", color: "var(--text-dim)" }}>Loading LinkedIn SSI data…</div>;
-  if (!ssiData) return <div style={{ padding: "20px", color: "var(--text-dim)" }}>Failed to load SSI data. Please refresh.</div>;
+  if (loading) return <div style={{ padding: "20px", color: "var(--text-dim)" }}>Loading Visibility data…</div>;
+  if (!ssiData) return <div style={{ padding: "20px", color: "var(--text-dim)" }}>Failed to load Visibility data. Please refresh.</div>;
 
   return (
     <div style={{ flex: 1, maxWidth: "none", marginLeft: 0, marginRight: 0 }}>
@@ -228,9 +228,12 @@ function LinkedInSSITab({ toast }) {
       <div style={{ flex: 1 }}>
         <div className="ta-head">
           <div>
-            <h1>LinkedIn SSI</h1>
+            <h1>Visibility</h1>
             <div className="sub">
               score {ssiData?.score ?? '-'} / 100 · target {ssiData?.target ?? 60} · {influencers.length} influencers tracked · {(() => { const d = new Date(); d.setDate(d.getDate() - 6); const cutoff = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; return engagementLog.filter(a => String(a.date || '') >= cutoff).length; })()} touchpoints this week
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-mute)", marginTop: 3 }}>
+              Tracks your LinkedIn Social Selling Index (SSI). Independent tool, not affiliated with or endorsed by LinkedIn.
             </div>
           </div>
         </div>
@@ -266,7 +269,7 @@ function LinkedInSSITab({ toast }) {
             <div className="grid" style={{ gridTemplateColumns: "1fr 1.1fr" }}>
               <div className="card fade-up" style={{ minWidth: 0 }}>
                 <div className="card-head">
-                  <div className="card-title"><span className="dot" />LinkedIn SSI Score</div>
+                  <div className="card-title"><span className="dot" />Visibility Score</div>
                 </div>
                 {(() => {
                   // Everything below is gated on an actually-recorded score. The
@@ -324,8 +327,8 @@ function LinkedInSSITab({ toast }) {
                         </div>
                       ) : (
                         <div style={{ fontSize: 11, color: "var(--text-mute)", lineHeight: 1.7 }}>
-                          Your SSI is a score LinkedIn calculates, so trajecktory cannot read it for
-                          you. Open your SSI page on LinkedIn, then record the four pillar scores under{" "}
+                          Your Social Selling Index is a score LinkedIn calculates, so trajecktory cannot read
+                          it for you. Open your SSI page on LinkedIn, then record the four sub-scores under{" "}
                           <b>Weekly Tracker</b>. This gauge starts tracking from your first entry, and
                           shows a week-on-week trend once you have two.
                         </div>
@@ -347,10 +350,10 @@ function LinkedInSSITab({ toast }) {
                 const prevWeek = complete.length >= 2 ? complete.slice(-2)[0] : lastWeek;
 
                 const pillars = [
-                  { key: "brand", label: "Establish Brand", color: "var(--accent)", value: lastWeek.brand || 0, hint: "Profile, content, thought leadership" },
-                  { key: "people", label: "Find Right People", color: "var(--blue)", value: lastWeek.people || 0, hint: "Search, targeting, prospect lists" },
-                  { key: "engage", label: "Engage with Insights", color: "var(--cyan)", value: lastWeek.engage || 0, hint: "Comments, shares, reactions" },
-                  { key: "rel", label: "Build Relationships", color: "var(--green)", value: lastWeek.rel || 0, hint: "Connections, DMs, conversations" },
+                  { key: "brand", label: "Brand", color: "var(--accent)", value: lastWeek.brand || 0, hint: "Profile, content, thought leadership" },
+                  { key: "people", label: "Audience", color: "var(--blue)", value: lastWeek.people || 0, hint: "Search, targeting, prospect lists" },
+                  { key: "engage", label: "Engagement", color: "var(--cyan)", value: lastWeek.engage || 0, hint: "Comments, shares, reactions" },
+                  { key: "rel", label: "Relationships", color: "var(--green)", value: lastWeek.rel || 0, hint: "Connections, DMs, conversations" },
                 ];
                 return (
                   <div className="card fade-up" style={{ animationDelay: ".05s", minWidth: 0 }}>
@@ -895,8 +898,8 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
 function WeeklyView({ weeks, target, setSsiData }) {
   const PILLAR_FIELDS = [
     { key: "brand", label: "Brand", color: "var(--accent)", apiKey: "brand" },
-    { key: "people", label: "Find People", color: "var(--blue)", apiKey: "findPeople" },
-    { key: "engage", label: "Engage", color: "var(--cyan)", apiKey: "engageInsights" },
+    { key: "people", label: "Audience", color: "var(--blue)", apiKey: "findPeople" },
+    { key: "engage", label: "Engagement", color: "var(--cyan)", apiKey: "engageInsights" },
     { key: "rel", label: "Relationships", color: "var(--green)", apiKey: "relationships" },
   ];
   const recordedCount = (weeks || []).filter((w) => w.brand != null).length;
@@ -1066,7 +1069,7 @@ function WeeklyView({ weeks, target, setSsiData }) {
             )}
             {saveOk && (
               <div style={{ fontSize: 11, color: "var(--green)", fontFamily: "var(--mono)" }}>
-                ✓ Saved · SSI score recalculated
+                ✓ Saved · Visibility score recalculated
               </div>
             )}
             <button className="btn primary block" onClick={save} disabled={saving || selectedWk == null}>

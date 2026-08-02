@@ -867,9 +867,11 @@ async function main() {
   try { await clickRail(page, 'Models & cost'); await shotPanel(page, 'lp-models', 700); }
   catch (e) { console.log('  models skip:', e.message); }
 
-  // Web discovery keys booster.
-  try { await clickRail(page, 'Web discovery keys'); await shotPanel(page, 'lp-discovery'); }
-  catch (e) { console.log('  discovery skip:', e.message); }
+  // API keys booster. The four optional key panels (AI draft key, web discovery,
+  // contact verification, Buffer) are now consolidated under one "API keys" rail
+  // item, so "Web discovery keys" is a subsection inside it, not its own rail.
+  try { await clickRail(page, 'API keys'); await shotPanel(page, 'lp-apikeys', 820); }
+  catch (e) { console.log('  api keys skip:', e.message); }
 
   // Health check — reload fresh, DOM-click the rail item, run it.
   await page.goto(BASE, { waitUntil: 'networkidle' });
@@ -1101,15 +1103,21 @@ async function main() {
     } catch (e) { console.log('  apply buttons skip:', e.message); }
   } catch (e) { console.log('  g3 pipeline skip:', e.message); }
 
-  // Block D tabs. Each renders from the same invented search.
-  for (const [nav, name, cap] of [
-    ['Follow-Ups', 'g3-followups', 640],
-    ['Recruiters', 'g3-recruiters', 660],
-    ['TA Outreach', 'g3-ta-outreach', 620],
-    ['LinkedIn SSI', 'g3-linkedin-ssi', 700],
+  // Block D tabs. Each renders from the same invented search. Recruiters and TA
+  // Outreach are no longer top-level navs: they are subtabs under Network, so they
+  // carry a `sub` label that is clicked after the Network nav opens.
+  for (const [nav, name, cap, sub] of [
+    ['Follow-Ups', 'g3-followups', 640, null],
+    ['Network', 'g3-recruiters', 660, 'Recruiters'],
+    ['Network', 'g3-ta-outreach', 620, 'TA Outreach'],
+    ['Social', 'g3-linkedin-ssi', 700, null],
   ]) {
     try {
       await clickNav(page, nav);
+      if (sub) {
+        await page.locator('.subtab', { hasText: sub }).first().click();
+        await page.waitForTimeout(700);
+      }
       await page.waitForTimeout(1100);
       await shotContentTight(page, name, cap);
     } catch (e) { console.log(`  ${name} skip:`, e.message); }
