@@ -188,14 +188,34 @@ jobs:
             exit 0
           fi
 
+          # What the .exe carries can change two ways. (1) The payload files
+          # themselves: build-bundle.ps1 (the Node and Git pins, the layout) and
+          # trusted-signers.
           CHANGED="$(git diff --name-only "${PREV}..${TAG}" -- installer/build-bundle.ps1 trusted-signers)"
+
+          # (2) The bundled Chromium, which Playwright pins rather than
+          # build-bundle.ps1, so a browser bump lands in package.json and the
+          # lockfile and this check used to miss it: a signed release with a Chromium
+          # change and no installer went green (v2.9.4). package.json cannot be
+          # diffed wholesale for the same reason trajecktory.iss is excluded above,
+          # Release Please rewrites its version field on every release, which would
+          # fire this check every time. Compare the RESOLVED playwright-core version
+          # across the tags instead; it moves only when the browser actually does.
+          pw_ver() { git show "$1:package-lock.json" 2>/dev/null | jq -r '.packages["node_modules/playwright-core"].version // empty' 2>/dev/null || true; }
+          PREV_PW="$(pw_ver "${PREV}")"
+          TAG_PW="$(pw_ver "${TAG}")"
+          if [ -n "${TAG_PW}" ] && [ "${PREV_PW}" != "${TAG_PW}" ]; then
+            CHANGED="$(printf '%s\nbundled Chromium (playwright-core %s to %s)' "${CHANGED}" "${PREV_PW:-none}" "${TAG_PW}")"
+          fi
+          CHANGED="$(printf '%s' "${CHANGED}" | sed '/^[[:space:]]*$/d')"
+
           if [ -z "${CHANGED}" ]; then
             echo "OK — ${TAG} changes nothing the bundle carries, so an installer is optional."
             exit 0
           fi
 
           echo "${TAG} changes what the bundle contains:"
-          printf '  %s\n' ${CHANGED}
+          printf '%s\n' "${CHANGED}" | sed 's/^/  /'
 
           if ! gh release view "${TAG}" --json assets > /tmp/assets.json 2>/dev/null; then
             echo "::warning title=No GitHub release for ${TAG}::Cannot check for an installer asset."
@@ -213,5 +233,5 @@ jobs:
           fi
 
           CHANGED_ONE_LINE="$(printf '%s' "${CHANGED}" | tr '\n' ' ')"
-          echo "::error title=Release ${TAG} changes the bundle but ships no installer::${CHANGED_ONE_LINE}changed since ${PREV}, and changes there reach users ONLY through a newly built .exe — self-update carries code, never the vendored runtimes or trusted-signers. Every install stays on the previous bundle while the release notes claim otherwise. Fix: build and upload per step 5 in docs/RELEASING.md, then re-run this workflow."
+          echo "::error title=Release ${TAG} changes the bundle but ships no installer::${CHANGED_ONE_LINE} changed since ${PREV}, and changes there reach users ONLY through a newly built .exe. Self-update carries code, never the vendored runtimes, the bundled browser, or trusted-signers. Every install stays on the previous bundle while the release notes claim otherwise. Fix: build and upload per step 5 in docs/RELEASING.md, then re-run this workflow."
           exit 1
