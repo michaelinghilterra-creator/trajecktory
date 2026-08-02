@@ -1,7 +1,7 @@
 // Posts composer tab. Draft LinkedIn / X posts (write your own or have Claude
 // draft one), edit them, and move them through a queue. Nothing is posted from
-// here: a queued post is one you have marked ready, and Claude schedules the
-// queue to Buffer through the Buffer MCP after you approve. Everything you do is
+// here: a queued post is one you have marked ready. You set its target time here,
+// then push it to Buffer from the Content → Publish tab. Everything you do is
 // recorded in the activity feed. Backend: server/routes/posts.mjs.
 
 const LANE_META = {
@@ -27,14 +27,36 @@ function fmtTime(iso) {
   } catch { return iso; }
 }
 
+// Convert a stored scheduledFor (naive local "…T08:00" OR a UTC ISO with a Z) into the
+// local "YYYY-MM-DDTHH:MM" a datetime-local input expects, so the picker always shows the
+// user's local time rather than a raw UTC slice.
+function toLocalInput(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso).slice(0, 16);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Split an X post written as a numbered thread ("1/ …", "2/ …") the same way the Buffer
+// push does, and report the tweet count, the longest tweet, and which tweets bust 280.
+// A single unnumbered post comes back as one "tweet".
+function threadStats(text) {
+  const parts = String(text || "").split(/\n\n(?=\d+\/\s)/).map((s) => s.trim()).filter(Boolean);
+  const lens = parts.map((p) => p.length);
+  return { count: parts.length, max: lens.length ? Math.max(...lens) : 0, over: lens.map((l, i) => (l > 280 ? i + 1 : 0)).filter(Boolean) };
+}
+
 // One editable post card with local text state so typing doesn't re-render the list.
 function PostCard({ post, onPatch, onRemove }) {
   const { useState } = React;
   const [text, setText] = useState(post.text);
   const [link, setLink] = useState(post.linkComment || "");
-  const [when, setWhen] = useState(post.scheduledFor ? post.scheduledFor.slice(0, 16) : "");
+  const [when, setWhen] = useState(toLocalInput(post.scheduledFor));
   const dirty = text.trim() !== post.text || link.trim() !== (post.linkComment || "");
-  const overX = post.channel === "x" && text.length > 280;
+  const isX = post.channel === "x";
+  const stats = isX ? threadStats(text) : null;
+  const overX = isX && stats.over.length > 0;
 
   const save = () => { if (dirty && text.trim()) onPatch(post.id, { text, linkComment: link }); };
 
@@ -46,8 +68,15 @@ function PostCard({ post, onPatch, onRemove }) {
         style: { background: post.source === "claude" ? "var(--panel-2, var(--panel))" : "transparent", color: "var(--text-dim)" },
       }, post.source === "claude" ? "Claude" : "You"),
       laneBadge(post.lane),
-      React.createElement("span", { style: { marginLeft: "auto", fontSize: 11, color: overX ? "var(--red)" : "var(--text-mute)" } },
-        `${text.length} chars${post.channel === "x" ? " / 280" : ""}`),
+      React.createElement("span", {
+        style: { marginLeft: "auto", fontSize: 11, color: overX ? "var(--red)" : "var(--text-mute)" },
+        title: isX ? "X allows 280 characters per tweet. A numbered thread is split on blank lines before 1/, 2/, and so on." : "",
+      },
+        isX
+          ? (stats.over.length
+              ? `${stats.count} tweets · tweet ${stats.over.join(", ")} over 280 (${stats.max})`
+              : `${stats.count} tweet${stats.count > 1 ? "s" : ""} · longest ${stats.max}/280`)
+          : `${text.length} chars`),
     ),
     React.createElement("textarea", {
       className: "inp", value: text, onChange: (e) => setText(e.target.value), onBlur: save,
@@ -61,16 +90,28 @@ function PostCard({ post, onPatch, onRemove }) {
     }),
     React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center", marginTop: 8, flexWrap: "wrap" } },
       dirty ? React.createElement("button", { className: "btn primary", onClick: save }, "Save") : null,
-      post.status === "draft" ? React.createElement("button", {
-        className: "btn", onClick: () => onPatch(post.id, { status: "queued", scheduledFor: when ? new Date(when).toISOString() : null }),
-      }, "Queue →") : null,
+      post.status === "draft" ? React.createElement(React.Fragment, null,
+        React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: "var(--text-dim)" } }, "Publish time:"),
+        React.createElement("input", {
+          type: "datetime-local", className: "inp", value: when,
+          onChange: (e) => setWhen(e.target.value),
+          style: { width: 190 }, title: "Pick the day and time to publish (you can also change it after queuing), then click Queue.",
+        }),
+        React.createElement("button", {
+          className: "btn primary", onClick: () => onPatch(post.id, { status: "queued", scheduledFor: when ? new Date(when).toISOString() : null }),
+          title: "Move this post to the Queue at the top. If you set a Publish time, it carries over.",
+        }, "Queue →"),
+      ) : null,
       post.status === "queued" ? React.createElement(React.Fragment, null,
+        React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: when ? "var(--text-dim)" : "var(--accent)" } }, "Publish time:"),
         React.createElement("input", {
           type: "datetime-local", className: "inp", value: when,
           onChange: (e) => { setWhen(e.target.value); onPatch(post.id, { scheduledFor: e.target.value ? new Date(e.target.value).toISOString() : null }); },
-          style: { width: 190 }, title: "Target time (optional). Claude uses this when scheduling to Buffer.",
+          style: { width: 190, borderColor: when ? "var(--border)" : "var(--accent)" },
+          title: "Set the day and time this should publish, then push it from the Content → Publish tab.",
         }),
-        React.createElement("button", { className: "btn", onClick: () => onPatch(post.id, { status: "scheduled" }), title: "Mark as scheduled once Claude has pushed it to Buffer" }, "Mark scheduled"),
+        when ? null : React.createElement("span", { style: { fontSize: 11, color: "var(--accent)", fontWeight: 600 } }, "← set a date to enable publishing"),
+        React.createElement("button", { className: "btn", onClick: () => onPatch(post.id, { status: "scheduled" }), title: "Manually mark scheduled. Pushing from Content → Publish does this for you automatically." }, "Mark scheduled"),
         React.createElement("button", { className: "btn", onClick: () => onPatch(post.id, { status: "draft" }) }, "← Unqueue"),
       ) : null,
       post.status === "scheduled" ? React.createElement("button", { className: "btn", onClick: () => onPatch(post.id, { status: "published" }) }, "Mark published") : null,
@@ -167,7 +208,7 @@ window.PostsTab = function PostsTab({ toast }) {
   return React.createElement("div", { className: "posts-tab", style: { padding: "18px 20px", maxWidth: "none", marginLeft: 0, marginRight: 0 } },
     React.createElement("h2", { style: { margin: "0 0 4px" } }, "Posts"),
     React.createElement("p", { style: { margin: "0 0 16px", color: "var(--text-dim)", fontSize: 13, maxWidth: 720 } },
-      "Draft posts for two lanes: Professional lands on LinkedIn (the lane that earns screens), trajecktory lands on X (build in public). Write your own or have Claude draft one, edit either, then queue it. Queued posts are ready; Claude schedules the queue to Buffer after you approve. Nothing posts automatically."),
+      "Draft posts for two lanes: Professional lands on LinkedIn (the lane that earns screens), trajecktory lands on X (build in public). Write your own or have Claude draft one, edit either, then queue it and set a target time. To publish, go to the Content → Publish tab, preview, and push to Buffer. Nothing posts automatically."),
 
     // Connect-Buffer callout — the one-time setup that makes "schedule the queue" work.
     React.createElement("details", { className: "card", style: { marginBottom: 16, borderColor: "var(--border)", padding: "10px 14px" } },
@@ -175,11 +216,11 @@ window.PostsTab = function PostsTab({ toast }) {
         "First time? Connect Buffer to publish →"),
       React.createElement("div", { style: { marginTop: 10, fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.7 } },
         React.createElement("p", { style: { margin: "0 0 8px" } },
-          "This composer drafts and queues. Buffer is what actually schedules your posts to LinkedIn and X. It is a one-time connect, done in Claude Code, not on this screen:"),
+          "This composer drafts and queues. Buffer is what actually schedules your posts to LinkedIn and X. Connect it once, then publish from the Content → Publish tab:"),
         React.createElement("ol", { style: { margin: "0 0 8px", paddingLeft: 18 } },
-          React.createElement("li", null, "Add the Buffer MCP server to Claude Code and sign in to Buffer once."),
-          React.createElement("li", null, "Draft and queue posts here."),
-          React.createElement("li", null, "In a Claude Code session, ask Claude to schedule your queued posts, then Mark them scheduled."),
+          React.createElement("li", null, "Add your personal Buffer API key in Setup → API keys → Social posting (one time)."),
+          React.createElement("li", null, "Draft posts here, queue the ones you want, and give each a target time."),
+          React.createElement("li", null, "Open Content → Publish, select them, Preview (a dry run that sends nothing), then Push to Buffer."),
         ),
         React.createElement("div", { style: { color: "var(--text-mute)", fontSize: 11.5 } },
           "trajecktory ships no shared posting link and never posts on its own; publishing always goes through your approval and your own Buffer account."),
@@ -211,12 +252,12 @@ window.PostsTab = function PostsTab({ toast }) {
     React.createElement("div", { style: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) 300px", gap: 22, alignItems: "start" } },
       // Left: the queues
       React.createElement("div", null,
-        Section("Drafts", drafts, "No drafts yet. Write one above, or have Claude draft one."),
-        queued.length > 0 || done.length > 0 ? React.createElement("div", {
+        Section("Queue", queued, "Nothing queued yet. Set a Publish time on a draft below, then click Queue."),
+        queued.length > 0 ? React.createElement("div", {
           style: { fontSize: 11, color: "var(--text-mute)", margin: "-6px 0 10px" },
-        }, "To publish the queue: in a Claude Code session with Buffer connected, ask Claude to schedule your queued posts. Then Mark scheduled.") : null,
-        Section("Queue", queued, "Nothing queued. Queue a draft when it is ready to schedule."),
-        Section("Scheduled / posted", done, "Nothing scheduled yet."),
+        }, "To publish: make sure each queued post has a Publish time, then open Content → Publish, preview, and push to Buffer.") : null,
+        done.length > 0 ? Section("Scheduled / posted", done, "Nothing scheduled yet.") : null,
+        Section("Drafts", drafts, "No drafts yet. Write one above, or have Claude draft one."),
       ),
       // Right: activity feed
       React.createElement("div", null,

@@ -152,7 +152,7 @@ guides: **[docs/onboarding](docs/onboarding)**.
   drafted, editable nudge for each.
 - **Recruiters & Target Talent** two CRMs (external recruiters, in-network contacts) with
   AI-drafted, voice-matched, editable outreach.
-- **LinkedIn** an SSI tracker, a connection queue, an engagement drafter, and a **Posts** composer:
+- **Social** a Visibility tracker (your LinkedIn Social Selling Index), a connection queue, an engagement drafter, and a **Posts** composer:
   write your own or have Claude draft them, edit either, queue them, and schedule to LinkedIn and X
   through Buffer.
 - **Interview** per-company prep and a live "click a cue" board for the round you are about to run.

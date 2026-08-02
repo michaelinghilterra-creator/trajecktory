@@ -102,7 +102,7 @@ plus a batch Evaluate, in place of the plan's Triage-first flow).
 | Recruiter outreach | Cold-outreach emails to recruiters | Haiku |
 | Target Talent outreach | Warm emails to internal TA contacts | Haiku |
 | TA Reconcile | Web search to find missing TA contacts | Haiku |
-| LinkedIn SSI | Comment replies and connection notes | Haiku |
+| Visibility | Comment replies and connection notes | Haiku |
 | Insights | A career-strategy report synthesized over your whole pipeline | Sonnet |
 
 (These are the Drafts & Outreach and Insights sections in Models & cost; change their
