@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.4](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.9.3...v2.9.4) (2026-08-02)
+
+
+### Bug Fixes
+
+* bump Playwright to 1.62.1 for a patched Chromium (refs [#51](https://github.com/michaelinghilterra-creator/trajecktory/issues/51)) ([#138](https://github.com/michaelinghilterra-creator/trajecktory/issues/138)) ([3e290c7](https://github.com/michaelinghilterra-creator/trajecktory/commit/3e290c73625307baba2b686dcf7cd1b042c364d2))
+
 ## [2.9.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.9.2...v2.9.3) (2026-08-02)
 
 
