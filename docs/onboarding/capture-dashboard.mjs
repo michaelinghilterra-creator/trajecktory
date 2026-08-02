@@ -1106,7 +1106,7 @@ async function main() {
     ['Follow-Ups', 'g3-followups', 640],
     ['Recruiters', 'g3-recruiters', 660],
     ['TA Outreach', 'g3-ta-outreach', 620],
-    ['LinkedIn SSI', 'g3-linkedin-ssi', 700],
+    ['Social', 'g3-linkedin-ssi', 700],
   ]) {
     try {
       await clickNav(page, nav);
