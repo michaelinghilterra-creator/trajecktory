@@ -6,6 +6,14 @@ slots: title, 3-keyword subtitle, professional summary, and Areas of
 Expertise. Every other paragraph, bullet, font, color, tab stop, page
 break, and byte of formatting is preserved exactly as in the master.
 
+**Resume integrity (HARD RULE).** Never inject hidden or invisible text
+(white/tiny font, off-page text, metadata), never write instructions
+aimed at an AI screener, and never fabricate skills or experience. These
+tricks backfire and read as dishonest once a human opens the file. Full
+rationale in `modes/docx.md` and the resume research note ("The new
+hack"). Light tailoring is only reframing the user's REAL background in
+the JD's language.
+
 **Output location:** write the tailored .docx into the folder named by
 `outputs.resume_dir` in `config/profile.yml` (default `output/`), passed as
 `--output <resume_dir>/<filename>.docx`.

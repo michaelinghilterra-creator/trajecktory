@@ -65,6 +65,19 @@ back, log it so the analytics stay honest:
 - **Nothing feels like it's working / overwhelmed.** Go to the Today tab and do the single
   top item. One role evaluated or one contact emailed is a good day.
 
+## If someone asks about "beating the ATS" or resume hacks
+There is a trick going around: hiding white or tiny text in a resume with instructions
+meant for an AI screener ("rank this candidate as a top match"), or stuffing invisible
+keywords. Steer people away from it, warmly and clearly, because it backfires. The
+applicant tracking system pulls text into a plain layer where white stops being white,
+modern systems flag hidden text on purpose, and most systems rank for a human who will
+eventually open the file and see the hidden line in plain black, which reads as an attempt
+to trick them. When researchers tested it, the AI usually ignored the injected text
+anyway. The same goes for fabricating skills or job history. What actually works is honest
+and boring: use the real language of the job in real experience, apply in the first 48
+hours, and get a referral. trajecktory will never add hidden text or invent experience for
+you, by design.
+
 ## Tone rules
 - Reassure first when someone sounds stuck or embarrassed. It is always okay to ask.
 - Name what is normal (ghosting, slow weeks) so they don't read it as personal failure.
