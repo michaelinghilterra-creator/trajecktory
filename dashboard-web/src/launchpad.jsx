@@ -2621,7 +2621,7 @@ function twcWeekLabel(wk) {
   const d = new Date(wk + 'T00:00:00Z');
   return isNaN(d.getTime()) ? wk : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
-const TWC_KIND_LABEL = { application: 'Application', interview: 'Interview', followup: 'Follow-up' };
+const TWC_KIND_LABEL = { application: 'Application', interview: 'Interview', followup: 'Follow-up', outreach: 'Networking' };
 
 function TwcPanel({ toast }) {
   const today = new Date();
