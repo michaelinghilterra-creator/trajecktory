@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.10.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.9.4...v2.10.0) (2026-08-03)
+
+
+### Features
+
+* add SmartRecruiters and Workable ATS parsers to scanner ([#141](https://github.com/michaelinghilterra-creator/trajecktory/issues/141)) ([7b13897](https://github.com/michaelinghilterra-creator/trajecktory/commit/7b13897f1d2d6486bebf4d5f3a69aa3489ad22c1))
+
 ## [2.9.4](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.9.3...v2.9.4) (2026-08-02)
 
 
