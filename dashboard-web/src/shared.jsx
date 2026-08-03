@@ -525,11 +525,11 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
       .catch(e => { setPasteBusy(false); setPasteMsg(e.message); });
   }
 
-  // Everyday flow: API Scan (free, fast) → Triage (Haiku scores the top 15) →
+  // Everyday flow: API Scan (free, fast) → Triage (Haiku ranks the queue) →
   // housekeeping. The expensive/optional/redundant steps move to Advanced below.
   const STEPS = [
     { id: 'api-scan',  label: '1. API Scan',         hint: 'Greenhouse/Ashby/Lever',    type: 'auto'   },
-    { id: 'triage',    label: '2. Triage',           hint: 'Haiku scores the top 15',   type: 'agent', mode: 'triage',
+    { id: 'triage',    label: '2. Triage',           hint: 'Haiku ranks the queue',     type: 'agent', mode: 'triage',
       command: '/trajecktory triage' },
     { id: 'merge',     label: '3. Merge Tracker',    hint: 'TSVs → applications.md',     type: 'auto'   },
     { id: 'verify',    label: '4. Verify Actionable',hint: 'Safety-net dead links',     type: 'auto'   },
@@ -836,6 +836,8 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                   <span className="workflow-hint">
                     {step.id === 'cli-eval' && pendingCount != null
                       ? `${step.hint} · ${pendingCount} waiting`
+                      : step.id === 'triage' && visibleTriage.length > 0
+                      ? `${step.hint} · ${visibleTriage.length} ranked`
                       : step.hint}
                   </span>
                 </span>
@@ -906,56 +908,12 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         })}
       </div>
 
-      {!hasKey && (visibleTriage.length > 0 || triageSuppressed.length > 0) && (
-        <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px' }}>
-          <div title="A coarse Haiku pre-filter that ranks the queue. These are NOT derived evaluation scores and are not comparable to one. Run a deep dive to get the real score." style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 4 }}>PRE-FILTER · {visibleTriage.length} ranked</div>
-          {/* Bounded, and scrolls inside itself. Fifteen ranked cards each carrying
-              a rationale line ran to roughly a thousand pixels, so a good triage run
-              pushed the paste box and everything under it off the bottom of the
-              sidebar. The queue is a queue: it should be reachable, not resident. */}
-          <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-          {visibleTriage.slice(0, 15).map(card => {
-            const dj = deepJobs[card.url];
-            const sc = card.score;
-            const color = sc == null ? 'var(--text-mute)' : sc >= 4 ? 'var(--green)' : sc >= 3 ? 'var(--yellow)' : 'var(--red)';
-            const isLocal = String(card.url || '').startsWith('local:');
-            return (
-              <div key={card.url} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                  <span title="Pre-filter score (coarse Haiku pass), not comparable to a derived evaluation score" style={{ color, fontWeight: 700, fontFamily: 'var(--mono)', fontSize: 12 }}>{sc == null ? '-' : '~' + sc.toFixed(1)}</span>
-                  <span style={{ fontSize: 11, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${card.company}: ${card.title}`}>{card.company} · {card.title}</span>
-                </div>
-                {card.rationale && <div style={{ fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4, marginTop: 2 }}>{card.rationale}</div>}
-                <div style={{ display: 'flex', gap: 10, marginTop: 4, alignItems: 'center' }}>
-                  {dj?.status === 'running' ? <span style={{ fontSize: 10.5, color: 'var(--yellow)' }}>⧖ Evaluating…</span>
-                    : dj?.status === 'done' ? <span style={{ fontSize: 10.5, color: 'var(--green)' }}>✓ Report ready</span>
-                    : dj?.status === 'error' ? <span style={{ fontSize: 10.5, color: 'var(--red)' }} title={dj.error}>✕ failed</span>
-                    : <button onClick={() => triggerDeep(card)} disabled={agentBusy2}
-                        style={{ background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 5, padding: '2px 8px', fontSize: 10.5, cursor: agentBusy2 ? 'not-allowed' : 'pointer', opacity: agentBusy2 ? 0.5 : 1 }}>Deep dive ⧉</button>}
-                  {!isLocal && card.url && <a href={window.safeHref(card.url)} target="_blank" rel="noreferrer" style={{ fontSize: 10.5, color: 'var(--text-dim)' }}>open JD ↗</a>}
-                  <button onClick={() => dismissCard(card.url)} title="Dismiss this card"
-                    style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-mute)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: '0 2px' }}>×</button>
-                </div>
-              </div>
-            );
-          })}
-          </div>
-
-          {/* A COUNT, never a list. These were scored by triage and then skipped
-              because each already has a tracker row, so every one of them is
-              already visible in Pipeline with its real status — the expandable
-              list rendered the same rows a second time, in a worse format, and
-              could fill most of the sidebar. The count still earns its line: it
-              is the only signal that triage ran and deduped correctly rather
-              than silently finding nothing. */}
-          {triageSuppressed.length > 0 && (
-            <div title="Scored by triage, then skipped: each already has a row in your tracker. Find them in Pipeline (terminal ones are under All)."
-              style={{ marginTop: visibleTriage.length ? 6 : 0, fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.4 }}>
-              {triageSuppressed.length} already tracked · skipped
-            </div>
-          )}
-        </div>
-      )}
+      {/* The triage PRE-FILTER card list used to render here. It was removed: the
+          same ranked postings already appear as rows in Pipeline → Active/All
+          (built independently in pipeline.jsx), and the sidebar copy never
+          refetched after a deep dive, so spent cards lingered until a reload. The
+          live ranked count now rides on the Triage step's subtitle above; the
+          results live in the Pipeline tabs, which clear themselves on deep dive. */}
 
       {evalSummary && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>

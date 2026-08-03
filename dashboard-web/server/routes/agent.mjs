@@ -237,7 +237,7 @@ function dashboardConstraints(mode, opts) {
   if (mode === 'deep') {
     const tgt = (opts && opts.url) || '';
     const [num] = reserveReportNumbers(1);
-    return ' ' + common + ` Report number is PRE-RESERVED for this run: ${num}. Use it as the report filename number ({num}-{slug}-{date}.md) and the matching tracker id. Do NOT run node next-jd.mjs; numbering is handled for you here.` + ` Deep evaluation of ONE posting only: ${tgt}. Read its job description with WebFetch first and WebSearch as a fallback (for a local:jds/ path, read that file directly). Produce the FULL A-G evaluation as a report in reports/ using the trajecktory-report/v1 format (JSON frontmatter then narrative) and populate every section: summary, cvMatch, gaps, levelMatch, comp, customizationCV, customizationLI, starStories with a leadStory, and a legitimacy object with a tier and signals (Playwright is unavailable here, so assess legitimacy from the fetched page and set verification to unconfirmed). Record the evaluation as a single nine-column TSV in batch/tracker-additions/. This posting was entered directly by the user (the dashboard paste box), not found by a scan, so set the tracker note to include [self-sourced]. Evaluate ONLY this one posting — do not scan for or evaluate any other URL. If it cannot be read, say so and stop.` + snapshotJd;
+    return ' ' + common + ` Report number is PRE-RESERVED for this run: ${num}. Use it as the report filename number ({num}-{slug}-{date}.md) and the matching tracker id. Do NOT run node next-jd.mjs; numbering is handled for you here.` + ` Deep evaluation of ONE posting only: ${tgt}. Read its job description with WebFetch first and WebSearch as a fallback (for a local:jds/ path, read that file directly; that snapshot begins with a "**Source URL:**" line — use that real posting URL as the URL in the report frontmatter and the tracker row, never the local: path). Produce the FULL A-G evaluation as a report in reports/ using the trajecktory-report/v1 format (JSON frontmatter then narrative) and populate every section: summary, cvMatch, gaps, levelMatch, comp, customizationCV, customizationLI, starStories with a leadStory, and a legitimacy object with a tier and signals (Playwright is unavailable here, so assess legitimacy from the fetched page and set verification to unconfirmed). Record the evaluation as a single nine-column TSV in batch/tracker-additions/. This posting was entered directly by the user (the dashboard paste box), not found by a scan, so set the tracker note to include [self-sourced]. Evaluate ONLY this one posting — do not scan for or evaluate any other URL. If it cannot be read, say so and stop.` + snapshotJd;
   }
   return '';
 }
@@ -721,11 +721,20 @@ router.post('/api/agent/:mode', (req, res) => {
       // inject instructions into the agent. Quote/backtick can break out of the
       // double-quoted Windows-cmd prompt wrapper specifically, so reject them too
       // (a real URL never contains a literal " or ` — those are percent-encoded).
+      //
+      // A "local:jds/<slug>.md" snapshot path is ALSO a valid target: resolve-jds
+      // writes these for SPA-hosted postings and triage records them, so a Deep dive
+      // on such a card arrives here as "local:jds/acme-vp-revops.md". The deep
+      // prompt reads a local:jds/ path directly (and the paste path constructs the
+      // same shape at line ~740), so accept it. Constrained to a FLAT filename
+      // (no "/" after jds/, so no "../" traversal) of safe slug chars ending in .md.
+      const isHttp = /^https?:\/\/[^\s]+$/i.test(url);
+      const isLocalJd = /^local:jds\/[A-Za-z0-9._-]+\.md$/.test(url);
       if (/["`]/.test(url)) {
-        return res.status(400).json({ error: 'Provide a valid http(s) URL (no quote or backtick characters).' });
+        return res.status(400).json({ error: 'Provide a valid http(s) URL or local:jds/ path (no quote or backtick characters).' });
       }
-      if (/[\x00-\x1f]/.test(url) || !/^https?:\/\/[^\s]+$/i.test(url)) {
-        return res.status(400).json({ error: 'Provide a valid http(s) URL (no spaces or control characters).' });
+      if (/[\x00-\x1f]/.test(url) || (!isHttp && !isLocalJd)) {
+        return res.status(400).json({ error: 'Provide a valid http(s) URL or a local:jds/ path.' });
       }
       target = { url };
     } else {
