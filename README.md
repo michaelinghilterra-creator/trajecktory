@@ -103,18 +103,56 @@ Everything runs on `http://localhost:3333`, bound to `127.0.0.1`. Your CV, conta
 mail stay on your machine and are sent only to the AI provider you choose. No cloud, no database, no
 telemetry, no account. The tool works for you and answers to you.
 
-## Download (Windows, no setup)
+## Getting Started
 
-**Just want to run it?** Download the Windows installer from the
-**[latest release](https://github.com/michaelinghilterra-creator/trajecktory/releases/latest)**
-and run it. It bundles everything (Node, Chromium, Claude Code, and Git) and installs in a few
-clicks. The only thing you provide is a [Claude](https://claude.ai) subscription (a paid plan) and a
-one-time sign-in.
+Two ways to run trajecktory. Both need one thing and one thing only: a paid
+[Claude](https://claude.ai) plan (Pro or Max). Everything else is either bundled for you or a single
+copy-paste block below.
 
-> The installer is not code-signed yet, so Windows SmartScreen may warn "unknown publisher" on first
-> run. Click **More info -> Run anyway**.
+### Option 1: Windows installer (easiest, nothing to set up)
 
-Prefer to run from source (Node + Claude Code)? See **[docs/SETUP.md](docs/SETUP.md)**.
+1. **Download** the installer from the
+   **[latest release](https://github.com/michaelinghilterra-creator/trajecktory/releases/latest)**.
+   Its name starts `trajecktory-setup-` and ends in the version number, so grab the newest one. It
+   bundles Node, Chromium, Claude Code, and Git, so you install nothing else.
+2. **Run it** (a few clicks). It is not code-signed yet, so Windows SmartScreen may warn "unknown
+   publisher": click **More info -> Run anyway**. If it asks you to restart, do it (that puts Git on
+   your PATH, which Claude Code needs).
+3. **Open trajecktory** from the desktop or Start Menu shortcut. It opens at
+   `http://localhost:3333`.
+4. **Sign in to Claude once**, then work the in-app **Launchpad** (it walks you through your CV,
+   profile, and target companies with a readiness meter).
+
+New to all of this? The three illustrated PDF guides, attached to every
+[release](https://github.com/michaelinghilterra-creator/trajecktory/releases/latest), walk you
+through it screen by screen: *Setting up Claude*, *Installing trajecktory*, and *Using trajecktory
+day to day*. The same day-to-day guide is built into the app under **Setup -> Day-to-day guide**.
+
+### Option 2: Run from source (macOS / Linux / Windows, for developers)
+
+**Prerequisites:** Node.js 20 or newer (Node 24 recommended, which is what CI and the bundled runtime
+use), Git, and [Claude Code](https://claude.ai/code) installed and signed in (`claude login`).
+
+```bash
+# 1. Clone and install
+git clone https://github.com/michaelinghilterra-creator/trajecktory.git
+cd trajecktory
+git config core.hooksPath .githooks     # enable the commit guards (recommended)
+npm ci                                  # root dependencies
+npm --prefix dashboard-web ci           # dashboard dependencies
+npx playwright install chromium         # liveness checks + portal scraping
+
+# 2. Launch the dashboard
+npm --prefix dashboard-web start        # -> http://localhost:3333
+```
+
+Open the dashboard and the **Launchpad** walks you through adding your CV, profile, and target
+companies. Run `node doctor.mjs` anytime to validate prerequisites. Fuller from-source notes:
+**[docs/SETUP.md](docs/SETUP.md)**.
+
+> **Credentials:** Evaluate, Scan, and every AI writing draft run on **your own Claude Pro/Max
+> login** (via the bundled `claude` CLI, no per-use cost), so **no Anthropic API key is required**.
+> Adding one is only an optional, faster path for the writing features. Nothing is shared with anyone.
 
 ## First run: what to expect
 
@@ -134,8 +172,8 @@ lifting; you mostly review and confirm.
 5. **Sign in to Claude.** Click "Sign in to Claude" in the sidebar once. This is what lets Evaluate
    and Scan run, on your own Claude plan. No Anthropic API key is required; adding one is only an
    optional, faster path for the writing features.
-6. **Run your first search.** From the sidebar: Scan (free, no AI) pulls fresh roles, then Triage
-   scores the best fits. Review the scored roles, deep-dive the strongest, let trajecktory tailor a
+6. **Run your first search.** From the sidebar: API Scan (free, no AI) pulls fresh roles from the job
+   boards, then Triage scores the best fits. Review the scored roles, deep-dive the strongest, let trajecktory tailor a
    resume and cover letter, and track it. It schedules the follow-ups.
 
 Fuller walkthrough: **[docs/onboarding/first-run.md](docs/onboarding/first-run.md)**. Illustrated
@@ -170,29 +208,6 @@ guides: **[docs/onboarding](docs/onboarding)**.
 5. **Track and act** manage status, follow-ups, and recruiter and in-network outreach from the
    dashboard; capture replies from Gmail.
 6. **Learn** honest insights show what is actually converting, so you target better over time.
-
-## Quick Start
-
-```bash
-# 1. Clone and install
-git clone https://github.com/michaelinghilterra-creator/trajecktory.git
-cd trajecktory
-git config core.hooksPath .githooks   # enable the pre-commit / commit-msg guards
-npm ci
-npm --prefix dashboard-web ci
-npx playwright install chromium     # liveness checks + scraping
-
-# 2. Launch the dashboard
-npm --prefix dashboard-web start    # -> http://localhost:3333
-```
-
-Open the dashboard and the **Launchpad** walks you through adding your CV, profile, and target
-companies. Run `node doctor.mjs` anytime to validate prerequisites.
-
-> **Credentials:** Evaluate and Scan run on **your own Claude Pro/Max login** (via the bundled
-> `claude` CLI, no per-use API cost). Resume, cover-letter, and outreach drafts run on that same
-> plan by default, so **no Anthropic API key is required**; adding one is only an optional, faster
-> path for the writing features. None of this is shared with anyone.
 
 ## Also runs in any agent CLI
 

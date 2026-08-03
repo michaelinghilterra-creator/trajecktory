@@ -58,7 +58,39 @@ fs.writeFileSync(path.join(tmp, 'follow-ups.md'), [
   '| # | app# | date | company | role | channel | contact | notes |',
   '|---|------|------|---------|------|---------|---------|-------|',
   '| 1 | 201 | 2026-07-23 | Acme | Widget Operations Manager | Email | Jane Doe | Second touch |',
+  // Cross-logged touch: ALSO present in the Acme correspondence log below. Must be
+  // counted once, not twice. Notes carry the exact subject line, as the live
+  // cross-log writes it.
+  '| 2 | 201 | 2026-07-22 | Acme | Widget Operations Manager | Email | Jane Doe | Cross-logged from Talent Acquisition · Acme · Subject: Widget Operations Manager application follow-up |',
   '',
+].join('\n'));
+
+// Target-talent contacts + their correspondence logs. The report must read Sent
+// touches straight from here (follow-ups.md alone misses every bulk/queue send).
+fs.writeFileSync(path.join(tmp, 'target-talent.md'), [
+  '# Target Talent', '',
+  '| # | company | last | first | salute | title | city | state | zip | phone | email | linkedin | status | lastTouch | notes | website |',
+  '|---|---------|------|-------|--------|-------|------|-------|-----|-------|-------|----------|--------|-----------|-------|---------|',
+  '| 301 | Acme | Doe | Jane | Jane | Recruiter |  |  |  |  | jane@acme.test [v:ok:probe:2026-07-01:90] | linkedin.com/in/jane | Sent | 2026-07-24 |  |  |',
+  '| 302 | Globex | Roe | Rich | Rich | TA Lead |  |  |  |  |  | linkedin.com/in/rich | Sent | 2026-07-25 |  |  |',
+  '',
+].join('\n'));
+const ttCorr = path.join(tmp, 'target-talent-correspondence');
+fs.mkdirSync(ttCorr, { recursive: true });
+// 301 Acme: a NEW email follow-up (not in follow-ups.md) + the cross-logged one
+// (same date/subject as follow-ups.md row 2 → must dedup).
+fs.writeFileSync(path.join(ttCorr, '301.md'), [
+  '## 2026-07-24 09:00 | Sent | Widget Operations Manager, quick intro',
+  '', 'Hi Jane, following up on my application.', '',
+  '## 2026-07-22 10:00 | Sent | Widget Operations Manager application follow-up',
+  '', 'Hi Jane, applied yesterday.', '',
+  '## 2026-07-23 11:00 | Received | Re: Widget Operations Manager',
+  '', 'Thanks, will review.', '',
+].join('\n'));
+// 302 Globex: a LinkedIn connection request → a Networking activity, method LinkedIn.
+fs.writeFileSync(path.join(ttCorr, '302.md'), [
+  '## 2026-07-25 14:00 | Sent | LinkedIn connection request',
+  '', 'Request sent.', '',
 ].join('\n'));
 
 // One cached employer so the join + the cached flag are exercised. Key is
@@ -90,9 +122,23 @@ try {
 
   // ── 2. Range filter + who counts ─────────────────────────────────────────────
   const narrow = buildActivities({ from: '2026-07-20', to: '2026-07-27' });
-  check(narrow.length === 5, `5 activities in the fortnight (got ${narrow.length}): apps 201/202/206, interview 205, follow-up 201`);
+  // apps 201/202/206 (3), interview 205 (1), follow-ups.md rows 1+2 (2),
+  // correspondence: 301 new email + 302 LinkedIn (2); 301's 07-22 email dedups
+  // against follow-ups.md row 2 → 8 total, not 9.
+  check(narrow.length === 8, `8 activities in the fortnight (got ${narrow.length})`);
   check(!narrow.some(a => a.company === 'Initech'), 'an Evaluated-but-never-applied role is excluded');
   check(!narrow.some(a => a.date === '2026-07-19'), 'an out-of-range application (204 on 07-19) is filtered out');
+
+  // ── 2b. Outreach sourced from correspondence + dedup + LinkedIn classification ─
+  const acme0722 = narrow.filter(a => a.kind === 'followup' && a.company === 'Acme' && a.date === '2026-07-22');
+  check(acme0722.length === 1, `the cross-logged Acme touch (in BOTH follow-ups.md and correspondence) is counted once (got ${acme0722.length})`);
+  const acmeEmail = find(narrow, a => a.company === 'Acme' && a.date === '2026-07-24' && a.method === 'Email');
+  check(acmeEmail && acmeEmail.result === 'Sent follow-up',
+    'a Sent email in the correspondence log (never cross-logged) becomes a Follow-up activity');
+  const linkedin = find(narrow, a => a.kind === 'outreach');
+  check(linkedin && linkedin.company === 'Globex' && linkedin.method === 'LinkedIn'
+    && linkedin.result === 'Sent connection request' && /LinkedIn connection request/.test(linkedin.activity),
+    'a LinkedIn connection request becomes a Networking activity with method LinkedIn, not an email touch');
 
   // ── 3. Date sourcing ─────────────────────────────────────────────────────────
   const app206 = find(narrow, a => a.kind === 'application' && a.appId === 206);
