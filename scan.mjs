@@ -18,6 +18,7 @@
  */
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
+import { pathToFileURL } from 'url';
 import yaml from 'js-yaml';
 import { buildTitleFilter, buildLocationFilter, normalizeUrl, scoreOffer } from './lib/scan-core.mjs';
 import { sanitizeCell } from './lib/sanitize-cell.mjs';
@@ -100,6 +101,31 @@ function detectApi(company) {
     };
   }
 
+  // SmartRecruiters: careers.smartrecruiters.com/{id} or jobs.smartrecruiters.com/{id}/…
+  // Public postings API is paginated (like Workday) — see fetchSmartRecruitersJobs.
+  const srMatch = url.match(/smartrecruiters\.com\/([^/?#]+)/i);
+  if (srMatch && !/^(www|jobs|careers|api)$/i.test(srMatch[1])) {
+    const companyId = srMatch[1];
+    return {
+      type: 'smartrecruiters',
+      url: `https://api.smartrecruiters.com/v1/companies/${companyId}/postings`,
+      meta: { companyId },
+    };
+  }
+
+  // Workable: apply.workable.com/{slug} or {slug}.workable.com. The public widget
+  // API returns the whole board in one call (no auth).
+  const wkApply = url.match(/apply\.workable\.com\/([^/?#]+)/i);
+  const wkSub = url.match(/https?:\/\/([^./]+)\.workable\.com/i);
+  const workableSlug = wkApply ? wkApply[1]
+    : (wkSub && !/^(apply|www)$/i.test(wkSub[1]) ? wkSub[1] : null);
+  if (workableSlug) {
+    return {
+      type: 'workable',
+      url: `https://apply.workable.com/api/v1/widget/accounts/${workableSlug}?details=true`,
+    };
+  }
+
   return null;
 }
 
@@ -107,10 +133,8 @@ function detectApi(company) {
 // the skipped-coverage report, so an unrecognized host is a fine answer: the point
 // is to separate "one parser away" from "bespoke page, nothing to build".
 const SKIP_PLATFORMS = [
-  [/smartrecruiters\.com/i, 'SmartRecruiters'],
   [/jobvite\.com/i, 'Jobvite'],
   [/icims\.com/i, 'iCIMS'],
-  [/workable\.com/i, 'Workable'],
   [/recruitee\.com/i, 'Recruitee'],
   [/breezy\.hr/i, 'Breezy'],
   [/rippling(?:ats)?\.com/i, 'Rippling'],
@@ -177,6 +201,34 @@ function parseWorkday(json, companyName, baseUrl) {
   }));
 }
 
+function parseWorkable(json, companyName) {
+  const jobs = json.jobs || [];
+  return jobs.map(j => ({
+    title: j.title || '',
+    url: j.url || j.shortlink || j.application_url || '',
+    company: companyName,
+    location: [j.city, j.state, j.country].filter(Boolean).join(', '),
+    postedAt: j.published_on || j.created_at || null,   // ISO date string
+    // telecommuting is Workable's explicit remote flag; department adds context.
+    remoteHint: `${j.telecommuting ? 'remote' : ''} ${j.department || ''}`,
+  }));
+}
+
+function parseSmartRecruiters(json, companyName, companyId) {
+  const jobs = json.content || [];
+  return jobs.map(j => ({
+    title: j.name || '',
+    // The list API carries no apply URL; the {companyId}/{id} public posting URL 200s.
+    url: `https://jobs.smartrecruiters.com/${companyId}/${j.id}`,
+    company: companyName,
+    location: j.location?.fullLocation
+      || [j.location?.city, j.location?.region, j.location?.country].filter(Boolean).join(', '),
+    postedAt: j.releasedDate || null,   // ISO string
+    // location.remote / .hybrid are explicit booleans — precise signal, no body grep.
+    remoteHint: `${j.location?.remote ? 'remote' : ''} ${j.location?.hybrid ? 'hybrid' : ''}`,
+  }));
+}
+
 // ── Age filter ──────────────────────────────────────────────────────
 
 /**
@@ -192,7 +244,7 @@ function isWithinAge(postedAt, maxDays) {
   return ageDays <= maxDays;
 }
 
-const PARSERS = { greenhouse: parseGreenhouse, ashby: parseAshby, lever: parseLever };
+const PARSERS = { greenhouse: parseGreenhouse, ashby: parseAshby, lever: parseLever, workable: parseWorkable };
 
 // ── Fetch with timeout ──────────────────────────────────────────────
 
@@ -232,6 +284,30 @@ async function fetchWorkdayJobs(apiUrl, baseUrl, companyName) {
       offset += limit;
     }
     return parseWorkday({ jobPostings: allPostings }, companyName, baseUrl);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// SmartRecruiters paginates (100/page). Public read API, no auth.
+async function fetchSmartRecruitersJobs(apiUrl, companyId, companyName) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS * 3);
+  const limit = 100;
+  let offset = 0;
+  let allContent = [];
+
+  try {
+    while (true) {
+      const res = await fetch(`${apiUrl}?limit=${limit}&offset=${offset}`, { signal: controller.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      const page = json.content || [];
+      allContent = allContent.concat(page);
+      if (page.length < limit || allContent.length >= (json.totalFound || 0)) break;
+      offset += limit;
+    }
+    return parseSmartRecruiters({ content: allContent }, companyName, companyId);
   } finally {
     clearTimeout(timer);
   }
@@ -472,6 +548,8 @@ async function main() {
       let jobs;
       if (type === 'workday') {
         jobs = await fetchWorkdayJobs(url, meta.baseUrl, company.name);
+      } else if (type === 'smartrecruiters') {
+        jobs = await fetchSmartRecruitersJobs(url, meta.companyId, company.name);
       } else {
         const json = await fetchJson(url);
         jobs = PARSERS[type](json, company.name);
@@ -560,7 +638,22 @@ async function main() {
   console.log(`\n→ Run /trajecktory pipeline to evaluate new offers.`);
 }
 
-main().catch(err => {
-  console.error('Fatal:', err.message);
-  process.exit(1);
-});
+// Exported for unit tests (tests/scan-parsers.test.mjs). Importing this module
+// must NOT kick off a scan, so main() runs only on direct CLI invocation.
+export {
+  detectApi,
+  parseGreenhouse,
+  parseAshby,
+  parseLever,
+  parseWorkday,
+  parseWorkable,
+  parseSmartRecruiters,
+};
+
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (invokedDirectly) {
+  main().catch(err => {
+    console.error('Fatal:', err.message);
+    process.exit(1);
+  });
+}
