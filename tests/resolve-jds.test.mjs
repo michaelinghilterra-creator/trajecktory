@@ -50,6 +50,10 @@ check(htmlToText('<p>Hello</p><p>World</p>') === 'Hello\nWorld', 'flattens <p> t
 check(htmlToText('<ul><li>a</li><li>b</li></ul>') === '- a\n- b', 'lists become dashes');
 check(htmlToText('R&amp;D &mdash; 5&#39;s') === "R&D — 5's", 'decodes entities');
 check(htmlToText('<b>x</b>') === 'x', 'strips inline tags');
+check(!htmlToText('<scr<script>ipt>x</scr</script>ipt>').includes('<script'),
+  'nested/crafted tags fully stripped — no residual <script (CodeQL js/incomplete-multi-character-sanitization)');
+check(htmlToText('&amp;lt;') === '&lt;',
+  'no double-unescape: &amp;lt; stays literal &lt; (CodeQL js/double-escaping)');
 
 // ── buildHintIndex from portals.yml ──────────────────────────────────────────
 const PORTALS_FIXTURE = `
