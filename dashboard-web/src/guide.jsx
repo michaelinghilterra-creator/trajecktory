@@ -388,9 +388,15 @@ const DG_CSS = `
 .dg-wrap .ib-preprail .ib-railttl{margin-bottom:9px}
 .dg-lead{font-size:14px !important;color:var(--text) !important;line-height:1.6 !important;margin:2px 0 12px !important}
 .dg-figure{margin:14px 0 4px}
-.dg-shot{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:10px;
+/* Captures are 2x density and vary in shape: wide full-window shots vs narrow,
+   tall panel crops (the sidebar workflow, the report drawer). Never force width
+   (that upscaled the narrow ones to a blurry full-column giant). Bound by both
+   axes and center, so every image downscales to fit and stays crisp. */
+.dg-shot{display:block;max-width:100%;max-height:520px;width:auto;height:auto;margin:2px auto 0;
+         border:1px solid var(--border);border-radius:10px;
          background:var(--panel-2);box-shadow:0 1px 3px rgba(0,0,0,.10)}
 .dg-shot-ph{display:flex;align-items:center;justify-content:center;text-align:center;min-height:150px;
+            max-width:100%;margin:2px auto 0;
             border:1px dashed var(--border-2);border-radius:10px;background:var(--panel-2);
             color:var(--text-mute);font-size:12px;padding:18px;line-height:1.5}
 .dg-cap{font-size:11.5px;color:var(--text-mute);line-height:1.5;margin-top:7px}
