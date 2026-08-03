@@ -2450,6 +2450,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
 // ─── Setup shell — wraps Launchpad as sub-tab #1 plus added modules ──────────
 const SETUP_ICONS = {
   launchpad: 'M5 3l14 9-14 9V3z',
+  guide:     'M2 4h7a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H2z M22 4h-7a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5H22z',
   pitch:     'M21 11.5a8.38 8.38 0 0 1-9 8.5 8.38 8.38 0 0 1-4-1L3 21l1.5-5a8.38 8.38 0 0 1-1-4 8.5 8.5 0 0 1 17 0z',
   twc:       'M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22z M12 6v6l4 2',
   changelog: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h6',
@@ -2468,6 +2469,7 @@ function SetupIcon({ name, size = 14 }) {
 
 const SETUP_SUBTABS = [
   { id: 'launchpad', label: 'Launchpad',              icon: 'launchpad' },
+  { id: 'guide',     label: 'Day-to-day guide',       icon: 'guide' },
   { id: 'pitch',     label: 'Tell Me About Yourself', icon: 'pitch' },
   { id: 'twc',       label: 'TWC',                    icon: 'twc' },
   { id: 'changelog', label: 'Change Log',             icon: 'changelog' },
@@ -2490,6 +2492,7 @@ window.SetupTab = function SetupTab({ toast, setTab }) {
       </div>
 
       {view === 'launchpad' && window.LaunchpadTab && <window.LaunchpadTab toast={toast} setTab={setTab} />}
+      {view === 'guide'     && window.DayToDayGuidePanel && <window.DayToDayGuidePanel />}
       {view === 'pitch'     && <TellMeAboutYouPanel />}
       {view === 'twc'       && <TwcPanel toast={toast} />}
       {view === 'changelog' && <ChangelogPanel />}
@@ -2618,7 +2621,7 @@ function twcWeekLabel(wk) {
   const d = new Date(wk + 'T00:00:00Z');
   return isNaN(d.getTime()) ? wk : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
-const TWC_KIND_LABEL = { application: 'Application', interview: 'Interview', followup: 'Follow-up' };
+const TWC_KIND_LABEL = { application: 'Application', interview: 'Interview', followup: 'Follow-up', outreach: 'Networking' };
 
 function TwcPanel({ toast }) {
   const today = new Date();

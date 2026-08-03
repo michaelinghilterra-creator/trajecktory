@@ -8,11 +8,22 @@
 // dated activity in that window, export as CSV whose columns mirror the TWC Work
 // Search Log. TWC accepts CSV — the exact PDF form is not required.
 //
-// WHAT COUNTS AS AN ACTIVITY (confirmed with Michael, all three TWC-acceptable):
+// WHAT COUNTS AS AN ACTIVITY (confirmed with Michael, all TWC-acceptable):
 //   - applications sent   → "Applied online for a job"
 //   - interviews          → each dated interview event ("Interview — Phone Screen")
-//   - follow-up / outreach → each dated touch ("Follow-up (Email)")
+//   - follow-up (email)   → each dated Sent email to an employer contact
+//   - networking          → each dated LinkedIn connection request to a contact
 // Raw evaluations are deliberately NOT counted (hundreds of them; padding).
+//
+// OUTREACH IS SOURCED FROM THE CORRESPONDENCE LOGS, not follow-ups.md alone.
+// follow-ups.md only captures a touch when the "also log to application"
+// cross-log fires, so every bulk / queue send (the bulk of the real outreach)
+// never reached it and the report was blind to it — e.g. a fortnight showing 13
+// follow-ups when 90 emails and 60 LinkedIn requests had actually gone out. The
+// per-contact correspondence logs (target-talent + recruiters) ARE the authoritative
+// record of every Sent message, so we read them directly and merge follow-ups.md on
+// top, deduped, so a cross-logged touch (present in both) is counted exactly once and
+// a hand-entered follow-up with no correspondence file is still kept.
 //
 // DATE SOURCING is the subtle part. The applications.md Date column is the
 // evaluation/scrape date, NOT when the user applied, so an application is dated
@@ -25,6 +36,10 @@
 import { parseApplicationsMd } from './applications.mjs';
 import { readApplyDates, parseStatusEvents } from './sidecars.mjs';
 import { parseFollowupsMd } from './followups.mjs';
+import { parseTargetTalentMd, readTTCorrespondence } from './target-talent.mjs';
+import { parseRecruitersMd, readRecruiterCorrespondence } from './recruiters.mjs';
+import { isLinkedInInvite } from './channels.mjs';
+import { normalizeCompany } from '../../../lib/identity.mjs';
 import { appReached, isInterviewStage } from './statuses.mjs';
 import { readEmployerDirectory, employerKey, hasEmployer, mergeEmployers } from './employer-directory.mjs';
 import { toCsv } from './csv.mjs';
@@ -102,6 +117,31 @@ export function buildActivities({ from, to } = {}) {
   const empFor = (company) => directory[employerKey(company)] || null;
   const webPage = (app, emp) => (app && app.url) || (emp && emp.website) || '';
 
+  // Company → its applications, so an outreach touch can borrow the role the user
+  // is seeking there (the TWC "Type of job" column) when it is unambiguous. Left
+  // blank when a company has zero or several open applications rather than guessing.
+  const appsByCompany = new Map();
+  for (const app of apps) {
+    const k = normalizeCompany(app.company);
+    if (!k) continue;
+    if (!appsByCompany.has(k)) appsByCompany.set(k, []);
+    appsByCompany.get(k).push(app);
+  }
+  const roleFor = (company) => {
+    const list = appsByCompany.get(normalizeCompany(company)) || [];
+    return list.length === 1 ? { role: list[0].role || '', appId: list[0].id } : { role: '', appId: '' };
+  };
+
+  // Dedup keys so a correspondence touch that ALSO lives in follow-ups.md (the
+  // cross-logged ones) is counted once. Two independent signatures because a
+  // follow-up row may match on either: the exact subject line (cross-logged rows
+  // store "Subject: …") OR the same contact reached the same day at the same
+  // company (catches rows whose notes are the full email body, no "Subject:").
+  const loggedSig = new Set();
+  const normSub = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const normNm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const subjOf = (notes) => { const m = /subject:\s*(.+)$/i.exec(String(notes || '')); return m ? m[1] : notes; };
+
   const activities = [];
 
   // 1) Applications — one row per app that ever reached Applied (or beyond).
@@ -149,12 +189,17 @@ export function buildActivities({ from, to } = {}) {
     });
   }
 
-  // 3) Follow-ups / outreach — one row per dated touch. This is the only source
-  // that carries a named contact + method; online applications leave both blank.
+  // 3) Follow-ups from follow-ups.md — one row per dated touch. This is the only
+  // source that carries a named contact + method; online applications leave both
+  // blank. Each row also seeds the dedup index so the correspondence sweep below
+  // does not re-add a touch that was cross-logged here.
   for (const f of followups) {
     if (!isYmd(f.date)) continue;
     const app = byId.get(String(f.appNum));
     const company = f.company || (app && app.company) || '';
+    const co = normalizeCompany(company);
+    loggedSig.add(`s|${f.date}|${co}|${normSub(subjOf(f.notes))}`);
+    if ((f.contact || '').trim()) loggedSig.add(`c|${f.date}|${co}|${normNm(f.contact)}`);
     const emp = empFor(company);
     activities.push({
       kind: 'followup',
@@ -168,6 +213,54 @@ export function buildActivities({ from, to } = {}) {
       result: 'Sent follow-up',
       appId: f.appNum,
     });
+  }
+
+  // 4) Outreach straight from the correspondence logs (target-talent + recruiters).
+  // Every Sent message is a dated employer contact: an email follow-up, or a
+  // LinkedIn connection request (networking). Deduped against the follow-ups.md
+  // rows above so a cross-logged touch is not double-counted. This is what makes
+  // the report reflect ALL outreach automatically, no manual cross-log required.
+  const books = [
+    { rows: safe(parseTargetTalentMd, []) || [], read: readTTCorrespondence, companyOf: (r) => r.company },
+    { rows: safe(parseRecruitersMd, []) || [], read: readRecruiterCorrespondence, companyOf: (r) => r.firm },
+  ];
+  for (const book of books) {
+    for (const c of book.rows) {
+      let msgs = [];
+      try { msgs = book.read(c.id) || []; } catch { msgs = []; }
+      for (const msg of msgs) {
+        if (msg.direction !== 'Sent') continue;
+        const date = String(msg.timestamp || '').slice(0, 10);
+        if (!isYmd(date)) continue;
+        const company = book.companyOf(c) || '';
+        const co = normalizeCompany(company);
+        const subject = msg.subject || '';
+        const contactName = `${c.first || ''} ${c.last || ''}`.trim();
+        // Already captured as a follow-ups.md row?
+        if (loggedSig.has(`s|${date}|${co}|${normSub(subject)}`)) continue;
+        if (contactName && loggedSig.has(`c|${date}|${co}|${normNm(contactName)}`)) continue;
+        // Guard against the same Sent message being read twice.
+        const selfSig = `x|${date}|${co}|${normNm(contactName)}|${normSub(subject)}`;
+        if (loggedSig.has(selfSig)) continue;
+        loggedSig.add(selfSig);
+
+        const linkedin = isLinkedInInvite(subject);
+        const emp = empFor(company);
+        const { role, appId } = roleFor(company);
+        activities.push({
+          kind: linkedin ? 'outreach' : 'followup',
+          date, week: twcWeekStart(date), dateApprox: false,
+          activity: linkedin ? 'Networking — LinkedIn connection request' : 'Follow-up (Email)',
+          role, company,
+          employerAddress: (emp && emp.hqAddress) || '',
+          employerWebPage: (emp && emp.website) || '',
+          employerPhone: (emp && emp.phone) || '',
+          contact: contactName, method: linkedin ? 'LinkedIn' : 'Email',
+          result: linkedin ? 'Sent connection request' : 'Sent follow-up',
+          appId,
+        });
+      }
+    }
   }
 
   const inRange = (d) => (!from || d >= from) && (!to || d <= to);

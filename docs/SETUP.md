@@ -7,7 +7,7 @@
 ## Prerequisites
 
 - A [Claude](https://claude.ai) subscription (a paid plan) and [Claude Code](https://claude.ai/code) installed and signed in (`claude login`)
-- Node.js 18+ (20 recommended, matches CI) for CV generation, the dashboard, and utility scripts
+- Node.js 20 or newer (Node 24 recommended, which is what CI and the bundled runtime use) for CV generation, the dashboard, and utility scripts
 - Git (to clone the repo and for the in-app self-updater)
 
 ## Quick Start (5 steps)
@@ -17,8 +17,10 @@
 ```bash
 git clone https://github.com/michaelinghilterra-creator/trajecktory.git
 cd trajecktory
-npm install
-npx playwright install chromium   # Required for liveness checks and portal scanning
+git config core.hooksPath .githooks   # enable the commit guards (recommended)
+npm ci                                # root dependencies
+npm --prefix dashboard-web ci         # dashboard dependencies
+npx playwright install chromium       # liveness checks + portal scraping
 ```
 
 ### 2. Configure your profile
@@ -80,9 +82,7 @@ node verify-pipeline.mjs     # Check pipeline integrity
 The web dashboard visualizes your pipeline, reports, follow-ups, and analytics.
 
 ```bash
-cd dashboard-web
-npm ci
-npm start            # then open the URL shown (default http://localhost:3333)
+npm --prefix dashboard-web start     # deps already installed in step 1; opens http://localhost:3333
 ```
 
 It runs locally only (binds `127.0.0.1`). For the dashboard's optional draft
