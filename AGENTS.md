@@ -435,6 +435,13 @@ When spawning headless workers for batch processing, use the appropriate command
 # 1. (Optional) Scan portals for new candidates
 node scan.mjs
 
+# 1b. Snapshot SPA-hosted JDs to jds/ so triage/eval can READ them. Ashby, Workday,
+#     SmartRecruiters, Lever and embedded-Greenhouse posting pages are JS apps that
+#     a plain fetch renders blank, so the agents ("skip any you cannot read") drop
+#     every role on them. This pulls each pending posting's JD via its ATS API and
+#     repoints the pipeline entry to local:jds/…, which the agents read directly.
+node resolve-jds.mjs
+
 # 2. REQUIRED: liveness-gate the pipeline BEFORE spending LLM tokens
 node gate-pipeline.mjs
 
