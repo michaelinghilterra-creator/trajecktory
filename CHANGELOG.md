@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.10.0...v2.11.0) (2026-08-03)
+
+
+### Features
+
+* snapshot SPA-hosted JDs via ATS APIs before triage and eval ([#143](https://github.com/michaelinghilterra-creator/trajecktory/issues/143)) ([5f7e0ac](https://github.com/michaelinghilterra-creator/trajecktory/commit/5f7e0ac61ecc12797b27cec9faf21caa279cc4d4))
+
 ## [2.10.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.9.4...v2.10.0) (2026-08-03)
 
 
