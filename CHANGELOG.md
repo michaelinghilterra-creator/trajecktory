@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.12.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.11.0...v2.12.0) (2026-08-03)
+
+
+### Features
+
+* in-app day-to-day guide and refreshed onboarding for v2.12.0 ([#145](https://github.com/michaelinghilterra-creator/trajecktory/issues/145)) ([66ac559](https://github.com/michaelinghilterra-creator/trajecktory/commit/66ac55987141f4f2f94e53769c47c38e71169fdf))
+
 ## [2.11.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.10.0...v2.11.0) (2026-08-03)
 
 
