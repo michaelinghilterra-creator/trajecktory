@@ -2,7 +2,12 @@
 // the headless agent runner both shell out to these exact node commands.
 const WORKFLOW_STEPS = {
   'discover':   { cmd: 'node discover.mjs',                   label: 'Expand Coverage',  summarize: discoverSummary },
-  'api-scan':   { cmd: 'node scan.mjs',                       label: 'API Scan',         summarize: scanSummary },
+  // Scan for new postings, then immediately snapshot any SPA-hosted JDs
+  // (Ashby/Workday/SmartRecruiters/embedded-Greenhouse) to jds/ and repoint the
+  // pipeline entry to local:jds/…. Without this, triage and eval "skip any you
+  // cannot read" and silently drop every role on those platforms. Chained here so
+  // it is automatic before Triage runs — see resolve-jds.mjs.
+  'api-scan':   { cmd: 'node scan.mjs && node resolve-jds.mjs', label: 'API Scan',       summarize: scanSummary },
   'gate':       { cmd: 'node gate-pipeline.mjs',              label: 'Liveness Gate',    summarize: gateSummary },
   'merge':      { cmd: 'node merge-tracker.mjs',              label: 'Merge Tracker',    summarize: tailLines },
   'verify':     { cmd: 'node verify-actionable.mjs --apply',  label: 'Verify Actionable',summarize: verifySummary },
@@ -68,7 +73,11 @@ function scanSummary(output) {
   const funnel = filtered.length
     ? ` (of ${n(found)} found: ${filtered.join(', ')})`
     : (found != null ? ` (of ${n(found)} found)` : '');
-  return `${n(added)} new${funnel}`;
+  // resolve-jds runs chained after scan.mjs in the same step; surface how many
+  // SPA-hosted JDs it snapshotted so the reader sees that work happened too.
+  const snap = grab(/(\d+) resolved · \d+ already local/);
+  const jdNote = snap ? ` · ${n(snap)} JD${snap === 1 ? '' : 's'} snapshotted` : '';
+  return `${n(added)} new${funnel}${jdNote}`;
 }
 
 function gateSummary(output) {
