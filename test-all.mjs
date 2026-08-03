@@ -447,6 +447,7 @@ for (const suite of [
   'tests/discard.test.mjs',
   'tests/auto-close-stale.test.mjs',
   'tests/scan-core.test.mjs',
+  'tests/scan-parsers.test.mjs',
   'tests/identity.test.mjs',
   'tests/identity-single-source.test.mjs',
   'tests/score.test.mjs',
