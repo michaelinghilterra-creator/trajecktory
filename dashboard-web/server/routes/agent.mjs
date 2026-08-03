@@ -724,7 +724,7 @@ router.post('/api/agent/:mode', (req, res) => {
       //
       // A "local:jds/<slug>.md" snapshot path is ALSO a valid target: resolve-jds
       // writes these for SPA-hosted postings and triage records them, so a Deep dive
-      // on such a card arrives here as "local:jds/netbrain-vp-revops.md". The deep
+      // on such a card arrives here as "local:jds/acme-vp-revops.md". The deep
       // prompt reads a local:jds/ path directly (and the paste path constructs the
       // same shape at line ~740), so accept it. Constrained to a FLAT filename
       // (no "/" after jds/, so no "../" traversal) of safe slug chars ending in .md.
