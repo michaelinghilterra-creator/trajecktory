@@ -471,6 +471,44 @@ const SSI_LOG = [
   { date: '2026-07-14', influencer: 'Jane Rivera',  actionType: 'Messaged',  topic: 'Intro',           message: 'Short note after her post.', responseReceived: 'Yes', connectionMade: 'Connected', notes: '', loggedAt: '2026-07-14T09:41:00.000Z' },
 ];
 
+// ---- AI Coach (v2.4.0) -----------------------------------------------------
+// GET /api/coach/history -> { messages:[{id,role:'user'|'coach',text,ts}] };
+// GET /api/coach/brief -> { brief, cached }. Same fictional search as everywhere.
+const COACH_HISTORY = { messages: [
+  { id: 'c1', role: 'user',  text: 'I have two roles at second-round stage. Which should I put more energy into this week?', ts: '2026-07-20T15:31:00.000Z' },
+  { id: 'c2', role: 'coach', text: 'Northwind is the stronger bet: it scored 4.6, the comp clears your target, and you are already at a second interview with the CRO. Globex is a fit but earlier (phone screen) and hybrid. Put the prep hours into Northwind, and keep Globex warm with a short follow-up.', ts: '2026-07-20T15:31:12.000Z' },
+  { id: 'c3', role: 'user',  text: 'Fair. What is the one thing to nail in the Northwind round?', ts: '2026-07-20T15:33:00.000Z' },
+  { id: 'c4', role: 'coach', text: 'Consolidation. Their whole reason for the role is three CRM instances after two acquisitions. Lead with the carrier-scorecard rebuild and frame it as consolidation, not analytics. Want me to draft three questions that show you understand that mandate?', ts: '2026-07-20T15:33:18.000Z' },
+] };
+const COACH_BRIEF = { cached: true, brief: 'Two follow-ups are overdue (Acme, Globex) and your Northwind second round is the highest-value thing on your board. Clear the follow-ups first, then spend the rest of today on Northwind prep.' };
+
+// ---- Network > Referrals (warm channel, v2.9.0) ----------------------------
+// GET /api/referrals -> { referrals, statuses, linkedin }. Rows carry a derived
+// `stage`: stage1 = contact inside an active-pipeline company, stage2 = wider pool.
+const REFERRALS = {
+  referrals: [
+    { id: 1, name: 'Priya Raghunathan', how: 'Former colleague at a logistics startup', where: 'Northwind Analytics · Director of Sales', target: 'Northwind Analytics', status: 'Asked',      lastTouch: '2026-07-15', notes: 'Offered to flag my application to the CRO.', stage: 'stage1' },
+    { id: 2, name: 'Marcus Ellery',     how: 'Runs the local RevOps meetup',            where: 'Globex Health · RevOps Manager',        target: 'Globex Health',       status: 'Intro Made', lastTouch: '2026-07-12', notes: 'Introduced me to their TA lead.',           stage: 'stage1' },
+    { id: 3, name: 'Dana Whitfield',     how: 'Worked together at a prior company',      where: 'Meridian Search · Principal',           target: '',                    status: 'Not Asked',  lastTouch: '',           notes: 'Strong recruiter contact for GTM roles.',  stage: 'stage2' },
+    { id: 4, name: 'Sam Okoro',          how: 'Met at an analytics conference',          where: 'Vertex Foods · Director of Analytics',  target: '',                    status: 'Not Asked',  lastTouch: '',           notes: 'Adjacent field, shares hiring posts.',     stage: 'stage2' },
+  ],
+  statuses: ['Not Asked', 'Asked', 'Intro Made', 'Declined', 'Thanked'],
+  linkedin: { count: 842, importedAt: '2026-07-14T17:00:00.000Z', source: 'upload' },
+};
+
+// ---- Social > Posts composer (v2.1.0, Buffer publishing v2.7.0) -------------
+// GET /api/posts -> { posts, activity }. Post: { id, source, lane, channel, text,
+// linkComment, status, title, type, metrics }. Buffer stays disconnected (the
+// honest first-run state), so the Content publish view shows the connect prompt.
+const POSTS = { activity: [], posts: [
+  { id: 'p1', source: 'claude', lane: 'professional', channel: 'linkedin', status: 'queued', title: '', type: 'text', linkComment: '',
+    text: 'Most job searches die in the follow-up, not the application. This week my rule is simple: no thread goes more than five business days without a nudge. The tool drafts it, I edit and send. Silence is the enemy, not the resume.', metrics: {} },
+  { id: 'p2', source: 'user', lane: 'trajecktory', channel: 'x', status: 'draft', title: '', type: 'text', linkComment: '',
+    text: 'Spent the morning turning three CRM instances into one story for an interview. The messy half of RevOps is the interesting half.', metrics: {} },
+  { id: 'p3', source: 'claude', lane: 'professional', channel: 'linkedin', status: 'draft', title: '', type: 'text', linkComment: 'Happy to share the scorecard template in the comments.',
+    text: 'A carrier scorecard is only useful if the planners who live under it own it. Here is how I moved one from "my team\'s report" to "their number" in two quarters.', metrics: {} },
+] };
+
 // ---- v2.0 Overview scorecard + Actions + cohorts ---------------------------
 // The weekly scorecard reads /api/metrics/weekly; the Actions card reads
 // /api/activity/actions + /api/activity/cohorts. All aggregate counts, zero PII.
@@ -599,7 +637,7 @@ async function installMocks(page) {
     // handoff prompt text is static + read-only; let it hit the server for authenticity
     return route.continue();
   });
-  await page.route('**/api/system/version', route => json(route, { version: '2.0.2' }));
+  await page.route('**/api/system/version', route => json(route, { version: '2.12.0' }));
   await page.route('**/api/claude-status', route => json(route, { signedIn: false }));
   await page.route('**/api/triage/results', route => json(route, (dataMode === 'empty' || !showTriage) ? { cards: [] } : TRIAGE));
   await page.route('**/api/agent/cost-history', route => json(route, []));
@@ -633,6 +671,18 @@ async function installMocks(page) {
   await page.route('**/api/linkedin-ssi/summary', route => json(route, SSI_SUMMARY));
   await page.route('**/api/linkedin-ssi/influencers', route => json(route, SSI_INFLUENCERS));
   await page.route('**/api/linkedin-ssi/engagement-log', route => json(route, SSI_LOG));
+  // AI Coach (v2.4.0). history + brief render the chat; message/act/clear only
+  // fire on interaction and safely hit the {} net.
+  await page.route('**/api/coach/history', route => json(route, COACH_HISTORY));
+  await page.route('**/api/coach/brief', route => json(route, COACH_BRIEF));
+  // Network > Referrals (v2.9.0). /api/referrals/* mutations fall to the {} net.
+  await page.route('**/api/referrals', route => json(route, REFERRALS));
+  // Social > Posts (v2.1.0) + Buffer (v2.7.0). Buffer DISCONNECTED is the honest
+  // first-run state, so Content shows the connect prompt rather than fake channels.
+  await page.route('**/api/posts', route => json(route, POSTS));
+  await page.route('**/api/posts/queue', route => json(route, { queue: [] }));
+  await page.route('**/api/buffer/status', route => json(route, { connected: false }));
+  await page.route('**/api/buffer/channels', route => json(route, []));
   // Insights is left unmocked-but-empty on purpose: a new user genuinely sees
   // "No analysis yet" until they run it, and that is the honest screenshot.
   await page.route('**/api/insights/latest', route => json(route, { generated_at: null }));
@@ -1108,6 +1158,7 @@ async function main() {
   // carry a `sub` label that is clicked after the Network nav opens.
   for (const [nav, name, cap, sub] of [
     ['Follow-Ups', 'g3-followups', 640, null],
+    ['Network', 'g3-referrals', 640, 'Referrals'],
     ['Network', 'g3-recruiters', 660, 'Recruiters'],
     ['Network', 'g3-ta-outreach', 620, 'TA Outreach'],
     ['Social', 'g3-linkedin-ssi', 700, null],
@@ -1138,6 +1189,28 @@ async function main() {
     } catch (e) { console.log('  insights analysis skip:', e.message); }
     googleMode = 'disconnected';
   } catch (e) { console.log('  review/insights skip:', e.message); googleMode = 'disconnected'; }
+
+  // AI Coach (v2.4.0). The chat renders from COACH_HISTORY; the "today" brief card
+  // from COACH_BRIEF. Both are intercepted, so no real pipeline text reaches it.
+  try {
+    await clickNav(page, 'AI Coach');
+    await page.waitForTimeout(1100);
+    await shotContentTight(page, 'coach', 660);
+  } catch (e) { console.log('  coach skip:', e.message); }
+
+  // Social > Posts composer. Click into Social, then the Posts view (a plain
+  // button, not a .subtab), and shoot the drafted-posts list.
+  try {
+    await clickNav(page, 'Social');
+    await page.waitForTimeout(700);
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('button, .subtab, [role="tab"]')]
+        .find(x => x.textContent.trim() === 'Posts');
+      if (b) b.click();
+    });
+    await page.waitForTimeout(1000);
+    await shotContentTight(page, 'g3-posts', 700);
+  } catch (e) { console.log('  posts skip:', e.message); }
 
   try {
     await clickNav(page, 'Interview');
