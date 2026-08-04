@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.12.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.12.0...v2.12.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* refetch triage results so they appear in Pipeline without a reload ([#147](https://github.com/michaelinghilterra-creator/trajecktory/issues/147)) ([3b7e74f](https://github.com/michaelinghilterra-creator/trajecktory/commit/3b7e74f72ac3261da8c9816d75f2a9fe6439f357))
+
 ## [2.12.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.11.0...v2.12.0) (2026-08-03)
 
 
