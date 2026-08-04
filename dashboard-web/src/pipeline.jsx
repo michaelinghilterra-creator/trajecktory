@@ -2006,6 +2006,22 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
     fetch('/api/triage/results').then(r => r.json()).then(d => setTriageCards(d.cards || [])).catch(() => {});
   }, []);
   useEffectP(() => { loadTriage(); }, [loadTriage]);
+  // Triage runs in Claude Code (background) or the workflow step, then writes
+  // triage-results.tsv while this tab is already mounted. Without a re-fetch the
+  // new rows only appear after a manual browser reload. That was the bug that hid
+  // every fresh triage for days. Refetch when the user returns to the window (the same
+  // focus-refresh pattern app.jsx uses for apps), throttled so a rapid blur/focus
+  // does not hammer the endpoint.
+  useEffectP(() => {
+    let last = 0;
+    const onFocus = () => { const now = Date.now(); if (now - last < 5000) return; last = now; loadTriage(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [loadTriage]);
+  // Also refetch whenever the applications list refreshes (onDataChanged fires
+  // after a scan/merge/eval completes): a workflow run that ends in the same
+  // window never blurs, so focus alone would miss it.
+  useEffectP(() => { loadTriage(); }, [apps, loadTriage]);
   useEffectP(() => () => { Object.values(deepPollers.current).forEach(clearInterval); }, []);
 
   const triageRows = useMemoP(() => buildTriageRows(triageCards), [triageCards]);
