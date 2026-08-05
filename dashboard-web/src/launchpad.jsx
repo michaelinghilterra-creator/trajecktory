@@ -420,12 +420,12 @@ function ModelsCostPanel() {
     <div>
       <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>Models &amp; cost</h3>
       <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>
-        Choose which Claude model runs each step and see the approximate cost per run. Cheaper defaults are already applied; every step stays overridable.
+        Choose which Claude model runs each step. <strong>Triage, Agent Scan, and Evaluate always run on your Claude plan</strong> — they go through Claude Code, which uses your subscription, so there is no per-token API charge. <strong>Only Insights and Drafts bill your API key.</strong> Cheaper defaults are already applied; every step stays overridable.
       </p>
       <div style={{ fontSize: 12, marginBottom: 14, padding: '8px 12px', borderRadius: 'var(--r-ctl)',
         background: showCost ? 'rgba(34,197,94,0.07)' : 'var(--panel-2)', border: `1px solid ${showCost ? 'rgba(34,197,94,0.22)' : 'var(--border)'}`,
         color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        {showCost ? '● API key saved. '
+        {showCost ? '● API-key mode. Only Insights & Drafts bill your key; Triage, Agent Scan & Evaluate still run on your Claude plan. '
           : state.keyPresent ? '○ Billing: Claude plan. Your saved key is not charged. '
           : '○ No API key. Steps run on your Claude subscription (no per-token cost). '}
         {state.note}
@@ -464,14 +464,15 @@ function ModelsCostPanel() {
                 onChange={e => save(s.key, e.target.value)}>
                 {s.options.map(a => (
                   <option key={a} value={a}>
-                    {a}{showCost ? ` · ~${lpUsd(s.costs[a])}/run` : ` · ${LP_TIER[a]}`}
+                    {a}{s.billsTo === 'api' ? ` · ~${lpUsd(s.costs[a])}/run` : ` · ${LP_TIER[a]}`}
                   </option>
                 ))}
               </select>
               <span className="mono" style={{ minWidth: 92, textAlign: 'right', fontSize: 12,
                 color: 'var(--text-dim)' }}>
-                {showCost ? `~${lpUsd(s.costs[s.current])}` : LP_TIER[s.current]}
-                <span style={{ color: 'var(--text-mute)' }}> / {s.unitLabel === 'eval' ? `run of ${s.unitsPerRun}` : s.unitLabel}</span>
+                {s.billsTo === 'api'
+                  ? <>~{lpUsd(s.costs[s.current])}<span style={{ color: 'var(--text-mute)' }}> / {s.unitLabel === 'eval' ? `run of ${s.unitsPerRun}` : s.unitLabel}</span></>
+                  : <span style={{ color: 'var(--text-mute)' }}>Claude plan · no API charge</span>}
               </span>
             </div>
             {warnMsg && <div style={{ fontSize: 11, color: 'var(--orange)', marginTop: 4, lineHeight: 1.4 }}>⚠ {warnMsg}</div>}
@@ -492,48 +493,6 @@ function ModelsCostPanel() {
       <div style={{ fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5, marginBottom: 14 }}>
         Batch size is the Evaluate throughput/cost trade: fewer per run costs less but clears the backlog slower. The API-key path stays higher so it does more than the plan alone.
       </div>
-
-      {/* Full-run total */}
-      <div style={{ padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--accent-bg)', border: '1px solid var(--accent)',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
-        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Estimated total per full run <span style={{ color: 'var(--text-mute)' }}>(Triage + Evaluate batch)</span></span>
-        <span className="mono" style={{ fontSize: 15, color: 'var(--accent)', fontWeight: 600 }}>{showCost ? `~${lpUsd(state.totalPerRun)}` : 'subscription'}</span>
-      </div>
-
-      {/* Recent runs — Claude Code's local token-cost estimate, not the API invoice */}
-      <div style={LP_SUB}>Recent runs (estimated cost)</div>
-      {history.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--text-mute)' }}>No runs logged yet. Run Evaluate or Agent Scan and its estimated cost shows here.</div>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table className="mono" style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ color: 'var(--text-mute)', textAlign: 'left' }}>
-                <th style={{ padding: '4px 8px 4px 0', fontWeight: 500 }}>When</th>
-                <th style={{ padding: '4px 8px', fontWeight: 500 }}>Step</th>
-                <th style={{ padding: '4px 8px', fontWeight: 500 }}>Model</th>
-                <th style={{ padding: '4px 0 4px 8px', fontWeight: 500, textAlign: 'right' }}>Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((h, i) => (
-                <tr key={i} style={{ color: 'var(--text-dim)', borderTop: '1px solid var(--border)' }}>
-                  <td style={{ padding: '4px 8px 4px 0' }}>{h.ts ? new Date(h.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}</td>
-                  <td style={{ padding: '4px 8px' }}>{LP_MODE_LABEL[h.mode] || h.mode}</td>
-                  <td style={{ padding: '4px 8px' }}>{h.model && h.model !== 'default' ? h.model : '-'} <span style={{ color: 'var(--text-mute)' }}>· {h.billedTo === 'api' ? 'key avail.' : 'plan'}</span></td>
-                  <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }} title="Local estimate from token counts, not your API invoice.">~{lpUsd(h.cost)} <span style={{ color: 'var(--text-mute)' }}>est.</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {history.length > 0 && (
-        <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.5 }}>
-          Estimates from Claude Code token counts, not your API invoice. The scan/evaluate workflow runs on your Claude subscription (it only bills your API key if the subscription auth is unavailable), so these usually will not appear in your Anthropic console.
-        </div>
-      )}
 
       {/* Per-day totals — cost + machine time rolled up by day, the numbers the
           weekly relaunch post-mortem reads without hand-parsing the run logs. */}
@@ -571,7 +530,7 @@ function ModelsCostPanel() {
             </tfoot>
           </table>
           <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.5 }}>
-            Machine time is wall-clock per run (hover a row for the API portion and the scan/evaluate split). Cost is the same local token estimate as above.
+            These runs are Triage, Agent Scan, and Evaluate, which all run on your Claude plan. Machine time is wall-clock per run (hover a row for the scan/evaluate split). Cost is a local token estimate of Claude-plan usage, not an API charge.
           </div>
         </div>
       )}
