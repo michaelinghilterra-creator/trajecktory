@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.12.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.12.1...v2.12.2) (2026-08-05)
+
+
+### Bug Fixes
+
+* **dashboard:** show true billing in Models & Cost (agent steps run on Claude plan, not API) ([#149](https://github.com/michaelinghilterra-creator/trajecktory/issues/149)) ([d3a3061](https://github.com/michaelinghilterra-creator/trajecktory/commit/d3a30615cc962302d24bf890d76f51ff43659a85))
+
 ## [2.12.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.12.0...v2.12.1) (2026-08-04)
 
 
