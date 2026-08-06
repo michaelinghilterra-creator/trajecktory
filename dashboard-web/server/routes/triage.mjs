@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { ROOT_DIR, DATA_DIR, APPS_MD } from '../config.mjs';
 import { canonicalUrl, buildDecidedIndex, findDecided } from '../../../lib/identity.mjs';
+import { markDone } from '../../../lib/pipeline.mjs';
 
 export const router = express.Router();
 
@@ -28,6 +29,18 @@ function decidedIndex() {
 // like every other route; in production DATA_DIR is the repo's own data/ dir.
 const TRIAGE_TSV = () => path.join(DATA_DIR, 'triage-results.tsv');
 const DISMISSED_TSV = () => path.join(DATA_DIR, 'triage-dismissed.tsv');
+const PIPELINE_MD = () => path.join(DATA_DIR, 'pipeline.md');
+
+// Check off a dismissed URL's pipeline.md row ("- [ ]" → "- [x]"). Without this,
+// dismissing a card leaves its row unchecked forever, so it re-enters the triage
+// top-15 window on every run and eventually crowds out genuinely-new postings —
+// the exact clog that made a triage run write nothing. markDone (lib/pipeline.mjs)
+// is the single, CRLF-safe, local+http-aware check-off writer. Best-effort: a
+// dismissal must never fail because the pipeline file was busy or missing.
+function checkOffPipelineRow(url) {
+  try { markDone(PIPELINE_MD(), [canonicalUrl(url)]); }
+  catch { /* best-effort — never break a dismissal */ }
+}
 
 // URLs the user dismissed ("not a match"). Durable so the cards never resurface:
 // GET hides them, and the triage mode is told to skip them on the next scan.
@@ -112,6 +125,7 @@ router.post('/api/triage/dismiss', (req, res) => {
       const date = new Date().toISOString().slice(0, 10);
       fs.appendFileSync(file, `${header}${url}\t${date}\n`, 'utf8');
     }
+    checkOffPipelineRow(url); // stop the dismissed role from re-clogging the triage queue
     res.json({ ok: true, dismissed: url });
   } catch (err) {
     res.status(500).json({ error: err.message });

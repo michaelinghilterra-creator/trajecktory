@@ -32,6 +32,7 @@ import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs'
 // else. It also imported normalizeUrl from scan-core, a re-export of
 // canonicalUrl, so the same function went by two names inside one file.
 import { canonicalUrl, normalizeCompany, sameRole, urlFromReport, urlForRow, buildDecidedIndex } from './lib/identity.mjs';
+import { markDone } from './lib/pipeline.mjs';
 // next-jd.mjs (persistent JD counter) can be one update cycle behind on installs
 // updating from a pre-counter version. Load it defensively so a missing file
 // degrades to max+1 numbering instead of crashing merge-tracker at module load.
@@ -305,13 +306,11 @@ function markPipelineDone(reportLinks) {
     if (u) done.add(canonicalUrl(u)); else unresolved++;
   }
   if (!done.size) return { flipped: 0, unresolved };
-  let flipped = 0;
-  const out = readFileSync(PIPELINE_FILE, 'utf-8').split('\n').map(line => {
-    const m = line.match(/^(\s*-\s*)\[ \](\s+)(https?:\/\/[^\s|)]+)(.*)$/);
-    if (m && done.has(canonicalUrl(m[3]))) { flipped++; return `${m[1]}[x]${m[2]}${m[3]}${m[4]}`; }
-    return line;
-  }).join('\n');
-  if (flipped > 0) writeFileSync(PIPELINE_FILE, out, 'utf-8');
+  // markDone (lib/pipeline.mjs) is the single check-off writer: CRLF-safe and it
+  // flips local:jds/ rows too. The old inline regex here matched only "https://"
+  // rows and broke on CRLF lines, so evaluated snapshot/CRLF rows never cleared —
+  // one of the ways the queue silently clogged.
+  const flipped = markDone(PIPELINE_FILE, done);
   return { flipped, unresolved };
 }
 

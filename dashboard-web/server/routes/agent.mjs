@@ -3,7 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'node:url';
-import { ROOT_DIR } from '../config.mjs';
+import { ROOT_DIR, DATA_DIR, APPS_MD } from '../config.mjs';
+import { reconcileHandled } from '../../../lib/pipeline.mjs';
 import { logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
@@ -85,7 +86,14 @@ function claudeErrorMessage(e) {
 // Match those precise tokens only, so a backend JD that merely says "rate
 // limiting" never trips a scary warning (the old broad scan did exactly that).
 const PRESSURE_RE = /\b(?:429|529)\b|overloaded_error|rate_limit_error|too many requests|usage limit (?:reached|exceeded)|approaching your usage limit/i;
-const PRESSURE_WARNING = 'Claude usage or limit pressure detected. The run may slow or stop early.';
+// Shown ONLY when a run actually stopped early (errored) with a pressure signal.
+// Deliberately does NOT say "usage limit": the regex also matches a transient 529
+// `overloaded_error` (Anthropic's servers briefly busy — nothing to do with the
+// user's quota), so a run at 2% of the window was tripping a scary limit message.
+// A run that COMPLETES never shows this now, even if a blip was seen mid-run — the
+// blip becomes the diagnostic `sawPressure` flag (logged), and the real outcome
+// (WROTE_NOTHING_WHY / the agent's own summary) is what the user sees.
+const PRESSURE_WARNING = 'Anthropic returned a transient rate-limit or overload signal and the run stopped early. Wait a moment and retry.';
 
 // Dashboard-driven runs share ONE Claude subscription, so they must stay inline
 // (no subagent fan-out — that is what trips usage limits) and headless (no
@@ -209,8 +217,8 @@ function dashboardConstraints(mode, opts) {
     return ' ' + common + reservedLine +
       ' Evaluate only the URLs already pending in data/pipeline.md and do not scan for new roles.' +
       ` Evaluate at most ${evalCap} pending unchecked URLs this run (${capWhy}). They are ordered best-fit first, so take them from the TOP of the pending list; once you have evaluated ${evalCap}, STOP even if more remain and tell me how many pending URLs are left so I can run Evaluate again for the next batch.` +
-      ' Do not run gate-pipeline.mjs or any browser tool; just evaluate the pending unchecked URLs as they are. To read each job description, your FIRST step is to run node fetch-jd.mjs from the repo root, passing the posting URL as its only argument (quote the URL in your own shell). it returns the full JD straight from the ATS API (Ashby, Greenhouse, Lever) and works where WebFetch cannot, because those postings are JavaScript single-page apps that a raw fetch sees as an empty shell. Evaluate ONLY from the text it prints. If fetch-jd.mjs exits non-zero (no ATS API available for that URL, e.g. a Workday posting), THEN try WebFetch. Only if BOTH fail do you defer: do NOT reconstruct the JD from WebSearch or aggregator mirrors — a stitched-together JD produces a confident score for a posting you never actually read, and that has shipped CLOSED roles as high scores. Instead append one tab-separated line (url, company, role) to data/needs-manual-jd.tsv (create it with that exact header row if it is missing), mark that URL done in data/pipeline.md ([ ] to [x]), and write NO report and NO tracker TSV for it. The user will confirm the posting is live and paste the JD text themselves.' +
-      ' After you have FULLY written a report for a URL (all required sections, not a partial), mark that URL done in data/pipeline.md by switching its leading checkbox from unchecked to checked (- [ ] becomes - [x]), so the next Evaluate run continues with the next batch instead of re-scoring the same roles. Never mark a URL done before its report is complete.' +
+      ' Do not run gate-pipeline.mjs or any browser tool; just evaluate the pending unchecked URLs as they are. To read each job description, your FIRST step is to run node fetch-jd.mjs from the repo root, passing the posting URL as its only argument (quote the URL in your own shell). it returns the full JD straight from the ATS API (Ashby, Greenhouse, Lever) and works where WebFetch cannot, because those postings are JavaScript single-page apps that a raw fetch sees as an empty shell. Evaluate ONLY from the text it prints. If fetch-jd.mjs exits non-zero (no ATS API available for that URL, e.g. a Workday posting), THEN try WebFetch. Only if BOTH fail do you defer: do NOT reconstruct the JD from WebSearch or aggregator mirrors — a stitched-together JD produces a confident score for a posting you never actually read, and that has shipped CLOSED roles as high scores. Instead append one tab-separated line (url, company, role) to data/needs-manual-jd.tsv (create it with that exact header row if it is missing), and write NO report and NO tracker TSV for it. The user will confirm the posting is live and paste the JD text themselves.' +
+      ' Do NOT edit data/pipeline.md at all — checking off evaluated, deferred, and already-decided rows is handled deterministically after the run, so an in-prompt edit is both unnecessary and unsafe when this run parallelizes across the batch.' +
       ' Record every evaluation as a single line nine column TSV in batch/tracker-additions/ and do not edit data/applications.md directly. Always write the report to reports/ even for a low score so the result is visible. Write each report in the trajecktory-report/v1 format (JSON frontmatter then narrative body) and you MUST populate the optional frontmatter sections so the dashboard drawer is complete, not just the score: include customizationCV and customizationLI (the CV and LinkedIn personalization plan), starStories plus a leadStory (interview prep, with the single story to lead with), and a legitimacy object with a tier and signals. Base EVERY section only on the JD text you actually fetched — never fabricate or infer missing content from search results. Legitimacy is assessed from the fetched posting (freshness, description quality, reposting, prompt-injection); set verification to unconfirmed (no live browser). If you could not fetch the posting, it does not belong here at all — it goes to data/needs-manual-jd.tsv per the rule above, not into a report. When done, the user will run Merge Tracker to fold your TSVs into the pipeline.' + snapshotJd;
   }
   // NOTE ON THE DEDUP SENTENCES BELOW (scan + triage): they are belt-and-braces,
@@ -488,7 +496,10 @@ function runClaudeAgent(jobId, mode, target) {
       const job = agentJobs.get(jobId) || {};
       const patch = { output: ((job.output || '') + text).slice(-8192) };
       // Real rate-limit / overload retries are logged here, not in the JSON stream.
-      if (PRESSURE_RE.test(text)) patch.warning = PRESSURE_WARNING;
+      // Record it as a diagnostic flag, NOT a user-facing warning: a transient blip
+      // during a run that then completes fine must not surface as "usage limit".
+      // The close handler promotes this to PRESSURE_WARNING only if the run errored.
+      if (PRESSURE_RE.test(text)) patch.sawPressure = true;
       agentJobs.set(jobId, { ...job, ...patch });
     });
 
@@ -551,7 +562,7 @@ function runClaudeAgent(jobId, mode, target) {
       // with precise tokens — never from assistant text or a fetched JD that
       // merely mentions "rate limiting". Do NOT scan `user`/tool_result content.
       if (ev.type === 'system' && PRESSURE_RE.test(JSON.stringify(ev))) {
-        update({ warning: PRESSURE_WARNING });
+        update({ sawPressure: true });
       }
     }
 
@@ -568,11 +579,16 @@ function runClaudeAgent(jobId, mode, target) {
       }
       const err = isError ? (resultText || 'Agent reported an error') : closeErr;
       const ok = !err;
+      // A pressure blip only becomes a user-facing warning when the run actually
+      // stopped early (errored). On a clean finish it stays a silent diagnostic —
+      // the run completed, so "the run stopped early" would be a lie.
+      const warning = (!ok && job.sawPressure) ? PRESSURE_WARNING : job.warning;
       agentJobs.set(jobId, {
         ...job,
         status: ok ? 'done' : 'error',
         summary: ok ? (resultText ? agentTail(resultText) : (job.activity || 'Agent finished')) : undefined,
         error: ok ? undefined : err,
+        warning,
         finishedAt: Date.now(),
       });
       persistJobs();
@@ -588,7 +604,8 @@ function runClaudeAgent(jobId, mode, target) {
         durationApiMs: job.durationApiMs ?? null,
         model: job.evalModel || null,
         billedTo: job.billedTo || null,
-        warning: job.warning || null,
+        warning: warning || null,
+        sawPressure: job.sawPressure || false,
         toolCount: job.toolCount || 0,
         tools: (job.toolCalls || []).slice(-50),
         error: ok ? null : (err ? String(err).slice(0, 300) : null),
@@ -639,6 +656,23 @@ async function runAgent(jobId, mode, target) {
   // probe for this mode, so fall back to trusting the exit code rather than
   // inventing a failure.
   const wroteSomething = before === null || (probeArtifacts(mode) ?? 0) > before;
+
+  // SELF-HEALING (the permanent fix for the recurring "queue clogged" bug): after
+  // EVERY run, check off any pipeline row that is already evaluated or dismissed.
+  // This does not depend on any single writer (the LLM's in-prompt check-off,
+  // merge-tracker, the dismiss route) having worked — whichever one misfired, the
+  // queue self-corrects here, so handled rows can no longer pile up between manual
+  // catches. Best-effort and idempotent; a reconcile failure never fails the run.
+  try {
+    reconcileHandled(path.join(DATA_DIR, 'pipeline.md'), {
+      appsPath: APPS_MD,
+      dismissedPath: path.join(DATA_DIR, 'triage-dismissed.tsv'),
+      additionsDir: path.join(ROOT_DIR, 'batch/tracker-additions'),
+      needsManualPath: path.join(DATA_DIR, 'needs-manual-jd.tsv'),
+      rootDir: ROOT_DIR,
+      apply: true,
+    });
+  } catch { /* never break a run on reconcile */ }
 
   // Activation log: whether a run produced anything is the outcome worth
   // knowing, and the server already computed it just above. Counts and an enum
