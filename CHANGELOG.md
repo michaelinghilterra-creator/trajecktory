@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.12.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.12.2...v2.12.3) (2026-08-06)
+
+
+### Bug Fixes
+
+* make pipeline.md check-off single-source, CRLF-safe, and self-healing ([#151](https://github.com/michaelinghilterra-creator/trajecktory/issues/151)) ([f56783a](https://github.com/michaelinghilterra-creator/trajecktory/commit/f56783a6f635018b91606efafe6e8c0ca3198c16))
+
 ## [2.12.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.12.1...v2.12.2) (2026-08-05)
 
 
