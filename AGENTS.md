@@ -465,6 +465,12 @@ node verify-reports.mjs
 
 # 7. Scoring drift guard: a derived report's headline must equal its tracker Score
 node verify-score-drift.mjs
+
+# 8. Numbering guard: a report's filename must match its own frontmatter id, and
+#    no two currently-linked reports may claim the same number. Does NOT flag a
+#    re-eval's tracker row keeping its own num while linking a freshly-numbered
+#    report — that is correct, not drift. See the file header before touching it.
+node verify-report-numbering.mjs
 ```
 
 **RULE: `node verify-reports.mjs` MUST show ✅ before the batch is declared complete.** If it shows ⚠️ or reports with drift, the drawer will be broken for those entries — fix before moving on. Root cause is always format drift: reports written with `## Block A —` or `## A.` instead of the required `## A)` format.

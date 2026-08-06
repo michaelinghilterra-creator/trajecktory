@@ -454,6 +454,7 @@ for (const suite of [
   'tests/score.test.mjs',
   'tests/compute-scores.test.mjs',
   'tests/verify-score-drift.test.mjs',
+  'tests/verify-report-numbering.test.mjs',
   'tests/update-signing.test.mjs',
   'tests/update-commit-identity.test.mjs',
   'tests/funnel-entry.test.mjs',
