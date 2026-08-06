@@ -19,6 +19,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { parseReport } from './dashboard-web/server/parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from './dashboard-web/server/v1-loader.mjs';
+import { reconcileHandled } from './lib/pipeline.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPORTS = path.join(__dirname, 'reports');
@@ -104,12 +105,27 @@ for (const file of files) {
   }
 }
 
+// ── Pipeline queue invariant ─────────────────────────────────────────────────
+// The recurring "triage wrote nothing" bug was always the same shape: a pipeline
+// row for an ALREADY evaluated-or-dismissed posting sat "- [ ]" open and clogged
+// the triage window. Assert it can't: no open row may be already-handled. This is
+// dry-run (reports only, never rewrites), and turns silent drift into a loud, same-
+// day failure of the mandatory health check instead of a mystery a week later.
+const queue = reconcileHandled(path.join(__dirname, 'data/pipeline.md'), {
+  appsPath: path.join(__dirname, 'data/applications.md'),
+  dismissedPath: path.join(__dirname, 'data/triage-dismissed.tsv'),
+  additionsDir: path.join(__dirname, 'batch/tracker-additions'),
+  needsManualPath: path.join(__dirname, 'data/needs-manual-jd.tsv'),
+  rootDir: __dirname,
+  apply: false,
+});
+
 if (jsonOut) {
-  console.log(JSON.stringify({ total: files.length, drift: results }, null, 2));
+  console.log(JSON.stringify({ total: files.length, drift: results, queueClog: queue.rows.map(r => r.url) }, null, 2));
 } else {
   console.log(`\nChecked ${files.length} reports`);
   if (results.length === 0) {
-    console.log('✅ All sections parse cleanly\n');
+    console.log('✅ All sections parse cleanly');
   } else {
     console.log(`⚠️  ${results.length} reports have format drift (content in .md but parser returns nothing):\n`);
     for (const r of results) {
@@ -117,8 +133,14 @@ if (jsonOut) {
     }
     console.log('');
     console.log('Fix: either update parser.mjs to handle the new format, or re-run the eval.');
-    console.log('');
+  }
+  if (queue.flipped === 0) {
+    console.log('✅ Pipeline queue clean — no already-handled rows left open\n');
+  } else {
+    console.log(`\n⚠️  ${queue.flipped} pipeline row(s) are already evaluated/dismissed but still "- [ ]" open (queue clog):\n`);
+    for (const r of queue.rows) console.log(`  ${r.url.slice(0, 84)}`);
+    console.log('\nFix: node reconcile-pipeline.mjs --apply  (the dashboard also self-heals after each run)\n');
   }
 }
 
-process.exit(results.length === 0 ? 0 : 1);
+process.exit(results.length === 0 && queue.flipped === 0 ? 0 : 1);
