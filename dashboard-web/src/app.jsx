@@ -171,6 +171,11 @@ function App() {
   // mirroring pipelineView. Defaults to Referrals (warmest channel).
   const [networkSub, setNetworkSub] = useState(() => loadNav().networkSub || "referrals");
   const openTaContact = (id) => { setPendingTaOpen(id); setNetworkSub("ta"); setTab("network"); };
+  // Same cross-tab hand-off for a recruiter contact (e.g. a High value row whose
+  // source is 'recruiter'): push the id and switch to Network → Recruiters, which
+  // consumes it and opens its own drawer.
+  const [pendingRecruiterOpen, setPendingRecruiterOpen] = useState(null);
+  const openRecruiter = (id) => { setPendingRecruiterOpen(id); setNetworkSub("recruiters"); setTab("network"); };
   const [pipelineView, setPipelineView] = useState(() => loadNav().pipelineView || "overview");
 
   // Reset Pipeline's subtab whenever the user navigates away. Otherwise
@@ -615,7 +620,7 @@ function App() {
           {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} toast={toast} />}
           {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} toast={toast} />}
           {tab === "interview" && <window.InterviewTab apps={apps} toast={toast} />}
-          {tab === "network" && <window.NetworkTab view={networkSub} setView={setNetworkSub} search={search} pendingTaOpen={pendingTaOpen} onTaOpenConsumed={() => setPendingTaOpen(null)} toast={toast} />}
+          {tab === "network" && <window.NetworkTab view={networkSub} setView={setNetworkSub} search={search} pendingTaOpen={pendingTaOpen} onTaOpenConsumed={() => setPendingTaOpen(null)} pendingRecruiterOpen={pendingRecruiterOpen} onRecruiterOpenConsumed={() => setPendingRecruiterOpen(null)} openTaContact={openTaContact} openRecruiter={openRecruiter} toast={toast} />}
           {tab === "linkedin-ssi" && <window.LinkedInSSITab toast={toast} />}
           {tab === "launchpad" && <window.SetupTab toast={toast} setTab={setTab} />}
         </div>

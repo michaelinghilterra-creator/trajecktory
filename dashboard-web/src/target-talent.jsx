@@ -652,6 +652,11 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
           <div className="ds-label"><TIcon d={TI.trend} size={12} /> Pipeline stage</div>
           <PipelineTrack contact={data} onChange={updateStatus} />
         </div>
+        {/* Outreach sequence (per-contact cadence; every step is an approved draft) */}
+        <div className="ds-section">
+          <div className="ds-label"><TIcon d={TI.spark} size={12} /> Outreach sequence</div>
+          {window.SequencePanel && <window.SequencePanel source="ta" id={data.id} toast={typeof toast !== "undefined" ? toast : undefined} />}
+        </div>
         {/* Related apps */}
         {data.relatedApps?.length > 0 && (
           <div className="ds-section">
@@ -846,12 +851,18 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
   const [sel, setSel] = useState(new Set());
   const [error, setError] = useState(null);
   const [addedCount, setAddedCount] = useState(0);
+  // Which kind of contact to search for: 'ta' = Talent Acquisition / recruiter
+  // gatekeeper (default), 'principal' = the hiring manager / skip-level you would
+  // actually report to (VP/Director of the target function). Principal mode hits a
+  // different endpoint and stamps the added contact [principal].
+  const [mode, setMode] = useState("ta");
 
   const keyOf = (s) => `${s.first || ""} ${s.last || ""}`.trim();
 
   const runDiscover = () => {
     setPhase("scanning"); setError(null);
-    window.tjkMutate("/api/tt-reconcile/discover", {
+    const endpoint = mode === "principal" ? "/api/tt-reconcile/discover-principal" : "/api/tt-reconcile/discover";
+    window.tjkMutate(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ companies: [{ company, exampleRole: exampleRole || "" }] }),
@@ -874,7 +885,11 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
     const contacts = suggestions.filter(s => sel.has(keyOf(s))).map(s => ({
       company, first: s.first || "", last: s.last || "", title: s.title || "",
       city: s.city || "", state: s.state || "", linkedin: s.linkedin || "",
-      notes: [s.notes, `Added via Find contacts (confidence: ${s.confidence || "unknown"})`].filter(Boolean).join(" · "),
+      notes: [
+        s.notes,
+        `Added via Find ${mode === "principal" ? "hiring manager" : "contacts"} (confidence: ${s.confidence || "unknown"})`,
+        mode === "principal" && !/\[principal\]/i.test(s.notes || "") ? "[principal]" : "",
+      ].filter(Boolean).join(" · "),
     }));
     if (contacts.length === 0) { onCancel?.(); return; }
     setPhase("adding");
@@ -887,24 +902,31 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
   return (
     <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 12, background: "var(--panel)" }}>
       <div className="ds-label" style={{ marginBottom: 8 }}>
-        <TIcon d={TI.users} size={12} /> Find contacts at {company}
+        <TIcon d={TI.users} size={12} /> Find {mode === "principal" ? "the hiring manager" : "contacts"} at {company}
         {onCancel && phase !== "done" && <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={onCancel}>Cancel</button>}
       </div>
       {error && <div style={{ padding: 8, background: "rgba(239,68,68,0.12)", color: "var(--red)", borderRadius: 4, marginBottom: 8, fontSize: 11 }}>{error}</div>}
 
       {phase === "idle" && (
         <>
-          <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>
-            Search the web for 2-3 current Talent Acquisition contacts at this one company. One lookup, low usage.
+          {/* Mode toggle: gatekeeper (TA) vs the decision-maker you'd report to. */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            <button className={"btn sm" + (mode === "ta" ? " primary" : "")} onClick={() => setMode("ta")}>TA / recruiter</button>
+            <button className={"btn sm" + (mode === "principal" ? " primary" : "")} onClick={() => setMode("principal")}>Hiring manager</button>
           </div>
-          <button className="btn primary sm" onClick={runDiscover}><TIcon d={TI.spark} size={12} /> Find contacts</button>
+          <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>
+            {mode === "principal"
+              ? "Search the web for the VP / Director / Head of the target function at this company — the person you'd report to, not the recruiter. Added as a hiring principal."
+              : "Search the web for 2-3 current Talent Acquisition contacts at this one company. One lookup, low usage."}
+          </div>
+          <button className="btn primary sm" onClick={runDiscover}><TIcon d={TI.spark} size={12} /> {mode === "principal" ? "Find hiring manager" : "Find contacts"}</button>
         </>
       )}
 
       {phase === "scanning" && (
         <div className="scan" style={{ padding: "10px 0" }}>
           <div className="scan-ring" />
-          <div className="scan-log">Searching for TA contacts at {company}…</div>
+          <div className="scan-log">Searching for {mode === "principal" ? "the hiring manager" : "TA contacts"} at {company}…</div>
         </div>
       )}
 
