@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.15.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.14.0...v2.15.0) (2026-08-07)
+
+
+### Features
+
+* high-value (both-channel) contact queue, contact card, and outreach signals ([#163](https://github.com/michaelinghilterra-creator/trajecktory/issues/163)) ([d13b321](https://github.com/michaelinghilterra-creator/trajecktory/commit/d13b321d99cdf5d80ebdaa62178663201168ccbf))
+
 ## [2.14.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.13.0...v2.14.0) (2026-08-07)
 
 
