@@ -4,7 +4,7 @@ import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { loadInfluencer, toneInstruction, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
-import { computeConnectQueue } from '../lib/followups.mjs';
+import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { parseRecruitersMd, updateRecruiterLine } from '../lib/recruiters.mjs';
 import { getIdentity } from '../lib/profile.mjs';
@@ -233,7 +233,10 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     // normalization and never draft for someone who has a live email channel.
     let resolved = null;
     if (source && id != null) {
-      const queue = computeConnectQueue();
+      // Search the LinkedIn-only queue AND the high-value (both-channel) queue: a
+      // both-channel contact is worked on LinkedIn from the Both tab, so it must
+      // resolve here too, not only from the connect queue.
+      const queue = [...computeConnectQueue(), ...computeBothQueue()];
       resolved = queue.find(r => r.source === source && String(r.id) === String(id)) || null;
     }
     const name            = (body.name    || resolved?.name    || '').trim();
