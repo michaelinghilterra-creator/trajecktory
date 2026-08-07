@@ -211,6 +211,10 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateHidden, setUpdateHidden] = useState(false);
   const [version, setVersion] = useState(null);
+  // Short git SHA of the running checkout (dev only; null in an installed bundle).
+  // A trailing "*" marks a dirty working tree. Shown next to the version so an
+  // unreleased/hand-edited checkout is visibly distinct from a shipped release.
+  const [sha, setSha] = useState(null);
 
   // Enrich each app with parsed comp: cleaned display string + midpoint $K salary
   // derived from compStated. Existing callers reading `a.salary` get a real number
@@ -345,7 +349,7 @@ function App() {
   useEffect(() => {
     fetch('/api/system/version')
       .then(r => r.json())
-      .then(d => { if (d && d.version) setVersion(d.version); })
+      .then(d => { if (d && d.version) setVersion(d.version); if (d && d.sha) setSha(d.dirty ? `${d.sha}*` : d.sha); })
       .catch(() => {});
   }, []);
 
@@ -591,7 +595,7 @@ function App() {
 
   return (
     <div className="app" data-density={tweaks.density}>
-      <window.Sidebar tab={tab} setTab={setTab} stats={stats} setupState={setupState} onDataChanged={refreshApps} version={version} />
+      <window.Sidebar tab={tab} setTab={setTab} stats={stats} setupState={setupState} onDataChanged={refreshApps} version={version} sha={sha} />
 
       <div className="main">
         <window.Topbar

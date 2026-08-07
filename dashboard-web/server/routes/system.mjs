@@ -1,5 +1,5 @@
 import express from 'express';
-import { execFile, spawn } from 'child_process';
+import { execFile, execFileSync, spawn } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { join, resolve } from 'path';
 import { randomBytes } from 'crypto';
@@ -102,12 +102,37 @@ router.get('/api/system/update-apply/:jobId', (req, res) => {
   res.json({ ...job, output: (job.output || '').slice(-4000) });
 });
 
+// The short git SHA of the running checkout, or null when there is no git repo.
+// An installed bundle ships via `git archive HEAD`, so it has NO .git directory —
+// there `git` fails and we return null, and the sidebar shows just the version
+// (unchanged for end users). Only a dev checkout resolves a SHA, which is exactly
+// where "am I running unreleased code?" is the useful question. `dirty` flags
+// uncommitted tracked changes so a hand-edited working tree is visibly distinct
+// from a clean commit. Computed once at boot: the running process is a fixed
+// checkout, so re-shelling out to git on every poll would be pure waste.
+const GIT_REV = (() => {
+  try {
+    const sha = execFileSync('git', ['rev-parse', '--short', 'HEAD'],
+      { cwd: ROOT_DIR, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    if (!sha) return { sha: null, dirty: false };
+    let dirty = false;
+    try {
+      dirty = execFileSync('git', ['status', '--porcelain', '--untracked-files=no'],
+        { cwd: ROOT_DIR, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim().length > 0;
+    } catch { /* leave dirty=false */ }
+    return { sha, dirty };
+  } catch {
+    return { sha: null, dirty: false };   // no git (installed bundle) or git missing
+  }
+})();
+
 // GET /api/system/version — the currently installed version (from the VERSION
-// file). Used by the sidebar to show the real version number.
+// file). Used by the sidebar to show the real version number, plus the git SHA of
+// the running checkout when this is a dev checkout (null in an installed bundle).
 router.get('/api/system/version', (req, res) => {
   let version = null;
   try { version = readFileSync(join(ROOT_DIR, 'VERSION'), 'utf-8').trim(); } catch {}
-  res.json({ version, bootId: BOOT_ID });
+  res.json({ version, sha: GIT_REV.sha, dirty: GIT_REV.dirty, bootId: BOOT_ID });
 });
 
 // POST /api/system/update-dismiss — silence the checker (writes .update-dismissed).
