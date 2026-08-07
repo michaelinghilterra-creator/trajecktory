@@ -615,6 +615,10 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
     isNew: baselineId != null && Number.isFinite(row.id) && row.id > baselineId,
     notContacted: !status.trim() || /^\s*not\s*contacted\s*$/i.test(status),
     companyOutreach: { lastTouch, touchedToday },
+    // Hiring-principal flag (TA contacts only; recruiters are never principals).
+    isPrincipal: source === 'ta' ? (row.isPrincipal ?? false) : false,
+    // Channel bucket: 1 = LinkedIn only, 2 = email only, 3 = both, 0 = neither.
+    channelBucket: contactChannelBucket(row).bucket,
   };
 }
 
@@ -626,8 +630,20 @@ function _sortByCompanyName(out) {
   return out;
 }
 
-// LinkedIn fallback lane: a real handle, NO sendable email, at a company you've
-// applied to, not yet actioned.
+// LinkedIn lane: a real handle, at a company you've applied to, not yet actioned.
+//
+// Channel-gate rule: a non-principal contact with a sendable email routes to the
+// EMAIL queue only (single best-channel). Exception: a hiring-principal contact
+// (row.isPrincipal === true, TA contacts only) who has BOTH an email AND a LinkedIn
+// handle (bucket 3) appears in BOTH queues — a double-touch that improves the odds
+// of being seen by the decision-maker. LinkedIn invites are capped ~100/rolling
+// 7-day window, so the double-touch is reserved for high-priority contacts only;
+// non-principal bucket-3 contacts still route email-only.
+//
+// Reply-pause: a contact at status 'Replied' or 'Meeting Scheduled' is excluded
+// from both queues by CONNECT_QUEUE_EXCLUDE_STATUS, so a reply on either channel
+// automatically stops the other — the existing status-based gate serves as the
+// reply-anywhere-pauses-all mechanism.
 function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
   const { ta, rec } = _bothBooks({ taRows, recruiterRows });
   const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
@@ -637,7 +653,10 @@ function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
   const out = [];
   const consider = (row, source) => {
     if (!_hasLinkedIn(row)) return;              // no LinkedIn handle → not reachable here
-    if (isSendable(row)) return;                 // has a live email → belongs to the email queue
+    // Let bucket-3 high-priority contacts through even when sendable — they earn
+    // the double-touch. Everyone else still routes email-only if sendable.
+    const isHighPriority = source === 'ta' && (row.isPrincipal === true);
+    if (isSendable(row) && !isHighPriority) return;
     if (CONNECT_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
     const company = source === 'recruiter' ? row.firm : row.company;
     if (!applied.has(normalizeCompany(company))) return;   // only companies you've applied to

@@ -1,6 +1,7 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
+import { pauseSequence } from '../lib/sequences.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, TT_STATUSES } from '../lib/target-talent.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
@@ -112,6 +113,13 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     else if (direction === 'Received' && curStage < 3) newStatus = 'Replied';
     if (newStatus !== r.status || direction !== 'Draft') {
       updateTTLine(id, { status: newStatus, lastTouch: today });
+    }
+
+    // Reply-anywhere-pauses-all: when a reply comes in on any channel, auto-pause
+    // any active outreach sequence for this contact. Best-effort — if there is no
+    // active sequence the call is a no-op (throws internally, caught silently).
+    if (direction === 'Received') {
+      try { pauseSequence('ta', id, today); } catch { /* no active sequence — safe to ignore */ }
     }
 
     // A LinkedIn connection request is a connect, NOT an email touch. Tally it in

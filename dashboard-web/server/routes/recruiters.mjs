@@ -8,6 +8,7 @@ import { logConnect } from '../lib/connects.mjs';
 import { isLinkedInInvite } from '../lib/channels.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
+import { pauseSequence } from '../lib/sequences.mjs';
 
 export const router = express.Router();
 
@@ -120,6 +121,9 @@ router.post('/api/recruiters/:id/correspondence', (req, res) => {
     else if (direction === 'Received' && curStage < 3) newStatus = 'Replied';
     if (newStatus !== r.status || direction !== 'Draft') {
       updateRecruiterLine(id, { status: newStatus, lastTouch: today });
+    }
+    if (direction === 'Received') {
+      try { pauseSequence('recruiter', id, today); } catch { /* no active sequence — safe to ignore */ }
     }
 
     // A LinkedIn connection request is a connect, NOT an email touch. Tally it in
