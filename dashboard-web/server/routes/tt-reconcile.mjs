@@ -255,6 +255,101 @@ If the search returns no reliable matches, return an empty array []. Never fabri
   }
 });
 
+// POST /api/tt-reconcile/discover-principal
+// body: { companies: [{ company, exampleRole }] }
+// Like /discover but targets HIRING PRINCIPALS — the VP/Director/Head of the
+// target function the user would report to — NOT the TA/recruiting gatekeeper.
+// Returns suggestions with the same shape as /discover so the same bulk-add UI
+// can accept them. A [principal] tag is added to each suggestion's notes field
+// so the contact is stamped on write.
+//
+// Response: { results: [{ company, suggestions: [{first,last,title,city,state,
+//                          linkedin,confidence,notes}] }] }
+router.post('/api/tt-reconcile/discover-principal', async (req, res) => {
+  try {
+    const { companies } = req.body || {};
+    if (!Array.isArray(companies) || companies.length === 0) {
+      return res.status(400).json({ error: 'companies[] required' });
+    }
+    if (companies.length > 15) {
+      return res.status(400).json({ error: 'Max 15 companies per call.' });
+    }
+
+    const discoverPrincipal = async (c) => {
+      const companyName = c.company;
+      const exampleRole = c.exampleRole || '';
+      if (!companyName) return null;
+
+      const prompt = `Find 2-3 people who currently LEAD the ${exampleRole || 'Revenue Operations / GTM'} function at ${companyName}. We are looking for the HIRING MANAGER or their skip-level — the VP, Director, Senior Director, or Head of the target function — NOT a recruiter, HR person, or TA team member.
+
+INSTRUCTIONS:
+1. USE THE web_search TOOL to search for functional leaders at ${companyName}. Try queries like:
+   - site:linkedin.com/in "${companyName}" "VP Revenue Operations"
+   - site:linkedin.com/in "${companyName}" "Head of Sales Operations"
+   - site:linkedin.com/in "${companyName}" "Director GTM"
+   - "${companyName}" leadership team "${exampleRole || 'revenue operations'}"
+2. Prioritize VP, Director, Senior Director, Head of — NOT Managers or ICs.
+3. Target the person this ${exampleRole || 'role'} would REPORT TO (the direct manager), or their skip-level (one rung up).
+4. Do NOT include TA, People, HR, or Recruiting people — only functional leaders.
+5. Verify each person's current employer before including.
+
+Output ONLY a JSON array (your final response after searching), no prose, no markdown:
+[
+  { "first": "First", "last": "Last", "title": "VP Revenue Operations", "city": "New York", "state": "NY", "linkedin": "https://www.linkedin.com/in/example/", "confidence": "high|medium|low", "notes": "One line on source and recency. [principal]" }
+]
+
+Confidence rules:
+- high   = LinkedIn profile shows ${companyName} as current employer (or equivalent recent verified source)
+- medium = found on third-party source (ZoomInfo, RocketReach, press release) but not verified on LinkedIn
+- low    = inferred or weak evidence
+
+If the search returns no reliable matches, return []. Never fabricate names or titles.`;
+
+      try {
+        console.log(`[discover-principal] start: ${companyName}`);
+        const apiCall = generateText(prompt, {
+          model: draftModel(),
+          maxTokens: 3000,
+          tools: [{
+            type: 'web_search_20260209',
+            name: 'web_search',
+            max_uses: 2,
+            allowed_callers: ['direct'],
+          }],
+        });
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`discover-principal timeout after 90s for ${companyName}`)), 90000)
+        );
+        const fullText = await Promise.race([apiCall, timeout]);
+        console.log(`[discover-principal] done:  ${companyName}`);
+        const jsonMatch = fullText.match(/\[[\s\S]*\]/);
+        let suggestions = jsonMatch ? (() => { try { return JSON.parse(jsonMatch[0]); } catch { return []; } })() : [];
+        // Guarantee the [principal] tag is in every suggestion's notes (the model
+        // is instructed to include it, but stamp it defensively on parse too).
+        suggestions = suggestions.map(s => ({
+          ...s,
+          notes: /\[principal\]/i.test(s.notes || '') ? s.notes : `${s.notes || ''}${s.notes ? ' ' : ''}[principal]`.trim(),
+        }));
+        return { company: companyName, exampleRole, suggestions };
+      } catch (e) {
+        console.log(`[discover-principal] ERROR: ${companyName} — ${e.message}`);
+        return { company: companyName, exampleRole, suggestions: [], error: e.message };
+      }
+    };
+
+    const CONCURRENCY = 3;
+    const results = [];
+    for (let i = 0; i < companies.length; i += CONCURRENCY) {
+      const slice = companies.slice(i, i + CONCURRENCY);
+      const chunkResults = await Promise.all(slice.map(discoverPrincipal));
+      for (const r of chunkResults) if (r) results.push(r);
+    }
+    res.json({ results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/tt-reconcile/bulk-add
 // body: { contacts: [{ company, first, last, title, linkedin?, city?, state?, notes? }] }
 // Writes confirmed contacts to data/target-talent.md.

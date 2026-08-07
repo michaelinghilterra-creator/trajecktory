@@ -46,6 +46,33 @@ export const FUNNEL_ORDER = _states
 export const ACTIVE_STATUSES = FUNNEL_ORDER.slice();
 export const CLOSED_STATUSES = ALL_STATUSES.filter(s => !FUNNEL_ORDER.includes(s));
 
+// ── Outreach eligibility (the ONE rule for who is worth contacting) ────────────
+// A company is worth spending a TA contact on — sourcing new contacts, keeping
+// existing ones, surfacing them in the connect/email follow-up queues — only when
+// you have a CURRENTLY-LIVE application there, plus the ghost case. Defined once
+// here and imported by BOTH tt-reconcile-core.mjs and followups.mjs so the two
+// can never drift (they used to: reconcile counted Evaluated as eligible while the
+// queues gated on "ever reached Applied", so an evaluated-not-applied company
+// surfaced for sourcing and an applied-then-rejected one lingered in the queues).
+//
+// ELIGIBLE = the live funnel MINUS Evaluated (a role you have only evaluated is
+// not yet a reason to spend a contact) PLUS No Response. No Response is a ghosted
+// application, not a dead one: it is the single highest-leverage outreach case,
+// where a warm TA nudge can revive an application sitting in a void, so it counts
+// as live for outreach even though it is off the funnel.
+export const OUTREACH_ELIGIBLE_STATUSES = [
+  ...FUNNEL_ORDER.filter(s => s !== 'Evaluated'),
+  'No Response',
+];
+
+// DEAD = a company here is definitively closed; its TA contacts can be archived.
+// This is the closed/terminal set MINUS No Response (chase-worthy, see above), so
+// it is exactly {Rejected, Discarded, SKIP, Closed, Not a Fit}. It deliberately
+// excludes Evaluated: an evaluated-not-yet-applied company is pre-application
+// limbo, neither eligible for outreach nor dead, so reconcile leaves its contacts
+// alone (never archives them just for being un-applied — you may apply next).
+export const OUTREACH_DEAD_STATUSES = CLOSED_STATUSES.filter(s => s !== 'No Response');
+
 // Did this row enter the funnel at all, i.e. reach the FIRST rung?
 //
 // Every row in applications.md was evaluated: an evaluation is what creates the

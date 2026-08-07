@@ -1,0 +1,99 @@
+{
+  "_comment": "Outreach sequence template library. Each sequence defines touches with timing offsets. dayOffset is calendar days after the previous touch (0 = same day as sequence start). These drive the scheduled-draft engine: all touches are pre-written as Gmail drafts when the user starts a sequence; each step surface in the stale engine when its dayOffset has elapsed.",
+  "sequences": [
+    {
+      "id": "cold-intro-principal",
+      "label": "Cold intro to hiring principal",
+      "scenario": "You have identified the VP/Director who leads the target function — the person you would likely report to. You want to introduce yourself with a concrete proof point and request a brief connection.",
+      "channel": "email",
+      "touches": [
+        {
+          "step": 1,
+          "dayOffset": 0,
+          "label": "Cold intro",
+          "tone": "Direct, senior peer. Lead with one concrete proof point (the artifact link). Under 80 words. Low-friction ask: a 15-min intro call."
+        },
+        {
+          "step": 2,
+          "dayOffset": 7,
+          "label": "Follow-up",
+          "tone": "Add genuine new value — a relevant market observation or a specific question about their function. Do not re-pitch. Under 60 words."
+        },
+        {
+          "step": 3,
+          "dayOffset": 14,
+          "label": "Final ping",
+          "tone": "Graceful last touch. Acknowledge this is the final note. Leave the door open with no pressure. Under 40 words."
+        }
+      ]
+    },
+    {
+      "id": "cold-intro-ta",
+      "label": "Cold intro to TA/recruiter (gatekeeper)",
+      "scenario": "You have a TA or recruiter contact at a company you have applied to. You want to introduce yourself and confirm your application reached the right desk.",
+      "channel": "email",
+      "touches": [
+        {
+          "step": 1,
+          "dayOffset": 0,
+          "label": "Intro + confirm",
+          "tone": "Brief, professional. Mention the specific role applied to. One line on fit. Ask if the application has been received. Under 60 words."
+        },
+        {
+          "step": 2,
+          "dayOffset": 7,
+          "label": "Follow-up",
+          "tone": "Short check-in. Add one data point not in the original application. Ask if a screen makes sense. Under 50 words."
+        }
+      ]
+    },
+    {
+      "id": "linkedin-connect-principal",
+      "label": "LinkedIn connection request to hiring principal",
+      "scenario": "You want to connect with a hiring principal on LinkedIn. The note must be under 300 characters.",
+      "channel": "linkedin",
+      "touches": [
+        {
+          "step": 1,
+          "dayOffset": 0,
+          "label": "Connection note",
+          "tone": "Under 300 characters. One sentence on shared domain expertise. One sentence on the specific reason you're reaching out. Sign off with first name only. NO em dashes."
+        }
+      ]
+    },
+    {
+      "id": "linkedin-connect-ta",
+      "label": "LinkedIn connection request to TA/recruiter",
+      "scenario": "You want to connect with a TA or recruiter on LinkedIn who is at a company you have applied to.",
+      "channel": "linkedin",
+      "touches": [
+        {
+          "step": 1,
+          "dayOffset": 0,
+          "label": "Connection note",
+          "tone": "Under 300 characters. Mention the specific role you applied to. Ask if they are the right person for that search. Sign off with first name only. NO em dashes."
+        }
+      ]
+    },
+    {
+      "id": "post-apply-warm-followup",
+      "label": "Post-application warm follow-up (applied, no contact yet)",
+      "scenario": "You have applied to a role but have no specific contact. This sequence surfaces in the stale engine as a nudge to find a contact, then provides a template once one is found.",
+      "channel": "email",
+      "touches": [
+        {
+          "step": 1,
+          "dayOffset": 7,
+          "label": "First follow-up",
+          "tone": "Brief, professional. Reference the specific role. One concrete proof point. Low-friction ask: confirm the application is under review. Under 70 words."
+        },
+        {
+          "step": 2,
+          "dayOffset": 14,
+          "label": "Second follow-up",
+          "tone": "Short. Add one new insight or recent proof point. Acknowledge this is a follow-up. Under 50 words."
+        }
+      ]
+    }
+  ]
+}

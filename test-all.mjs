@@ -491,6 +491,7 @@ for (const suite of [
   'tests/tt-reconcile.test.mjs',
   'tests/connect-queue.test.mjs',
   'tests/email-queue.test.mjs',
+  'tests/stale-contacts.test.mjs',
   'tests/debrief.test.mjs',
   'tests/google.test.mjs',
   'tests/reply-draft.test.mjs',

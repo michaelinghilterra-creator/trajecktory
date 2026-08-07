@@ -1,12 +1,11 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import https from 'https';
 import { execFile } from 'child_process';
 import { ROOT_DIR } from '../config.mjs';
 import { generateText, readProjectFile, draftModel } from './anthropic.mjs';
-import { renderObsidianNote, warnObsidianPushFailed } from './obsidian.mjs';
-import { getIdentity, getObsidianAppliedFolder } from './profile.mjs';
+import { pushObsidianNote } from './obsidian.mjs';
+import { getIdentity } from './profile.mjs';
 import { resolveReportPath } from './safe-path.mjs';
 
 const applyJobs = new Map();
@@ -68,47 +67,10 @@ async function runByoApplyJob(jobId, row) {
   const todayFormal  = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const errors = [];
 
-  // Obsidian push (same as the generation path's Step 5)
-  try {
-    const obsKey  = process.env.OBSIDIAN_API_KEY;
-    const obsPort = parseInt(process.env.OBSIDIAN_PORT || '27124', 10);
-    const [y, m, d2] = today.split('-');
-    const dateMDY = `${m}-${d2}-${y}`;
-    const safeRole = row.role.replace(/[/\\:*?"<>|]/g, '-');
-    // Company, like role, becomes part of the note FILENAME, so strip path
-    // separators and reserved chars — otherwise a company with a "/" or "\"
-    // escapes the applied-notes folder (path traversal).
-    const safeCompany = String(row.company || '').replace(/[/\\:*?"<>|]/g, '-');
-    const noteName = `${dateMDY} - ${safeCompany} - ${safeRole}`;
-    const notePath = `${getObsidianAppliedFolder()}/${noteName}.md`;
-
-    const byoFallbackHeader = `# ${row.company} — ${row.role}\n\n**Applied:** ${todayFormal}\n**Score:** ${row.scoreRaw || 'N/A'}\n**Status:** Applied\n**Assets:** Bring-your-own (no trajecktory-generated CV or cover letter)\n`;
-    const reportText = readReport(row);
-    const noteContent = renderObsidianNote({ row, reportText, todayFormal, fallbackHeader: byoFallbackHeader });
-
-    const encoded = encodeURIComponent(notePath);
-    const bodyBuf = Buffer.from(noteContent, 'utf8');
-    await new Promise((resolve) => {
-      const req = https.request({
-        hostname: '127.0.0.1', port: obsPort, path: `/vault/${encoded}`, method: 'PUT',
-        headers: { 'Authorization': `Bearer ${obsKey}`, 'Content-Type': 'text/markdown', 'Content-Length': bodyBuf.length },
-        rejectUnauthorized: false,
-      }, (res) => {
-        res.resume();
-        if (!(res.statusCode >= 200 && res.statusCode < 300)) {
-          errors.push(`Obsidian: HTTP ${res.statusCode}`);
-          warnObsidianPushFailed(row.company, `HTTP ${res.statusCode}`);
-        }
-        resolve();
-      });
-      req.on('error', (err) => { errors.push(`Obsidian: ${err.message}`); warnObsidianPushFailed(row.company, err.message); resolve(); });
-      req.write(bodyBuf);
-      req.end();
-    });
-  } catch (err) {
-    errors.push(`Obsidian: ${err.message}`);
-    warnObsidianPushFailed(row.company, err.message);
-  }
+  // Obsidian push via the single shared implementation (see obsidian.mjs).
+  const byoFallbackHeader = `# ${row.company} — ${row.role}\n\n**Applied:** ${todayFormal}\n**Score:** ${row.scoreRaw || 'N/A'}\n**Status:** Applied\n**Assets:** Bring-your-own (no trajecktory-generated CV or cover letter)\n`;
+  const byoPush = await pushObsidianNote({ row, appliedDate: today, reportText: readReport(row), fallbackHeader: byoFallbackHeader });
+  if (byoPush && byoPush.ok === false) errors.push(`Obsidian: ${byoPush.error}`);
 
   const job = applyJobs.get(jobId) || {};
   applyJobs.set(jobId, {
@@ -408,59 +370,11 @@ ${STYLE_RULES}`;
   }
 
   // ── Step 5: Push cheat sheet to Obsidian ─────────────────────────────────
-  try {
-    const obsKey  = process.env.OBSIDIAN_API_KEY;
-    const obsPort = parseInt(process.env.OBSIDIAN_PORT || '27124', 10);
-
-    // Build filename: MM-DD-YYYY - Company - Role
-    const [y, m, d2] = today.split('-');
-    const dateMDY = `${m}-${d2}-${y}`;
-    const safeRole = row.role.replace(/[/\\:*?"<>|]/g, '-');
-    // Company, like role, becomes part of the note FILENAME, so strip path
-    // separators and reserved chars — otherwise a company with a "/" or "\"
-    // escapes the applied-notes folder (path traversal).
-    const safeCompany = String(row.company || '').replace(/[/\\:*?"<>|]/g, '-');
-    const noteName = `${dateMDY} - ${safeCompany} - ${safeRole}`;
-    const notePath = `${getObsidianAppliedFolder()}/${noteName}.md`;
-
-    // Build note content from report (or minimal fallback)
-    const fallbackHeader = `# ${row.company} — ${row.role}\n\n**Applied:** ${todayFormal}\n**Score:** ${row.scoreRaw || 'N/A'}\n**Status:** Applied\n`;
-    const reportText = readReport(row);
-    const noteContent = renderObsidianNote({ row, reportText, todayFormal, fallbackHeader });
-
-    // PUT to Obsidian REST API (creates or overwrites) via https.request (handles self-signed cert)
-    const encoded = encodeURIComponent(notePath);
-    const bodyBuf = Buffer.from(noteContent, 'utf8');
-    await new Promise((resolve) => {
-      const req = https.request({
-        hostname: '127.0.0.1',
-        port: obsPort,
-        path: `/vault/${encoded}`,
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${obsKey}`,
-          'Content-Type': 'text/markdown',
-          'Content-Length': bodyBuf.length,
-        },
-        rejectUnauthorized: false,
-      }, (res) => {
-        res.resume(); // drain response
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          // success
-        } else {
-          errors.push(`Obsidian: HTTP ${res.statusCode}`);
-          warnObsidianPushFailed(row.company, `HTTP ${res.statusCode}`);
-        }
-        resolve();
-      });
-      req.on('error', (err) => { errors.push(`Obsidian: ${err.message}`); warnObsidianPushFailed(row.company, err.message); resolve(); });
-      req.write(bodyBuf);
-      req.end();
-    });
-  } catch (err) {
-    errors.push(`Obsidian: ${err.message}`);
-    warnObsidianPushFailed(row.company, err.message);
-  }
+  // Single shared implementation (see obsidian.mjs); self-skips when Obsidian
+  // isn't set up, never throws.
+  const genFallbackHeader = `# ${row.company} — ${row.role}\n\n**Applied:** ${todayFormal}\n**Score:** ${row.scoreRaw || 'N/A'}\n**Status:** Applied\n`;
+  const genPush = await pushObsidianNote({ row, appliedDate: today, reportText: readReport(row), fallbackHeader: genFallbackHeader });
+  if (genPush && genPush.ok === false) errors.push(`Obsidian: ${genPush.error}`);
 
   const job = applyJobs.get(jobId) || {};
   const result = { docx: docxRel, ...(mode === 'claude' ? { apply: applyRel } : {}) };
