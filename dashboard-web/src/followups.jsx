@@ -454,6 +454,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
     { id: 'overview', label: 'Overview',         n: null,        icon: window.ICON.pulse },
     { id: 'connect',  label: 'Connect',          n: null,        icon: window.ICON.userPlus },
     { id: 'email',    label: 'Email queue',      n: null,        icon: window.ICON.mail },
+    { id: 'both',     label: 'High value',       n: null,        icon: window.ICON.star || window.ICON.userPlus },
     { id: 'warm',     label: 'Warm threads',     n: warm.length, icon: window.ICON.send },
     { id: 'cold',     label: 'Applications out',  n: cold.length, icon: window.ICON.briefcase },
   ];
@@ -533,6 +534,9 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
 
       {/* ── Email queue: emailable contacts at applied companies ───────────── */}
       {subView === 'email' && <window.EmailQueueTab toast={toast} />}
+
+      {/* ── High value: contacts reachable on both channels (multithread) ───── */}
+      {subView === 'both' && <window.BothQueueTab toast={toast} />}
 
       {/* ── Warm threads: the actionable queue ─────────────────────────────── */}
       {subView === 'warm' && (

@@ -8,7 +8,7 @@ import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute } from '../lib/sidecars.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeContactlessApps, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, highValueContacts, computeContactlessApps, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
@@ -54,6 +54,29 @@ router.get('/api/followups/withheld', (req, res) => {
 router.get('/api/followups/email-queue', (req, res) => {
   try {
     res.json({ queue: computeEmailQueue() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/followups/both-queue — the HIGH-VALUE bucket: contacts reachable both
+// ways (verified email AND a LinkedIn handle) at applied companies, worked on both
+// channels in parallel. Each row carries linkedinDone/emailDone; the row stays
+// until both channels are touched or a reply pauses it.
+router.get('/api/followups/both-queue', (req, res) => {
+  try {
+    res.json({ queue: computeBothQueue() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/network/high-value — the Network directory of ALL dual-channel contacts
+// (verified email AND LinkedIn), not gated to applied companies. Backs the Network
+// "High value" table, which provides its own search/filter over this list.
+router.get('/api/network/high-value', (req, res) => {
+  try {
+    res.json({ contacts: highValueContacts() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

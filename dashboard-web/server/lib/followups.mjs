@@ -653,10 +653,10 @@ function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
   const out = [];
   const consider = (row, source) => {
     if (!_hasLinkedIn(row)) return;              // no LinkedIn handle → not reachable here
-    // Let bucket-3 high-priority contacts through even when sendable — they earn
-    // the double-touch. Everyone else still routes email-only if sendable.
-    const isHighPriority = source === 'ta' && (row.isPrincipal === true);
-    if (isSendable(row) && !isHighPriority) return;
+    // LinkedIn-ONLY bucket. A contact who ALSO has a sendable email is high-value
+    // (reachable both ways) and belongs in the Both queue, where both channels are
+    // worked in parallel — not here. This keeps the three buckets mutually exclusive.
+    if (isSendable(row)) return;
     if (CONNECT_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
     const company = source === 'recruiter' ? row.firm : row.company;
     if (!applied.has(normalizeCompany(company))) return;   // only companies you've applied to
@@ -680,6 +680,9 @@ function computeEmailQueue({ taRows, recruiterRows, apps } = {}) {
   const out = [];
   const consider = (row, source) => {
     if (!isSendable(row)) return;                // MUST have a sendable email
+    // Email-ONLY bucket. A contact who ALSO has a LinkedIn handle is high-value
+    // (reachable both ways) and belongs in the Both queue, not here.
+    if (_hasLinkedIn(row)) return;
     if (EMAIL_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
     const company = source === 'recruiter' ? row.firm : row.company;
     if (!applied.has(normalizeCompany(company))) return;
@@ -688,6 +691,79 @@ function computeEmailQueue({ taRows, recruiterRows, apps } = {}) {
   for (const r of ta)  consider(r, 'ta');
   for (const r of rec) consider(r, 'recruiter');
   return _sortByCompanyName(out);
+}
+
+// The HIGH-VALUE bucket: contacts reachable BOTH ways (a verified email AND a
+// LinkedIn handle) at a company you've applied to. These are worked on both
+// channels in parallel — the multithread. Unlike the single-channel queues, a row
+// here does NOT drop off after one touch: it stays until BOTH a LinkedIn invite and
+// an email have gone out, or a reply/acceptance pauses it (BOTH_QUEUE_EXCLUDE_STATUS
+// below). Each row carries linkedinDone / emailDone so the UI shows which channel is
+// still open. 'Sent' is deliberately NOT an exclude status here — after one channel
+// the status is Sent but the other channel is still owed, so inclusion is decided by
+// the per-channel done flags, not the coarse status.
+const BOTH_QUEUE_EXCLUDE_STATUS = new Set(['Archived', 'Replied', 'Meeting Scheduled', 'Connected']);
+function _channelsDone(source, id) {
+  let linkedinDone = false, emailDone = false;
+  try {
+    const corr = source === 'recruiter' ? readRecruiterCorrespondence(id) : readTTCorrespondence(id);
+    for (const m of (corr || [])) {
+      if (m.direction !== 'Sent') continue;
+      if (isLinkedInInvite(m.subject)) linkedinDone = true;
+      else emailDone = true;
+    }
+  } catch { /* unreadable log → treat as nothing done yet */ }
+  return { linkedinDone, emailDone };
+}
+function computeBothQueue({ taRows, recruiterRows, apps } = {}) {
+  const { ta, rec } = _bothBooks({ taRows, recruiterRows });
+  const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
+  const baselineId = getNewBaselineId();
+  const touchIdx = buildCompanyTouchIndex({ ta, rec });
+  const today = _localToday();
+  const out = [];
+  const consider = (row, source) => {
+    if (!(_hasLinkedIn(row) && isSendable(row))) return;   // must have BOTH channels
+    if (BOTH_QUEUE_EXCLUDE_STATUS.has(row.status)) return; // a reply/acceptance pauses the multithread
+    const company = source === 'recruiter' ? row.firm : row.company;
+    if (!applied.has(normalizeCompany(company))) return;
+    const { linkedinDone, emailDone } = _channelsDone(source, row.id);
+    if (linkedinDone && emailDone) return;                 // both channels already touched → done
+    out.push({ ..._queueRow(row, source, baselineId, touchIdx.get(normalizeCompany(company)), today), linkedinDone, emailDone });
+  };
+  for (const r of ta)  consider(r, 'ta');
+  for (const r of rec) consider(r, 'recruiter');
+  return _sortByCompanyName(out);
+}
+
+// The Network "High value" DIRECTORY: every contact reachable BOTH ways (a verified
+// email AND a LinkedIn handle) across both books. Unlike computeBothQueue this is a
+// managed directory, NOT an action queue — it is NOT gated to applied companies and
+// includes any status except Archived, so you can see and manage all your dual-channel
+// contacts. Carries the fields a searchable table needs (name, title, company, email +
+// state, LinkedIn, location, status, notes). The UI provides its own search/filters.
+function highValueContacts({ taRows, recruiterRows } = {}) {
+  const { ta, rec } = _bothBooks({ taRows, recruiterRows });
+  const out = [];
+  const add = (row, source) => {
+    if (!(_hasLinkedIn(row) && isSendable(row))) return;   // must have BOTH channels
+    if (row.status === 'Archived') return;
+    const company = source === 'recruiter' ? row.firm : row.company;
+    out.push({
+      source, id: row.id,
+      name: `${row.first || ''} ${row.last || ''}`.trim(),
+      first: row.first || '', last: row.last || '',
+      title: row.title || '', company: company || '',
+      email: (row.email || '').trim(), emailState: row.verified?.state || 'unverified',
+      linkedin: (row.linkedin || '').trim(),
+      city: row.city || '', state: row.state || '',
+      status: row.status || '', notes: (row.notes || '').replace(/\s+/g, ' ').trim(),
+    });
+  };
+  for (const r of ta)  add(r, 'ta');
+  for (const r of rec) add(r, 'recruiter');
+  out.sort((a, b) => (a.company || '').localeCompare(b.company || '') || (a.name || '').localeCompare(b.name || ''));
+  return out;
 }
 
 // Applied roles in OUTREACH_ELIGIBLE_STATUSES that have ZERO contacts (no TA or
@@ -750,8 +826,8 @@ function countWithheldContacts({ taRows, recruiterRows } = {}) {
 
 export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
-  computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue,
-  computeContactlessApps, countWithheldContacts,
+  computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
+  highValueContacts, computeContactlessApps, countWithheldContacts,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 
