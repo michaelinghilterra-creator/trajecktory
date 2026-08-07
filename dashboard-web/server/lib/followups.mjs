@@ -5,7 +5,7 @@ import { parseApplicationsMd } from './applications.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, matchByCompany, getNewBaselineId } from './target-talent.mjs';
 import { parseRecruitersMd, readRecruiterCorrespondence } from './recruiters.mjs';
 import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
-import { INTERVIEW_STAGES, isInterviewStage, FUNNEL_ORDER } from './statuses.mjs';
+import { INTERVIEW_STAGES, isInterviewStage, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { isSendable } from '../../../lib/email-verify.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
 import { isLinkedInInvite } from './channels.mjs';
@@ -396,18 +396,20 @@ function _hasLinkedIn(row) {
   return !!(row && (row.linkedin || '').trim());
 }
 
-// Companies the user has AT LEAST APPLIED to. Outreach (LinkedIn or email) should
-// only surface for a company you've actually committed to — an Evaluated-only or
-// Discarded row is not yet a reason to spend a contact on, and once you apply the
-// company's contacts appear. `reached` is the furthest funnel rung a row ever hit
-// (FUNNEL_ORDER: Evaluated=0, Applied=1, …), so `reached >= Applied` is exactly
-// "applied, or further, at any point" and correctly includes an applied-then-
-// rejected row. Matched on the normalized company name (the one identity engine).
-const _APPLIED_IDX = FUNNEL_ORDER.indexOf('Applied');
-function appliedCompanies(apps) {
+// Companies with a CURRENTLY-LIVE application, the only ones worth spending an
+// outreach contact on. Uses the shared OUTREACH_ELIGIBLE_STATUSES (live funnel
+// Applied..Offer + No Response) from statuses.mjs, matched on CURRENT status —
+// NOT the furthest rung ever reached. That distinction is the whole point of this
+// change: the old `reached >= Applied` test kept an applied-then-Rejected company
+// in the queues forever (its furthest rung was still Applied), so a dead
+// opportunity kept surfacing contacts to chase. Current-status gating drops it
+// the moment the row goes terminal, while No Response (a chase-worthy ghost)
+// stays. Evaluated-only and Triage-only companies never qualify (no live app).
+// Matched on the normalized company name (the one identity engine).
+function outreachEligibleCompanies(apps) {
   const set = new Set();
   for (const a of (apps || [])) {
-    if (FUNNEL_ORDER.indexOf(a.reached) >= _APPLIED_IDX) set.add(normalizeCompany(a.company));
+    if (OUTREACH_ELIGIBLE_STATUSES.includes(a.status)) set.add(normalizeCompany(a.company));
   }
   return set;
 }
@@ -510,7 +512,7 @@ function _sortByCompanyName(out) {
 // applied to, not yet actioned.
 function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
   const { ta, rec } = _bothBooks({ taRows, recruiterRows });
-  const applied = appliedCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
+  const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const baselineId = getNewBaselineId();
   const touchIdx = buildCompanyTouchIndex({ ta, rec });
   const today = _localToday();
@@ -534,7 +536,7 @@ function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
 // connect queue logs LinkedIn connects.
 function computeEmailQueue({ taRows, recruiterRows, apps } = {}) {
   const { ta, rec } = _bothBooks({ taRows, recruiterRows });
-  const applied = appliedCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
+  const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const baselineId = getNewBaselineId();
   const touchIdx = buildCompanyTouchIndex({ ta, rec });
   const today = _localToday();
