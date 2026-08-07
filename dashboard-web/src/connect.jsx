@@ -738,15 +738,18 @@ window.BothQueueTab = function BothQueueTab({ toast }) {
   useEffectCq(() => { load(); }, []);
 
   // A high-value row leaves only when BOTH channels are done. Marking one channel
-  // keeps the row (the server recomputes and returns it with that channel flagged
-  // done); marking the second drops it. Re-fetch after either so the per-channel
-  // state and sibling company-outreach warnings stay accurate. Stable source:id
-  // keys keep an in-progress draft on the other channel alive across the refresh.
+  // updates that row IN PLACE (its own local state already shows the ✓); marking the
+  // second removes it. Deliberately NO full re-fetch here: with a large queue a
+  // load() on every mark re-renders every row, and a click landing during that churn
+  // gets dropped — the exact "I marked sent but nothing happened" bug. Row identity
+  // is stable (source:id), so only the touched row's object changes.
   const onChannelDone = (source, id, state) => {
-    if (state && state.linkedinDone && state.emailDone) {
-      setQueue(q => (q || []).filter(c => !(c.source === source && String(c.id) === String(id))));
-    }
-    load();
+    const isRow = (c) => c.source === source && String(c.id) === String(id);
+    setQueue(q => {
+      const list = q || [];
+      if (state && state.linkedinDone && state.emailDone) return list.filter(c => !isRow(c));
+      return list.map(c => isRow(c) ? { ...c, linkedinDone: state.linkedinDone, emailDone: state.emailDone } : c);
+    });
   };
 
   if (err) return <div className="dim" style={{ padding: 28 }}>Could not load the high-value queue: {err}</div>;

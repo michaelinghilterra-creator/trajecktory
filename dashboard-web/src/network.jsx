@@ -24,7 +24,7 @@ const { useState: useStateHv, useEffect: useEffectHv, useMemo: useMemoHv } = Rea
 // contacts worth a two-channel multithread. Read-only directory with its own
 // search + source/status filters; the actual outreach happens in Follow-Ups →
 // High value. Backed by GET /api/network/high-value.
-function HighValueTab({ search }) {
+function HighValueTab({ search, onOpen }) {
   const [rows, setRows] = useStateHv(null);
   const [err, setErr] = useStateHv(null);
   const [q, setQ] = useStateHv('');
@@ -62,7 +62,8 @@ function HighValueTab({ search }) {
       <h2 style={{ margin: '0 0 2px' }}>High-value contacts</h2>
       <p className="dim" style={{ fontSize: 13, marginTop: 4, marginBottom: 14 }}>
         {filtered.length} of {rows.length} contact{rows.length === 1 ? '' : 's'} reachable BOTH ways (a verified
-        email and a LinkedIn handle), across your TA and recruiter books. Work them on both channels from
+        email and a LinkedIn handle), across your TA and recruiter books. Click a row to open the full contact card
+        (related applications, sequences, past comms, reply, AI drafts). Work them on both channels from
         Follow-Ups → High value.
       </p>
 
@@ -98,6 +99,7 @@ function HighValueTab({ search }) {
                 <th style={{ padding: '8px 10px' }}>Email</th>
                 <th style={{ padding: '8px 10px' }}>Status</th>
                 <th style={{ padding: '8px 10px' }}>Channels</th>
+                <th style={{ padding: '8px 10px' }}></th>
               </tr>
             </thead>
             <tbody>
@@ -106,7 +108,9 @@ function HighValueTab({ search }) {
                 const mailto = c.email ? `mailto:${c.email}` : null;
                 const loc = [c.city, c.state].filter(Boolean).join(', ');
                 return (
-                  <tr key={`${c.source}:${c.id}`} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <tr key={`${c.source}:${c.id}`} onClick={() => onOpen && onOpen(c.source, c.id)}
+                    style={{ borderBottom: '1px solid var(--border)', cursor: onOpen ? 'pointer' : 'default' }}
+                    title="Open the full contact card">
                     <td style={{ padding: '8px 10px', fontWeight: 600 }}>
                       {c.name || '(no name)'}
                       {c.isPrincipal ? <span title="Hiring principal — the decision-maker you'd report to." style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '.3px', padding: '1px 5px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)', verticalAlign: 'middle' }}>PRINCIPAL</span> : null}
@@ -116,13 +120,16 @@ function HighValueTab({ search }) {
                     <td style={{ padding: '8px 10px' }}>{c.company || '-'}</td>
                     <td style={{ padding: '8px 10px' }}><span className="mono dim">{c.source}</span></td>
                     <td style={{ padding: '8px 10px' }}>
-                      {mailto ? <a href={mailto} className="mono" style={{ color: 'var(--accent)' }}>{c.email}</a> : '-'}
+                      {mailto ? <a href={mailto} className="mono" style={{ color: 'var(--accent)' }} onClick={e => e.stopPropagation()}>{c.email}</a> : '-'}
                       {c.emailState === 'risky' ? <span className="dim" title="Catch-all domain: usually deliverable."> · risky</span> : null}
                     </td>
                     <td style={{ padding: '8px 10px' }}>{c.status || '-'}</td>
                     <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
                       <span title="Verified email on file" style={{ marginRight: 6 }}>✉</span>
-                      {href ? <a href={href} target="_blank" rel="noreferrer" title="Open LinkedIn profile" style={{ color: 'var(--accent)' }}>in ↗</a> : null}
+                      {href ? <a href={href} target="_blank" rel="noreferrer" title="Open LinkedIn profile" style={{ color: 'var(--accent)' }} onClick={e => e.stopPropagation()}>in ↗</a> : null}
+                    </td>
+                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                      {onOpen ? <button className="btn ghost sm" onClick={e => { e.stopPropagation(); onOpen(c.source, c.id); }}>Open card ↗</button> : null}
                     </td>
                   </tr>
                 );
@@ -135,8 +142,15 @@ function HighValueTab({ search }) {
   );
 }
 
-window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, onTaOpenConsumed, toast } = {}) {
+window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, onTaOpenConsumed, pendingRecruiterOpen, onRecruiterOpenConsumed, openTaContact, openRecruiter, toast } = {}) {
   const active = view || 'referrals';
+  // A High value row is a TA or recruiter record; clicking it opens that book's
+  // existing full drawer (related apps, sequence/campaign, past comms, reply, AI
+  // drafts), so high-value contacts get full parity with no duplicate drawer.
+  const openContact = (source, id) => {
+    if (source === 'recruiter') { openRecruiter && openRecruiter(id); }
+    else { openTaContact && openTaContact(id); }
+  };
   return (
     <div className="col" style={{ gap: 0 }}>
       <div className="subtabs">
@@ -148,7 +162,7 @@ window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, 
       </div>
 
       {active === 'referrals'  && window.ReferralsTab && <window.ReferralsTab search={search} />}
-      {active === 'recruiters' && window.RecruitersTab && <window.RecruitersTab search={search} />}
+      {active === 'recruiters' && window.RecruitersTab && <window.RecruitersTab search={search} initialOpenId={pendingRecruiterOpen} onInitialOpenConsumed={onRecruiterOpenConsumed} />}
       {active === 'ta'         && window.TargetTalentTab && (
         <window.TargetTalentTab
           initialOpenId={pendingTaOpen}
@@ -156,7 +170,7 @@ window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, 
           search={search}
         />
       )}
-      {active === 'highvalue'  && <HighValueTab search={search} />}
+      {active === 'highvalue'  && <HighValueTab search={search} onOpen={openContact} />}
     </div>
   );
 };

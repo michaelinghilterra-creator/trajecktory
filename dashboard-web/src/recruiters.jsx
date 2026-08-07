@@ -1034,12 +1034,18 @@ const REC_SUBTABS = [
 ];
 
 // ─── Root module ────────────────────────────────────────────────────────────
-window.RecruitersTab = function RecruitersTab({ search } = {}) {
+window.RecruitersTab = function RecruitersTab({ search, initialOpenId, onInitialOpenConsumed } = {}) {
   const [recruiters, setRecruiters] = useStateR([]);
   const [loading, setLoading] = useStateR(true);
   const [view, setView] = useStateR('overview');
   const [selected, setSelected] = useStateR(null);
   const [starred, setStarred] = useStateR(() => new Set());
+
+  // Honor a cross-tab hand-off (e.g. a High value row whose source is 'recruiter'):
+  // open that recruiter's drawer once, then clear the parent's pending id.
+  useEffectR(() => {
+    if (initialOpenId != null) { setSelected(initialOpenId); onInitialOpenConsumed && onInitialOpenConsumed(); }
+  }, [initialOpenId, onInitialOpenConsumed]);
 
   const load = useCallbackR(() => {
     setLoading(true);
