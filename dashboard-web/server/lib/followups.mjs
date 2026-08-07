@@ -421,6 +421,9 @@ function computeStaleContacts({ apps } = {}) {
       taFirst: c.first || '',
       taLast: c.last || '',
       taEmail: c.email || '',
+      // Hiring-principal flag: true when the contact carries the [principal] tag
+      // in their notes (TA contacts only; recruiter contacts are never principals).
+      isPrincipal: source === 'ta' ? (c.isPrincipal ?? false) : false,
     });
   };
 

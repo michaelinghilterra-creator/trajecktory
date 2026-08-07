@@ -49,6 +49,11 @@ function parseTargetTalentMd() {
       lastTouch: parts[14],
       notes:     parts[15],
       website:   (parts[16] || '').trim(),
+      // A [principal] tag in the notes marks this person as a hiring principal —
+      // the VP/Director/Head of the target function the user would report to, NOT
+      // the TA gatekeeper. Parsed here so every consumer reads the same signal
+      // without grepping notes themselves.
+      isPrincipal: /\[principal\]/i.test(parts[15] || ''),
       verified,  // { state, source, date, score, address, hadTag }
       raw: line,
     });
