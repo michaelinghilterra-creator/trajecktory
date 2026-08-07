@@ -16,7 +16,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { canonicalUrl } from '../lib/identity.mjs';
 import {
-  parsePipelineRow, readPipelineRows, markDone, handledOpenRows, reconcileHandled,
+  parsePipelineRow, readPipelineRows, markDone, handledOpenRows, reconcileHandled, sourceUrlOf,
 } from '../lib/pipeline.mjs';
 
 let passed = 0, failed = 0;
@@ -78,6 +78,34 @@ check(parsePipelineRow('# a heading') === null, 'non-row returns null');
   const handled = new Set([canonicalUrl('https://real.co/posting/7')]); // tracker stores the REAL url
   const rows = handledOpenRows(file, handled, dir);
   check(rows.length === 1 && rows[0].url === 'local:jds/bar.md', 'an evaluated local: row is matched via its snapshot Source URL');
+}
+
+// ── sourceUrlOf, exported directly (2026-08-06: the dashboard's triage-results
+// view hit this exact gap outside pipeline.md — a triage card scored under a
+// local:jds/ snapshot never suppressed once the role was deep-dived, because
+// the tracker holds the real URL and nothing resolved the snapshot back to it) ─
+{
+  check(sourceUrlOf('local:jds/bar.md', dir) === canonicalUrl('https://real.co/posting/7'),
+    'sourceUrlOf resolves a local:jds/ url to its snapshot Source URL, canonicalized');
+  check(sourceUrlOf('https://real.co/posting/7', dir) === null,
+    'sourceUrlOf returns null for a non-local: url (nothing to resolve)');
+  check(sourceUrlOf('local:jds/does-not-exist.md', dir) === null,
+    'sourceUrlOf returns null (not throws) for a missing snapshot file');
+  check(sourceUrlOf('local:jds/bar.md', null) === null,
+    'sourceUrlOf returns null when no rootDir is given, rather than throwing');
+}
+
+// Three real header formats coexist in jds/, from three different ingestion
+// paths built at different times. Matching only the newest ("**Source URL:**")
+// left every older-batch snapshot unresolvable — the bug this test pins.
+{
+  writeFileSync(join(dir, 'jds/ashby-batch.md'), '# Role\n\n**URL:** https://ashby.example/posting/1\n', 'utf8');
+  check(sourceUrlOf('local:jds/ashby-batch.md', dir) === canonicalUrl('https://ashby.example/posting/1'),
+    'sourceUrlOf resolves the "**URL:**" header format (an earlier Ashby-pull batch)');
+
+  writeFileSync(join(dir, 'jds/obsidian-batch.md'), '# Role\nURL: https://obsidian.example/posting/2\n', 'utf8');
+  check(sourceUrlOf('local:jds/obsidian-batch.md', dir) === canonicalUrl('https://obsidian.example/posting/2'),
+    'sourceUrlOf resolves a bare "URL:" header with no markdown bold at all (the original Obsidian-clip ingestion)');
 }
 
 // ── INCIDENT 3+4: dismissed rows stayed open forever → reconcileHandled closes them

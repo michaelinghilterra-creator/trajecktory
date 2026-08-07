@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { ROOT_DIR, DATA_DIR, APPS_MD } from '../config.mjs';
 import { canonicalUrl, buildDecidedIndex, findDecided } from '../../../lib/identity.mjs';
-import { markDone } from '../../../lib/pipeline.mjs';
+import { markDone, sourceUrlOf } from '../../../lib/pipeline.mjs';
 
 export const router = express.Router();
 
@@ -95,7 +95,15 @@ router.get('/api/triage/results', (req, res) => {
     const cards = [];
     const suppressed = [];
     for (const card of byUrl.values()) {
-      const prior = findDecided(index, card.url, { company: card.company, role: card.title });
+      // A card scored while its pipeline row still pointed at a local:jds/ snapshot
+      // (Ashby/Workday/etc. postings a plain fetch can't read) carries that local
+      // path as its own url — which never canonical-matches the real posting URL
+      // recorded in applications.md once the role is actually deep-dived. Resolve
+      // the snapshot's own "**Source URL:**" header first so an already-evaluated
+      // role gets suppressed instead of reappearing as an unresolved triage card
+      // forever. See lib/pipeline.mjs's sourceUrlOf for the full incident history.
+      const resolvedUrl = sourceUrlOf(card.url, ROOT_DIR) || card.url;
+      const prior = findDecided(index, resolvedUrl, { company: card.company, role: card.title });
       if (prior) {
         suppressed.push({ ...card, existingNum: prior.num, existingStatus: prior.status });
       } else {
