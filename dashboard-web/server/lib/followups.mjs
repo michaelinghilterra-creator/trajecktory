@@ -5,7 +5,7 @@ import { parseApplicationsMd } from './applications.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, matchByCompany, getNewBaselineId } from './target-talent.mjs';
 import { parseRecruitersMd, readRecruiterCorrespondence } from './recruiters.mjs';
 import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
-import { INTERVIEW_STAGES, isInterviewStage, FUNNEL_ORDER } from './statuses.mjs';
+import { INTERVIEW_STAGES, isInterviewStage, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { isSendable } from '../../../lib/email-verify.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
 import { isLinkedInInvite } from './channels.mjs';
@@ -320,6 +320,124 @@ function computeStaleTA() {
   return stale;
 }
 
+// ─── Contact channel bucket classifier ───────────────────────────────────────
+// Classifies a single contact by which outreach channels are actually available:
+//   Bucket 1 — LinkedIn only (handle present, no sendable email)
+//   Bucket 2 — Email only (sendable email, no LinkedIn handle)
+//   Bucket 3 — Both (sendable email AND LinkedIn handle) — high-priority multithread candidate
+//   Bucket 0 — Neither (not reachable via either channel here)
+//
+// Per-CONTACT classifier; not the same as channelFor() which is per-company.
+// channelFor() continues to drive the warm/cold split in computeStaleApps()
+// (aggregating across all contacts at a company). This one drives per-contact
+// routing in computeStaleContacts() and will later gate bucket-3 multithread
+// logic for high-priority contacts (item 5 of the design).
+function contactChannelBucket(contact) {
+  const hasEmail    = isSendable(contact);
+  const hasLinkedIn = !!((contact.linkedin || '').trim());
+  let bucket;
+  if (hasEmail && hasLinkedIn) bucket = 3;
+  else if (hasEmail)           bucket = 2;
+  else if (hasLinkedIn)        bucket = 1;
+  else                         bucket = 0;
+  return { bucket, hasEmail, hasLinkedIn };
+}
+
+// ─── Unified contact-keyed stale engine ──────────────────────────────────────
+// The contact-centric model: the cadence clock lives on the CONTACT (their
+// lastTouch), not on the application. This covers both the target-talent and
+// recruiter books. Only contacts at companies with a CURRENTLY-LIVE application
+// surface — a contact at a dead opportunity (Rejected, Discarded…) is noise.
+//
+// `computeStaleTA()` stays intact for backward compatibility (tests depend on
+// it). This function is the target state and supersedes it in the route.
+const CONTACT_STALE_THRESHOLD_DAYS = 14; // calendar-threshold before we check business-days
+const CONTACT_FU_CAP = 1;               // nudge cap; more than one follow-up burns warm contacts
+// Active-thread statuses that carry a real follow-up clock. 'Connected' (invite
+// accepted, no ongoing message thread) and dead-end states (Dormant/Bounced/
+// Blocked/Archived) are excluded: they have no thread to keep warm.
+const CONTACT_TRACKED_STATUSES = new Set(['Sent', 'Replied', 'Meeting Scheduled']);
+
+function computeStaleContacts({ apps } = {}) {
+  const appList = apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })();
+  const eligible = outreachEligibleCompanies(appList);
+
+  let taContacts = [];
+  try { taContacts = parseTargetTalentMd(); } catch { /* */ }
+  let recruiterContacts = [];
+  try { recruiterContacts = parseRecruitersMd(); } catch { /* */ }
+
+  const stale = [];
+
+  const processContact = (c, source) => {
+    const company = source === 'recruiter' ? c.firm : c.company;
+    if (!CONTACT_TRACKED_STATUSES.has(c.status)) return;
+    if (!c.lastTouch) return;
+    if (!eligible.has(normalizeCompany(company))) return;
+
+    const daysSinceLastTouch = _businessDaysAgo(c.lastTouch);
+    if (daysSinceLastTouch == null || daysSinceLastTouch < CONTACT_STALE_THRESHOLD_DAYS) return;
+
+    const corr = source === 'recruiter'
+      ? readRecruiterCorrespondence(c.id)
+      : readTTCorrespondence(c.id);
+    const sentCount = corr.filter(m => m.direction === 'Sent').length;
+    const fuCount = Math.max(0, sentCount - 1); // first send = original touch, not a follow-up
+    const overCap = fuCount >= CONTACT_FU_CAP;
+
+    let coachVerdict, coachLevel;
+    if (overCap) {
+      coachVerdict = `Already nudged ${fuCount}×. Let this contact cool.`;
+      coachLevel = 'give-up';
+    } else if (fuCount === 0) {
+      coachVerdict = `${daysSinceLastTouch}d since last touch · time to keep warm.`;
+      coachLevel = 'overdue';
+    } else {
+      coachVerdict = `${daysSinceLastTouch}d since the nudge · final ping.`;
+      coachLevel = 'overdue';
+    }
+
+    stale.push({
+      source,
+      id: c.id,
+      company: company || '',
+      role: c.title || '',
+      score: null,
+      status: c.status,
+      applyDate: null,
+      lastTouchDate: c.lastTouch,
+      daysSinceLastTouch,
+      daysSinceApply: null,
+      fuCount,
+      cap: CONTACT_FU_CAP,
+      coachVerdict,
+      coachLevel,
+      klass: 'warm',           // engaged threads are always warm
+      muted: false,
+      ...(() => { const b = contactChannelBucket(c); return { channelBucket: b.bucket, channel: b.hasEmail ? 'email' : b.hasLinkedIn ? 'linkedin' : 'none' }; })(),
+      sector: null,
+      notes: c.notes || '',
+      followups: [],
+      taFirst: c.first || '',
+      taLast: c.last || '',
+      taEmail: c.email || '',
+      // Hiring-principal flag: true when the contact carries the [principal] tag
+      // in their notes (TA contacts only; recruiter contacts are never principals).
+      isPrincipal: source === 'ta' ? (c.isPrincipal ?? false) : false,
+    });
+  };
+
+  for (const c of taContacts)        processContact(c, 'ta');
+  for (const c of recruiterContacts) processContact(c, 'recruiter');
+
+  stale.sort((a, b) => {
+    if (a.coachLevel !== b.coachLevel) return a.coachLevel === 'give-up' ? -1 : 1;
+    return b.daysSinceLastTouch - a.daysSinceLastTouch;
+  });
+
+  return stale;
+}
+
 // Ghosted applications: status still Applied, applied > GHOST_DAYS calendar days
 // ago, no advancement to Responded / an interview round (implied by status === 'Applied').
 // These are candidates for the one-click "archive to No Response" bulk action so
@@ -396,18 +514,20 @@ function _hasLinkedIn(row) {
   return !!(row && (row.linkedin || '').trim());
 }
 
-// Companies the user has AT LEAST APPLIED to. Outreach (LinkedIn or email) should
-// only surface for a company you've actually committed to — an Evaluated-only or
-// Discarded row is not yet a reason to spend a contact on, and once you apply the
-// company's contacts appear. `reached` is the furthest funnel rung a row ever hit
-// (FUNNEL_ORDER: Evaluated=0, Applied=1, …), so `reached >= Applied` is exactly
-// "applied, or further, at any point" and correctly includes an applied-then-
-// rejected row. Matched on the normalized company name (the one identity engine).
-const _APPLIED_IDX = FUNNEL_ORDER.indexOf('Applied');
-function appliedCompanies(apps) {
+// Companies with a CURRENTLY-LIVE application, the only ones worth spending an
+// outreach contact on. Uses the shared OUTREACH_ELIGIBLE_STATUSES (live funnel
+// Applied..Offer + No Response) from statuses.mjs, matched on CURRENT status —
+// NOT the furthest rung ever reached. That distinction is the whole point of this
+// change: the old `reached >= Applied` test kept an applied-then-Rejected company
+// in the queues forever (its furthest rung was still Applied), so a dead
+// opportunity kept surfacing contacts to chase. Current-status gating drops it
+// the moment the row goes terminal, while No Response (a chase-worthy ghost)
+// stays. Evaluated-only and Triage-only companies never qualify (no live app).
+// Matched on the normalized company name (the one identity engine).
+function outreachEligibleCompanies(apps) {
   const set = new Set();
   for (const a of (apps || [])) {
-    if (FUNNEL_ORDER.indexOf(a.reached) >= _APPLIED_IDX) set.add(normalizeCompany(a.company));
+    if (OUTREACH_ELIGIBLE_STATUSES.includes(a.status)) set.add(normalizeCompany(a.company));
   }
   return set;
 }
@@ -495,6 +615,10 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
     isNew: baselineId != null && Number.isFinite(row.id) && row.id > baselineId,
     notContacted: !status.trim() || /^\s*not\s*contacted\s*$/i.test(status),
     companyOutreach: { lastTouch, touchedToday },
+    // Hiring-principal flag (TA contacts only; recruiters are never principals).
+    isPrincipal: source === 'ta' ? (row.isPrincipal ?? false) : false,
+    // Channel bucket: 1 = LinkedIn only, 2 = email only, 3 = both, 0 = neither.
+    channelBucket: contactChannelBucket(row).bucket,
   };
 }
 
@@ -506,18 +630,33 @@ function _sortByCompanyName(out) {
   return out;
 }
 
-// LinkedIn fallback lane: a real handle, NO sendable email, at a company you've
-// applied to, not yet actioned.
+// LinkedIn lane: a real handle, at a company you've applied to, not yet actioned.
+//
+// Channel-gate rule: a non-principal contact with a sendable email routes to the
+// EMAIL queue only (single best-channel). Exception: a hiring-principal contact
+// (row.isPrincipal === true, TA contacts only) who has BOTH an email AND a LinkedIn
+// handle (bucket 3) appears in BOTH queues — a double-touch that improves the odds
+// of being seen by the decision-maker. LinkedIn invites are capped ~100/rolling
+// 7-day window, so the double-touch is reserved for high-priority contacts only;
+// non-principal bucket-3 contacts still route email-only.
+//
+// Reply-pause: a contact at status 'Replied' or 'Meeting Scheduled' is excluded
+// from both queues by CONNECT_QUEUE_EXCLUDE_STATUS, so a reply on either channel
+// automatically stops the other — the existing status-based gate serves as the
+// reply-anywhere-pauses-all mechanism.
 function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
   const { ta, rec } = _bothBooks({ taRows, recruiterRows });
-  const applied = appliedCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
+  const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const baselineId = getNewBaselineId();
   const touchIdx = buildCompanyTouchIndex({ ta, rec });
   const today = _localToday();
   const out = [];
   const consider = (row, source) => {
     if (!_hasLinkedIn(row)) return;              // no LinkedIn handle → not reachable here
-    if (isSendable(row)) return;                 // has a live email → belongs to the email queue
+    // Let bucket-3 high-priority contacts through even when sendable — they earn
+    // the double-touch. Everyone else still routes email-only if sendable.
+    const isHighPriority = source === 'ta' && (row.isPrincipal === true);
+    if (isSendable(row) && !isHighPriority) return;
     if (CONNECT_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
     const company = source === 'recruiter' ? row.firm : row.company;
     if (!applied.has(normalizeCompany(company))) return;   // only companies you've applied to
@@ -534,7 +673,7 @@ function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
 // connect queue logs LinkedIn connects.
 function computeEmailQueue({ taRows, recruiterRows, apps } = {}) {
   const { ta, rec } = _bothBooks({ taRows, recruiterRows });
-  const applied = appliedCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
+  const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const baselineId = getNewBaselineId();
   const touchIdx = buildCompanyTouchIndex({ ta, rec });
   const today = _localToday();
@@ -549,6 +688,39 @@ function computeEmailQueue({ taRows, recruiterRows, apps } = {}) {
   for (const r of ta)  consider(r, 'ta');
   for (const r of rec) consider(r, 'recruiter');
   return _sortByCompanyName(out);
+}
+
+// Applied roles in OUTREACH_ELIGIBLE_STATUSES that have ZERO contacts (no TA or
+// recruiter row) at the same company. These are "fly-blind" applications: you have
+// a live application but nobody to surface yourself to. Each row is a prompt to
+// find a hiring-principal or TA contact for that company.
+//
+// Excludes any company where at least one row exists in either contact book,
+// regardless of contact status (even Archived rows count — the user already mapped
+// that company and chose not to pursue contacts there).
+function computeContactlessApps({ apps, taRows, recruiterRows } = {}) {
+  const appList = apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })();
+  const { ta, rec } = _bothBooks({ taRows, recruiterRows });
+  const hasContact = new Set();
+  for (const r of ta)  if ((r.company || '').trim()) hasContact.add(normalizeCompany(r.company));
+  for (const r of rec) if ((r.firm   || '').trim()) hasContact.add(normalizeCompany(r.firm));
+  const out = [];
+  for (const a of appList) {
+    if (!OUTREACH_ELIGIBLE_STATUSES.includes(a.status)) continue;
+    const co = normalizeCompany(a.company);
+    if (!co || hasContact.has(co)) continue;
+    out.push({
+      source: 'app',
+      id: a.num,
+      company: a.company || '',
+      role: a.role || '',
+      status: a.status,
+      applyDate: a.date || null,
+      score: a.score || null,
+    });
+  }
+  out.sort((a, b) => (b.applyDate || '').localeCompare(a.applyDate || ''));
+  return out;
 }
 
 // How many contacts are being held back purely because their address could not be
@@ -577,8 +749,9 @@ function countWithheldContacts({ taRows, recruiterRows } = {}) {
 }
 
 export {
-  parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA,
-  computeGhostedCandidates, channelFor, computeConnectQueue, computeEmailQueue, countWithheldContacts,
-  GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, _daysAgo,
+  parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
+  computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue,
+  computeContactlessApps, countWithheldContacts,
+  GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 

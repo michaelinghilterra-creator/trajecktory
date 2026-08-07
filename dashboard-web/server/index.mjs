@@ -34,6 +34,7 @@ import { router as googleRoutes } from './routes/google.mjs';
 import { router as reviewRoutes } from './routes/review.mjs';
 import { router as buildFloorRoutes } from './routes/build-floor.mjs';
 import { router as systemRoutes, updateJobs } from './routes/system.mjs';
+import { router as sequencesRoutes } from './routes/sequences.mjs';
 import { getIdentity } from './lib/profile.mjs';
 
 // ── Process-level safety net ─────────────────────────────────────────────────
@@ -206,6 +207,7 @@ app.use(googleRoutes);
 app.use(reviewRoutes);
 app.use(buildFloorRoutes);
 app.use(systemRoutes);
+app.use(sequencesRoutes);
 
 // Public identity for the frontend's signature blocks, so no name/email/phone
 // is hardcoded in the client bundle. Reads config/profile.yml via the cached

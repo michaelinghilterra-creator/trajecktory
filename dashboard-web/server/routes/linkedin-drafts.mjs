@@ -248,7 +248,12 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
 
     let cvMd = '';
     try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
-    const cvExcerpt = cvMd ? cvMd.slice(0, 3500) : '(CV not available)';
+    let articleDigestMd = '';
+    try { articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md'); } catch {}
+    // Prepend portfolio artifacts (capped at 1000 chars) so the model can lead with
+    // a named project/outcome rather than a generic role claim, even in 300 chars.
+    const portfolioSnippet = articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 1000)}\n\nCV:\n` : '';
+    const cvExcerpt = portfolioSnippet + (cvMd ? cvMd.slice(0, 3500) : '(CV not available)');
     const idn = getIdentity();
 
     // Source-specific "why connect" anchor. External recruiters place GTM / RevOps

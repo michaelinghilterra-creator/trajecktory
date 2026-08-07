@@ -22,6 +22,7 @@ import {
   canonicalUrl, normalizeCompany, sameRole, roleSignature,
   urlFromReport, buildDecidedIndex, findDecided,
   buildActiveRoleIndex, findActiveRepost,
+  buildDecidedRoleIndex, findDecidedRole,
 } from '../lib/identity.mjs';
 
 let passed = 0, failed = 0;
@@ -243,6 +244,50 @@ check(findActiveRepost(actIdx, 'https://boards.greenhouse.io/contoso/jobs/2', { 
   'a repost of a merely-EVALUATED (not active) role is NOT suppressed');
 check(findActiveRepost(actIdx, 'https://job-boards.greenhouse.io/globex/jobs/6107003004', { company: 'Globex', role: 'Widget Operations Manager' }) === null,
   'the SAME url is left to findDecided, not double-suppressed here');
+
+// ── Decided-role index (triage-queue phantom-card suppression) ────────────────
+// The duplicate-requisition case: one role posted under two urls, one already
+// deep-dived. findDecided won't collapse the sibling (different url), so the
+// triage queue needs a company+role net to move the phantom to "already handled".
+// Crucially this spans ALL statuses, unlike buildActiveRoleIndex (active-only) —
+// a Discarded/Not-a-Fit decision must suppress the sibling too (the real incident
+// was a role posted once per hub office, deep-dived once, then Discarded, whose
+// sibling url lingered as a phantom active card). Fictional fixtures per the
+// no-real-postings guard.
+writeFileSync(join(sb, 'data/apps-role.md'), [
+  HEADER,
+  '| 9339 | 2020-01-07 | Globex | Head of Widget Strategy, AMER | 2.0/5 | Discarded | ❌ | — | [9339](reports/9339-h.md) | n | https://jobs.ashbyhq.com/globex/aaa-office-one |',
+  '| 9338 | 2020-01-07 | Initech | Senior Director of Widget Analytics | 3.6/5 | Evaluated | ❌ | — | [9338](reports/9338-g.md) | n | https://job-boards.greenhouse.io/initech/jobs/5550001 |',
+  '',
+].join('\n'));
+const roleIdx = buildDecidedRoleIndex({ appsPath: join(sb, 'data/apps-role.md'), rootDir: sb });
+check(findDecidedRole(roleIdx, { company: 'Globex', role: 'Head of Widget Strategy, AMER' })?.num === 9339,
+  'sibling requisition (same company+role, DISCARDED) is matched — the phantom-card case');
+check(findDecidedRole(roleIdx, { company: 'Globex', role: 'Head of Widget Strategy, AMER' })?.status === 'Discarded',
+  'the matched row carries its real status, so the phantom card shows the true decision not the stale triage score');
+check(findDecidedRole(roleIdx, { company: 'Initech', role: 'Senior Director of Widget Analytics' })?.num === 9338,
+  'an EVALUATED role also matches (all statuses, not just active-engagement)');
+check(findDecidedRole(roleIdx, { company: 'Globex', role: 'Director of Sales Operations' }) === null,
+  'a genuinely DIFFERENT role at the same company is NOT matched (sameRole guards it)');
+check(findDecidedRole(roleIdx, { company: 'Nonesuch Corp', role: 'Head of Widget Strategy, AMER' }) === null,
+  'the same title at a DIFFERENT company is NOT matched');
+check(findDecidedRole(roleIdx, { company: 'Globex' }) === null,
+  'a hint missing the role never matches (company alone is not identity)');
+check(findDecidedRole(null, { company: 'Globex', role: 'x' }) === null && findDecidedRole(roleIdx, null) === null,
+  'null index or null hint returns null, never throws');
+{
+  // Highest row number wins = the most recent decision stands, mirroring
+  // buildDecidedIndex. Two decided rows for the same reposted role.
+  writeFileSync(join(sb, 'data/apps-role2.md'), [
+    HEADER,
+    '| 700 | 2020-01-06 | Acme | Director of Widgets | 3.0/5 | Discarded | ❌ | — | [700](reports/700.md) | n | https://jobs.ashbyhq.com/acme/old |',
+    '| 900 | 2020-01-08 | Acme | Director of Widgets | 4.0/5 | Applied | ❌ | — | [900](reports/900.md) | n | https://jobs.ashbyhq.com/acme/new |',
+    '',
+  ].join('\n'));
+  const idx2 = buildDecidedRoleIndex({ appsPath: join(sb, 'data/apps-role2.md'), rootDir: sb });
+  check(findDecidedRole(idx2, { company: 'Acme', role: 'Director of Widgets' })?.num === 900,
+    'when a reposted role has several decided rows, the most recent (highest num) is reported');
+}
 
 rmSync(sb, { recursive: true, force: true });
 

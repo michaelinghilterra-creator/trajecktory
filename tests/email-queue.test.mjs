@@ -34,10 +34,12 @@ const taRows = [
 const recruiterRows = [
   rec({ id: 101, first: 'Gil', last: 'Shaw', title: 'Partner', firm: 'Halcyon Partners', email: 'gil@halcyon.example', state: 'risky', status: 'Dormant' }),                           // IN (risky is sendable)
 ];
+// Gate is CURRENT status in OUTREACH_ELIGIBLE_STATUSES (live funnel + No Response),
+// not the furthest rung ever reached. Nimbus (Evaluated) is pre-application → gated.
 const apps = [
-  { company: 'Northwind Robotics', reached: 'Applied' },
-  { company: 'Halcyon Partners',   reached: 'Responded' },
-  { company: 'Nimbus Health',      reached: 'Evaluated' },   // not applied → gated
+  { company: 'Northwind Robotics', status: 'Applied' },
+  { company: 'Halcyon Partners',   status: 'Responded' },
+  { company: 'Nimbus Health',      status: 'Evaluated' },   // not applied → gated
 ];
 
 const q = computeEmailQueue({ taRows, recruiterRows, apps });

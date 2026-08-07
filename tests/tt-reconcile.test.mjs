@@ -24,6 +24,12 @@ const apps = [
   { id: 5, company: 'Brightwave', status: '1st Interview', role: 'RevOps Mgr', date: '2026-03-01' },
   { id: 6, company: 'Ghostly', status: 'No Response', role: 'RevOps Dir', date: '2026-02-10' },
   { id: 7, company: 'Vanished', status: 'No Response', role: 'RevOps Lead', date: '2026-02-11' },
+  // Evaluated-only = pre-application LIMBO: neither eligible for outreach nor dead.
+  // Limbo Co has a contact (must be LEFT ALONE, not archived); Prospectus has none
+  // (must NOT be sourced). This is the rule the user asked for: don't spend a
+  // contact before applying, but don't wipe one you already hold either.
+  { id: 8, company: 'Limbo Co', status: 'Evaluated', role: 'RevOps Dir', date: '2026-03-05' },
+  { id: 9, company: 'Prospectus', status: 'Evaluated', role: 'Analytics Dir', date: '2026-03-06' },
 ];
 const ttRows = [
   { id: 10, first: 'A', last: 'One', company: 'Acme Labs', title: 'TA', status: 'Not Contacted' },
@@ -31,6 +37,7 @@ const ttRows = [
   { id: 12, first: 'C', last: 'Three', company: 'Zenith', title: 'TA', status: 'Not Contacted' },
   { id: 13, first: 'D', last: 'Four', company: 'acme labs', title: 'TA', status: 'Dormant' },
   { id: 14, first: 'E', last: 'Five', company: 'Ghostly', title: 'TA', status: 'Not Contacted' },
+  { id: 15, first: 'F', last: 'Six', company: 'Limbo Co', title: 'TA', status: 'Not Contacted' },
 ];
 
 const { toArchive, companiesNeedingContacts } = reconcilePreview(apps, ttRows);
@@ -41,6 +48,7 @@ check(archiveIds.includes(13), 'archive #13: normalized "acme labs" matches "Acm
 check(!archiveIds.includes(11), 'keep #11: Northwind has an active app (Applied)');
 check(!archiveIds.includes(12), 'leave #12 alone: Zenith has no logged apps');
 check(!archiveIds.includes(14), 'keep #14: Ghostly is No Response (ghosted, not dead) — chase-worthy, never archived');
+check(!archiveIds.includes(15), 'keep #15: Limbo Co is Evaluated-only (pre-application limbo, not dead) — never archived');
 check(archiveIds.length === 2, 'exactly two archived');
 check(/2 applications closed/.test(toArchive.find(c => c.id === 10).reason), 'reason names the closed count + statuses');
 
@@ -51,6 +59,8 @@ check(!needCos.includes('Ghostly'), 'Ghostly not flagged — No Response but alr
 check(!needCos.includes('Northwind'), 'Northwind not flagged — it already has a TA contact');
 check(!needCos.includes('Crestline'), 'Crestline not flagged — its app is closed (not active)');
 check(!needCos.includes('Acme Labs'), 'Acme not flagged — closed + already has contacts');
+check(!needCos.includes('Prospectus'), 'Prospectus not flagged — Evaluated only, not applied yet (no contact spent pre-application)');
+check(!needCos.includes('Limbo Co'), 'Limbo Co not flagged — Evaluated only, even though it has no NEW contact need beyond its existing one');
 
 check(normCompany('ADT, Inc.') === 'adt', 'normCompany strips punctuation, legal suffix, lowercases');
 check(normCompany('') === '', 'normCompany handles empty');

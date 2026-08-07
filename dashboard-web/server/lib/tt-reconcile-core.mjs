@@ -7,17 +7,15 @@
 // NONE of them are still worth keeping — i.e. none are active (Evaluated..Offer)
 // AND none are "No Response". Recruiters are external firms, not tied to one
 // opportunity, and are never considered here.
-import { ACTIVE_STATUSES } from './statuses.mjs';
+import { OUTREACH_ELIGIBLE_STATUSES, OUTREACH_DEAD_STATUSES } from './statuses.mjs';
 
-// Companies whose contacts are worth keeping (never auto-archived). This is the
-// active funnel PLUS "No Response". A No-Response application is ghosted, not
-// dead: the connect/email queues already treat it as still-applied (a No-Response
-// row's furthest-reached rung is forced to Applied in statuses.mjs), so reconcile
-// must agree — otherwise it archives exactly the contacts those queues surface for
-// chasing a ghost, which is what silently wiped a batch of freshly-sourced
-// contacts. Genuinely dead outcomes (Rejected, Discarded, SKIP, Closed) are NOT
-// here, so their contacts still archive.
-const KEEP_STATUSES = [...ACTIVE_STATUSES, 'No Response'];
+// The outreach rule lives in statuses.mjs as the single source of truth, shared
+// with the follow-up queues so the two can never disagree:
+//   ELIGIBLE = live funnel (Applied..Offer) + No Response — worth a contact.
+//   DEAD     = {Rejected, Discarded, SKIP, Closed, Not a Fit} — safe to archive.
+// Evaluated is in NEITHER set on purpose: an evaluated-not-applied company is
+// pre-application limbo, so reconcile neither sources a contact for it nor
+// archives one it already has (you may apply next). See OUTREACH_* in statuses.mjs.
 
 export function normCompany(s) {
   // Drop a " — City" / " - City" suffix and common legal suffixes before
@@ -44,13 +42,17 @@ export function reconcilePreview(apps, ttRows) {
     appsByCompany.get(k).push(a);
   }
 
-  // Archive a contact when their company has apps and none are worth keeping
-  // (no active app and no ghosted "No Response" app to chase).
+  // Archive a contact only when their company is DEFINITIVELY dead: it has apps
+  // and EVERY one is terminal (Rejected/Discarded/SKIP/Closed/Not a Fit). Any
+  // live/No-Response app keeps the contact; an Evaluated-only company is limbo and
+  // is left alone (the `every` is false when any app is Evaluated), so a contact
+  // sourced just before you apply is never wiped. This replaced a "none are
+  // keep-worthy" test, which would have archived Evaluated-only contacts.
   const toArchive = [];
   for (const c of ttRows) {
     const companyApps = appsByCompany.get(normCompany(c.company)) || [];
     if (companyApps.length === 0) continue;               // no apps logged — leave alone
-    if (companyApps.some(a => KEEP_STATUSES.includes(a.status))) continue; // active or ghosted — keep
+    if (!companyApps.every(a => OUTREACH_DEAD_STATUSES.includes(a.status))) continue; // any live/limbo app — keep
     toArchive.push({
       id: c.id,
       first: c.first,
@@ -62,14 +64,15 @@ export function reconcilePreview(apps, ttRows) {
     });
   }
 
-  // Companies worth a contact (>=1 active OR ghosted "No Response" app) that have
-  // no TA contact yet — the discover targets. Includes No Response so a ghosted
-  // company you want to chase surfaces for sourcing, matching the keep rule above.
+  // Companies worth a contact (>=1 outreach-eligible app: currently-live funnel or
+  // a ghosted No Response) that have no TA contact yet — the discover targets. An
+  // Evaluated-only company is excluded here: no application means no reason to
+  // source a contact yet. Uses the SAME eligible set as the follow-up queues.
   const ttCompaniesNorm = new Set(ttRows.map(c => normCompany(c.company)));
   const companiesNeedingContacts = [];
   for (const [k, companyApps] of appsByCompany.entries()) {
     if (ttCompaniesNorm.has(k)) continue;
-    const active = companyApps.filter(a => KEEP_STATUSES.includes(a.status));
+    const active = companyApps.filter(a => OUTREACH_ELIGIBLE_STATUSES.includes(a.status));
     if (active.length === 0) continue;
     const mostRecent = active.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
     companiesNeedingContacts.push({

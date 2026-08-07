@@ -76,19 +76,27 @@ const taRows = [
   // → excluded by the applied-gate: don't spend a contact before you've committed.
   ta({ id: 10, first: 'Rae', last: 'Nolan', title: 'Head of TA', company: 'Nimbus Health',
        linkedin: 'linkedin.com/in/rae-nolan-ex', status: 'Not Contacted' }),
+  // no email + LinkedIn + active, BUT you applied then got REJECTED there → excluded.
+  // This is the current-status gate: the opportunity is dead, so stop chasing
+  // contacts for it even though the company was once at Applied. (Under the old
+  // reached-based gate this contact WOULD have surfaced forever.)
+  ta({ id: 11, first: 'Kit', last: 'Ramsey', title: 'Recruiter', company: 'Ridgeline Legal',
+       linkedin: 'linkedin.com/in/kit-ramsey-ex', status: 'Not Contacted' }),
 ];
 
-// Applications gate: a contact only surfaces if its company reached >= Applied.
-// `reached` is the furthest funnel rung (Evaluated=0, Applied=1). Nimbus Health is
-// Evaluated-only, so ta:10 must NOT appear even though it is otherwise queue-eligible.
+// Applications gate: a contact only surfaces if its company has a CURRENTLY-LIVE
+// application (current status in OUTREACH_ELIGIBLE_STATUSES = live funnel + No
+// Response), not merely one that ever reached Applied. Nimbus Health is
+// Evaluated-only (pre-application) so ta:10 must NOT appear.
 const apps = [
-  { company: 'Northwind Robotics', reached: 'Applied' },
-  { company: 'Cobalt Systems',     reached: 'Phone Screen' }, // past Applied, still counts
-  { company: 'Aster Grid',         reached: 'Applied' },
-  { company: 'Meridian AI',        reached: 'Applied' },
-  { company: 'Halcyon Partners',   reached: 'Applied' },
-  { company: 'Solstice Data',      reached: 'Applied' },       // ta:9 excluded by status, not gate
-  { company: 'Nimbus Health',      reached: 'Evaluated' },     // ta:10 excluded by the gate
+  { company: 'Northwind Robotics', status: 'Applied' },
+  { company: 'Cobalt Systems',     status: 'Phone Screen' }, // past Applied, still live
+  { company: 'Aster Grid',         status: 'Applied' },
+  { company: 'Meridian AI',        status: 'Applied' },
+  { company: 'Halcyon Partners',   status: 'Applied' },
+  { company: 'Solstice Data',      status: 'Applied' },       // ta:9 excluded by status, not gate
+  { company: 'Nimbus Health',      status: 'Evaluated' },     // ta:10 excluded by the gate (pre-application)
+  { company: 'Ridgeline Legal',    status: 'Rejected' },      // ta:11 excluded by the gate (dead opportunity)
 ];
 
 const recruiterRows = [
@@ -119,6 +127,7 @@ check(!ids.includes('ta:5'), 'Archived (dead-opp) contact is NOT queued');
 check(!ids.includes('ta:6'), 'contact with no LinkedIn handle is NOT queued');
 check(!ids.includes('ta:9'), 'contact whose invite already went out (status Sent) is NOT queued');
 check(!ids.includes('ta:10'), 'contact at an Evaluated-only company is NOT queued (must have applied)');
+check(!ids.includes('ta:11'), 'contact at an applied-then-Rejected company is NOT queued (opportunity is dead)');
 
 const robin = q.find(r => r.id === 102);
 check(robin && robin.company === 'Halcyon Partners', 'recruiter company is taken from `firm`');
