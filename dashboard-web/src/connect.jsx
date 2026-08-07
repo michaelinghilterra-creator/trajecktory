@@ -63,6 +63,13 @@ function CompanyOutreach({ c }) {
         title="The most recent message to or from THIS contact, either direction.">
         {selfLine}
       </div>
+      {o.selfSentToday ? (
+        <div style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 4,
+          background: 'color-mix(in srgb, var(--orange) 15%, transparent)', color: 'var(--orange)', border: '1px solid color-mix(in srgb, var(--orange) 40%, transparent)' }}
+          title={`You already ${chLabel(o.selfSentToday.channel) === 'email' ? 'emailed' : 'sent a LinkedIn invite to'} this contact today. Hitting the other channel the same day reads as over-contacting — consider waiting a day.`}>
+          ⚠ You already reached this contact today ({chLabel(o.selfSentToday.channel)}) — consider spacing the other channel to another day
+        </div>
+      ) : null}
       {o.touchedToday ? (
         <div style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 4,
           background: 'color-mix(in srgb, var(--orange) 15%, transparent)', color: 'var(--orange)', border: '1px solid color-mix(in srgb, var(--orange) 40%, transparent)' }}

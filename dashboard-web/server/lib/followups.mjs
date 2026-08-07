@@ -604,6 +604,7 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
   let lastTouch = null;
   let selfLastTouch = null;
   let companyLastComms = null;
+  let selfSentToday = null;   // { channel } when YOU sent to THIS contact today
   if (Array.isArray(companyTouches)) {
     // last SENT to someone else — keeps the "already reached out today" semantics
     const sent = companyTouches.find(x => x.key !== selfKey && x.direction === 'Sent');
@@ -614,6 +615,13 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
     // last comms with anyone else at the org, either direction
     const other = companyTouches.find(x => x.key !== selfKey);
     if (other) companyLastComms = { name: other.name, date: other.date, direction: other.direction, channel: other.channel };
+    // did YOU send to THIS contact today? (an OUTBOUND today — a received reply does
+    // not count). Drives the per-contact same-day cross-channel hold-off: emailing and
+    // LinkedIn-inviting the same person on the same day reads as over-contacting.
+    if (today) {
+      const st = companyTouches.find(x => x.key === selfKey && x.direction === 'Sent' && x.date === today);
+      if (st) selfSentToday = { channel: st.channel };
+    }
   }
   const touchedToday = (lastTouch && today && lastTouch.date === today)
     ? { name: lastTouch.name, channel: lastTouch.channel }
@@ -633,7 +641,7 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
     reason: (row.notes || '').replace(/\s+/g, ' ').trim().slice(0, 160),
     isNew: baselineId != null && Number.isFinite(row.id) && row.id > baselineId,
     notContacted: !status.trim() || /^\s*not\s*contacted\s*$/i.test(status),
-    companyOutreach: { lastTouch, touchedToday, selfLastTouch, companyLastComms },
+    companyOutreach: { lastTouch, touchedToday, selfLastTouch, companyLastComms, selfSentToday },
     // Hiring-principal flag (TA contacts only; recruiters are never principals).
     isPrincipal: source === 'ta' ? (row.isPrincipal ?? false) : false,
     // Channel bucket: 1 = LinkedIn only, 2 = email only, 3 = both, 0 = neither.
