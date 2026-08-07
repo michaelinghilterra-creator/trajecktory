@@ -277,7 +277,7 @@ window.PostingPanel = function PostingPanel({ app }) {
 }
 
 // ---------- Sidebar ----------
-window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChanged, version }) {
+window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChanged, version, sha }) {
   // Numeric (1-9) keyboard hotkeys for tab switching removed per user request.
   // The `hint` field is gone too. Pipeline carries the pending-decisions badge
   // now that the standalone Overview tab is folded into Pipeline → Overview.
@@ -317,7 +317,10 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
         </div>
         <div className="brand-text">
           <strong className="mono">traje<span style={{ color: "var(--accent)" }}>ck</span>tory</strong>
-          <span>{version ? `v${version}` : "Career Pipeline"}</span>
+          <span>
+            {version ? `v${version}` : "Career Pipeline"}
+            {sha ? <span className="mono" style={{ opacity: 0.6 }} title="running checkout (dev); * = uncommitted changes">{` · ${sha}`}</span> : null}
+          </span>
         </div>
       </div>
 
