@@ -690,6 +690,39 @@ function computeEmailQueue({ taRows, recruiterRows, apps } = {}) {
   return _sortByCompanyName(out);
 }
 
+// Applied roles in OUTREACH_ELIGIBLE_STATUSES that have ZERO contacts (no TA or
+// recruiter row) at the same company. These are "fly-blind" applications: you have
+// a live application but nobody to surface yourself to. Each row is a prompt to
+// find a hiring-principal or TA contact for that company.
+//
+// Excludes any company where at least one row exists in either contact book,
+// regardless of contact status (even Archived rows count — the user already mapped
+// that company and chose not to pursue contacts there).
+function computeContactlessApps({ apps, taRows, recruiterRows } = {}) {
+  const appList = apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })();
+  const { ta, rec } = _bothBooks({ taRows, recruiterRows });
+  const hasContact = new Set();
+  for (const r of ta)  if ((r.company || '').trim()) hasContact.add(normalizeCompany(r.company));
+  for (const r of rec) if ((r.firm   || '').trim()) hasContact.add(normalizeCompany(r.firm));
+  const out = [];
+  for (const a of appList) {
+    if (!OUTREACH_ELIGIBLE_STATUSES.includes(a.status)) continue;
+    const co = normalizeCompany(a.company);
+    if (!co || hasContact.has(co)) continue;
+    out.push({
+      source: 'app',
+      id: a.num,
+      company: a.company || '',
+      role: a.role || '',
+      status: a.status,
+      applyDate: a.date || null,
+      score: a.score || null,
+    });
+  }
+  out.sort((a, b) => (b.applyDate || '').localeCompare(a.applyDate || ''));
+  return out;
+}
+
 // How many contacts are being held back purely because their address could not be
 // checked. The send gate refusing an unverified address is correct, but its effect
 // is INVISIBLE: the row simply does not appear, and fewer rows looks like a quiet
@@ -717,7 +750,8 @@ function countWithheldContacts({ taRows, recruiterRows } = {}) {
 
 export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
-  computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, countWithheldContacts,
+  computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue,
+  computeContactlessApps, countWithheldContacts,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 

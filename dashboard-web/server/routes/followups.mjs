@@ -8,7 +8,7 @@ import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute } from '../lib/sidecars.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeContactlessApps, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
@@ -103,6 +103,11 @@ router.get('/api/followups/stale', (req, res) => {
       cold,
       snoozed,
       ghostedCandidates: computeGhostedCandidates(),
+      // Applied roles with no contact at the company — "find a contact" nudge.
+      // Sorted by apply date descending; each row has: source:'app', id, company,
+      // role, status, applyDate, score. Empty array when all applied companies
+      // already have at least one contact row.
+      contactlessApps: computeContactlessApps(),
       // Deprecated alias: legacy readers expect `items` to be the badge list.
       items: warm,
     });
