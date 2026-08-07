@@ -4,6 +4,7 @@ import path from 'path';
 import { OUTPUT_DIR } from '../config.mjs';
 import { parseApplicationsMd, patchRowInMd, rejectionTimingStats } from '../lib/applications.mjs';
 import { recordApplyDate } from '../lib/sidecars.mjs';
+import { pushObsidianNote } from '../lib/obsidian.mjs';
 import { ALL_STATUSES } from '../lib/statuses.mjs';
 import { mdToHtml, escapeHtml } from '../lib/html.mjs';
 
@@ -74,6 +75,15 @@ router.patch('/api/applications/:id', (req, res) => {
     }
     const when = eventDate || undefined;
 
+    // Detect the transition INTO Applied. We push a vault note only when a row
+    // that was NOT already Applied becomes Applied — not on every save where the
+    // status happens to be Applied — so an unrelated notes edit never overwrites
+    // a note the user has since hand-edited in Obsidian.
+    const before = parseApplicationsMd();
+    const prevRow = (company && before.find(r => r.id === id && r.company === company))
+      || before.find(r => r.id === id);
+    const becomingApplied = status === 'Applied' && (!prevRow || prevRow.status !== 'Applied');
+
     const updates = {};
     if (status !== undefined) updates.status = status;
     if (notes !== undefined) updates.notes = notes;
@@ -91,6 +101,19 @@ router.patch('/api/applications/:id', (req, res) => {
     const rows = parseApplicationsMd();
     const updated = (company && rows.find(r => r.id === id && r.company === company))
       || rows.find(r => r.id === id);
+
+    // Automatic Obsidian note on apply. The Apply button already does this via
+    // the apply job; marking Applied from the status dropdown used to skip it
+    // entirely, which is why applied roles were missing from the vault. Fire the
+    // same shared push here. It self-skips when Obsidian isn't set up and never
+    // throws, so a vault hiccup cannot break the status change. Fire-and-forget:
+    // the status change is already persisted, so we don't make the client wait.
+    if (becomingApplied && updated) {
+      pushObsidianNote({ row: updated, appliedDate: when })
+        .then((r) => { if (r && r.ok) console.log(`[obsidian] wrote ${r.notePath}`); })
+        .catch(() => { /* pushObsidianNote already logs; never surfaces here */ });
+    }
+
     res.json(updated || { id, ...updates });
   } catch (err) {
     res.status(500).json({ error: err.message });
