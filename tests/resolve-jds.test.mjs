@@ -13,7 +13,7 @@
  * Run: node tests/resolve-jds.test.mjs   (exit 0 = pass, 1 = fail)
  */
 import { htmlToText, parsePostingUrl, fetchJdText } from '../lib/ats-jd.mjs';
-import { buildHintIndex, parsePendingRow, repointPipeline } from '../resolve-jds.mjs';
+import { buildHintIndex, parsePendingRow, repointPipeline, computeGating } from '../resolve-jds.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -107,6 +107,53 @@ check(threw, 'fetchJdText throws NEEDS_BOARD when a gh_jid has no board hint');
 const ash = await fetchJdText({ ats: 'ashby', slug: 'globex', id: 'uuid-1' },
   { fetchImpl: stub({ 'posting-api/job-board/globex': { jobs: [{ id: 'uuid-1', title: 'Dir Analytics', descriptionHtml: '<p>Own data</p>' }] } }) });
 check(ash.text === 'Own data', 'fetchJdText ashby: finds posting by id on the board');
+
+// ── computeGating: the retry-limit boundary ───────────────────────────────────
+// 2026-08-06: a handful of postings (unsupported ATS, or a confirmed 404) kept
+// re-surfacing at the top of the triage queue every run, burning a full LLM round
+// each time to re-discover the same dead end. This is the fix — retries are
+// bounded, and an "unrecognized platform" result is never going to change on its
+// own, so it does not get a retry at all.
+{
+  const g = computeGating({
+    unrecognized: [{ url: 'https://spa.example/job/1', company: 'Spa Co', title: 'Role' }],
+    failed: [],
+    priorFailCounts: {},
+    retryLimit: 1,
+  });
+  check(g.toGate.length === 1 && g.toGate[0].url === 'https://spa.example/job/1', 'unrecognized platform gates immediately (0 retries)');
+  check(/unsupported ATS platform/.test(g.toGate[0].reason), 'unrecognized gate reason names the cause');
+}
+{
+  // First-ever failure: not yet gated, count carried forward for next run.
+  const g = computeGating({
+    unrecognized: [],
+    failed: [{ url: 'https://gh.example/job/1', company: 'Gh Co', title: 'Role', reason: 'HTTP 404' }],
+    priorFailCounts: {},
+    retryLimit: 1,
+  });
+  check(g.toGate.length === 0, 'a first-time fetch failure is not gated yet (within retry limit)');
+  check(g.nextFailCounts['https://gh.example/job/1'] === 1, 'fail count incremented to 1 and carried forward');
+}
+{
+  // Second consecutive failure (this run's failure + prior count 1 > retryLimit 1): gate.
+  const g = computeGating({
+    unrecognized: [],
+    failed: [{ url: 'https://gh.example/job/1', company: 'Gh Co', title: 'Role', reason: 'HTTP 404' }],
+    priorFailCounts: { 'https://gh.example/job/1': 1 },
+    retryLimit: 1,
+  });
+  check(g.toGate.length === 1 && /unreadable after 2 attempts/.test(g.toGate[0].reason), 'gates once the retry limit is exceeded, reason states the attempt count');
+  check(g.nextFailCounts['https://gh.example/job/1'] === undefined, 'a gated URL is not carried forward in the next fail-count file');
+}
+{
+  // A URL that resolved successfully (or was gated) this run is simply absent from
+  // `failed`/`unrecognized` — computeGating only sees the URLs handed to it, so a
+  // stale counter for a since-resolved URL is the caller's job to drop (main() does
+  // this by intersecting with the still-pending set), not computeGating's.
+  const g = computeGating({ unrecognized: [], failed: [], priorFailCounts: { 'https://old.example/x': 3 }, retryLimit: 1 });
+  check(g.toGate.length === 0 && Object.keys(g.nextFailCounts).length === 0, 'a URL with no failure this run produces no gate and no carried-forward count');
+}
 
 // ── done ─────────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -24,12 +24,14 @@ import yaml from 'js-yaml';
 import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness, workdaySiteFromCareersUrl } from './liveness-core.mjs';
 import { isSafeLivenessUrl } from './lib/safe-url.mjs';
 import { buildDecidedIndex, findDecided, buildActiveRoleIndex, findActiveRepost } from './lib/identity.mjs';
+import { appendGateHistory } from './lib/gate-history.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(__dirname, 'data/pipeline.md');
 const PORTALS = join(__dirname, 'portals.yml');
 const APPS = join(__dirname, 'data/applications.md');
 const MERGE_DROPS = join(__dirname, 'data/merge-drops.tsv');
+const GATE_HISTORY = join(__dirname, 'data/gate-history.tsv');
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -97,6 +99,13 @@ if (pending.length === 0) {
 let decidedCount = 0;
 let repostCount = 0;
 const dropLog = [];   // rows appended to data/merge-drops.tsv for audit
+// Every disposition this run reaches — decided/repost suppressions AND (further
+// below) the browser-checked live/dead/uncertain verdicts — is also mirrored
+// into data/gate-history.tsv, a durable append-only log independent of
+// pipeline.md. See lib/gate-history.mjs for why: pipeline.md was the ONLY place
+// this information lived until 2026-08-06, and losing that file meant losing
+// every liveness disposition ever computed, not just the queue itself.
+const gateHistoryRows = [];
 if (!allowReeval) {
   const index = buildDecidedIndex({ appsPath: APPS, rootDir: __dirname });
   const activeIndex = buildActiveRoleIndex({ appsPath: APPS, rootDir: __dirname });
@@ -106,6 +115,7 @@ if (!allowReeval) {
     if (prior) {
       lines[p.idx] = `- [!] ${p.url}${p.suffix} — already evaluated as #${prior.num} (${prior.status})`;
       decidedCount++;
+      gateHistoryRows.push({ url: p.url, company: p.company, role: p.role, result: 'decided', reason: `already evaluated as #${prior.num} (${prior.status})` });
       console.log(`  ⏭ decided   #${prior.num} (${prior.status}) — ${p.url.slice(0, 78)}`);
       continue;
     }
@@ -116,6 +126,7 @@ if (!allowReeval) {
       lines[p.idx] = `- [!] ${p.url}${p.suffix} — repost of #${repost.num} (${repost.status}); already engaged, skipped`;
       repostCount++;
       dropLog.push(`${todayISO()}\trepost\t${repost.num}\t${repost.status}\t${p.company}\t${p.role}\t${p.url}`);
+      gateHistoryRows.push({ url: p.url, company: p.company, role: p.role, result: 'repost', reason: `repost of #${repost.num} (${repost.status}); already engaged` });
       console.log(`  ⏭ repost    of #${repost.num} (${repost.status}) — ${p.company} / ${p.role}`);
       continue;
     }
@@ -127,7 +138,7 @@ if (!allowReeval) {
   if (repostCount) console.log(`\nReposts suppressed: ${repostCount} (already applied/interviewing — logged to data/merge-drops.tsv)`);
 
   if ((decidedCount || repostCount) && pending.length === 0) {
-    if (!dryRun) { writeFileSync(PIPELINE, lines.join('\n'), 'utf8'); flushDropLog(dropLog); }
+    if (!dryRun) { writeFileSync(PIPELINE, lines.join('\n'), 'utf8'); flushDropLog(dropLog); appendGateHistory(GATE_HISTORY, gateHistoryRows); }
     if (decidedCount) console.log(`Already evaluated: ${decidedCount} (skipped, not browser-checked)`);
     console.log('Nothing left to liveness-check.');
     process.exit(0);
@@ -289,11 +300,20 @@ for (const r of dead) {
   newLines[r.idx] = `- [!] ${r.url}${r.suffix} — gated: ${reasonShort}`;
 }
 
+// Log EVERY browser-checked verdict, not just the dead ones that mutate
+// pipeline.md — a "live" or "uncertain" result is just as much a disposition
+// worth having a durable record of.
+for (const r of results) {
+  gateHistoryRows.push({ url: r.url, company: r.company, role: r.role, result: r.result, reason: r.reason || '' });
+}
+
 if (dryRun) {
   console.log('Would rewrite pipeline.md with the above changes. No file written.');
   process.exit(0);
 }
 
 writeFileSync(PIPELINE, newLines.join('\n'));
+appendGateHistory(GATE_HISTORY, gateHistoryRows);
 console.log(`Rewrote ${PIPELINE} — ${dead.length} entries flipped to "- [!]" (gated).`);
 console.log(`Batch will now process only ${live.length + uncertain.length} URLs.`);
+console.log(`Logged ${gateHistoryRows.length} verdicts to data/gate-history.tsv (audit trail, survives a pipeline.md loss).`);

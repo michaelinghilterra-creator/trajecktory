@@ -63,6 +63,8 @@ AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluat
 | `data/applications.md` | Application tracker |
 | `data/pipeline.md` | Inbox of pending URLs |
 | `data/scan-history.tsv` | Scanner dedup history |
+| `data/triage-results.tsv` | Fast-triage scores (`lib/triage-results.mjs` is the single append-only writer — see the "One true batch workflow" liveness-gate step and `node reconcile-triage.mjs`) |
+| `data/gate-history.tsv` | Durable audit trail of every `gate-pipeline.mjs` liveness verdict (live/dead/uncertain/decided/repost), independent of `pipeline.md` — `lib/gate-history.mjs` is the single append-only writer. Exists because `pipeline.md` used to be the ONLY record of a liveness disposition; losing that file (as happened once) meant losing every verdict ever computed, not just the queue. |
 | `portals.yml` | Query and company config |
 | `templates/cv-master.docx` | **CV master template (default).** The user's Word resume. Tailored CVs are produced by copying this file and surgically swapping the top four slots (title, 3-keyword subtitle, summary, areas of expertise) in `word/document.xml`. Every other byte is preserved exactly. To update the master, edit it in Word and resync `cv.md`. |
 | `templates/cv-template-slots.json` | Slot definitions: locators, baseline character counts, and which slots are page-break-sensitive (drift more than ±15% blocks output). **User-layer (gitignored):** the `locator` values are verbatim lines from the user's own `cv-master.docx`, so this file is personal data. The tracked default is `templates/cv-template-slots.example.json` (fictional locators); the generator falls back to it, and the docx mode regenerates the real file from the user's CV. |
@@ -440,10 +442,25 @@ node scan.mjs
 #     a plain fetch renders blank, so the agents ("skip any you cannot read") drop
 #     every role on them. This pulls each pending posting's JD via its ATS API and
 #     repoints the pipeline entry to local:jds/…, which the agents read directly.
+#     Also gates rows that are structurally unreadable: an unrecognized-platform
+#     posting (no public JD API) gates immediately, a recognized-ATS fetch failure
+#     (e.g. a 404) gets one retry on the next run before gating. Without this, a
+#     dead/unreadable posting sits at the top of the queue and burns a full triage
+#     round every time it re-surfaces. Gated rows still show up as "- [!]" in
+#     data/pipeline.md with a reason — nothing is silently dropped.
 node resolve-jds.mjs
 
 # 2. REQUIRED: liveness-gate the pipeline BEFORE spending LLM tokens
 node gate-pipeline.mjs
+
+# 2b. If a triage pass (mode: triage) has run against this queue, reconcile it
+#     so already-scored rows stop showing as unchecked. Triage deliberately never
+#     checks off a pipeline row itself (see modes/triage.md), so a role that's
+#     already been triage-scored — or already has a full evaluation in
+#     applications.md from an earlier session — otherwise sits open forever and
+#     gets re-verified as a duplicate on every subsequent run. Dry-run by
+#     default; --apply to write.
+node reconcile-triage.mjs --apply
 
 # 3. Run the batch (only "- [ ]" items get evaluated; "- [!]" are skipped)
 #    via /trajecktory pipeline in your CLI
