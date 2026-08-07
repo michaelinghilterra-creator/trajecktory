@@ -330,6 +330,8 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   const warm = data.warm || [];
   const cold = data.cold || [];
   const ghosted = data.ghostedCandidates || [];
+  // Applied roles with no contact at the company — the "find a contact" nudge.
+  const contactlessApps = data.contactlessApps || [];
 
   // Snooze defers a stale alert by N days without logging a touch (the clock
   // keeps running). Mute is the indefinite "done for now / awaiting reply": it
@@ -455,6 +457,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
     { id: 'connect',  label: 'Connect',          n: null,        icon: window.ICON.userPlus },
     { id: 'email',    label: 'Email queue',      n: null,        icon: window.ICON.mail },
     { id: 'both',     label: 'High value',       n: null,        icon: window.ICON.star || window.ICON.userPlus },
+    { id: 'findcontact', label: 'Find a contact', n: contactlessApps.length, icon: window.ICON.search || window.ICON.userPlus },
     { id: 'warm',     label: 'Warm threads',     n: warm.length, icon: window.ICON.send },
     { id: 'cold',     label: 'Applications out',  n: cold.length, icon: window.ICON.briefcase },
   ];
@@ -728,6 +731,44 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
         </>
       )}
         </>
+      )}
+
+      {/* ── Find a contact: applied roles with nobody to talk to ───────────── */}
+      {subView === 'findcontact' && (
+        <div style={{ padding: '4px 0' }}>
+          <div className="ta-head">
+            <div>
+              <h1>Find a contact</h1>
+              <div className="sub">
+                {contactlessApps.length === 0
+                  ? 'Every live application has at least one contact. Nice.'
+                  : `${contactlessApps.length} role${contactlessApps.length === 1 ? '' : 's'} you've applied to with nobody to talk to. Find a hiring principal or TA contact so you can actually follow up.`}
+              </div>
+            </div>
+          </div>
+          {contactlessApps.length > 0 && (
+            <div className="col" style={{ gap: 8, marginTop: 12 }}>
+              {contactlessApps.map(a => (
+                <div key={`cl-${a.id}`} className="action-card">
+                  <div className="action-card-row">
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span className="mono dim" style={{ fontSize: 10.5 }}>#{String(a.id).padStart(3, '0')}</span>
+                        <span className="action-card-co">{a.company}</span>
+                        <span className="dim">· {a.role || 'unknown role'}</span>
+                        <span className="pill" style={{ fontSize: 10.5 }}>{a.status}</span>
+                        {a.applyDate ? <span className="dim" style={{ fontSize: 11 }}>applied {a.applyDate}</span> : null}
+                      </div>
+                    </div>
+                    <button className="btn accent sm" onClick={() => setFindFor({ company: a.company, role: a.role })}>
+                      Find a contact
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Find-contacts modal (reuses the per-company finder from TA Outreach) */}

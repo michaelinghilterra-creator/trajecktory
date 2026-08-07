@@ -566,6 +566,8 @@ function BothRow({ c, toast, onChannelDone }) {
             <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
             <span title="High value: reachable on both email and LinkedIn. Worked on both channels."
               style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.4px', padding: '2px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff', verticalAlign: 'middle' }}>HIGH VALUE</span>
+            {c.isPrincipal ? <span title="Hiring principal — the decision-maker you'd report to."
+              style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)', verticalAlign: 'middle' }}>PRINCIPAL</span> : null}
             <OutreachPills c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
@@ -630,6 +632,99 @@ function BothRow({ c, toast, onChannelDone }) {
     </div>
   );
 }
+
+// ── Sequence panel ──────────────────────────────────────────────────────────────
+// Per-contact outreach sequence: pick a template, and the engine tracks which step
+// you're on and when the next is due. Each step is a DRAFT you approve — nothing
+// auto-sends (HITL). Reads GET /api/sequences/:source/:id and the template library,
+// and drives start / advance / pause / resume. Usable from any contact.
+window.SequencePanel = function SequencePanel({ source, id, toast }) {
+  const [state, setState] = useStateCq(undefined);   // undefined = loading, null = none, obj = active
+  const [templates, setTemplates] = useStateCq(null);
+  const [pick, setPick] = useStateCq('');
+  const [busy, setBusy] = useStateCq(false);
+  const [err, setErr] = useStateCq(null);
+
+  const loadState = () =>
+    fetch(`/api/sequences/${source}/${id}`).then(r => r.json())
+      .then(d => { if (d && d.error) setErr(d.error); else setState(d.state || null); })
+      .catch(e => setErr(e.message));
+
+  useEffectCq(() => {
+    loadState();
+    fetch('/api/sequences/templates').then(r => r.json())
+      .then(d => { const t = (d && d.templates) || []; setTemplates(t); if (t[0]) setPick(t[0].id); })
+      .catch(() => setTemplates([]));
+  }, [source, id]);
+
+  const post = (path, body) => {
+    setBusy(true); setErr(null);
+    return window.tjkMutate(`/api/sequences/${source}/${id}${path}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
+    }).then(r => r.json())
+      .then(res => { if (res.error) { setErr(res.error); toast && toast(res.error, 'error'); } return res; })
+      .catch(e => { setErr(e.message); toast && toast(e.message, 'error'); })
+      .finally(() => { setBusy(false); loadState(); });
+  };
+
+  const tpl = (templates || []).find(t => t.id === (state && state.sequenceId)) || null;
+  const nTouches = tpl ? (tpl.touches || []).length : 0;
+  const stepDone = state ? state.step : 0;
+  const nextTouch = tpl && (tpl.touches || [])[stepDone];
+
+  if (err) return <div className="dim" style={{ fontSize: 12 }}>Sequence unavailable: {err}</div>;
+  if (state === undefined) return <div className="dim" style={{ fontSize: 12 }}>Loading sequence…</div>;
+
+  // Active sequence
+  if (state) {
+    return (
+      <div style={{ fontSize: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600 }}>{tpl ? tpl.label : state.sequenceId}</span>
+          {state.paused
+            ? <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--orange) 18%, transparent)', color: 'var(--orange)', border: '1px solid color-mix(in srgb, var(--orange) 40%, transparent)' }}>PAUSED</span>
+            : state.completedAt
+              ? <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--green) 18%, transparent)', color: 'var(--green)' }}>DONE</span>
+              : <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)' }}>ACTIVE</span>}
+        </div>
+        <div className="dim" style={{ marginTop: 4 }}>
+          Step {Math.min(stepDone, nTouches)} of {nTouches} done{state.nextStepDue ? ` · next due ${state.nextStepDue}` : ''}
+          {nextTouch ? ` · next: ${nextTouch.label}` : ''}
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+          {!state.completedAt && <button className="btn sm" onClick={() => post('/advance')} disabled={busy} title="Mark the current step's draft sent and move the clock to the next step.">Mark step sent</button>}
+          {!state.completedAt && (state.paused
+            ? <button className="btn sm" onClick={() => post('/resume')} disabled={busy}>Resume</button>
+            : <button className="btn ghost sm" onClick={() => post('/pause')} disabled={busy}>Pause</button>)}
+        </div>
+      </div>
+    );
+  }
+
+  // No active sequence → picker
+  return (
+    <div style={{ fontSize: 12 }}>
+      <div className="dim" style={{ marginBottom: 8 }}>No active sequence. Start one to track a multi-touch cadence — each step is a draft you approve.</div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={pick} onChange={e => setPick(e.target.value)}
+          style={{ fontSize: 12, padding: '5px 8px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}>
+          {(templates || []).map(t => <option key={t.id} value={t.id}>{t.label} ({(t.touches || []).length} touches)</option>)}
+        </select>
+        <button className="btn accent sm" onClick={() => post('/start', { sequenceId: pick })} disabled={busy || !pick}>Start sequence</button>
+      </div>
+      {pick && templates && (() => {
+        const t = templates.find(x => x.id === pick);
+        if (!t) return null;
+        return (
+          <div className="dim" style={{ marginTop: 8, fontSize: 11 }}>
+            {t.scenario ? <div style={{ marginBottom: 4 }}>{t.scenario}</div> : null}
+            {(t.touches || []).map((x, i) => <div key={i}>• Day {x.dayOffset}: {x.label}</div>)}
+          </div>
+        );
+      })()}
+    </div>
+  );
+};
 
 window.BothQueueTab = function BothQueueTab({ toast }) {
   const [queue, setQueue] = useStateCq(null);

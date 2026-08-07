@@ -758,6 +758,7 @@ function highValueContacts({ taRows, recruiterRows } = {}) {
       linkedin: (row.linkedin || '').trim(),
       city: row.city || '', state: row.state || '',
       status: row.status || '', notes: (row.notes || '').replace(/\s+/g, ' ').trim(),
+      isPrincipal: source === 'ta' ? (row.isPrincipal ?? false) : false,
     });
   };
   for (const r of ta)  add(r, 'ta');

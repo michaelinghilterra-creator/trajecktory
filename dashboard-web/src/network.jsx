@@ -107,7 +107,11 @@ function HighValueTab({ search }) {
                 const loc = [c.city, c.state].filter(Boolean).join(', ');
                 return (
                   <tr key={`${c.source}:${c.id}`} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={{ padding: '8px 10px', fontWeight: 600 }}>{c.name || '(no name)'}{loc ? <div className="dim" style={{ fontWeight: 400, fontSize: 11 }}>{loc}</div> : null}</td>
+                    <td style={{ padding: '8px 10px', fontWeight: 600 }}>
+                      {c.name || '(no name)'}
+                      {c.isPrincipal ? <span title="Hiring principal — the decision-maker you'd report to." style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '.3px', padding: '1px 5px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)', verticalAlign: 'middle' }}>PRINCIPAL</span> : null}
+                      {loc ? <div className="dim" style={{ fontWeight: 400, fontSize: 11 }}>{loc}</div> : null}
+                    </td>
                     <td style={{ padding: '8px 10px' }}>{c.title || '-'}</td>
                     <td style={{ padding: '8px 10px' }}>{c.company || '-'}</td>
                     <td style={{ padding: '8px 10px' }}><span className="mono dim">{c.source}</span></td>
