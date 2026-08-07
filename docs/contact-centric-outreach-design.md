@@ -3,8 +3,8 @@
 **Status:** Draft / proposed. Not built. This documents the target model and the
 decisions taken so far, so the build can be scoped later.
 **Date:** 2026-08-07
-**Origin:** A LinkedIn exchange with the builder of a competing tool (Repliably),
-plus two follow-on design threads. The through-line: **the contact, not the
+**Origin:** A LinkedIn exchange about a competing tool, plus two follow-on design
+threads. The through-line: **the contact, not the
 application, is the unit of outreach.** trajecktory is strong on the first half
 of the search (source, score, tailor) and weaker on the second half (follow up
 with the right people). This note closes that gap.
@@ -110,9 +110,8 @@ anyone else at the company.
 A new contact type for **the person you would report to** (the VP/Director of the
 target function), distinct from the recruiter/TA gatekeeper. Discovery aims at
 "who leads {function} at {company}," not "who recruits there." This is the move
-that actually got the Repliably builder hired: he put the decision-maker in his
-CRM, reached out, and demoed. Hiring principals are prime bucket-3 /
-high-priority candidates.
+that reportedly works: put the decision-maker in the CRM, reach out, and demo.
+Hiring principals are prime bucket-3 / high-priority candidates.
 
 ### 7. Templates and AI-filled sequences, HITL-preserved
 A reusable **template library** per scenario (cold intro, follow-up 1/2,
@@ -127,7 +126,7 @@ a stronger story than pure auto-send.
 ### 8. Lead with an artifact
 Outreach drafts to a hiring principal should default to leading with a tangible
 proof link (the GitHub project, the portfolio carousel). Showing beats telling;
-this mirrors the "demo, don't describe" move that landed the hire.
+this mirrors the "demo, don't describe" move that reportedly lands hires.
 
 ---
 
