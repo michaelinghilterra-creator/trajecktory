@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.12.5](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.12.4...v2.12.5) (2026-08-07)
+
+
+### Bug Fixes
+
+* resolve all three jds/ snapshot URL header formats, not just the newest ([#156](https://github.com/michaelinghilterra-creator/trajecktory/issues/156)) ([90fcc36](https://github.com/michaelinghilterra-creator/trajecktory/commit/90fcc36c4282ad5eac730896935839f4d2fd9b9d))
+
 ## [2.12.4](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.12.3...v2.12.4) (2026-08-07)
 
 
