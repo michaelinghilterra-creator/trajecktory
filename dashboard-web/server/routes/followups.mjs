@@ -8,7 +8,7 @@ import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute } from '../lib/sidecars.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeGhostedCandidates, computeEmailQueue, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
@@ -60,13 +60,14 @@ router.get('/api/followups/email-queue', (req, res) => {
 });
 
 // GET /api/followups/stale — computed stale list with coaching.
-// Merges applications.md (Applied/Responded/Interview) with target-talent.md
-// (Sent/Replied/Meeting Scheduled). Each row is tagged with `source: 'app' | 'ta'`.
+// Merges applications.md (Applied/Responded/Interview) with per-contact stale
+// items from both target-talent.md and recruiters.md. Each row is tagged with
+// `source: 'app' | 'ta' | 'recruiter'`.
 router.get('/api/followups/stale', (req, res) => {
   try {
     const apps = computeStaleApps().map(it => ({ source: 'app', ...it }));
-    const ta = computeStaleTA();
-    const merged = [...apps, ...ta].sort((a, b) => {
+    const contacts = computeStaleContacts();
+    const merged = [...apps, ...contacts].sort((a, b) => {
       if (a.coachLevel !== b.coachLevel) {
         return a.coachLevel === 'give-up' ? -1 : 1;
       }
@@ -95,7 +96,8 @@ router.get('/api/followups/stale', (req, res) => {
 
     res.json({
       thresholds: STALE_THRESHOLD_BY_STATUS,
-      taThreshold: TA_STALE_THRESHOLD_DAYS,
+      taThreshold: TA_STALE_THRESHOLD_DAYS,         // legacy alias
+      contactThreshold: CONTACT_STALE_THRESHOLD_DAYS, // unified contact threshold
       ghostDays: GHOST_DAYS,
       warm,
       cold,
@@ -114,7 +116,7 @@ router.post('/api/followups/snooze', (req, res) => {
   try {
     const { source, id, days } = req.body || {};
     if (!SNOOZE_KINDS.has(source)) {
-      return res.status(400).json({ error: "source must be 'app' or 'ta'" });
+      return res.status(400).json({ error: `source must be one of: ${[...SNOOZE_KINDS].join(', ')}` });
     }
     if (id == null || `${id}`.trim() === '') return res.status(400).json({ error: 'id required' });
     const n = Number.isFinite(+days) && +days > 0 ? Math.min(Math.floor(+days), 365) : 14;
@@ -127,12 +129,12 @@ router.post('/api/followups/snooze', (req, res) => {
 });
 
 // POST /api/followups/unsnooze — bring an alert back early.
-//   body: { source: 'app' | 'ta', id }
+//   body: { source: 'app' | 'ta' | 'recruiter', id }
 router.post('/api/followups/unsnooze', (req, res) => {
   try {
     const { source, id } = req.body || {};
     if (!SNOOZE_KINDS.has(source)) {
-      return res.status(400).json({ error: "source must be 'app' or 'ta'" });
+      return res.status(400).json({ error: `source must be one of: ${[...SNOOZE_KINDS].join(', ')}` });
     }
     const snooze = readSnooze();
     const existed = snooze[source][String(id)] != null;

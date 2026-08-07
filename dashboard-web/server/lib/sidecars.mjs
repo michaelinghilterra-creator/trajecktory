@@ -23,28 +23,41 @@ function localYmd(d = new Date()) {
 function snoozeToday() { return localYmd(); }
 function snoozeDateIn(days) { const d = new Date(); d.setDate(d.getDate() + days); return localYmd(d); }
 
+// All source buckets the snooze store tracks. Adding a new contact source
+// (e.g. 'recruiter') means adding it here and nowhere else: read/write/prune
+// all iterate this list, so the file schema stays in sync automatically.
+const _SNOOZE_BUCKETS = ['app', 'ta', 'recruiter'];
+
 function readSnooze() {
   try {
     const raw = JSON.parse(fs.readFileSync(SNOOZE_PATH, 'utf8'));
-    return { app: raw.app || {}, ta: raw.ta || {} };
-  } catch { return { app: {}, ta: {} }; }
+    const out = {};
+    for (const k of _SNOOZE_BUCKETS) out[k] = raw[k] || {};
+    return out;
+  } catch {
+    const out = {};
+    for (const k of _SNOOZE_BUCKETS) out[k] = {};
+    return out;
+  }
 }
 function writeSnooze(snooze) {
-  fs.writeFileSync(SNOOZE_PATH, JSON.stringify({ app: snooze.app || {}, ta: snooze.ta || {} }, null, 2) + '\n');
+  const out = {};
+  for (const k of _SNOOZE_BUCKETS) out[k] = snooze[k] || {};
+  fs.writeFileSync(SNOOZE_PATH, JSON.stringify(out, null, 2) + '\n');
 }
 // Drop entries whose date has passed so the file stays small and expired
 // snoozes naturally re-surface as stale. Returns true if anything was pruned.
 function pruneSnooze(snooze) {
   const today = snoozeToday();
   let changed = false;
-  for (const kind of ['app', 'ta']) {
+  for (const kind of _SNOOZE_BUCKETS) {
     for (const [id, until] of Object.entries(snooze[kind] || {})) {
       if (!until || until <= today) { delete snooze[kind][id]; changed = true; }
     }
   }
   return changed;
 }
-const SNOOZE_KINDS = new Set(['app', 'ta']);
+const SNOOZE_KINDS = new Set(_SNOOZE_BUCKETS);
 
 // ─── Follow-up mute store ─────────────────────────────────────────────────────
 // "Done for now / Awaiting reply": indefinitely removes an application from the

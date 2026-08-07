@@ -320,6 +320,98 @@ function computeStaleTA() {
   return stale;
 }
 
+// ─── Unified contact-keyed stale engine ──────────────────────────────────────
+// The contact-centric model: the cadence clock lives on the CONTACT (their
+// lastTouch), not on the application. This covers both the target-talent and
+// recruiter books. Only contacts at companies with a CURRENTLY-LIVE application
+// surface — a contact at a dead opportunity (Rejected, Discarded…) is noise.
+//
+// `computeStaleTA()` stays intact for backward compatibility (tests depend on
+// it). This function is the target state and supersedes it in the route.
+const CONTACT_STALE_THRESHOLD_DAYS = 14; // calendar-threshold before we check business-days
+const CONTACT_FU_CAP = 1;               // nudge cap; more than one follow-up burns warm contacts
+// Active-thread statuses that carry a real follow-up clock. 'Connected' (invite
+// accepted, no ongoing message thread) and dead-end states (Dormant/Bounced/
+// Blocked/Archived) are excluded: they have no thread to keep warm.
+const CONTACT_TRACKED_STATUSES = new Set(['Sent', 'Replied', 'Meeting Scheduled']);
+
+function computeStaleContacts({ apps } = {}) {
+  const appList = apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })();
+  const eligible = outreachEligibleCompanies(appList);
+
+  let taContacts = [];
+  try { taContacts = parseTargetTalentMd(); } catch { /* */ }
+  let recruiterContacts = [];
+  try { recruiterContacts = parseRecruitersMd(); } catch { /* */ }
+
+  const stale = [];
+
+  const processContact = (c, source) => {
+    const company = source === 'recruiter' ? c.firm : c.company;
+    if (!CONTACT_TRACKED_STATUSES.has(c.status)) return;
+    if (!c.lastTouch) return;
+    if (!eligible.has(normalizeCompany(company))) return;
+
+    const daysSinceLastTouch = _businessDaysAgo(c.lastTouch);
+    if (daysSinceLastTouch == null || daysSinceLastTouch < CONTACT_STALE_THRESHOLD_DAYS) return;
+
+    const corr = source === 'recruiter'
+      ? readRecruiterCorrespondence(c.id)
+      : readTTCorrespondence(c.id);
+    const sentCount = corr.filter(m => m.direction === 'Sent').length;
+    const fuCount = Math.max(0, sentCount - 1); // first send = original touch, not a follow-up
+    const overCap = fuCount >= CONTACT_FU_CAP;
+
+    let coachVerdict, coachLevel;
+    if (overCap) {
+      coachVerdict = `Already nudged ${fuCount}×. Let this contact cool.`;
+      coachLevel = 'give-up';
+    } else if (fuCount === 0) {
+      coachVerdict = `${daysSinceLastTouch}d since last touch · time to keep warm.`;
+      coachLevel = 'overdue';
+    } else {
+      coachVerdict = `${daysSinceLastTouch}d since the nudge · final ping.`;
+      coachLevel = 'overdue';
+    }
+
+    stale.push({
+      source,
+      id: c.id,
+      company: company || '',
+      role: c.title || '',
+      score: null,
+      status: c.status,
+      applyDate: null,
+      lastTouchDate: c.lastTouch,
+      daysSinceLastTouch,
+      daysSinceApply: null,
+      fuCount,
+      cap: CONTACT_FU_CAP,
+      coachVerdict,
+      coachLevel,
+      klass: 'warm',           // engaged threads are always warm
+      muted: false,
+      channel: (c.email || '').includes('@') ? 'email' : 'linkedin',
+      sector: null,
+      notes: c.notes || '',
+      followups: [],
+      taFirst: c.first || '',
+      taLast: c.last || '',
+      taEmail: c.email || '',
+    });
+  };
+
+  for (const c of taContacts)        processContact(c, 'ta');
+  for (const c of recruiterContacts) processContact(c, 'recruiter');
+
+  stale.sort((a, b) => {
+    if (a.coachLevel !== b.coachLevel) return a.coachLevel === 'give-up' ? -1 : 1;
+    return b.daysSinceLastTouch - a.daysSinceLastTouch;
+  });
+
+  return stale;
+}
+
 // Ghosted applications: status still Applied, applied > GHOST_DAYS calendar days
 // ago, no advancement to Responded / an interview round (implied by status === 'Applied').
 // These are candidates for the one-click "archive to No Response" bulk action so
@@ -579,8 +671,8 @@ function countWithheldContacts({ taRows, recruiterRows } = {}) {
 }
 
 export {
-  parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA,
+  parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
   computeGhostedCandidates, channelFor, computeConnectQueue, computeEmailQueue, countWithheldContacts,
-  GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, _daysAgo,
+  GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 
