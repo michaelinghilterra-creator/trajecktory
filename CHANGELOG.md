@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.12.4](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.12.3...v2.12.4) (2026-08-07)
+
+
+### Bug Fixes
+
+* make triage/liveness writes agent-proof and add durable audit trails ([#154](https://github.com/michaelinghilterra-creator/trajecktory/issues/154)) ([f32b612](https://github.com/michaelinghilterra-creator/trajecktory/commit/f32b612e8858c2730b87d7181b6927a0523f95e3))
+* rewrite stale pipeline mode file and add a numbering drift guard ([#153](https://github.com/michaelinghilterra-creator/trajecktory/issues/153)) ([88cb88e](https://github.com/michaelinghilterra-creator/trajecktory/commit/88cb88eb0e13f1b5d2d2e8a4d37ee68f22bfe091))
+
 ## [2.12.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.12.2...v2.12.3) (2026-08-06)
 
 
