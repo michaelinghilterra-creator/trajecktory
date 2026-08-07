@@ -25,11 +25,29 @@ import { dirname, join } from 'path';
 import yaml from 'js-yaml';
 import { parsePostingUrl, fetchJdText } from './lib/ats-jd.mjs';
 import { workdaySiteFromCareersUrl } from './liveness-core.mjs';
+import { updatePipelineRows } from './lib/pipeline.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(__dirname, 'data/pipeline.md');
 const PORTALS = join(__dirname, 'portals.yml');
 const JDS_DIR = join(__dirname, 'jds');
+const FAIL_COUNTS = join(__dirname, 'data/resolve-fail-counts.json');
+
+// A "recognized ATS but couldn't fetch" result might be a transient blip (network,
+// rate limit) — give it one more run before gating. An "unrecognized platform" is a
+// structural fact about that URL, not a fluke; it will never resolve on its own, so
+// it gates immediately (0 retries). Both are read by the batch triage/deep-dive
+// agents, which otherwise burn a full LLM round re-discovering the same dead end
+// every time it happens to be at the top of the queue.
+const RETRY_LIMIT = 1; // 1 retry = gate on the 2nd consecutive failure
+
+function loadFailCounts() {
+  if (!existsSync(FAIL_COUNTS)) return {};
+  try { return JSON.parse(readFileSync(FAIL_COUNTS, 'utf8')); } catch { return {}; }
+}
+function saveFailCounts(counts) {
+  writeFileSync(FAIL_COUNTS, JSON.stringify(counts, null, 2), 'utf8');
+}
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const normCompany = (s) => String(s || '').toLowerCase()
@@ -82,6 +100,29 @@ export function repointPipeline(md, resolved) {
   }).join('\n');
 }
 
+// Decide which rows to gate to "- [!]" and what the next fail-count file should
+// hold. Pure (no fs/network) so the retry-limit boundary is unit-testable:
+//   - every `unrecognized` row gates immediately (0 retries — a structural fact,
+//     retrying never changes the outcome).
+//   - a `failed` row gates once its count EXCEEDS retryLimit; otherwise its count
+//     is carried forward for the next run to check again.
+export function computeGating({ unrecognized, failed, priorFailCounts, retryLimit }) {
+  const toGate = [];
+  for (const r of unrecognized) {
+    toGate.push({ url: r.url, reason: 'unsupported ATS platform — needs manual JD paste' });
+  }
+  const nextFailCounts = {};
+  for (const r of failed) {
+    const count = (priorFailCounts[r.url] || 0) + 1;
+    if (count > retryLimit) {
+      toGate.push({ url: r.url, reason: `unreadable after ${count} attempts — ${r.reason}` });
+    } else {
+      nextFailCounts[r.url] = count;
+    }
+  }
+  return { toGate, nextFailCounts };
+}
+
 // ── main (guarded so the module is importable for tests) ─────────────────────
 async function main() {
   const dryRun = process.argv.slice(2).includes('--dry-run');
@@ -123,17 +164,52 @@ async function main() {
 
   if (!dryRun && resolved.size) writeFileSync(PIPELINE, repointPipeline(md, resolved), 'utf8');
 
+  // ── gate persistently-unreadable rows so the triage/deep-dive agents stop
+  // re-discovering them every run. Unrecognized platform gates immediately (it is
+  // never going to resolve without a human pasting the JD). A recognized-ATS fetch
+  // failure gets one retry (its previous count from a prior resolve-jds run) before
+  // gating, in case the first failure was a transient network blip.
+  const failCounts = loadFailCounts();
+  const stillPendingUrls = new Set(pending.map(r => r.url));
+  const { toGate, nextFailCounts } = computeGating({
+    unrecognized: report.unrecognized, failed: report.failed,
+    priorFailCounts: failCounts, retryLimit: RETRY_LIMIT,
+  });
+  // Drop counters for URLs no longer pending (resolved, gated, or removed elsewhere).
+  for (const url of Object.keys(nextFailCounts)) {
+    if (!stillPendingUrls.has(url)) delete nextFailCounts[url];
+  }
+  if (!dryRun) saveFailCounts(nextFailCounts);
+
+  if (toGate.length && !dryRun) {
+    const gateSet = new Map(toGate.map(g => [g.url, g.reason]));
+    const { changed } = updatePipelineRows(PIPELINE, (row) => {
+      if (row.state !== 'open' || !gateSet.has(row.url)) return null;
+      const reasonShort = gateSet.get(row.url).replace(/[\r\n]+/g, ' ').slice(0, 80);
+      return { box: '!', rest: `${row.rest} — gated: ${reasonShort}` };
+    });
+    report.gated = changed;
+  } else {
+    report.gated = 0;
+  }
+
   // ── summary ──
   console.log(`resolve-jds ${dryRun ? '(dry run — no writes)' : ''}`.trim());
-  console.log(`  ${report.resolved.length} resolved · ${report.alreadyLocal} already local · ${report.unrecognized.length} unrecognized · ${report.failed.length} failed\n`);
+  console.log(`  ${report.resolved.length} resolved · ${report.alreadyLocal} already local · ${report.unrecognized.length} unrecognized · ${report.failed.length} failed · ${report.gated} gated (retry limit ${RETRY_LIMIT})\n`);
   for (const r of report.resolved) console.log(`  ✅ ${r.ats.padEnd(15)} ${r.company} — ${r.title}  (${r.chars}ch → ${r.file})`);
   if (report.failed.length) {
     console.log('\n  Recognized ATS but could not fetch (needs a board/site hint, or the posting is gone):');
-    for (const r of report.failed) console.log(`  ⚠ ${r.ats.padEnd(15)} ${r.company} — ${r.title}  (${r.reason})`);
+    for (const r of report.failed) {
+      const gated = toGate.some(g => g.url === r.url);
+      console.log(`  ⚠ ${r.ats.padEnd(15)} ${r.company} — ${r.title}  (${r.reason})${gated ? '  [GATED — retry limit reached]' : '  [will retry once more next run]'}`);
+    }
   }
   if (report.unrecognized.length) {
     console.log('\n  Unrecognized platform (no public JD API — paste the JD or supply a specific job URL):');
-    for (const r of report.unrecognized) console.log(`  · ${r.company} — ${r.title}`);
+    for (const r of report.unrecognized) console.log(`  · ${r.company} — ${r.title}  [GATED — no retry]`);
+  }
+  if (dryRun && (report.failed.length || report.unrecognized.length)) {
+    console.log('\n  (dry run: no rows were actually gated or written)');
   }
 }
 

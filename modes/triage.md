@@ -11,14 +11,27 @@ separately (Evaluate / deep dive).
 > A generic, un-calibrated prompt makes Haiku score everything 4+. Do not skip the
 > calibration rules.
 
+## Invocation context
+
+This file is shared by an interactive `/trajecktory triage` (typed directly in
+a terminal) and a dashboard-driven headless run (`claude -p` with constraints
+appended after this file's own instructions). **Where they conflict, the
+appended constraints win** — this applies most to the Output section below:
+a dashboard-driven run is told to emit JSON instead of writing the file
+itself, and that instruction overrides this file's own write-it-yourself
+default.
+
 ## Inputs (read first)
 - `cv.md` — candidate evidence for the CV-match read
 - `modes/_profile.md` — target archetypes, level, deal-breakers, location policy
 - `config/profile.yml` — comp band, location policy, archetype list
-- `data/pipeline.md` — pending postings under "Pendientes" as `- [ ] {url} | {company} | {title}`, ordered best-fit first
+- `data/pipeline.md` — pending postings as flat `- [ ] {url} | {company} | {title}` rows (no section headers), ordered best-fit first
 
 ## What to score
-Take the **TOP N unchecked URLs** (default 15) from the top of the pending list. For each:
+Take the **TOP N unchecked URLs** (default 15) from the top of the pending list. **Before scoring, read `data/triage-results.tsv` (if it exists) and skip any URL that already has a row there — it was scored by a prior run — and take the next unchecked URL instead.** Nothing checks off a pipeline row after triage, so without this step every run re-reads the exact same top-of-file URLs forever and never reaches the rest of the queue. This is the single most important rule in this file: getting it wrong silently wastes an entire run's cost on roles you already scored.
+
+**Match on the exact URL, never on company name alone.** A company can post several genuinely different roles at once (multiple titles, multiple cities) — each is a separate posting with its own row in `data/pipeline.md` and needs its own score. Seeing "Acme Corp" already has a row in `triage-results.tsv` is NOT a reason to skip a different Acme Corp URL/title. Compare the full URL (or the exact title, for a `local:jds/…` snapshot) — not just the employer name.
+For each URL that survives that filter:
 1. Read the JD with **WebFetch** first, **WebSearch** as a fallback. If it cannot be read, skip it (do not guess).
 2. Score FIT **0.0-5.0** (one decimal) using the rubric + anti-inflation calibration below.
 3. Write a **one-sentence rationale** naming the main fit driver or gap.
@@ -42,7 +55,10 @@ Weigh, in order of importance:
 **ANTI-INFLATION (critical):** Across this candidate's history only about **1 in 5 roles is a genuine 4.0+**. Do NOT inflate. Default into the **2.5-3.5** range unless the role clearly hits the right archetype AND level AND location. A RevOps/Analytics-sounding title alone is NOT enough for a 4 — check level, function, location, and real CV evidence.
 
 ## Output — `data/triage-results.tsv`
-Append one tab-separated line per scored role. If the file does not exist, create it with this header row first:
+
+**If your invoking prompt tells you to output your results as JSON between marker lines instead of writing the file yourself (a dashboard-driven run always does this), follow that instead of the rest of this section.** That is the correct, current path: the dashboard server appends deterministically after you finish, which is what actually persists reliably. Two real incidents on 2026-08-06 came from an agent writing this file directly across a long run — once as a silent failure (the sandbox denies `Bash(cat:*)`, and the Write/Edit fallback was inconsistent), once as a silent **data loss** (a run held a stale early-turn snapshot of the file in context and overwrote ~108 rows other runs had appended in the meantime by writing that snapshot back at the end). Do not reintroduce a direct write from a dashboard-driven run.
+
+**Only if you are running interactively with no such instruction** (a bare `/trajecktory triage` typed directly in a terminal, no dashboard involved): append one tab-separated line per scored role yourself. If the file does not exist, create it with this header row first:
 
 ```
 url	company	title	score	rationale	date
@@ -51,6 +67,8 @@ url	company	title	score	rationale	date
 - `score` — `X.X` (e.g. `4.2`)
 - `rationale` — one sentence, no tabs
 - `date` — today, `YYYY-MM-DD`
+
+Use the Write or Edit tool directly on `data/triage-results.tsv`. Do NOT use `Bash(cat > ...)` or a heredoc. Read the file ONCE, immediately before writing, not earlier in the session — batch all scored roles into ONE Write/Edit call at the end rather than one call per role, and never rely on an earlier Read's content when composing that final write.
 
 **Do NOT** write a report, generate a PDF, write a `batch/tracker-additions/` TSV, or check off the `data/pipeline.md` checkboxes. Triage is non-destructive — the deep evaluation owns those.
 

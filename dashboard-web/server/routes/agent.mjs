@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'node:url';
 import { ROOT_DIR, DATA_DIR, APPS_MD } from '../config.mjs';
 import { reconcileHandled } from '../../../lib/pipeline.mjs';
+import { parseTriageOutput, appendTriageResults, START_MARKER, END_MARKER } from '../../../lib/triage-results.mjs';
 import { logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
@@ -240,7 +241,12 @@ function dashboardConstraints(mode, opts) {
   if (mode === 'triage') {
     const tcap = parseInt(process.env.TJK_TRIAGE_MAX, 10) || 15;
     const n = limit > 0 ? Math.min(limit, tcap) : tcap;
-    return ' ' + common + ` Triage only — do NOT run a full evaluation. Score the TOP ${n} unchecked URLs from the top of data/pipeline.md (they are ordered best-fit first). Before scoring, SKIP any URL that already appears in data/applications.md (it already has an evaluation) or in data/triage-dismissed.tsv (the user dismissed it), and take the next unchecked URLs instead, so you never re-triage a role that is already evaluated or dismissed. For each: read the JD with WebFetch first and WebSearch as a fallback (skip any you cannot read), then give a 0.0-5.0 fit score and a one-sentence rationale using the rubric and anti-inflation calibration in the triage mode (most roles are NOT 4+; reserve 4+ for genuine strong fits on archetype AND level AND location). Append one TSV line per role to data/triage-results.tsv with columns url, company, title, score, rationale, date — create it with that header row if it is missing. Do NOT write a report, do NOT generate a PDF, do NOT write a tracker-additions TSV, and do NOT check off the pipeline.md checkboxes. Stop after ${n}.`;
+    return ' ' + common + ` Triage only — do NOT run a full evaluation. Score the TOP ${n} unchecked URLs from the top of data/pipeline.md (they are ordered best-fit first). Before scoring, SKIP any URL that already appears in data/applications.md (it already has an evaluation), in data/triage-dismissed.tsv (the user dismissed it), OR in data/triage-results.tsv (a PRIOR triage run already scored it), and take the next unchecked URLs instead, so you never re-triage a role that is already evaluated, dismissed, or scored. For each URL that survives that filter: read the JD with WebFetch first and WebSearch as a fallback (skip any you cannot read), then give a 0.0-5.0 fit score and a one-sentence rationale using the rubric and anti-inflation calibration in the triage mode (most roles are NOT 4+; reserve 4+ for genuine strong fits on archetype AND level AND location).` +
+      ` Do NOT write to data/triage-results.tsv yourself, and do NOT use Bash, Write, or Edit on it at all — the dashboard server appends your results deterministically after you finish, which is more reliable than a direct file edit across a long run. Instead, output every role you scored this run as a single valid JSON array between these two exact marker lines, each marker on its own line with nothing else on that line, and the array using standard double-quote JSON syntax (never single quotes, never a markdown code fence around it):` +
+      ` ${START_MARKER}` +
+      ` ${END_MARKER}` +
+      ` Between those two marker lines, put one JSON object per scored role, as an array. Each object needs exactly five keys: url (the posting URL, string), company (string), title (string), score (a number from 0.0 to 5.0), and rationale (one sentence, string). Use real double-quote characters around every string, standard JSON syntax throughout.` +
+      ` Put this block FIRST in your final response, before any summary or commentary — your response has a length limit, and if the block comes last a long summary can push it past that limit and cut the array off mid-write, which loses every score in the run even though you actually did the work. Write the block complete and correct, THEN add a short summary after it if you want. Omit any role you could not read rather than guessing a field. If you scored zero roles this run (everything was a duplicate or unreadable), still emit the markers with an empty array between them so the run is recorded as complete rather than ambiguous. Do NOT write a report, do NOT generate a PDF, do NOT write a tracker-additions TSV, and do NOT check off the pipeline.md checkboxes. Stop after ${n}.`;
   }
   if (mode === 'deep') {
     const tgt = (opts && opts.url) || '';
@@ -268,8 +274,13 @@ function dashboardConstraints(mode, opts) {
 // duplicates, or a triage whose URLs are all already evaluated, legitimately
 // writes nothing. So this does not fail the run. It only refuses to claim
 // success, which is the part that was actually broken.
+// NOTE: 'triage' is deliberately ABSENT here. It used to be file-size-probed
+// like scan/pipeline/deep, but the agent no longer writes triage-results.tsv at
+// all (see lib/triage-results.mjs) -- the server parses structured output from
+// the agent's final response and appends deterministically. wroteSomething for
+// triage is therefore computed directly from that append's real return value in
+// runAgent(), not from a before/after probe.
 const AGENT_ARTIFACTS = {
-  triage:   { noun: 'triage scores', probe: () => fileSize('data/triage-results.tsv') },
   scan:     { noun: 'new postings',  probe: () => fileSize('data/pipeline.md') },
   // Count staged AND merged TSVs: the dashboard auto-runs Merge right after a
   // batch, which moves TSVs from tracker-additions/ into tracker-additions/merged/.
@@ -652,10 +663,34 @@ async function runAgent(jobId, mode, target) {
   persistJobs();   // capture the running record immediately so a restart can mark it interrupted
   const before = probeArtifacts(mode);
   const res = await runClaudeAgent(jobId, mode, target);
+
+  // TRIAGE: the agent never touches triage-results.tsv itself (see
+  // lib/triage-results.mjs's file header for why). It emits its scores as a
+  // structured JSON block in its final response; the server parses and
+  // appends here, deterministically, append-only. This is computed BEFORE the
+  // generic wroteSomething logic below because triage's own truth is this
+  // append's real return value, not a before/after file-size probe (removed
+  // from AGENT_ARTIFACTS for this mode on purpose).
+  let triageAppend = null;
+  let triageParseErrors = [];
+  if (mode === 'triage' && res.ok) {
+    try {
+      const { rows, errors } = parseTriageOutput(res.result || '');
+      triageParseErrors = errors;
+      triageAppend = appendTriageResults(path.join(DATA_DIR, 'triage-results.tsv'), rows);
+    } catch (e) {
+      triageParseErrors = [`append failed: ${(e && e.message) || e}`];
+      triageAppend = { appended: 0, skippedDuplicate: 0 };
+    }
+  }
+
   // Only claim work when the artifact grew. `before === null` means we have no
   // probe for this mode, so fall back to trusting the exit code rather than
-  // inventing a failure.
-  const wroteSomething = before === null || (probeArtifacts(mode) ?? 0) > before;
+  // inventing a failure. Triage is the one exception: its probe was removed,
+  // so its truth is triageAppend.appended directly.
+  const wroteSomething = mode === 'triage'
+    ? !!(triageAppend && triageAppend.appended > 0)
+    : (before === null || (probeArtifacts(mode) ?? 0) > before);
 
   // SELF-HEALING (the permanent fix for the recurring "queue clogged" bug): after
   // EVERY run, check off any pipeline row that is already evaluated or dismissed.
@@ -683,6 +718,27 @@ async function runAgent(jobId, mode, target) {
       count: job.evaluationsDone,
       detail: !res.ok ? 'error' : (wroteSomething ? 'ok' : 'empty'),
     });
+  }
+
+  // Triage gets its own summary, separate from the generic AGENT_ARTIFACTS
+  // path below (which no longer covers 'triage' — see the note where it's
+  // defined): the real, honest count is triageAppend's return value, not a
+  // guess from file size, and it's worth surfacing skippedDuplicate and any
+  // parse errors too so a run that silently produced nothing usable is visible
+  // instead of looking identical to a run that scored zero *new* roles.
+  if (mode === 'triage' && res.ok) {
+    const job = agentJobs.get(jobId) || {};
+    if (wroteSomething) {
+      const dupNote = triageAppend.skippedDuplicate ? ` (${triageAppend.skippedDuplicate} already scored, skipped)` : '';
+      agentJobs.set(jobId, { ...job, summary: `${job.summary ? job.summary + ' · ' : ''}Triage appended ${triageAppend.appended} score${triageAppend.appended === 1 ? '' : 's'}${dupNote}.` });
+    } else {
+      const why = triageParseErrors.length
+        ? `Could not persist any scores: ${triageParseErrors.slice(0, 3).join('; ')}${triageParseErrors.length > 3 ? '…' : ''}`
+        : (triageAppend && triageAppend.skippedDuplicate
+          ? `All ${triageAppend.skippedDuplicate} scored role(s) this run were already in triage-results.tsv.`
+          : 'No triage scores were produced this run.');
+      agentJobs.set(jobId, { ...job, summary: why, warning: job.warning || WROTE_NOTHING_WHY });
+    }
   }
 
   if (res.ok && !wroteSomething && AGENT_ARTIFACTS[mode]) {
