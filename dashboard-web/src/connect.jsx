@@ -44,29 +44,41 @@ function relDaysAgo(dateStr) {
 }
 function chLabel(ch) { return ch === 'linkedin' ? 'LinkedIn invite' : 'email'; }
 
+// Two timing signals per row so you never have to open the card to know where you
+// stand: (1) THIS contact — the last message to/from this person, either direction;
+// (2) the ORG — the last comms with anyone else at the company, either direction,
+// plus the same-day hold-off warning. The self line fixes the confusion where the org
+// showed an old email to a different contact while this person was messaged recently.
 function CompanyOutreach({ c }) {
   const o = c.companyOutreach;
   if (!o) return null;
-  if (o.touchedToday) {
-    return (
-      <div style={{ fontSize: 11, marginTop: 5, padding: '2px 8px', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 4,
-        background: 'color-mix(in srgb, var(--orange) 15%, transparent)', color: 'var(--orange)', border: '1px solid color-mix(in srgb, var(--orange) 40%, transparent)' }}
-        title={`You already reached out at ${c.company} today (${chLabel(o.touchedToday.channel)} to ${o.touchedToday.name}). Reaching a second contact there today may read as over-contacting — consider holding off.`}>
-        ⚠ Already reached out at {c.company} today — {chLabel(o.touchedToday.channel)} to {o.touchedToday.name}
-      </div>
-    );
-  }
-  if (o.lastTouch) {
-    return (
-      <div className="dim" style={{ fontSize: 11, marginTop: 5 }}
-        title={`Most recent outreach to anyone else at ${c.company}.`}>
-        {c.company}: last reached out {relDaysAgo(o.lastTouch.date)} · {chLabel(o.lastTouch.channel)} to {o.lastTouch.name}
-      </div>
-    );
-  }
+  const self = o.selfLastTouch;
+  const org = o.companyLastComms;
+  const selfLine = self
+    ? `This contact: last ${self.direction === 'Received' ? 'reply received' : `${chLabel(self.channel)} sent`} ${relDaysAgo(self.date)} (${self.date})`
+    : 'This contact: no prior correspondence yet';
   return (
-    <div className="dim" style={{ fontSize: 11, marginTop: 5, opacity: 0.7 }}>
-      No prior outreach at {c.company}
+    <div style={{ marginTop: 5, display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div className="dim" style={{ fontSize: 11 }}
+        title="The most recent message to or from THIS contact, either direction.">
+        {selfLine}
+      </div>
+      {o.touchedToday ? (
+        <div style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 4,
+          background: 'color-mix(in srgb, var(--orange) 15%, transparent)', color: 'var(--orange)', border: '1px solid color-mix(in srgb, var(--orange) 40%, transparent)' }}
+          title={`You already reached out at ${c.company} today (${chLabel(o.touchedToday.channel)} to ${o.touchedToday.name}). Reaching a second contact there today may read as over-contacting — consider holding off.`}>
+          ⚠ Already reached out at {c.company} today — {chLabel(o.touchedToday.channel)} to {o.touchedToday.name}
+        </div>
+      ) : org ? (
+        <div className="dim" style={{ fontSize: 11 }}
+          title={`Most recent comms with anyone else at ${c.company}, either direction.`}>
+          {c.company}: last comms {relDaysAgo(org.date)} · {org.direction === 'Received' ? `${chLabel(org.channel)} from` : `${chLabel(org.channel)} to`} {org.name}
+        </div>
+      ) : (
+        <div className="dim" style={{ fontSize: 11, opacity: 0.7 }}>
+          No other comms at {c.company}
+        </div>
+      )}
     </div>
   );
 }

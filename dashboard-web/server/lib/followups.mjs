@@ -564,11 +564,14 @@ function buildCompanyTouchIndex({ ta, rec }) {
     const co = normalizeCompany(companyRaw);
     if (!co) return;
     for (const m of (msgs || [])) {
-      if (m.direction !== 'Sent') continue;
+      // Include BOTH directions now: the queue shows last comms (sent OR received),
+      // for this contact and for the org. The Sent-only "reached out today" hold-off
+      // warning is preserved by filtering on direction where it is computed.
+      if (m.direction !== 'Sent' && m.direction !== 'Received') continue;
       const date = (m.timestamp || '').slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
       if (!idx.has(co)) idx.set(co, []);
-      idx.get(co).push({ key, name, date, channel: isLinkedInInvite(m.subject) ? 'linkedin' : 'email' });
+      idx.get(co).push({ key, name, date, direction: m.direction, channel: isLinkedInInvite(m.subject) ? 'linkedin' : 'email' });
     }
   };
   for (const r of (ta || []))  { try { add(r.company, `ta:${r.id}`, `${r.first || ''} ${r.last || ''}`.trim(), readTTCorrespondence(r.id)); } catch { /* skip unreadable */ } }
@@ -584,17 +587,33 @@ function buildCompanyTouchIndex({ ta, rec }) {
 // isNew flags a contact added after the last reconcile opened; notContacted flags
 // one you have not reached out to yet. They are independent signals — a contact can
 // be new, not-contacted, both, or neither — so the UI badges them separately.
-// companyOutreach.lastTouch/touchedToday describe outreach to OTHER contacts at the
-// same company (this contact's own touches are excluded), so you can decide inside
-// the queue whether reaching a second person there today is doubling up.
+// companyOutreach carries three signals, all newest-first from the touch index:
+//   lastTouch        — last SENT to SOMEONE ELSE at the company (drives touchedToday)
+//   touchedToday     — you already reached out to someone else there today (hold-off)
+//   selfLastTouch    — THIS contact's own most recent correspondence (sent OR received)
+//   companyLastComms — most recent correspondence with ANYONE ELSE at the company
+//                      (sent OR received), so the org's activity is visible even when
+//                      it was a reply, not an outbound.
+// The self signal fixes a real confusion: the org line could show an 8-week-old email
+// to a different contact while you had emailed THIS person last week — invisible until
+// you opened the card.
 function _queueRow(row, source, baselineId = null, companyTouches = null, today = null) {
   const company = source === 'recruiter' ? row.firm : row.company;
   const status = row.status || '';
   const selfKey = `${source}:${row.id}`;
   let lastTouch = null;
+  let selfLastTouch = null;
+  let companyLastComms = null;
   if (Array.isArray(companyTouches)) {
-    const t = companyTouches.find(x => x.key !== selfKey);   // newest-first; first non-self wins
-    if (t) lastTouch = { name: t.name, date: t.date, channel: t.channel };
+    // last SENT to someone else — keeps the "already reached out today" semantics
+    const sent = companyTouches.find(x => x.key !== selfKey && x.direction === 'Sent');
+    if (sent) lastTouch = { name: sent.name, date: sent.date, channel: sent.channel };
+    // this contact's own last message, either direction
+    const self = companyTouches.find(x => x.key === selfKey);
+    if (self) selfLastTouch = { date: self.date, direction: self.direction, channel: self.channel };
+    // last comms with anyone else at the org, either direction
+    const other = companyTouches.find(x => x.key !== selfKey);
+    if (other) companyLastComms = { name: other.name, date: other.date, direction: other.direction, channel: other.channel };
   }
   const touchedToday = (lastTouch && today && lastTouch.date === today)
     ? { name: lastTouch.name, channel: lastTouch.channel }
@@ -614,7 +633,7 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
     reason: (row.notes || '').replace(/\s+/g, ' ').trim().slice(0, 160),
     isNew: baselineId != null && Number.isFinite(row.id) && row.id > baselineId,
     notContacted: !status.trim() || /^\s*not\s*contacted\s*$/i.test(status),
-    companyOutreach: { lastTouch, touchedToday },
+    companyOutreach: { lastTouch, touchedToday, selfLastTouch, companyLastComms },
     // Hiring-principal flag (TA contacts only; recruiters are never principals).
     isPrincipal: source === 'ta' ? (row.isPrincipal ?? false) : false,
     // Channel bucket: 1 = LinkedIn only, 2 = email only, 3 = both, 0 = neither.
