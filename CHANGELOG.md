@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.13.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.12.5...v2.13.0) (2026-08-07)
+
+
+### Features
+
+* contact-centric multi-channel outreach engine ([#160](https://github.com/michaelinghilterra-creator/trajecktory/issues/160)) ([ca8e186](https://github.com/michaelinghilterra-creator/trajecktory/commit/ca8e1868c96940847990289378ac995dd42c25f2))
+
 ## [2.12.5](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.12.4...v2.12.5) (2026-08-07)
 
 
