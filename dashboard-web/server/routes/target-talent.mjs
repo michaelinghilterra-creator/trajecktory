@@ -183,8 +183,9 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
     if (!r) return res.status(404).json({ error: 'Contact not found' });
 
     const projectRoot = ROOT_DIR;
-    const cvMd      = readProjectFile(projectRoot, 'cv.md');
-    const profileMd = readProjectFile(projectRoot, 'modes/_profile.md');
+    const cvMd           = readProjectFile(projectRoot, 'cv.md');
+    const profileMd      = readProjectFile(projectRoot, 'modes/_profile.md');
+    const articleDigestMd = readProjectFile(projectRoot, 'article-digest.md');
     const prior = readTTCorrespondence(id);
     const isFirstTouch = prior.length === 0;
     const messageType = req.body?.messageType || (isFirstTouch ? 'first-touch' : 'follow-up');
@@ -295,7 +296,7 @@ ${relatedContext}
 
 == ${me.firstName.toUpperCase()}'S CV (source of truth — do not invent metrics or experience) ==
 ${cvMd}
-
+${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md — use for the artifact-led opener) ==\n${articleDigestMd}\n` : ''}
 == VOICE RULES (from modes/_profile.md — must follow) ==
 ${profileMd}
 
@@ -306,7 +307,7 @@ ${profileMd}
 - NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
 - Never invent metrics or claims not on the CV.
 - Open with a specific reason for contacting this person at THIS company (role applied to, recent funding/news/leadership change, specific team context).
-- Lead with one quantified proof point from the CV most relevant to the role.
+- Lead with the most specific named artifact from the PORTFOLIO block above (a named project, initiative, or concrete outcome). If no PORTFOLIO block is present, use the most relevant quantified CV proof point. A named artifact hooks the reader far better than a generic role claim.
 - Make the ask soft: invite a conversation if useful. Do NOT request a specific meeting length (no "20-minute call"). Phrasing like "would welcome a conversation if there's mutual interest" is the target.
 - Close with a clear, low-friction next step.
 - Do NOT ask them to forward your resume or do recruiting work for you. Frame as peer-to-peer candidate introduction.

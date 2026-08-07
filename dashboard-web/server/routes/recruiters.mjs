@@ -147,8 +147,9 @@ router.post('/api/recruiters/:id/draft', async (req, res) => {
     if (!r) return res.status(404).json({ error: 'Recruiter not found' });
 
     const projectRoot = ROOT_DIR;
-    const cvMd = readProjectFile(projectRoot, 'cv.md');
-    const profileMd = readProjectFile(projectRoot, 'modes/_profile.md');
+    const cvMd           = readProjectFile(projectRoot, 'cv.md');
+    const profileMd      = readProjectFile(projectRoot, 'modes/_profile.md');
+    const articleDigestMd = readProjectFile(projectRoot, 'article-digest.md');
     const prior = readRecruiterCorrespondence(id);
     const isFirstTouch = prior.length === 0;
     const messageType = req.body?.messageType || (isFirstTouch ? 'first-touch' : 'follow-up');
@@ -209,7 +210,7 @@ Email: ${r.email}
 
 == ${me.firstName.toUpperCase()}'S CV (source of truth — do not invent metrics or experience) ==
 ${cvMd}
-
+${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md — use for the artifact-led proof point) ==\n${articleDigestMd}\n` : ''}
 == VOICE RULES (from modes/_profile.md — must follow) ==
 ${profileMd}
 
@@ -220,7 +221,7 @@ ${profileMd}
 - Never invent metrics or claims not on the CV.
 - Lead with a specific reason for contacting THIS recruiter (their firm specialty, location, recent placements if known). Generic outreach gets ignored.
 - Make the ask specific: a 20-minute conversation about RevOps/SalesOps/Analytics director-level openings in their network.
-- Include one quantified proof point taken verbatim from the CV above. Never invent, round, or embellish a metric.
+- Include one named artifact from the PORTFOLIO block above as the proof point (a named project, initiative, or concrete outcome with a metric). If no PORTFOLIO block is present, use the most relevant quantified CV proof point. Never invent, round, or embellish a metric.
 - Close with a clear next step.
 ${linkBlock ? `
 - FOR FIRST-TOUCH RECRUITER OUTREACH: Include ONE sentence that references ${me.firstName}'s documented approach to strategic hiring/job search at ${me.trajecktoryUrl}. It shows he thinks systematically about process and understands AI tooling, which distinguishes him from typical candidates. Weave it in naturally (not as a tacked-on PS) and include the full URL "${me.trajecktoryUrl}" verbatim so the recruiter can click through. Example phrasings: "I've documented my approach to strategic hiring and process design at ${me.trajecktoryUrl}" or "I approach hiring conversations the way a RevOps leader approaches forecasting — see ${me.trajecktoryUrl} for context." Pick whichever fits the tone.
