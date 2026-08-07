@@ -320,6 +320,29 @@ function computeStaleTA() {
   return stale;
 }
 
+// ─── Contact channel bucket classifier ───────────────────────────────────────
+// Classifies a single contact by which outreach channels are actually available:
+//   Bucket 1 — LinkedIn only (handle present, no sendable email)
+//   Bucket 2 — Email only (sendable email, no LinkedIn handle)
+//   Bucket 3 — Both (sendable email AND LinkedIn handle) — high-priority multithread candidate
+//   Bucket 0 — Neither (not reachable via either channel here)
+//
+// Per-CONTACT classifier; not the same as channelFor() which is per-company.
+// channelFor() continues to drive the warm/cold split in computeStaleApps()
+// (aggregating across all contacts at a company). This one drives per-contact
+// routing in computeStaleContacts() and will later gate bucket-3 multithread
+// logic for high-priority contacts (item 5 of the design).
+function contactChannelBucket(contact) {
+  const hasEmail    = isSendable(contact);
+  const hasLinkedIn = !!((contact.linkedin || '').trim());
+  let bucket;
+  if (hasEmail && hasLinkedIn) bucket = 3;
+  else if (hasEmail)           bucket = 2;
+  else if (hasLinkedIn)        bucket = 1;
+  else                         bucket = 0;
+  return { bucket, hasEmail, hasLinkedIn };
+}
+
 // ─── Unified contact-keyed stale engine ──────────────────────────────────────
 // The contact-centric model: the cadence clock lives on the CONTACT (their
 // lastTouch), not on the application. This covers both the target-talent and
@@ -391,7 +414,7 @@ function computeStaleContacts({ apps } = {}) {
       coachLevel,
       klass: 'warm',           // engaged threads are always warm
       muted: false,
-      channel: (c.email || '').includes('@') ? 'email' : 'linkedin',
+      ...(() => { const b = contactChannelBucket(c); return { channelBucket: b.bucket, channel: b.hasEmail ? 'email' : b.hasLinkedIn ? 'linkedin' : 'none' }; })(),
       sector: null,
       notes: c.notes || '',
       followups: [],
@@ -672,7 +695,7 @@ function countWithheldContacts({ taRows, recruiterRows } = {}) {
 
 export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
-  computeGhostedCandidates, channelFor, computeConnectQueue, computeEmailQueue, countWithheldContacts,
+  computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, countWithheldContacts,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 

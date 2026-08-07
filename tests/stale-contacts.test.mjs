@@ -11,7 +11,7 @@
  * Run: node tests/stale-contacts.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { computeStaleContacts } from '../dashboard-web/server/lib/followups.mjs';
+import { computeStaleContacts, contactChannelBucket } from '../dashboard-web/server/lib/followups.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -151,6 +151,28 @@ for (let i = 1; i < overdue.length; i++) {
   if (overdue[i].daysSinceLastTouch > overdue[i - 1].daysSinceLastTouch) { daysOk = false; break; }
 }
 check(daysOk, 'overdue items are sorted by daysSinceLastTouch descending');
+
+console.log('\n── contactChannelBucket classifier ─────────────────────────────────────');
+// Invented contact rows, not keyed to any real person.
+const bucketContact = (email, state, linkedin) => ({
+  email: email || '', verified: { state: state || 'unverified', address: email || '' }, linkedin: linkedin || '',
+});
+
+const emailOnly = bucketContact('a@acme.example', 'ok', '');
+const linkedInOnly = bucketContact('', 'unverified', 'linkedin.com/in/someone');
+const both = bucketContact('b@acme.example', 'ok', 'linkedin.com/in/someone');
+const neither = bucketContact('', 'unverified', '');
+const unverifiedEmailWithLinkedIn = bucketContact('c@acme.example', 'unverified', 'linkedin.com/in/someone');
+
+check(contactChannelBucket(emailOnly).bucket === 2, 'verified email + no LinkedIn → bucket 2');
+check(contactChannelBucket(linkedInOnly).bucket === 1, 'no email + LinkedIn → bucket 1');
+check(contactChannelBucket(both).bucket === 3, 'verified email + LinkedIn → bucket 3 (high-priority)');
+check(contactChannelBucket(neither).bucket === 0, 'no channels → bucket 0');
+check(contactChannelBucket(unverifiedEmailWithLinkedIn).bucket === 1,
+  'unverified email + LinkedIn → bucket 1 (unverified is not sendable)');
+check(contactChannelBucket(both).hasEmail === true, 'bucket 3 contact has hasEmail:true');
+check(contactChannelBucket(both).hasLinkedIn === true, 'bucket 3 contact has hasLinkedIn:true');
+check(contactChannelBucket(linkedInOnly).hasEmail === false, 'LinkedIn-only contact has hasEmail:false');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
