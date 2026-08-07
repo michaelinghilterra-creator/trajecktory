@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.14.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.13.0...v2.14.0) (2026-08-07)
+
+
+### Features
+
+* show git SHA next to the version in the sidebar (dev checkouts) ([#159](https://github.com/michaelinghilterra-creator/trajecktory/issues/159)) ([6d74de9](https://github.com/michaelinghilterra-creator/trajecktory/commit/6d74de95a428a977ea89de6d2d54ed2f4228e539))
+
 ## [2.13.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.12.5...v2.13.0) (2026-08-07)
 
 
