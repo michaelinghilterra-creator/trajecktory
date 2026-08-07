@@ -108,7 +108,13 @@ async function pushObsidianNote({ row, appliedDate, reportText, fallbackHeader }
         'Content-Type': 'text/markdown',
         'Content-Length': bodyBuf.length,
       },
-      rejectUnauthorized: false,
+      // The Obsidian Local REST API listens ONLY on loopback (127.0.0.1, hardcoded
+      // above) and presents a SELF-SIGNED certificate that the plugin regenerates
+      // per install. There is no CA to validate it against, and a loopback socket
+      // has no network path a man-in-the-middle could sit on: certificate validation
+      // cannot add security here, it would only break every push. This exception is
+      // scoped to the hardcoded loopback host and nowhere else. Accepted risk.
+      rejectUnauthorized: false, // codeql[js/disabling-certificate-validation]
     }, (res) => {
       res.resume(); // drain
       if (res.statusCode >= 200 && res.statusCode < 300) {
