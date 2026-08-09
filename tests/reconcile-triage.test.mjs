@@ -13,7 +13,10 @@
  * Run: node tests/reconcile-triage.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { buildTriageIndex, buildTrackedIdIndex, alreadyHandledByTriage } from '../lib/reconcile-triage.mjs';
+import { buildTriageIndex, buildTrackedIdIndex, alreadyHandledByTriage, reconcileTriageResults } from '../lib/reconcile-triage.mjs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -106,6 +109,52 @@ check(!trackedIds.has('9999'), 'does not invent an id that is not present');
 {
   const row = { url: 'https://brandnew.example/job/1', rest: ' | Brand New Co | Totally Fresh Role' };
   check(alreadyHandledByTriage(row, { triageIndex, trackedIds }) === null, 'a genuinely new posting under every signal returns null (never false-positive)');
+}
+
+// ── reconcileTriageResults: the file-level reconcile the dashboard after-run
+// self-heal calls. Writes a real pipeline.md, checks off scored rows, leaves a
+// genuinely new one open. This is the piece that was MISSING from the server's
+// post-run reconcile (reconcileHandled ignored triage-results.tsv), which let
+// triage-scored rows re-surface every run. ─────────────────────────────────
+{
+  const dir = mkdtempSync(join(tmpdir(), 'tt-reconcile-'));
+  try {
+    const pipelinePath = join(dir, 'pipeline.md');
+    const triagePath = join(dir, 'triage-results.tsv');
+    const appsPath = join(dir, 'applications.md');
+    writeFileSync(triagePath, TRIAGE_TSV);
+    writeFileSync(appsPath, APPLICATIONS_MD);
+    writeFileSync(pipelinePath, [
+      '# Pipeline',
+      '',
+      '- [ ] https://job-boards.greenhouse.io/acme/jobs/1 | Acme | Director, RevOps',
+      '- [ ] https://brandnew.example/job/1 | Brand New Co | Totally Fresh Role',
+      '- [x] https://already.example/done | Done Co | Already Done',
+      '',
+    ].join('\n'));
+
+    // Dry run: reports what WOULD flip, writes nothing.
+    const dry = reconcileTriageResults(pipelinePath, { triageResultsPath: triagePath, appsPath, apply: false });
+    check(dry.flipped.length === 1, 'dry run reports exactly the one scored-but-open row');
+    check(readFileSync(pipelinePath, 'utf8').includes('- [ ] https://job-boards.greenhouse.io/acme/jobs/1'), 'dry run does NOT mutate the file');
+
+    // Apply: flips the scored row, leaves the new one open.
+    const res = reconcileTriageResults(pipelinePath, { triageResultsPath: triagePath, appsPath, apply: true });
+    check(res.changed === 1, 'apply flips exactly one row');
+    const after = readFileSync(pipelinePath, 'utf8');
+    check(after.includes('- [x] https://job-boards.greenhouse.io/acme/jobs/1'), 'the triage-scored row is now checked off');
+    check(after.includes('- [ ] https://brandnew.example/job/1'), 'the genuinely new row stays open');
+
+    // Idempotent: a second apply is a no-op.
+    const again = reconcileTriageResults(pipelinePath, { triageResultsPath: triagePath, appsPath, apply: true });
+    check(again.changed === 0, 'a second apply is a no-op (idempotent)');
+
+    // Missing triage file: empty result, never a throw.
+    const missing = reconcileTriageResults(pipelinePath, { triageResultsPath: join(dir, 'nope.tsv'), appsPath, apply: true });
+    check(missing.changed === 0 && missing.flipped.length === 0, 'a missing triage-results.tsv yields an empty result, not a throw');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
