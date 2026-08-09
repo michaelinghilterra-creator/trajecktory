@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'node:url';
 import { ROOT_DIR, DATA_DIR, APPS_MD } from '../config.mjs';
 import { reconcileHandled } from '../../../lib/pipeline.mjs';
+import { reconcileTriageResults } from '../../../lib/reconcile-triage.mjs';
 import { parseTriageOutput, appendTriageResults, START_MARKER, END_MARKER } from '../../../lib/triage-results.mjs';
 import { logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
@@ -705,6 +706,20 @@ async function runAgent(jobId, mode, target) {
       additionsDir: path.join(ROOT_DIR, 'batch/tracker-additions'),
       needsManualPath: path.join(DATA_DIR, 'needs-manual-jd.tsv'),
       rootDir: ROOT_DIR,
+      apply: true,
+    });
+  } catch { /* never break a run on reconcile */ }
+
+  // reconcileHandled (above) covers applications.md / dismissed / staged, but NOT
+  // triage-results.tsv. A row that's been triage-SCORED but not yet fully
+  // evaluated would otherwise stay "- [ ]" and re-surface (and get re-verified as
+  // a duplicate) on every subsequent triage run — the exact clog that caused the
+  // repeated "wrote nothing, all already in triage-results.tsv" incidents. This
+  // second pass checks those off too. Best-effort and idempotent.
+  try {
+    reconcileTriageResults(path.join(DATA_DIR, 'pipeline.md'), {
+      triageResultsPath: path.join(DATA_DIR, 'triage-results.tsv'),
+      appsPath: APPS_MD,
       apply: true,
     });
   } catch { /* never break a run on reconcile */ }

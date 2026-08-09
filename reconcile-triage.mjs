@@ -12,11 +12,10 @@
 // Dry-run by default. Pass --apply to write. Idempotent — running it twice
 // with nothing new to reconcile is a no-op.
 
-import { readFileSync, existsSync } from 'fs';
+import { existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { updatePipelineRows } from './lib/pipeline.mjs';
-import { buildTriageIndex, buildTrackedIdIndex, alreadyHandledByTriage } from './lib/reconcile-triage.mjs';
+import { reconcileTriageResults } from './lib/reconcile-triage.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(ROOT, 'data/pipeline.md');
@@ -29,18 +28,10 @@ if (!existsSync(TRIAGE_RESULTS)) {
   process.exit(0);
 }
 
-const triageIndex = buildTriageIndex(readFileSync(TRIAGE_RESULTS, 'utf8'));
-const trackedIds = existsSync(APPLICATIONS)
-  ? buildTrackedIdIndex(readFileSync(APPLICATIONS, 'utf8'))
-  : new Set();
-
-const flipped = [];
-const { changed } = updatePipelineRows(PIPELINE, (row) => {
-  if (row.state !== 'open') return null;
-  const reason = alreadyHandledByTriage(row, { triageIndex, trackedIds });
-  if (!reason) return null;
-  flipped.push({ url: row.url, reason });
-  return APPLY ? { box: 'x' } : null; // dry run: report, don't mutate
+const { flipped } = reconcileTriageResults(PIPELINE, {
+  triageResultsPath: TRIAGE_RESULTS,
+  appsPath: APPLICATIONS,
+  apply: APPLY,
 });
 
 if (!flipped.length) {
