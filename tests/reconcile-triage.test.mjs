@@ -13,7 +13,10 @@
  * Run: node tests/reconcile-triage.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { buildTriageIndex, buildTrackedIdIndex, alreadyHandledByTriage } from '../lib/reconcile-triage.mjs';
+import { buildTriageIndex, buildTrackedIdIndex, alreadyHandledByTriage, reconcileTriageResults } from '../lib/reconcile-triage.mjs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -23,17 +26,21 @@ function check(cond, msg) {
 
 console.log('reconcile-triage.test.mjs');
 
+// Fully synthetic fixtures: whimsical roles and 2020 dates that correspond to no
+// real tracker row (a fictional company alone is not enough — a real date+role+
+// score cluster can still fingerprint a real application, which is why these are
+// invented outright, not just company-masked).
 const TRIAGE_TSV = [
   'url\tcompany\ttitle\tscore\trationale\tdate',
-  'https://job-boards.greenhouse.io/acme/jobs/1\tAcme\tDirector, RevOps\t3.5\tgood fit\t2026-08-06',
-  'local:jds/globex-head-of-gtm-ai.md\tGlobex\tChief Widget Wrangling Officer\t3.7\tsolid\t2026-08-06',
-  'https://x.example/umbrella-corp-cfo-role\tUmbrella Corp\tChief Financial Officer - Regional\t0.5\tno\t2026-08-06',
+  'https://job-boards.greenhouse.io/acme/jobs/1\tAcme\tDirector, Sprocket Operations\t3.5\tgood fit\t2020-02-20',
+  'local:jds/globex-head-of-gtm-ai.md\tGlobex\tChief Widget Wrangling Officer\t3.7\tsolid\t2020-02-20',
+  'https://x.example/umbrella-corp-cfo-role\tUmbrella Corp\tChief Financial Officer - Regional\t0.5\tno\t2020-02-20',
 ].join('\n');
 
 const APPLICATIONS_MD = [
   '| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes | URL |',
   '|---|------|---------|------|-------|--------|-----|--------|--------|-------|-----|',
-  '| 4200 | 2026-07-29 | Contoso | Director, GTM Ops | 4.4/5 | Applied | ❌ | — | [4200](reports/4200-contoso-2026-07-29.md) | note | https://x.example/4200 |',
+  '| 4200 | 2020-01-15 | Contoso | Director, Widget Logistics | 3.1/5 | Applied | ❌ | — | [4200](reports/4200-contoso-2020-01-15.md) | note | https://x.example/4200 |',
 ].join('\n');
 
 const triageIndex = buildTriageIndex(TRIAGE_TSV);
@@ -41,7 +48,7 @@ const trackedIds = buildTrackedIdIndex(APPLICATIONS_MD);
 
 // ── buildTriageIndex ─────────────────────────────────────────────────────
 check(triageIndex.urls.has('https://job-boards.greenhouse.io/acme/jobs/1'), 'indexes the exact scored URL');
-check(triageIndex.keys.has('acme::director, revops'), 'indexes company::title lowercase key');
+check(triageIndex.keys.has('acme::director, sprocket operations'), 'indexes company::title lowercase key');
 check(triageIndex.titles.has('chief widget wrangling officer'), 'indexes title alone');
 
 // ── buildTrackedIdIndex ──────────────────────────────────────────────────
@@ -50,14 +57,14 @@ check(!trackedIds.has('9999'), 'does not invent an id that is not present');
 
 // ── alreadyHandledByTriage: layer 1, exact URL ───────────────────────────
 {
-  const row = { url: 'https://job-boards.greenhouse.io/acme/jobs/1', rest: ' | Acme | Director, RevOps' };
+  const row = { url: 'https://job-boards.greenhouse.io/acme/jobs/1', rest: ' | Acme | Director, Sprocket Operations' };
   check(alreadyHandledByTriage(row, { triageIndex, trackedIds }) === 'exact URL already in triage-results.tsv', 'exact URL match is the strongest, first-checked signal');
 }
 
 // ── layer 2: exact company+title, survives a DIFFERENT url (the
 // resolve-jds.mjs repoint-after-scoring shape from the real incident) ────
 {
-  const row = { url: 'local:jds/acme-director-revops.md', rest: ' | Acme | Director, RevOps' };
+  const row = { url: 'local:jds/acme-director-sprocket-ops.md', rest: ' | Acme | Director, Sprocket Operations' };
   const reason = alreadyHandledByTriage(row, { triageIndex, trackedIds });
   check(reason === 'exact company+title match', 'company+title match survives a URL that differs from the one it was originally scored under');
 }
@@ -106,6 +113,52 @@ check(!trackedIds.has('9999'), 'does not invent an id that is not present');
 {
   const row = { url: 'https://brandnew.example/job/1', rest: ' | Brand New Co | Totally Fresh Role' };
   check(alreadyHandledByTriage(row, { triageIndex, trackedIds }) === null, 'a genuinely new posting under every signal returns null (never false-positive)');
+}
+
+// ── reconcileTriageResults: the file-level reconcile the dashboard after-run
+// self-heal calls. Writes a real pipeline.md, checks off scored rows, leaves a
+// genuinely new one open. This is the piece that was MISSING from the server's
+// post-run reconcile (reconcileHandled ignored triage-results.tsv), which let
+// triage-scored rows re-surface every run. ─────────────────────────────────
+{
+  const dir = mkdtempSync(join(tmpdir(), 'tt-reconcile-'));
+  try {
+    const pipelinePath = join(dir, 'pipeline.md');
+    const triagePath = join(dir, 'triage-results.tsv');
+    const appsPath = join(dir, 'applications.md');
+    writeFileSync(triagePath, TRIAGE_TSV);
+    writeFileSync(appsPath, APPLICATIONS_MD);
+    writeFileSync(pipelinePath, [
+      '# Pipeline',
+      '',
+      '- [ ] https://job-boards.greenhouse.io/acme/jobs/1 | Acme | Director, Sprocket Operations',
+      '- [ ] https://brandnew.example/job/1 | Brand New Co | Totally Fresh Role',
+      '- [x] https://already.example/done | Done Co | Closed Role',
+      '',
+    ].join('\n'));
+
+    // Dry run: reports what WOULD flip, writes nothing.
+    const dry = reconcileTriageResults(pipelinePath, { triageResultsPath: triagePath, appsPath, apply: false });
+    check(dry.flipped.length === 1, 'dry run reports exactly the one scored-but-open row');
+    check(readFileSync(pipelinePath, 'utf8').includes('- [ ] https://job-boards.greenhouse.io/acme/jobs/1'), 'dry run does NOT mutate the file');
+
+    // Apply: flips the scored row, leaves the new one open.
+    const res = reconcileTriageResults(pipelinePath, { triageResultsPath: triagePath, appsPath, apply: true });
+    check(res.changed === 1, 'apply flips exactly one row');
+    const after = readFileSync(pipelinePath, 'utf8');
+    check(after.includes('- [x] https://job-boards.greenhouse.io/acme/jobs/1'), 'the triage-scored row is now checked off');
+    check(after.includes('- [ ] https://brandnew.example/job/1'), 'the genuinely new row stays open');
+
+    // Idempotent: a second apply is a no-op.
+    const again = reconcileTriageResults(pipelinePath, { triageResultsPath: triagePath, appsPath, apply: true });
+    check(again.changed === 0, 'a second apply is a no-op (idempotent)');
+
+    // Missing triage file: empty result, never a throw.
+    const missing = reconcileTriageResults(pipelinePath, { triageResultsPath: join(dir, 'nope.tsv'), appsPath, apply: true });
+    check(missing.changed === 0 && missing.flipped.length === 0, 'a missing triage-results.tsv yields an empty result, not a throw');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
