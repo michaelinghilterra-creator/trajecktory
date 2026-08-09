@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.15.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.15.0...v2.15.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* check off triage-scored pipeline rows after every agent run ([#166](https://github.com/michaelinghilterra-creator/trajecktory/issues/166)) ([ee6dfda](https://github.com/michaelinghilterra-creator/trajecktory/commit/ee6dfdaf6a4ebaf159741d128481194f486a0bac))
+
 ## [2.15.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.14.0...v2.15.0) (2026-08-07)
 
 
