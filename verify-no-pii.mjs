@@ -629,11 +629,21 @@ function admZip() {
 // line-window checks still work), tabs/breaks become spaces, then all tags go and
 // entities decode. Tags are stripped BEFORE entities so a decoded "&lt;" can never
 // forge a tag.
+//
+// The tag strip runs to a FIXPOINT: one pass can leave a tag that only forms after a
+// removal (the "<scr<x>ipt>" → "<script>" case), so repeat until the string stops
+// changing. This extracted text is only ever substring-scanned by the gate and never
+// emitted as HTML, so there is no injection sink here — but a complete strip is the
+// correct behaviour and is what the multi-character-sanitization analysis expects.
+// It terminates: each pass only removes characters, so length strictly drops until no
+// tag remains.
 function xmlToText(xml) {
-  return xml
+  let s = xml
     .replace(/<\/(w:p|a:p|text:p|text:h)>/gi, '\n')
-    .replace(/<(w:br|w:tab|a:br|text:tab|text:line-break)\b[^>]*\/?>/gi, ' ')
-    .replace(/<[^>]+>/g, '')
+    .replace(/<(w:br|w:tab|a:br|text:tab|text:line-break)\b[^>]*\/?>/gi, ' ');
+  let prev;
+  do { prev = s; s = s.replace(/<[^>]*>/g, ''); } while (s !== prev);
+  return s
     .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => safeCp(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_, d) => safeCp(parseInt(d, 10)))
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
