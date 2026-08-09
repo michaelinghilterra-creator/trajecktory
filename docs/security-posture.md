@@ -97,6 +97,27 @@ alternative is requiring admin, which is worse for a personal tool.
 locate is not actionable. What it never prints is the derived term list, which
 comes from the user's own ungitignored data. Counts only.
 
+**The PII gate reads text out of binary documents, but not out of images.**
+`verify-no-pii.mjs` extracts text from PDFs (zero-dependency: it inflates the
+content streams with Node's built-in zlib and reconstructs the visible strings)
+and from Office/OpenDocument files (via `adm-zip`, already a project dependency),
+then runs the extracted text through the same identity/career/comp/secret checks
+as any other file. A document it cannot read as text — an encrypted PDF, a
+scanned/image-only one, a subset-font PDF whose glyphs don't map back to
+characters, a corrupt container, or a legacy binary `.doc`/`.xls`/`.ppt` — is
+**not** waved through: it becomes a "cannot certify" and fails the build with
+exit 2, the same fail-closed posture the gate takes when its derivation sources
+are unparseable. This closed the highest-risk blind spot, the one a real CV zip
+shipped through in v1.14.0: a real CV/offer letter shipped as a `.pdf` or `.docx`
+used to pass completely unscanned.
+
+**Images remain a human-review residual.** A `.png`/`.jpg` (the ~30 tracked
+dashboard screenshots, `docs/og-image.png`) cannot be grepped — a screenshot of a
+real dashboard leaks whatever is on screen and no byte scan can see it. Failing
+the build on every image is not viable, so the gate skips them; confirming a
+tracked image carries no personal data is a manual pre-publish step, called out
+here rather than pretended away.
+
 ## Findings fixed: the maintainer pass (8)
 
 Recorded so a later reader can tell which rough edges were already found.

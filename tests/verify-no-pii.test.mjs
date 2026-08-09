@@ -29,6 +29,7 @@ import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import AdmZip from 'adm-zip';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GATE = join(root, 'verify-no-pii.mjs');
@@ -61,6 +62,39 @@ const KEY = {
   hiCamel: 'target' + 'High',
 };
 const N = { real: '275', real2: '400', neutral: '100', neutralLo: '90', neutralHi: '140' };
+
+// ── Binary-document fixtures, built at runtime ──────────────────────────────
+// The gate now extracts and scans text out of PDF/Office files instead of skipping
+// them (the highest-risk blind spot: a real CV/offer shipped as a .pdf or .docx used
+// to pass completely unscanned). These builders assemble minimal-but-real containers
+// so the fixtures carry no literal PII in this source — same discipline as the comp
+// fixtures above.
+function makeDocx(bodyText) {
+  const xml = `<?xml version="1.0"?><w:document xmlns:w="urn:x"><w:body><w:p><w:r><w:t>${bodyText}</w:t></w:r></w:p></w:body></w:document>`;
+  const z = new AdmZip();
+  z.addFile('[Content_Types].xml', Buffer.from('<?xml version="1.0"?><Types/>'));
+  z.addFile('word/document.xml', Buffer.from(xml));
+  return z.toBuffer();
+}
+// A minimal PDF with ONE uncompressed content stream that shows `showText`.
+function makePdf(showText) {
+  const stream = `BT /F1 12 Tf 72 720 Td (${showText}) Tj ET`;
+  return Buffer.from(
+    '%PDF-1.4\n' +
+    '1 0 obj<< /Type /Catalog >>endobj\n' +
+    `4 0 obj<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n` +
+    '%%EOF\n', 'latin1');
+}
+// A PDF with a stream of pure binary and no text operators: has a stream object but
+// no readable text layer, i.e. what a scanned/image-only PDF looks like to the gate.
+function makeImageOnlyPdf() {
+  const junk = Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13]);
+  return Buffer.concat([
+    Buffer.from(`%PDF-1.4\n5 0 obj<< /Length ${junk.length} >>\nstream\n`, 'latin1'),
+    junk,
+    Buffer.from('\nendstream\nendobj\n%%EOF\n', 'latin1'),
+  ]);
+}
 
 // Run the gate over a throwaway payload dir. Returns { code, out }.
 function scan(files) {
@@ -138,6 +172,28 @@ check(allows({ 'x.mjs': "const to = 'someone@acme.example';\n" }), '.example add
 check(allows({ 'x.mjs': "const to = 'someone@acme.test';\n" }), '.test address is allowed');
 check(allows({ 'x.mjs': "const ssh = 'git@github.com';\n" }), 'git@github.com (SSH protocol) is allowed');
 check(allows({ 'x.mjs': '// commit 12345+user@users.noreply.github.com\n' }), 'GitHub noreply address is allowed');
+
+console.log('\n7. Binary documents (PDF/Office) are extracted and scanned, not skipped');
+// 7a. A .docx whose document.xml carries a comp value → EXIT 1. Proves Office files
+//     are no longer refused-as-archive but text-extracted and run through the checks.
+const docxDirty = scan({ 'resume.docx': makeDocx(`${KEY.walk}: ${N.real}`) });
+check(docxDirty.code === 1 && /COMP LITERAL/.test(docxDirty.out), 'a .docx with a planted comp value is flagged (exit 1)');
+check(allows({ 'resume.docx': makeDocx('There is nothing sensitive in this document.') }), 'a clean .docx passes (exit 0)');
+
+// 7b. A text-bearing PDF with a planted real email → EXIT 1 (STRAY EMAIL). `stray`
+//     is assembled above (section 6) so this source holds no literal address.
+const pdfDirty = scan({ 'cover.pdf': makePdf(`Please contact ${stray} about the role`) });
+check(pdfDirty.code === 1 && /STRAY EMAIL/.test(pdfDirty.out), 'a text-bearing PDF with a real email is flagged (exit 1)');
+
+// 7c. An image-only / undecodable PDF must be CANNOT-CERTIFY (exit 2), never a
+//     silent pass. A gate that cannot read a document must not report it clean.
+const pdfBlind = scan({ 'scan.pdf': makeImageOnlyPdf() });
+check(pdfBlind.code === 2 && /CANNOT CERTIFY/.test(pdfBlind.out), 'an image-only PDF cannot be certified (exit 2, not 0)');
+
+// 7d. A legacy binary Office format (OLE compound doc) has no extractor here, so it
+//     fails closed rather than slipping through the old binary skip.
+const legacy = scan({ 'old.doc': Buffer.from([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, 0, 0, 0, 0]) });
+check(legacy.code === 2 && /CANNOT CERTIFY/.test(legacy.out), 'a legacy .doc fails closed (exit 2)');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

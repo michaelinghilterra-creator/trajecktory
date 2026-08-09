@@ -22,6 +22,9 @@
 import { execSync, execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, extname, basename } from 'node:path';
+import { inflateSync, inflateRawSync } from 'node:zlib';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 
 const ROOT = process.cwd();
 const argv = process.argv.slice(2);
@@ -43,6 +46,10 @@ const MSG_FILE = msgFileIdx !== -1 ? argv[msgFileIdx + 1] : null;
 const STAGED = argv.includes('--staged');
 
 const hits = [];
+// Documents (PDF/Office) that could not be read as text. A leak-checker that
+// cannot read a file must NOT report it clean, so these force exit 2 ("cannot
+// certify"), the same posture the derivation-health check already takes.
+const cannotCertify = [];
 const leak = (file, why, detail) => hits.push({ file, why, detail });
 const rx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -102,7 +109,14 @@ const IDENTITY_ALLOW = new Set([
 // report; both the repo scan and the installer scan read straight past it.
 // Rule: ship no archive. If one ever legitimately must ship, add it here and
 // justify it — the point is that the decision is explicit rather than silent.
-const ARCHIVE_EXT = new Set(['.zip', '.docx', '.xlsx', '.pptx', '.jar', '.7z', '.rar', '.gz', '.tgz', '.bz2']);
+//
+// .docx/.xlsx/.pptx are DELIBERATELY not here anymore. They used to be refused as
+// opaque archives, which meant a real CV or offer letter shipped as a Word doc was
+// flagged but never READ — and a .pdf was neither refused nor scanned, it just hit
+// the null-byte skip and passed clean. Both are now handled by DOCUMENT TEXT
+// EXTRACTION below: their text is pulled out and run through the same checks as any
+// other file. A generic archive (.zip/.jar/…) can hold anything, so it stays refused.
+const ARCHIVE_EXT = new Set(['.zip', '.jar', '.7z', '.rar', '.gz', '.tgz', '.bz2']);
 const ARCHIVE_ALLOW = new Set([]);
 
 // ── 2. COMPENSATION ────────────────────────────────────────────────────────
@@ -572,6 +586,202 @@ if (health.length) {
   process.exit(2);
 }
 
+// ── DOCUMENT TEXT EXTRACTION ────────────────────────────────────────────────
+// PDFs and Office/OpenDocument files are binary containers. The old gate either
+// refused them as opaque archives or skipped them on the null-byte test, so a real
+// CV / cover letter / offer letter shipped as .pdf or .docx passed COMPLETELY
+// UNSCANNED — the highest-risk blind spot, and the same class as the v1.14.0 CV
+// zip. Here we pull the TEXT out and feed it through the very same derived checks
+// + SECRET_PATTERNS as any other file.
+//
+// SANDBOXED: extraction only reads bytes — it inflates zlib streams and strips
+// markup. It never runs anything a document can carry (no PDF JavaScript, no Office
+// macros are executed).
+//
+// FAIL CLOSED: a document we cannot read as text (encrypted, image-only, a
+// subset/CID-font PDF whose glyphs we can't map back to characters, a corrupt
+// container, or a format with no extractor here) is recorded as a cannot-certify
+// and forces exit 2. It is NEVER treated as clean.
+
+const PDF_EXT = new Set(['.pdf']);
+// OOXML (+ macro-enabled + template variants) are ZIP-of-XML. adm-zip is ALREADY a
+// project dependency (generate-docx-from-template.mjs), so no new dependency.
+const OOXML_EXT = new Set(['.docx', '.docm', '.dotx', '.xlsx', '.xlsm', '.xltx', '.pptx', '.pptm', '.potx']);
+const ODF_EXT = new Set(['.odt', '.ods', '.odp']);      // OpenDocument: also ZIP-of-XML
+// Legacy OLE compound documents. No minimal text extractor exists for them and they
+// DO carry real prose, so a tracked one fails closed rather than silently skipping.
+const LEGACY_OFFICE_EXT = new Set(['.doc', '.xls', '.ppt']);
+const DOC_EXT = new Set([...PDF_EXT, ...OOXML_EXT, ...ODF_EXT, ...LEGACY_OFFICE_EXT]);
+
+const safeCp = (n) => { try { return String.fromCodePoint(n); } catch { return ''; } };
+
+// adm-zip loaded lazily and defensively: on a fresh clone with no node_modules the
+// gate must still run every other check (single-file, no-crash-on-missing-sources).
+// If it is absent AND an Office doc is present, that doc degrades LOUDLY to a
+// cannot-certify — never a silent pass.
+let _AdmZip, _admTried = false;
+function admZip() {
+  if (!_admTried) { _admTried = true; try { _AdmZip = require('adm-zip'); } catch { _AdmZip = null; } }
+  return _AdmZip;
+}
+
+// Strip XML down to its text. Paragraph/heading ends become newlines (so the
+// line-window checks still work), tabs/breaks become spaces, then all tags go and
+// entities decode. Tags are stripped BEFORE entities so a decoded "&lt;" can never
+// forge a tag.
+//
+// The tag strip runs to a FIXPOINT: one pass can leave a tag that only forms after a
+// removal (the "<scr<x>ipt>" → "<script>" case), so repeat until the string stops
+// changing. This extracted text is only ever substring-scanned by the gate and never
+// emitted as HTML, so there is no injection sink here — but a complete strip is the
+// correct behaviour and is what the multi-character-sanitization analysis expects.
+// It terminates: each pass only removes characters, so length strictly drops until no
+// tag remains.
+function xmlToText(xml) {
+  let s = xml
+    .replace(/<\/(w:p|a:p|text:p|text:h)>/gi, '\n')
+    .replace(/<(w:br|w:tab|a:br|text:tab|text:line-break)\b[^>]*\/?>/gi, ' ');
+  let prev;
+  do { prev = s; s = s.replace(/<[^>]*>/g, ''); } while (s !== prev);
+  return s
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => safeCp(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => safeCp(parseInt(d, 10)))
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+// Which zip entries hold user-visible text (and authorship metadata, which carries
+// the owner's name). docProps holds author/company; body parts hold the content.
+function ooxmlEntry(n) {
+  return /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/i.test(n)
+    || /^xl\/sharedStrings\.xml$/i.test(n)
+    || /^xl\/worksheets\/sheet[^/]*\.xml$/i.test(n)
+    || /^ppt\/(slides|notesSlides)\/[^/]+\.xml$/i.test(n)
+    || /^docProps\/(core|app)\.xml$/i.test(n);
+}
+const odfEntry = (n) => /^(content|styles|meta)\.xml$/i.test(n);
+
+function extractZipDoc(buf, wants) {
+  const AdmZip = admZip();
+  if (!AdmZip) return { ok: false, reason: 'adm-zip is not installed, so this Office/OpenDocument file cannot be text-scanned' };
+  let zip;
+  try { zip = new AdmZip(buf); } catch { return { ok: false, reason: 'container is not a readable zip (corrupt, or not really an Office/OpenDocument file)' }; }
+  let text = '', found = 0;
+  for (const e of zip.getEntries()) {
+    if (e.isDirectory || !wants(e.entryName)) continue;
+    found++;
+    let xml; try { xml = e.getData().toString('utf8'); } catch { continue; }
+    text += xmlToText(xml) + '\n';
+  }
+  if (!found) return { ok: false, reason: 'no recognized text parts inside the container' };
+  return { ok: true, text };
+}
+
+// PDF literal-string escapes: \n \r \t \b \f, octal \ddd, line-continuation.
+function decodePdfLiteral(s) {
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c !== '\\') { out += c; continue; }
+    const n = s[++i];
+    if (n === undefined) break;
+    if (n === 'n') out += '\n';
+    else if (n === 'r') out += '\r';
+    else if (n === 't') out += '\t';
+    else if (n === 'b') out += '\b';
+    else if (n === 'f') out += '\f';
+    else if (n === '\n' || n === '\r') { /* line continuation: drop */ }
+    else if (n >= '0' && n <= '7') {
+      let oct = n;
+      while (oct.length < 3 && s[i + 1] >= '0' && s[i + 1] <= '7') oct += s[++i];
+      out += safeCp(parseInt(oct, 8));
+    } else out += n;   // \( \) \\ and anything else → the literal next char
+  }
+  return out;
+}
+
+// Reconstruct visible text from the PDF string operands in a content stream.
+// A LINEAR scanner (no regex over untrusted input → no ReDoS) that handles
+// arbitrarily nested literal ( ) strings and hex < > strings. Returns the pieces
+// TWICE — glued and space-joined — because a word may be split one-glyph-per-token
+// or one-token-per-word, and those two splits need opposite spacing. Scanning both
+// forms only ADDS matches, the right bias for a leak gate.
+function pdfStringsFrom(content) {
+  const glued = [], spaced = [];
+  const n = content.length;
+  for (let i = 0; i < n; i++) {
+    const c = content[i];
+    if (c === '(') {
+      let depth = 1, j = i + 1, raw = '';
+      while (j < n && depth > 0) {
+        const ch = content[j];
+        if (ch === '\\') { raw += ch + (content[j + 1] ?? ''); j += 2; continue; }
+        if (ch === '(') depth++;
+        else if (ch === ')') { if (--depth === 0) break; }
+        raw += ch; j++;
+      }
+      const piece = decodePdfLiteral(raw);
+      glued.push(piece); spaced.push(piece);
+      i = j;
+    } else if (c === '<' && content[i + 1] !== '<') {   // hex string, not a << dict
+      const j = content.indexOf('>', i + 1);
+      if (j === -1) break;
+      const hex = content.slice(i + 1, j).replace(/[^0-9A-Fa-f]/g, '');
+      const even = hex.length % 2 ? hex + '0' : hex;
+      let s = '';
+      for (let k = 0; k < even.length; k += 2) s += safeCp(parseInt(even.substr(k, 2), 16));
+      glued.push(s); spaced.push(s);
+      i = j;
+    }
+  }
+  return glued.join('') + '\n' + spaced.join(' ');
+}
+
+function extractPdfText(buf) {
+  const latin = buf.toString('latin1');   // 1 byte → 1 char, so string offsets == byte offsets
+  if (!latin.includes('%PDF-')) return { ok: false, reason: 'not a PDF (missing %PDF- header)' };
+  // Encrypted PDFs store their streams enciphered; inflating yields noise. We do not
+  // decrypt, so we cannot read the text to certify it — fail closed.
+  if (/\/Encrypt\b/.test(latin)) return { ok: false, reason: 'encrypted PDF — its text cannot be read to certify it' };
+  let content = '', streams = 0;
+  const re = /stream(\r\n|\r|\n)/g;
+  let m;
+  while ((m = re.exec(latin))) {
+    const start = m.index + m[0].length;
+    const end = latin.indexOf('endstream', start);
+    if (end === -1) continue;
+    re.lastIndex = end + 9;   // resume AFTER this stream so its binary bytes can't re-match "stream"
+    streams++;
+    const raw = buf.subarray(start, end);
+    let data = null;
+    try { data = inflateSync(raw); } catch { try { data = inflateRawSync(raw); } catch { data = null; } }
+    if (data) content += data.toString('latin1') + '\n';
+    else {
+      const s = raw.toString('latin1');
+      if (/\bBT\b|\bTj\b|\bTJ\b/.test(s)) content += s + '\n';   // uncompressed content stream
+    }
+  }
+  if (!streams) return { ok: false, reason: 'no stream objects found (unreadable or image-only PDF)' };
+  const text = pdfStringsFrom(content);
+  const stripped = text.replace(/\s+/g, '');
+  const letters = (text.match(/[A-Za-z]/g) || []).length;
+  // No text at all → scanned/image-only. Mostly non-letters → the string bytes are
+  // glyph indices from a subset/CID font we can't map back to characters. Either
+  // way the text layer is not certifiable; route to human review, do not pass.
+  if (stripped.length < 12) return { ok: false, reason: 'no extractable text layer (scanned/image-only PDF?)' };
+  if (letters / stripped.length < 0.4) return { ok: false, reason: 'text layer not decodable (subset/CID font without a usable encoding)' };
+  return { ok: true, text };
+}
+
+function extractDocText(buf, ext) {
+  if (PDF_EXT.has(ext)) return extractPdfText(buf);
+  if (OOXML_EXT.has(ext)) return extractZipDoc(buf, ooxmlEntry);
+  if (ODF_EXT.has(ext)) return extractZipDoc(buf, odfEntry);
+  if (LEGACY_OFFICE_EXT.has(ext)) return { ok: false, reason: `${ext} is a legacy binary Office format with no text extractor here — cannot certify it as clean` };
+  return { ok: false, reason: `no text extractor for ${ext}` };
+}
+
 // ── the sweep ──────────────────────────────────────────────────────────────
 // (SECRET_PATTERNS is defined above scanMessages so both surfaces share it.)
 const files = targets();
@@ -581,8 +791,11 @@ for (const abs of files) {
   let st; try { st = statSync(abs); } catch { continue; }
   if (!st.isFile()) continue;
 
-  // 1. archives — structural, no content read required
-  if (ARCHIVE_EXT.has(extname(abs).toLowerCase()) && !ARCHIVE_ALLOW.has(name)) {
+  const ext = extname(abs).toLowerCase();
+
+  // 1. true archives — structural, no content read required. (.docx/.xlsx/.pptx are
+  // NOT archives anymore; they are handled by the document extractor path below.)
+  if (ARCHIVE_EXT.has(ext) && !ARCHIVE_ALLOW.has(name)) {
     leak(rel, 'ARCHIVE', `${extname(abs)} — contents cannot be scanned; ship no archives`);
     continue;
   }
@@ -590,20 +803,34 @@ for (const abs of files) {
   const buf = readTarget(abs, rel);
   if (!buf) continue;
 
-  // Binary content is not scannable as text and must not be treated as if it were.
-  // A PNG stores its pixels zlib-compressed, so rendered text never appears as
-  // plaintext bytes, while random bytes DO occasionally spell a short token — a
-  // screenshot in docs/ matched one of the money figures below by pure chance.
-  // Scanning binaries for strings is therefore all false positive and no signal,
-  // which is exactly why archives are refused structurally above rather than
-  // searched. (The figure itself is deliberately not quoted here: it is real, and
-  // this file is tracked. Naming a leak while documenting it is how it ships.)
-  //
-  // The residual risk this leaves is real but not solvable by grep: a SCREENSHOT of
-  // a real dashboard leaks whatever is on screen, and no byte scan can see it. That
-  // is a human review item, called out in docs/ rather than pretended away here.
-  if (buf.subarray(0, 8192).includes(0)) continue;
-  const text = buf.toString('utf8');
+  let text;
+  if (DOC_EXT.has(ext)) {
+    // PDF / Office / OpenDocument: extract text and scan it exactly like any other
+    // file. Fail CLOSED — a document we cannot read becomes a cannot-certify (exit
+    // 2), never a silent pass. This is the blind spot a real CV zip shipped through.
+    const res = extractDocText(buf, ext);
+    if (!res.ok) { cannotCertify.push({ file: rel, reason: res.reason }); continue; }
+    text = res.text;
+  } else {
+    // Binary content is not scannable as text and must not be treated as if it were.
+    // A PNG stores its pixels zlib-compressed, so rendered text never appears as
+    // plaintext bytes, while random bytes DO occasionally spell a short token — a
+    // screenshot in docs/ matched one of the money figures below by pure chance.
+    // Scanning binaries for strings is therefore all false positive and no signal,
+    // which is exactly why archives are refused structurally above rather than
+    // searched. (The figure itself is deliberately not quoted here: it is real, and
+    // this file is tracked. Naming a leak while documenting it is how it ships.)
+    //
+    // IMAGES ARE A KNOWN RESIDUAL RISK, not a certified pass. A SCREENSHOT of a real
+    // dashboard leaks whatever is on screen and no byte scan can see it; a scanned
+    // document is the same. The repo ships ~30 tracked .png screenshots as a product
+    // feature, so failing the build on every image is not viable — instead they are
+    // skipped here and called out as a HUMAN REVIEW item in docs/security-posture.md.
+    // Text-bearing documents (PDF/Office) do NOT fall through here; they are
+    // extracted above and fail closed when unreadable.
+    if (buf.subarray(0, 8192).includes(0)) continue;
+    text = buf.toString('utf8');
+  }
 
   // 1b. secret / credential scan — applies to EVERY file (a key is a leak wherever
   // it lands, so this is not allowlisted). Binaries are already skipped by the
@@ -710,8 +937,9 @@ for (const abs of files) {
     }
   }
 
-  // 3d. report path reproducing a real tracker row (id + date), slug-form
-  if (/\.(md|mjs|js|jsx|ya?ml|json|txt)$/i.test(abs)) {
+  // 3d. report path reproducing a real tracker row (id + date), slug-form.
+  // DOC_EXT included: extracted text from a shipped PDF/Office doc is scanned too.
+  if (/\.(md|mjs|js|jsx|ya?ml|json|txt)$/i.test(abs) || DOC_EXT.has(ext)) {
     for (const m of text.matchAll(/reports\/(\d+)-[a-z0-9-]+-(\d{4}-\d{2}-\d{2})\.md/g)) {
       if (trackerIdDate.has(`${m[1]}:${m[2]}`)) {
         leak(`${rel}`, 'TRACKER ROW (report path)', `${m[0]} reproduces real tracker row #${m[1]} (${m[2]}). Use a fictional example path (an id/date matching no real row).`);
@@ -755,8 +983,10 @@ for (const abs of files) {
   // (this is how the real reports hid in tests/fixtures/). A demo table is one row
   // per line, where file-level matching would cross-contaminate unrelated rows.
   // So: prose matches at file scope, structured data matches at line scope.
-  if (pipeline.size && /\.(md|json|mjs|js|jsx|tsv|csv|ya?ml|html?|txt)$/i.test(abs)) {
-    const prose = /\.(md|markdown|html?|txt)$/i.test(abs);
+  // DOC_EXT included and treated as prose: an evaluation report shipped as a PDF or
+  // Word doc is a prose document about one company, matched at file scope like a .md.
+  if (pipeline.size && (/\.(md|json|mjs|js|jsx|tsv|csv|ya?ml|html?|txt)$/i.test(abs) || DOC_EXT.has(ext))) {
+    const prose = /\.(md|markdown|html?|txt)$/i.test(abs) || DOC_EXT.has(ext);
     const seen = new Set();
     const check = (hay, where) => {
       const nhay = norm(hay);
@@ -784,17 +1014,32 @@ for (const abs of files) {
 
 // ── report ─────────────────────────────────────────────────────────────────
 if (JSON_OUT) {
-  console.log(JSON.stringify({ ok: hits.length === 0, scanned: files.length, hits }, null, 2));
-  process.exit(hits.length ? 1 : 0);
+  const code = hits.length ? 1 : cannotCertify.length ? 2 : 0;
+  console.log(JSON.stringify({ ok: hits.length === 0 && cannotCertify.length === 0, scanned: files.length, hits, cannotCertify }, null, 2));
+  process.exit(code);
 }
 const scope = PAYLOAD ? `payload ${PAYLOAD}` : 'tracked tree';
 console.log(`Scanning ${scope}: ${files.length} files`);
 console.log(`  derived: ${identity.length} identity, ${thirdParty.size} third-party, ${pipeline.size} companies`);
-if (!hits.length) {
-  console.log('  OK — no personal data found.');
-  process.exit(0);
+const showCannotCertify = () => {
+  console.log(`\n${cannotCertify.length} DOCUMENT(S) COULD NOT BE CERTIFIED:`);
+  for (const c of cannotCertify) console.log(`  [CANNOT CERTIFY] ${c.file}\n      ${c.reason}`);
+};
+// A definite leak (exit 1) outranks a cannot-certify (exit 2): the build fails
+// either way, and a confirmed finding is the more urgent thing to show first.
+if (hits.length) {
+  console.log(`\n${hits.length} LEAK(S):`);
+  for (const h of hits) console.log(`  [${h.why}] ${h.file}\n      ${h.detail}`);
+  if (cannotCertify.length) showCannotCertify();
+  console.log('\nThese files ship to every user (repo + installer payload). Refusing to pass.');
+  process.exit(1);
 }
-console.log(`\n${hits.length} LEAK(S):`);
-for (const h of hits) console.log(`  [${h.why}] ${h.file}\n      ${h.detail}`);
-console.log('\nThese files ship to every user (repo + installer payload). Refusing to pass.');
-process.exit(1);
+if (cannotCertify.length) {
+  showCannotCertify();
+  console.log('\nA binary document (PDF/Office) could not be read as text, so this scan cannot');
+  console.log('prove it carries no personal data. Refusing to pass (exit 2). Convert it to a');
+  console.log('scannable form, remove it from git, or review it by hand and confirm it is clean.');
+  process.exit(2);
+}
+console.log('  OK — no personal data found.');
+process.exit(0);
