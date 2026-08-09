@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.16.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.15.1...v2.16.0) (2026-08-09)
+
+
+### Features
+
+* scan text inside PDF and Office documents in the PII gate ([#168](https://github.com/michaelinghilterra-creator/trajecktory/issues/168)) ([6e8a1c3](https://github.com/michaelinghilterra-creator/trajecktory/commit/6e8a1c3f1a653262d0fd06fef54a93a09054f76b))
+
 ## [2.15.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.15.0...v2.15.1) (2026-08-09)
 
 
