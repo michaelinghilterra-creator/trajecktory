@@ -2,13 +2,13 @@
 //
 // WHY THIS EXISTS
 // A claimant on unemployment must keep a running log of job-search activities and
-// produce it on request or lose benefits. Michael already does all of that
-// searching inside trajecktory, so this assembles the log straight from his own
-// data instead of asking him to hand-keep it. Pick a date range, get one row per
+// produce it on request or lose benefits. The user already does all of that
+// searching inside trajecktory, so this assembles the log straight from their own
+// data instead of asking them to hand-keep it. Pick a date range, get one row per
 // dated activity in that window, export as CSV whose columns mirror the TWC Work
 // Search Log. TWC accepts CSV — the exact PDF form is not required.
 //
-// WHAT COUNTS AS AN ACTIVITY (confirmed with Michael, all TWC-acceptable):
+// WHAT COUNTS AS AN ACTIVITY (all TWC-acceptable):
 //   - applications sent   → "Applied online for a job"
 //   - interviews          → each dated interview event ("Interview — Phone Screen")
 //   - follow-up (email)   → each dated Sent email to an employer contact
