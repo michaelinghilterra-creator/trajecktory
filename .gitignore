@@ -1,5 +1,7 @@
 # Personal data (user fills these)
 cv.md
+# User-layer proof points (see AGENTS.md Data Contract); never ship
+article-digest.md
 # All of data/ is user-layer (real + demo); ship none of it. Demo data is
 # regenerated from the seed scripts. Keep the dir via .gitkeep only.
 data/*
@@ -86,6 +88,9 @@ ms-playwright/
 # Local-only scratch / tooling (never ship)
 dashboard-web/.claude/
 ignore-old_design_audit_files/
+# /claude-security scan output dirs at repo root (defense-in-depth; each also
+# self-ignores via a nested .gitignore, but do not rely on that surviving)
+CLAUDE-SECURITY-*/
 # Internal point-in-time audit (references security findings + the owner name)
 AUDIT.md
 # Pre-archive backups (created by archive-discarded.mjs runs)
