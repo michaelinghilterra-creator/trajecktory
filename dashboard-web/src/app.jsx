@@ -161,6 +161,13 @@ function App() {
   const [tab, setTab] = useState(() => loadNav().tab || "pipeline");
   const [debriefPrompt, setDebriefPrompt] = useState(null);
   const [search, setSearch] = useState("");
+  // Universal-search dropdown results (people + companies) for the top bar.
+  const [searchResults, setSearchResults] = useState({ people: [], companies: [] });
+  // A universal-search jump can ask the destination tab to pre-filter to a term.
+  // The cluster-clear effect below wipes `search` on tab change, so stash the term
+  // here and apply it AFTER that runs (see the effect further down). Mirrors the
+  // pendingTaOpen hand-off.
+  const [pendingSearch, setPendingSearch] = useState(null);
   const [drawerApp, setDrawerApp] = useState(null);
   // Transient: a Follow-Ups click on a TA row pushes the contact id here and
   // switches to Network → TA Outreach; TargetTalentTab consumes it once and
@@ -176,6 +183,9 @@ function App() {
   // consumes it and opens its own drawer.
   const [pendingRecruiterOpen, setPendingRecruiterOpen] = useState(null);
   const openRecruiter = (id) => { setPendingRecruiterOpen(id); setNetworkSub("recruiters"); setTab("network"); };
+  // Referrals has no per-id drawer, so a referral jump lands on Network → Referrals
+  // and pre-filters the list to the person's name (via pendingSearch).
+  const openReferral = (name) => { setPendingSearch(name || ""); setNetworkSub("referrals"); setTab("network"); };
   const [pipelineView, setPipelineView] = useState(() => loadNav().pipelineView || "overview");
 
   // Reset Pipeline's subtab whenever the user navigates away. Otherwise
@@ -564,6 +574,48 @@ function App() {
     prevTabRef.current = tab;
   }, [tab, SEARCH_CLUSTER_A]);
 
+  // Universal search: debounce the top-bar term and fetch cross-entity matches
+  // (people + companies) for the dropdown. Cleared under 2 chars.
+  useEffect(() => {
+    const q = search.trim();
+    if (q.length < 2) { setSearchResults({ people: [], companies: [] }); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(q)}`)
+        .then(r => (r.ok ? r.json() : { people: [], companies: [] }))
+        .then(d => { if (!cancelled) setSearchResults({ people: d.people || [], companies: d.companies || [] }); })
+        .catch(() => { if (!cancelled) setSearchResults({ people: [], companies: [] }); });
+    }, 150);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [search]);
+
+  // Apply a pending universal-search filter to the destination tab. Defined AFTER
+  // the cluster-clear effect above so it wins the same-tick tab switch; also fires
+  // when only pendingSearch changes (a jump while already on the destination tab).
+  useEffect(() => {
+    if (pendingSearch != null) { setSearch(pendingSearch); setPendingSearch(null); }
+  }, [tab, pendingSearch]);
+
+  // Route a universal-search pick to the right destination, reusing the existing
+  // deep-link hand-offs. Contacts open their drawer; a company row opens the
+  // pipeline drawer for that exact posting (falling back to a filtered All Entries
+  // when the row is not in memory); a referral lands on Referrals filtered by name.
+  const pickResult = (item) => {
+    if (!item) return;
+    switch (item.type) {
+      case "ta":        openTaContact(item.id); setSearch(""); break;
+      case "recruiter": openRecruiter(item.id); setSearch(""); break;
+      case "referral":  openReferral(item.name); break;
+      case "company": {
+        const app = apps.find(a => String(a.id) === String(item.id));
+        if (app) { setDrawerApp(app); setSearch(""); }
+        else { setPendingSearch(item.company || item.name); setPipelineView("all"); setTab("pipeline"); }
+        break;
+      }
+      default: break;
+    }
+  };
+
   const searchPlaceholder = useMemo(() => {
     switch (tab) {
       case "pipeline":       return "Search company, role, source…";
@@ -606,6 +658,8 @@ function App() {
         <window.Topbar
           search={search} setSearch={setSearch}
           searchPlaceholder={searchPlaceholder}
+          searchResults={searchResults}
+          onPickResult={pickResult}
           lastSync={lastSync}
           theme={tweaks.theme} setTheme={(t) => setTweak("theme", t)}
           themeOptions={THEME_OPTIONS}
