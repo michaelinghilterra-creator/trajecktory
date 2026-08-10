@@ -982,21 +982,98 @@ window.SyncIndicator = function SyncIndicator({ lastSync }) {
   return <span className="muted" style={{ fontSize: 10.5 }}>· synced {label}</span>;
 };
 
+// ---------- Universal search dropdown ----------
+// Results panel under the top search bar: people (TA / recruiters / referrals) and
+// companies (pipeline roles), each clickable to jump straight there. Positioned
+// `fixed` off the search box's measured rect because `.topbar` has overflow:hidden
+// and would clip an absolutely-positioned child. Reuses the cmdk-item/section
+// styles the command palette already ships.
+const USEARCH_ICON = { ta: '◎', recruiter: '☎', referral: '⇄', company: '▥' };
+window.UniversalSearchDropdown = function UniversalSearchDropdown({ anchorRef, results, active, onHover, onPick }) {
+  const [rect, setRect] = React.useState(null);
+  React.useLayoutEffect(() => {
+    const measure = () => { const el = anchorRef && anchorRef.current; if (el) setRect(el.getBoundingClientRect()); };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [anchorRef]);
+  const people = results.people || [];
+  const companies = results.companies || [];
+  const pos = rect
+    ? { position: 'fixed', top: rect.bottom + 6, left: rect.left, width: rect.width }
+    : { position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 6 };
+  const row = (item, idx) => (
+    <div
+      key={item.type + '-' + item.id + '-' + idx}
+      className={`cmdk-item ${idx === active ? 'active' : ''}`}
+      onMouseEnter={() => onHover(idx)}
+      onMouseDown={e => e.preventDefault()}  /* keep input focus so onClick registers */
+      onClick={() => onPick(item)}
+    >
+      <span className="mono dim" style={{ fontSize: 11, width: 16 }}>{USEARCH_ICON[item.type] || '›'}</span>
+      <span className="label">{item.name}{item.company ? <span className="dim" style={{ marginLeft: 6 }}>· {item.company}</span> : null}</span>
+      {item.subtitle && <span className="hint">{item.subtitle}</span>}
+    </div>
+  );
+  return (
+    <div
+      className="cmdk-list"
+      style={{ ...pos, zIndex: 200, maxHeight: 380, background: 'var(--panel)', border: '1px solid var(--border-2)', borderRadius: 10, boxShadow: '0 20px 60px -20px rgba(0,0,0,0.7)' }}
+      onMouseDown={e => e.preventDefault()}
+    >
+      {people.length > 0 && <div className="cmdk-section">People</div>}
+      {people.map((it, i) => row(it, i))}
+      {companies.length > 0 && <div className="cmdk-section">Companies</div>}
+      {companies.map((it, i) => row(it, people.length + i))}
+    </div>
+  );
+};
+
 // ---------- Topbar ----------
-window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, theme, setTheme, themeOptions, openCmd, lastSync }) {
+window.Topbar = function Topbar({ search, setSearch, searchPlaceholder, theme, setTheme, themeOptions, openCmd, lastSync, searchResults, onPickResult }) {
   const opts = themeOptions && themeOptions.length ? themeOptions : [{ value: theme, label: theme }];
+  const searchRef = React.useRef(null);
+  const [open, setOpen] = React.useState(false);
+  const [active, setActive] = React.useState(0);
+  const results = searchResults || { people: [], companies: [] };
+  const flat = [...(results.people || []), ...(results.companies || [])];
+  const showDrop = open && search.trim().length >= 2 && flat.length > 0;
+
+  React.useEffect(() => { setActive(0); }, [search]);
+
+  const pick = (item) => { if (onPickResult) onPickResult(item); setOpen(false); };
+  const onSearchKey = (e) => {
+    if (!showDrop) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(i => Math.min(i + 1, flat.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(i => Math.max(i - 1, 0)); }
+    else if (e.key === 'Enter') { e.preventDefault(); const it = flat[active]; if (it) pick(it); }
+    else if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
+  };
+
   return (
     <div className="topbar">
-      <div className="search">
+      <div className="search" ref={searchRef}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <input
           type="text"
           aria-label={searchPlaceholder || "Search"}
           placeholder={searchPlaceholder || "Search by company, role, status…"}
           value={search}
-          onChange={e => setSearch(e.target.value)}
+          onChange={e => { setSearch(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 120)}
+          onKeyDown={onSearchKey}
         />
         <span className="kbd-hint kbd">/</span>
+        {showDrop && (
+          <window.UniversalSearchDropdown
+            anchorRef={searchRef}
+            results={results}
+            active={active}
+            onHover={setActive}
+            onPick={pick}
+          />
+        )}
       </div>
 
       <div className="row" style={{ marginLeft: "auto", gap: 10 }}>
