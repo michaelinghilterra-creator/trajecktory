@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.16.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.16.0...v2.16.1) (2026-08-10)
+
+
+### Bug Fixes
+
+* unblock Agent Scan discovery via server-side validated portal merge ([#171](https://github.com/michaelinghilterra-creator/trajecktory/issues/171)) ([2c29719](https://github.com/michaelinghilterra-creator/trajecktory/commit/2c297192cd3d183fe7e26f9dafac2e839427bf84))
+
 ## [2.16.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.15.1...v2.16.0) (2026-08-09)
 
 
