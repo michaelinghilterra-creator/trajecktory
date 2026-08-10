@@ -118,7 +118,11 @@ const liveFetch = async () => ({ ok: true, json: async () => ({ jobs: [1] }) });
   const r = await mergePortalAdditions(p, companies, { today: '2026-08-10', fetchImpl: liveFetch });
   const after = readFileSync(p, 'utf8');
   check(r.added === 1 && after.includes('Fresh Co'), 'adds a genuinely-new company');
-  check(after.includes('https://boards-api.greenhouse.io/v1/boards/freshco/jobs'), 'CONSTRUCTS the api URL from the slug (never a supplied host)');
+  // Exact-line equality, NOT a URL `.includes()` (which trips CodeQL's
+  // js/incomplete-url-substring-sanitization even in a test): asserts the api line
+  // was CONSTRUCTED from the slug, byte for byte.
+  const expectedApiLine = 'api: https://boards-api.greenhouse.io/v1/boards/freshco/jobs';
+  check(after.split('\n').some(l => l.trim() === expectedApiLine), 'CONSTRUCTS the api URL from the slug (never a supplied host)');
   check(after.includes('Existing Co') && after.includes('Migrated Co'), 'leaves existing entries intact');
 }
 {
