@@ -50,6 +50,22 @@ check(/dedup/i.test(scan), 'scan prompt still instructs the agent to dedup');
 check(/scan-history\.tsv/.test(scan) && /pipeline\.md/.test(scan) && /applications\.md/.test(scan),
   'scan prompt names all three dedup sources');
 
+// The 2026-08-10 fix: the agent must NOT try to write portals.yml (the shared
+// eval sandbox denies it, so the discovery half silently dead-ended) and must
+// NOT add WebSearch-only roles to pipeline.md (it invented phantom postings).
+// It hands companies to the server as a structured PORTAL_ADDITIONS block; the
+// server validates + writes. If any of this regresses, the discovery half breaks
+// exactly the way it did before, and nothing else would notice.
+check(/PORTAL_START/.test(scan) && /PORTAL_END/.test(scan), 'scan prompt injects the PORTAL_ADDITIONS start/end markers');
+check(/do NOT edit portals\.yml/i.test(scan), 'scan prompt forbids editing portals.yml directly');
+check(/"ats"/.test(scan) && /"slug"/.test(scan), 'scan prompt asks for ats + slug (not a raw URL the server would have to trust)');
+check(/do NOT add anything to data\/pipeline\.md yourself/i.test(scan), 'scan prompt forbids the agent adding WebSearch-only roles to the pipeline');
+
+// The server side of that contract must exist: the scan route parses the block
+// and merges through the single-owner writer. Pins the wiring, not just the prompt.
+check(/parsePortalAdditions/.test(src) && /mergePortalAdditions/.test(src),
+  'scan route parses PORTAL_ADDITIONS and merges it server-side');
+
 const triage = branch('triage');
 check(triage.length > 0, 'triage-mode prompt branch exists');
 check(/SKIP any URL that already appears in data\/applications\.md/.test(triage),
