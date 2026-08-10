@@ -7,6 +7,7 @@ import { ROOT_DIR, DATA_DIR, APPS_MD } from '../config.mjs';
 import { reconcileHandled } from '../../../lib/pipeline.mjs';
 import { reconcileTriageResults } from '../../../lib/reconcile-triage.mjs';
 import { parseTriageOutput, appendTriageResults, START_MARKER, END_MARKER } from '../../../lib/triage-results.mjs';
+import { parsePortalAdditions, mergePortalAdditions, START_MARKER as PORTAL_START, END_MARKER as PORTAL_END } from '../../../lib/portal-additions.mjs';
 import { logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
@@ -236,8 +237,14 @@ function dashboardConstraints(mode, opts) {
   // set it matched against was empty. It became true only when that column
   // landed. Do not "clean up" this now-working instruction.
   if (mode === 'scan') {
-    const cap = limit > 0 ? ` TEST MODE (TJK_TEST_LIMIT=${limit}): add at most ${limit} new postings to data/pipeline.md, then stop.` : '';
-    return ' ' + common + ' Your FIRST and mandatory step is to run `node scan.mjs` from the repo root ONCE. That script IS the entire ATS API tier: it hits every tracked_companies Greenhouse/Ashby/Lever board, applies the portals.yml title_filter, dedups against data/scan-history.tsv + data/pipeline.md + data/applications.md, and writes every new live posting into data/pipeline.md itself — all zero-token. Do NOT WebFetch ATS boards by hand, do NOT re-implement the title filter, and do NOT write any test/helper script (buildTitleFilter and the whole API tier already live in scan.mjs); doing so wastes the turn budget for no gain. After scan.mjs finishes, spend the REST of this run on the one thing it cannot do: use WebSearch to discover companies NOT yet in portals.yml tracked_companies. Pace the searches a few at a time. For each genuinely new company you find that has a Greenhouse, Ashby, or Lever job board, append it to portals.yml tracked_companies with its careers_url and api endpoint (merge only: preserve every existing entry and comment byte for byte) so the next zero-token scan.mjs catches its postings for free; if it has a live matching posting right now, dedup it against the three sources above and add it to data/pipeline.md too. Skip the Playwright tier entirely.' + cap;
+    const cap = limit > 0 ? ` TEST MODE (TJK_TEST_LIMIT=${limit}): list at most ${limit} new companies in the block, then stop.` : '';
+    return ' ' + common + ' Your FIRST and mandatory step is to run `node scan.mjs` from the repo root ONCE. That script IS the entire ATS API tier: it hits every tracked_companies Greenhouse/Ashby/Lever board, applies the portals.yml title_filter, dedups against data/scan-history.tsv + data/pipeline.md + data/applications.md, and writes every new live posting into data/pipeline.md itself — all zero-token. Do NOT WebFetch ATS boards by hand, do NOT re-implement the title filter, and do NOT write any test/helper script (buildTitleFilter and the whole API tier already live in scan.mjs); doing so wastes the turn budget for no gain.' +
+      ' After scan.mjs finishes, spend the REST of this run on the one thing it cannot do: use WebSearch to discover companies NOT yet in portals.yml tracked_companies that run their careers on a Greenhouse, Ashby, or Lever job board. Pace the searches a few at a time. Read portals.yml first so you do not re-list a company that is already tracked.' +
+      ' Do NOT edit portals.yml, and do NOT add anything to data/pipeline.md yourself — you cannot write portals.yml here (it is intentionally read-only to this run), and a role you found only through WebSearch has not actually been read, so adding it would file a guessed posting. Instead, hand the companies to the dashboard as structured data and let it do the writing: for each genuinely new company, output ONE JSON object with exactly three keys — "name" (the company display name), "ats" (one of "greenhouse", "ashby", or "lever"), and "slug" (the board identifier, i.e. the path segment right after the ATS host: jobs.ashbyhq.com/<slug>, jobs.lever.co/<slug>, or job-boards.greenhouse.io/<slug>). Do NOT include a URL, careers_url, or api field — the dashboard builds those from ats+slug itself, verifies the board is live, adds the new companies to portals.yml, and then scans their real boards for live matching roles. Only list a company whose board slug you actually saw in a real ATS URL; never guess a slug.' +
+      ` Emit the companies as a single valid JSON array between these two exact marker lines, each marker alone on its own line, standard double-quote JSON, no markdown code fence:` +
+      ` ${PORTAL_START}` +
+      ` ${PORTAL_END}` +
+      ` Put this block FIRST in your final response, before any prose summary, so a long summary cannot push it past the response length limit and truncate it. If you found no genuinely new companies, still emit the two markers with an empty array [] between them so the run records cleanly. Skip the Playwright tier entirely.` + cap;
   }
   if (mode === 'triage') {
     const tcap = parseInt(process.env.TJK_TRIAGE_MAX, 10) || 15;
@@ -650,6 +657,35 @@ function runMergeTracker() {
   });
 }
 
+// After the server adds newly-discovered companies to portals.yml, surface their
+// REAL live roles by re-running the zero-token scanner over just those boards.
+// This is what makes the discovery half honest: the roles come from the actual
+// ATS API (deduped, title/geo-filtered by scan.mjs), never from the agent's
+// WebSearch — which invents "live" roles it never read (two phantom Director
+// roles on 2026-08-10, neither on its board). One `scan.mjs --company <name>` per
+// added company (small N); returns the total new offers written to pipeline.md.
+function scanOneCompany(name) {
+  return new Promise((resolve) => {
+    let out = '';
+    let child;
+    try {
+      child = spawn(process.execPath, ['scan.mjs', '--company', name], { cwd: ROOT_DIR, windowsHide: true });
+    } catch { return resolve(0); }
+    if (child.stdin) { try { child.stdin.end(); } catch { /* already closed */ } }
+    child.stdout && child.stdout.on('data', (c) => { out += c.toString(); });
+    child.on('error', () => resolve(0));
+    child.on('close', () => {
+      const m = out.match(/New offers added:\s*(\d+)/);
+      resolve(m ? parseInt(m[1], 10) : 0);
+    });
+  });
+}
+async function scanNewCompanies(entries) {
+  let total = 0;
+  for (const e of entries) total += await scanOneCompany(e.name);
+  return total;
+}
+
 // Single agent run for BOTH Agent Scan and Evaluate Pipeline. Each dashboard
 // command does exactly ONE thing now — no bundled gate -> merge -> verify ->
 // health chain around the eval. The user runs Liveness Gate, Merge Tracker,
@@ -685,13 +721,46 @@ async function runAgent(jobId, mode, target) {
     }
   }
 
+  // SCAN discovery: the agent no longer writes portals.yml (the shared eval
+  // sandbox denies it, and its WebSearch invents phantom companies/roles). It
+  // emits discovered companies as a structured PORTAL_ADDITIONS block; the server
+  // validates them (ATS allow-list + safe slug + live-board check), CONSTRUCTS
+  // every careers_url/api from the slug so no supplied host is ever fetched, and
+  // merges them deterministically — then scans those new boards for real live
+  // roles. Same agent-emits-structured-output / server-writes pattern as triage.
+  let portalMerge = null;
+  if (mode === 'scan' && res.ok) {
+    // runClaudeAgent already flipped this job to 'done'. Hold it at 'running'
+    // through the server-side merge + per-company scans (the live-board checks and
+    // up to a dozen scan.mjs spawns take tens of seconds): the single-flight guard
+    // keys on status==='running', so a premature 'done' would let a second agent
+    // run start and race this one's portals.yml/pipeline.md writes. Flipped back to
+    // 'done' in the scan-summary block below. Same reasoning as deep mode's merge.
+    const j0 = agentJobs.get(jobId) || {};
+    agentJobs.set(jobId, { ...j0, status: 'running', activity: 'Adding discovered companies to your scan list…' });
+    try {
+      const { companies, errors } = parsePortalAdditions(res.result || '');
+      portalMerge = await mergePortalAdditions(path.join(ROOT_DIR, 'portals.yml'), companies, { today: new Date().toISOString().slice(0, 10) });
+      portalMerge.parseErrors = errors;
+      portalMerge.rolesAdded = portalMerge.entries.length ? await scanNewCompanies(portalMerge.entries) : 0;
+    } catch (e) {
+      portalMerge = { added: 0, entries: [], skippedDuplicate: 0, skippedDead: 0, collisions: [], rolesAdded: 0, error: (e && e.message) || String(e) };
+    }
+  }
+
   // Only claim work when the artifact grew. `before === null` means we have no
   // probe for this mode, so fall back to trusting the exit code rather than
   // inventing a failure. Triage is the one exception: its probe was removed,
-  // so its truth is triageAppend.appended directly.
+  // so its truth is triageAppend.appended directly. Scan is a second exception:
+  // growing portals.yml (more companies tracked for every future free scan) is
+  // real work even when no posting lands in pipeline.md this instant, so a run
+  // that added companies must not report "wrote nothing".
+  const grew = before === null || (probeArtifacts(mode) ?? 0) > before;
   const wroteSomething = mode === 'triage'
     ? !!(triageAppend && triageAppend.appended > 0)
-    : (before === null || (probeArtifacts(mode) ?? 0) > before);
+    : mode === 'scan'
+      ? (grew || !!(portalMerge && (portalMerge.added > 0 || portalMerge.rolesAdded > 0)))
+      : grew;
 
   // SELF-HEALING (the permanent fix for the recurring "queue clogged" bug): after
   // EVERY run, check off any pipeline row that is already evaluated or dismissed.
@@ -763,6 +832,30 @@ async function runAgent(jobId, mode, target) {
       summary: `No ${AGENT_ARTIFACTS[mode].noun} were written this run.`,
       warning: job.warning || WROTE_NOTHING_WHY,
     });
+  }
+
+  // Scan discovery summary: report what the server did with the agent's
+  // PORTAL_ADDITIONS block — companies added, real roles surfaced from their
+  // boards, and every candidate that was skipped and WHY (already tracked, dead
+  // board, or a name-collision only a human can resolve). Runs after the generic
+  // empty-summary block so it can either replace it (something was added) or
+  // append the "why nothing landed" detail onto it (nothing was).
+  if (mode === 'scan' && res.ok && portalMerge) {
+    const job = agentJobs.get(jobId) || {};
+    const wins = [];
+    if (portalMerge.added) wins.push(`${portalMerge.added} new compan${portalMerge.added === 1 ? 'y' : 'ies'} added to your scan list`);
+    if (portalMerge.rolesAdded) wins.push(`${portalMerge.rolesAdded} live role${portalMerge.rolesAdded === 1 ? '' : 's'} added to your pipeline`);
+    const skips = [];
+    if (portalMerge.skippedDuplicate) skips.push(`${portalMerge.skippedDuplicate} already tracked`);
+    if (portalMerge.skippedDead) skips.push(`${portalMerge.skippedDead} unreachable board${portalMerge.skippedDead === 1 ? '' : 's'} skipped`);
+    if (portalMerge.collisions && portalMerge.collisions.length) skips.push(`${portalMerge.collisions.length} name-collision${portalMerge.collisions.length === 1 ? '' : 's'} left for you to check`);
+    let line = wins.join(' · ');
+    if (skips.length) line += `${line ? ' ' : ''}(${skips.join(', ')})`;
+    const summary = line ? (job.summary ? `${job.summary} · ${line}` : line) : job.summary;
+    // Flip back to 'done' (the merge block held it at 'running' so the single-
+    // flight guard covered the server-side write). finishedAt marks the true end.
+    agentJobs.set(jobId, { ...job, status: 'done', summary, finishedAt: Date.now() });
+    persistJobs();
   }
 
   // Evaluate writes tracker TSVs; folding them into applications.md is the

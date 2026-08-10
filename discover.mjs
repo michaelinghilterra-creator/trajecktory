@@ -25,7 +25,7 @@
 
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync } from 'fs';
 import yaml from 'js-yaml';
-import { buildCompanyIndex, addCompanyToIndex, findKnownCompany } from './lib/portals.mjs';
+import { buildCompanyIndex, addCompanyToIndex, findKnownCompany, buildPortalsEntry, slugToName, insertPortalsEntries } from './lib/portals.mjs';
 import { canonicalUrl } from './lib/identity.mjs';
 import { sanitizeCell } from './lib/sanitize-cell.mjs';
 
@@ -111,9 +111,7 @@ function parseAtsUrl(rawUrl) {
   return null;
 }
 
-function slugToName(slug) {
-  return decodeURIComponent(slug).replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).trim();
-}
+// slugToName now lives in lib/portals.mjs (shared with the agent-scan path).
 
 // ─── Collect ATS URLs already in local files ────────────────────────
 
@@ -203,54 +201,18 @@ function passesFilter(title, filter) {
 }
 
 // ─── portals.yml entry builder ──────────────────────────────────────
+// buildPortalsEntry + insertPortalsEntries now live in lib/portals.mjs so the
+// dashboard agent-scan path writes entries through the same one implementation.
+// This local wrapper preserves discover.mjs's provenance note verbatim.
 
-function buildPortalsEntry(parsed, today, companyHint) {
-  const { type, slug } = parsed;
-  const name = companyHint || slugToName(slug);
-  const company = { name };
-
-  if (type === 'greenhouse') {
-    company.careers_url = `https://job-boards.greenhouse.io/${slug}`;
-    company.api = `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`;
-  } else if (type === 'ashby') {
-    company.careers_url = `https://jobs.ashbyhq.com/${encodeURIComponent(slug)}`;
-  } else if (type === 'lever') {
-    company.careers_url = `https://jobs.lever.co/${slug}`;
-  }
-
-  const lines = [`\n  - name: ${name}`];
-  if (company.careers_url) lines.push(`    careers_url: ${company.careers_url}`);
-  if (company.api)         lines.push(`    api: ${company.api}`);
-  lines.push(`    notes: "Discovered ${today} from pipeline/history."`);
-  lines.push(`    enabled: true`);
-
-  // `company` is the same entry in tracked_companies shape, so it can be folded
-  // straight into the identity index and dedupe the rest of this run.
-  return { name, company, yaml: lines.join('\n') };
+function discoverEntry(parsed, today, companyHint) {
+  return buildPortalsEntry(parsed, { today, companyHint, note: `Discovered ${today} from pipeline/history.` });
 }
 
 // ─── Write helpers ──────────────────────────────────────────────────
 
 function writePortals(portalsRaw, newEntries) {
-  const HEADER = '  # -- Auto-discovered via site: search --';
-  // portals.yml is user-edited and on Windows is typically CRLF. The old
-  // implementation replaced `HEADER + '\n'`, which never matches a CRLF file
-  // (the header line ends '\r\n'), so writeFileSync rewrote identical bytes and
-  // every registration silently no-oped. Detect the file's EOL, insert after
-  // the header line via index (EOL-agnostic), and emit the block in the file's
-  // own EOL so we don't mix line endings.
-  const eol = portalsRaw.includes('\r\n') ? '\r\n' : '\n';
-  let text = portalsRaw;
-  const block = (newEntries.map(e => e.yaml).join('') + '\n').split('\n').join(eol);
-  const headerIdx = text.indexOf(HEADER);
-  if (headerIdx !== -1) {
-    const lineEnd = text.indexOf('\n', headerIdx);
-    const insertAt = lineEnd === -1 ? text.length : lineEnd + 1;
-    text = text.slice(0, insertAt) + block + text.slice(insertAt);
-  } else {
-    text = text.trimEnd() + eol + eol + HEADER + block;
-  }
-  writeFileSync(PORTALS_PATH, text, 'utf8');
+  writeFileSync(PORTALS_PATH, insertPortalsEntries(portalsRaw, newEntries.map(e => e.yaml)), 'utf8');
 }
 
 function writePipeline(newJobs, today) {
@@ -394,7 +356,7 @@ async function main() {
     const parsed = parseAtsUrl(rawUrl);
     if (!parsed) continue;
     if (claimCompany(companyIndex, parsed, companyHint, skipped)) continue;
-    const entry = buildPortalsEntry(parsed, today, companyHint);
+    const entry = discoverEntry(parsed, today, companyHint);
     addCompanyToIndex(companyIndex, entry.company);
     phase1Entries.push(entry);
     if (VERBOSE) console.log(`   + ${entry.name} (${parsed.type})`);
@@ -424,7 +386,7 @@ async function main() {
         // Brave results carry no company hint, so only the slug is available to
         // match on here. A known company still contributes its job URL below.
         if (!claimCompany(companyIndex, parsed, '', skipped)) {
-          const entry = buildPortalsEntry(parsed, today, '');
+          const entry = discoverEntry(parsed, today, '');
           addCompanyToIndex(companyIndex, entry.company);
           phase2Entries.push(entry);
         }
