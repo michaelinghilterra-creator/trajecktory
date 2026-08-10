@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.17.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.16.1...v2.17.0) (2026-08-10)
+
+
+### Features
+
+* **activity-tracker:** rename TWC tab to Activity Tracker and split weekly counts by type ([#173](https://github.com/michaelinghilterra-creator/trajecktory/issues/173)) ([9c2cb6b](https://github.com/michaelinghilterra-creator/trajecktory/commit/9c2cb6b8aea5eb7e8b2c85d44afba336e314c614))
+* **search:** add a universal top-bar search for contacts and companies ([#174](https://github.com/michaelinghilterra-creator/trajecktory/issues/174)) ([02fcb4c](https://github.com/michaelinghilterra-creator/trajecktory/commit/02fcb4c81a3f4c83ab73deaa2fe749c0226e39b5))
+
 ## [2.16.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.16.0...v2.16.1) (2026-08-10)
 
 
