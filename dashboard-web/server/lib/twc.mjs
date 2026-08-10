@@ -272,16 +272,24 @@ export function buildActivities({ from, to } = {}) {
 }
 
 // Per benefit-week activity counts, so the UI can show whether a week hit the
-// required minimum. Sorted by week ascending.
+// required minimum. Each week also carries a per-kind breakdown (byKind) so the
+// dashboard can show WHAT made up the week — applications vs LinkedIn networking
+// vs follow-ups vs interviews — not just the total. `count` is retained (it is
+// the sum of byKind) so an older client keeps working. Sorted by week ascending.
+const TWC_KINDS = ['application', 'interview', 'followup', 'outreach'];
 export function weeklyCounts(activities) {
   const map = new Map();
+  const zero = () => TWC_KINDS.reduce((o, k) => (o[k] = 0, o), {});
   for (const a of activities) {
     const wk = a.week || 'unknown';
-    map.set(wk, (map.get(wk) || 0) + 1);
+    if (!map.has(wk)) map.set(wk, { count: 0, byKind: zero() });
+    const entry = map.get(wk);
+    entry.count += 1;
+    if (Object.prototype.hasOwnProperty.call(entry.byKind, a.kind)) entry.byKind[a.kind] += 1;
   }
   return [...map.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([week, count]) => ({ week, count }));
+    .map(([week, { count, byKind }]) => ({ week, count, byKind }));
 }
 
 // Distinct employers in a set of activities, each flagged with whether the

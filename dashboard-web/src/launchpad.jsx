@@ -2430,7 +2430,7 @@ const SETUP_SUBTABS = [
   { id: 'launchpad', label: 'Launchpad',              icon: 'launchpad' },
   { id: 'guide',     label: 'Day-to-day guide',       icon: 'guide' },
   { id: 'pitch',     label: 'Tell Me About Yourself', icon: 'pitch' },
-  { id: 'twc',       label: 'TWC',                    icon: 'twc' },
+  { id: 'twc',       label: 'Activity Tracker',       icon: 'twc' },
   { id: 'changelog', label: 'Change Log',             icon: 'changelog' },
   { id: 'about',     label: 'About',                  icon: 'about' },
 ];
@@ -2581,6 +2581,15 @@ function twcWeekLabel(wk) {
   return isNaN(d.getTime()) ? wk : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 const TWC_KIND_LABEL = { application: 'Application', interview: 'Interview', followup: 'Follow-up', outreach: 'Networking' };
+// Ordered short labels for the per-week activity-type breakdown. 'outreach' is
+// the LinkedIn connection-request channel, shown as "LinkedIn" here so the split
+// reads Applications / LinkedIn / Follow-ups / Interviews.
+const TWC_BREAKDOWN = [
+  ['application', 'applications'],
+  ['outreach',   'LinkedIn'],
+  ['followup',   'follow-ups'],
+  ['interview',  'interviews'],
+];
 
 function TwcPanel({ toast }) {
   const today = new Date();
@@ -2600,7 +2609,7 @@ function TwcPanel({ toast }) {
         // so Express serves the SPA index.html and r.json() would throw a cryptic
         // "Unexpected token '<'". Detect that and say the real fix in plain words.
         if (!(r.headers.get('content-type') || '').includes('application/json')) {
-          throw new Error('The TWC endpoints are not loaded on the running dashboard yet. Fully restart the dashboard (stop the server and start it again, not just reload the page), then Generate again.');
+          throw new Error('The Activity Tracker endpoints are not loaded on the running dashboard yet. Fully restart the dashboard (stop the server and start it again, not just reload the page), then Generate again.');
         }
         const d = await r.json();
         if (d.error) throw new Error(d.error);
@@ -2646,13 +2655,13 @@ function TwcPanel({ toast }) {
 
   return (
     <div className="col" style={{ gap: 16 }}>
-      <div className="ta-head"><div><h1>TWC</h1><div className="sub">Your unemployment work-search activity log, built from trajecktory.</div></div></div>
+      <div className="ta-head"><div><h1>Activity Tracker</h1><div className="sub">Your unemployment work-search activity log, built from trajecktory.</div></div></div>
 
       <div className="card padded-lg col" style={{ gap: 12 }}>
         <div className="dim" style={{ fontSize: 12, lineHeight: 1.55 }}>
-          Pick the weeks TWC asked about (their weeks run Sunday to Saturday). This pulls every application,
-          interview, and follow-up you logged in that window. Download it as a CSV. TWC accepts the CSV format,
-          so you do not have to retype anything onto their paper form.
+          Pick the weeks your unemployment office asked about (benefit weeks run Sunday to Saturday). This pulls every
+          application, interview, and follow-up you logged in that window. Download it as a CSV. Most unemployment offices
+          accept this CSV format, so you do not have to retype anything onto their paper form.
         </div>
         <div className="row" style={{ gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="mono dim" style={{ fontSize: 11 }}>From</span>{dateInput(from, setFrom)}
@@ -2687,11 +2696,31 @@ function TwcPanel({ toast }) {
             <span className="card-title"><span className="dot" style={{ background: 'var(--accent)' }} />Activities per week</span>
             <span className="card-meta mono">{data.count} total</span>
           </div>
+          {/* Totals by activity type across the whole range, so the mix is visible at a glance. */}
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            {TWC_BREAKDOWN.map(([kind, label]) => {
+              const n = data.weeks.reduce((s, w) => s + ((w.byKind && w.byKind[kind]) || 0), 0);
+              return n > 0 ? (
+                <span key={kind} className="tag" style={{ fontSize: 11 }}>
+                  {label}: <strong style={{ marginLeft: 4 }}>{n}</strong>
+                </span>
+              ) : null;
+            })}
+          </div>
+          {/* One row per week: the week total, then the per-type breakdown (non-zero types only). */}
+          <div className="col" style={{ gap: 6 }}>
             {data.weeks.map(w => (
-              <span key={w.week} className="tag" style={{ fontSize: 11 }}>
-                Week of {twcWeekLabel(w.week)}: <strong style={{ marginLeft: 4 }}>{w.count}</strong>
-              </span>
+              <div key={w.week} className="row" style={{ gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <span className="tag" style={{ fontSize: 11 }}>
+                  Week of {twcWeekLabel(w.week)}: <strong style={{ marginLeft: 4 }}>{w.count}</strong>
+                </span>
+                <span className="mono dim" style={{ fontSize: 10.5 }}>
+                  {TWC_BREAKDOWN
+                    .filter(([kind]) => w.byKind && w.byKind[kind] > 0)
+                    .map(([kind, label]) => `${w.byKind[kind]} ${label}`)
+                    .join(' · ')}
+                </span>
+              </div>
             ))}
           </div>
         </div>
@@ -2711,8 +2740,8 @@ function TwcPanel({ toast }) {
           </div>
           <div className="dim" style={{ fontSize: 11, lineHeight: 1.5 }}>
             The address and phone columns come from a web search (billed to your Claude plan, a few seconds per company,
-            cached so a re-run does not search again). Web results can be stale or wrong, so give them a glance before you send the log to TWC.
-            Blank address/phone is fine on the TWC form.
+            cached so a re-run does not search again). Web results can be stale or wrong, so give them a glance before you send the log in.
+            Blank address/phone is fine on the form.
           </div>
         </div>
       )}
