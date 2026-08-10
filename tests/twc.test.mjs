@@ -173,6 +173,9 @@ try {
   // ── 6. Weekly counts + employer roster ───────────────────────────────────────
   const weeks = weeklyCounts(narrow);
   check(weeks.reduce((n, w) => n + w.count, 0) === narrow.length, 'weekly counts sum to the activity total');
+  check(weeks.every(w => w.byKind && ['application', 'interview', 'followup', 'outreach']
+    .reduce((n, k) => n + w.byKind[k], 0) === w.count),
+    'each week\'s byKind breakdown sums to that week\'s count');
   const emps = employersInActivities(wide);
   const acme = emps.find(e => e.company === 'Acme');
   const globex = emps.find(e => e.company === 'Globex');

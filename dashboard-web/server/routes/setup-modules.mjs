@@ -215,7 +215,7 @@ router.get('/api/setup/twc/export', (req, res) => {
     const csv = toTwcCsv(buildActivities({ from, to }));
     const stamp = (s) => (s ? String(s) : 'all');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="TWC_Work_Search_${stamp(from)}_to_${stamp(to)}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="Work_Search_Log_${stamp(from)}_to_${stamp(to)}.csv"`);
     res.send(csv);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
