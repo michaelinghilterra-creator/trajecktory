@@ -104,10 +104,20 @@ router.post('/api/recruiters/find-emails', async (req, res) => {
     const cap = planFindBudget({ needed: rows.length, limit: wanted, creditsLeft });
     const toRun = rows.slice(0, cap);
 
+    // Domain hint: recruiters here usually already carry an unverified/bounced
+    // address whose DOMAIN is the real firm domain (the boutique-firm names Hunter
+    // can't resolve). Extract it (or a website domain) and hand it to Hunter so it
+    // finds the correct mailbox for this person on the right domain.
+    const domainOf = (r) => {
+      const fromEmail = (r.email || '').split('@')[1];
+      if (fromEmail && fromEmail.includes('.')) return fromEmail.trim().toLowerCase();
+      const site = (r.website || '').trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+      return site.includes('.') ? site.toLowerCase() : null;
+    };
     const results = [];
     for (const r of toRun) {
       try {
-        const f = await findAndVerify(r.firm, r.first, r.last, hkey, mkey);
+        const f = await findAndVerify(r.firm, r.first, r.last, hkey, mkey, domainOf(r));
         if (f.found && f.verify) {
           updateRecruiterLine(r.id, { email: setVerifyTag(f.email, f.verify) });
           results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: f.email, state: f.verify.state });

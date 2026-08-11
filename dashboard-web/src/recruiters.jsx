@@ -870,7 +870,13 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
       .then(r => r.json()).then(d => {
         setFinding(false);
         if (d.error) { setImportMsg(d.error); return; }
-        setImportMsg(`Found ${d.written} verified email${d.written === 1 ? '' : 's'} (checked ${d.checked}${d.skippedForBudget ? `, ${d.skippedForBudget} left for next run` : ''}).`);
+        const res = d.results || [];
+        const notFound = res.filter(x => x.state === 'not_found').length;
+        const unverifiable = res.filter(x => x.state === 'unverifiable').length;
+        const parts = [`${d.written} verified`];
+        if (unverifiable) parts.push(`${unverifiable} found but unverifiable`);
+        if (notFound) parts.push(`${notFound} not found`);
+        setImportMsg(`${parts.join(' · ')} (checked ${d.checked}${d.skippedForBudget ? `, ${d.skippedForBudget} left for next run` : ''}).`);
         onImported && onImported();
       }).catch(err => { setFinding(false); setImportMsg(err.message); });
   };
