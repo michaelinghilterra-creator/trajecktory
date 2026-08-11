@@ -111,8 +111,21 @@ function updateTTLine(id, updates) {
     if (updates.notes      !== undefined) parts[15] = cell(updates.notes);
     if (updates.phone      !== undefined) parts[10] = cell(updates.phone);
     // Email cell may carry an inline [v:...] verification tag; cell() keeps it intact
-    // (no pipe/newline in a tag). Used by the reconcile find-emails endpoint.
+    // (no pipe/newline in a tag). Used by the reconcile find-emails endpoint. When
+    // the user edits the address by hand, they pass a plain email with no tag, so it
+    // correctly reverts to unverified until re-checked.
     if (updates.email      !== undefined) parts[11] = cell(updates.email);
+    // Identity fields — editable from the contact drawer so the user can fix data
+    // in place. Column layout mirrors parseTargetTalentMd's index map.
+    if (updates.company    !== undefined) parts[2]  = cell(updates.company);
+    if (updates.last       !== undefined) parts[3]  = cell(updates.last);
+    if (updates.first      !== undefined) parts[4]  = cell(updates.first);
+    if (updates.salute     !== undefined) parts[5]  = cell(updates.salute);
+    if (updates.title      !== undefined) parts[6]  = cell(updates.title);
+    if (updates.city       !== undefined) parts[7]  = cell(updates.city);
+    if (updates.state      !== undefined) parts[8]  = cell(updates.state);
+    if (updates.zip        !== undefined) parts[9]  = cell(updates.zip);
+    if (updates.linkedin   !== undefined) parts[12] = cell(updates.linkedin);
     if (updates.website    !== undefined) {
       // Older rows have no Website cell; insert one before the trailing '' so the
       // row stays well-formed. Newer rows (length >= 18) just overwrite parts[16].

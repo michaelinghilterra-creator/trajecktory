@@ -70,7 +70,8 @@ router.get('/api/target-talent/:id', (req, res) => {
 router.patch('/api/target-talent/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { status, notes, lastTouch, website, phone, linkedinStatus } = req.body || {};
+    const { status, notes, lastTouch, website, phone, linkedinStatus,
+            first, last, salute, title, company, city, state, zip, email, linkedin } = req.body || {};
     if (status && !TT_STATUSES.includes(status)) {
       return res.status(400).json({ error: `Invalid status. Must be one of: ${TT_STATUSES.join(', ')}` });
     }
@@ -81,9 +82,12 @@ router.patch('/api/target-talent/:id', (req, res) => {
     // ONLY changes linkedinStatus must not require the contact's row to be
     // rewritten. Set it first, then only touch the row if a row field was given.
     if (linkedinStatus !== undefined) setLinkedInStatus(id, linkedinStatus);
-    const touchesRow = [status, notes, lastTouch, website, phone].some(v => v !== undefined);
+    // Row fields — status/lastTouch/notes plus the editable identity fields.
+    const rowUpdates = { status, notes, lastTouch, website, phone,
+                         first, last, salute, title, company, city, state, zip, email, linkedin };
+    const touchesRow = Object.values(rowUpdates).some(v => v !== undefined);
     if (touchesRow) {
-      const ok = updateTTLine(id, { status, notes, lastTouch, website, phone });
+      const ok = updateTTLine(id, rowUpdates);
       if (!ok) return res.status(404).json({ error: 'Contact not found' });
     }
     res.json({ ok: true });

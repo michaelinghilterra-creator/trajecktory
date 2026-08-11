@@ -79,11 +79,13 @@ router.get('/api/recruiters/:id', (req, res) => {
 router.patch('/api/recruiters/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { status, notes, lastTouch, website, linkedin, phone } = req.body || {};
+    const { status, notes, lastTouch, website, linkedin, phone,
+            first, last, salute, title, firm, city, state, zip, email } = req.body || {};
     if (status && !RECRUITER_STATUSES.includes(status)) {
       return res.status(400).json({ error: `Invalid status. Must be one of: ${RECRUITER_STATUSES.join(', ')}` });
     }
-    const ok = updateRecruiterLine(id, { status, notes, lastTouch, website, linkedin, phone });
+    const ok = updateRecruiterLine(id, { status, notes, lastTouch, website, linkedin, phone,
+                                         first, last, salute, title, firm, city, state, zip, email });
     if (!ok) return res.status(404).json({ error: 'Recruiter not found' });
     res.json({ ok: true });
   } catch (err) {

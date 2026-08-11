@@ -541,6 +541,8 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
   const [notes, setNotes] = useState("");
   const [website, setWebsite] = useState("");
   const [editingWeb, setEditingWeb] = useState(false);
+  const [editing, setEditing] = useState(false);   // whole-contact edit mode (identity fields)
+  const [edit, setEdit] = useState({});             // draft field values while editing
   const [logModal, setLogModal] = useState(null);
   // Multi-app cross-log: every related application at the company is checked
   // by default so a TA touch propagates to all of them in one step. User can
@@ -604,6 +606,29 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
   const saveWebsite = () => {
     window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ website: website.trim() }) })
       .then(() => { setEditingWeb(false); load(); onUpdate?.(); });
+  };
+  // Whole-contact edit mode: seed the draft from current values, then PATCH the
+  // identity fields on save. Editing the email drops any verification tag server-side
+  // (a changed address is unverified until re-checked).
+  const EDIT_FIELDS = [
+    { k: "salute", label: "Salutation", w: 90 }, { k: "first", label: "First name" }, { k: "last", label: "Last name" },
+    { k: "title", label: "Title", full: true }, { k: "company", label: "Company", full: true },
+    { k: "email", label: "Email", full: true }, { k: "linkedin", label: "LinkedIn URL", full: true },
+    { k: "phone", label: "Phone" }, { k: "city", label: "City" }, { k: "state", label: "State", w: 90 },
+  ];
+  const startEdit = () => {
+    setEdit(Object.fromEntries(EDIT_FIELDS.map(f => [f.k, data[f.k] || ""])));
+    setEditing(true);
+  };
+  const saveEdit = () => {
+    const payload = {};
+    for (const f of EDIT_FIELDS) {
+      const v = (edit[f.k] || "").trim();
+      if (v !== (data[f.k] || "")) payload[f.k] = v;
+    }
+    if (Object.keys(payload).length === 0) { setEditing(false); return; }
+    window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+      .then(() => { setEditing(false); load(); onUpdate?.(); });
   };
   const generateDraft = () => {
     setDrafting(true); setDraftResult(null);
@@ -671,7 +696,26 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
       <div className={embedded ? "" : "drawer-body"} style={bodyStyle}>
         {/* Contact info */}
         <div className="ds-section">
-          <div className="ds-label"><TIcon d={TI.building} size={12} /> Contact</div>
+          <div className="ds-label">
+            <TIcon d={TI.building} size={12} /> Contact
+            {!editing && <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={startEdit}><TIcon d={TI.pen} size={11} /> Edit</button>}
+          </div>
+          {editing ? (
+            <div className="info-card" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {EDIT_FIELDS.map(f => (
+                <div key={f.k} style={{ gridColumn: f.full ? "1 / -1" : "auto", display: "flex", flexDirection: "column", gap: 3 }}>
+                  <label style={{ fontSize: 10.5, color: "var(--text-mute)", letterSpacing: ".04em" }}>{f.label}</label>
+                  <input className="inp" value={edit[f.k] || ""} onChange={e => setEdit(prev => ({ ...prev, [f.k]: e.target.value }))}
+                    style={{ background: "var(--panel-2)", border: "1px solid var(--border)", borderRadius: 4, padding: "5px 8px", color: "var(--text)", fontSize: 12 }} />
+                </div>
+              ))}
+              <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, marginTop: 2 }}>
+                <button className="btn primary sm" onClick={saveEdit}><TIcon d={TI.check} size={12} /> Save</button>
+                <button className="btn ghost sm" onClick={() => setEditing(false)}>Cancel</button>
+                <span style={{ fontSize: 11, color: "var(--text-mute)", alignSelf: "center", marginLeft: "auto" }}>Changing the email marks it unverified until re-checked.</span>
+              </div>
+            </div>
+          ) : (
           <div className="info-card">
             <div className="info-row">
               <span className="ik">Website</span>
@@ -736,6 +780,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
               <span />
             </div>
           </div>
+          )}
         </div>
         {/* Pipeline */}
         <div className="ds-section">

@@ -1389,6 +1389,8 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
   const [editingWeb, setEditingWeb] = useStateR(false);
   const [linkedin, setLinkedin] = useStateR('');
   const [editingLi, setEditingLi] = useStateR(false);
+  const [editing, setEditing] = useStateR(false);   // whole-contact edit mode
+  const [edit, setEdit] = useStateR({});
   const [composing, setComposing] = useStateR(false);
   const [log, setLog] = useStateR(null);
   const [toast, setToastMsg] = useStateR(null);
@@ -1452,6 +1454,28 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
       body: JSON.stringify({ linkedin: linkedin.trim() }),
     }).then(() => { setEditingLi(false); load(); onUpdate?.(); showToast('LinkedIn saved', 'success'); });
   };
+  // Whole-contact edit mode (identity fields). Recruiters use `firm` for the org.
+  const REC_EDIT_FIELDS = [
+    { k: 'salute', label: 'Salutation', w: 90 }, { k: 'first', label: 'First name' }, { k: 'last', label: 'Last name' },
+    { k: 'title', label: 'Title', full: true }, { k: 'firm', label: 'Firm', full: true },
+    { k: 'email', label: 'Email', full: true }, { k: 'linkedin', label: 'LinkedIn URL', full: true },
+    { k: 'phone', label: 'Phone' }, { k: 'city', label: 'City' }, { k: 'state', label: 'State', w: 90 },
+  ];
+  const startEdit = () => {
+    setEdit(Object.fromEntries(REC_EDIT_FIELDS.map(f => [f.k, data[f.k] || ''])));
+    setEditing(true);
+  };
+  const saveEdit = () => {
+    const payload = {};
+    for (const f of REC_EDIT_FIELDS) {
+      const v = (edit[f.k] || '').trim();
+      if (v !== (data[f.k] || '')) payload[f.k] = v;
+    }
+    if (Object.keys(payload).length === 0) { setEditing(false); return; }
+    window.tjkMutate(`/api/recruiters/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    }).then(() => { setEditing(false); load(); onUpdate?.(); showToast('Contact updated', 'success'); });
+  };
   const saveCorrespondence = (direction, subject, body) => {
     window.tjkMutate(`/api/recruiters/${id}/correspondence`, {
       method: 'POST',
@@ -1513,7 +1537,26 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
         <div className="drawer-body">
           {/* Contact info */}
           <div className="ds-section">
-            <div className="ds-label"><RecIcon d={REC_I.building} size={12} /> Contact</div>
+            <div className="ds-label">
+              <RecIcon d={REC_I.building} size={12} /> Contact
+              {!editing && <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={startEdit}><RecIcon d={REC_I.pen} size={11} /> Edit</button>}
+            </div>
+            {editing ? (
+              <div className="info-card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {REC_EDIT_FIELDS.map(f => (
+                  <div key={f.k} style={{ gridColumn: f.full ? '1 / -1' : 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <label style={{ fontSize: 10.5, color: 'var(--text-mute)', letterSpacing: '.04em' }}>{f.label}</label>
+                    <input className="inp" value={edit[f.k] || ''} onChange={e => setEdit(prev => ({ ...prev, [f.k]: e.target.value }))}
+                      style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '5px 8px', color: 'var(--text)', fontSize: 12 }} />
+                  </div>
+                ))}
+                <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, marginTop: 2 }}>
+                  <button className="btn primary sm" onClick={saveEdit}><RecIcon d={REC_I.check} size={12} /> Save</button>
+                  <button className="btn ghost sm" onClick={() => setEditing(false)}>Cancel</button>
+                  <span style={{ fontSize: 11, color: 'var(--text-mute)', alignSelf: 'center', marginLeft: 'auto' }}>Changing the email marks it unverified until re-checked.</span>
+                </div>
+              </div>
+            ) : (
             <div className="info-card">
               <div className="info-row">
                 <span className="ik">Firm site</span>
@@ -1579,9 +1622,12 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
                 <span />
               </div>
             </div>
-            <div className="li-fallback">
-              <RecIcon d={REC_I.search} size={11} /> LinkedIn searched via Google. Paste a profile URL once found.
-            </div>
+            )}
+            {!editing && (
+              <div className="li-fallback">
+                <RecIcon d={REC_I.search} size={11} /> LinkedIn searched via Google. Paste a profile URL once found.
+              </div>
+            )}
           </div>
 
           {/* Pipeline */}
