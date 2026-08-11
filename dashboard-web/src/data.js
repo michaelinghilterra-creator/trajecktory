@@ -70,10 +70,16 @@ window.INTERVIEW_STAGES = ["Phone Screen","1st Interview","2nd Interview","3rd I
 window.isInterviewStage = (s) => window.INTERVIEW_STAGES.includes(s);
 
 window.STATUSES = ["Evaluated","Applied","Responded",...window.INTERVIEW_STAGES,"Offer","Rejected","Discarded","SKIP","Closed","Not a Fit","No Response"];
-// "Unclassified" is the catch-all inferArchetype() falls through to (see
-// server/lib/applications.mjs). It is a gap in the matching rules, not a cohort —
-// keep it last and never treat it as a targeting recommendation.
-window.ARCHETYPES = ["RevOps","SalesOps","Analytics","BizDev","SalesDev","Strategy","Unclassified"];
+// The SINGLE source of the archetype list for the browser — the Sankey, the
+// pipeline filter and grouping, and the tracker all read window.ARCHETYPES from
+// here (data.js loads before every bundle). Keep this in the same ORDER as, and
+// covering the same labels as, inferArchetype() in server/lib/applications.mjs;
+// a label the server can emit but this list omits simply never renders (that is
+// how the four newest buckets went missing from the Sankey). The non-target
+// buckets (Operations / Sales Leadership / Partnerships) are honestly-labeled
+// non-archetypes; "Unclassified" is the catch-all fall-through — keep it last and
+// never treat it as a targeting recommendation.
+window.ARCHETYPES = ["RevOps","SalesOps","Analytics","Marketing","BizDev","SalesDev","Strategy","Operations","Sales Leadership","Partnerships","Unclassified"];
 
 window.STATUS_META = {
   Evaluated:  { color: "#a78bfa", bg: "rgba(167,139,250,0.12)", icon: "◆" },
