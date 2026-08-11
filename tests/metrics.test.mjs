@@ -142,7 +142,15 @@ try {
   eq(f.rejections.total, 3, 'terminal rows are Rejected + No Response');
   eq(f.rejections.byStage['1st Interview'], 1, 'a rejection is attributed to its furthest EVENT stage');
   eq(f.rejections.byStage['Phone Screen'], 1, 'a rejection is attributed to its tag when it has no events');
-  eq(f.rejections.unknownStage, 1, 'a terminal row with no signal at all is counted as unknown, not as pre-interview');
+  // A terminal row with NO signal never advanced past Applied — advancing to a
+  // reply/screen/interview is always a tracked step, so a missing signal is proof
+  // of a pre-interview loss, not cause to bucket it as "unknown". (The old
+  // unknownStage bucket is gone; every terminal row lands in exactly one rung.)
+  eq(f.rejections.preInterview, 1, 'a terminal row with no signal at all is a Pre-interview loss');
+  eq(f.rejections.unknownStage, undefined, 'there is no separate "unknown" bucket anymore');
+  const attributed = f.rejections.preInterview
+    + Object.values(f.rejections.byStage).reduce((s, n) => s + n, 0);
+  eq(attributed, f.rejections.total, 'every terminal loss is attributed to exactly one rung (no leakage)');
 
   // ── Ladder drift: the browser's hardcoded copies vs states.yml ────────────
   // The browser never reads states.yml, so every ladder in src/ is a hand-kept
