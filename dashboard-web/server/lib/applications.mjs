@@ -67,7 +67,11 @@ function readReportHeader(reportPath) {
       try {
         const { data } = parseV1(head);
         const h = v1Header(data);
-        const out = { url: h.url, domain: h.domain, compStated: h.compStated, legitimacy: h.legitimacy };
+        // jdSnapshot is the in-repo `jds/<file>.md` capture of the posting. It is
+        // what "Open JD" falls back to when the row's url is not web-openable (a
+        // local: path, or the $file-style garbage a broken batch once wrote), so a
+        // self-sourced role still has a readable JD instead of a dead button.
+        const out = { url: h.url, domain: h.domain, compStated: h.compStated, legitimacy: h.legitimacy, jdSnapshot: data.jdSnapshot || null };
         _reportHeaderCache.set(reportPath, { mtimeMs: stat.mtimeMs, data: out });
         return out;
       } catch { /* malformed v1 — fall through to legacy regex */ }
@@ -101,7 +105,9 @@ function readReportHeader(reportPath) {
     }
   } catch { /* report not readable */ }
 
-  const data = { url, domain, compStated, legitimacy };
+  // Legacy (non-v1) reports predate the jdSnapshot frontmatter key, so there is
+  // nothing to capture — null keeps the object shape identical to the v1 branch.
+  const data = { url, domain, compStated, legitimacy, jdSnapshot: null };
   _reportHeaderCache.set(reportPath, { mtimeMs: stat.mtimeMs, data });
   return data;
 }
@@ -268,6 +274,7 @@ function parseApplicationsMd() {
     const sector     = normalizeSector(sectorRaw);
     const compStated = header?.compStated || null;
     const legitimacy = header?.legitimacy || null;
+    const jdSnapshot = header?.jdSnapshot || null;
     const source     = classifySource(notes, url);
 
     rows.push({
@@ -291,6 +298,7 @@ function parseApplicationsMd() {
       sectorRaw,           // original Block A "Domain" string for hover tooltip
       size: null,
       url,
+      jdSnapshot,          // in-repo `jds/<file>.md` — the Open JD fallback when url isn't web-openable
       source,              // 'Self-sourced' | 'Referral' | 'API Scan' | 'Agent Scan'
       legitimacy,          // 'High Confidence' | 'Proceed with Caution' | 'Suspicious' | null
     });

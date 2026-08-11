@@ -1274,7 +1274,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               {(cs && cs.remote) && <span className="meta-chip">{cs.remote}</span>}
               {sectorRaw && <span className="meta-chip">{sectorRaw}</span>}
               {(cs && cs.seniority) && <span className="meta-chip">{cs.seniority.split('(')[0].trim()}</span>}
-              {app.url && <a className="meta-chip link" href={window.safeHref(app.url)} target="_blank" rel="noreferrer">JD ↗</a>}
+              {window.jdHref(app) && <a className="meta-chip link" href={window.jdHref(app)} target="_blank" rel="noreferrer">JD ↗</a>}
             </div>
           </div>
           <button className="icon-btn" onClick={onClose} title="Close (Esc)">
@@ -1750,7 +1750,9 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                   {app.url && (
                     <div className="info-row" style={{ gridTemplateColumns: '116px 1fr' }}>
                       <span className="ik">JD URL</span>
-                      <a className="iv link" href={window.safeHref(app.url)} target="_blank" rel="noreferrer" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.url}</a>
+                      {window.jdHref(app)
+                        ? <a className="iv link" href={window.jdHref(app)} target="_blank" rel="noreferrer" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{app.url}</a>
+                        : <span className="iv" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.7 }}>{app.url}</span>}
                     </div>
                   )}
                   {app.resume && (
@@ -1949,7 +1951,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               {(r.docx || r.pdf) && <a className="btn sm" href={hrefFor(r.docx || r.pdf)} target="_blank" rel="noreferrer">{r.docx ? 'Resume DOCX ↗' : 'Resume PDF ↗'}</a>}
               {r.cover && <a className="btn sm" href={hrefFor(r.cover)} target="_blank" rel="noreferrer">Cover Letter ↗</a>}
               {r.apply && <a className="btn sm accent" href={hrefFor(r.apply)} target="_blank" rel="noreferrer">Form Responses ↗</a>}
-              {app.url && <a className="btn sm" href={window.safeHref(app.url)} target="_blank" rel="noreferrer">JD ↗</a>}
+              {window.jdHref(app) && <a className="btn sm" href={window.jdHref(app)} target="_blank" rel="noreferrer">JD ↗</a>}
               <button className="btn sm ghost" onClick={() => setApplyResult(null)}>✕</button>
             </div>
           );
@@ -1971,7 +1973,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
               {b.label}
             </button>
           ))}
-          {app.url && <a className="btn ghost jd" href={window.safeHref(app.url)} target="_blank" rel="noreferrer">Open JD <PIcon d={PI.arrowR} size={12} /></a>}
+          {window.jdHref(app) && <a className="btn ghost jd" href={window.jdHref(app)} target="_blank" rel="noreferrer">Open JD <PIcon d={PI.arrowR} size={12} /></a>}
         </div>
       </div>
     </div>
