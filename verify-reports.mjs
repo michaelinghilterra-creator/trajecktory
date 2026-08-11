@@ -75,10 +75,30 @@ let files = fs.readdirSync(REPORTS)
   .sort((a, b) => parseInt(b) - parseInt(a));
 if (recentN) files = files.slice(0, recentN);
 
+// An unexpanded template/shell variable in a report url means a batch wrote a
+// literal like `local:...\...$file` — the substitution never ran. That
+// string is not a real path and, worse, the SAME literal stands in for many
+// files, so it silently collides unrelated postings onto one identity (this is
+// exactly what orphaned five evaluations on 2026-08-10). canonicalUrl now treats
+// such a url as unresolvable, but the bad DATA still needs a loud, same-day
+// failure so it is fixed at the source instead of quietly becoming a url-less row.
+// Linear on every branch — the mustache branch matches the opening `{{` only, not
+// `{{.*?}}` (whose lazy inner match is a polynomial-ReDoS sink on report urls that
+// originate from scanned, untrusted sources). Mirrors canonicalUrl in lib/identity.mjs.
+const TEMPLATE_VAR = /\$\{?\w+\}?|%\w+%|\{\{/;
+const badUrlReports = [];
+function reportUrlOf(md) {
+  if (hasV1Frontmatter(md)) { try { return parseV1(md).data.url || null; } catch { return null; } }
+  const m = md.match(/^\*\*URL:\*\*\s*(\S+)/m);
+  return m ? m[1] : null;
+}
+
 const results = [];
 for (const file of files) {
   const md = fs.readFileSync(path.join(REPORTS, file), 'utf8');
   const num = file.match(/^(\d+)/)[1];
+  const rurl = reportUrlOf(md);
+  if (rurl && /^local:/i.test(rurl) && TEMPLATE_VAR.test(rurl)) badUrlReports.push({ num, file, url: rurl });
   const cs = hasV1Frontmatter(md) ? v1ToCheatsheet(parseV1(md).data) : parseReport(md);
 
   // Block A is always present; the Overview tab needs companyBrief + keywords to look complete
@@ -121,9 +141,17 @@ const queue = reconcileHandled(path.join(__dirname, 'data/pipeline.md'), {
 });
 
 if (jsonOut) {
-  console.log(JSON.stringify({ total: files.length, drift: results, queueClog: queue.rows.map(r => r.url) }, null, 2));
+  console.log(JSON.stringify({ total: files.length, drift: results, queueClog: queue.rows.map(r => r.url), badUrls: badUrlReports }, null, 2));
 } else {
   console.log(`\nChecked ${files.length} reports`);
+  if (badUrlReports.length === 0) {
+    console.log('✅ No report carries an unexpanded template variable in its url');
+  } else {
+    console.log(`\n🛑 ${badUrlReports.length} report(s) have an UNEXPANDED template variable in the url frontmatter:\n`);
+    for (const r of badUrlReports) console.log(`  ${r.num}  ${r.url}  →  ${r.file}`);
+    console.log('\nThese are garbage identities (a batch wrote the literal, unsubstituted). Fix the url in each');
+    console.log('report frontmatter (set the real posting URL, or "" if unknown) before merging.\n');
+  }
   if (results.length === 0) {
     console.log('✅ All sections parse cleanly');
   } else {
@@ -143,4 +171,4 @@ if (jsonOut) {
   }
 }
 
-process.exit(results.length === 0 && queue.flipped === 0 ? 0 : 1);
+process.exit(results.length === 0 && queue.flipped === 0 && badUrlReports.length === 0 ? 0 : 1);
