@@ -121,7 +121,9 @@ function FUBarRow({ label, n, total, color }) {
   );
 }
 
-function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts, bucketCounts, giveUpCount, onOpen, onJumpSubview }) {
+function FUOverview({ items, thresholds, taThreshold, onOpen }) {
+  // Contact-scoped: applications now live in Pipeline → Awaiting response, so this
+  // overview describes only the people (TA + recruiter contacts) going quiet.
   const parseScore = (s) => {
     if (typeof s === 'number') return s;
     const m = String(s || '').match(/(\d+(?:\.\d+)?)/);
@@ -129,12 +131,18 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
   };
 
   const total = items.length;
-  const appItems = items.filter(it => (it.source || 'app') === 'app');
-  const taItems  = items.filter(it => it.source === 'ta');
+  const taCount  = items.filter(it => it.source === 'ta').length;
+  const recCount = items.filter(it => it.source === 'recruiter').length;
+  const inConversation = items.filter(it => ['Replied', 'Meeting Scheduled'].includes(it.status)).length;
+  const giveUpCount = items.filter(it => it.coachLevel === 'give-up').length;
+  const avgSilence = total > 0 ? Math.round(items.reduce((s, it) => s + (it.daysSinceLastTouch || 0), 0) / total) : 0;
 
-  const interviewStale = items.filter(it => window.isInterviewStage(it.status)).length;
-  const highLeverage   = appItems.filter(it => (parseScore(it.score) ?? 0) >= 4.0).length;
-  const avgSilence     = total > 0 ? Math.round(items.reduce((s, it) => s + (it.daysSinceLastTouch || 0), 0) / total) : 0;
+  const bucketCounts = useMemoF(() => {
+    const b = {}; for (const it of items) { const k = ageBucket(it.daysSinceLastTouch).key; b[k] = (b[k] || 0) + 1; } return b;
+  }, [items]);
+  const statusCounts = useMemoF(() => {
+    const c = {}; for (const it of items) c[it.status] = (c[it.status] || 0) + 1; return c;
+  }, [items]);
 
   // Pick the most urgent insight for the action panel
   const orderedActions = useMemoF(() => {
@@ -154,50 +162,48 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
   if (total === 0) {
     return (
       <div className="card" style={{ padding: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>You're all caught up.</div>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>No contacts going quiet.</div>
         <div className="dim" style={{ fontSize: 12 }}>
-          Nothing inside the touch window has gone stale. New rows surface here when an Applied/Responded/interview-round entry
-          crosses {thresholds?.Applied || 7}/{thresholds?.Responded || 5}/{thresholds?.['1st Interview'] || 3}d, or a TA contact crosses {taThreshold || 14}d.
+          People you've already reached surface here once they cross {taThreshold || 14} business days with no reply.
+          Applications awaiting a response live in <b>Pipeline → Awaiting response</b>.
         </div>
       </div>
     );
   }
 
   // KPI tones — coaching not alarm
+  const goingCold     = bucketCounts['45d+'] || 0;
   const staleTone     = total > 15 ? 'warn' : 'neutral';
-  const criticalTone  = interviewStale > 0 ? 'danger' : giveUpCount > 0 ? 'warn' : 'good';
-  const leverageTone  = highLeverage > 0 ? 'accent' : 'neutral';
+  const coldTone      = goingCold > 0 ? 'danger' : giveUpCount > 0 ? 'warn' : 'good';
+  const convoTone     = inConversation > 0 ? 'good' : 'neutral';
   const silenceTone   = avgSilence >= 21 ? 'warn' : 'neutral';
-
-  const criticalLabel = interviewStale > 0 ? `${interviewStale} interview` : giveUpCount > 0 ? `${giveUpCount} write-off` : 'Nothing critical';
-  const criticalValue = interviewStale > 0 ? interviewStale : giveUpCount;
 
   // Visual data
   const ageOrder = ['0-10d', '10-21d', '21-45d', '45d+'];
   const ageColor = { '0-10d': '#60a5fa', '10-21d': '#a78bfa', '21-45d': '#f59e0b', '45d+': '#ef4444' };
-  const statusOrder = [...window.INTERVIEW_STAGES, 'Responded', 'Applied', 'Sent', 'Replied', 'Meeting Scheduled'];
+  const statusOrder = ['Meeting Scheduled', 'Replied', 'Sent', 'Connected', 'Not Contacted', 'Dormant'];
 
   return (
     <div className="col" style={{ gap: 16 }}>
       <div className="ta-head">
         <div>
           <h1>Follow-Ups</h1>
-          <div className="sub">{total} stale touchpoints · {sourceCounts.app} app · {sourceCounts.ta} TA · {giveUpCount} ready to write off</div>
+          <div className="sub">{total} contact{total === 1 ? '' : 's'} going quiet · {taCount} TA · {recCount} recruiter{giveUpCount ? ` · ${giveUpCount} ready to write off` : ''}</div>
         </div>
       </div>
 
       {/* KPI row */}
       <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-        <FUKpi label="Stale touchpoints" value={total} sub={`${sourceCounts.app} app · ${sourceCounts.ta} TA. Work the list, oldest first`} tone={staleTone} />
-        <FUKpi label="Critical" value={criticalValue} sub={interviewStale > 0
-          ? 'Interview silence. Nudge same-day or lose momentum'
-          : giveUpCount > 0 ? `${criticalLabel} ready. Close cleanly and move on` : 'No high-urgency items right now'} tone={criticalTone} />
-        <FUKpi label="High leverage" value={highLeverage} sub={highLeverage > 0
-          ? 'Score ≥ 4.0 going cold. Prioritize the strongest fits'
-          : 'No strong-fit apps in the stale list. Good'} tone={leverageTone} />
+        <FUKpi label="Contacts going quiet" value={total} sub={`${taCount} TA · ${recCount} recruiter. Work the list, oldest first`} tone={staleTone} />
+        <FUKpi label="In conversation" value={inConversation} sub={inConversation > 0
+          ? 'Replied or meeting booked. Keep the momentum'
+          : 'No live threads right now'} tone={convoTone} />
+        <FUKpi label="Going cold (45d+)" value={goingCold} sub={goingCold > 0
+          ? 'Long silent. Send a final ping or let them go'
+          : 'Nothing stuck past 45 days. Good'} tone={coldTone} />
         <FUKpi label="Avg silence" value={`${avgSilence}d`} sub={avgSilence >= 21
-          ? 'Queue is aging. Clear the 21d+ bucket before adding new apps'
-          : 'Healthy. Staying inside the response window'} tone={silenceTone} />
+          ? 'Threads are aging. Clear the 21d+ bucket'
+          : 'Healthy. Staying inside the window'} tone={silenceTone} />
       </div>
 
       {/* Three visuals */}
@@ -219,17 +225,17 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
         </div>
 
         <div className="card" style={{ padding: 14, flex: 1, minWidth: 240 }}>
-          <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>By Source</div>
+          <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>By Book</div>
           <div className="col" style={{ gap: 10 }}>
-            <FUBarRow label="Apps" n={sourceCounts.app} total={total} color="#a78bfa" />
-            <FUBarRow label="TA Outreach" n={sourceCounts.ta} total={total} color="#22d3ee" />
+            <FUBarRow label="TA Outreach" n={taCount} total={total} color="#22d3ee" />
+            <FUBarRow label="Recruiters" n={recCount} total={total} color="#a78bfa" />
           </div>
           <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-            {sourceCounts.app > sourceCounts.ta * 4
-              ? 'Mostly app silence. Your TA pipeline is keeping up.'
-              : sourceCounts.ta > sourceCounts.app
-                ? 'TA contacts are slipping. Warm them before they go cold.'
-                : 'Balanced. Alternate App nudges with TA touchpoints.'}
+            {taCount > recCount
+              ? 'Mostly TA contacts. Warm them before they cool.'
+              : recCount > taCount
+                ? 'Mostly recruiters. Keep those relationships alive.'
+                : 'Balanced across both books.'}
           </div>
         </div>
 
@@ -241,11 +247,9 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
             ))}
           </div>
           <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-            {window.INTERVIEW_STAGES.reduce((n, s) => n + (statusCounts[s] || 0), 0) > 0
-              ? 'Interview rows first. They convert at the highest rate.'
-              : (statusCounts['Responded'] || 0) > 0
-                ? 'Responded rows next. Momentum is fragile, keep it.'
-                : 'Applied bucket only. Straightforward nudge cycle.'}
+            {(statusCounts['Replied'] || 0) + (statusCounts['Meeting Scheduled'] || 0) > 0
+              ? 'Replied / meeting rows first. Those threads are live.'
+              : 'Mostly sent-and-waiting. A nudge is what moves them.'}
           </div>
         </div>
       </div>
@@ -532,16 +536,10 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
 
       {subView === 'overview' && (
         <FUOverview
-          items={warm}
+          items={warmContacts}
           thresholds={data.thresholds}
           taThreshold={data.taThreshold}
-          sourceCounts={sourceCounts}
-          statusCounts={statusCounts}
-          bucketCounts={bucketCounts}
-          giveUpCount={giveUpCount}
-          coldCount={cold.length}
           onOpen={openFromOverview}
-          onJumpSubview={setSubView}
         />
       )}
 
