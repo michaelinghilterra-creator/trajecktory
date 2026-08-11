@@ -4,6 +4,7 @@ import { TARGET_TALENT_MD, TT_CORR_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { TALENT_STATUS_LABELS, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { parseVerifyTag } from '../../../lib/email-verify.mjs';
+import { readLinkedInMap } from './tt-linkedin.mjs';
 
 // Derived from templates/states.yml (talent_states) rather than hardcoded here.
 // The previous local array is the exact drift the recruiter side already fixed:
@@ -15,6 +16,10 @@ const TT_STATUSES = TALENT_STATUS_LABELS;
 function parseTargetTalentMd() {
   if (!fs.existsSync(TARGET_TALENT_MD)) return [];
   const text = fs.readFileSync(TARGET_TALENT_MD, 'utf8');
+  // LinkedIn connection state lives in a sidecar keyed by id. Read it once here
+  // and attach per-row, so every consumer (list, single, by-company) sees the
+  // same `linkedinStatus` without each re-reading the file.
+  const liMap = readLinkedInMap();
   const rows = [];
   for (const line of text.split('\n')) {
     if (!line.startsWith('| ')) continue;
@@ -55,6 +60,9 @@ function parseTargetTalentMd() {
       // without grepping notes themselves.
       isPrincipal: /\[principal\]/i.test(parts[15] || ''),
       verified,  // { state, source, date, score, address, hadTag }
+      // LinkedIn connection axis, separate from `status` (the outreach pipeline).
+      // Default 'Not Connected' when the sidecar has no entry for this id.
+      linkedinStatus: (liMap[String(id)]?.state) || 'Not Connected',
       raw: line,
     });
   }
@@ -103,8 +111,21 @@ function updateTTLine(id, updates) {
     if (updates.notes      !== undefined) parts[15] = cell(updates.notes);
     if (updates.phone      !== undefined) parts[10] = cell(updates.phone);
     // Email cell may carry an inline [v:...] verification tag; cell() keeps it intact
-    // (no pipe/newline in a tag). Used by the reconcile find-emails endpoint.
+    // (no pipe/newline in a tag). Used by the reconcile find-emails endpoint. When
+    // the user edits the address by hand, they pass a plain email with no tag, so it
+    // correctly reverts to unverified until re-checked.
     if (updates.email      !== undefined) parts[11] = cell(updates.email);
+    // Identity fields — editable from the contact drawer so the user can fix data
+    // in place. Column layout mirrors parseTargetTalentMd's index map.
+    if (updates.company    !== undefined) parts[2]  = cell(updates.company);
+    if (updates.last       !== undefined) parts[3]  = cell(updates.last);
+    if (updates.first      !== undefined) parts[4]  = cell(updates.first);
+    if (updates.salute     !== undefined) parts[5]  = cell(updates.salute);
+    if (updates.title      !== undefined) parts[6]  = cell(updates.title);
+    if (updates.city       !== undefined) parts[7]  = cell(updates.city);
+    if (updates.state      !== undefined) parts[8]  = cell(updates.state);
+    if (updates.zip        !== undefined) parts[9]  = cell(updates.zip);
+    if (updates.linkedin   !== undefined) parts[12] = cell(updates.linkedin);
     if (updates.website    !== undefined) {
       // Older rows have no Website cell; insert one before the trailing '' so the
       // row stays well-formed. Newer rows (length >= 18) just overwrite parts[16].

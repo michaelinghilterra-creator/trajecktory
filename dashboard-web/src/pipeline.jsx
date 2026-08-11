@@ -854,6 +854,7 @@ const PL_SUBTABS = [
   { id: 'overview',  label: 'Overview',  icon: PI.pulse },
   { id: 'table',     label: 'Active',    icon: PI.list },
   { id: 'all',       label: 'All',       icon: PI.list },
+  { id: 'awaiting',  label: 'Awaiting response', icon: PI.clock || PI.pulse },
   { id: 'analytics', label: 'Analytics', icon: PI.chart },
 ];
 
@@ -2187,6 +2188,12 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
       )}
       {subView === 'all' && (
         <AllEntriesView apps={[...apps, ...triageRows]} onOpen={handleOpen} search={search} isStale={isStale} staleDays={staleDays} triage={triage} />
+      )}
+      {subView === 'awaiting' && window.AwaitingResponseView && (
+        <window.AwaitingResponseView
+          search={search}
+          onOpenApp={(id) => { const a = apps.find(x => x.id === id); if (a) handleOpen(a); }}
+        />
       )}
       {subView === 'analytics' && (
         <AnalyticsView apps={activeApps} allApps={apps} compTweaks={compTweaks} onOpen={handleOpen} isStale={isStale} />

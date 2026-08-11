@@ -854,10 +854,32 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
   const q = search || '';
   const [firmFilter, setFirmFilter] = useStateR('');
   const [statusFilter, setStatusFilter] = useStateR('');
+  const [hvOnly, setHvOnly] = useStateR(false);   // high value = reachable both ways (email + LinkedIn)
   const [sortKey, setSortKey] = useStateR('firm');
   const [sortDir, setSortDir] = useStateR('asc');
   const [importing, setImporting] = useStateR(false);
   const [importMsg, setImportMsg] = useStateR('');
+  const [finding, setFinding] = useStateR(false);
+
+  // Bulk find + verify emails for recruiters that lack a verified address (the
+  // usual bounce source). One Hunter search credit each, budget-capped server-side;
+  // only verified addresses are written.
+  const findEmails = () => {
+    setFinding(true); setImportMsg('');
+    window.tjkMutate('/api/recruiters/find-emails', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+      .then(r => r.json()).then(d => {
+        setFinding(false);
+        if (d.error) { setImportMsg(d.error); return; }
+        const res = d.results || [];
+        const notFound = res.filter(x => x.state === 'not_found').length;
+        const unverifiable = res.filter(x => x.state === 'unverifiable').length;
+        const parts = [`${d.written} verified`];
+        if (unverifiable) parts.push(`${unverifiable} found but unverified (review on their cards)`);
+        if (notFound) parts.push(`${notFound} not found`);
+        setImportMsg(`${parts.join(' · ')} (checked ${d.checked}${d.skippedForBudget ? `, ${d.skippedForBudget} left for next run` : ''}).`);
+        onImported && onImported();
+      }).catch(err => { setFinding(false); setImportMsg(err.message); });
+  };
 
   // Bulk-import recruiter contacts from a CSV (shared template with TA Outreach).
   function handleImport(e) {
@@ -893,6 +915,7 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
     const list = contacts.filter(c => {
       if (firmFilter && c.firm !== firmFilter) return false;
       if (statusFilter && c.status !== statusFilter) return false;
+      if (hvOnly && !c.isHighValue) return false;
       if (t && !`${c.first} ${c.last} ${c.firm} ${c.title} ${c.city} ${c.email}`.toLowerCase().includes(t)) return false;
       return true;
     });
@@ -910,10 +933,11 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
       return (a.firm || '').localeCompare(b.firm || '') || (a.last || '').localeCompare(b.last || '');
     });
     return list;
-  }, [contacts, q, firmFilter, statusFilter, sortKey, sortDir]);
+  }, [contacts, q, firmFilter, statusFilter, hvOnly, sortKey, sortDir]);
 
   const firmsShown = useMemoR(() => new Set(rows.map(c => c.firmId)).size, [rows]);
-  const hasFilter = q || firmFilter || statusFilter;
+  const hvCount = useMemoR(() => contacts.filter(c => c.isHighValue).length, [contacts]);
+  const hasFilter = q || firmFilter || statusFilter || hvOnly;
 
   const cols = [
     { k: 'name',      label: 'Contact',    w: 200 },
@@ -938,6 +962,10 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
             {importing ? 'Importing…' : 'Import CSV'}
             <input type="file" accept=".csv,text/csv" style={{ display: 'none' }} disabled={importing} onChange={handleImport} />
           </label>
+          <button className="btn" onClick={findEmails} disabled={finding}
+            title="Find + verify emails (Hunter → MillionVerifier) for recruiters without a verified address. Only verified addresses are saved.">
+            {finding ? 'Finding…' : 'Find verified emails'}
+          </button>
         </div>
       </div>
 
@@ -967,8 +995,13 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
             <option value="">All firms</option>
             {firmList.map(f => <option key={f.id} value={f.name}>{f.name.split(' — ')[0]} ({f.n})</option>)}
           </select>
+          <button className="btn ghost sm" onClick={() => setHvOnly(v => !v)}
+            title="High value = reachable both ways (a verified email and a LinkedIn handle). The best contacts to multithread."
+            style={hvOnly ? { color: 'var(--yellow)', borderColor: 'var(--yellow)' } : undefined}>
+            ★ High value <span className="mono" style={{ opacity: 0.7, marginLeft: 2 }}>{hvCount}</span>
+          </button>
           {hasFilter && (
-            <button className="btn ghost sm" onClick={() => { setFirmFilter(''); setStatusFilter(''); }}>
+            <button className="btn ghost sm" onClick={() => { setFirmFilter(''); setStatusFilter(''); setHvOnly(false); }}>
               <RecIcon d={REC_I.x} size={12} /> Clear
             </button>
           )}
@@ -1001,6 +1034,7 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
                         <div className="mono-av sm" style={{ borderColor: m.color, color: m.color, flex: 'none' }}>{initials(c.first + ' ' + c.last)}</div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.first} {c.last}</div>
+                        {c.isHighValue && <span title="High value: reachable both ways (verified email + LinkedIn). Worth a multithread." style={{ flex: 'none', color: 'var(--yellow)', fontSize: 12 }}>★</span>}
                       </div>
                     </td>
                     <td title={c.title || ''}>
@@ -1380,6 +1414,9 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
   const [editingWeb, setEditingWeb] = useStateR(false);
   const [linkedin, setLinkedin] = useStateR('');
   const [editingLi, setEditingLi] = useStateR(false);
+  const [editing, setEditing] = useStateR(false);   // whole-contact edit mode
+  const [edit, setEdit] = useStateR({});
+  const [finding, setFinding] = useStateR(false);   // Hunter+MillionVerifier email lookup
   const [composing, setComposing] = useStateR(false);
   const [log, setLog] = useStateR(null);
   const [toast, setToastMsg] = useStateR(null);
@@ -1443,6 +1480,49 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
       body: JSON.stringify({ linkedin: linkedin.trim() }),
     }).then(() => { setEditingLi(false); load(); onUpdate?.(); showToast('LinkedIn saved', 'success'); });
   };
+  // Find + verify an email via Hunter → MillionVerifier (one search credit). Only a
+  // verified address is written, so this only ever improves the contact.
+  const findEmail = () => {
+    setFinding(true);
+    window.tjkMutate('/api/recruiters/find-emails', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [id] }) })
+      .then(r => r.json()).then(d => {
+        setFinding(false);
+        if (d.error) { showToast(d.error, 'error'); return; }
+        const hit = (d.results || [])[0];
+        if (hit && hit.email && !hit.candidate) { showToast(`Verified email found (${hit.state})`, 'success'); load(); onUpdate?.(); }
+        else if (hit && hit.candidate) { showToast('Found an address but could not verify it — review below', 'warn'); load(); onUpdate?.(); }
+        else showToast('No address found', 'warn');
+      }).catch(() => { setFinding(false); showToast('Lookup failed', 'error'); });
+  };
+  // Accept or dismiss the stashed unverified candidate address (Hunter found it but
+  // MillionVerifier wouldn't confirm). Accepting writes it as an unverified address.
+  const resolveCandidate = (accept) => {
+    window.tjkMutate(`/api/recruiters/${id}/candidate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accept }) })
+      .then(() => { load(); onUpdate?.(); showToast(accept ? 'Address saved (unverified)' : 'Candidate dismissed', accept ? 'success' : 'info'); })
+      .catch(() => showToast('Could not update', 'error'));
+  };
+  // Whole-contact edit mode (identity fields). Recruiters use `firm` for the org.
+  const REC_EDIT_FIELDS = [
+    { k: 'salute', label: 'Salutation', w: 90 }, { k: 'first', label: 'First name' }, { k: 'last', label: 'Last name' },
+    { k: 'title', label: 'Title', full: true }, { k: 'firm', label: 'Firm', full: true },
+    { k: 'email', label: 'Email', full: true }, { k: 'linkedin', label: 'LinkedIn URL', full: true },
+    { k: 'phone', label: 'Phone' }, { k: 'city', label: 'City' }, { k: 'state', label: 'State', w: 90 },
+  ];
+  const startEdit = () => {
+    setEdit(Object.fromEntries(REC_EDIT_FIELDS.map(f => [f.k, data[f.k] || ''])));
+    setEditing(true);
+  };
+  const saveEdit = () => {
+    const payload = {};
+    for (const f of REC_EDIT_FIELDS) {
+      const v = (edit[f.k] || '').trim();
+      if (v !== (data[f.k] || '')) payload[f.k] = v;
+    }
+    if (Object.keys(payload).length === 0) { setEditing(false); return; }
+    window.tjkMutate(`/api/recruiters/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    }).then(() => { setEditing(false); load(); onUpdate?.(); showToast('Contact updated', 'success'); });
+  };
   const saveCorrespondence = (direction, subject, body) => {
     window.tjkMutate(`/api/recruiters/${id}/correspondence`, {
       method: 'POST',
@@ -1504,7 +1584,26 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
         <div className="drawer-body">
           {/* Contact info */}
           <div className="ds-section">
-            <div className="ds-label"><RecIcon d={REC_I.building} size={12} /> Contact</div>
+            <div className="ds-label">
+              <RecIcon d={REC_I.building} size={12} /> Contact
+              {!editing && <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={startEdit}><RecIcon d={REC_I.pen} size={11} /> Edit</button>}
+            </div>
+            {editing ? (
+              <div className="info-card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {REC_EDIT_FIELDS.map(f => (
+                  <div key={f.k} style={{ gridColumn: f.full ? '1 / -1' : 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <label style={{ fontSize: 10.5, color: 'var(--text-mute)', letterSpacing: '.04em' }}>{f.label}</label>
+                    <input className="inp" value={edit[f.k] || ''} onChange={e => setEdit(prev => ({ ...prev, [f.k]: e.target.value }))}
+                      style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '5px 8px', color: 'var(--text)', fontSize: 12 }} />
+                  </div>
+                ))}
+                <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, marginTop: 2 }}>
+                  <button className="btn primary sm" onClick={saveEdit}><RecIcon d={REC_I.check} size={12} /> Save</button>
+                  <button className="btn ghost sm" onClick={() => setEditing(false)}>Cancel</button>
+                  <span style={{ fontSize: 11, color: 'var(--text-mute)', alignSelf: 'center', marginLeft: 'auto' }}>Changing the email marks it unverified until re-checked.</span>
+                </div>
+              </div>
+            ) : (
             <div className="info-card">
               <div className="info-row">
                 <span className="ik">Firm site</span>
@@ -1527,11 +1626,42 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
                   );
                 })()}
               </div>
-              <div className="info-row">
-                <span className="ik">Email</span>
-                <span className="iv">{data.email}</span>
-                <RecCopyField value={data.email} />
-              </div>
+              {(() => {
+                const st = (data.verified?.state || '').toLowerCase();
+                const verified = ['ok', 'valid', 'risky', 'catch_all', 'catch-all', 'accept_all', 'deliverable'].includes(st);
+                return (
+                  <div className="info-row">
+                    <span className="ik">Email</span>
+                    <span className="iv">
+                      {data.email || <span style={{ color: 'var(--text-mute)' }}>—</span>}
+                      {data.email && !verified && <span title="Not verified deliverable — may bounce" style={{ marginLeft: 8, padding: '2px 6px', borderRadius: 4, background: 'rgba(234,179,8,0.18)', color: '#fde68a', fontSize: 10.5, fontWeight: 600 }}>UNVERIFIED</span>}
+                      {data.email && verified && <span title="Verified deliverable" style={{ marginLeft: 8, padding: '2px 6px', borderRadius: 4, background: 'rgba(34,197,94,0.16)', color: '#86efac', fontSize: 10.5, fontWeight: 600 }}>VERIFIED</span>}
+                    </span>
+                    {data.email && <RecCopyField value={data.email} />}
+                    {!verified && (
+                      <button className="btn ghost sm" onClick={findEmail} disabled={finding}
+                        title="Find a deliverable address via Hunter, confirm it with MillionVerifier, and save only if verified (one search credit).">
+                        {finding ? 'Finding…' : (data.email ? 'Re-find' : 'Find email')}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+              {data.emailCandidate && (
+                <div className="info-row" style={{ alignItems: 'flex-start' }}>
+                  <span className="ik">Suggested</span>
+                  <span className="iv" style={{ minWidth: 0 }}>
+                    <span className="mono" style={{ fontSize: 12 }}>{data.emailCandidate.email}</span>
+                    <span title="Hunter found this address but MillionVerifier could not confirm it" style={{ marginLeft: 8, padding: '2px 6px', borderRadius: 4, background: 'rgba(234,179,8,0.18)', color: '#fde68a', fontSize: 10, fontWeight: 600 }}>UNVERIFIED</span>
+                    <div style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 3 }}>Hunter found this; verifier said “{data.emailCandidate.reason}”. Use it at your own risk.</div>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                      <button className="btn primary sm" onClick={() => resolveCandidate(true)}>Use this address</button>
+                      <button className="btn ghost sm" onClick={() => resolveCandidate(false)}>Dismiss</button>
+                    </div>
+                  </span>
+                  <span />
+                </div>
+              )}
               {data.phone && (
                 <div className="info-row">
                   <span className="ik">Phone</span>
@@ -1570,9 +1700,12 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
                 <span />
               </div>
             </div>
-            <div className="li-fallback">
-              <RecIcon d={REC_I.search} size={11} /> LinkedIn searched via Google. Paste a profile URL once found.
-            </div>
+            )}
+            {!editing && (
+              <div className="li-fallback">
+                <RecIcon d={REC_I.search} size={11} /> LinkedIn searched via Google. Paste a profile URL once found.
+              </div>
+            )}
           </div>
 
           {/* Pipeline */}

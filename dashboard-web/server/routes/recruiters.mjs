@@ -1,5 +1,6 @@
 import express from 'express';
 import fs from 'fs';
+import path from 'path';
 import { ROOT_DIR, RECRUITERS_MD } from '../config.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine, appendRecruiterRows, REC_HEADER, RECRUITER_STATUSES } from '../lib/recruiters.mjs';
@@ -9,6 +10,10 @@ import { isLinkedInInvite } from '../lib/channels.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
 import { pauseSequence } from '../lib/sequences.mjs';
+import { isHighValueContact } from '../lib/followups.mjs';
+import { loadEnvKey } from '../../../verify-contacts.mjs';
+import { findAndVerify, hunterSearchesLeft } from '../../../find-contacts.mjs';
+import { setVerifyTag } from '../../../lib/email-verify.mjs';
 
 export const router = express.Router();
 
@@ -53,8 +58,8 @@ router.post('/api/recruiters/bulk-import', (req, res) => {
 router.get('/api/recruiters', (req, res) => {
   try {
     const rows = parseRecruitersMd();
-    // Strip the raw markdown line before sending
-    res.json(rows.map(({ raw, ...rest }) => rest));
+    // Strip the raw markdown line before sending; tag dual-channel high value.
+    res.json(rows.map(({ raw, ...rest }) => ({ ...rest, isHighValue: isHighValueContact(rest) })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -68,7 +73,128 @@ router.get('/api/recruiters/:id', (req, res) => {
     const r = rows.find(x => x.id === id);
     if (!r) return res.status(404).json({ error: 'Recruiter not found' });
     const { raw, ...recruiter } = r;
-    res.json({ ...recruiter, correspondence: readRecruiterCorrespondence(id) });
+    res.json({ ...recruiter, isHighValue: isHighValueContact(recruiter), emailCandidate: readCandidates()[id] || null, correspondence: readRecruiterCorrespondence(id) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/recruiters/find-emails — find + verify emails for recruiters that lack
+// a verified address (recruiters ship with unverified emails, which is where the
+// bounces come from). Runs the same Hunter Email Finder → MillionVerifier pipeline
+// as TA Outreach and writes ONLY a verified address. Optional { ids } targets
+// specific recruiters (per-contact "Find email"); otherwise it sweeps EVERYONE who
+// needs an address in one run (no per-run cap), bounded only by remaining Hunter
+// credits when that balance is readable. Mirrors /api/tt-reconcile/find-emails.
+const REC_SENDABLE = new Set(['ok', 'valid', 'risky', 'catch_all', 'catch-all', 'accept_all', 'deliverable']);
+// Records the last date each recruiter's address was searched (found or not). Only
+// matters as a fairness fallback if credits ever cap a sweep below the number
+// needing one — then the oldest-attempted go first so no one is starved.
+const REC_ATTEMPTS_PATH = path.join(path.dirname(RECRUITERS_MD), 'recruiter-email-attempts.json');
+function readAttempts() { try { const j = JSON.parse(fs.readFileSync(REC_ATTEMPTS_PATH, 'utf8')); return (j && typeof j === 'object') ? j : {}; } catch { return {}; } }
+function writeAttempts(m) { try { fs.writeFileSync(REC_ATTEMPTS_PATH, JSON.stringify(m, null, 2)); } catch { /* best-effort */ } }
+
+// When Hunter finds an address but MillionVerifier won't confirm it, we DON'T write
+// it to the recruiter (the email cell stays what it was) — instead we stash the
+// candidate here, keyed by id, and surface it on the card as a flagged suggestion
+// the user can accept or dismiss. So a real Hunter hit is never silently lost, and
+// nothing unverified sneaks into the send path.
+const REC_CANDIDATES_PATH = path.join(path.dirname(RECRUITERS_MD), 'recruiter-email-candidates.json');
+function readCandidates() { try { const j = JSON.parse(fs.readFileSync(REC_CANDIDATES_PATH, 'utf8')); return (j && typeof j === 'object') ? j : {}; } catch { return {}; } }
+function writeCandidates(m) { try { fs.writeFileSync(REC_CANDIDATES_PATH, JSON.stringify(m, null, 2)); } catch { /* best-effort */ } }
+
+router.post('/api/recruiters/find-emails', async (req, res) => {
+  try {
+    const hkey = loadEnvKey('HUNTER_API_KEY');
+    const mkey = loadEnvKey('MILLIONVERIFIER_API_KEY');
+    if (!hkey || !mkey) {
+      return res.status(400).json({ error: 'HUNTER_API_KEY and MILLIONVERIFIER_API_KEY must both be set in dashboard-web/.env to find + verify emails.' });
+    }
+    const { ids, limit } = req.body || {};
+    const idSet = Array.isArray(ids) && ids.length ? new Set(ids.map(Number)) : null;
+    // A recruiter "needs" an address when it has no verified one on file.
+    const rows = parseRecruitersMd().filter(r =>
+      r.first && r.last && r.firm && !REC_SENDABLE.has((r.verified?.state || '').toLowerCase()) &&
+      (!idSet || idSet.has(r.id)));
+
+    // Rotate: on a sweep (no explicit ids), do the least-recently-attempted first
+    // so every recruiter gets a turn before any is re-tried. Explicit ids (a single
+    // "Find email" click) always run regardless.
+    const attempts = readAttempts();
+    if (!idSet) rows.sort((a, b) => String(attempts[a.id] || '').localeCompare(String(attempts[b.id] || '')) || (a.id - b.id));
+
+    // No per-run cap by default: process everyone who needs an address (or an
+    // explicit `limit` if one is passed), bounded only by remaining credits when
+    // that balance can be read.
+    const creditsLeft = await hunterSearchesLeft(hkey);
+    const wanted = Number.isFinite(limit) && limit > 0 ? limit : rows.length;
+    const cap = Number.isFinite(creditsLeft) ? Math.min(wanted, creditsLeft) : wanted;
+    const toRun = rows.slice(0, cap);
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Domain hint: recruiters here usually already carry an unverified/bounced
+    // address whose DOMAIN is the real firm domain (the boutique-firm names Hunter
+    // can't resolve). Extract it (or a website domain) and hand it to Hunter so it
+    // finds the correct mailbox for this person on the right domain.
+    const domainOf = (r) => {
+      const fromEmail = (r.email || '').split('@')[1];
+      if (fromEmail && fromEmail.includes('.')) return fromEmail.trim().toLowerCase();
+      const site = (r.website || '').trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+      return site.includes('.') ? site.toLowerCase() : null;
+    };
+    const candidates = readCandidates();
+    const results = [];
+    for (const r of toRun) {
+      try {
+        const f = await findAndVerify(r.firm, r.first, r.last, hkey, mkey, domainOf(r));
+        if (f.found && f.verify) {
+          updateRecruiterLine(r.id, { email: setVerifyTag(f.email, f.verify) });
+          delete candidates[r.id];   // a verified address supersedes any stashed candidate
+          results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: f.email, state: f.verify.state });
+        } else if (f.found && f.email) {
+          // Hunter found an address MillionVerifier wouldn't confirm — stash it as a
+          // flagged candidate instead of discarding it. Not written to the email cell.
+          candidates[r.id] = { email: f.email, reason: f.bad || 'unverifiable', date: today };
+          results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: f.email, state: 'unverifiable', candidate: true });
+        } else {
+          results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: null, state: 'not_found' });
+        }
+      } catch (e) {
+        results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: null, state: 'error', error: e.message });
+      }
+      attempts[r.id] = today;   // stamp so a credit-limited sweep rotates fairly
+    }
+    writeAttempts(attempts);
+    writeCandidates(candidates);
+    res.json({
+      ok: true, checked: toRun.length, written: results.filter(x => x.email).length,
+      needing: rows.length, skippedForBudget: rows.length - toRun.length,
+      creditsBefore: creditsLeft, creditsSpent: toRun.length, results,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/recruiters/:id/candidate — accept or dismiss the stashed unverified
+// candidate address. body { accept: true } writes it to the email cell (as an
+// unverified address, so it shows the UNVERIFIED badge and never counts as a
+// verified/high-value channel); anything else just dismisses it. Either way the
+// candidate is cleared from the sidecar.
+router.post('/api/recruiters/:id/candidate', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const cands = readCandidates();
+    const cand = cands[id];
+    if (!cand) return res.status(404).json({ error: 'No candidate to act on' });
+    if (req.body && req.body.accept) {
+      // Write the plain address (no verification tag) → parses back as unverified.
+      const ok = updateRecruiterLine(id, { email: cand.email });
+      if (!ok) return res.status(404).json({ error: 'Recruiter not found' });
+    }
+    delete cands[id];
+    writeCandidates(cands);
+    res.json({ ok: true, accepted: !!(req.body && req.body.accept), email: cand.email });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -78,11 +204,13 @@ router.get('/api/recruiters/:id', (req, res) => {
 router.patch('/api/recruiters/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { status, notes, lastTouch, website, linkedin, phone } = req.body || {};
+    const { status, notes, lastTouch, website, linkedin, phone,
+            first, last, salute, title, firm, city, state, zip, email } = req.body || {};
     if (status && !RECRUITER_STATUSES.includes(status)) {
       return res.status(400).json({ error: `Invalid status. Must be one of: ${RECRUITER_STATUSES.join(', ')}` });
     }
-    const ok = updateRecruiterLine(id, { status, notes, lastTouch, website, linkedin, phone });
+    const ok = updateRecruiterLine(id, { status, notes, lastTouch, website, linkedin, phone,
+                                         first, last, salute, title, firm, city, state, zip, email });
     if (!ok) return res.status(404).json({ error: 'Recruiter not found' });
     res.json({ ok: true });
   } catch (err) {

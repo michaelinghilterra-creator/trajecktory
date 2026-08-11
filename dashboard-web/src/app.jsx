@@ -173,10 +173,10 @@ function App() {
   // switches to Network → TA Outreach; TargetTalentTab consumes it once and
   // opens its own drawer.
   const [pendingTaOpen, setPendingTaOpen] = useState(null);
-  // Network parent-tab subtab (referrals | recruiters | ta), lifted here so the
-  // command palette and the Follow-Ups→TA jump can target a specific subtab,
-  // mirroring pipelineView. Defaults to Referrals (warmest channel).
-  const [networkSub, setNetworkSub] = useState(() => loadNav().networkSub || "referrals");
+  // Contacts parent-tab subtab (all | referrals | recruiters | ta), lifted here so
+  // the command palette and the Follow-Ups→TA jump can target a specific subtab,
+  // mirroring pipelineView. Defaults to the unified "All contacts" table.
+  const [networkSub, setNetworkSub] = useState(() => loadNav().networkSub || "all");
   const openTaContact = (id) => { setPendingTaOpen(id); setNetworkSub("ta"); setTab("network"); };
   // Same cross-tab hand-off for a recruiter contact (e.g. a High value row whose
   // source is 'recruiter'): push the id and switch to Network → Recruiters, which
@@ -197,11 +197,11 @@ function App() {
     if (tab !== "pipeline" && pipelineView !== "overview") {
       setPipelineView("overview");
     }
-    // Same for Network: re-entry defaults back to Referrals. A command-palette /
-    // Follow-Ups jump that sets networkSub in the same tick as tab still wins
-    // (state updates batch, and tab === "network" skips this reset).
-    if (tab !== "network" && networkSub !== "referrals") {
-      setNetworkSub("referrals");
+    // Same for Contacts: re-entry defaults back to the unified All view. A
+    // command-palette / Follow-Ups jump that sets networkSub in the same tick as
+    // tab still wins (state updates batch, and tab === "network" skips this reset).
+    if (tab !== "network" && networkSub !== "all") {
+      setNetworkSub("all");
     }
   }, [tab]);
 

@@ -121,7 +121,9 @@ function FUBarRow({ label, n, total, color }) {
   );
 }
 
-function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts, bucketCounts, giveUpCount, onOpen, onJumpSubview }) {
+function FUOverview({ items, thresholds, taThreshold, onOpen }) {
+  // Contact-scoped: applications now live in Pipeline → Awaiting response, so this
+  // overview describes only the people (TA + recruiter contacts) going quiet.
   const parseScore = (s) => {
     if (typeof s === 'number') return s;
     const m = String(s || '').match(/(\d+(?:\.\d+)?)/);
@@ -129,12 +131,18 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
   };
 
   const total = items.length;
-  const appItems = items.filter(it => (it.source || 'app') === 'app');
-  const taItems  = items.filter(it => it.source === 'ta');
+  const taCount  = items.filter(it => it.source === 'ta').length;
+  const recCount = items.filter(it => it.source === 'recruiter').length;
+  const inConversation = items.filter(it => ['Replied', 'Meeting Scheduled'].includes(it.status)).length;
+  const giveUpCount = items.filter(it => it.coachLevel === 'give-up').length;
+  const avgSilence = total > 0 ? Math.round(items.reduce((s, it) => s + (it.daysSinceLastTouch || 0), 0) / total) : 0;
 
-  const interviewStale = items.filter(it => window.isInterviewStage(it.status)).length;
-  const highLeverage   = appItems.filter(it => (parseScore(it.score) ?? 0) >= 4.0).length;
-  const avgSilence     = total > 0 ? Math.round(items.reduce((s, it) => s + (it.daysSinceLastTouch || 0), 0) / total) : 0;
+  const bucketCounts = useMemoF(() => {
+    const b = {}; for (const it of items) { const k = ageBucket(it.daysSinceLastTouch).key; b[k] = (b[k] || 0) + 1; } return b;
+  }, [items]);
+  const statusCounts = useMemoF(() => {
+    const c = {}; for (const it of items) c[it.status] = (c[it.status] || 0) + 1; return c;
+  }, [items]);
 
   // Pick the most urgent insight for the action panel
   const orderedActions = useMemoF(() => {
@@ -154,50 +162,48 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
   if (total === 0) {
     return (
       <div className="card" style={{ padding: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>You're all caught up.</div>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>No contacts going quiet.</div>
         <div className="dim" style={{ fontSize: 12 }}>
-          Nothing inside the touch window has gone stale. New rows surface here when an Applied/Responded/interview-round entry
-          crosses {thresholds?.Applied || 7}/{thresholds?.Responded || 5}/{thresholds?.['1st Interview'] || 3}d, or a TA contact crosses {taThreshold || 14}d.
+          People you've already reached surface here once they cross {taThreshold || 14} business days with no reply.
+          Applications awaiting a response live in <b>Pipeline → Awaiting response</b>.
         </div>
       </div>
     );
   }
 
   // KPI tones — coaching not alarm
+  const goingCold     = bucketCounts['45d+'] || 0;
   const staleTone     = total > 15 ? 'warn' : 'neutral';
-  const criticalTone  = interviewStale > 0 ? 'danger' : giveUpCount > 0 ? 'warn' : 'good';
-  const leverageTone  = highLeverage > 0 ? 'accent' : 'neutral';
+  const coldTone      = goingCold > 0 ? 'danger' : giveUpCount > 0 ? 'warn' : 'good';
+  const convoTone     = inConversation > 0 ? 'good' : 'neutral';
   const silenceTone   = avgSilence >= 21 ? 'warn' : 'neutral';
-
-  const criticalLabel = interviewStale > 0 ? `${interviewStale} interview` : giveUpCount > 0 ? `${giveUpCount} write-off` : 'Nothing critical';
-  const criticalValue = interviewStale > 0 ? interviewStale : giveUpCount;
 
   // Visual data
   const ageOrder = ['0-10d', '10-21d', '21-45d', '45d+'];
   const ageColor = { '0-10d': '#60a5fa', '10-21d': '#a78bfa', '21-45d': '#f59e0b', '45d+': '#ef4444' };
-  const statusOrder = [...window.INTERVIEW_STAGES, 'Responded', 'Applied', 'Sent', 'Replied', 'Meeting Scheduled'];
+  const statusOrder = ['Meeting Scheduled', 'Replied', 'Sent', 'Connected', 'Not Contacted', 'Dormant'];
 
   return (
     <div className="col" style={{ gap: 16 }}>
       <div className="ta-head">
         <div>
           <h1>Follow-Ups</h1>
-          <div className="sub">{total} stale touchpoints · {sourceCounts.app} app · {sourceCounts.ta} TA · {giveUpCount} ready to write off</div>
+          <div className="sub">{total} contact{total === 1 ? '' : 's'} going quiet · {taCount} TA · {recCount} recruiter{giveUpCount ? ` · ${giveUpCount} ready to write off` : ''}</div>
         </div>
       </div>
 
       {/* KPI row */}
       <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-        <FUKpi label="Stale touchpoints" value={total} sub={`${sourceCounts.app} app · ${sourceCounts.ta} TA. Work the list, oldest first`} tone={staleTone} />
-        <FUKpi label="Critical" value={criticalValue} sub={interviewStale > 0
-          ? 'Interview silence. Nudge same-day or lose momentum'
-          : giveUpCount > 0 ? `${criticalLabel} ready. Close cleanly and move on` : 'No high-urgency items right now'} tone={criticalTone} />
-        <FUKpi label="High leverage" value={highLeverage} sub={highLeverage > 0
-          ? 'Score ≥ 4.0 going cold. Prioritize the strongest fits'
-          : 'No strong-fit apps in the stale list. Good'} tone={leverageTone} />
+        <FUKpi label="Contacts going quiet" value={total} sub={`${taCount} TA · ${recCount} recruiter. Work the list, oldest first`} tone={staleTone} />
+        <FUKpi label="In conversation" value={inConversation} sub={inConversation > 0
+          ? 'Replied or meeting booked. Keep the momentum'
+          : 'No live threads right now'} tone={convoTone} />
+        <FUKpi label="Going cold (45d+)" value={goingCold} sub={goingCold > 0
+          ? 'Long silent. Send a final ping or let them go'
+          : 'Nothing stuck past 45 days. Good'} tone={coldTone} />
         <FUKpi label="Avg silence" value={`${avgSilence}d`} sub={avgSilence >= 21
-          ? 'Queue is aging. Clear the 21d+ bucket before adding new apps'
-          : 'Healthy. Staying inside the response window'} tone={silenceTone} />
+          ? 'Threads are aging. Clear the 21d+ bucket'
+          : 'Healthy. Staying inside the window'} tone={silenceTone} />
       </div>
 
       {/* Three visuals */}
@@ -219,17 +225,17 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
         </div>
 
         <div className="card" style={{ padding: 14, flex: 1, minWidth: 240 }}>
-          <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>By Source</div>
+          <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>By Book</div>
           <div className="col" style={{ gap: 10 }}>
-            <FUBarRow label="Apps" n={sourceCounts.app} total={total} color="#a78bfa" />
-            <FUBarRow label="TA Outreach" n={sourceCounts.ta} total={total} color="#22d3ee" />
+            <FUBarRow label="TA Outreach" n={taCount} total={total} color="#22d3ee" />
+            <FUBarRow label="Recruiters" n={recCount} total={total} color="#a78bfa" />
           </div>
           <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-            {sourceCounts.app > sourceCounts.ta * 4
-              ? 'Mostly app silence. Your TA pipeline is keeping up.'
-              : sourceCounts.ta > sourceCounts.app
-                ? 'TA contacts are slipping. Warm them before they go cold.'
-                : 'Balanced. Alternate App nudges with TA touchpoints.'}
+            {taCount > recCount
+              ? 'Mostly TA contacts. Warm them before they cool.'
+              : recCount > taCount
+                ? 'Mostly recruiters. Keep those relationships alive.'
+                : 'Balanced across both books.'}
           </div>
         </div>
 
@@ -241,11 +247,9 @@ function FUOverview({ items, thresholds, taThreshold, sourceCounts, statusCounts
             ))}
           </div>
           <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-            {window.INTERVIEW_STAGES.reduce((n, s) => n + (statusCounts[s] || 0), 0) > 0
-              ? 'Interview rows first. They convert at the highest rate.'
-              : (statusCounts['Responded'] || 0) > 0
-                ? 'Responded rows next. Momentum is fragile, keep it.'
-                : 'Applied bucket only. Straightforward nudge cycle.'}
+            {(statusCounts['Replied'] || 0) + (statusCounts['Meeting Scheduled'] || 0) > 0
+              ? 'Replied / meeting rows first. Those threads are live.'
+              : 'Mostly sent-and-waiting. A nudge is what moves them.'}
           </div>
         </div>
       </div>
@@ -449,17 +453,30 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
     return order.map(k => ({ key: k, label: ageBucket(sampleDays[k]).label, items: groups[k] || [] })).filter(g => g.items.length > 0);
   }, [filtered]);
 
+  // Contact follow-ups (already-reached contacts going quiet) fold into the
+  // Follow-ups queue tab. Applications moved to Pipeline → Awaiting response, so
+  // this book is contact-level only. Grouped by age like the old warm queue.
+  const warmContacts = useMemoF(() => warm.filter(it => (it.source || 'app') !== 'app'), [warm]);
+  const contactGroups = useMemoF(() => {
+    const order = ['45d+', '21-45d', '10-21d', '0-10d']; const groups = {};
+    const q = (search || '').trim().toLowerCase();
+    const items = q ? warmContacts.filter(it => `${it.company || ''} ${it.taFirst || ''} ${it.taLast || ''} ${it.role || ''}`.toLowerCase().includes(q)) : warmContacts;
+    for (const it of items) { const k = ageBucket(it.daysSinceLastTouch).key; (groups[k] = groups[k] || []).push(it); }
+    const sample = { '45d+': 45, '21-45d': 21, '10-21d': 10, '0-10d': 0 };
+    return order.map(k => ({ key: k, label: ageBucket(sample[k]).label, items: groups[k] || [] })).filter(g => g.items.length);
+  }, [warmContacts, search]);
+
   const toggleStatus = (s) => setStatusFilter(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
   const toggleBucket = (b) => setBucketFilter(prev => prev.includes(b) ? prev.filter(x => x !== b) : [...prev, b]);
 
+  // Follow-Ups is contact-level after the revamp. The old "Warm threads" and
+  // "Applications out" subtabs are gone: application follow-ups now live in
+  // Pipeline → Awaiting response, and contact follow-ups fold into the Follow-ups
+  // queue tab below the outreach queue.
   const SUBTABS = [
     { id: 'overview', label: 'Overview',         n: null,        icon: window.ICON.pulse },
-    { id: 'connect',  label: 'Connect',          n: null,        icon: window.ICON.userPlus },
-    { id: 'email',    label: 'Email queue',      n: null,        icon: window.ICON.mail },
-    { id: 'both',     label: 'High value',       n: null,        icon: window.ICON.star || window.ICON.userPlus },
+    { id: 'queue',    label: 'Follow-ups',       n: contactGroups.reduce((s, g) => s + g.items.length, 0) || null, icon: window.ICON.send },
     { id: 'findcontact', label: 'Find a contact', n: contactlessApps.length, icon: window.ICON.search || window.ICON.userPlus },
-    { id: 'warm',     label: 'Warm threads',     n: warm.length, icon: window.ICON.send },
-    { id: 'cold',     label: 'Applications out',  n: cold.length, icon: window.ICON.briefcase },
   ];
 
   const openFromOverview = (it) => {
@@ -519,219 +536,48 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
 
       {subView === 'overview' && (
         <FUOverview
-          items={warm}
+          items={warmContacts}
           thresholds={data.thresholds}
           taThreshold={data.taThreshold}
-          sourceCounts={sourceCounts}
-          statusCounts={statusCounts}
-          bucketCounts={bucketCounts}
-          giveUpCount={giveUpCount}
-          coldCount={cold.length}
           onOpen={openFromOverview}
-          onJumpSubview={setSubView}
         />
       )}
 
-      {/* ── Connect: the by-hand LinkedIn queue (moved here from the sidebar) ── */}
-      {subView === 'connect' && <window.ConnectTab toast={toast} />}
-
-      {/* ── Email queue: emailable contacts at applied companies ───────────── */}
-      {subView === 'email' && <window.EmailQueueTab toast={toast} />}
-
-      {/* ── High value: contacts reachable on both channels (multithread) ───── */}
-      {subView === 'both' && <window.BothQueueTab toast={toast} />}
-
-      {/* ── Warm threads: the actionable queue ─────────────────────────────── */}
-      {subView === 'warm' && (
+      {/* ── Follow-ups: the outreach queue (Connect + Email + High value merged;
+             channel is a filter chip), then contact follow-up nudges for people
+             you've already reached who have gone quiet. ─────────────────────── */}
+      {subView === 'queue' && (
         <>
-      <div className="ta-head">
-        <div>
-          <h1>Warm threads</h1>
-          <div className="sub">
-            {warm.length === 0
-              ? <>No warm threads right now. A reply, an interview, or a contact who engaged shows up here.</>
-              : <>{warm.length} warm {warm.length === 1 ? 'thread' : 'threads'} worth a nudge · thresholds App {data.thresholds?.Applied || 7}/{data.thresholds?.Responded || 5}/{data.thresholds?.['1st Interview'] || 3}d · TA {data.taThreshold || 14}d</>}
-          </div>
-          {withholding && (
-            <div style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.6, maxWidth: 620 }}>
-              {withheld.withheld} {withheld.withheld === 1 ? 'contact is' : 'contacts are'} not shown here because their email address has never been checked, and nothing is sent to an address that might not exist. Turn on contact email checking in Launchpad, under Optional boosters, to bring them back.
-            </div>
-          )}
-        </div>
-        <div className="act">
-          <button className="btn sm" onClick={load} title="Reload">⟳ Refresh</button>
-        </div>
-      </div>
-
-      {warm.length === 0 && !loading && (
-        <div className="card" style={{ padding: 18 }}>
-          <div className="dim" style={{ fontSize: 12 }}>
-            Nothing warm is going cold. Warm threads are replies, interviews, contacts who engaged, and Applied roles where
-            you have a usable email. Cold portal applications live under <b>Applications out</b> ({cold.length}) so they don't nag.
-          </div>
-        </div>
-      )}
-
-      {warm.length > 0 && (
-        <>
-          <div className="card" style={{ padding: '10px 14px' }}>
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              {sourceCounts.app > 0 && sourceCounts.ta > 0 && (
-                <>
-                  <span className="dim mono" style={{ fontSize: 10.5, marginRight: 4 }}>SOURCE</span>
-                  {[['app', sourceCounts.app, '#a78bfa', 'rgba(167,139,250,0.14)', 'App'], ['ta', sourceCounts.ta, '#22d3ee', 'rgba(34,211,238,0.14)', 'TA']].map(([s, n, fg, bg, label]) => {
-                    const active = sourceFilter.includes(s);
-                    return (
-                      <span key={s} onClick={() => toggleSource(s)} style={{
-                        cursor: 'pointer', padding: '4px 10px', borderRadius: 4,
-                        background: active ? fg : bg, color: active ? '#0a0a0c' : fg,
-                        fontSize: 11, fontWeight: 600, fontFamily: 'JetBrains Mono, monospace',
-                        border: `1px solid ${active ? fg : 'transparent'}`,
-                      }}>{label} <span style={{ opacity: 0.7, marginLeft: 4 }}>{n}</span></span>
-                    );
-                  })}
-                  <span className="dim mono" style={{ fontSize: 10.5, marginLeft: 14, marginRight: 4 }}>STATUS</span>
-                </>
-              )}
-              {!(sourceCounts.app > 0 && sourceCounts.ta > 0) && (
-                <span className="dim mono" style={{ fontSize: 10.5, marginRight: 4 }}>STATUS</span>
-              )}
-              {Object.entries(statusCounts).map(([s, n]) => {
-                const style = STATUS_COLOR[s] || { bg: 'rgba(113,113,122,0.14)', color: '#a1a1aa' };
-                const active = statusFilter.includes(s);
-                return (
-                  <span key={s} onClick={() => toggleStatus(s)} style={{
-                    cursor: 'pointer', padding: '4px 10px', borderRadius: 4,
-                    background: active ? style.color : style.bg, color: active ? '#0a0a0c' : style.color,
-                    fontSize: 11, fontWeight: 600, fontFamily: 'JetBrains Mono, monospace',
-                    border: `1px solid ${active ? style.color : 'transparent'}`,
-                  }}>{s} <span style={{ opacity: 0.7, marginLeft: 4 }}>{n}</span></span>
-                );
-              })}
-              <span className="dim mono" style={{ fontSize: 10.5, marginLeft: 14, marginRight: 4 }}>AGE</span>
-              {Object.entries(bucketCounts).map(([b, n]) => {
-                const active = bucketFilter.includes(b);
-                return (
-                  <span key={b} onClick={() => toggleBucket(b)} style={{
-                    cursor: 'pointer', padding: '4px 10px', borderRadius: 4,
-                    background: active ? '#a78bfa' : 'rgba(167,139,250,0.14)',
-                    color: active ? '#0a0a0c' : '#a78bfa',
-                    fontSize: 11, fontWeight: 600, fontFamily: 'JetBrains Mono, monospace',
-                    border: `1px solid ${active ? '#a78bfa' : 'transparent'}`,
-                  }}>{b} <span style={{ opacity: 0.7, marginLeft: 4 }}>{n}</span></span>
-                );
-              })}
-              {(statusFilter.length > 0 || bucketFilter.length > 0 || sourceFilter.length > 0) && (
-                <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={() => { setStatusFilter([]); setBucketFilter([]); setSourceFilter([]); }}>Clear filters</button>
-              )}
-            </div>
-          </div>
-
-          {grouped.map(group => (
-            <div key={group.key} className="card padded-lg">
-              <div className="card-head" style={{ marginBottom: 10 }}>
-                <span className="card-title">{group.label}</span>
-                <span className="card-meta mono">{group.items.length} entr{group.items.length === 1 ? 'y' : 'ies'}</span>
+          <window.FollowupQueueTab toast={toast} />
+          {contactGroups.length > 0 && (
+            <div className="col" style={{ gap: 14, marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
+              <div style={{ padding: '0 24px' }}>
+                <h2 style={{ margin: '0 0 2px' }}>Going quiet</h2>
+                <div className="sub">Contacts you've already reached who have not replied. Nudge, or mark done for now.</div>
               </div>
-              <div className="col" style={{ gap: 6 }}>
-                {group.items.map(it => (
-                  <FollowupRow key={`${it.source || 'app'}-${it.id}`} item={it}
-                    onSnooze={() => snooze(it, 14)}
-                    onMute={it.source !== 'ta' ? () => mute(it) : null}
-                    onOpen={() => openItem(it)} />
+              <div className="col" style={{ gap: 14, padding: '0 24px' }}>
+                {contactGroups.map(group => (
+                  <div key={group.key} className="card padded-lg">
+                    <div className="card-head" style={{ marginBottom: 10 }}>
+                      <span className="card-title">{group.label}</span>
+                      <span className="card-meta mono">{group.items.length} contact{group.items.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <div className="col" style={{ gap: 6 }}>
+                      {group.items.map(it => (
+                        <FollowupRow key={`${it.source || 'ta'}-${it.id}`} item={it}
+                          onSnooze={() => snooze(it, 14)}
+                          onMute={it.source !== 'ta' ? () => mute(it) : null}
+                          onOpen={() => openItem(it)} />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
-          ))}
-
-          {filtered.length === 0 && (statusFilter.length > 0 || bucketFilter.length > 0 || sourceFilter.length > 0) && (
-            <div className="no-data">No matches. <button className="btn ghost sm" onClick={() => { setStatusFilter([]); setBucketFilter([]); setSourceFilter([]); }}>Clear filters</button></div>
           )}
         </>
       )}
-        </>
-      )}
 
-      {/* ── Applications out: cold ledger, no daily nag ────────────────────── */}
-      {subView === 'cold' && (
-        <>
-      <div className="ta-head">
-        <div>
-          <h1>Applications out</h1>
-          <div className="sub">
-            {cold.length === 0
-              ? <>No cold applications waiting. Nice.</>
-              : <>{cold.length} application{cold.length === 1 ? '' : 's'} out with no usable contact or muted · {coldNoContact} no contact · {coldMuted} awaiting</>}
-          </div>
-        </div>
-        <div className="act">
-          <button className="btn sm" onClick={load} title="Reload">⟳ Refresh</button>
-        </div>
-      </div>
-
-      {/* Ghosted auto-age suggestion */}
-      {ghosted.length > 0 && (
-        <div className="card" style={{ padding: '12px 14px', borderLeft: '3px solid #ef4444' }}>
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{ghosted.length} application{ghosted.length === 1 ? '' : 's'} have had no response in {data.ghostDays || 45}+ days</div>
-              <div className="dim mono" style={{ fontSize: 11, marginTop: 3 }}>Archive to "No Response" to clear the backlog honestly. They still count as applications-with-no-reply in analytics.</div>
-              {/* Rows with no recorded apply date fall back to the tracker Date column,
-                  which is the EVALUATION date and runs days early on self-sourced rows.
-                  This button bulk-writes status, so say which ones are estimates. */}
-              {ghosted.some(g => g.estimated) && (
-                <div className="mono" style={{ fontSize: 11, marginTop: 4, color: 'var(--amber, #fbbf24)' }}>
-                  {ghosted.filter(g => g.estimated).length} of these are estimated from the evaluation date, not a recorded apply date, so their age may run early.
-                </div>
-              )}
-            </div>
-            <button className="btn primary sm" onClick={() => archiveGhosted(ghosted.map(g => g.id))}>
-              Archive {ghosted.length} → No Response
-            </button>
-          </div>
-        </div>
-      )}
-
-      {cold.length > 0 && (
-        <>
-          <div className="card" style={{ padding: '10px 14px' }}>
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span className="dim mono" style={{ fontSize: 10.5, marginRight: 4 }}>SHOW</span>
-              {[['all', 'All', cold.length], ['none', 'No contact', coldNoContact], ['awaiting', 'Awaiting', coldMuted]].map(([id, label, n]) => {
-                const active = coldFilter === id;
-                return (
-                  <span key={id} onClick={() => setColdFilter(id)} style={{
-                    cursor: 'pointer', padding: '4px 10px', borderRadius: 4,
-                    background: active ? '#a78bfa' : 'rgba(167,139,250,0.14)',
-                    color: active ? '#0a0a0c' : '#a78bfa',
-                    fontSize: 11, fontWeight: 600, fontFamily: 'JetBrains Mono, monospace',
-                    border: `1px solid ${active ? '#a78bfa' : 'transparent'}`,
-                  }}>{label} <span style={{ opacity: 0.7, marginLeft: 4 }}>{n}</span></span>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="card padded-lg">
-            <div className="card-head" style={{ marginBottom: 10 }}>
-              <span className="card-title">Applications out</span>
-              <span className="card-meta mono">{coldFiltered.length} shown</span>
-            </div>
-            <div className="col" style={{ gap: 6 }}>
-              {coldFiltered.map(it => (
-                <FollowupRow key={`cold-${it.id}`} item={it}
-                  onOpen={() => openItem(it)}
-                  onMute={it.muted ? null : () => mute(it)}
-                  onUnmute={it.muted ? () => unmute(it) : null}
-                  onFind={it.channel === 'none' ? () => setFindFor({ company: it.company, role: it.role }) : null} />
-              ))}
-              {coldFiltered.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>Nothing here.</div>}
-            </div>
-          </div>
-        </>
-      )}
-        </>
-      )}
 
       {/* ── Find a contact: applied roles with nobody to talk to ───────────── */}
       {subView === 'findcontact' && (
@@ -839,6 +685,87 @@ function SourcePill({ source }) {
     }}>{label}</span>
   );
 }
+
+// Pipeline "Awaiting response": the APPLICATION follow-up view (has this app gone
+// quiet?). It lives in Pipeline now, not Follow-Ups, because it is application-level
+// — Follow-Ups is contact-level after the revamp. Built here so it can reuse
+// FollowupRow, the age grouping, FUKpi, and the /stale endpoint; pipeline.jsx mounts
+// it via window.AwaitingResponseView and hands in onOpenApp to open the app drawer.
+window.AwaitingResponseView = function AwaitingResponseView({ onOpenApp, search }) {
+  const [data, setData] = useStateF({});
+  const [loading, setLoading] = useStateF(true);
+  const load = () => fetch('/api/followups/stale').then(r => r.json()).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+  useEffectF(() => { load(); }, []);
+  const act = (url, body) => window.tjkMutate(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(() => load()).catch(() => {});
+  // Application stale items only (both warm and cold); contacts stay in Follow-Ups.
+  const appItems = useMemoF(() => [...(data.warm || []), ...(data.cold || [])].filter(it => (it.source || 'app') === 'app'), [data]);
+  const q = (search || '').trim().toLowerCase();
+  const items = q ? appItems.filter(it => `${it.company || ''} ${it.role || ''}`.toLowerCase().includes(q)) : appItems;
+  const grouped = useMemoF(() => {
+    const order = ['45d+', '21-45d', '10-21d', '0-10d']; const groups = {};
+    for (const it of items) { const k = ageBucket(it.daysSinceLastTouch).key; (groups[k] = groups[k] || []).push(it); }
+    const sample = { '45d+': 45, '21-45d': 21, '10-21d': 10, '0-10d': 0 };
+    return order.map(k => ({ key: k, label: ageBucket(sample[k]).label, items: groups[k] || [] })).filter(g => g.items.length);
+  }, [items]);
+  const ghosted = data.ghostedCandidates || [];
+  const parseScore = s => { const m = String(s ?? '').match(/(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0; };
+  const interviewStale = items.filter(it => window.isInterviewStage(it.status)).length;
+  const highLeverage = items.filter(it => parseScore(it.score) >= 4.0).length;
+  const avgSilence = items.length ? Math.round(items.reduce((s, it) => s + (it.daysSinceLastTouch || 0), 0) / items.length) : 0;
+  const archiveGhosted = () => {
+    const ids = ghosted.map(g => g.id);
+    if (!ids.length) return;
+    if (!window.confirm(`Archive ${ids.length} ghosted application${ids.length === 1 ? '' : 's'} to "No Response"?\n\nThey'll leave the active pipeline but still count as applications-with-no-reply in your analytics.`)) return;
+    act('/api/followups/archive-ghosted', { ids });
+  };
+
+  if (loading) return <div className="no-data" style={{ padding: 24 }}>Loading…</div>;
+
+  return (
+    <div className="col" style={{ gap: 14 }}>
+      <div className="ta-head">
+        <div>
+          <h1>Awaiting response</h1>
+          <div className="sub">{items.length} application{items.length === 1 ? '' : 's'} sent and going quiet. Nudge the strongest first; snooze or mark awaiting to stop the nag.</div>
+        </div>
+      </div>
+      {items.length > 0 && (
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+          <FUKpi label="Awaiting" value={items.length} sub="applications with no reply yet" tone="neutral" />
+          <FUKpi label="Interview silence" value={interviewStale} sub={interviewStale ? 'nudge same-day' : 'none right now'} tone={interviewStale ? 'danger' : 'good'} />
+          <FUKpi label="High leverage" value={highLeverage} sub="score ≥ 4.0 going cold" tone={highLeverage ? 'accent' : 'neutral'} />
+          <FUKpi label="Avg silence" value={`${avgSilence}d`} sub="mean days since last touch" tone={avgSilence >= 21 ? 'warn' : 'neutral'} />
+        </div>
+      )}
+      {ghosted.length > 0 && (
+        <div className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span className="dim" style={{ fontSize: 12 }}>{ghosted.length} application{ghosted.length === 1 ? '' : 's'} past the ghost window with no reply.</span>
+          <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={archiveGhosted}>Archive to No Response</button>
+        </div>
+      )}
+      {grouped.length === 0 ? (
+        <div className="card" style={{ padding: 18 }}>
+          <div className="dim" style={{ fontSize: 12 }}>Nothing awaiting a nudge. Applications you've sent are either fresh or already answered.</div>
+        </div>
+      ) : grouped.map(group => (
+        <div key={group.key} className="card padded-lg">
+          <div className="card-head" style={{ marginBottom: 10 }}>
+            <span className="card-title">{group.label}</span>
+            <span className="card-meta mono">{group.items.length} entr{group.items.length === 1 ? 'y' : 'ies'}</span>
+          </div>
+          <div className="col" style={{ gap: 6 }}>
+            {group.items.map(it => (
+              <FollowupRow key={`app-${it.id}`} item={it}
+                onSnooze={() => act('/api/followups/snooze', { source: 'app', id: it.id, days: 14 })}
+                onMute={() => act('/api/followups/mute', { id: it.id })}
+                onOpen={() => onOpenApp && onOpenApp(it.id)} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 function FollowupRow({ item, onOpen, onSnooze, onMute, onUnmute, onFind }) {
   const coachStyle = COACH_COLOR[item.coachLevel] || COACH_COLOR.overdue;

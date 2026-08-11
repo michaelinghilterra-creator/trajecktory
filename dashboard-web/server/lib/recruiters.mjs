@@ -98,6 +98,16 @@ function updateRecruiterLine(id, updates) {
     // intact (a tag holds no pipe/newline). Used by the Gmail bounce scan to flip
     // a recruiter's address to bounced, mirroring updateTTLine's email support.
     if (updates.email      !== undefined) parts[11] = cell(updates.email);
+    // Identity fields — editable from the recruiter drawer. Column layout per the
+    // parts map above. (firm is the recruiter's "company".)
+    if (updates.firm       !== undefined) parts[2] = cell(updates.firm);
+    if (updates.last       !== undefined) parts[3] = cell(updates.last);
+    if (updates.first      !== undefined) parts[4] = cell(updates.first);
+    if (updates.salute     !== undefined) parts[5] = cell(updates.salute);
+    if (updates.title      !== undefined) parts[6] = cell(updates.title);
+    if (updates.city       !== undefined) parts[7] = cell(updates.city);
+    if (updates.state      !== undefined) parts[8] = cell(updates.state);
+    if (updates.zip        !== undefined) parts[9] = cell(updates.zip);
     if (updates.linkedin !== undefined || updates.website !== undefined) {
       // Older rows lack the LinkedIn + Website cells; pad with empties before the
       // trailing '' so columns line up, then set whichever was provided.

@@ -8,6 +8,8 @@ import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFrom
 import { appendFollowupRow, parseFollowupsMd } from '../lib/followups.mjs';
 import { logConnect } from '../lib/connects.mjs';
 import { isLinkedInInvite } from '../lib/channels.mjs';
+import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES } from '../lib/tt-linkedin.mjs';
+import { isHighValueContact } from '../lib/followups.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
 
@@ -26,7 +28,7 @@ export const router = express.Router();
 router.get('/api/target-talent', (req, res) => {
   try {
     const rows = parseTargetTalentMd();
-    res.json(rows.map(({ raw, ...rest }) => rest));
+    res.json(rows.map(({ raw, ...rest }) => ({ ...rest, isHighValue: isHighValueContact(rest) })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -39,7 +41,7 @@ router.get('/api/target-talent/by-company/:company', (req, res) => {
     const company = decodeURIComponent(req.params.company);
     const rows = parseTargetTalentMd();
     const match = matchByCompany(rows, company, r => r.company);
-    res.json(match.map(({ raw, ...rest }) => rest));
+    res.json(match.map(({ raw, ...rest }) => ({ ...rest, isHighValue: isHighValueContact(rest) })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -55,6 +57,7 @@ router.get('/api/target-talent/:id', (req, res) => {
     const { raw, ...contact } = r;
     res.json({
       ...contact,
+      isHighValue: isHighValueContact(contact),
       correspondence: readTTCorrespondence(id),
       relatedApps: findRelatedApps(r.company),
     });
@@ -67,12 +70,26 @@ router.get('/api/target-talent/:id', (req, res) => {
 router.patch('/api/target-talent/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { status, notes, lastTouch, website, phone } = req.body || {};
+    const { status, notes, lastTouch, website, phone, linkedinStatus,
+            first, last, salute, title, company, city, state, zip, email, linkedin } = req.body || {};
     if (status && !TT_STATUSES.includes(status)) {
       return res.status(400).json({ error: `Invalid status. Must be one of: ${TT_STATUSES.join(', ')}` });
     }
-    const ok = updateTTLine(id, { status, notes, lastTouch, website, phone });
-    if (!ok) return res.status(404).json({ error: 'Contact not found' });
+    if (linkedinStatus !== undefined && !isLinkedInState(linkedinStatus)) {
+      return res.status(400).json({ error: `Invalid linkedinStatus. Must be one of: ${LINKEDIN_STATES.join(', ')}` });
+    }
+    // LinkedIn state lives in a sidecar (not the markdown row), so a request that
+    // ONLY changes linkedinStatus must not require the contact's row to be
+    // rewritten. Set it first, then only touch the row if a row field was given.
+    if (linkedinStatus !== undefined) setLinkedInStatus(id, linkedinStatus);
+    // Row fields — status/lastTouch/notes plus the editable identity fields.
+    const rowUpdates = { status, notes, lastTouch, website, phone,
+                         first, last, salute, title, company, city, state, zip, email, linkedin };
+    const touchesRow = Object.values(rowUpdates).some(v => v !== undefined);
+    if (touchesRow) {
+      const ok = updateTTLine(id, rowUpdates);
+      if (!ok) return res.status(404).json({ error: 'Contact not found' });
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -127,6 +144,10 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     // (email only) does not. Idempotent on (date, name, source).
     if (direction === 'Sent' && isLinkedInInvite(subject)) {
       logConnect({ name: `${r.first || ''} ${r.last || ''}`.trim(), source: 'ta', date: ts.slice(0, 10) });
+      // The invite just went out → advance the LinkedIn axis to 'Invite Pending'.
+      // Only from 'Not Connected'; never regress someone already 'Connected'. The
+      // user flips it to 'Connected' by hand when the invite is accepted.
+      markInvitePending(id, ts.slice(0, 10));
     }
 
     // Cross-log to applications follow-ups for an outbound Sent. Accepts an
