@@ -1,7 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { OUTPUT_DIR } from '../config.mjs';
+import { OUTPUT_DIR, ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd, patchRowInMd, rejectionTimingStats } from '../lib/applications.mjs';
 import { recordApplyDate } from '../lib/sidecars.mjs';
 import { pushObsidianNote } from '../lib/obsidian.mjs';
@@ -20,6 +20,31 @@ router.get('/output-preview/:file', (req, res) => {
   const raw = fs.readFileSync(filePath, 'utf8');
   const body = mdToHtml(raw);
   // No scripts in a rendered output document; lock it down (defense-in-depth).
+  res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data: http: https:");
+  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(file)}</title>
+<style>
+  body{font-family:'Georgia',serif;max-width:720px;margin:60px auto;padding:0 24px;color:#1a1a1a;line-height:1.7;font-size:15px}
+  h1,h2,h3{font-family:'Arial',sans-serif;margin:1.4em 0 0.4em}
+  h1{font-size:22px} h2{font-size:18px} h3{font-size:15px}
+  blockquote{border-left:3px solid #ccc;margin:12px 0;padding:8px 16px;color:#444;background:#f9f9f9}
+  p{margin:0.8em 0}
+  strong{font-weight:600}
+  @media print{body{margin:0.5in}}
+</style>
+</head><body>${body}</body></html>`);
+});
+
+// GET /jd-preview/:file — render a captured JD snapshot from jds/ as HTML.
+// This is the "Open JD" target for a self-sourced role whose url is a local:
+// path (or the $file garbage a broken batch wrote): the posting has no live web
+// URL, but its JD was snapshotted into jds/ at eval time. basename() strips any
+// path so a poisoned frontmatter cell like ../../secret cannot escape jds/.
+router.get('/jd-preview/:file', (req, res) => {
+  const file = path.basename(req.params.file);
+  const filePath = path.join(ROOT_DIR, 'jds', file);
+  if (!file.endsWith('.md') || !fs.existsSync(filePath)) return res.status(404).send('JD snapshot not found');
+  const raw = fs.readFileSync(filePath, 'utf8');
+  const body = mdToHtml(raw);
   res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data: http: https:");
   res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(file)}</title>
 <style>
