@@ -56,7 +56,7 @@ const CHAPTERS = [
         <h3>Add these as you go</h3>
         <ul>
           <li><b>Follow-Ups</b> when threads go quiet, <b>Interview</b> when you land one.</li>
-          <li><b>Network</b> and <b>Social</b> once you start talking to people and building visibility.</li>
+          <li><b>Contacts</b> and <b>Social</b> once you start talking to people and building visibility.</li>
           <li><b>AI Coach</b> any time you want a second opinion, and <b>Insights</b> once you have enough
           history to learn from.</li>
         </ul>
@@ -195,29 +195,29 @@ const CHAPTERS = [
         <b> Follow-Ups</b> tab is the action queue that keeps that from happening, with the nudge already drafted.</p>
         <Shot src="followups.png" alt="Follow-Ups: warm threads with speed-to-lead and ghosting cues"
           caption="Follow-Ups shows what is overdue, what is about to go cold, and who to give up on, with an editable nudge ready for each." />
-        <p>Its subtabs split the work by what kind of nudge it is:</p>
+        <p>Its subtabs split the work up:</p>
         <ul>
-          <li><b>Overview</b> is the queue: who is overdue, ranked by how warm and how urgent.</li>
-          <li><b>Connect</b> is the LinkedIn connection queue for people you can only reach there.</li>
-          <li><b>Email queue</b> is the drafted follow-up emails, waiting for your edit and send.</li>
-          <li><b>Warm threads</b> are the live conversations. A thread reads <b>[inbound]</b> when they found you
-          and <b>[outbound]</b> when you reached out first.</li>
-          <li><b>Applications out</b> is the cold list: applied, no reply yet, not yet worth a personal nudge.</li>
+          <li><b>Overview</b> summarizes what's overdue, ranked by how warm and how urgent.</li>
+          <li><b>Follow-ups</b> is one ranked queue of everyone worth a touch. Use the channel chips
+          (LinkedIn / Email / Both) to filter; contacts you've already reached who have gone quiet appear
+          under "Going quiet" below the queue.</li>
+          <li><b>Find a contact</b> flags applied roles where you have nobody to talk to yet.</li>
         </ul>
-        <Why>The badge counts warm threads only, not every cold application, so the number means "conversations at
-        risk of going cold," which is something you can actually act on today. Cold applications live under
-        Applications out until they warm up.</Why>
+        <Why>Follow-Ups is about chasing <em>people</em>. An application that has gone quiet with no reply is a
+        different thing — that lives in <b>Pipeline → Awaiting response</b>, so the two don't blur together.</Why>
       </>
     ),
   },
   {
-    id: 'network', mk: '08', label: 'Network', title: 'Network: the relationships that compound',
+    id: 'network', mk: '08', label: 'Contacts', title: 'Contacts: the relationships that compound',
     body: (
       <>
-        <p className="dg-lead">The <b>Network</b> tab is three CRMs in one place, because the people around a role
-        matter as much as the role. Every message here is AI-drafted in your voice and fully editable before it goes.</p>
-        <Shot src="network-referrals.png" alt="Network: Referrals, TA Outreach, and Recruiters"
-          caption="Network holds three related lists. Each is a person, not a form: warm intros, internal contacts, and external recruiters." />
+        <p className="dg-lead">The <b>Contacts</b> tab is every person in one place, because the people around a role
+        matter as much as the role. <b>All contacts</b> is one table across all three books with a type filter; the
+        Referrals, TA Outreach, and Recruiters subtabs keep each book's own tools. Every message here is AI-drafted
+        in your voice and fully editable before it goes.</p>
+        <Shot src="network-referrals.png" alt="Contacts: Referrals, TA Outreach, and Recruiters"
+          caption="Contacts holds three related lists in one table. Each is a person, not a form: warm intros, internal contacts, and external recruiters." />
         <ul>
           <li><b>Referrals</b> is your warm channel, built from your LinkedIn connections. It splits into
           <b> Stage 1</b> (people already inside a company you are pursuing) and <b>Stage 2</b> (your wider
@@ -373,7 +373,7 @@ const CHAPTERS = [
           <li>Let roles flow in through <b>Scan</b> and <b>Triage</b>, and only Evaluate the strongest.</li>
           <li>Read a report top-down: the score answers "worth it," the tabs hold the evidence.</li>
           <li>Chase warm threads in <b>Follow-Ups</b> before they go cold. That is the highest-value habit.</li>
-          <li>Work the people in <b>Network</b> and build visibility in <b>Social</b>. Warm beats cold.</li>
+          <li>Work the people in <b>Contacts</b> and build visibility in <b>Social</b>. Warm beats cold.</li>
           <li>Trust the honest numbers in <b>Insights</b>, and ask the <b>AI Coach</b> when you are unsure.</li>
         </ul>
         <p>Everything trajecktory produces is yours to edit, and it never submits anything on your behalf. It is a

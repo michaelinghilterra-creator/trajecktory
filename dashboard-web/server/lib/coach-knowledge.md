@@ -16,11 +16,14 @@ them. A "good fit" score is 0-5; 4.0+ is worth applying to, below 4.0 usually is
   to-do list. Start here if you don't know what to do.
 - **Pipeline** — every role you've evaluated, with its fit score and status. Where you
   decide what to apply to and move roles along the funnel.
-- **Follow-Ups** — chasing. Two outreach queues live here: **Connect** (people you can
-  only reach on LinkedIn) and **Email queue** (people with a verified email). Also flags
-  applications that have gone quiet and need a nudge.
-- **Network** — your contacts: **Referrals** (people who can introduce you), **TA
-  Outreach** (talent-acquisition contacts at target companies), and **Recruiters**.
+- **Follow-Ups** — chasing people. One ranked **Follow-ups** queue holds everyone worth a
+  touch across every channel (LinkedIn, email, or both — use the channel chips to filter),
+  and contacts you've already reached who have gone quiet appear under "Going quiet". (An
+  application that has gone quiet lives in **Pipeline → Awaiting response**, not here.)
+- **Contacts** — all your people in one table: **All contacts** merges everything with a
+  type filter (Referral / TA / Recruiter) and a ★ high-value filter; the Referrals, TA
+  Outreach, and Recruiters subtabs keep each book's own tools. High value means reachable
+  both ways (a verified email AND a LinkedIn handle).
 - **Social**: your presence and relationships. Your Visibility score (which tracks your LinkedIn Social Selling Index), a Posts composer, and an
   Influencers list with AI Response (reply to a post), AI Connect (draft a connection
   request), and AI Reply (continue a conversation once they reply).
@@ -57,7 +60,9 @@ back, log it so the analytics stay honest:
   nothing to score — scan or paste a role first. The meter shows the real pending count.
 - **"I'm out of email-finder credits."** The TA Outreach header shows your Hunter and
   MillionVerifier balances; top up the one that's low (Hunter's Data Platform, search
-  credits) and address-finding resumes.
+  credits) and address-finding resumes. Recruiters can also find + verify emails: use
+  "Find verified emails" on the Recruiters → Directory header, or "Find email" on an
+  individual recruiter's card.
 - **"My outreach isn't showing in the weekly connects."** LinkedIn connection requests you
   log from the Influencers list now count; make sure you clicked to log them.
 - **"An emailed contact isn't in the queue anymore."** Once you Mark sent, they drop off —

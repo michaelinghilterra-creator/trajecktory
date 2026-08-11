@@ -763,35 +763,62 @@ function computeBothQueue({ taRows, recruiterRows, apps } = {}) {
   return _sortByCompanyName(out);
 }
 
-// The Network "High value" DIRECTORY: every contact reachable BOTH ways (a verified
-// email AND a LinkedIn handle) across both books. Unlike computeBothQueue this is a
-// managed directory, NOT an action queue — it is NOT gated to applied companies and
-// includes any status except Archived, so you can see and manage all your dual-channel
-// contacts. Carries the fields a searchable table needs (name, title, company, email +
-// state, LinkedIn, location, status, notes). The UI provides its own search/filters.
-function highValueContacts({ taRows, recruiterRows } = {}) {
-  const { ta, rec } = _bothBooks({ taRows, recruiterRows });
-  const out = [];
-  const add = (row, source) => {
-    if (!(_hasLinkedIn(row) && isSendable(row))) return;   // must have BOTH channels
-    if (row.status === 'Archived') return;
-    const company = source === 'recruiter' ? row.firm : row.company;
-    out.push({
-      source, id: row.id,
-      name: `${row.first || ''} ${row.last || ''}`.trim(),
-      first: row.first || '', last: row.last || '',
-      title: row.title || '', company: company || '',
-      email: (row.email || '').trim(), emailState: row.verified?.state || 'unverified',
-      linkedin: (row.linkedin || '').trim(),
-      city: row.city || '', state: row.state || '',
-      status: row.status || '', notes: (row.notes || '').replace(/\s+/g, ' ').trim(),
-      isPrincipal: source === 'ta' ? (row.isPrincipal ?? false) : false,
-    });
-  };
-  for (const r of ta)  add(r, 'ta');
-  for (const r of rec) add(r, 'recruiter');
-  out.sort((a, b) => (a.company || '').localeCompare(b.company || '') || (a.name || '').localeCompare(b.name || ''));
-  return out;
+// ── Unified follow-up queue ──────────────────────────────────────────────────
+// One ranked work queue that merges the three channel queues (LinkedIn-only,
+// email-only, both) so the user works a single list instead of flipping between
+// three tabs. The three are mutually exclusive by construction (see the bucket
+// gates in each builder), so the union needs no dedup. Each row is tagged with
+// `channel` ('linkedin' | 'email' | 'both') for the UI's filter chips, and a
+// numeric `rank` (higher = do sooner) for the sort.
+//
+// RANK (importance first, then last-touch recency, per the agreed formula):
+//   + hiring principal (decision-maker)         +50
+//   + dual-channel "both" (multithread, high value) +20
+//   + status weight (further in the process = more valuable to nudge)
+//   + overdue: older last self-touch = higher; never-contacted = neutral middle
+// The weights are intentionally simple and live here so they are easy to tune;
+// changing them changes only the order, never which rows appear.
+const _FUQ_STATUS_WEIGHT = {
+  'Responded': 25, 'Phone Screen': 40,
+  '1st Interview': 45, '2nd Interview': 50, '3rd Interview': 55, '4th Interview': 60,
+  'Sent': 5, 'Drafted': 3,
+};
+function _followupRank(r) {
+  let score = 0;
+  if (r.isPrincipal) score += 50;
+  if (r.channel === 'both') score += 20;
+  score += _FUQ_STATUS_WEIGHT[r.status] || 0;
+  // Recency: a contact you last touched long ago is more overdue. Never-contacted
+  // rows (no prior self-touch) get a neutral middle so importance decides their
+  // slot rather than floating them to either extreme.
+  const d = r.companyOutreach?.selfLastTouch?.date;
+  const days = d ? _businessDaysAgo(d) : null;
+  score += (days == null) ? 15 : Math.min(days, 60) * 0.5;
+  return score;
+}
+function computeFollowupQueue(opts = {}) {
+  const rows = [
+    ...computeConnectQueue(opts).map(r => ({ ...r, channel: 'linkedin' })),
+    ...computeEmailQueue(opts).map(r => ({ ...r, channel: 'email' })),
+    ...computeBothQueue(opts).map(r => ({ ...r, channel: 'both' })),
+  ];
+  for (const r of rows) r.rank = _followupRank(r);
+  // Rank desc; company then name as a stable tiebreak so equal-rank rows don't
+  // shuffle between reloads.
+  rows.sort((a, b) =>
+    (b.rank - a.rank) ||
+    (a.company || '').localeCompare(b.company || '') ||
+    (a.name || '').localeCompare(b.name || ''));
+  return rows;
+}
+
+// "High value" = reachable BOTH ways (a verified/sendable email AND a LinkedIn
+// handle). It was once its own Network directory page; now it is a per-contact
+// SIGNAL (a star + filter) on the TA and Recruiter tables, computed by this one
+// predicate so every surface agrees on what "high value" means. Same dual-channel
+// criteria the both-queue uses (contactChannelBucket bucket 3).
+function isHighValueContact(row) {
+  return contactChannelBucket(row).bucket === 3;
 }
 
 // Applied roles in OUTREACH_ELIGIBLE_STATUSES that have ZERO contacts (no TA or
@@ -855,7 +882,8 @@ function countWithheldContacts({ taRows, recruiterRows } = {}) {
 export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
   computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
-  highValueContacts, computeContactlessApps, countWithheldContacts,
+  computeFollowupQueue, _followupRank,
+  isHighValueContact, computeContactlessApps, countWithheldContacts,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 

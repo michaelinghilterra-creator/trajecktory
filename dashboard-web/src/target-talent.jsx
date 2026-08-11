@@ -18,6 +18,46 @@ const TT_STATUS = [
 const TT_STATUS_MAP = Object.fromEntries(TT_STATUS.map(s => [s.id, s]));
 const TT_PIPELINE = TT_STATUS.filter(s => s.pipeline);
 
+// ── LinkedIn connection axis ──────────────────────────────────────────────────
+// SEPARATE from the outreach pipeline above. The pipeline tracks how far the
+// CONVERSATION has progressed; this tracks whether they accepted your LinkedIn
+// invite — a different question (someone can accept while the conversation is
+// still at "Sent, no reply"). LinkedIn-brand blue for the connected state, so it
+// never reads as the pipeline's green "Connected". Stored server-side in a
+// sidecar (server/lib/tt-linkedin.mjs), not in the contact row.
+const TT_LINKEDIN = [
+  { id: "Not Connected",  short: "Not connected",  color: "var(--text-mute)", rgb: "113,113,122" },
+  { id: "Invite Pending", short: "Invite pending", color: "var(--yellow)",    rgb: "234,179,8"   },
+  { id: "Connected",      short: "Connected",      color: "var(--blue)",      rgb: "96,165,250"  },
+];
+const TT_LINKEDIN_MAP = Object.fromEntries(TT_LINKEDIN.map(s => [s.id, s]));
+const TT_LINKEDIN_RANK = Object.fromEntries(TT_LINKEDIN.map((s, i) => [s.id, i]));
+
+function LinkedInBadge({ status, size = "md" }) {
+  const m = TT_LINKEDIN_MAP[status] || TT_LINKEDIN_MAP["Not Connected"];
+  const sm = size === "sm";
+  const connected = m.id !== "Not Connected";
+  return React.createElement("span", {
+    className: "status-badge",
+    title: m.id === "Connected" ? "You're connected on LinkedIn"
+      : m.id === "Invite Pending" ? "Invite sent, not yet accepted"
+      : "No LinkedIn connection",
+    style: {
+      color: m.color,
+      borderColor: `rgba(${m.rgb},0.42)`,
+      background: `rgba(${m.rgb},0.12)`,
+      fontSize: sm ? 9.5 : 10.5,
+      padding: sm ? "2px 7px" : "3px 9px",
+    }
+  },
+    React.createElement("span", {
+      className: "sb-dot",
+      style: { background: m.color, boxShadow: connected ? `0 0 6px ${m.color}` : "none" }
+    }),
+    m.short
+  );
+}
+
 // ── Icons (stroke paths, 24x24 viewBox) ──────────────────────────────────────
 // Canonical paths in shared.jsx (window.ICON). Local TI alias preserves call sites.
 const TI = window.ICON;
@@ -131,6 +171,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
   const [showArchived, setShowArchived] = useState(false);
   const [statusFilter, setStatusFilter] = useState(null);
   const [companyFilter, setCompanyFilter] = useState("");
+  const [hvOnly, setHvOnly] = useState(false);   // high-value = reachable both ways (email + LinkedIn)
   const [sortKey, setSortKey] = useState("status");
   const [sortDir, setSortDir] = useState("desc");
   const [importing, setImporting] = useState(false);
@@ -150,12 +191,13 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
     let r = showArchived ? contacts : active;
     if (statusFilter) r = r.filter(c => c.status === statusFilter);
     if (companyFilter) r = r.filter(c => c.company === companyFilter);
+    if (hvOnly) r = r.filter(c => c.isHighValue);
     if (q.trim()) {
       const t = q.toLowerCase();
       r = r.filter(c => `${c.first} ${c.last} ${c.company} ${c.title}`.toLowerCase().includes(t));
     }
     return r;
-  }, [contacts, active, showArchived, statusFilter, companyFilter, q]);
+  }, [contacts, active, showArchived, statusFilter, companyFilter, hvOnly, q]);
 
   const sortVal = (c, key) => {
     switch (key) {
@@ -164,6 +206,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
       case "company":  return (c.company || "").toLowerCase();
       case "location": return `${c.state || ""} ${c.city || ""}`.toLowerCase();
       case "status":   return (TT_STATUS_MAP[c.status] || { stage: -2 }).stage;
+      case "linkedin": return TT_LINKEDIN_RANK[c.linkedinStatus] ?? 0;
       case "last":     return c.lastTouch || "";
       default:         return "";
     }
@@ -182,7 +225,8 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
     return arr;
   }, [rows, sortKey, sortDir]);
 
-  const hasFilters = statusFilter || companyFilter || q.trim();
+  const hasFilters = statusFilter || companyFilter || hvOnly || q.trim();
+  const hvCount = active.filter(c => c.isHighValue).length;
 
   // Bulk-import contacts from a CSV (the "Excel floor" for non-power users).
   // Reads the file as text and posts it to /api/tt-reconcile/bulk-import.
@@ -213,6 +257,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
     { k: "company",  label: "Company",    w: 180 },
     { k: "location", label: "Location",   w: 140 },
     { k: "status",   label: "Status",     w: 150 },
+    { k: "linkedin", label: "LinkedIn",   w: 130 },
     { k: "last",     label: "Last touch", w: 110 },
   ];
 
@@ -260,8 +305,13 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
             <option value="">All companies</option>
             {companies.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+          <button className={"btn ghost sm" + (hvOnly ? " active" : "")} onClick={() => setHvOnly(v => !v)}
+            title="High value = reachable both ways (a verified email and a LinkedIn handle). The best contacts to multithread."
+            style={hvOnly ? { color: "var(--yellow)", borderColor: "var(--yellow)" } : undefined}>
+            ★ High value <span className="mono" style={{ opacity: 0.7, marginLeft: 2 }}>{hvCount}</span>
+          </button>
           {hasFilters && (
-            <button className="btn ghost sm" onClick={() => { setStatusFilter(null); setCompanyFilter(""); }}>
+            <button className="btn ghost sm" onClick={() => { setStatusFilter(null); setCompanyFilter(""); setHvOnly(false); }}>
               <TIcon d={TI.x} size={12} /> Clear
             </button>
           )}
@@ -294,6 +344,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
                       <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
                         <div className="mono-av sm" style={{ borderColor: m.color, color: m.color, flex: "none" }}>{ttInitials(c.first + " " + c.last)}</div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.first} {c.last}</div>
+                        {c.isHighValue && <span title="High value: reachable both ways (verified email + LinkedIn). Worth a multithread." style={{ flex: "none", color: "var(--yellow)", fontSize: 12 }}>★</span>}
                       </div>
                     </td>
                     <td title={c.title || "No job title recorded for this contact"}>
@@ -306,6 +357,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
                       <span style={{ fontSize: 12, color: loc ? "var(--text-dim)" : "var(--text-mute)" }} title={loc || "No location recorded for this contact"} aria-label={loc || "No location recorded"}>{loc || "-"}</span>
                     </td>
                     <td><StatusBadge status={c.status} size="sm" /></td>
+                    <td><LinkedInBadge status={c.linkedinStatus} size="sm" /></td>
                     <td>
                       <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: c.lastTouch ? "var(--text-dim)" : "var(--text-mute)" }} title={c.lastTouch ? relTouch(c.lastTouch) : "Never contacted"} aria-label={c.lastTouch ? relTouch(c.lastTouch) : "Never contacted"}>{c.lastTouch ? relTouch(c.lastTouch) : "-"}</span>
                     </td>
@@ -362,6 +414,40 @@ function CopyBtn({ value }) {
     <button className={"copy-btn" + (done ? " done" : "")} onClick={copy}>
       <TIcon d={done ? TI.check : TI.copy} size={11} />{done ? "Copied" : "Copy"}
     </button>
+  );
+}
+
+// LinkedIn connection selector — three-state segmented control, its own axis
+// separate from the outreach pipeline. The active state is tinted with the same
+// palette as LinkedInBadge so the control and the table badge always agree.
+function LinkedInControl({ status, onChange }) {
+  const cur = status || "Not Connected";
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 6 }}>
+        {TT_LINKEDIN.map(s => {
+          const on = cur === s.id;
+          return (
+            <button key={s.id} className="btn sm" onClick={() => onChange(s.id)}
+              title={s.id === "Connected" ? "They accepted your invite — you're connected"
+                : s.id === "Invite Pending" ? "Invite sent, waiting on them to accept"
+                : "No LinkedIn connection yet"}
+              style={{
+                flex: 1,
+                color: s.color,
+                borderColor: on ? s.color : "var(--border)",
+                background: on ? `rgba(${s.rgb},0.14)` : "transparent",
+                fontWeight: on ? 600 : 400,
+              }}>
+              {s.short}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 6 }}>
+        Did they accept your LinkedIn invite? Separate from the pipeline stage above. Sending an invite from the Connect queue sets this to Invite Pending automatically.
+      </div>
+    </div>
   );
 }
 
@@ -455,6 +541,8 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
   const [notes, setNotes] = useState("");
   const [website, setWebsite] = useState("");
   const [editingWeb, setEditingWeb] = useState(false);
+  const [editing, setEditing] = useState(false);   // whole-contact edit mode (identity fields)
+  const [edit, setEdit] = useState({});             // draft field values while editing
   const [logModal, setLogModal] = useState(null);
   // Multi-app cross-log: every related application at the company is checked
   // by default so a TA touch propagates to all of them in one step. User can
@@ -507,6 +595,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
     window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })
       .then(() => { load(); onUpdate?.(); });
   };
+  const updateLinkedIn = linkedinStatus => {
+    window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkedinStatus }) })
+      .then(() => { load(); onUpdate?.(); });
+  };
   const saveNotes = () => {
     window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }) })
       .then(() => { load(); onUpdate?.(); });
@@ -514,6 +606,29 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
   const saveWebsite = () => {
     window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ website: website.trim() }) })
       .then(() => { setEditingWeb(false); load(); onUpdate?.(); });
+  };
+  // Whole-contact edit mode: seed the draft from current values, then PATCH the
+  // identity fields on save. Editing the email drops any verification tag server-side
+  // (a changed address is unverified until re-checked).
+  const EDIT_FIELDS = [
+    { k: "salute", label: "Salutation", w: 90 }, { k: "first", label: "First name" }, { k: "last", label: "Last name" },
+    { k: "title", label: "Title", full: true }, { k: "company", label: "Company", full: true },
+    { k: "email", label: "Email", full: true }, { k: "linkedin", label: "LinkedIn URL", full: true },
+    { k: "phone", label: "Phone" }, { k: "city", label: "City" }, { k: "state", label: "State", w: 90 },
+  ];
+  const startEdit = () => {
+    setEdit(Object.fromEntries(EDIT_FIELDS.map(f => [f.k, data[f.k] || ""])));
+    setEditing(true);
+  };
+  const saveEdit = () => {
+    const payload = {};
+    for (const f of EDIT_FIELDS) {
+      const v = (edit[f.k] || "").trim();
+      if (v !== (data[f.k] || "")) payload[f.k] = v;
+    }
+    if (Object.keys(payload).length === 0) { setEditing(false); return; }
+    window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+      .then(() => { setEditing(false); load(); onUpdate?.(); });
   };
   const generateDraft = () => {
     setDrafting(true); setDraftResult(null);
@@ -581,7 +696,26 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
       <div className={embedded ? "" : "drawer-body"} style={bodyStyle}>
         {/* Contact info */}
         <div className="ds-section">
-          <div className="ds-label"><TIcon d={TI.building} size={12} /> Contact</div>
+          <div className="ds-label">
+            <TIcon d={TI.building} size={12} /> Contact
+            {!editing && <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={startEdit}><TIcon d={TI.pen} size={11} /> Edit</button>}
+          </div>
+          {editing ? (
+            <div className="info-card" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {EDIT_FIELDS.map(f => (
+                <div key={f.k} style={{ gridColumn: f.full ? "1 / -1" : "auto", display: "flex", flexDirection: "column", gap: 3 }}>
+                  <label style={{ fontSize: 10.5, color: "var(--text-mute)", letterSpacing: ".04em" }}>{f.label}</label>
+                  <input className="inp" value={edit[f.k] || ""} onChange={e => setEdit(prev => ({ ...prev, [f.k]: e.target.value }))}
+                    style={{ background: "var(--panel-2)", border: "1px solid var(--border)", borderRadius: 4, padding: "5px 8px", color: "var(--text)", fontSize: 12 }} />
+                </div>
+              ))}
+              <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, marginTop: 2 }}>
+                <button className="btn primary sm" onClick={saveEdit}><TIcon d={TI.check} size={12} /> Save</button>
+                <button className="btn ghost sm" onClick={() => setEditing(false)}>Cancel</button>
+                <span style={{ fontSize: 11, color: "var(--text-mute)", alignSelf: "center", marginLeft: "auto" }}>Changing the email marks it unverified until re-checked.</span>
+              </div>
+            </div>
+          ) : (
           <div className="info-card">
             <div className="info-row">
               <span className="ik">Website</span>
@@ -646,11 +780,17 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
               <span />
             </div>
           </div>
+          )}
         </div>
         {/* Pipeline */}
         <div className="ds-section">
           <div className="ds-label"><TIcon d={TI.trend} size={12} /> Pipeline stage</div>
           <PipelineTrack contact={data} onChange={updateStatus} />
+        </div>
+        {/* LinkedIn connection — separate axis from the pipeline above */}
+        <div className="ds-section">
+          <div className="ds-label"><TIcon d={TI.ext} size={12} /> LinkedIn connection</div>
+          <LinkedInControl status={data.linkedinStatus} onChange={updateLinkedIn} />
         </div>
         {/* Outreach sequence (per-contact cadence; every step is an approved draft) */}
         <div className="ds-section">

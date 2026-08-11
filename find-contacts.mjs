@@ -36,8 +36,14 @@ export function mapHunterFind(json) {
   const score = Number.isFinite(d.score) ? d.score : null;
   return email ? { email, score } : null;
 }
-async function hunterFind(company, first, last, key) {
-  const params = new URLSearchParams({ company, first_name: first, last_name: last, api_key: key });
+async function hunterFind(company, first, last, key, domain) {
+  // Hunter's Email Finder resolves a company NAME to a domain internally, which is
+  // unreliable for small/boutique firms. When we already know the domain (e.g. from
+  // a recruiter's existing but unverified address), pass it directly — far higher
+  // hit rate. Fall back to the company name when no domain is available.
+  const params = new URLSearchParams({ first_name: first, last_name: last, api_key: key });
+  if ((domain || '').trim()) params.set('domain', domain.trim());
+  else params.set('company', company);
   const res = await fetch(`https://api.hunter.io/v2/email-finder?${params.toString()}`, { signal: AbortSignal.timeout(25_000) });
   if (res.status === 429) throw new Error('Hunter rate limit (429) — wait and re-run');
   const j = await res.json();
@@ -92,8 +98,8 @@ export function planFindBudget({ needed, limit = 0, creditsLeft = null, defaultL
 //   { found:false }                                 — Hunter had nothing
 //   { found:true, email, score, verify:null, bad }  — found, but did not verify (do NOT write)
 //   { found:true, email, score, verify:{...} }      — found AND verified (write this)
-export async function findAndVerify(company, first, last, hkey, mkey) {
-  const cand = await hunterFind(company, first, last, hkey);
+export async function findAndVerify(company, first, last, hkey, mkey, domain) {
+  const cand = await hunterFind(company, first, last, hkey, domain);
   if (!cand) return { found: false };
   const verdict = await mvVerify(cand.email, mkey);
   if (!verdict || verdict.state === 'invalid') {

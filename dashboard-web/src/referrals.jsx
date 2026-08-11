@@ -93,6 +93,7 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
   const [form, setForm] = useState({ name: '', how: '', where: '', target: '', notes: '' });
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [subtab, setSubtab] = useState('stage1');
+  const [drawerId, setDrawerId] = useState(null);   // open contact drawer
   const [linkedin, setLinkedin] = useState({ count: 0, importedAt: null });
   const [reconciling, setReconciling] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -286,64 +287,50 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
                   : 'No matches for your search.'}
           </div>
         ) : (
-          <table className="ref-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table className="tbl ssi-tbl" style={{ width: '100%' }}>
             <thead>
-              <tr style={{ textAlign: 'left', color: 'var(--text-mute)', fontFamily: 'var(--mono)', fontSize: 11 }}>
-                <th style={refTh}>Name</th>
-                <th style={refTh}>How you know them</th>
-                <th style={refTh}>Where now / reach</th>
-                <th style={refTh}>Target</th>
-                <th style={refTh}>Status</th>
-                <th style={refTh}>Last touch</th>
-                <th style={refTh}>Notes</th>
-                <th style={refTh}></th>
+              <tr>
+                <th style={{ width: 210 }}>Name</th>
+                <th style={{ width: 220 }}>How you know them</th>
+                <th style={{ width: 200 }}>Where now / reach</th>
+                <th style={{ width: 180 }}>Target</th>
+                <th style={{ width: 150 }}>Status</th>
+                <th style={{ width: 110 }}>Last touch</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(row => (
-                <tr key={row.id} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={refTd}>
-                    <input className="ref-cell" aria-label="Name" defaultValue={row.name} placeholder="-"
-                      onBlur={e => e.target.value !== row.name && patch(row.id, { name: e.target.value })} />
-                  </td>
-                  <td style={refTd}>
-                    <input className="ref-cell" aria-label="How you know them" defaultValue={row.how} placeholder="-"
-                      onBlur={e => e.target.value !== row.how && patch(row.id, { how: e.target.value })} />
-                  </td>
-                  <td style={refTd}>
-                    <input className="ref-cell" aria-label="Where they are now" defaultValue={row.where} placeholder="-"
-                      onBlur={e => e.target.value !== row.where && patch(row.id, { where: e.target.value })} />
-                  </td>
-                  <td style={refTd}>
-                    <input className="ref-cell" aria-label="Target" defaultValue={row.target} placeholder="-"
-                      onBlur={e => e.target.value !== row.target && patch(row.id, { target: e.target.value })} />
-                  </td>
-                  <td style={refTd}>
-                    <select className="sel" value={row.status}
-                      style={{ color: REF_STATUS_COLORS[row.status] || 'var(--text)', fontWeight: 600 }}
-                      onChange={e => patch(row.id, { status: e.target.value })}>
-                      {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </td>
-                  <td style={refTd}>
-                    <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                      <span className="mono dim" style={{ fontSize: 11, minWidth: 68 }}>{row.lastTouch || '-'}</span>
-                      <button className="btn ghost sm" title="Log a touch today" onClick={() => logToday(row)}>Today</button>
+                <tr key={row.id} className={drawerId === row.id ? 'selected' : ''} tabIndex={0}
+                  onKeyDown={window.kbdActivate(() => setDrawerId(row.id))} onClick={() => setDrawerId(row.id)}>
+                  <td>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+                      <div className="mono-av sm" style={{ borderColor: REF_STATUS_COLORS[row.status] || 'var(--border)', color: REF_STATUS_COLORS[row.status] || 'var(--text-dim)', flex: 'none' }}>{refInitials(row.name)}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name || '(no name)'}</div>
+                      {row.stage === 'stage1' && <span title="Inside a company you are targeting" style={{ flex: 'none', fontSize: 9, fontWeight: 700, letterSpacing: '.4px', padding: '1px 5px', borderRadius: 4, background: 'rgba(34,197,94,0.16)', color: '#22c55e' }}>S1</span>}
                     </div>
                   </td>
-                  <td style={refTd}>
-                    <input className="ref-cell" aria-label="Notes" defaultValue={row.notes} placeholder="-"
-                      onBlur={e => e.target.value !== row.notes && patch(row.id, { notes: e.target.value })} />
-                  </td>
-                  <td style={refTd}>
-                    <button className="btn ghost sm" title="Remove" onClick={() => remove(row)}>✕</button>
-                  </td>
+                  <td title={row.how || ''}><span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.how || '-'}</span></td>
+                  <td title={row.where || ''}><span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.where || '-'}</span></td>
+                  <td title={row.target || ''}><span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.target || '-'}</span></td>
+                  <td><span className="status-badge" style={{ color: REF_STATUS_COLORS[row.status] || 'var(--text)', borderColor: 'var(--border)', fontSize: 9.5, padding: '2px 7px' }}><span className="sb-dot" style={{ background: REF_STATUS_COLORS[row.status] || 'var(--text-mute)' }} />{row.status}</span></td>
+                  <td><span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: row.lastTouch ? 'var(--text-dim)' : 'var(--text-mute)' }}>{row.lastTouch || '-'}</span></td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {drawerId != null && (
+        <ReferralDrawer
+          row={rows.find(r => r.id === drawerId)}
+          statuses={statuses}
+          onClose={() => setDrawerId(null)}
+          onPatch={patch}
+          onLogToday={logToday}
+          onRemove={(r) => { remove(r); setDrawerId(null); }}
+        />
+      )}
 
       {/* Templates */}
       <div className="card padded-lg">
@@ -373,14 +360,147 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
   );
 };
 
-const refTh = { padding: '8px 10px', fontWeight: 600, whiteSpace: 'nowrap' };
-const refTd = { padding: '4px 10px', verticalAlign: 'middle' };
-
 function RefStat({ n, label, accent }) {
   return (
     <div className="col" style={{ gap: 2 }}>
       <div className="mono" style={{ fontSize: 22, fontWeight: 700, color: accent || 'var(--text)' }}>{n}</div>
       <div className="dim mono" style={{ fontSize: 11 }}>{label}</div>
+    </div>
+  );
+}
+
+// Exposed so the unified Contacts table (network.jsx) can open a referral in the
+// same drawer used inside the Referrals subtab.
+window.ReferralDrawer = ReferralDrawer;
+window.REF_STATUS_COLORS = REF_STATUS_COLORS;
+
+function refInitials(name) {
+  const parts = String(name || '').replace(/['"]/g, '').split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  return ((parts[0][0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+
+// ─── Contact drawer ───────────────────────────────────────────────────────────
+// Same slide-over chrome as the TA and Recruiter drawers, so a referral is a
+// clickable contact card like every other book. Referral-specific fields (how you
+// know them, their reach, the target you want in) instead of email/correspondence,
+// since this channel is warm-intro / template driven, not direct outreach.
+function ReferralDrawer({ row, statuses, onClose, onPatch, onLogToday, onRemove }) {
+  const open = !!row;
+  return (
+    <>
+      <div className={"drawer-backdrop" + (open ? " open" : "")} onClick={onClose}
+        style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }} />
+      <div className={"drawer" + (open ? " open" : "")} style={{ transform: open ? "translateX(0)" : "translateX(100%)" }}>
+        {open && <ReferralPanel row={row} statuses={statuses} onClose={onClose} onPatch={onPatch} onLogToday={onLogToday} onRemove={onRemove} />}
+      </div>
+    </>
+  );
+}
+
+function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onRemove }) {
+  const [editing, setEditing] = useState(false);
+  const [edit, setEdit] = useState({});
+  const FIELDS = [
+    { k: 'name', label: 'Name' },
+    { k: 'how', label: 'How you know them' },
+    { k: 'where', label: 'Where they are now / their reach' },
+    { k: 'target', label: 'Target company or role you want in' },
+    { k: 'notes', label: 'Notes', textarea: true },
+  ];
+  const startEdit = () => { setEdit(Object.fromEntries(FIELDS.map(f => [f.k, row[f.k] || '']))); setEditing(true); };
+  const saveEdit = () => {
+    const payload = {};
+    for (const f of FIELDS) { const v = (edit[f.k] || '').trim(); if (v !== (row[f.k] || '')) payload[f.k] = v; }
+    if (Object.keys(payload).length) onPatch(row.id, payload);
+    setEditing(false);
+  };
+  useEffect(() => {
+    const h = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [onClose]);
+
+  const color = REF_STATUS_COLORS[row.status] || 'var(--text)';
+  const inputStyle = { background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '5px 8px', color: 'var(--text)', fontSize: 12, width: '100%' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          {row.stage === 'stage1' && <span className="tag" style={{ background: 'rgba(34,197,94,0.16)', color: '#22c55e' }}>Stage 1 · warm path into a target</span>}
+          {row.stage === 'stage2' && <span className="tag">Stage 2 · warm referrer</span>}
+          <button className="icon-btn" onClick={onClose} style={{ marginLeft: 'auto' }}>✕</button>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <span className="mono-av" style={{ width: 44, height: 44, fontSize: 14, borderRadius: 10, borderColor: color, color }}>{refInitials(row.name)}</span>
+          <div style={{ minWidth: 0 }}>
+            <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>{row.name || '(no name)'}</h3>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>{row.where || 'reach not recorded'}</div>
+            <div style={{ fontSize: 12, color, marginTop: 3, fontWeight: 600 }}>{row.status}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="drawer-body" style={{ padding: 20, overflowY: 'auto', flex: 1 }}>
+        {/* Details */}
+        <div className="ds-section">
+          <div className="ds-label">
+            Details
+            {!editing && <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={startEdit}>Edit</button>}
+          </div>
+          {editing ? (
+            <div className="info-card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {FIELDS.map(f => (
+                <div key={f.k} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <label style={{ fontSize: 10.5, color: 'var(--text-mute)', letterSpacing: '.04em' }}>{f.label}</label>
+                  {f.textarea
+                    ? <textarea value={edit[f.k] || ''} onChange={e => setEdit(p => ({ ...p, [f.k]: e.target.value }))} rows={3} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
+                    : <input value={edit[f.k] || ''} onChange={e => setEdit(p => ({ ...p, [f.k]: e.target.value }))} style={inputStyle} />}
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                <button className="btn primary sm" onClick={saveEdit}>Save</button>
+                <button className="btn ghost sm" onClick={() => setEditing(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div className="info-card">
+              <div className="info-row"><span className="ik">How you know them</span><span className="iv">{row.how || '—'}</span><span /></div>
+              <div className="info-row"><span className="ik">Where now / reach</span><span className="iv">{row.where || '—'}</span><span /></div>
+              <div className="info-row"><span className="ik">Target</span><span className="iv">{row.target || '—'}</span><span /></div>
+              <div className="info-row"><span className="ik">Notes</span><span className="iv">{row.notes || '—'}</span><span /></div>
+            </div>
+          )}
+        </div>
+
+        {/* Status + touch */}
+        <div className="ds-section">
+          <div className="ds-label">Status</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            {statuses.map(s => {
+              const on = row.status === s;
+              const c = REF_STATUS_COLORS[s] || 'var(--text)';
+              return (
+                <button key={s} className="btn sm" onClick={() => onPatch(row.id, { status: s })}
+                  style={{ color: c, borderColor: on ? c : 'var(--border)', background: on ? `color-mix(in srgb, ${c} 14%, transparent)` : 'transparent', fontWeight: on ? 600 : 400 }}>
+                  {s}
+                </button>
+              );
+            })}
+          </div>
+          <div className="info-row">
+            <span className="ik">Last touch</span>
+            <span className="iv" style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{row.lastTouch || 'Never'}</span>
+            <button className="btn ghost sm" onClick={() => onLogToday(row)} title="Log a warm touch today (a reconnect or an ask both count)">Log touch today</button>
+          </div>
+        </div>
+
+        {/* Danger zone */}
+        <div className="ds-section">
+          <button className="btn ghost sm" style={{ color: 'var(--red)' }} onClick={() => onRemove(row)}>Remove from tracker</button>
+        </div>
+      </div>
     </div>
   );
 }

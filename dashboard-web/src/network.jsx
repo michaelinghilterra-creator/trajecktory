@@ -1,156 +1,218 @@
-// Network Module — the consolidated home for the three 1:1 contact channels.
-// Referrals, Recruiters, and TA Outreach are the same interaction model (a
-// contact list + a status ladder + AI-drafted messages), so they live under one
-// parent instead of three sibling top-level tabs. Ordered by warmth: Referrals
-// (your own network, highest-yield per the post-mortem) is first and the default.
-//
-// This is a thin shell — it renders a subtab bar and hands off to the existing
-// ReferralsTab / RecruitersTab / TargetTalentTab components unchanged. Recruiters
-// keeps its own internal subtabs, so on that subtab you'll see two rows of nav
-// (section + module); that's the accepted cost of grouping.
+// Contacts Module — the consolidated home for every 1:1 contact.
+// Referrals, TA Outreach, and Recruiters are the same interaction model (a contact
+// list + a status ladder + a detail drawer), so they live under one parent. The
+// default "All contacts" subtab is a single unified table across all three books
+// (type = Referral / TA / Recruiter), with per-type drawers; the three original
+// subtabs are kept as secondary views so each book's own tools survive (recruiter
+// analytics/activity, referral LinkedIn-import + warm-intro templates, reconcile).
 (function () {
+const { useState, useEffect, useMemo } = React;
 
 const NET_SUBTABS = [
+  { id: 'all',        label: 'All contacts' },
   { id: 'referrals',  label: 'Referrals' },
   { id: 'ta',         label: 'TA Outreach' },
   { id: 'recruiters', label: 'Recruiters' },
-  { id: 'highvalue',  label: 'High value' },
 ];
 
-const { useState: useStateHv, useEffect: useEffectHv, useMemo: useMemoHv } = React;
+// Per-type visual identity for the badge/avatar in the unified table.
+const TYPE_META = {
+  referral:  { label: 'Referral',  color: '#22c55e', rgb: '34,197,94' },
+  ta:        { label: 'TA',         color: '#22d3ee', rgb: '34,211,238' },
+  recruiter: { label: 'Recruiter',  color: '#a78bfa', rgb: '167,139,250' },
+};
 
-// High value — the directory of dual-channel contacts (a verified email AND a
-// LinkedIn handle), drawn from both the TA and recruiter books. These are the
-// contacts worth a two-channel multithread. Read-only directory with its own
-// search + source/status filters; the actual outreach happens in Follow-Ups →
-// High value. Backed by GET /api/network/high-value.
-function HighValueTab({ search, onOpen }) {
-  const [rows, setRows] = useStateHv(null);
-  const [err, setErr] = useStateHv(null);
-  const [q, setQ] = useStateHv('');
-  const [sourceFilter, setSourceFilter] = useStateHv('');   // '' | 'ta' | 'recruiter'
-  const [statusFilter, setStatusFilter] = useStateHv('');
+function uInitials(name) {
+  const p = String(name || '').replace(/['"]/g, '').split(/\s+/).filter(Boolean);
+  if (!p.length) return '?';
+  return ((p[0][0] || '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase();
+}
+function uToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
-  useEffectHv(() => {
-    fetch('/api/network/high-value').then(r => r.json())
-      .then(d => { if (d && d.error) setErr(d.error); else setRows(d.contacts || []); })
-      .catch(e => setErr(e.message));
-  }, []);
+// ── Unified "All contacts" table ──────────────────────────────────────────────
+function AllContactsView({ search }) {
+  const [ta, setTa] = useState(null);
+  const [rec, setRec] = useState(null);
+  const [ref, setRef] = useState(null);
+  const [refStatuses, setRefStatuses] = useState([]);
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [hvOnly, setHvOnly] = useState(false);
+  const [drawer, setDrawer] = useState(null);       // { type, id }
+  const [sortKey, setSortKey] = useState('name');
+  const [sortDir, setSortDir] = useState('asc');
 
-  const statuses = useMemoHv(() => {
-    const s = new Set((rows || []).map(r => r.status).filter(Boolean));
-    return [...s].sort();
-  }, [rows]);
+  const loadTa = () => fetch('/api/target-talent').then(r => r.json()).then(d => setTa(Array.isArray(d) ? d : [])).catch(() => setTa([]));
+  const loadRec = () => fetch('/api/recruiters').then(r => r.json()).then(d => setRec(Array.isArray(d) ? d : [])).catch(() => setRec([]));
+  const loadRef = () => fetch('/api/referrals').then(r => r.json()).then(d => { setRef(d.referrals || []); setRefStatuses(d.statuses || []); }).catch(() => setRef([]));
+  useEffect(() => { loadTa(); loadRec(); loadRef(); }, []);
 
-  const filtered = useMemoHv(() => {
-    let r = rows || [];
-    const term = `${q} ${search || ''}`.trim().toLowerCase();
-    if (sourceFilter) r = r.filter(x => x.source === sourceFilter);
-    if (statusFilter) r = r.filter(x => x.status === statusFilter);
-    if (term) r = r.filter(x => `${x.name} ${x.company} ${x.title} ${x.email}`.toLowerCase().includes(term));
-    return r;
-  }, [rows, q, search, sourceFilter, statusFilter]);
+  const rows = useMemo(() => {
+    const out = [];
+    for (const c of (ta || [])) {
+      if (c.status === 'Archived') continue;
+      out.push({ type: 'ta', id: c.id, name: `${c.first || ''} ${c.last || ''}`.trim(), role: c.title || '', org: c.company || '', status: c.status || '', hv: !!c.isHighValue, lastTouch: c.lastTouch || '' });
+    }
+    for (const c of (rec || [])) {
+      out.push({ type: 'recruiter', id: c.id, name: `${c.first || ''} ${c.last || ''}`.trim(), role: c.title || '', org: c.firm || '', status: c.status || '', hv: !!c.isHighValue, lastTouch: c.lastTouch || '' });
+    }
+    for (const c of (ref || [])) {
+      out.push({ type: 'referral', id: c.id, name: c.name || '', role: c.how || '', org: c.where || '', status: c.status || '', hv: false, lastTouch: c.lastTouch || '' });
+    }
+    return out;
+  }, [ta, rec, ref]);
 
-  if (err) return <div className="dim" style={{ padding: 28 }}>Could not load high-value contacts: {err}</div>;
-  if (!rows) return <div className="dim" style={{ padding: 28 }}>Loading high-value contacts…</div>;
+  const filtered = useMemo(() => {
+    let r = rows;
+    if (typeFilter !== 'all') r = r.filter(x => x.type === typeFilter);
+    if (hvOnly) r = r.filter(x => x.hv);
+    const q = (search || '').trim().toLowerCase();
+    if (q) r = r.filter(x => `${x.name} ${x.org} ${x.role} ${x.status}`.toLowerCase().includes(q));
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const val = x => sortKey === 'last' ? (x.lastTouch || '')
+      : sortKey === 'org' ? (x.org || '').toLowerCase()
+      : sortKey === 'type' ? x.type
+      : sortKey === 'status' ? (x.status || '').toLowerCase()
+      : sortKey === 'role' ? (x.role || '').toLowerCase()
+      : (x.name || '').toLowerCase();
+    return [...r].sort((a, b) => { const av = val(a), bv = val(b); if (av < bv) return -dir; if (av > bv) return dir; return (a.name || '').localeCompare(b.name || ''); });
+  }, [rows, typeFilter, hvOnly, search, sortKey, sortDir]);
 
-  const hrefOf = (li) => li ? (/^https?:/.test(li) ? li : `https://${li}`) : null;
-  const inputStyle = { fontSize: 13, padding: '6px 10px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' };
+  const counts = useMemo(() => ({
+    all: rows.length,
+    referral: rows.filter(x => x.type === 'referral').length,
+    ta: rows.filter(x => x.type === 'ta').length,
+    recruiter: rows.filter(x => x.type === 'recruiter').length,
+  }), [rows]);
+  const hvCount = useMemo(() => rows.filter(x => x.hv).length, [rows]);
+
+  // Referral drawer handlers (referrals have no single-GET endpoint, so the drawer
+  // gets the live row from `ref` state and edits go through the same PATCH/DELETE).
+  const patchRef = (id, updates) => {
+    setRef(prev => (prev || []).map(r => r.id === id ? { ...r, ...updates } : r));
+    window.tjkMutate(`/api/referrals/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) }).then(() => loadRef()).catch(() => loadRef());
+  };
+  const logTodayRef = (row) => { const u = { lastTouch: uToday() }; if (row.status === 'Not Asked') u.status = 'Catching Up'; patchRef(row.id, u); };
+  const removeRef = (row) => {
+    if (!window.confirm(`Remove ${row.name || 'this person'} from your referral tracker?`)) return;
+    window.tjkMutate(`/api/referrals/${row.id}`, { method: 'DELETE' }).then(() => { loadRef(); setDrawer(null); }).catch(() => loadRef());
+  };
+
+  const setSort = k => { if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir(k === 'last' ? 'desc' : 'asc'); } };
+
+  if (ta === null || rec === null || ref === null) return <div className="dim" style={{ padding: 28 }}>Loading contacts…</div>;
+
+  const cols = [
+    { k: 'name',   label: 'Name',            w: 220 },
+    { k: 'type',   label: 'Type',            w: 110 },
+    { k: 'role',   label: 'Role / how',      w: 200 },
+    { k: 'org',    label: 'Company / reach', w: 190 },
+    { k: 'status', label: 'Status',          w: 150 },
+    { k: 'last',   label: 'Last touch',      w: 110 },
+  ];
+  const CHIPS = [
+    { id: 'all', label: 'All' },
+    { id: 'referral', label: 'Referrals' },
+    { id: 'ta', label: 'TA' },
+    { id: 'recruiter', label: 'Recruiters' },
+  ];
+  const drawerRow = drawer && drawer.type === 'referral' ? (ref || []).find(r => r.id === drawer.id) : null;
 
   return (
-    <div style={{ padding: 24 }}>
-      <h2 style={{ margin: '0 0 2px' }}>High-value contacts</h2>
-      <p className="dim" style={{ fontSize: 13, marginTop: 4, marginBottom: 14 }}>
-        {filtered.length} of {rows.length} contact{rows.length === 1 ? '' : 's'} reachable BOTH ways (a verified
-        email and a LinkedIn handle), across your TA and recruiter books. Click a row to open the full contact card
-        (related applications, sequences, past comms, reply, AI drafts). Work them on both channels from
-        Follow-Ups → High value.
-      </p>
-
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, company, title, email…"
-          style={{ ...inputStyle, flex: '1 1 260px', minWidth: 200 }} />
-        <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={inputStyle}>
-          <option value="">All sources</option>
-          <option value="ta">TA</option>
-          <option value="recruiter">Recruiters</option>
-        </select>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={inputStyle}>
-          <option value="">All statuses</option>
-          {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+    <div className="fade-up" style={{ padding: '6px 0' }}>
+      <div className="ta-head">
+        <div>
+          <h1>All contacts</h1>
+          <div className="sub">{filtered.length} of {rows.length} across referrals, TA, and recruiters &middot; click a row for the full card</div>
+        </div>
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="card dim">
-          {rows.length === 0
-            ? 'No dual-channel contacts yet. A contact appears here once it has both a verified email and a LinkedIn handle on file.'
-            : 'No contacts match these filters.'}
+      <div className="card padded-lg">
+        <div className="ta-filters" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          {CHIPS.map(ch => {
+            const on = typeFilter === ch.id;
+            return (
+              <span key={ch.id} onClick={() => setTypeFilter(ch.id)} style={{
+                cursor: 'pointer', padding: '4px 11px', borderRadius: 5, fontSize: 11.5, fontWeight: 600,
+                background: on ? 'var(--accent)' : 'var(--panel-2)', color: on ? '#15101f' : 'var(--text-dim)',
+                border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+              }}>{ch.label} <span style={{ opacity: 0.7, marginLeft: 2 }}>{counts[ch.id]}</span></span>
+            );
+          })}
+          <button className="btn ghost sm" onClick={() => setHvOnly(v => !v)}
+            title="High value = reachable both ways (a verified email and a LinkedIn handle)."
+            style={hvOnly ? { color: 'var(--yellow)', borderColor: 'var(--yellow)' } : undefined}>
+            ★ High value <span className="mono" style={{ opacity: 0.7, marginLeft: 2 }}>{hvCount}</span>
+          </button>
+          {(typeFilter !== 'all' || hvOnly) && (
+            <button className="btn ghost sm" onClick={() => { setTypeFilter('all'); setHvOnly(false); }}>Clear</button>
+          )}
+          <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 10.5, color: 'var(--text-mute)' }}>{filtered.length} shown</span>
         </div>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table className="tbl" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+
+        <div className="tbl-wrap" style={{ maxHeight: 'calc(100vh - 320px)', border: 'none', borderRadius: 0, background: 'transparent' }}>
+          <table className="tbl ssi-tbl">
             <thead>
-              <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
-                <th style={{ padding: '8px 10px' }}>Name</th>
-                <th style={{ padding: '8px 10px' }}>Title</th>
-                <th style={{ padding: '8px 10px' }}>Company</th>
-                <th style={{ padding: '8px 10px' }}>Source</th>
-                <th style={{ padding: '8px 10px' }}>Email</th>
-                <th style={{ padding: '8px 10px' }}>Status</th>
-                <th style={{ padding: '8px 10px' }}>Channels</th>
-                <th style={{ padding: '8px 10px' }}></th>
+              <tr>
+                {cols.map(c => (
+                  <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? 'sorted' : ''} role="button" tabIndex={0}
+                    onClick={() => setSort(c.k)} onKeyDown={window.kbdActivate(() => setSort(c.k))}>
+                    {c.label}<span className="sort-ind">{sortKey === c.k ? (sortDir === 'asc' ? '↑' : '↓') : '·'}</span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
+              {filtered.length === 0 && (
+                <tr><td colSpan={cols.length}><div className="no-data" style={{ padding: 40, textAlign: 'center' }}>No contacts match these filters.</div></td></tr>
+              )}
               {filtered.map(c => {
-                const href = hrefOf(c.linkedin);
-                const mailto = c.email ? `mailto:${c.email}` : null;
-                const loc = [c.city, c.state].filter(Boolean).join(', ');
+                const tm = TYPE_META[c.type];
                 return (
-                  <tr key={`${c.source}:${c.id}`} onClick={() => onOpen && onOpen(c.source, c.id)}
-                    style={{ borderBottom: '1px solid var(--border)', cursor: onOpen ? 'pointer' : 'default' }}
-                    title="Open the full contact card">
-                    <td style={{ padding: '8px 10px', fontWeight: 600 }}>
-                      {c.name || '(no name)'}
-                      {c.isPrincipal ? <span title="Hiring principal — the decision-maker you'd report to." style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: '.3px', padding: '1px 5px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)', verticalAlign: 'middle' }}>PRINCIPAL</span> : null}
-                      {loc ? <div className="dim" style={{ fontWeight: 400, fontSize: 11 }}>{loc}</div> : null}
+                  <tr key={`${c.type}:${c.id}`} className={drawer && drawer.type === c.type && drawer.id === c.id ? 'selected' : ''}
+                    tabIndex={0} onKeyDown={window.kbdActivate(() => setDrawer({ type: c.type, id: c.id }))} onClick={() => setDrawer({ type: c.type, id: c.id })}>
+                    <td>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
+                        <div className="mono-av sm" style={{ borderColor: tm.color, color: tm.color, flex: 'none' }}>{uInitials(c.name)}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name || '(no name)'}</div>
+                        {c.hv && <span title="High value: reachable both ways (verified email + LinkedIn)." style={{ flex: 'none', color: 'var(--yellow)', fontSize: 12 }}>★</span>}
+                      </div>
                     </td>
-                    <td style={{ padding: '8px 10px' }}>{c.title || '-'}</td>
-                    <td style={{ padding: '8px 10px' }}>{c.company || '-'}</td>
-                    <td style={{ padding: '8px 10px' }}><span className="mono dim">{c.source}</span></td>
-                    <td style={{ padding: '8px 10px' }}>
-                      {mailto ? <a href={mailto} className="mono" style={{ color: 'var(--accent)' }} onClick={e => e.stopPropagation()}>{c.email}</a> : '-'}
-                      {c.emailState === 'risky' ? <span className="dim" title="Catch-all domain: usually deliverable."> · risky</span> : null}
+                    <td>
+                      <span className="status-badge" style={{ color: tm.color, borderColor: `rgba(${tm.rgb},0.42)`, background: `rgba(${tm.rgb},0.12)`, fontSize: 9.5, padding: '2px 7px' }}>{tm.label}</span>
                     </td>
-                    <td style={{ padding: '8px 10px' }}>{c.status || '-'}</td>
-                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
-                      <span title="Verified email on file" style={{ marginRight: 6 }}>✉</span>
-                      {href ? <a href={href} target="_blank" rel="noreferrer" title="Open LinkedIn profile" style={{ color: 'var(--accent)' }} onClick={e => e.stopPropagation()}>in ↗</a> : null}
-                    </td>
-                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
-                      {onOpen ? <button className="btn ghost sm" onClick={e => { e.stopPropagation(); onOpen(c.source, c.id); }}>Open card ↗</button> : null}
-                    </td>
+                    <td title={c.role || ''}><span style={{ fontSize: 12, color: 'var(--text-dim)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.role || '-'}</span></td>
+                    <td title={c.org || ''}><span style={{ fontWeight: 600, fontSize: 12, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.org || '-'}</span></td>
+                    <td><span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{c.status || '-'}</span></td>
+                    <td><span style={{ fontFamily: 'var(--mono)', fontSize: 10.5, color: c.lastTouch ? 'var(--text-dim)' : 'var(--text-mute)' }}>{c.lastTouch || '-'}</span></td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Per-type drawers — reuse each book's existing detail drawer. */}
+      {drawer && drawer.type === 'ta' && window.TargetTalentDrawer && (
+        <window.TargetTalentDrawer id={drawer.id} onClose={() => setDrawer(null)} onUpdate={loadTa} />
+      )}
+      {drawer && drawer.type === 'recruiter' && window.RecruiterDrawer && (
+        <window.RecruiterDrawer id={drawer.id} onClose={() => setDrawer(null)} onUpdate={loadRec} />
+      )}
+      {drawer && drawer.type === 'referral' && drawerRow && window.ReferralDrawer && (
+        <window.ReferralDrawer row={drawerRow} statuses={refStatuses} onClose={() => setDrawer(null)}
+          onPatch={patchRef} onLogToday={logTodayRef} onRemove={removeRef} />
       )}
     </div>
   );
 }
 
 window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, onTaOpenConsumed, pendingRecruiterOpen, onRecruiterOpenConsumed, openTaContact, openRecruiter, toast } = {}) {
-  const active = view || 'referrals';
-  // A High value row is a TA or recruiter record; clicking it opens that book's
-  // existing full drawer (related apps, sequence/campaign, past comms, reply, AI
-  // drafts), so high-value contacts get full parity with no duplicate drawer.
-  const openContact = (source, id) => {
-    if (source === 'recruiter') { openRecruiter && openRecruiter(id); }
-    else { openTaContact && openTaContact(id); }
-  };
+  // Fall back to the unified All view for an unknown/stale saved view.
+  const active = NET_SUBTABS.some(s => s.id === view) ? view : 'all';
   return (
     <div className="col" style={{ gap: 0 }}>
       <div className="subtabs">
@@ -161,6 +223,7 @@ window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, 
         ))}
       </div>
 
+      {active === 'all'        && <AllContactsView search={search} />}
       {active === 'referrals'  && window.ReferralsTab && <window.ReferralsTab search={search} />}
       {active === 'recruiters' && window.RecruitersTab && <window.RecruitersTab search={search} initialOpenId={pendingRecruiterOpen} onInitialOpenConsumed={onRecruiterOpenConsumed} />}
       {active === 'ta'         && window.TargetTalentTab && (
@@ -170,7 +233,6 @@ window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, 
           search={search}
         />
       )}
-      {active === 'highvalue'  && <HighValueTab search={search} onOpen={openContact} />}
     </div>
   );
 };

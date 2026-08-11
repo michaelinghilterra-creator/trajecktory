@@ -65,6 +65,12 @@ export const RECRUITER_CORR_DIR = path.join(DATA_DIR, 'recruiter-correspondence'
 export const REFERRALS_MD = path.join(DATA_DIR, 'referrals.md');
 export const TARGET_TALENT_MD = path.join(DATA_DIR, 'target-talent.md');
 export const TT_CORR_DIR = path.join(DATA_DIR, 'target-talent-correspondence');
+// LinkedIn connection state per TA contact, keyed by contact id. A SIDECAR (not a
+// column in target-talent.md) on purpose: LinkedIn accept/pending is orthogonal to
+// the outreach pipeline, and adding a markdown column to that table is the exact
+// index-drift hazard documented in AGENTS.md. Same sidecar pattern as
+// tt-new-state.json / linkedin-connects.json. Gitignored personal data under DATA_DIR.
+export const TT_LINKEDIN_PATH = path.join(DATA_DIR, 'tt-linkedin.json');
 export const LINKEDIN_SSI_DIR = path.join(DATA_DIR, 'linkedin-ssi');
 
 // "Interview" tab: the per-company prep folders (and their .run.md board
