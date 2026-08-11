@@ -1,5 +1,6 @@
 import express from 'express';
 import fs from 'fs';
+import path from 'path';
 import { ROOT_DIR, RECRUITERS_MD } from '../config.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine, appendRecruiterRows, REC_HEADER, RECRUITER_STATUSES } from '../lib/recruiters.mjs';
@@ -11,7 +12,7 @@ import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
 import { pauseSequence } from '../lib/sequences.mjs';
 import { isHighValueContact } from '../lib/followups.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
-import { findAndVerify, hunterSearchesLeft, planFindBudget, DEFAULT_FIND_LIMIT } from '../../../find-contacts.mjs';
+import { findAndVerify, hunterSearchesLeft } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 
 export const router = express.Router();
@@ -82,9 +83,17 @@ router.get('/api/recruiters/:id', (req, res) => {
 // a verified address (recruiters ship with unverified emails, which is where the
 // bounces come from). Runs the same Hunter Email Finder → MillionVerifier pipeline
 // as TA Outreach and writes ONLY a verified address. Optional { ids } targets
-// specific recruiters (per-contact "Find email"); otherwise it sweeps up to a
-// budget-capped batch. Mirrors /api/tt-reconcile/find-emails.
+// specific recruiters (per-contact "Find email"); otherwise it sweeps EVERYONE who
+// needs an address in one run (no per-run cap), bounded only by remaining Hunter
+// credits when that balance is readable. Mirrors /api/tt-reconcile/find-emails.
 const REC_SENDABLE = new Set(['ok', 'valid', 'risky', 'catch_all', 'catch-all', 'accept_all', 'deliverable']);
+// Records the last date each recruiter's address was searched (found or not). Only
+// matters as a fairness fallback if credits ever cap a sweep below the number
+// needing one — then the oldest-attempted go first so no one is starved.
+const REC_ATTEMPTS_PATH = path.join(path.dirname(RECRUITERS_MD), 'recruiter-email-attempts.json');
+function readAttempts() { try { const j = JSON.parse(fs.readFileSync(REC_ATTEMPTS_PATH, 'utf8')); return (j && typeof j === 'object') ? j : {}; } catch { return {}; } }
+function writeAttempts(m) { try { fs.writeFileSync(REC_ATTEMPTS_PATH, JSON.stringify(m, null, 2)); } catch { /* best-effort */ } }
+
 router.post('/api/recruiters/find-emails', async (req, res) => {
   try {
     const hkey = loadEnvKey('HUNTER_API_KEY');
@@ -99,10 +108,20 @@ router.post('/api/recruiters/find-emails', async (req, res) => {
       r.first && r.last && r.firm && !REC_SENDABLE.has((r.verified?.state || '').toLowerCase()) &&
       (!idSet || idSet.has(r.id)));
 
+    // Rotate: on a sweep (no explicit ids), do the least-recently-attempted first
+    // so every recruiter gets a turn before any is re-tried. Explicit ids (a single
+    // "Find email" click) always run regardless.
+    const attempts = readAttempts();
+    if (!idSet) rows.sort((a, b) => String(attempts[a.id] || '').localeCompare(String(attempts[b.id] || '')) || (a.id - b.id));
+
+    // No per-run cap by default: process everyone who needs an address (or an
+    // explicit `limit` if one is passed), bounded only by remaining credits when
+    // that balance can be read.
     const creditsLeft = await hunterSearchesLeft(hkey);
-    const wanted = idSet ? rows.length : (Number.isFinite(limit) && limit > 0 ? limit : DEFAULT_FIND_LIMIT);
-    const cap = planFindBudget({ needed: rows.length, limit: wanted, creditsLeft });
+    const wanted = Number.isFinite(limit) && limit > 0 ? limit : rows.length;
+    const cap = Number.isFinite(creditsLeft) ? Math.min(wanted, creditsLeft) : wanted;
     const toRun = rows.slice(0, cap);
+    const today = new Date().toISOString().slice(0, 10);
 
     // Domain hint: recruiters here usually already carry an unverified/bounced
     // address whose DOMAIN is the real firm domain (the boutique-firm names Hunter
@@ -127,7 +146,9 @@ router.post('/api/recruiters/find-emails', async (req, res) => {
       } catch (e) {
         results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: null, state: 'error', error: e.message });
       }
+      attempts[r.id] = today;   // stamp so a credit-limited sweep rotates fairly
     }
+    writeAttempts(attempts);
     res.json({
       ok: true, checked: toRun.length, written: results.filter(x => x.email).length,
       needing: rows.length, skippedForBudget: rows.length - toRun.length,
