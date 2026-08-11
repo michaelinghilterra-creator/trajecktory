@@ -18,6 +18,46 @@ const TT_STATUS = [
 const TT_STATUS_MAP = Object.fromEntries(TT_STATUS.map(s => [s.id, s]));
 const TT_PIPELINE = TT_STATUS.filter(s => s.pipeline);
 
+// ── LinkedIn connection axis ──────────────────────────────────────────────────
+// SEPARATE from the outreach pipeline above. The pipeline tracks how far the
+// CONVERSATION has progressed; this tracks whether they accepted your LinkedIn
+// invite — a different question (someone can accept while the conversation is
+// still at "Sent, no reply"). LinkedIn-brand blue for the connected state, so it
+// never reads as the pipeline's green "Connected". Stored server-side in a
+// sidecar (server/lib/tt-linkedin.mjs), not in the contact row.
+const TT_LINKEDIN = [
+  { id: "Not Connected",  short: "Not connected",  color: "var(--text-mute)", rgb: "113,113,122" },
+  { id: "Invite Pending", short: "Invite pending", color: "var(--yellow)",    rgb: "234,179,8"   },
+  { id: "Connected",      short: "Connected",      color: "var(--blue)",      rgb: "96,165,250"  },
+];
+const TT_LINKEDIN_MAP = Object.fromEntries(TT_LINKEDIN.map(s => [s.id, s]));
+const TT_LINKEDIN_RANK = Object.fromEntries(TT_LINKEDIN.map((s, i) => [s.id, i]));
+
+function LinkedInBadge({ status, size = "md" }) {
+  const m = TT_LINKEDIN_MAP[status] || TT_LINKEDIN_MAP["Not Connected"];
+  const sm = size === "sm";
+  const connected = m.id !== "Not Connected";
+  return React.createElement("span", {
+    className: "status-badge",
+    title: m.id === "Connected" ? "You're connected on LinkedIn"
+      : m.id === "Invite Pending" ? "Invite sent, not yet accepted"
+      : "No LinkedIn connection",
+    style: {
+      color: m.color,
+      borderColor: `rgba(${m.rgb},0.42)`,
+      background: `rgba(${m.rgb},0.12)`,
+      fontSize: sm ? 9.5 : 10.5,
+      padding: sm ? "2px 7px" : "3px 9px",
+    }
+  },
+    React.createElement("span", {
+      className: "sb-dot",
+      style: { background: m.color, boxShadow: connected ? `0 0 6px ${m.color}` : "none" }
+    }),
+    m.short
+  );
+}
+
 // ── Icons (stroke paths, 24x24 viewBox) ──────────────────────────────────────
 // Canonical paths in shared.jsx (window.ICON). Local TI alias preserves call sites.
 const TI = window.ICON;
@@ -164,6 +204,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
       case "company":  return (c.company || "").toLowerCase();
       case "location": return `${c.state || ""} ${c.city || ""}`.toLowerCase();
       case "status":   return (TT_STATUS_MAP[c.status] || { stage: -2 }).stage;
+      case "linkedin": return TT_LINKEDIN_RANK[c.linkedinStatus] ?? 0;
       case "last":     return c.lastTouch || "";
       default:         return "";
     }
@@ -213,6 +254,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
     { k: "company",  label: "Company",    w: 180 },
     { k: "location", label: "Location",   w: 140 },
     { k: "status",   label: "Status",     w: 150 },
+    { k: "linkedin", label: "LinkedIn",   w: 130 },
     { k: "last",     label: "Last touch", w: 110 },
   ];
 
@@ -306,6 +348,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
                       <span style={{ fontSize: 12, color: loc ? "var(--text-dim)" : "var(--text-mute)" }} title={loc || "No location recorded for this contact"} aria-label={loc || "No location recorded"}>{loc || "-"}</span>
                     </td>
                     <td><StatusBadge status={c.status} size="sm" /></td>
+                    <td><LinkedInBadge status={c.linkedinStatus} size="sm" /></td>
                     <td>
                       <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: c.lastTouch ? "var(--text-dim)" : "var(--text-mute)" }} title={c.lastTouch ? relTouch(c.lastTouch) : "Never contacted"} aria-label={c.lastTouch ? relTouch(c.lastTouch) : "Never contacted"}>{c.lastTouch ? relTouch(c.lastTouch) : "-"}</span>
                     </td>
@@ -362,6 +405,40 @@ function CopyBtn({ value }) {
     <button className={"copy-btn" + (done ? " done" : "")} onClick={copy}>
       <TIcon d={done ? TI.check : TI.copy} size={11} />{done ? "Copied" : "Copy"}
     </button>
+  );
+}
+
+// LinkedIn connection selector — three-state segmented control, its own axis
+// separate from the outreach pipeline. The active state is tinted with the same
+// palette as LinkedInBadge so the control and the table badge always agree.
+function LinkedInControl({ status, onChange }) {
+  const cur = status || "Not Connected";
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 6 }}>
+        {TT_LINKEDIN.map(s => {
+          const on = cur === s.id;
+          return (
+            <button key={s.id} className="btn sm" onClick={() => onChange(s.id)}
+              title={s.id === "Connected" ? "They accepted your invite — you're connected"
+                : s.id === "Invite Pending" ? "Invite sent, waiting on them to accept"
+                : "No LinkedIn connection yet"}
+              style={{
+                flex: 1,
+                color: s.color,
+                borderColor: on ? s.color : "var(--border)",
+                background: on ? `rgba(${s.rgb},0.14)` : "transparent",
+                fontWeight: on ? 600 : 400,
+              }}>
+              {s.short}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 6 }}>
+        Did they accept your LinkedIn invite? Separate from the pipeline stage above. Sending an invite from the Connect queue sets this to Invite Pending automatically.
+      </div>
+    </div>
   );
 }
 
@@ -505,6 +582,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
 
   const updateStatus = status => {
     window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })
+      .then(() => { load(); onUpdate?.(); });
+  };
+  const updateLinkedIn = linkedinStatus => {
+    window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkedinStatus }) })
       .then(() => { load(); onUpdate?.(); });
   };
   const saveNotes = () => {
@@ -651,6 +732,11 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
         <div className="ds-section">
           <div className="ds-label"><TIcon d={TI.trend} size={12} /> Pipeline stage</div>
           <PipelineTrack contact={data} onChange={updateStatus} />
+        </div>
+        {/* LinkedIn connection — separate axis from the pipeline above */}
+        <div className="ds-section">
+          <div className="ds-label"><TIcon d={TI.ext} size={12} /> LinkedIn connection</div>
+          <LinkedInControl status={data.linkedinStatus} onChange={updateLinkedIn} />
         </div>
         {/* Outreach sequence (per-contact cadence; every step is an approved draft) */}
         <div className="ds-section">

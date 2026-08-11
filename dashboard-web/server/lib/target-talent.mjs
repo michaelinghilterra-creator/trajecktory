@@ -4,6 +4,7 @@ import { TARGET_TALENT_MD, TT_CORR_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { TALENT_STATUS_LABELS, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { parseVerifyTag } from '../../../lib/email-verify.mjs';
+import { readLinkedInMap } from './tt-linkedin.mjs';
 
 // Derived from templates/states.yml (talent_states) rather than hardcoded here.
 // The previous local array is the exact drift the recruiter side already fixed:
@@ -15,6 +16,10 @@ const TT_STATUSES = TALENT_STATUS_LABELS;
 function parseTargetTalentMd() {
   if (!fs.existsSync(TARGET_TALENT_MD)) return [];
   const text = fs.readFileSync(TARGET_TALENT_MD, 'utf8');
+  // LinkedIn connection state lives in a sidecar keyed by id. Read it once here
+  // and attach per-row, so every consumer (list, single, by-company) sees the
+  // same `linkedinStatus` without each re-reading the file.
+  const liMap = readLinkedInMap();
   const rows = [];
   for (const line of text.split('\n')) {
     if (!line.startsWith('| ')) continue;
@@ -55,6 +60,9 @@ function parseTargetTalentMd() {
       // without grepping notes themselves.
       isPrincipal: /\[principal\]/i.test(parts[15] || ''),
       verified,  // { state, source, date, score, address, hadTag }
+      // LinkedIn connection axis, separate from `status` (the outreach pipeline).
+      // Default 'Not Connected' when the sidecar has no entry for this id.
+      linkedinStatus: (liMap[String(id)]?.state) || 'Not Connected',
       raw: line,
     });
   }

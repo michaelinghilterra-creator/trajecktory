@@ -490,6 +490,7 @@ for (const suite of [
   'tests/hunter-budget.test.mjs',
   'tests/scan-summary.test.mjs',
   'tests/tt-reconcile.test.mjs',
+  'tests/tt-linkedin.test.mjs',
   'tests/connect-queue.test.mjs',
   'tests/email-queue.test.mjs',
   'tests/both-queue.test.mjs',
