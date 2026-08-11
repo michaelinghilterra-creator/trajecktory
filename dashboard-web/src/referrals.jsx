@@ -369,6 +369,11 @@ function RefStat({ n, label, accent }) {
   );
 }
 
+// Exposed so the unified Contacts table (network.jsx) can open a referral in the
+// same drawer used inside the Referrals subtab.
+window.ReferralDrawer = ReferralDrawer;
+window.REF_STATUS_COLORS = REF_STATUS_COLORS;
+
 function refInitials(name) {
   const parts = String(name || '').replace(/['"]/g, '').split(/\s+/).filter(Boolean);
   if (!parts.length) return '?';
