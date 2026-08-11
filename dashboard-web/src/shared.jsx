@@ -106,6 +106,23 @@ window.safeHref = function safeHref(u) {
   return (lc.startsWith('http://') || lc.startsWith('https://') || lc.startsWith('mailto:')) ? s : '#';
 };
 
+// Where "Open JD" should point for an application row. A real web posting opens
+// live; a self-sourced role whose url is a local: path (or the $file garbage a
+// broken batch wrote) has no live URL, so we fall back to its in-repo JD snapshot
+// rendered at /jd-preview/. Returns null when neither exists — callers MUST hide
+// the button then, because the old code fed the local: url through safeHref, got
+// '#', and a target="_blank" anchor on '#' opened a whole new dashboard tab.
+window.jdHref = function jdHref(app) {
+  if (!app) return null;
+  const web = window.safeHref(app.url);
+  if (web !== '#') return web;
+  if (app.jdSnapshot) {
+    const f = String(app.jdSnapshot).split(/[\\/]/).pop();
+    if (f && f.endsWith('.md')) return `/jd-preview/${encodeURIComponent(f)}`;
+  }
+  return null;
+};
+
 window.outputHref = function outputHref(p) {
   if (!p) return null;
   const f = String(p).split(/[\\/]/).pop();
@@ -255,7 +272,7 @@ window.PostingPanel = function PostingPanel({ app }) {
         <div className="cs-callout-label">No saved copy of this posting</div>
         <div className="cs-callout-body" style={{ lineHeight: 1.6 }}>
           This role was evaluated before trajecktory started keeping the posting text, so only the link survives.
-          {app.url ? <> The original is <a href={window.safeHref(app.url)} target="_blank" rel="noreferrer">still worth a try</a>, though postings usually come down once they are filled.</> : null}
+          {window.jdHref(app) ? <> The original is <a href={window.jdHref(app)} target="_blank" rel="noreferrer">still worth a try</a>, though postings usually come down once they are filled.</> : null}
           <div style={{ marginTop: 8, color: 'var(--text-mute)' }}>Evaluations from now on save the text automatically, so it is here when you prepare for a later round.</div>
         </div>
       </div>
@@ -268,7 +285,7 @@ window.PostingPanel = function PostingPanel({ app }) {
         <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
           Saved when this role was evaluated, so it survives the posting being taken down.
         </span>
-        {app.url && <a className="btn sm" href={window.safeHref(app.url)} target="_blank" rel="noreferrer">Original ↗</a>}
+        {window.jdHref(app) && <a className="btn sm" href={window.jdHref(app)} target="_blank" rel="noreferrer">Original ↗</a>}
       </div>
       <div className="mono dim" style={{ fontSize: 10.5 }}>{state.path}</div>
       <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, lineHeight: 1.6, color: 'var(--text)', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 'var(--r-card)', padding: 12, margin: 0, maxHeight: '60vh', overflowY: 'auto' }}>{state.text}</pre>

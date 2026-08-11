@@ -43,6 +43,26 @@ check(canonicalUrl('https://jobs.lever.co/co/uuid/apply') === 'https://jobs.leve
 check(canonicalUrl('https://jobs.ashbyhq.com/co/uuid/application') === 'https://jobs.ashbyhq.com/co/uuid', 'strips a trailing /application');
 check(canonicalUrl('') === '' && canonicalUrl(null) === '' && canonicalUrl(undefined) === '', 'empty/null/undefined are safe');
 
+// ── junk local: references are UNRESOLVABLE (regression: the $file batch) ──────
+// A local: path carrying an unexpanded template variable is not a real path, and
+// the SAME literal stood in for six different files on 2026-08-10. It must NOT be
+// a usable identity, or Tier-0 (company-blind) URL matching merges unrelated
+// postings. The two garbage strings below MUST both canonicalize to '' — NOT to
+// each other.
+const junkA = 'local:C:\\Users\\x\\notes\\jd$file';
+const junkB = 'local:C:\\Users\\x\\notes\\jd$file';
+check(canonicalUrl(junkA) === '', 'local: path with unexpanded $file → unresolvable ("")');
+check(canonicalUrl('local:/tmp/${jobFile}') === '', 'local: path with ${var} → unresolvable');
+check(canonicalUrl('local:C:\\jobs\\%JOBFILE%.md') === '', 'local: path with %VAR% → unresolvable');
+check(canonicalUrl('local:C:\\jobs\\{{slug}}.md') === '', 'local: path with {{mustache}} → unresolvable');
+check(canonicalUrl('local:') === '' && canonicalUrl('local:   ') === '', 'empty local: body → unresolvable');
+// A REAL local file path is still a stable identity (self-sourced JDs rely on it).
+check(canonicalUrl('local:C:\\jobs\\acme-role.md') === 'local:C:\\jobs\\acme-role.md',
+  'a real local: file path is preserved as its own identity');
+// http percent-encoding must NOT be mistaken for an unexpanded %VAR%.
+check(canonicalUrl('https://x.com/a%2Fb%2Fc') === 'https://x.com/a%2Fb%2Fc',
+  'http percent-encoding (%2F%2F) is left intact, never treated as a template var');
+
 // "apply" as a substring of a company slug must survive.
 check(canonicalUrl('https://jobs.lever.co/applyacme/uuid') === 'https://jobs.lever.co/applyacme/uuid',
   'a company slug starting with "apply" is left intact');
@@ -189,6 +209,29 @@ writeFileSync(join(sb, 'data/apps2.md'), [
 const idx2 = buildDecidedIndex({ appsPath: join(sb, 'data/apps2.md'), rootDir: sb });
 check(idx2.ambiguous.has('https://shared.host/careers'), 'one id-less url across two employers is flagged ambiguous');
 check(findDecided(idx2, 'https://shared.host/careers') === null, 'an ambiguous url never suppresses');
+
+// ── the $file collision, end to end (regression 2026-08-10) ───────────────────
+// Two DIFFERENT companies whose reports both carry the garbage `...$file` url must
+// NOT collapse. Before the canonicalUrl guard, both canonicalized to the same
+// non-empty key and Tier-0 (company-blind) matching merged one onto the other,
+// overwriting a row and orphaning evaluations. (Fixture companies are fictional —
+// tracked files must never restate a real employer+title, see no-real-postings.)
+const JUNK = 'local:C:\\Users\\x\\notes\\jd$file';
+writeFileSync(join(sb, 'reports/9010-a.md'), `---\n{ "url": "${JUNK.replace(/\\/g, '\\\\')}" }\n---\n`);
+writeFileSync(join(sb, 'reports/9011-b.md'), `---\n{ "url": "${JUNK.replace(/\\/g, '\\\\')}" }\n---\n`);
+writeFileSync(join(sb, 'data/apps4.md'), [
+  HEADER,
+  '| 9010 | 2026-08-10 | Northwind | Director, Widget Development | 3.5/5 | Evaluated | ❌ | — | [9010](reports/9010-a.md) | n |',
+  '| 9011 | 2026-08-10 | Contoso | Senior Director, Sprocket Operations | 4.1/5 | Evaluated | ❌ | — | [9011](reports/9011-b.md) | n |',
+  '',
+].join('\n'));
+const idx4 = buildDecidedIndex({ appsPath: join(sb, 'data/apps4.md'), rootDir: sb });
+check(idx4.byUrl.size === 0, 'a junk $file url is NOT indexed as a resolvable identity');
+check(idx4.noUrlByCompany.get('northwind')?.length === 1 && idx4.noUrlByCompany.get('contoso')?.length === 1,
+  'both junk-url rows fall back to company+role, neither vanishes');
+check(findDecided(idx4, JUNK) === null, 'looking up the junk url decides nothing — cannot overwrite a foreign row');
+check(findDecided(idx4, JUNK, { company: 'Contoso', role: 'Senior Director, Sprocket Operations' })?.num === 9011,
+  'with a company+role hint the fallback still finds the RIGHT row, never the other company');
 
 // ...but the same-employer-two-spellings case must still suppress, because that
 // is a real duplicate. Measured against a real tracker, every ambiguity flag was
