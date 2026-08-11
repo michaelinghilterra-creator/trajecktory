@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.19.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.18.0...v2.19.0) (2026-08-11)
+
+
+### Features
+
+* unify Follow-Ups queue and Contacts table, add recruiter email verification ([#180](https://github.com/michaelinghilterra-creator/trajecktory/issues/180)) ([94ee26d](https://github.com/michaelinghilterra-creator/trajecktory/commit/94ee26db877110bb6fa46c6c871c07063ed46afc))
+
 ## [2.18.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.17.1...v2.18.0) (2026-08-11)
 
 
