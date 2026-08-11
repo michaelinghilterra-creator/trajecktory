@@ -32,7 +32,10 @@ Take the **TOP N unchecked URLs** (default 15) from the top of the pending list.
 
 **Match on the exact URL, never on company name alone.** A company can post several genuinely different roles at once (multiple titles, multiple cities) — each is a separate posting with its own row in `data/pipeline.md` and needs its own score. Seeing "Acme Corp" already has a row in `triage-results.tsv` is NOT a reason to skip a different Acme Corp URL/title. Compare the full URL (or the exact title, for a `local:jds/…` snapshot) — not just the employer name.
 For each URL that survives that filter:
-1. Read the JD with **WebFetch** first, **WebSearch** as a fallback. If it cannot be read, skip it (do not guess).
+1. Read the JD.
+   - **If the row is a `local:jds/…` snapshot path (NOT an `http(s)` URL), read that file directly with the Read tool. Do NOT WebFetch it** — it is a local file, not a web address, so a fetch fails and you would wrongly skip a JD that is sitting readable on disk. `resolve-jds.mjs` writes these snapshots for JS-rendered (SPA) postings precisely so you can read them directly; when the queue is mostly `local:jds/…` rows, treating them as un-fetchable makes an entire run score nothing.
+   - Otherwise (an `http(s)` URL), read it with **WebFetch** first, **WebSearch** as a fallback.
+   - If it genuinely cannot be read either way, skip it (do not guess).
 2. Score FIT **0.0-5.0** (one decimal) using the rubric + anti-inflation calibration below.
 3. Write a **one-sentence rationale** naming the main fit driver or gap.
 
