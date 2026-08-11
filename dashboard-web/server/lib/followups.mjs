@@ -812,35 +812,13 @@ function computeFollowupQueue(opts = {}) {
   return rows;
 }
 
-// The Network "High value" DIRECTORY: every contact reachable BOTH ways (a verified
-// email AND a LinkedIn handle) across both books. Unlike computeBothQueue this is a
-// managed directory, NOT an action queue — it is NOT gated to applied companies and
-// includes any status except Archived, so you can see and manage all your dual-channel
-// contacts. Carries the fields a searchable table needs (name, title, company, email +
-// state, LinkedIn, location, status, notes). The UI provides its own search/filters.
-function highValueContacts({ taRows, recruiterRows } = {}) {
-  const { ta, rec } = _bothBooks({ taRows, recruiterRows });
-  const out = [];
-  const add = (row, source) => {
-    if (!(_hasLinkedIn(row) && isSendable(row))) return;   // must have BOTH channels
-    if (row.status === 'Archived') return;
-    const company = source === 'recruiter' ? row.firm : row.company;
-    out.push({
-      source, id: row.id,
-      name: `${row.first || ''} ${row.last || ''}`.trim(),
-      first: row.first || '', last: row.last || '',
-      title: row.title || '', company: company || '',
-      email: (row.email || '').trim(), emailState: row.verified?.state || 'unverified',
-      linkedin: (row.linkedin || '').trim(),
-      city: row.city || '', state: row.state || '',
-      status: row.status || '', notes: (row.notes || '').replace(/\s+/g, ' ').trim(),
-      isPrincipal: source === 'ta' ? (row.isPrincipal ?? false) : false,
-    });
-  };
-  for (const r of ta)  add(r, 'ta');
-  for (const r of rec) add(r, 'recruiter');
-  out.sort((a, b) => (a.company || '').localeCompare(b.company || '') || (a.name || '').localeCompare(b.name || ''));
-  return out;
+// "High value" = reachable BOTH ways (a verified/sendable email AND a LinkedIn
+// handle). It was once its own Network directory page; now it is a per-contact
+// SIGNAL (a star + filter) on the TA and Recruiter tables, computed by this one
+// predicate so every surface agrees on what "high value" means. Same dual-channel
+// criteria the both-queue uses (contactChannelBucket bucket 3).
+function isHighValueContact(row) {
+  return contactChannelBucket(row).bucket === 3;
 }
 
 // Applied roles in OUTREACH_ELIGIBLE_STATUSES that have ZERO contacts (no TA or
@@ -905,7 +883,7 @@ export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
   computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
   computeFollowupQueue, _followupRank,
-  highValueContacts, computeContactlessApps, countWithheldContacts,
+  isHighValueContact, computeContactlessApps, countWithheldContacts,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 

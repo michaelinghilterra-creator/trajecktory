@@ -9,6 +9,7 @@ import { isLinkedInInvite } from '../lib/channels.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
 import { pauseSequence } from '../lib/sequences.mjs';
+import { isHighValueContact } from '../lib/followups.mjs';
 
 export const router = express.Router();
 
@@ -53,8 +54,8 @@ router.post('/api/recruiters/bulk-import', (req, res) => {
 router.get('/api/recruiters', (req, res) => {
   try {
     const rows = parseRecruitersMd();
-    // Strip the raw markdown line before sending
-    res.json(rows.map(({ raw, ...rest }) => rest));
+    // Strip the raw markdown line before sending; tag dual-channel high value.
+    res.json(rows.map(({ raw, ...rest }) => ({ ...rest, isHighValue: isHighValueContact(rest) })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -68,7 +69,7 @@ router.get('/api/recruiters/:id', (req, res) => {
     const r = rows.find(x => x.id === id);
     if (!r) return res.status(404).json({ error: 'Recruiter not found' });
     const { raw, ...recruiter } = r;
-    res.json({ ...recruiter, correspondence: readRecruiterCorrespondence(id) });
+    res.json({ ...recruiter, isHighValue: isHighValueContact(recruiter), correspondence: readRecruiterCorrespondence(id) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

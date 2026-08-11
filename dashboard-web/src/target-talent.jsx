@@ -171,6 +171,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
   const [showArchived, setShowArchived] = useState(false);
   const [statusFilter, setStatusFilter] = useState(null);
   const [companyFilter, setCompanyFilter] = useState("");
+  const [hvOnly, setHvOnly] = useState(false);   // high-value = reachable both ways (email + LinkedIn)
   const [sortKey, setSortKey] = useState("status");
   const [sortDir, setSortDir] = useState("desc");
   const [importing, setImporting] = useState(false);
@@ -190,12 +191,13 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
     let r = showArchived ? contacts : active;
     if (statusFilter) r = r.filter(c => c.status === statusFilter);
     if (companyFilter) r = r.filter(c => c.company === companyFilter);
+    if (hvOnly) r = r.filter(c => c.isHighValue);
     if (q.trim()) {
       const t = q.toLowerCase();
       r = r.filter(c => `${c.first} ${c.last} ${c.company} ${c.title}`.toLowerCase().includes(t));
     }
     return r;
-  }, [contacts, active, showArchived, statusFilter, companyFilter, q]);
+  }, [contacts, active, showArchived, statusFilter, companyFilter, hvOnly, q]);
 
   const sortVal = (c, key) => {
     switch (key) {
@@ -223,7 +225,8 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
     return arr;
   }, [rows, sortKey, sortDir]);
 
-  const hasFilters = statusFilter || companyFilter || q.trim();
+  const hasFilters = statusFilter || companyFilter || hvOnly || q.trim();
+  const hvCount = active.filter(c => c.isHighValue).length;
 
   // Bulk-import contacts from a CSV (the "Excel floor" for non-power users).
   // Reads the file as text and posts it to /api/tt-reconcile/bulk-import.
@@ -302,8 +305,13 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
             <option value="">All companies</option>
             {companies.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+          <button className={"btn ghost sm" + (hvOnly ? " active" : "")} onClick={() => setHvOnly(v => !v)}
+            title="High value = reachable both ways (a verified email and a LinkedIn handle). The best contacts to multithread."
+            style={hvOnly ? { color: "var(--yellow)", borderColor: "var(--yellow)" } : undefined}>
+            ★ High value <span className="mono" style={{ opacity: 0.7, marginLeft: 2 }}>{hvCount}</span>
+          </button>
           {hasFilters && (
-            <button className="btn ghost sm" onClick={() => { setStatusFilter(null); setCompanyFilter(""); }}>
+            <button className="btn ghost sm" onClick={() => { setStatusFilter(null); setCompanyFilter(""); setHvOnly(false); }}>
               <TIcon d={TI.x} size={12} /> Clear
             </button>
           )}
@@ -336,6 +344,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
                       <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
                         <div className="mono-av sm" style={{ borderColor: m.color, color: m.color, flex: "none" }}>{ttInitials(c.first + " " + c.last)}</div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.first} {c.last}</div>
+                        {c.isHighValue && <span title="High value: reachable both ways (verified email + LinkedIn). Worth a multithread." style={{ flex: "none", color: "var(--yellow)", fontSize: 12 }}>★</span>}
                       </div>
                     </td>
                     <td title={c.title || "No job title recorded for this contact"}>

@@ -9,6 +9,7 @@ import { appendFollowupRow, parseFollowupsMd } from '../lib/followups.mjs';
 import { logConnect } from '../lib/connects.mjs';
 import { isLinkedInInvite } from '../lib/channels.mjs';
 import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES } from '../lib/tt-linkedin.mjs';
+import { isHighValueContact } from '../lib/followups.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
 
@@ -27,7 +28,7 @@ export const router = express.Router();
 router.get('/api/target-talent', (req, res) => {
   try {
     const rows = parseTargetTalentMd();
-    res.json(rows.map(({ raw, ...rest }) => rest));
+    res.json(rows.map(({ raw, ...rest }) => ({ ...rest, isHighValue: isHighValueContact(rest) })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -40,7 +41,7 @@ router.get('/api/target-talent/by-company/:company', (req, res) => {
     const company = decodeURIComponent(req.params.company);
     const rows = parseTargetTalentMd();
     const match = matchByCompany(rows, company, r => r.company);
-    res.json(match.map(({ raw, ...rest }) => rest));
+    res.json(match.map(({ raw, ...rest }) => ({ ...rest, isHighValue: isHighValueContact(rest) })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -56,6 +57,7 @@ router.get('/api/target-talent/:id', (req, res) => {
     const { raw, ...contact } = r;
     res.json({
       ...contact,
+      isHighValue: isHighValueContact(contact),
       correspondence: readTTCorrespondence(id),
       relatedApps: findRelatedApps(r.company),
     });

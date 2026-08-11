@@ -8,7 +8,7 @@ import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute } from '../lib/sidecars.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, highValueContacts, computeContactlessApps, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
@@ -84,16 +84,9 @@ router.get('/api/followups/both-queue', (req, res) => {
   }
 });
 
-// GET /api/network/high-value — the Network directory of ALL dual-channel contacts
-// (verified email AND LinkedIn), not gated to applied companies. Backs the Network
-// "High value" table, which provides its own search/filter over this list.
-router.get('/api/network/high-value', (req, res) => {
-  try {
-    res.json({ contacts: highValueContacts() });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// (The Network "High value" directory endpoint was removed: high value is now a
+// per-contact star + filter on the TA and Recruiter tables — see isHighValueContact
+// in lib/followups.mjs and the isHighValue flag on the contact list endpoints.)
 
 // GET /api/followups/stale — computed stale list with coaching.
 // Merges applications.md (Applied/Responded/Interview) with per-contact stale

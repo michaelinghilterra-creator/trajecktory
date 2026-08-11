@@ -854,6 +854,7 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
   const q = search || '';
   const [firmFilter, setFirmFilter] = useStateR('');
   const [statusFilter, setStatusFilter] = useStateR('');
+  const [hvOnly, setHvOnly] = useStateR(false);   // high value = reachable both ways (email + LinkedIn)
   const [sortKey, setSortKey] = useStateR('firm');
   const [sortDir, setSortDir] = useStateR('asc');
   const [importing, setImporting] = useStateR(false);
@@ -893,6 +894,7 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
     const list = contacts.filter(c => {
       if (firmFilter && c.firm !== firmFilter) return false;
       if (statusFilter && c.status !== statusFilter) return false;
+      if (hvOnly && !c.isHighValue) return false;
       if (t && !`${c.first} ${c.last} ${c.firm} ${c.title} ${c.city} ${c.email}`.toLowerCase().includes(t)) return false;
       return true;
     });
@@ -910,10 +912,11 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
       return (a.firm || '').localeCompare(b.firm || '') || (a.last || '').localeCompare(b.last || '');
     });
     return list;
-  }, [contacts, q, firmFilter, statusFilter, sortKey, sortDir]);
+  }, [contacts, q, firmFilter, statusFilter, hvOnly, sortKey, sortDir]);
 
   const firmsShown = useMemoR(() => new Set(rows.map(c => c.firmId)).size, [rows]);
-  const hasFilter = q || firmFilter || statusFilter;
+  const hvCount = useMemoR(() => contacts.filter(c => c.isHighValue).length, [contacts]);
+  const hasFilter = q || firmFilter || statusFilter || hvOnly;
 
   const cols = [
     { k: 'name',      label: 'Contact',    w: 200 },
@@ -967,8 +970,13 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
             <option value="">All firms</option>
             {firmList.map(f => <option key={f.id} value={f.name}>{f.name.split(' — ')[0]} ({f.n})</option>)}
           </select>
+          <button className="btn ghost sm" onClick={() => setHvOnly(v => !v)}
+            title="High value = reachable both ways (a verified email and a LinkedIn handle). The best contacts to multithread."
+            style={hvOnly ? { color: 'var(--yellow)', borderColor: 'var(--yellow)' } : undefined}>
+            ★ High value <span className="mono" style={{ opacity: 0.7, marginLeft: 2 }}>{hvCount}</span>
+          </button>
           {hasFilter && (
-            <button className="btn ghost sm" onClick={() => { setFirmFilter(''); setStatusFilter(''); }}>
+            <button className="btn ghost sm" onClick={() => { setFirmFilter(''); setStatusFilter(''); setHvOnly(false); }}>
               <RecIcon d={REC_I.x} size={12} /> Clear
             </button>
           )}
@@ -1001,6 +1009,7 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
                       <div style={{ display: 'flex', gap: 10, alignItems: 'center', minWidth: 0 }}>
                         <div className="mono-av sm" style={{ borderColor: m.color, color: m.color, flex: 'none' }}>{initials(c.first + ' ' + c.last)}</div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.first} {c.last}</div>
+                        {c.isHighValue && <span title="High value: reachable both ways (verified email + LinkedIn). Worth a multithread." style={{ flex: 'none', color: 'var(--yellow)', fontSize: 12 }}>★</span>}
                       </div>
                     </td>
                     <td title={c.title || ''}>
