@@ -10,6 +10,9 @@ import { getIdentity } from '../lib/profile.mjs';
 import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
 import { pauseSequence } from '../lib/sequences.mjs';
 import { isHighValueContact } from '../lib/followups.mjs';
+import { loadEnvKey } from '../../../verify-contacts.mjs';
+import { findAndVerify, hunterSearchesLeft, planFindBudget, DEFAULT_FIND_LIMIT } from '../../../find-contacts.mjs';
+import { setVerifyTag } from '../../../lib/email-verify.mjs';
 
 export const router = express.Router();
 
@@ -70,6 +73,56 @@ router.get('/api/recruiters/:id', (req, res) => {
     if (!r) return res.status(404).json({ error: 'Recruiter not found' });
     const { raw, ...recruiter } = r;
     res.json({ ...recruiter, isHighValue: isHighValueContact(recruiter), correspondence: readRecruiterCorrespondence(id) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/recruiters/find-emails — find + verify emails for recruiters that lack
+// a verified address (recruiters ship with unverified emails, which is where the
+// bounces come from). Runs the same Hunter Email Finder → MillionVerifier pipeline
+// as TA Outreach and writes ONLY a verified address. Optional { ids } targets
+// specific recruiters (per-contact "Find email"); otherwise it sweeps up to a
+// budget-capped batch. Mirrors /api/tt-reconcile/find-emails.
+const REC_SENDABLE = new Set(['ok', 'valid', 'risky', 'catch_all', 'catch-all', 'accept_all', 'deliverable']);
+router.post('/api/recruiters/find-emails', async (req, res) => {
+  try {
+    const hkey = loadEnvKey('HUNTER_API_KEY');
+    const mkey = loadEnvKey('MILLIONVERIFIER_API_KEY');
+    if (!hkey || !mkey) {
+      return res.status(400).json({ error: 'HUNTER_API_KEY and MILLIONVERIFIER_API_KEY must both be set in dashboard-web/.env to find + verify emails.' });
+    }
+    const { ids, limit } = req.body || {};
+    const idSet = Array.isArray(ids) && ids.length ? new Set(ids.map(Number)) : null;
+    // A recruiter "needs" an address when it has no verified one on file.
+    const rows = parseRecruitersMd().filter(r =>
+      r.first && r.last && r.firm && !REC_SENDABLE.has((r.verified?.state || '').toLowerCase()) &&
+      (!idSet || idSet.has(r.id)));
+
+    const creditsLeft = await hunterSearchesLeft(hkey);
+    const wanted = idSet ? rows.length : (Number.isFinite(limit) && limit > 0 ? limit : DEFAULT_FIND_LIMIT);
+    const cap = planFindBudget({ needed: rows.length, limit: wanted, creditsLeft });
+    const toRun = rows.slice(0, cap);
+
+    const results = [];
+    for (const r of toRun) {
+      try {
+        const f = await findAndVerify(r.firm, r.first, r.last, hkey, mkey);
+        if (f.found && f.verify) {
+          updateRecruiterLine(r.id, { email: setVerifyTag(f.email, f.verify) });
+          results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: f.email, state: f.verify.state });
+        } else {
+          results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: null, state: f.found ? 'unverifiable' : 'not_found' });
+        }
+      } catch (e) {
+        results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: null, state: 'error', error: e.message });
+      }
+    }
+    res.json({
+      ok: true, checked: toRun.length, written: results.filter(x => x.email).length,
+      needing: rows.length, skippedForBudget: rows.length - toRun.length,
+      creditsBefore: creditsLeft, creditsSpent: toRun.length, results,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

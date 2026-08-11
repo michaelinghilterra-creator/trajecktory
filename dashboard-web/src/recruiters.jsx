@@ -859,6 +859,21 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
   const [sortDir, setSortDir] = useStateR('asc');
   const [importing, setImporting] = useStateR(false);
   const [importMsg, setImportMsg] = useStateR('');
+  const [finding, setFinding] = useStateR(false);
+
+  // Bulk find + verify emails for recruiters that lack a verified address (the
+  // usual bounce source). One Hunter search credit each, budget-capped server-side;
+  // only verified addresses are written.
+  const findEmails = () => {
+    setFinding(true); setImportMsg('');
+    window.tjkMutate('/api/recruiters/find-emails', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+      .then(r => r.json()).then(d => {
+        setFinding(false);
+        if (d.error) { setImportMsg(d.error); return; }
+        setImportMsg(`Found ${d.written} verified email${d.written === 1 ? '' : 's'} (checked ${d.checked}${d.skippedForBudget ? `, ${d.skippedForBudget} left for next run` : ''}).`);
+        onImported && onImported();
+      }).catch(err => { setFinding(false); setImportMsg(err.message); });
+  };
 
   // Bulk-import recruiter contacts from a CSV (shared template with TA Outreach).
   function handleImport(e) {
@@ -941,6 +956,10 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
             {importing ? 'Importing…' : 'Import CSV'}
             <input type="file" accept=".csv,text/csv" style={{ display: 'none' }} disabled={importing} onChange={handleImport} />
           </label>
+          <button className="btn" onClick={findEmails} disabled={finding}
+            title="Find + verify emails (Hunter → MillionVerifier) for recruiters without a verified address. Only verified addresses are saved.">
+            {finding ? 'Finding…' : 'Find verified emails'}
+          </button>
         </div>
       </div>
 
@@ -1391,6 +1410,7 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
   const [editingLi, setEditingLi] = useStateR(false);
   const [editing, setEditing] = useStateR(false);   // whole-contact edit mode
   const [edit, setEdit] = useStateR({});
+  const [finding, setFinding] = useStateR(false);   // Hunter+MillionVerifier email lookup
   const [composing, setComposing] = useStateR(false);
   const [log, setLog] = useStateR(null);
   const [toast, setToastMsg] = useStateR(null);
@@ -1453,6 +1473,19 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ linkedin: linkedin.trim() }),
     }).then(() => { setEditingLi(false); load(); onUpdate?.(); showToast('LinkedIn saved', 'success'); });
+  };
+  // Find + verify an email via Hunter → MillionVerifier (one search credit). Only a
+  // verified address is written, so this only ever improves the contact.
+  const findEmail = () => {
+    setFinding(true);
+    window.tjkMutate('/api/recruiters/find-emails', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [id] }) })
+      .then(r => r.json()).then(d => {
+        setFinding(false);
+        if (d.error) { showToast(d.error, 'error'); return; }
+        const hit = (d.results || [])[0];
+        if (hit && hit.email) { showToast(`Verified email found (${hit.state})`, 'success'); load(); onUpdate?.(); }
+        else showToast(hit ? `No verified address found (${hit.state})` : 'No address found', 'warn');
+      }).catch(() => { setFinding(false); showToast('Lookup failed', 'error'); });
   };
   // Whole-contact edit mode (identity fields). Recruiters use `firm` for the org.
   const REC_EDIT_FIELDS = [
@@ -1579,11 +1612,27 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
                   );
                 })()}
               </div>
-              <div className="info-row">
-                <span className="ik">Email</span>
-                <span className="iv">{data.email}</span>
-                <RecCopyField value={data.email} />
-              </div>
+              {(() => {
+                const st = (data.verified?.state || '').toLowerCase();
+                const verified = ['ok', 'valid', 'risky', 'catch_all', 'catch-all', 'accept_all', 'deliverable'].includes(st);
+                return (
+                  <div className="info-row">
+                    <span className="ik">Email</span>
+                    <span className="iv">
+                      {data.email || <span style={{ color: 'var(--text-mute)' }}>—</span>}
+                      {data.email && !verified && <span title="Not verified deliverable — may bounce" style={{ marginLeft: 8, padding: '2px 6px', borderRadius: 4, background: 'rgba(234,179,8,0.18)', color: '#fde68a', fontSize: 10.5, fontWeight: 600 }}>UNVERIFIED</span>}
+                      {data.email && verified && <span title="Verified deliverable" style={{ marginLeft: 8, padding: '2px 6px', borderRadius: 4, background: 'rgba(34,197,94,0.16)', color: '#86efac', fontSize: 10.5, fontWeight: 600 }}>VERIFIED</span>}
+                    </span>
+                    {data.email && <RecCopyField value={data.email} />}
+                    {!verified && (
+                      <button className="btn ghost sm" onClick={findEmail} disabled={finding}
+                        title="Find a deliverable address via Hunter, confirm it with MillionVerifier, and save only if verified (one search credit).">
+                        {finding ? 'Finding…' : (data.email ? 'Re-find' : 'Find email')}
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
               {data.phone && (
                 <div className="info-row">
                   <span className="ik">Phone</span>
