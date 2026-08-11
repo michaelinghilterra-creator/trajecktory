@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.18.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.17.1...v2.18.0) (2026-08-11)
+
+
+### Features
+
+* sharpen analytics accuracy and cross-log TA outreach to the pipeline ([#178](https://github.com/michaelinghilterra-creator/trajecktory/issues/178)) ([4424ed3](https://github.com/michaelinghilterra-creator/trajecktory/commit/4424ed3396b778ec78764744f3cd9db31a8c5e2c))
+
 ## [2.17.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.17.0...v2.17.1) (2026-08-11)
 
 
