@@ -8,7 +8,7 @@ import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute } from '../lib/sidecars.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, highValueContacts, computeContactlessApps, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, highValueContacts, computeContactlessApps, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
@@ -43,6 +43,19 @@ router.get('/api/followups/withheld', (req, res) => {
   try {
     const hasKeys = !!((process.env.HUNTER_API_KEY || '').trim() && (process.env.MILLIONVERIFIER_API_KEY || '').trim());
     res.json({ withheld: countWithheldContacts(), hasVerifierKeys: hasKeys });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/followups/queue — the UNIFIED follow-up work queue. Merges the three
+// channel queues (LinkedIn-only, email-only, both) into one ranked list, each row
+// tagged with `channel` for the UI filter chips and `rank` for the sort. This is
+// what the single Follow-ups queue reads; the three per-channel endpoints below
+// remain for now (compatibility) but the UI no longer flips between them.
+router.get('/api/followups/queue', (req, res) => {
+  try {
+    res.json({ queue: computeFollowupQueue() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -763,6 +763,55 @@ function computeBothQueue({ taRows, recruiterRows, apps } = {}) {
   return _sortByCompanyName(out);
 }
 
+// ── Unified follow-up queue ──────────────────────────────────────────────────
+// One ranked work queue that merges the three channel queues (LinkedIn-only,
+// email-only, both) so the user works a single list instead of flipping between
+// three tabs. The three are mutually exclusive by construction (see the bucket
+// gates in each builder), so the union needs no dedup. Each row is tagged with
+// `channel` ('linkedin' | 'email' | 'both') for the UI's filter chips, and a
+// numeric `rank` (higher = do sooner) for the sort.
+//
+// RANK (importance first, then last-touch recency, per the agreed formula):
+//   + hiring principal (decision-maker)         +50
+//   + dual-channel "both" (multithread, high value) +20
+//   + status weight (further in the process = more valuable to nudge)
+//   + overdue: older last self-touch = higher; never-contacted = neutral middle
+// The weights are intentionally simple and live here so they are easy to tune;
+// changing them changes only the order, never which rows appear.
+const _FUQ_STATUS_WEIGHT = {
+  'Responded': 25, 'Phone Screen': 40,
+  '1st Interview': 45, '2nd Interview': 50, '3rd Interview': 55, '4th Interview': 60,
+  'Sent': 5, 'Drafted': 3,
+};
+function _followupRank(r) {
+  let score = 0;
+  if (r.isPrincipal) score += 50;
+  if (r.channel === 'both') score += 20;
+  score += _FUQ_STATUS_WEIGHT[r.status] || 0;
+  // Recency: a contact you last touched long ago is more overdue. Never-contacted
+  // rows (no prior self-touch) get a neutral middle so importance decides their
+  // slot rather than floating them to either extreme.
+  const d = r.companyOutreach?.selfLastTouch?.date;
+  const days = d ? _businessDaysAgo(d) : null;
+  score += (days == null) ? 15 : Math.min(days, 60) * 0.5;
+  return score;
+}
+function computeFollowupQueue(opts = {}) {
+  const rows = [
+    ...computeConnectQueue(opts).map(r => ({ ...r, channel: 'linkedin' })),
+    ...computeEmailQueue(opts).map(r => ({ ...r, channel: 'email' })),
+    ...computeBothQueue(opts).map(r => ({ ...r, channel: 'both' })),
+  ];
+  for (const r of rows) r.rank = _followupRank(r);
+  // Rank desc; company then name as a stable tiebreak so equal-rank rows don't
+  // shuffle between reloads.
+  rows.sort((a, b) =>
+    (b.rank - a.rank) ||
+    (a.company || '').localeCompare(b.company || '') ||
+    (a.name || '').localeCompare(b.name || ''));
+  return rows;
+}
+
 // The Network "High value" DIRECTORY: every contact reachable BOTH ways (a verified
 // email AND a LinkedIn handle) across both books. Unlike computeBothQueue this is a
 // managed directory, NOT an action queue — it is NOT gated to applied companies and
@@ -855,6 +904,7 @@ function countWithheldContacts({ taRows, recruiterRows } = {}) {
 export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
   computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
+  computeFollowupQueue, _followupRank,
   highValueContacts, computeContactlessApps, countWithheldContacts,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };

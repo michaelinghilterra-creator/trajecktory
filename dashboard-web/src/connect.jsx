@@ -791,3 +791,96 @@ window.BothQueueTab = function BothQueueTab({ toast }) {
     </div>
   );
 };
+
+// ── Unified follow-up queue ─────────────────────────────────────────────────
+// The single work queue that replaces the three channel tabs (Connect / Email /
+// High value). Reads GET /api/followups/queue (one ranked, channel-tagged list)
+// and renders each row with the SAME per-channel row component the old tabs used
+// (ConnectRow / EmailRow / BothRow), so the outreach actions are byte-identical.
+// Channel becomes a filter chip instead of a tab. Rows arrive pre-ranked from the
+// server (importance, then last-touch recency); we preserve that order.
+window.FollowupQueueTab = function FollowupQueueTab({ toast }) {
+  const [queue, setQueue] = useStateCq(null);
+  const [err, setErr] = useStateCq(null);
+  const [channel, setChannel] = useStateCq('all');
+
+  const load = () =>
+    fetch('/api/followups/queue').then(r => r.json())
+      .then(d => { if (d && d.error) setErr(d.error); else setQueue(d.queue || []); })
+      .catch(e => setErr(e.message));
+
+  useEffectCq(() => { load(); }, []);
+
+  // Single-channel rows (LinkedIn / email) drop off after one touch; drop optimistically
+  // then re-fetch so siblings at the same company refresh their "already reached out
+  // today" context. Stable source:id keys keep in-progress drafts alive across the reload.
+  const dropRow = (source, id) => {
+    setQueue(q => (q || []).filter(c => !(c.source === source && String(c.id) === String(id))));
+    load();
+  };
+  // A dual-channel ("both") row stays until BOTH channels are touched: update in place,
+  // or remove once both are done.
+  const onChannelDone = (source, id, state) => {
+    const isRow = (c) => c.source === source && String(c.id) === String(id);
+    setQueue(q => {
+      const list = q || [];
+      if (state && state.linkedinDone && state.emailDone) return list.filter(c => !isRow(c));
+      return list.map(c => isRow(c) ? { ...c, linkedinDone: state.linkedinDone, emailDone: state.emailDone } : c);
+    });
+    load();
+  };
+
+  if (err) return <div className="dim" style={{ padding: 28 }}>Could not load the follow-up queue: {err}</div>;
+  if (!queue) return <div className="dim" style={{ padding: 28 }}>Loading follow-up queue…</div>;
+
+  const counts = {
+    all: queue.length,
+    linkedin: queue.filter(c => c.channel === 'linkedin').length,
+    email: queue.filter(c => c.channel === 'email').length,
+    both: queue.filter(c => c.channel === 'both').length,
+  };
+  const CHIPS = [
+    { id: 'all', label: 'All' },
+    { id: 'linkedin', label: 'LinkedIn' },
+    { id: 'email', label: 'Email' },
+    { id: 'both', label: 'Both' },
+  ];
+  const rows = channel === 'all' ? queue : queue.filter(c => c.channel === channel);
+
+  return (
+    <div style={{ padding: 24, maxWidth: "none", marginLeft: 0, marginRight: 0 }}>
+      <h2 style={{ margin: '0 0 2px' }}>Follow-ups</h2>
+      <p className="dim" style={{ fontSize: 13, marginTop: 4, marginBottom: 14 }}>
+        One ranked queue of everyone worth a touch, across every channel. Rows are ordered by importance
+        (hiring principals and dual-channel contacts first), then by how overdue the last touch is. Draft,
+        copy, send by hand, then Mark sent. Nothing is sent from here.
+      </p>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+        <span className="dim mono" style={{ fontSize: 10.5, marginRight: 2 }}>CHANNEL</span>
+        {CHIPS.map(ch => {
+          const active = channel === ch.id;
+          const n = counts[ch.id];
+          return (
+            <span key={ch.id} onClick={() => setChannel(ch.id)} style={{
+              cursor: 'pointer', padding: '4px 11px', borderRadius: 5, fontSize: 11.5, fontWeight: 600,
+              background: active ? 'var(--accent)' : 'var(--panel-2)',
+              color: active ? '#15101f' : 'var(--text-dim)',
+              border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+            }}>{ch.label} <span style={{ opacity: 0.7, marginLeft: 3 }}>{n}</span></span>
+          );
+        })}
+      </div>
+      {rows.length === 0
+        ? <div className="card dim">
+            {queue.length === 0
+              ? 'Your follow-up queue is clear. Contacts appear here once you apply to a company where you have someone to reach.'
+              : `No ${channel} contacts in the queue right now.`}
+          </div>
+        : rows.map(c =>
+            c.channel === 'linkedin' ? <ConnectRow key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} />
+          : c.channel === 'email'   ? <EmailRow   key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} />
+          :                           <BothRow    key={`${c.source}:${c.id}`} c={c} toast={toast} onChannelDone={onChannelDone} />
+        )}
+    </div>
+  );
+};

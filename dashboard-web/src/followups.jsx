@@ -454,11 +454,9 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
 
   const SUBTABS = [
     { id: 'overview', label: 'Overview',         n: null,        icon: window.ICON.pulse },
-    { id: 'connect',  label: 'Connect',          n: null,        icon: window.ICON.userPlus },
-    { id: 'email',    label: 'Email queue',      n: null,        icon: window.ICON.mail },
-    { id: 'both',     label: 'High value',       n: null,        icon: window.ICON.star || window.ICON.userPlus },
+    { id: 'queue',    label: 'Follow-ups',       n: null,        icon: window.ICON.send },
     { id: 'findcontact', label: 'Find a contact', n: contactlessApps.length, icon: window.ICON.search || window.ICON.userPlus },
-    { id: 'warm',     label: 'Warm threads',     n: warm.length, icon: window.ICON.send },
+    { id: 'warm',     label: 'Warm threads',     n: warm.length, icon: window.ICON.userPlus },
     { id: 'cold',     label: 'Applications out',  n: cold.length, icon: window.ICON.briefcase },
   ];
 
@@ -532,14 +530,9 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
         />
       )}
 
-      {/* ── Connect: the by-hand LinkedIn queue (moved here from the sidebar) ── */}
-      {subView === 'connect' && <window.ConnectTab toast={toast} />}
-
-      {/* ── Email queue: emailable contacts at applied companies ───────────── */}
-      {subView === 'email' && <window.EmailQueueTab toast={toast} />}
-
-      {/* ── High value: contacts reachable on both channels (multithread) ───── */}
-      {subView === 'both' && <window.BothQueueTab toast={toast} />}
+      {/* ── Follow-ups: one ranked queue across every channel (Connect + Email +
+             High value merged; channel is now a filter chip inside it) ──────── */}
+      {subView === 'queue' && <window.FollowupQueueTab toast={toast} />}
 
       {/* ── Warm threads: the actionable queue ─────────────────────────────── */}
       {subView === 'warm' && (
