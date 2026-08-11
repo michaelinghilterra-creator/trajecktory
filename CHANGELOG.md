@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.17.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.17.0...v2.17.1) (2026-08-11)
+
+
+### Bug Fixes
+
+* treat junk local: urls as unresolvable so distinct postings can't collapse ([#176](https://github.com/michaelinghilterra-creator/trajecktory/issues/176)) ([c172a12](https://github.com/michaelinghilterra-creator/trajecktory/commit/c172a120d16d0095b74758c8137086cb5a0cedad))
+
 ## [2.17.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.16.1...v2.17.0) (2026-08-10)
 
 
