@@ -3,9 +3,9 @@ import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { pauseSequence } from '../lib/sequences.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, TT_STATUSES } from '../lib/target-talent.mjs';
+import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
-import { appendFollowupRow } from '../lib/followups.mjs';
+import { appendFollowupRow, parseFollowupsMd } from '../lib/followups.mjs';
 import { logConnect } from '../lib/connects.mjs';
 import { isLinkedInInvite } from '../lib/channels.mjs';
 import { getIdentity } from '../lib/profile.mjs';
@@ -129,28 +129,44 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
       logConnect({ name: `${r.first || ''} ${r.last || ''}`.trim(), source: 'ta', date: ts.slice(0, 10) });
     }
 
-    // Cross-log to applications follow-ups if requested (only for outbound Sent).
-    // Accepts either the new `alsoLogToAppNums: number[]` form (multi-app) or the
-    // legacy `alsoLogToAppNum: number` form (single app). De-duplicates and
-    // returns the row ids of every follow-up actually written.
+    // Cross-log to applications follow-ups for an outbound Sent. Accepts an
+    // explicit `alsoLogToAppNums: number[]` (multi-app) or legacy
+    // `alsoLogToAppNum: number` (single app).
+    //
+    // AUTO-CROSS-LOG: when the caller names no application, a Sent TA touch still
+    // services every live application at this company, so we resolve them by
+    // company and log to each. Without this the touch updated the TA CRM but not
+    // the follow-up log, and the Unserviced/WIP gauge (which reads the follow-up
+    // log, NOT the TA CRM) drifted — reading dozens of applications as untouched
+    // that had already had outreach sent. Scoped to OUTREACH_ELIGIBLE_STATUSES
+    // (applied through offer, plus a ghosted No Response) so an only-Evaluated or
+    // closed row is never touched. Explicit ids, when given, win and suppress the
+    // auto path.
     const crossLoggedFollowups = [];
     if (direction === 'Sent') {
-      const ids = new Set();
-      if (Array.isArray(alsoLogToAppNums)) for (const n of alsoLogToAppNums) ids.add(parseInt(n, 10));
-      if (alsoLogToAppNum) ids.add(parseInt(alsoLogToAppNum, 10));
-      if (ids.size > 0) {
+      const apps = parseApplicationsMd();
+      const explicit = [
+        ...(Array.isArray(alsoLogToAppNums) ? alsoLogToAppNums : []),
+        ...(alsoLogToAppNum ? [alsoLogToAppNum] : []),
+      ];
+      const ids = crossLogAppNums(apps, r.company, explicit);
+      if (ids.length > 0) {
         try {
-          const apps = parseApplicationsMd();
+          // Dedupe against a touch already logged today for this contact, so a
+          // re-sent message or a double-submit does not stack duplicate rows.
+          const existing = parseFollowupsMd();
+          const contactName = `${r.first || ''} ${r.last || ''}`.trim();
           for (const appNum of ids) {
             const app = apps.find(a => a.id === appNum);
             if (!app) continue;
+            if (existing.some(f => f.appNum === appNum && f.date === today && (f.contact || '').trim() === contactName)) continue;
             const n = appendFollowupRow({
               appNum,
               date: today,
               company: app.company,
               role: app.role,
               channel: alsoLogChannel || 'Email',
-              contact: `${r.first} ${r.last}`.trim(),
+              contact: contactName,
               notes: `Cross-logged from Talent Acquisition · ${r.company} · Subject: ${subject.trim()}`,
             });
             crossLoggedFollowups.push({ appNum, n });

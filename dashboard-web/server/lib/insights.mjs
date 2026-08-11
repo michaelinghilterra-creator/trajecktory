@@ -6,7 +6,7 @@ import { computeStaleApps, computeStaleTA } from './followups.mjs';
 import { parseRecruitersMd, RECRUITER_CONTACTED } from './recruiters.mjs';
 import { parseTargetTalentMd } from './target-talent.mjs';
 import { parseStatusEvents } from './sidecars.mjs';
-import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, isInterviewStage, reachedStage, makeFurthestIdx, enteredFunnel } from './statuses.mjs';
+import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, isInterviewStage, makeFurthestIdx, enteredFunnel } from './statuses.mjs';
 import { rateStat, MIN_SAMPLE } from './rate-confidence.mjs';
 
 const INSIGHTS_DIR = path.resolve(ROOT_DIR, 'data', 'insights');
@@ -259,7 +259,7 @@ export function stageFunnelStats() {
   const apps = parseApplicationsMd();
   const events = parseStatusEvents();
 
-  const { furthestIdx, idxOf, eventsByApp } = makeFurthestIdx(events);
+  const { furthestIdx, idxOf } = makeFurthestIdx(events);
 
   const reached = {};
   for (const stage of FUNNEL_ORDER) {
@@ -293,24 +293,30 @@ export function stageFunnelStats() {
   for (const s of INTERVIEW_STAGES) rejectedAtStage[s] = 0;
   rejectedAtStage[RESPONDED_STAGE] = 0;  // lost after a reply, before any interview
   rejectedAtStage[OFFER_STAGE] = 0;      // lost at/after an offer (deepest reach)
-  let rejectedPreInterview = 0;  // reached Applied only — lost before any reply
-  let rejectedUnknownStage = 0;  // terminal but no signal to attribute a stage
+  let rejectedPreInterview = 0;  // never advanced past Applied — lost before any reply
 
   const terminal = apps.filter(a => a.status === 'Rejected' || a.status === 'No Response');
   for (const a of terminal) {
     const fi = furthestIdx(a);
     const rung = FUNNEL_ORDER[fi];
-    // A deeper rung (Responded / interview / Offer) always came from a real event
-    // or the [reached:] tag. At the Applied floor, distinguish a genuine signal
-    // (an event or tag exists) from a row that pre-dates the event log entirely —
-    // the latter stays "unknown" rather than being claimed as pre-interview, since
-    // it may actually have reached deeper without any tracked progression.
-    const hasSignal = (eventsByApp.get(String(a.id)) || []).length > 0 || !!reachedStage(a.notes);
+    // Attribute each loss to the furthest rung it reached. Any rung deeper than
+    // Applied — a reply, a phone screen, an interview, an offer — is a TRACKED step:
+    // it only lands here via a status event or a [reached:] tag, which is exactly
+    // why the "reached" counts above can hold those stages at all. So a terminal
+    // loss with no such signal provably never advanced, and is a pre-interview loss.
+    //
+    // This deliberately drops an earlier "Stage unknown" bucket that split the
+    // pre-interview losses in two by whether an event happened to be logged. That
+    // distinction has no meaning once you accept that advancing always leaves a
+    // signal: an unlogged phone screen would have to be a phone screen that never
+    // moved the status or earned a tag, i.e. one the funnel never saw — and the
+    // tracked ceiling (few reach a reply, fewer an interview) confirms there is no
+    // such hidden population. Calling those losses "unknown" understated the real,
+    // knowable answer: they were rejected before anyone talked to you.
     if (rung === OFFER_STAGE) rejectedAtStage[OFFER_STAGE]++;
     else if (isInterviewStage(rung)) rejectedAtStage[rung]++;
     else if (rung === RESPONDED_STAGE) rejectedAtStage[RESPONDED_STAGE]++;
-    else if (hasSignal) rejectedPreInterview++;
-    else rejectedUnknownStage++;
+    else rejectedPreInterview++;
   }
 
   return {
@@ -321,7 +327,6 @@ export function stageFunnelStats() {
     rejections: {
       byStage: rejectedAtStage,
       preInterview: rejectedPreInterview,
-      unknownStage: rejectedUnknownStage,
       total: terminal.length,
     },
     eventsTracked: events.length,

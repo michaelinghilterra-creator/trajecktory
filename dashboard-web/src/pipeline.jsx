@@ -309,7 +309,10 @@ function OverviewView({ apps, onOpen, onAction, search }) {
 }
 
 // ─── Filter toolbar (shared by Board + Table) ──────────────────────────────
-const ARCHETYPES = ['RevOps', 'SalesOps', 'Analytics', 'BizDev', 'SalesDev', 'Strategy', 'Unclassified'];
+// Single source is window.ARCHETYPES (data.js, loaded before this bundle). Do NOT
+// re-list the labels here — a second copy is exactly what drifted and left the new
+// buckets off the Sankey while the pipeline filter showed them.
+const ARCHETYPES = window.ARCHETYPES;
 
 function applyFilters(apps, filters, search) {
   return apps.filter(a => {
@@ -700,14 +703,6 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
   const avgComp  = withComp.length ? Math.round(withComp.reduce((s, a) => s + a.salary, 0) / withComp.length) : 0;
   const inOrAbovePct = withComp.length ? Math.round(((inTarget.length + aboveTgt.length) / withComp.length) * 100) : 0;
 
-  const vel = STATUS.map(s => {
-    const items = apps.filter(a => a.status === s.id);
-    const avgAge = items.length ? Math.round(items.reduce((x, a) => x + daysAgo(a.date), 0) / items.length) : 0;
-    return { s, avgAge, n: items.length };
-  });
-  const maxAge = Math.max(...vel.map(v => v.avgAge), 1);
-  const bottleneck = [...vel].filter(v => v.n > 0 && v.s.stage < LAST_STAGE).sort((a, b) => b.avgAge - a.avgAge)[0];
-
   // Rates are ALL-TIME over the full tracker, not the active subset the rest of
   // this view uses. Scoping them to active roles deleted every reply that later
   // became a rejection — which is the outcome the metric most wants to count —
@@ -748,6 +743,22 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
         <Kpi k="On / Above Target" v={inOrAbovePct + '%'} sub={`avg posted comp $${avgComp}K`} color={inOrAbovePct < 40 ? 'var(--red)' : 'var(--text)'} icon={PI.trend} />
       </div>
 
+      <div style={{ marginBottom: 14 }}>
+        <CompPositioningCard
+          apps={apps}
+          withComp={withComp}
+          belowWalk={belowWalk}
+          stretch={stretch}
+          inTarget={inTarget}
+          aboveTgt={aboveTgt}
+          avgComp={avgComp}
+          inOrAbovePct={inOrAbovePct}
+          walkAway={walkAway}
+          targetLow={targetLow}
+          targetHigh={targetHigh}
+        />
+      </div>
+
       <div className="grid cols-2" style={{ marginBottom: 14 }}>
         <div className="card padded-lg">
           <div className="card-head"><span className="card-title"><span className="dot" />Source Effectiveness</span><span className="card-meta mono">quality by channel</span></div>
@@ -775,14 +786,17 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
         <div className="card padded-lg">
           <div className="card-head"><span className="card-title"><span className="dot" />Archetype Conversion</span><span className="card-meta mono">apply → interview</span></div>
           <div className="afun" style={{ marginTop: 2 }}>
-            {byArch.map(a => (
+            {byArch.filter(a => a.interviewed > 0).length === 0 && (
+              <div className="mono dim" style={{ fontSize: 12, padding: '4px 0' }}>No archetype has reached an interview yet.</div>
+            )}
+            {byArch.filter(a => a.interviewed > 0).map(a => (
               <div className="afun-row" key={a.k}>
                 <span className="afun-lbl"><span className="d" />{a.k}</span>
                 <div className="afun-track">
                   <div className="afun-applied" />
                   <div className="afun-intv" style={{ width: `${Math.max(a.conv, 4)}%` }}>{a.conv >= 16 ? a.conv + '%' : ''}</div>
                 </div>
-                <span className="afun-cap">{a.conv < 16 ? <b>{a.conv}% · </b> : null}<b>{a.interviewed}</b>/{a.applied} to intv</span>
+                <span className="afun-cap">{a.conv > 0 && a.conv < 16 ? <b>{a.conv}% · </b> : null}<b>{a.interviewed}</b>/{a.applied} to intv</span>
               </div>
             ))}
           </div>
@@ -792,39 +806,6 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
             </Insight>
           )}
         </div>
-      </div>
-
-      <div style={{ marginBottom: 14 }}>
-        <CompPositioningCard
-          apps={apps}
-          withComp={withComp}
-          belowWalk={belowWalk}
-          stretch={stretch}
-          inTarget={inTarget}
-          aboveTgt={aboveTgt}
-          avgComp={avgComp}
-          inOrAbovePct={inOrAbovePct}
-          walkAway={walkAway}
-          targetLow={targetLow}
-          targetHigh={targetHigh}
-        />
-      </div>
-
-      <div className="card padded-lg">
-        <div className="card-head"><span className="card-title"><span className="dot" />Time in Stage</span><span className="card-meta mono">avg age · bottleneck finder</span></div>
-        <div className="pl-histo" style={{ marginTop: 4 }}>
-          {vel.map(({ s, avgAge, n }) => (
-            <div className="pl-histo-col" key={s.id}>
-              <div className="pl-histo-bar" style={{ height: `${n ? Math.max((avgAge / maxAge) * 100, 4) : 0}%`, background: s.color, opacity: 0.85 }}>
-                <span className="hn">{n ? avgAge + 'd' : '-'}</span>
-              </div>
-              <span className="pl-histo-x" style={{ color: s.color }}>{s.id}</span>
-            </div>
-          ))}
-        </div>
-        <Insight kind="warn">
-          {bottleneck ? <>Roles pile up longest in <b>{bottleneck.s.id}</b> (avg {bottleneck.avgAge}d). That's your bottleneck: {bottleneck.s.id === 'Applied' ? 'send follow-up nudges on anything past 14 days' : bottleneck.s.id === 'Evaluated' ? 'decide and apply on the oldest sitting reports today' : 'chase the stalled threads to keep momentum'}.</> : 'Pipeline is moving cleanly. No stage is aging out.'}
-        </Insight>
       </div>
 
       {/* Pipeline Flow Sankey — moved from main Analytics tab per user request */}

@@ -493,6 +493,7 @@ for (const suite of [
   'tests/connect-queue.test.mjs',
   'tests/email-queue.test.mjs',
   'tests/both-queue.test.mjs',
+  'tests/ta-crosslog.test.mjs',
   'tests/stale-contacts.test.mjs',
   'tests/debrief.test.mjs',
   'tests/google.test.mjs',

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { TARGET_TALENT_MD, TT_CORR_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
-import { TALENT_STATUS_LABELS } from './statuses.mjs';
+import { TALENT_STATUS_LABELS, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { parseVerifyTag } from '../../../lib/email-verify.mjs';
 
 // Derived from templates/states.yml (talent_states) rather than hardcoded here.
@@ -213,6 +213,29 @@ function findRelatedApps(companyName) {
   } catch { return []; }
 }
 
+// Which application ids a Sent TA touch should cross-log a follow-up onto.
+//
+// If the caller named applications explicitly, those win verbatim — the user made
+// a deliberate choice. Otherwise (the AUTO path) a Sent touch services every LIVE
+// application at that company, resolved by company match and gated to
+// OUTREACH_ELIGIBLE_STATUSES (applied through offer, plus a ghosted No Response).
+// The gate is the point: without it a company where you have only an *evaluated*
+// (not-yet-applied) row, or a closed/rejected one, would get a follow-up that
+// claims outreach on an application you never sent — the inverse of the drift this
+// fixes. Pure and side-effect-free so it is unit-testable without the route.
+function crossLogAppNums(apps, company, explicit = []) {
+  const ids = new Set(
+    (Array.isArray(explicit) ? explicit : [explicit])
+      .map(n => parseInt(n, 10))
+      .filter(Number.isFinite),
+  );
+  if (ids.size > 0) return [...ids];
+  for (const app of matchByCompany(apps, company, a => a.company)) {
+    if (OUTREACH_ELIGIBLE_STATUSES.includes(app.status)) ids.add(app.id);
+  }
+  return [...ids];
+}
+
 // ── "NEW since last reconcile" baseline ──────────────────────────────────────
 // Contacts are numbered by a monotonic max+1 id and reconcile is the only add
 // path, so "added after the last reconcile started" == "id greater than the max
@@ -241,5 +264,5 @@ function setNewBaselineId(id) {
 
 // GET /api/target-talent — list all
 
-export { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, appendTTRows, matchByCompany, findRelatedApps, TT_STATUSES, maxTTId, getNewBaselineId, setNewBaselineId };
+export { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, appendTTRows, matchByCompany, findRelatedApps, crossLogAppNums, TT_STATUSES, maxTTId, getNewBaselineId, setNewBaselineId };
 

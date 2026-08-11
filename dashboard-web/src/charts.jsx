@@ -690,7 +690,9 @@ window.Sankey = function Sankey({ apps }) {
     // Archetype palette + source column
     const archColors = {
       RevOps: "#5b8def", SalesOps: "#22d3ee", Analytics: "#a78bfa",
-      BizDev: "#f59e0b", SalesDev: "#22c55e", Strategy: "#ec4899",
+      Marketing: "#e879f9", BizDev: "#f59e0b", SalesDev: "#22c55e", Strategy: "#ec4899",
+      // Non-target buckets — real roles, honestly labeled, but not archetypes to chase.
+      Operations: "#818cf8", "Sales Leadership": "#fb7185", Partnerships: "#2dd4bf",
       // Deliberately muted: a matching gap, not a cohort to draw the eye.
       Unclassified: "#6b7280",
     };
@@ -920,22 +922,45 @@ window.StageFunnel = function StageFunnel() {
   const order = data.funnelOrder || [];
   const reached = data.reached || {};
   const meta = window.STATUS_META || {};
-  const maxReached = Math.max(1, ...order.map(s => reached[s] || 0));
+  // "Responded" is hidden from the funnel: on this pipeline it always equals Phone
+  // Screen (a reply that never becomes a screen does not happen), so it is a
+  // redundant rung. Drop it and recompute each conversion against the previous
+  // SHOWN rung, so Phone Screen reads as applied->screen (the rate that matters)
+  // rather than the trivial responded->screen 100%.
+  // Also hide any rung nothing has reached. The funnel is monotonic (it cannot
+  // widen), so these are always the trailing deep stages — e.g. 2nd Interview
+  // through Offer before you have reached them — and an empty row adds nothing.
+  // The panel grows back down on its own as you actually reach a deeper stage.
+  const shownOrder = order.filter(s => s !== 'Responded' && (reached[s] || 0) > 0);
+  const maxReached = Math.max(1, ...shownOrder.map(s => reached[s] || 0));
   const convByTo = {};
-  (data.conversion || []).forEach(c => { convByTo[c.to] = c.rate; });
+  for (let i = 1; i < shownOrder.length; i++) {
+    const prev = reached[shownOrder[i - 1]] || 0;
+    convByTo[shownOrder[i]] = prev ? Math.round((reached[shownOrder[i]] || 0) / prev * 100) : null;
+  }
 
-  const rej = data.rejections || { byStage: {}, preInterview: 0, unknownStage: 0, total: 0 };
+  const rej = data.rejections || { byStage: {}, preInterview: 0, total: 0 };
   const ivStages = data.interviewStages || [];
   // Shallow -> deep: applied-but-no-reply, then Responded, the interview rounds,
-  // then Offer (the deepest reach), then the un-attributable bucket.
+  // then Offer (the deepest reach). A loss that never advanced past Applied is
+  // Pre-interview — advancing is a tracked step, so no-signal means it never
+  // happened (there is no separate "unknown" bucket).
+  // Each interview/offer row also carries how many REACHED that rung, so the panel
+  // ties to "Reached each stage": e.g. 8 reached Phone Screen = 6 lost here + 2 who
+  // advanced (and show up under 1st Interview). Pre-interview has no single reached
+  // rung (it is the Applied floor minus everyone still open), so it shows no "of N".
   const rejRows = [
     { label: 'Pre-interview', n: rej.preInterview || 0, color: '#60a5fa' },
-    { label: 'Responded', n: (rej.byStage || {})['Responded'] || 0, color: '#38bdf8' },
-    ...ivStages.map(s => ({ label: s, n: (rej.byStage || {})[s] || 0, color: (meta[s] && meta[s].color) || '#f59e0b' })),
-    { label: 'Offer', n: (rej.byStage || {})['Offer'] || 0, color: '#22c55e' },
-    { label: 'Stage unknown', n: rej.unknownStage || 0, color: '#71717a' },
+    ...ivStages.map(s => ({ label: s, n: (rej.byStage || {})[s] || 0, reached: reached[s] || 0, color: (meta[s] && meta[s].color) || '#f59e0b' })),
+    { label: 'Offer', n: (rej.byStage || {})['Offer'] || 0, reached: reached['Offer'] || 0, color: '#22c55e' },
   ];
-  const maxRej = Math.max(1, ...rejRows.map(r => r.n));
+  // Show only stages where losses actually happened. An empty rung is noise, and
+  // "Responded" is the worst offender: reaching a phone screen or interview already
+  // implies a response, so on any real pipeline the Responded loss count is either
+  // zero or folded into the deeper rung — a wasted line. Hiding zero-count rungs
+  // also drops the interview rounds and Offer until a loss actually lands there.
+  const shownRej = rejRows.filter(r => r.n > 0);
+  const maxRej = Math.max(1, ...shownRej.map(r => r.n));
 
   const Bar = ({ n, max, color }) => (
     <div style={{ height: 6, borderRadius: 4, background: 'var(--border)' }}>
@@ -948,7 +973,7 @@ window.StageFunnel = function StageFunnel() {
       <div style={{ flex: 1, minWidth: 280 }}>
         <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>Reached each stage</div>
         <div className="col" style={{ gap: 6 }}>
-          {order.map(s => {
+          {shownOrder.length ? shownOrder.map(s => {
             const n = reached[s] || 0;
             const conv = convByTo[s];
             return (
@@ -960,24 +985,24 @@ window.StageFunnel = function StageFunnel() {
                 <Bar n={n} max={maxReached} color={(meta[s] && meta[s].color) || 'var(--accent)'} />
               </div>
             );
-          })}
+          }) : <div className="mono dim" style={{ fontSize: 12 }}>No applications yet.</div>}
         </div>
       </div>
       <div style={{ flex: 1, minWidth: 280 }}>
         <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 10 }}>Where we lose them · {rej.total} closed</div>
         <div className="col" style={{ gap: 6 }}>
-          {rejRows.map(r => (
+          {shownRej.length ? shownRej.map(r => (
             <div key={r.label}>
               <div className="row" style={{ justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
                 <span>{r.label}</span>
-                <span className="mono dim">{r.n}</span>
+                <span className="mono dim">{r.n}{r.reached != null ? ` · of ${r.reached}` : ''}</span>
               </div>
               <Bar n={r.n} max={maxRej} color={r.color} />
             </div>
-          ))}
+          )) : <div className="mono dim" style={{ fontSize: 12 }}>No closed applications yet.</div>}
         </div>
         <div className="mono dim" style={{ fontSize: 10.5, marginTop: 10, lineHeight: 1.5 }}>
-          Attributed from {data.eventsTracked || 0} logged status changes. Losses recorded before this view existed, with no tracked progression, show as "Stage unknown" and fill in over time.
+          Attributed from {data.eventsTracked || 0} logged status changes. Reaching a reply, screen or interview is a tracked step, so a loss with no such progression is counted as Pre-interview — it never advanced past the application.
         </div>
       </div>
     </div>

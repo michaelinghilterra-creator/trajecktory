@@ -15,7 +15,25 @@
  * Run: node tests/both-queue.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { computeConnectQueue, computeEmailQueue, computeBothQueue } from '../dashboard-web/server/lib/followups.mjs';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+// Sandbox the data dir BEFORE importing followups.mjs. computeBothQueue's
+// _channelsDone() reads a contact's REAL correspondence by id
+// (readTTCorrespondence), so a fixture id that happens to equal a real
+// target-talent contact would read that person's actual sent/received mail and
+// flip linkedinDone/emailDone — making this test depend on live data. That is
+// exactly what broke it: a real contact that happened to share a fixture's id
+// gained a Sent email, so that fixture's emailDone became true. Point
+// TJK_DATA_DIR at an empty temp dir so every read is
+// hermetic (the pattern metrics.test.mjs already uses). The import is dynamic
+// because ESM hoists static imports above this assignment.
+const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-bothqueue-'));
+process.env.TJK_DATA_DIR = sandbox;
+
+const { computeConnectQueue, computeEmailQueue, computeBothQueue } =
+  await import('../dashboard-web/server/lib/followups.mjs');
 
 let passed = 0, failed = 0;
 function check(cond, msg) {

@@ -348,12 +348,15 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
           const cold = rate(sent.filter(a => !isWarmApp(a)));
           const closed = apps.filter(a => a.status === 'Closed').length;
           const stalePct = apps.length ? Math.round((closed / apps.length) * 100) : 0;
-          // Coverage guard. Only 2 rows in the tracker carry an [inbound] tag and
-          // none carry [referral:], while the plan reconstructs 3-4 real warm
-          // touches. So the warm column is UNDER-COUNTED, and saying so is the
-          // difference between a split funnel and a fabricated one.
-          const warmTagged = apps.filter(isWarmApp).length;
-          const undercounted = warmTagged < 4;
+          // Warm COVERAGE, not a warm reply rate. A reply rate over the handful of
+          // warm rows is noise — n is tiny, one row swings it 25 points — and it
+          // describes the ~10% exception, not the work: most applications go in cold.
+          // Coverage over the full applied denominator is the actionable number: the
+          // share of applications that had ANY warm channel, which the relaunch
+          // thesis says to push up via outbound. Warm is under-tagged (few rows carry
+          // an [inbound]/[referral:] tag), so this reads as a FLOOR. The warm reply
+          // detail (k of n replied) moves to the tooltip, off the headline.
+          const warmCoveragePct = sent.length ? Math.round((warm.n / sent.length) * 1000) / 10 : null;
           // Break warm into its sub-types for the tooltip. Inbound and outbound
           // are both "warm" for the rate, but only outbound answers the question
           // the next three weeks are asking.
@@ -369,13 +372,13 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
               </span>
               <span className="kpi-delta">{cold.k} of {cold.n} · {COLD_APPLY_BENCHMARK.label}</span>
             </div>,
-            <div className="kpi" key="warm" title={`Contact with a person existed before the application, either direction. Tagged: ${kindLabel}. Only the outbound share is scalable.`}>
-              <span className="kpi-label">Warm reply rate</span>
-              <span className="kpi-value" style={{ color: undercounted ? 'var(--text-mute)' : 'var(--green)' }}>
-                {warm.n ? `${warm.pct}%` : '-'}
+            <div className="kpi" key="warm" title={`Warm = a person-contact existed before or alongside the application (${kindLabel}). This is the SHARE of your applications that had any warm channel — most go in cold, so this is the lever to grow, and the scalable part is the outbound slice. Warm is under-tagged, so treat it as a floor. When a contact existed, ${warm.k} of ${warm.n} drew a reply.`}>
+              <span className="kpi-label">Warm coverage</span>
+              <span className="kpi-value">
+                {warmCoveragePct == null ? '-' : `${warmCoveragePct}%`}
               </span>
               <span className="kpi-delta">
-                {warm.k} of {warm.n} · {kindLabel}
+                {warm.n} of {sent.length} applied · {kindLabel}
               </span>
             </div>,
             <div className="kpi" key="stale" title="Postings that closed before you could act. Evaluation effort spent on roles that expired.">
