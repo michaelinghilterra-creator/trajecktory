@@ -874,7 +874,7 @@ function RecDirectoryView({ contacts, firms, onOpen, onCompose, onQuickSent, sta
         const notFound = res.filter(x => x.state === 'not_found').length;
         const unverifiable = res.filter(x => x.state === 'unverifiable').length;
         const parts = [`${d.written} verified`];
-        if (unverifiable) parts.push(`${unverifiable} found but unverifiable`);
+        if (unverifiable) parts.push(`${unverifiable} found but unverified (review on their cards)`);
         if (notFound) parts.push(`${notFound} not found`);
         setImportMsg(`${parts.join(' · ')} (checked ${d.checked}${d.skippedForBudget ? `, ${d.skippedForBudget} left for next run` : ''}).`);
         onImported && onImported();
@@ -1489,9 +1489,17 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
         setFinding(false);
         if (d.error) { showToast(d.error, 'error'); return; }
         const hit = (d.results || [])[0];
-        if (hit && hit.email) { showToast(`Verified email found (${hit.state})`, 'success'); load(); onUpdate?.(); }
-        else showToast(hit ? `No verified address found (${hit.state})` : 'No address found', 'warn');
+        if (hit && hit.email && !hit.candidate) { showToast(`Verified email found (${hit.state})`, 'success'); load(); onUpdate?.(); }
+        else if (hit && hit.candidate) { showToast('Found an address but could not verify it — review below', 'warn'); load(); onUpdate?.(); }
+        else showToast('No address found', 'warn');
       }).catch(() => { setFinding(false); showToast('Lookup failed', 'error'); });
+  };
+  // Accept or dismiss the stashed unverified candidate address (Hunter found it but
+  // MillionVerifier wouldn't confirm). Accepting writes it as an unverified address.
+  const resolveCandidate = (accept) => {
+    window.tjkMutate(`/api/recruiters/${id}/candidate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accept }) })
+      .then(() => { load(); onUpdate?.(); showToast(accept ? 'Address saved (unverified)' : 'Candidate dismissed', accept ? 'success' : 'info'); })
+      .catch(() => showToast('Could not update', 'error'));
   };
   // Whole-contact edit mode (identity fields). Recruiters use `firm` for the org.
   const REC_EDIT_FIELDS = [
@@ -1639,6 +1647,21 @@ window.RecruiterDrawer = function RecruiterDrawer({ id, onClose, onUpdate, firms
                   </div>
                 );
               })()}
+              {data.emailCandidate && (
+                <div className="info-row" style={{ alignItems: 'flex-start' }}>
+                  <span className="ik">Suggested</span>
+                  <span className="iv" style={{ minWidth: 0 }}>
+                    <span className="mono" style={{ fontSize: 12 }}>{data.emailCandidate.email}</span>
+                    <span title="Hunter found this address but MillionVerifier could not confirm it" style={{ marginLeft: 8, padding: '2px 6px', borderRadius: 4, background: 'rgba(234,179,8,0.18)', color: '#fde68a', fontSize: 10, fontWeight: 600 }}>UNVERIFIED</span>
+                    <div style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 3 }}>Hunter found this; verifier said “{data.emailCandidate.reason}”. Use it at your own risk.</div>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                      <button className="btn primary sm" onClick={() => resolveCandidate(true)}>Use this address</button>
+                      <button className="btn ghost sm" onClick={() => resolveCandidate(false)}>Dismiss</button>
+                    </div>
+                  </span>
+                  <span />
+                </div>
+              )}
               {data.phone && (
                 <div className="info-row">
                   <span className="ik">Phone</span>

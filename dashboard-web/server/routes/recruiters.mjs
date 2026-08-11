@@ -73,7 +73,7 @@ router.get('/api/recruiters/:id', (req, res) => {
     const r = rows.find(x => x.id === id);
     if (!r) return res.status(404).json({ error: 'Recruiter not found' });
     const { raw, ...recruiter } = r;
-    res.json({ ...recruiter, isHighValue: isHighValueContact(recruiter), correspondence: readRecruiterCorrespondence(id) });
+    res.json({ ...recruiter, isHighValue: isHighValueContact(recruiter), emailCandidate: readCandidates()[id] || null, correspondence: readRecruiterCorrespondence(id) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -93,6 +93,15 @@ const REC_SENDABLE = new Set(['ok', 'valid', 'risky', 'catch_all', 'catch-all', 
 const REC_ATTEMPTS_PATH = path.join(path.dirname(RECRUITERS_MD), 'recruiter-email-attempts.json');
 function readAttempts() { try { const j = JSON.parse(fs.readFileSync(REC_ATTEMPTS_PATH, 'utf8')); return (j && typeof j === 'object') ? j : {}; } catch { return {}; } }
 function writeAttempts(m) { try { fs.writeFileSync(REC_ATTEMPTS_PATH, JSON.stringify(m, null, 2)); } catch { /* best-effort */ } }
+
+// When Hunter finds an address but MillionVerifier won't confirm it, we DON'T write
+// it to the recruiter (the email cell stays what it was) — instead we stash the
+// candidate here, keyed by id, and surface it on the card as a flagged suggestion
+// the user can accept or dismiss. So a real Hunter hit is never silently lost, and
+// nothing unverified sneaks into the send path.
+const REC_CANDIDATES_PATH = path.join(path.dirname(RECRUITERS_MD), 'recruiter-email-candidates.json');
+function readCandidates() { try { const j = JSON.parse(fs.readFileSync(REC_CANDIDATES_PATH, 'utf8')); return (j && typeof j === 'object') ? j : {}; } catch { return {}; } }
+function writeCandidates(m) { try { fs.writeFileSync(REC_CANDIDATES_PATH, JSON.stringify(m, null, 2)); } catch { /* best-effort */ } }
 
 router.post('/api/recruiters/find-emails', async (req, res) => {
   try {
@@ -133,15 +142,22 @@ router.post('/api/recruiters/find-emails', async (req, res) => {
       const site = (r.website || '').trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
       return site.includes('.') ? site.toLowerCase() : null;
     };
+    const candidates = readCandidates();
     const results = [];
     for (const r of toRun) {
       try {
         const f = await findAndVerify(r.firm, r.first, r.last, hkey, mkey, domainOf(r));
         if (f.found && f.verify) {
           updateRecruiterLine(r.id, { email: setVerifyTag(f.email, f.verify) });
+          delete candidates[r.id];   // a verified address supersedes any stashed candidate
           results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: f.email, state: f.verify.state });
+        } else if (f.found && f.email) {
+          // Hunter found an address MillionVerifier wouldn't confirm — stash it as a
+          // flagged candidate instead of discarding it. Not written to the email cell.
+          candidates[r.id] = { email: f.email, reason: f.bad || 'unverifiable', date: today };
+          results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: f.email, state: 'unverifiable', candidate: true });
         } else {
-          results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: null, state: f.found ? 'unverifiable' : 'not_found' });
+          results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: null, state: 'not_found' });
         }
       } catch (e) {
         results.push({ id: r.id, name: `${r.first} ${r.last}`.trim(), firm: r.firm, email: null, state: 'error', error: e.message });
@@ -149,11 +165,36 @@ router.post('/api/recruiters/find-emails', async (req, res) => {
       attempts[r.id] = today;   // stamp so a credit-limited sweep rotates fairly
     }
     writeAttempts(attempts);
+    writeCandidates(candidates);
     res.json({
       ok: true, checked: toRun.length, written: results.filter(x => x.email).length,
       needing: rows.length, skippedForBudget: rows.length - toRun.length,
       creditsBefore: creditsLeft, creditsSpent: toRun.length, results,
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/recruiters/:id/candidate — accept or dismiss the stashed unverified
+// candidate address. body { accept: true } writes it to the email cell (as an
+// unverified address, so it shows the UNVERIFIED badge and never counts as a
+// verified/high-value channel); anything else just dismisses it. Either way the
+// candidate is cleared from the sidecar.
+router.post('/api/recruiters/:id/candidate', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const cands = readCandidates();
+    const cand = cands[id];
+    if (!cand) return res.status(404).json({ error: 'No candidate to act on' });
+    if (req.body && req.body.accept) {
+      // Write the plain address (no verification tag) → parses back as unverified.
+      const ok = updateRecruiterLine(id, { email: cand.email });
+      if (!ok) return res.status(404).json({ error: 'Recruiter not found' });
+    }
+    delete cands[id];
+    writeCandidates(cands);
+    res.json({ ok: true, accepted: !!(req.body && req.body.accept), email: cand.email });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
