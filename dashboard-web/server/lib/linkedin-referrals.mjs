@@ -153,8 +153,10 @@ function existingReferralKeys() {
   const names = new Set(), urls = new Set();
   for (const r of parseReferralsMd()) {
     names.add(norm(r.name));
-    const m = (r.notes || '').match(/https?:\/\/[^\s|]+/i);
-    if (m) urls.add(m[0].trim().toLowerCase());
+    // Prefer the structured LinkedIn column; fall back to a URL still embedded in
+    // notes on any row written before the migration.
+    const u = (r.linkedin || '').trim() || ((r.notes || '').match(/https?:\/\/[^\s|]+/i)?.[0] || '');
+    if (u) urls.add(u.trim().toLowerCase());
   }
   return { names, urls };
 }
@@ -176,7 +178,12 @@ export function reconcile({ seedPool = false } = {}) {
     target: target ? `${target.company} — ${target.role}` : '',
     status: 'Not Asked',
     lastTouch: '',
-    notes: `${c.position || ''}${c.position ? ' · ' : ''}${c.url}${c.on ? ` · connected ${c.on}` : ''}`.trim(),
+    // LinkedIn URL and any exported email go in the STRUCTURED columns now; notes
+    // keeps only the human context (title + when you connected). ~180 of a ~7k
+    // export carry an email — seed it (unverified) so enrichment can verify later.
+    linkedin: c.url || '',
+    email: c.email || '',
+    notes: `${c.position || ''}${c.position && c.on ? ' · ' : ''}${c.on ? `connected ${c.on}` : ''}`.trim(),
   });
   const rows = stage1.map((c) => toRow(c, c.target));
   if (seedPool) rows.push(...stage2.map((c) => toRow(c, null)));

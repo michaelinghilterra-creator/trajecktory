@@ -13,7 +13,8 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-referrals-'));
 process.env.TJK_DATA_DIR = tmp;
 
 // Import AFTER setting the env so config.mjs resolves REFERRALS_MD into the temp dir.
-const { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES } =
+const { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES,
+  readReferralCorrespondence, writeReferralCorrespondence } =
   await import('../dashboard-web/server/lib/referrals.mjs');
 
 let n = 0;
@@ -76,5 +77,58 @@ ok('delete: already-gone id -> false');
 const [c] = appendReferralRows([{ name: 'New Person' }]);
 assert.equal(c.id, 4);
 ok('append after delete: id is max+1, never reused');
+
+// ── LinkedIn + Email columns (structured, trailing, backward-compatible) ───────
+
+// append with a LinkedIn URL and a plain (unverified) email → both persist
+const [d] = appendReferralRows([{ name: 'Jo Lin', where: 'Globex', linkedin: 'https://www.linkedin.com/in/jolin', email: 'jo@example.com' }]);
+let jo = parseReferralsMd().find(r => r.id === d.id);
+assert.equal(jo.linkedin, 'https://www.linkedin.com/in/jolin');
+assert.equal(jo.email, 'jo@example.com');
+assert.equal(jo.verified.state, 'unverified');
+ok('append: linkedin + plain email persist; email reads unverified');
+
+// email with a verify stamp round-trips to a CLEAN address plus a parsed state
+const [e] = appendReferralRows([{ name: 'Vee Kay', where: 'Initech', email: 'vee@example.com', emailVerify: { state: 'ok', source: 'mv', date: '2026-08-12', score: 95 } }]);
+let vee = parseReferralsMd().find(r => r.id === e.id);
+assert.equal(vee.email, 'vee@example.com');        // tag stripped from the address
+assert.equal(vee.verified.state, 'ok');
+assert.equal(vee.verified.source, 'mv');
+ok('append: email verify tag round-trips (clean address + ok state)');
+
+// update the structured columns on an existing (new-format) row
+assert.equal(updateReferralLine(d.id, { linkedin: 'https://www.linkedin.com/in/jo-lin-2', email: 'jo.lin@example.com' }), true);
+jo = parseReferralsMd().find(r => r.id === d.id);
+assert.equal(jo.linkedin, 'https://www.linkedin.com/in/jo-lin-2');
+assert.equal(jo.email, 'jo.lin@example.com');
+ok('update: linkedin + email persist');
+
+// backward-compat: a legacy 8-field row (no LinkedIn/Email cells) gains them
+// without shifting any existing cell — the column-drift hazard this guards.
+const { REFERRALS_MD } = await import('../dashboard-web/server/config.mjs');
+fs.appendFileSync(REFERRALS_MD, '| 900 | Legacy Person | old friend | Acme | Acme RevOps | Not Asked |  | just notes |\n');
+let legacy = parseReferralsMd().find(r => r.id === 900);
+assert.equal(legacy.linkedin, '');   // absent trailing cells read as empty
+assert.equal(legacy.email, '');
+assert.equal(updateReferralLine(900, { linkedin: 'https://www.linkedin.com/in/legacy', email: 'legacy@example.com' }), true);
+legacy = parseReferralsMd().find(r => r.id === 900);
+assert.equal(legacy.linkedin, 'https://www.linkedin.com/in/legacy');
+assert.equal(legacy.email, 'legacy@example.com');
+assert.equal(legacy.notes, 'just notes');   // padding didn't corrupt existing cells
+ok('update: legacy 8-field row gains linkedin + email without column drift');
+
+// ── Referral correspondence store (for referrals with no TA/recruiter twin) ────
+assert.deepEqual(readReferralCorrespondence(1), []);   // nothing logged yet
+writeReferralCorrespondence(1, [
+  { timestamp: '2026-08-12 10:00', direction: 'Sent', subject: 'reconnect', body: 'long time no talk' },
+  { timestamp: '2026-08-12 11:30', direction: 'Received', subject: 'Re: reconnect', body: 'great to hear from you' },
+]);
+const corr = readReferralCorrespondence(1);
+assert.equal(corr.length, 2);
+assert.equal(corr[0].direction, 'Sent');
+assert.equal(corr[0].subject, 'reconnect');
+assert.equal(corr[1].direction, 'Received');
+assert.equal(corr[1].body, 'great to hear from you');
+ok('correspondence: write + read round-trips (2 messages, direction + body preserved)');
 
 console.log(`\n  ${n} referrals checks passed`);
