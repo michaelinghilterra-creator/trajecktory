@@ -63,6 +63,11 @@ export const ACTIVATION_PATH = path.join(DATA_DIR, 'activation-log.tsv');
 export const RECRUITERS_MD = path.join(DATA_DIR, 'recruiters.md');
 export const RECRUITER_CORR_DIR = path.join(DATA_DIR, 'recruiter-correspondence');
 export const REFERRALS_MD = path.join(DATA_DIR, 'referrals.md');
+// Per-referral correspondence, only used for referrals with NO TA/recruiter twin.
+// A linked referral reuses the twin's correspondence dir (see routes/referrals.mjs
+// resolveReferralLink), so the same message shows on both cards — that is the whole
+// point of the unified drawer.
+export const REFERRAL_CORR_DIR = path.join(DATA_DIR, 'referral-correspondence');
 export const TARGET_TALENT_MD = path.join(DATA_DIR, 'target-talent.md');
 export const TT_CORR_DIR = path.join(DATA_DIR, 'target-talent-correspondence');
 // LinkedIn connection state per TA contact, keyed by contact id. A SIDECAR (not a

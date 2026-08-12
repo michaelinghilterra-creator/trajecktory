@@ -97,6 +97,9 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
   const [linkedin, setLinkedin] = useState({ count: 0, importedAt: null });
   const [reconciling, setReconciling] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [lastImport, setLastImport] = useState(null);   // persistent import summary
+  const [findingId, setFindingId] = useState(null);     // per-contact email find in flight
+  const [findingBulk, setFindingBulk] = useState(false);
   const fileRef = useRef(null);
   const toast = window.tjkToast || (() => {});
 
@@ -179,12 +182,41 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
       window.tjkMutate('/api/referrals/import-linkedin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv: String(reader.result || '') }) })
         .then(r => r.json()).then(d => {
           setImporting(false);
-          if (d.ok) { toast(`Imported ${d.imported} connections · +${d.stage1Added} Stage 1, +${d.stage2Added} Stage 2`, 'success'); load(); }
+          if (d.ok) { setLastImport({ ...d, at: new Date() }); toast(`Imported ${d.imported} connections · +${d.stage1Added} Stage 1, +${d.stage2Added} Stage 2`, 'success'); load(); }
           else toast(d.error || 'Import failed', 'error');
         }).catch(() => { setImporting(false); toast('Import failed', 'error'); });
     };
     reader.onerror = () => { setImporting(false); toast('Could not read file', 'error'); };
     reader.readAsText(file);
+  };
+
+  // Find + verify an email for ONE referral (Hunter Email Finder → MillionVerifier).
+  // Writes only a verified address; a warm path with no email becomes reachable.
+  const findEmailOne = (row) => {
+    setFindingId(row.id);
+    window.tjkMutate('/api/referrals/find-emails', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [row.id] }) })
+      .then(r => r.json()).then(d => {
+        setFindingId(null);
+        if (!d.ok) { toast(d.error || 'Email lookup failed', 'error'); return; }
+        const res = (d.results || [])[0];
+        if (res && res.email) toast(`Found ${res.email} · ${res.state}`, 'success');
+        else toast(res ? `No verified email (${res.state})` : 'No email found', 'warn');
+        load();
+      }).catch(() => { setFindingId(null); toast('Email lookup failed', 'error'); });
+  };
+
+  // Bulk find + verify for referrals missing an address, capped per run by the
+  // Hunter credit budget so a big list can't drain the free tier in one click.
+  const findEmailsBulk = () => {
+    if (!window.confirm('Find + verify emails for referrals that are missing one? Uses Hunter credits (capped per run — re-run to continue).')) return;
+    setFindingBulk(true);
+    window.tjkMutate('/api/referrals/find-emails', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+      .then(r => r.json()).then(d => {
+        setFindingBulk(false);
+        if (!d.ok) { toast(d.error || 'Email lookup failed', 'error'); return; }
+        toast(`Checked ${d.checked} · ${d.written} verified${d.skippedForBudget ? ` · ${d.skippedForBudget} left for next run` : ''}`, 'success');
+        load();
+      }).catch(() => { setFindingBulk(false); toast('Email lookup failed', 'error'); });
   };
 
   const logToday = (row) => {
@@ -235,9 +267,24 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
             title="Upload a fresh LinkedIn Connections.csv export (Settings → Data Privacy → Get a copy of your data → Connections)">
             {importing ? 'Importing…' : '⭱ Import LinkedIn CSV'}
           </button>
+          <button className="btn sm" onClick={findEmailsBulk} disabled={findingBulk || !rows.length}
+            title="Find + verify missing emails via Hunter and MillionVerifier (capped per run to protect your credits)">
+            {findingBulk ? 'Finding emails…' : '✉ Find emails'}
+          </button>
           <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }}
             onChange={e => { const f = e.target.files && e.target.files[0]; e.target.value = ''; importCsv(f); }} />
         </div>
+
+        {/* Persistent import summary — the "did it work, what changed" receipt */}
+        {lastImport && (
+          <div className="row" style={{ gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px' }}>
+            <span style={{ color: '#22c55e', fontWeight: 700, fontSize: 12 }}>✓ Import complete</span>
+            <span className="mono dim" style={{ fontSize: 11.5 }}>
+              {Number(lastImport.imported).toLocaleString()} connections read · +{lastImport.stage1Added} Stage 1 · +{lastImport.stage2Added} Stage 2 · {Number(lastImport.stage2Available || 0).toLocaleString()} warm referrers matched · scanned against {lastImport.activeCompanies} active companies
+            </span>
+            <button className="icon-btn" onClick={() => setLastImport(null)} title="Dismiss" style={{ marginLeft: 'auto' }}>✕</button>
+          </div>
+        )}
       </div>
 
       {/* Add form */}
@@ -328,6 +375,9 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
           onClose={() => setDrawerId(null)}
           onPatch={patch}
           onLogToday={logToday}
+          onFindEmail={findEmailOne}
+          finding={findingId === drawerId}
+          onChanged={load}
           onRemove={(r) => { remove(r); setDrawerId(null); }}
         />
       )}
@@ -385,29 +435,67 @@ function refInitials(name) {
 // clickable contact card like every other book. Referral-specific fields (how you
 // know them, their reach, the target you want in) instead of email/correspondence,
 // since this channel is warm-intro / template driven, not direct outreach.
-function ReferralDrawer({ row, statuses, onClose, onPatch, onLogToday, onRemove }) {
+function ReferralDrawer({ row, statuses, onClose, onPatch, onLogToday, onFindEmail, finding, onChanged, onRemove }) {
   const open = !!row;
   return (
     <>
       <div className={"drawer-backdrop" + (open ? " open" : "")} onClick={onClose}
         style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }} />
       <div className={"drawer" + (open ? " open" : "")} style={{ transform: open ? "translateX(0)" : "translateX(100%)" }}>
-        {open && <ReferralPanel row={row} statuses={statuses} onClose={onClose} onPatch={onPatch} onLogToday={onLogToday} onRemove={onRemove} />}
+        {open && <ReferralPanel row={row} statuses={statuses} onClose={onClose} onPatch={onPatch} onLogToday={onLogToday} onFindEmail={onFindEmail} finding={finding} onChanged={onChanged} onRemove={onRemove} />}
       </div>
     </>
   );
 }
 
-function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onRemove }) {
+// One correspondence entry, rendered like the TA/recruiter timeline.
+function RefMsg({ m }) {
+  const dir = m.direction || 'Sent';
+  const isSent = dir === 'Sent';
+  const c = dir === 'Received' ? '#22d3ee' : dir === 'Draft' ? 'var(--text-mute)' : '#a78bfa';
+  return (
+    <div style={{ display: 'flex', gap: 10, padding: '8px 0' }}>
+      <div style={{ flex: 'none', width: 22, display: 'flex', justifyContent: 'center', color: c, fontSize: 12 }}>{isSent ? '↑' : dir === 'Received' ? '↓' : '✎'}</div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.5px', padding: '1px 6px', borderRadius: 4, border: `1px solid ${c}`, color: c }}>{dir.toUpperCase()}</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{m.subject || '(no subject)'}</span>
+          <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-mute)' }}>{m.timestamp}</span>
+        </div>
+        {m.body && <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-dim)', whiteSpace: 'pre-wrap', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 9px' }}>{m.body}</div>}
+      </div>
+    </div>
+  );
+}
+
+// Deliverability badge colors, shared vocabulary with lib/email-verify.mjs.
+const REF_VERIFY_COLORS = {
+  ok: '#22c55e', risky: '#f59e0b', unverified: 'var(--text-mute)',
+  invalid: 'var(--red)', blocked: 'var(--red)', bounced: 'var(--red)',
+};
+
+function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmail, finding, onChanged, onRemove }) {
   const [editing, setEditing] = useState(false);
   const [edit, setEdit] = useState({});
+  const [detail, setDetail] = useState(null);
+  const [compose, setCompose] = useState(null);   // { direction, subject, body } | null
+  const [saving, setSaving] = useState(false);
+  const toast = window.tjkToast || (() => {});
   const FIELDS = [
     { k: 'name', label: 'Name' },
     { k: 'how', label: 'How you know them' },
     { k: 'where', label: 'Where they are now / their reach' },
     { k: 'target', label: 'Target company or role you want in' },
+    { k: 'linkedin', label: 'LinkedIn URL' },
+    { k: 'email', label: 'Email' },
     { k: 'notes', label: 'Notes', textarea: true },
   ];
+
+  const loadDetail = useCallback(() => {
+    fetch(`/api/referrals/${row.id}/detail`).then(r => r.json()).then(setDetail).catch(() => setDetail({ error: true }));
+  }, [row.id]);
+  useEffect(() => { loadDetail(); }, [loadDetail]);
+
   const startEdit = () => { setEdit(Object.fromEntries(FIELDS.map(f => [f.k, row[f.k] || '']))); setEditing(true); };
   const saveEdit = () => {
     const payload = {};
@@ -421,22 +509,40 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onRemove }
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
 
+  const submitMessage = () => {
+    if (!compose || !compose.body.trim()) { toast('Add the message text first', 'warn'); return; }
+    setSaving(true);
+    window.tjkMutate(`/api/referrals/${row.id}/correspondence`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction: compose.direction, subject: compose.subject, body: compose.body }),
+    }).then(r => r.json()).then(d => {
+      setSaving(false);
+      if (!d.ok) { toast(d.error || 'Could not log', 'error'); return; }
+      setCompose(null); loadDetail(); onChanged && onChanged();
+      toast(d.linkedTo ? `Logged to your ${d.linkedTo.source === 'ta' ? 'TA' : 'recruiter'} timeline for this person` : `Logged ${compose.direction.toLowerCase()}`, 'success');
+    }).catch(() => { setSaving(false); toast('Could not log', 'error'); });
+  };
+
   const color = REF_STATUS_COLORS[row.status] || 'var(--text)';
   const inputStyle = { background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '5px 8px', color: 'var(--text)', fontSize: 12, width: '100%' };
+  const link = detail && detail.link;
+  const corr = (detail && detail.correspondence) || [];
+  const relatedApps = (detail && detail.relatedApps) || [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           {row.stage === 'stage1' && <span className="tag" style={{ background: 'rgba(34,197,94,0.16)', color: '#22c55e' }}>Stage 1 · warm path into a target</span>}
           {row.stage === 'stage2' && <span className="tag">Stage 2 · warm referrer</span>}
+          {link && <span className="tag" style={{ background: link.source === 'ta' ? 'rgba(34,211,238,0.14)' : 'rgba(167,139,250,0.14)', color: link.source === 'ta' ? '#22d3ee' : '#a78bfa' }}>Also {link.source === 'ta' ? 'TA' : 'Recruiter'} #{link.id} · shared timeline</span>}
           <button className="icon-btn" onClick={onClose} style={{ marginLeft: 'auto' }}>✕</button>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <span className="mono-av" style={{ width: 44, height: 44, fontSize: 14, borderRadius: 10, borderColor: color, color }}>{refInitials(row.name)}</span>
           <div style={{ minWidth: 0 }}>
             <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>{row.name || '(no name)'}</h3>
-            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>{row.where || 'reach not recorded'}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>{(link && link.title) || row.where || 'reach not recorded'}</div>
             <div style={{ fontSize: 12, color, marginTop: 3, fontWeight: 600 }}>{row.status}</div>
           </div>
         </div>
@@ -468,11 +574,53 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onRemove }
             <div className="info-card">
               <div className="info-row"><span className="ik">How you know them</span><span className="iv">{row.how || '—'}</span><span /></div>
               <div className="info-row"><span className="ik">Where now / reach</span><span className="iv">{row.where || '—'}</span><span /></div>
+              <div className="info-row">
+                <span className="ik">LinkedIn</span>
+                <span className="iv">{row.linkedin
+                  ? <a href={row.linkedin} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>{row.linkedin.replace(/^https?:\/\/(www\.)?/, '')}</a>
+                  : '—'}</span>
+                <span>{row.linkedin && <RefCopyBtn text={row.linkedin} label="Copy" />}</span>
+              </div>
+              <div className="info-row">
+                <span className="ik">Email</span>
+                <span className="iv" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  {row.email
+                    ? <>
+                        <a href={`mailto:${row.email}`} style={{ color: 'var(--accent)' }}>{row.email}</a>
+                        {row.verified && row.verified.state && row.verified.state !== 'unverified' && (
+                          <span title={`Deliverability: ${row.verified.state}${row.verified.source ? ' · ' + row.verified.source : ''}`}
+                            style={{ fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 4, border: `1px solid ${REF_VERIFY_COLORS[row.verified.state] || 'var(--border)'}`, color: REF_VERIFY_COLORS[row.verified.state] || 'var(--text-dim)' }}>{row.verified.state}</span>
+                        )}
+                      </>
+                    : <span style={{ color: 'var(--text-mute)' }}>—</span>}
+                </span>
+                <button className="btn ghost sm" disabled={finding} onClick={() => onFindEmail(row)}
+                  title="Find + verify an email via Hunter and MillionVerifier">
+                  {finding ? 'Finding…' : (row.email ? 'Re-find' : 'Find email')}
+                </button>
+              </div>
               <div className="info-row"><span className="ik">Target</span><span className="iv">{row.target || '—'}</span><span /></div>
               <div className="info-row"><span className="ik">Notes</span><span className="iv">{row.notes || '—'}</span><span /></div>
             </div>
           )}
         </div>
+
+        {/* Related applications — same company match the TA drawer uses */}
+        {relatedApps.length > 0 && (
+          <div className="ds-section">
+            <div className="ds-label">Related applications at {row.where}<span className="r">{relatedApps.length}</span></div>
+            <div className="info-card" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {relatedApps.map(a => (
+                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)' }}>#{a.id}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.role || '(role)'}</span>
+                  {a.score != null && <span className="mono" style={{ fontSize: 11, color: 'var(--text-dim)' }}>{a.score}/5</span>}
+                  <span className="status-badge" style={{ fontSize: 9, padding: '2px 6px' }}>{a.status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Status + touch */}
         <div className="ds-section">
@@ -494,6 +642,45 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onRemove }
             <span className="iv" style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{row.lastTouch || 'Never'}</span>
             <button className="btn ghost sm" onClick={() => onLogToday(row)} title="Log a warm touch today (a reconnect or an ask both count)">Log touch today</button>
           </div>
+        </div>
+
+        {/* Correspondence */}
+        <div className="ds-section">
+          <div className="ds-label">
+            Correspondence<span className="r">{corr.length} message{corr.length !== 1 ? 's' : ''}</span>
+            {!compose && (
+              <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                <button className="btn ghost sm" onClick={() => setCompose({ direction: 'Sent', subject: '', body: '' })}>↑ Log sent</button>
+                <button className="btn ghost sm" onClick={() => setCompose({ direction: 'Received', subject: '', body: '' })}>↓ Log reply</button>
+              </span>
+            )}
+          </div>
+
+          {link && (
+            <div className="dim mono" style={{ fontSize: 10.5, marginBottom: 8 }}>
+              Shared with this person's {link.source === 'ta' ? 'TA Outreach' : 'Recruiter'} record — messages logged here appear on both cards.
+            </div>
+          )}
+
+          {compose && (
+            <div className="info-card" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: compose.direction === 'Sent' ? '#a78bfa' : '#22d3ee' }}>
+                {compose.direction === 'Sent' ? 'Log a message you sent' : 'Log a reply you received'}
+              </div>
+              <input className="inp" placeholder="Subject (optional)" value={compose.subject} style={inputStyle}
+                onChange={e => setCompose(c => ({ ...c, subject: e.target.value }))} />
+              <textarea placeholder="What was said…" value={compose.body} rows={4} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+                onChange={e => setCompose(c => ({ ...c, body: e.target.value }))} />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn primary sm" disabled={saving} onClick={submitMessage}>{saving ? 'Saving…' : 'Save to timeline'}</button>
+                <button className="btn ghost sm" onClick={() => setCompose(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {corr.length === 0 && !compose
+            ? <div className="dim mono" style={{ fontSize: 11 }}>No messages logged yet. Use Log sent / Log reply to build the history{link ? ', or open their ' + (link.source === 'ta' ? 'TA' : 'recruiter') + ' card' : ''}.</div>
+            : <div>{corr.slice().reverse().map((m, i) => <RefMsg key={i} m={m} />)}</div>}
         </div>
 
         {/* Danger zone */}

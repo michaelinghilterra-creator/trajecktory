@@ -99,6 +99,19 @@ function AllContactsView({ search }) {
     if (!window.confirm(`Remove ${row.name || 'this person'} from your referral tracker?`)) return;
     window.tjkMutate(`/api/referrals/${row.id}`, { method: 'DELETE' }).then(() => { loadRef(); setDrawer(null); }).catch(() => loadRef());
   };
+  const [findingRefId, setFindingRefId] = useState(null);
+  const findEmailRef = (row) => {
+    setFindingRefId(row.id);
+    window.tjkMutate('/api/referrals/find-emails', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [row.id] }) })
+      .then(r => r.json()).then(d => {
+        setFindingRefId(null);
+        const res = d.ok && (d.results || [])[0];
+        if (res && res.email) window.tjkToast && window.tjkToast(`Found ${res.email} · ${res.state}`, 'success');
+        else if (d.ok) window.tjkToast && window.tjkToast('No verified email found', 'warn');
+        else window.tjkToast && window.tjkToast(d.error || 'Lookup failed', 'error');
+        loadRef();
+      }).catch(() => { setFindingRefId(null); window.tjkToast && window.tjkToast('Lookup failed', 'error'); });
+  };
 
   const setSort = k => { if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir(k === 'last' ? 'desc' : 'asc'); } };
 
@@ -204,7 +217,8 @@ function AllContactsView({ search }) {
       )}
       {drawer && drawer.type === 'referral' && drawerRow && window.ReferralDrawer && (
         <window.ReferralDrawer row={drawerRow} statuses={refStatuses} onClose={() => setDrawer(null)}
-          onPatch={patchRef} onLogToday={logTodayRef} onRemove={removeRef} />
+          onPatch={patchRef} onLogToday={logTodayRef} onFindEmail={findEmailRef} finding={findingRefId === drawerRow.id}
+          onChanged={loadRef} onRemove={removeRef} />
       )}
     </div>
   );
