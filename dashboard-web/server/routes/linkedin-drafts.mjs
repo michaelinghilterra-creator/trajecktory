@@ -3,6 +3,7 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { cleanProse } from '../lib/text-hygiene.mjs';
 import { loadInfluencer, toneInstruction, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
@@ -60,7 +61,7 @@ HARD RULES:
 Return ONLY the comment text, ready to paste. No quotes, no preface, no explanation.`;
 
     const response = await generateText(prompt, { model: draftModel(), maxTokens: 300 });
-    res.json({ response: response.trim() });
+    res.json({ response: cleanProse(response.trim()) });
   } catch (err) {
     console.error('Error generating response:', err);
     res.status(500).json({ error: err.message });
@@ -128,7 +129,7 @@ HARD RULES:
 Return ONLY the reply text, ready to paste. No quotes, no preface, no explanation.`;
 
     const response = await generateText(prompt, { model: draftModel(), maxTokens: 400 });
-    res.json({ response: response.trim() });
+    res.json({ response: cleanProse(response.trim()) });
   } catch (err) {
     console.error('Error generating reply:', err);
     res.status(500).json({ error: err.message });
@@ -187,7 +188,8 @@ Return ONLY the body of the connection note, ready to paste into LinkedIn. No qu
 
     const callClaude = async (targetMax) => {
       const text = await generateText(buildPrompt(targetMax), { model: draftModel(), maxTokens: 220 });
-      return text.trim();
+      // Clean before the 300-char cap check so the length test sees final text.
+      return cleanProse(text.trim());
     };
 
     // First pass: aim for 280 to leave margin
@@ -274,9 +276,9 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       guidance, cvExcerpt, tone, toneText: toneInstruction(tone), targetMax,
     });
 
-    let response = (await generateText(buildPrompt(280), { model: draftModel(), maxTokens: 220 })).trim();
+    let response = cleanProse((await generateText(buildPrompt(280), { model: draftModel(), maxTokens: 220 })).trim());
     if (response.length > 300) {
-      response = (await generateText(buildPrompt(250), { model: draftModel(), maxTokens: 220 })).trim();
+      response = cleanProse((await generateText(buildPrompt(250), { model: draftModel(), maxTokens: 220 })).trim());
     }
     if (response.length > 300) {
       response = fitConnectNote(response, idn.firstName).text;

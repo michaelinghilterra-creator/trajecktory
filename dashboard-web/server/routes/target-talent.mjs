@@ -2,7 +2,8 @@ import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { pauseSequence } from '../lib/sequences.mjs';
-import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { appendFollowupRow, parseFollowupsMd } from '../lib/followups.mjs';
@@ -241,8 +242,8 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
       const draft = JSON.parse(jsonMatch[0]);
       draft.body = _stripLeadingSalutation(draft.body, r.first);
       draft.body = _stripTrailingSignature(draft.body);
-      draft.body = _replaceEmDashes(draft.body);
-      draft.subject = _replaceEmDashes(collapseRe(draft.subject, inbound.subject));
+      draft.body = cleanEmailBody(draft.body);
+      draft.subject = cleanEmailSubject(collapseRe(draft.subject, inbound.subject));
       return res.json({ ok: true, draft, messageType: 'reply', relatedApp: null });
     }
 
@@ -260,8 +261,8 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
       const draft = JSON.parse(jsonMatch[0]);
       draft.body = _stripLeadingSalutation(draft.body, r.first);
       draft.body = _stripTrailingSignature(draft.body);
-      draft.body = _replaceEmDashes(draft.body);
-      draft.subject = _replaceEmDashes(collapseRe(draft.subject, sent.subject));
+      draft.body = cleanEmailBody(draft.body);
+      draft.subject = cleanEmailSubject(collapseRe(draft.subject, sent.subject));
       return res.json({ ok: true, draft, messageType: 'followup-sent', relatedApp: null });
     }
 
@@ -370,8 +371,8 @@ Output ONLY a JSON object — no markdown, no code fences, no explanation:
     const draft = JSON.parse(jsonMatch[0]);
     draft.body = _stripLeadingSalutation(draft.body, r.first);
     draft.body = _stripTrailingSignature(draft.body);
-    draft.body = _replaceEmDashes(draft.body);
-    draft.subject = _replaceEmDashes(draft.subject);
+    draft.body = cleanEmailBody(draft.body);
+    draft.subject = cleanEmailSubject(draft.subject);
     res.json({ ok: true, draft, messageType, relatedApp: topApp || null });
   } catch (err) {
     res.status(500).json({ error: err.message });

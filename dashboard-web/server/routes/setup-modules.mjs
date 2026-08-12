@@ -11,6 +11,7 @@ import path from 'path';
 import { ROOT_DIR } from '../config.mjs';
 import { cleanNote, fetchReleases, parseReleaseBody } from '../lib/release-notes.mjs';
 import { generateText } from '../lib/anthropic.mjs';
+import { cleanProse } from '../lib/text-hygiene.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { loadProfileContext } from '../lib/insights.mjs';
 import { buildActivities, weeklyCounts, employersInActivities, toTwcCsv, enrichEmployers, ENRICH_MAX } from '../lib/twc.mjs';
@@ -99,11 +100,11 @@ RULES:
     if (cv) parts.push(`## CV (cv.md, trimmed)\n\n${cv}`);
     parts.push(`Write the "Tell me about yourself" answer now, honoring the parameters above.`);
 
-    const pitch = (await generateText(parts.join('\n\n'), {
+    const pitch = cleanProse((await generateText(parts.join('\n\n'), {
       model: 'claude-sonnet-4-6',
       maxTokens: 1200,
       system: sys,
-    })).trim();
+    })).trim());
 
     const tweaks = { seniority, industry, interviewStage, length };
     const out = { pitch, tweaks, generated_at: new Date().toISOString() };

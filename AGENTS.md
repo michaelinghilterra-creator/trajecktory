@@ -471,6 +471,14 @@ node reconcile-triage.mjs --apply
 #     dimensions) are left untouched. Verified: --all touches zero of them.
 node compute-scores.mjs --all --apply
 
+# 3c. Text hygiene on the agent-authored reports: strip invisible/zero-width
+#     Unicode and fold AI-prose tells (em dashes, curly quotes) that the eval
+#     subprocess emits. Reports are written by the agent, so they never pass
+#     through the dashboard's in-process hygiene layer; this is the batch-path
+#     equivalent of the post-run pass in dashboard-web/server/routes/agent.mjs.
+#     Dry-run by default; --apply writes. Idempotent, protects frontmatter + code.
+node clean-generated-text.mjs reports/ --apply
+
 # 4. Merge results into applications.md
 node merge-tracker.mjs
 
