@@ -93,6 +93,12 @@ export const SYSTEM_PATHS = [
   // install would call a script that is not there and every evaluation would fail at
   // the scoring step. Same class as the render-runsheet.mjs / verify-no-pii.mjs hazards.
   'compute-scores.mjs',
+  // Spawned by dashboard-web/server/routes/agent.mjs after every pipeline/deep run
+  // (Tier-B text hygiene over reports/ and interview-prep/), and invoked in
+  // CLAUDE.md's batch workflow. Root script, so the bare lib/ and dashboard-web/
+  // entries do not cover it; without this line an updated install would spawn a
+  // script that is not there. Same class as the compute-scores.mjs hazard above.
+  'clean-generated-text.mjs',
   'next-jd.mjs',
   'verify-pipeline.mjs',
   // Imported at module scope by dashboard-web/server/lib/interview.mjs, which

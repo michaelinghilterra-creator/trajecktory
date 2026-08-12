@@ -2,7 +2,8 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { ROOT_DIR, RECRUITERS_MD } from '../config.mjs';
-import { generateText, _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine, appendRecruiterRows, REC_HEADER, RECRUITER_STATUSES } from '../lib/recruiters.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { logConnect } from '../lib/connects.mjs';
@@ -295,8 +296,8 @@ router.post('/api/recruiters/:id/draft', async (req, res) => {
       const draft = JSON.parse(jsonMatch[0]);
       draft.body = _stripLeadingSalutation(draft.body, r.first);
       draft.body = _stripTrailingSignature(draft.body);
-      draft.body = _replaceEmDashes(draft.body);
-      draft.subject = _replaceEmDashes(collapseRe(draft.subject, inbound.subject));
+      draft.body = cleanEmailBody(draft.body);
+      draft.subject = cleanEmailSubject(collapseRe(draft.subject, inbound.subject));
       return res.json({ ok: true, draft, messageType: 'reply' });
     }
 
@@ -314,8 +315,8 @@ router.post('/api/recruiters/:id/draft', async (req, res) => {
       const draft = JSON.parse(jsonMatch[0]);
       draft.body = _stripLeadingSalutation(draft.body, r.first);
       draft.body = _stripTrailingSignature(draft.body);
-      draft.body = _replaceEmDashes(draft.body);
-      draft.subject = _replaceEmDashes(collapseRe(draft.subject, sent.subject));
+      draft.body = cleanEmailBody(draft.body);
+      draft.subject = cleanEmailSubject(collapseRe(draft.subject, sent.subject));
       return res.json({ ok: true, draft, messageType: 'followup-sent' });
     }
 
@@ -371,8 +372,8 @@ Output ONLY a JSON object — no markdown, no code fences, no explanation:
     const draft = JSON.parse(jsonMatch[0]);
     draft.body = _stripLeadingSalutation(draft.body, r.first);
     draft.body = _stripTrailingSignature(draft.body);
-    draft.body = _replaceEmDashes(draft.body);
-    draft.subject = _replaceEmDashes(draft.subject);
+    draft.body = cleanEmailBody(draft.body);
+    draft.subject = cleanEmailSubject(draft.subject);
     res.json({ ok: true, draft, messageType });
   } catch (err) {
     res.status(500).json({ error: err.message });

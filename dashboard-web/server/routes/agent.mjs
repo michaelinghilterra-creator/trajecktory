@@ -793,6 +793,25 @@ async function runAgent(jobId, mode, target) {
     });
   } catch { /* never break a run on reconcile */ }
 
+  // Tier-B text hygiene: evaluation reports and interview prep are authored by the
+  // `claude` agent SUBPROCESS, so that text never passed through the server's
+  // in-process hygiene layer (dashboard-web/server/lib/text-hygiene.mjs). Clean the
+  // files this mode wrote, here, after the run. Fire-and-forget, idempotent, scoped
+  // by mode; a hygiene failure never affects the run. The CLI batch path is covered
+  // separately by a step in CLAUDE.md's "one true batch workflow".
+  try {
+    const hygieneDirs = [];
+    if (mode === 'pipeline' || mode === 'deep') hygieneDirs.push(path.join(ROOT_DIR, 'reports'));
+    if (mode === 'interview' || mode === 'cheat-sheet' || mode === 'runsheet' || mode === 'interview-prep') {
+      hygieneDirs.push(path.join(ROOT_DIR, 'interview-prep'));
+    }
+    for (const d of hygieneDirs) {
+      const child = spawn(process.execPath, ['clean-generated-text.mjs', d, '--apply'], { cwd: ROOT_DIR, stdio: 'ignore' });
+      child.on('error', () => {});   // never surface a spawn error
+      child.unref();
+    }
+  } catch { /* hygiene is best-effort; never break a run */ }
+
   // Activation log: whether a run produced anything is the outcome worth
   // knowing, and the server already computed it just above. Counts and an enum
   // only — never what was found. No-ops unless the user opted in.

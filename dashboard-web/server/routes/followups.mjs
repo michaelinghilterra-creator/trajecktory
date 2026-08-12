@@ -8,6 +8,7 @@ import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute } from '../lib/sidecars.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
@@ -352,6 +353,11 @@ Output ONLY a JSON object — no markdown, no code fences, no explanation:
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: 'Could not parse draft', raw });
     const draft = JSON.parse(jsonMatch[0]);
+    // Text hygiene on the parsed field values (never the JSON envelope): strip
+    // invisibles + fold em dashes / curly quotes the prompt's "NO em dashes" rule
+    // asks for but the model often ignores. This draft path had no cleaning before.
+    draft.body = cleanEmailBody(draft.body);
+    draft.subject = cleanEmailSubject(draft.subject);
     res.json({ ok: true, draft, touchNumber, fuCount });
   } catch (err) {
     res.status(500).json({ error: err.message });

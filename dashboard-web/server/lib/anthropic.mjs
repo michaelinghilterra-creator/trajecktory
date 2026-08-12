@@ -7,6 +7,7 @@ import '../config.mjs';
 import { getIdentity } from './profile.mjs';
 import { runClaudePrompt } from './claude-cli.mjs';
 import { resolveModelId, currentModel, currentBilling } from './pricing.mjs';
+import { _replaceEmDashes } from './text-hygiene.mjs';
 
 // The SDK captures the key at CONSTRUCTION, so a client built when this module
 // first loads holds whatever key existed then, forever. That broke the promise
@@ -182,18 +183,10 @@ function _stripTrailingSignature(body, userFirstName, userLastName) {
   return lines.join('\n').replace(/\s+$/, '');
 }
 
-// Replace em dashes with commas (and clean up the spacing/double-comma it
-// creates). The model is told no em dashes in the prompt but ignores it
-// often. Em dash (U+2014) is the AI-prose tell; comma is the safest
-// universal replacement that preserves clause structure.
-function _replaceEmDashes(body) {
-  if (!body) return body;
-  return body
-    .replace(/\s+—\s+/g, ', ')    // " — " (spaced) → ", "
-    .replace(/—/g, ', ')           // bare em dash → ", "
-    .replace(/\s+,/g, ',')         // remove space-before-comma artifacts
-    .replace(/,\s*,+/g, ',');      // collapse double commas
-}
+// _replaceEmDashes now lives in the shared hygiene core (lib/text-hygiene-core.mjs)
+// and is imported + re-exported here UNCHANGED, so its two consumers
+// (routes/recruiters.mjs, routes/target-talent.mjs) keep importing it from this
+// module. See dashboard-web/server/lib/text-hygiene.mjs for the full preset set.
 function readProjectFile(projectRoot, relPath) {
   try {
     return fs.readFileSync(path.join(projectRoot, relPath), 'utf8');
