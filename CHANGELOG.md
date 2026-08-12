@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.20.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.19.0...v2.20.0) (2026-08-12)
+
+
+### Features
+
+* **referrals:** structured LinkedIn/email columns, email enrichment, and a unified contact drawer ([#182](https://github.com/michaelinghilterra-creator/trajecktory/issues/182)) ([00834e5](https://github.com/michaelinghilterra-creator/trajecktory/commit/00834e5a7968dc346d1d5c8bb48379015fb47d13))
+
 ## [2.19.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.18.0...v2.19.0) (2026-08-11)
 
 
