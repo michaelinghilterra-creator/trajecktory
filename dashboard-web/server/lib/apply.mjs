@@ -4,6 +4,7 @@ import path from 'path';
 import { execFile } from 'child_process';
 import { ROOT_DIR } from '../config.mjs';
 import { generateText, readProjectFile, draftModel } from './anthropic.mjs';
+import { cleanProse, cleanAtsField } from './text-hygiene.mjs';
 import { pushObsidianNote } from './obsidian.mjs';
 import { getIdentity } from './profile.mjs';
 import { resolveReportPath } from './safe-path.mjs';
@@ -144,7 +145,12 @@ Output format (raw JSON only, no wrapping):
     try {
       const raw = await runClaudeSubprocess(coverJsonPrompt);
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (jsonMatch) coverJson = JSON.parse(jsonMatch[0]);
+      if (jsonMatch) {
+        coverJson = JSON.parse(jsonMatch[0]);
+        // Hygiene on the parsed prose fields (never the JSON envelope), before
+        // they are escHtml'd into the cover-letter HTML below.
+        for (const k of ['salutation', 'p1', 'p2', 'p3', 'closing']) coverJson[k] = cleanProse(coverJson[k]);
+      }
     } catch (err) {
       errors.push(`Cover letter: ${err.message}`);
     }
@@ -281,7 +287,13 @@ Output format (raw JSON only, no wrapping):
     try {
       const raw = await runClaudeSubprocess(cvJsonPrompt);
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (jsonMatch) cvJson = JSON.parse(jsonMatch[0]);
+      if (jsonMatch) {
+        cvJson = JSON.parse(jsonMatch[0]);
+        // Conservative, length-stable hygiene on the four docx slot strings so the
+        // swap stays inside the +/-15% drift guard (cleanAtsField only strips or
+        // does 1:1 swaps -- no em-dash/ellipsis growth, no homoglyph fold).
+        for (const k of ['title', 'subtitle_secondary', 'summary', 'areas_of_expertise']) cvJson[k] = cleanAtsField(cvJson[k]);
+      }
     } catch (err) {
       errors.push(`CV content: ${err.message}`);
     }
@@ -321,6 +333,7 @@ Output format (raw JSON only, no wrapping):
             const raw2 = await runClaudeSubprocess(compressPrompt);
             const m2 = raw2.match(/\{[\s\S]*\}/);
             const c2 = m2 ? JSON.parse(m2[0]) : null;
+            if (c2) for (const k of ['title', 'subtitle_secondary', 'summary', 'areas_of_expertise']) c2[k] = cleanAtsField(c2[k]);
             if (c2 && c2.summary && c2.areas_of_expertise) {
               const swaps2 = {
                 title: c2.title || swaps.title,

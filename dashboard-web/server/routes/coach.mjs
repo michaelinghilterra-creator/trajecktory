@@ -4,6 +4,7 @@
 // after the user confirms. Mirrors the posts feature's route+lib+generateText shape.
 import express from 'express';
 import { generateText, draftModel } from '../lib/anthropic.mjs';
+import { cleanProse } from '../lib/text-hygiene.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import {
   getMessages, appendMessage, clearMessages, getCachedBrief, setCachedBrief,
@@ -34,7 +35,7 @@ router.get('/api/coach/brief', async (req, res) => {
     }
     const state = coachState();
     const system = buildSystemPrompt(state, getIdentity());
-    const text = (await generateText(briefPrompt(state), { system, model: draftModel(), maxTokens: 320 })).trim();
+    const text = cleanProse((await generateText(briefPrompt(state), { system, model: draftModel(), maxTokens: 320 })).trim());
     if (text) setCachedBrief(text, today);
     res.json({ brief: text, cached: false });
   } catch (err) {
@@ -57,7 +58,9 @@ router.post('/api/coach/message', async (req, res) => {
     const system = buildSystemPrompt(state, getIdentity());
     const raw = await generateText(buildChatPrompt(prior, message), { system, model: draftModel(), maxTokens: 700 });
     const { text, action } = parseAction(raw);
-    const replyText = text || "I'm here — could you say a bit more about what you're trying to do?";
+    // Clean the human-facing prose only; the action object (already peeled off by
+    // parseAction) is never touched.
+    const replyText = cleanProse(text) || "I'm here — could you say a bit more about what you're trying to do?";
     const saved = appendMessage({ role: 'coach', text: replyText, action });
     res.json({ reply: { id: saved.id, text: replyText, action, ts: saved.ts } });
   } catch (err) {
