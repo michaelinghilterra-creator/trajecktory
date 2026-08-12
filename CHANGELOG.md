@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.21.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.20.0...v2.21.0) (2026-08-12)
+
+
+### Features
+
+* **hygiene:** text-hygiene layer across all generation surfaces ([#184](https://github.com/michaelinghilterra-creator/trajecktory/issues/184)) ([151f96c](https://github.com/michaelinghilterra-creator/trajecktory/commit/151f96c39ff5c72ef32cb4e2879a9f74bb3a84c3))
+
 ## [2.20.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.19.0...v2.20.0) (2026-08-12)
 
 
