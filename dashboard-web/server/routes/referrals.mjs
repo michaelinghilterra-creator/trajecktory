@@ -4,7 +4,7 @@ import { reconcile, parseConnectionsCsv, saveConnections, linkedinStatus, stageF
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
 import { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine } from '../lib/recruiters.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
-import { findAndVerify, hunterSearchesLeft, planFindBudget, DEFAULT_FIND_LIMIT } from '../../../find-contacts.mjs';
+import { findAndVerify, hunterSearchesLeft } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 
 export const router = express.Router();
@@ -157,29 +157,46 @@ router.post('/api/referrals/find-emails', async (req, res) => {
       .filter(r => !(r.email || '').trim() && r._n.first && r._n.last && (r.where || '').trim() &&
         (!idSet || idSet.has(r.id)));
 
+    // No per-run cap. Paid Hunter/MillionVerifier plans exist precisely so a bulk
+    // run clears the whole list in one pass — the user should not have to re-click
+    // through batches. An optional body `limit` still lets a caller cap on purpose;
+    // otherwise every addressless referral is processed. creditsBefore is reported,
+    // never a gate (a depleted key just yields graceful not_found/error rows).
     const creditsLeft = await hunterSearchesLeft(hkey);
-    const wanted = idSet ? rows.length : (Number.isFinite(limit) && limit > 0 ? limit : DEFAULT_FIND_LIMIT);
-    const cap = planFindBudget({ needed: rows.length, limit: wanted, creditsLeft });
-    const toRun = rows.slice(0, cap);
+    const toRun = (Number.isFinite(limit) && limit > 0) ? rows.slice(0, limit) : rows;
+
+    // Run the finder calls CONCURRENTLY (each findAndVerify is an independent Hunter
+    // → MillionVerifier round-trip), then apply the writes SEQUENTIALLY: updateReferralLine
+    // does a read-modify-write of referrals.md, so parallel writes would race and drop
+    // rows. The network is the slow part, and that is what the pool parallelizes.
+    const CONCURRENCY = 6;
+    const found = new Array(toRun.length);
+    let next = 0;
+    const worker = async () => {
+      while (next < toRun.length) {
+        const i = next++;
+        const r = toRun[i];
+        try { found[i] = { r, f: await findAndVerify(r.where, r._n.first, r._n.last, hkey, mkey) }; }
+        catch (e) { found[i] = { r, err: e.message }; }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, toRun.length || 1) }, worker));
 
     const results = [];
-    for (const r of toRun) {
-      try {
-        const f = await findAndVerify(r.where, r._n.first, r._n.last, hkey, mkey);
-        if (f.found && f.verify) {
-          updateReferralLine(r.id, { email: setVerifyTag(f.email, f.verify) });
-          results.push({ id: r.id, name: r.name, company: r.where, email: f.email, state: f.verify.state });
-        } else {
-          results.push({ id: r.id, name: r.name, company: r.where, email: null, state: f.found ? 'unverifiable' : 'not_found' });
-        }
-      } catch (e) {
-        results.push({ id: r.id, name: r.name, company: r.where, email: null, state: 'error', error: e.message });
+    for (const item of found) {
+      if (!item) continue;
+      const { r, f, err } = item;
+      if (err) { results.push({ id: r.id, name: r.name, company: r.where, email: null, state: 'error', error: err }); continue; }
+      if (f.found && f.verify) {
+        updateReferralLine(r.id, { email: setVerifyTag(f.email, f.verify) });
+        results.push({ id: r.id, name: r.name, company: r.where, email: f.email, state: f.verify.state });
+      } else {
+        results.push({ id: r.id, name: r.name, company: r.where, email: null, state: f.found ? 'unverifiable' : 'not_found' });
       }
     }
     res.json({
       ok: true, checked: toRun.length, written: results.filter(x => x.email).length,
-      needing: rows.length, skippedForBudget: rows.length - toRun.length,
-      creditsBefore: creditsLeft, creditsSpent: toRun.length, results,
+      needing: rows.length, creditsBefore: creditsLeft, results,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

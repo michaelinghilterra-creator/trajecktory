@@ -208,13 +208,13 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
   // Bulk find + verify for referrals missing an address, capped per run by the
   // Hunter credit budget so a big list can't drain the free tier in one click.
   const findEmailsBulk = () => {
-    if (!window.confirm('Find + verify emails for referrals that are missing one? Uses Hunter credits (capped per run — re-run to continue).')) return;
+    if (!window.confirm('Find + verify an email for every referral missing one? Runs the whole list in a single pass using your Hunter and MillionVerifier credits.')) return;
     setFindingBulk(true);
     window.tjkMutate('/api/referrals/find-emails', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
       .then(r => r.json()).then(d => {
         setFindingBulk(false);
         if (!d.ok) { toast(d.error || 'Email lookup failed', 'error'); return; }
-        toast(`Checked ${d.checked} · ${d.written} verified${d.skippedForBudget ? ` · ${d.skippedForBudget} left for next run` : ''}`, 'success');
+        toast(`Checked ${d.checked} · ${d.written} verified email${d.written === 1 ? '' : 's'}`, 'success');
         load();
       }).catch(() => { setFindingBulk(false); toast('Email lookup failed', 'error'); });
   };
@@ -268,7 +268,7 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
             {importing ? 'Importing…' : '⭱ Import LinkedIn CSV'}
           </button>
           <button className="btn sm" onClick={findEmailsBulk} disabled={findingBulk || !rows.length}
-            title="Find + verify missing emails via Hunter and MillionVerifier (capped per run to protect your credits)">
+            title="Find + verify an email for every referral missing one, in a single pass (Hunter + MillionVerifier)">
             {findingBulk ? 'Finding emails…' : '✉ Find emails'}
           </button>
           <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }}
