@@ -54,7 +54,7 @@ trajecktory"), do NOT open a browser tab yourself. Start it like this:
 
 ## What is trajecktory
 
-AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluation, CV generation, portal scanning, batch processing. Runs on any AI coding CLI that follows the [open agent skill standard](https://agentskills.io) (Claude Code, Codex, Gemini, OpenCode, Qwen, Copilot, Kimi).
+AI-powered job search, run from a local dashboard: pipeline tracking, offer scoring, CV and cover-letter generation, portal scanning, follow-ups, and interview prep. The dashboard is the primary way in; the same skill also runs headless on any AI coding CLI that follows the [open agent skill standard](https://agentskills.io) (Claude Code, Codex, Gemini, OpenCode, Qwen, Copilot, Kimi).
 
 ### Main Files
 
