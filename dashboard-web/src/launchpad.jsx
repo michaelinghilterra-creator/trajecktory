@@ -7,6 +7,72 @@
 // fields are saved via /api/setup/save; everything else is a handoff.
 const { useState, useEffect, useCallback, useRef } = React;
 
+// Resume rhythm (cadence) card for the Launchpad "Your resume" step. Reads
+// GET /api/resume/cadence and shows a 0-100 variety score, a verdict, and coaching
+// flags for the resume's experience bullets. FLAG + COACH only: it never edits the
+// resume. Varying the rhythm is the user's call, which is why there is no rewrite
+// button here (unlike the auto-revise on emails / LinkedIn / social).
+window.ResumeCadenceCard = function ResumeCadenceCard() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch('/api/resume/cadence', { signal: ctrl.signal })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error('unavailable'))))
+      .then(d => setData(d))
+      .catch(e => { if (e.name !== 'AbortError') setErr(true); });
+    return () => ctrl.abort();
+  }, []);
+
+  if (err) return null; // no resume yet, or unreadable: stay quiet on the onboarding step
+  if (!data) return <div style={{ marginTop: 14, fontSize: 12, color: 'var(--text-mute)' }}>Checking resume rhythm...</div>;
+
+  const wrap = { marginTop: 14, border: '1px solid var(--border)', borderRadius: 'var(--r-card)', padding: 14, background: 'var(--bg-2)' };
+  const title = <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Resume rhythm</div>;
+
+  if (data.insufficient) {
+    return (
+      <div style={wrap}>
+        {title}
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6, lineHeight: 1.55 }}>
+          Not enough experience bullets to judge the rhythm yet (found {data.bulletCount}). Add a few more and check back.
+        </div>
+      </div>
+    );
+  }
+
+  const tone = data.score >= 70 ? '#3fb950' : data.score >= 45 ? '#d29922' : '#f85149';
+  const m = data.metrics || {};
+  return (
+    <div style={wrap}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+        {title}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--mono, monospace)', color: tone }}>{data.score}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>/100</span>
+          <span className="pill" style={{ borderColor: tone, color: tone }}>{data.verdict}</span>
+        </div>
+      </div>
+      <div style={{ height: 6, borderRadius: 4, background: 'var(--border)', marginTop: 8, overflow: 'hidden' }}>
+        <div style={{ width: data.score + '%', height: '100%', background: tone }} />
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 6 }}>
+        {data.bulletCount} experience bullets / avg {m.meanWords} words / {Math.round((m.bandFraction || 0) * 100)}% about the same length
+      </div>
+      {data.flags && data.flags.length > 0 ? (
+        <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+          {data.flags.map((f, i) => <li key={i}>{f.message}</li>)}
+        </ul>
+      ) : (
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 10 }}>Nice variety. No rhythm problems flagged.</div>
+      )}
+      <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 10 }}>
+        This only flags the rhythm so you can vary it. It never changes your resume.
+      </div>
+    </div>
+  );
+};
+
 // ---- section catalog -------------------------------------------------------
 // kind: 'action' (run something), 'form' (scalar fields saved direct),
 //       'gen' (hand off to Claude Code). req drives the readiness meter.
@@ -1237,6 +1303,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
             {lpHandoffCheck("cv")}
           </div>
         )}
+        <window.ResumeCadenceCard />
       </div>
     );
   }
