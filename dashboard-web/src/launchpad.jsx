@@ -12,6 +12,58 @@ const { useState, useEffect, useCallback, useRef } = React;
 // flags for the resume's experience bullets. FLAG + COACH only: it never edits the
 // resume. Varying the rhythm is the user's call, which is why there is no rewrite
 // button here (unlike the auto-revise on emails / LinkedIn / social).
+// Plain-language (style) card for the Launchpad "Your resume" step. Reads
+// GET /api/resume/style and shows a 0-100 plainness score plus flagged AI vocab,
+// filler, and cliche openers. FLAG + COACH only; never edits the resume.
+window.ResumeStyleCard = function ResumeStyleCard() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch('/api/resume/style', { signal: ctrl.signal })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error('unavailable'))))
+      .then(d => setData(d))
+      .catch(e => { if (e.name !== 'AbortError') setErr(true); });
+    return () => ctrl.abort();
+  }, []);
+  if (err) return null;
+  if (!data) return <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-mute)' }}>Checking plain language...</div>;
+  const wrap = { marginTop: 10, border: '1px solid var(--border)', borderRadius: 'var(--r-card)', padding: 14, background: 'var(--bg-2)' };
+  const title = <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Plain language</div>;
+  if (data.insufficient) {
+    return (
+      <div style={wrap}>
+        {title}
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 6, lineHeight: 1.55 }}>Not enough resume text to judge word choice yet.</div>
+      </div>
+    );
+  }
+  const tone = data.score >= 75 ? '#3fb950' : data.score >= 50 ? '#d29922' : '#f85149';
+  return (
+    <div style={wrap}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+        {title}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--mono, monospace)', color: tone }}>{data.score}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>/100</span>
+          <span className="pill" style={{ borderColor: tone, color: tone }}>{data.verdict}</span>
+        </div>
+      </div>
+      <div style={{ height: 6, borderRadius: 4, background: 'var(--border)', marginTop: 8, overflow: 'hidden' }}>
+        <div style={{ width: data.score + '%', height: '100%', background: tone }} />
+      </div>
+      {data.flags && data.flags.length > 0 ? (
+        <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+          {data.flags.slice(0, 8).map((f, i) => <li key={i}>{f.message}</li>)}
+        </ul>
+      ) : (
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 10 }}>Reads plainly. Nothing flagged.</div>
+      )}
+      <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 10 }}>Suggestions only. It never changes your resume.</div>
+    </div>
+  );
+};
+
 window.ResumeCadenceCard = function ResumeCadenceCard() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(false);
@@ -1304,6 +1356,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
           </div>
         )}
         <window.ResumeCadenceCard />
+        <window.ResumeStyleCard />
       </div>
     );
   }
