@@ -12,7 +12,7 @@
  * Run: node tests/scan-parsers.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { detectApi, parseWorkable, parseSmartRecruiters } from '../scan.mjs';
+import { detectApi, parseWorkable, parseSmartRecruiters, parseWorkday } from '../scan.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -104,6 +104,30 @@ console.log('\n5. parseSmartRecruiters');
     'hybrid:true reflected in remoteHint');
   check(offers[1].location === 'us', 'falls back to city/region/country join when no fullLocation');
   check(/remote/.test(offers[1].remoteHint), 'remote:true → "remote" in remoteHint');
+}
+
+// ── 6. parseWorkday (remoteHint recovery) ────────────────────────────────────
+// Workday's list API has no JD body and no remote flag, so parseWorkday used to
+// emit no remoteHint and genuinely-remote roles listing only an HQ city were
+// geo-blocked. The hint now folds title + bulletFields + locationsText.
+console.log('\n6. parseWorkday');
+{
+  const base = 'https://acme.wd1.myworkdayjobs.com/careers';
+  const fixture = { jobPostings: [
+    { title: 'Director, Analytics (Remote)', externalPath: '/job/Chicago/Director-Analytics_JR1',
+      locationsText: 'Chicago, IL', bulletFields: ['JR1'], postedOn: 'Posted 3 Days Ago' },
+    { title: 'Director, Analytics', externalPath: '/job/Dallas/Director-Analytics_JR2',
+      locationsText: 'Dallas, TX', bulletFields: ['JR2'], postedOn: 'Posted Today' },
+    { title: 'Head of Revenue Operations', externalPath: '/job/Remote/Head-RevOps_JR3',
+      locationsText: 'New York, NY', bulletFields: ['JR3', 'Remote'], postedOn: 'Posted 30+ Days Ago' },
+  ]};
+  const offers = parseWorkday(fixture, 'Acme', base);
+  check(offers.length === 3, `maps all jobPostings (${offers.length}/3)`);
+  check(offers[0].url === base + '/job/Chicago/Director-Analytics_JR1', 'url = baseUrl + externalPath');
+  check(offers[0].location === 'Chicago, IL', 'location from locationsText');
+  check(/\bremote\b/i.test(offers[0].remoteHint), '"(Remote)" in title surfaces in remoteHint (was geo-blocked before)');
+  check(!/\bremote\b/i.test(offers[1].remoteHint), 'genuine onsite role carries no remote signal');
+  check(/\bremote\b/i.test(offers[2].remoteHint), 'remote signal in a bulletField also surfaces');
 }
 
 console.log(`\n📊 scan parsers: ${passed} passed, ${failed} failed`);

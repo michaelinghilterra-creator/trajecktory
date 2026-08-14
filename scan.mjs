@@ -191,14 +191,24 @@ function parseLever(json, companyName) {
 
 function parseWorkday(json, companyName, baseUrl) {
   const jobs = json.jobPostings || [];
-  return jobs.map(j => ({
-    title: j.title || '',
-    url: j.externalPath ? `${baseUrl}${j.externalPath}` : '',
-    company: companyName,
-    // locationsText is a flat string; bulletFields[0] sometimes carries location
-    location: j.locationsText || (Array.isArray(j.bulletFields) ? j.bulletFields[0] : '') || '',
-    postedAt: j.postedOn || null,
-  }));
+  return jobs.map(j => {
+    const bullets = Array.isArray(j.bulletFields) ? j.bulletFields : [];
+    return {
+      title: j.title || '',
+      url: j.externalPath ? `${baseUrl}${j.externalPath}` : '',
+      company: companyName,
+      // locationsText is a flat string; bulletFields[0] sometimes carries location
+      location: j.locationsText || bullets[0] || '',
+      postedAt: j.postedOn || null,
+      // Workday's list API returns no JD body and no explicit remote flag, so a
+      // genuinely-remote role listing only its HQ city was geo-blocked as
+      // out-of-region — parseWorkday was the ONE parser with no remoteHint.
+      // Fold title + all bulletFields + locationsText into the hint so the
+      // location filter can still find a "remote" signal wherever Workday put it
+      // (commonly a "(Remote)" suffix in the title).
+      remoteHint: [j.title, ...bullets, j.locationsText].filter(Boolean).join(' '),
+    };
+  });
 }
 
 function parseWorkable(json, companyName) {
@@ -472,9 +482,7 @@ async function main() {
   const companyFlag = args.indexOf('--company');
   const filterCompany = companyFlag !== -1 ? args[companyFlag + 1]?.toLowerCase() : null;
   const maxAgeDaysFlag = args.indexOf('--max-age-days');
-  const maxAgeDays = noAgeFilter ? 0
-    : maxAgeDaysFlag !== -1 ? parseInt(args[maxAgeDaysFlag + 1], 10) || 60
-    : 60;  // default: skip postings older than 60 days
+  const flagAge = maxAgeDaysFlag !== -1 ? parseInt(args[maxAgeDaysFlag + 1], 10) : NaN;
   const maxHistoryDaysFlag = args.indexOf('--max-history-days');
   const maxHistoryDays = maxHistoryDaysFlag !== -1 ? parseInt(args[maxHistoryDaysFlag + 1], 10) || 30 : 30;
 
@@ -488,6 +496,13 @@ async function main() {
   const companies = config.tracked_companies || [];
   const titleFilter = buildTitleFilter(config.title_filter);
   const locationFilter = buildLocationFilter(config.title_filter);  // reads location_policy from title_filter section
+
+  // Age cap resolution: the --max-age-days flag wins, then portals.yml
+  // `scan.max_age_days`, then a 90-day default. Raised from 60 — still-open
+  // senior roles routinely sit 60-90 days on a slow board, and dropping them as
+  // "stale" hid live matches the user would apply to. --no-age-filter sets 0.
+  const cfgAge = Number.isFinite(config.scan?.max_age_days) ? config.scan.max_age_days : 90;
+  const maxAgeDays = noAgeFilter ? 0 : (Number.isFinite(flagAge) ? flagAge : cfgAge);
 
   // 2. Filter to enabled companies with detectable APIs
   const targets = companies
