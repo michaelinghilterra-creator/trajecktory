@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.24.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.23.0...v2.24.0) (2026-08-14)
+
+
+### Features
+
+* rework the job-discovery funnel end to end ([#191](https://github.com/michaelinghilterra-creator/trajecktory/issues/191)) ([ef3c430](https://github.com/michaelinghilterra-creator/trajecktory/commit/ef3c430cde490c000054f759b6fbc1e1acb0c1a5))
+
 ## [2.23.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.22.0...v2.23.0) (2026-08-14)
 
 
