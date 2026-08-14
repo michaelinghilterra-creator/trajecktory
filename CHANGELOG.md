@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.25.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.24.0...v2.25.0) (2026-08-14)
+
+
+### Features
+
+* **style:** plain-language flags + fold word choice into the revise pass ([#193](https://github.com/michaelinghilterra-creator/trajecktory/issues/193)) ([a68c68c](https://github.com/michaelinghilterra-creator/trajecktory/commit/a68c68c87dd9e91122284fa99cf6ea98f7eb74ed))
+
 ## [2.24.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.23.0...v2.24.0) (2026-08-14)
 
 
