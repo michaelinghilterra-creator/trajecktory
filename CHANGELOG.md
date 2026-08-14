@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.23.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.22.0...v2.23.0) (2026-08-14)
+
+
+### Features
+
+* **cadence:** resume rhythm flag + coach on the Launchpad ([#189](https://github.com/michaelinghilterra-creator/trajecktory/issues/189)) ([290d9c6](https://github.com/michaelinghilterra-creator/trajecktory/commit/290d9c6636ce97e44585745ad43bf101f37f9a16))
+
 ## [2.22.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.21.0...v2.22.0) (2026-08-14)
 
 
