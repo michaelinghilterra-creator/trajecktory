@@ -34,6 +34,7 @@ Take the **TOP N unchecked URLs** (default 15) from the top of the pending list.
 For each URL that survives that filter:
 1. Read the JD.
    - **If the row is a `local:jds/…` snapshot path (NOT an `http(s)` URL), read that file directly with the Read tool. Do NOT WebFetch it** — it is a local file, not a web address, so a fetch fails and you would wrongly skip a JD that is sitting readable on disk. `resolve-jds.mjs` writes these snapshots for JS-rendered (SPA) postings precisely so you can read them directly; when the queue is mostly `local:jds/…` rows, treating them as un-fetchable makes an entire run score nothing.
+     - **Resolve the path relative to the repo root (your current working directory):** `local:jds/foo.md` is the file `jds/foo.md`, NOT `data/jds/foo.md`. The `jds/` snapshot directory sits at the repo root; do NOT look for it under `data/` just because `data/pipeline.md` (the file that lists the row) lives there. A run that guesses `data/jds/` finds nothing on disk and then wrongly skips every snapshot, scoring 0 on an otherwise-fine queue.
    - Otherwise (an `http(s)` URL), read it with **WebFetch** first, **WebSearch** as a fallback.
    - If it genuinely cannot be read either way, skip it (do not guess).
 2. Score FIT **0.0-5.0** (one decimal) using the rubric + anti-inflation calibration below.
