@@ -4,6 +4,7 @@ import { parseApplicationsMd } from '../lib/applications.mjs';
 import { pauseSequence } from '../lib/sequences.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
+import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { appendFollowupRow, parseFollowupsMd } from '../lib/followups.mjs';
@@ -243,6 +244,7 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
       draft.body = _stripLeadingSalutation(draft.body, r.first);
       draft.body = _stripTrailingSignature(draft.body);
       draft.body = cleanEmailBody(draft.body);
+      draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
       draft.subject = cleanEmailSubject(collapseRe(draft.subject, inbound.subject));
       return res.json({ ok: true, draft, messageType: 'reply', relatedApp: null });
     }
@@ -262,6 +264,7 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
       draft.body = _stripLeadingSalutation(draft.body, r.first);
       draft.body = _stripTrailingSignature(draft.body);
       draft.body = cleanEmailBody(draft.body);
+      draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
       draft.subject = cleanEmailSubject(collapseRe(draft.subject, sent.subject));
       return res.json({ ok: true, draft, messageType: 'followup-sent', relatedApp: null });
     }
@@ -372,6 +375,7 @@ Output ONLY a JSON object — no markdown, no code fences, no explanation:
     draft.body = _stripLeadingSalutation(draft.body, r.first);
     draft.body = _stripTrailingSignature(draft.body);
     draft.body = cleanEmailBody(draft.body);
+    draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
     draft.subject = cleanEmailSubject(draft.subject);
     res.json({ ok: true, draft, messageType, relatedApp: topApp || null });
   } catch (err) {
