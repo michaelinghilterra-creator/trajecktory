@@ -14,6 +14,7 @@ import { analyzeCadence, formatCadenceReport } from '../dashboard-web/server/lib
 import { reviseForCadence } from '../dashboard-web/server/lib/cadence-revise.mjs';
 import { computeStreak } from '../dashboard-web/server/lib/cadence.mjs';
 import { experienceBullets } from '../dashboard-web/server/routes/resume-cadence.mjs';
+import { analyzeStyle, stripRedundantFiller } from '../dashboard-web/server/lib/text-hygiene.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -74,6 +75,28 @@ check(cvBullets.length === 3, `extracts only the 3 experience bullets (got ${cvB
 check(cvBullets.every((b) => !b.startsWith('-')), 'bullet markers are stripped');
 check(!cvBullets.some((b) => /italics|Summary|outside|Also outside/.test(b)), 'skips italic context, summary, and out-of-section bullets');
 check(experienceBullets('# No experience section here\nsome text').length === 0, 'no Professional Experience heading -> no bullets');
+
+// ── style analysis (mirror of the OSS module, via text-hygiene) ──────────────
+const STYLE_AI = "In today's fast-paced world I have delved into the realm of gardening to unlock the potential of my backyard, meticulously fostering synergy between soil and season to spearhead pivotal, world-class harvests that resonate across the whole neighborhood every year.";
+const STYLE_PLAIN = 'I repainted the back fence last spring. It had been peeling for years, so I scraped it down, primed the bare spots, and put on two coats over a long weekend. The color finally matched the house again.';
+const stAi = analyzeStyle(STYLE_AI);
+const stPlain = analyzeStyle(STYLE_PLAIN);
+check(!stAi.insufficient && stAi.score < 40, `AI-flavored text scores low (${stAi.score})`);
+check(stAi.flags.some((f) => f.type === 'ai-vocab' && f.severity === 'high'), 'AI-flavored flags high ai-vocab');
+check(!stPlain.insufficient && stPlain.score > 80, `plain text scores high (${stPlain.score})`);
+check(analyzeStyle('too short').insufficient === true, 'short input is insufficient');
+check(analyzeStyle(null).insufficient === true, 'analyzeStyle(null) is insufficient, not a throw');
+check(analyzeStyle(STYLE_PLAIN, { expectBullets: true }).score >= 80, 'expectBullets does not lower a clean prose score');
+
+// ── stripRedundantFiller: the one safe auto-fix (via text-hygiene) ───────────
+check(stripRedundantFiller('In order to win we meet on a daily basis.') === 'To win we meet daily.', 'strip: swaps + preserves leading capital');
+check(stripRedundantFiller(null) === null, 'stripRedundantFiller is null-safe');
+
+// ── revise pass now applies the safe filler swaps even on a too-short draft ──
+const rTiny = await reviseForCadence('In order to help.');
+check(rTiny.reason === 'too-short' && rTiny.text === 'To help.', 'revise: too-short draft still gets the safe filler swap');
+const rEmpty = await reviseForCadence('');
+check(rEmpty.revised === false && rEmpty.reason === 'empty', 'revise: empty input short-circuits');
 
 // ── regression: the WEEKLY cadence tracker is a different, intact module ─────
 check(typeof computeStreak === 'function', 'weekly-cadence tracker (cadence.mjs) still exports computeStreak');
