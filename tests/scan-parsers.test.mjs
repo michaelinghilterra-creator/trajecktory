@@ -12,7 +12,7 @@
  * Run: node tests/scan-parsers.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { detectApi, parseWorkable, parseSmartRecruiters, parseWorkday } from '../scan.mjs';
+import { detectApi, parseWorkable, parseSmartRecruiters, parseWorkday, insertOffersIntoPipeline } from '../scan.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -128,6 +128,24 @@ console.log('\n6. parseWorkday');
   check(/\bremote\b/i.test(offers[0].remoteHint), '"(Remote)" in title surfaces in remoteHint (was geo-blocked before)');
   check(!/\bremote\b/i.test(offers[1].remoteHint), 'genuine onsite role carries no remote signal');
   check(/\bremote\b/i.test(offers[2].remoteHint), 'remote signal in a bulletField also surfaces');
+}
+
+// ── 7. insertOffersIntoPipeline (fresh finds go to the TOP) ──────────────────
+// The eval agent evaluates the top N pending rows, so appending fresh finds at
+// the bottom made them wait behind the whole backlog. New offers now prepend.
+console.log('\n7. insertOffersIntoPipeline');
+{
+  const md = '## Pendientes\n\n- [ ] https://old/1 | OldCo | Old Role\n';
+  const out = insertOffersIntoPipeline(md, [
+    { url: 'https://new/1', company: 'NewCo', title: 'Director, RevOps' },
+    { url: 'https://new/2', company: 'NewCo2', title: 'VP, Analytics' },
+  ]);
+  check(out.indexOf('https://new/1') < out.indexOf('https://old/1'), 'fresh offers are placed ABOVE the existing backlog');
+  check(out.includes('- [ ] https://old/1 | OldCo | Old Role'), 'existing pending rows are preserved');
+  check((out.match(/## Pendientes/g) || []).length === 1, 'does not duplicate the Pendientes marker');
+  const created = insertOffersIntoPipeline('', [{ url: 'https://x/1', company: 'X', title: 'Head of RevOps' }]);
+  check(/## Pendientes/.test(created) && /- \[ \] https:\/\/x\/1/.test(created), 'creates the Pendientes section when the file has none');
+  check(insertOffersIntoPipeline(md, []) === md, 'no offers leaves the text unchanged');
 }
 
 console.log(`\n📊 scan parsers: ${passed} passed, ${failed} failed`);
