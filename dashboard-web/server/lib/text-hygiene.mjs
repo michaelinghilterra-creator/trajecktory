@@ -31,3 +31,8 @@ export {
 // Cadence analysis (the rhythm half). Mirror of the ai-text-hygiene OSS module;
 // keep lib/cadence-core.mjs in sync with that repo. Covered by lib/ in SYSTEM_PATHS.
 export { analyzeCadence, formatCadenceReport } from '../../../lib/cadence-core.mjs';
+
+// Style analysis (word choice / filler / openers / bullets). Mirror of the OSS
+// module; keep lib/style-core.mjs in sync. analyzeStyle is detect-only;
+// stripRedundantFiller is the one safe auto-fix.
+export { analyzeStyle, formatStyleReport, stripRedundantFiller } from '../../../lib/style-core.mjs';
