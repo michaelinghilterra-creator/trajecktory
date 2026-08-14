@@ -40,8 +40,15 @@ const src = readFileSync(join(ROOT, 'dashboard-web/server/routes/agent.mjs'), 'u
 function branch(mode) {
   const start = src.indexOf(`if (mode === '${mode}')`);
   if (start === -1) return '';
-  const end = src.indexOf('\n  if (mode ===', start + 10);
-  return src.slice(start, end === -1 ? src.length : end);
+  // End at the next mode branch, OR (for the last branch, 'deep') the builder's
+  // terminal `return '';`. Without the second bound, branch('deep') ran to EOF
+  // and swept in unrelated later route code — its local:jds assertion would then
+  // pass off code that has nothing to do with the deep prompt.
+  const nextBranch = src.indexOf('\n  if (mode ===', start + 10);
+  const fnEnd = src.indexOf("\n  return '';", start + 10);
+  const ends = [nextBranch, fnEnd].filter(i => i !== -1);
+  const end = ends.length ? Math.min(...ends) : src.length;
+  return src.slice(start, end);
 }
 
 const scan = branch('scan');
@@ -72,6 +79,32 @@ check(/SKIP any URL that already appears in data\/applications\.md/.test(triage)
   'triage prompt still instructs skipping already-evaluated URLs');
 check(/triage-dismissed\.tsv/.test(triage),
   'triage prompt still instructs skipping user-dismissed URLs');
+
+// Triage queues are frequently local:jds/ snapshots (resolve-jds repoints every
+// SPA-hosted posting to one). The agent must read those DIRECTLY, and must
+// resolve the path against the REPO ROOT. Without the base-dir statement the
+// Haiku agent non-deterministically guessed data/jds/ (pipeline.md lives in
+// data/), found nothing on disk, and scored 0/N on an otherwise-fine queue
+// (reproduced 2026-08-14). Pin both halves so this cannot silently regress.
+check(/local:jds/.test(triage),
+  'triage prompt handles local:jds snapshot rows (read directly, not WebFetch)');
+check(/data\/jds/.test(triage),
+  'triage prompt disambiguates the local:jds base path from data/jds');
+
+// The same disambiguation must live in the mode file, which the interactive
+// (non-dashboard) triage path reads instead of this prompt.
+const triageMode = readFileSync(join(ROOT, 'modes/triage.md'), 'utf8');
+check(/local:jds/.test(triageMode) && /data\/jds/.test(triageMode),
+  'modes/triage.md disambiguates the local:jds base path from data/jds');
+
+// The deep-dive branch receives the SAME local:jds paths (a triage card can be
+// deep-dived) and carries the same base-dir ambiguity. It runs on a stronger
+// model and never reproduced the 0-score bug, but the clause costs nothing and
+// closes the latent hole.
+const deep = branch('deep');
+check(deep.length > 0, 'deep-mode prompt branch exists');
+check(/local:jds/.test(deep) && /data\/jds/.test(deep),
+  'deep prompt disambiguates the local:jds base path from data/jds');
 
 // The enforced half. If these move, the prompt sentences above stop being
 // belt-and-braces and become the only defense again.
