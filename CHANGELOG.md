@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.22.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.21.0...v2.22.0) (2026-08-14)
+
+
+### Features
+
+* **cadence:** auto-revise generated drafts for varied sentence rhythm ([#187](https://github.com/michaelinghilterra-creator/trajecktory/issues/187)) ([1a51c59](https://github.com/michaelinghilterra-creator/trajecktory/commit/1a51c59a21251b57a8b8e1e9d8e97cd0bddec2c8))
+
 ## [2.21.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.20.0...v2.21.0) (2026-08-12)
 
 
