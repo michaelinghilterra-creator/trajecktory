@@ -27,6 +27,12 @@ console.log('resolve-jds.test.mjs');
 // ── parsePostingUrl: recognized single-posting URLs ──────────────────────────
 check(eq(parsePostingUrl('https://job-boards.greenhouse.io/acmerobotics/jobs/5100000001'),
   { ats: 'greenhouse', board: 'acmerobotics', id: '5100000001' }), 'greenhouse direct board URL');
+// EU-hosted Greenhouse boards (job-boards.eu / boards.eu) were gated "unsupported
+// ATS platform"; the US API host serves them, so recognizing the host is enough.
+check(eq(parsePostingUrl('https://job-boards.eu.greenhouse.io/acmerobotics/jobs/5100000001'),
+  { ats: 'greenhouse', board: 'acmerobotics', id: '5100000001' }), 'greenhouse EU board host (job-boards.eu) recognized');
+check(eq(parsePostingUrl('https://boards.eu.greenhouse.io/acmerobotics/jobs/5100000001'),
+  { ats: 'greenhouse', board: 'acmerobotics', id: '5100000001' }), 'greenhouse EU board host (boards.eu) recognized');
 check(eq(parsePostingUrl('https://www.contoso.example/careers/job?gh_jid=7100000001'),
   { ats: 'greenhouse', id: '7100000001', needsBoard: true }), 'greenhouse gh_jid on company domain → needsBoard');
 check(eq(parsePostingUrl('https://jobs.ashbyhq.com/globex/0d86cc2f-1111-2222-3333-444455556666'),

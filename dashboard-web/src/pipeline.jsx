@@ -854,6 +854,7 @@ const PL_SUBTABS = [
   { id: 'overview',  label: 'Overview',  icon: PI.pulse },
   { id: 'table',     label: 'Active',    icon: PI.list },
   { id: 'all',       label: 'All',       icon: PI.list },
+  { id: 'discovery', label: 'Discovery', icon: PI.pulse },
   { id: 'awaiting',  label: 'Awaiting response', icon: PI.clock || PI.pulse },
   { id: 'analytics', label: 'Analytics', icon: PI.chart },
 ];
@@ -1966,6 +1967,61 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
 window.PipelineDrawer = PipelineDrawer;
 
 // ─── Root: PipelineTab (replaces the existing) ─────────────────────────────
+// ─── Discovery Inbox sub-tab ───────────────────────────────────────────────
+// The raw discovery queue from data/pipeline.md (GET /api/pipeline/inbox): what
+// a scan FOUND but has not evaluated yet (pending), what was gated dead/unreadable
+// and why (gated), and a done count. Exists because every other Pipeline view
+// reads only evaluated rows, so a found-but-pending or gated role appeared
+// nowhere and looked "lost" — the #1 driver of the "we keep losing JDs" report.
+function DiscoveryInbox({ inbox, onReload }) {
+  if (!inbox) return <div className="card padded-lg dim" style={{ fontSize: 12 }}>Loading discovery queue…</div>;
+  const { counts = { pending: 0, gated: 0, done: 0 }, pending = [], gated = [] } = inbox;
+  const rowStyle = (i) => ({ gap: 10, alignItems: 'baseline', padding: '5px 0', borderTop: i ? '1px solid var(--border)' : 'none' });
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="card padded-lg col" style={{ gap: 8 }}>
+        <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+          The raw discovery queue. A scanned role lands here as <b>pending</b>, gets a JD snapshot, then is evaluated and moves to your pipeline. <b>Gated</b> rows were found dead or unreadable, with the reason shown. Nothing here is lost — pending roles simply have not been evaluated yet.
+        </div>
+        <div className="row" style={{ gap: 18, marginTop: 2, alignItems: 'center' }}>
+          <span className="mono" style={{ fontSize: 12 }}><b>{counts.pending}</b> pending eval</span>
+          <span className="mono" style={{ fontSize: 12 }}><b>{counts.gated}</b> gated</span>
+          <span className="mono dim" style={{ fontSize: 12 }}>{counts.done} done</span>
+          <button type="button" className="btn sm" style={{ marginLeft: 'auto' }} onClick={onReload}>↻ Refresh</button>
+        </div>
+      </div>
+
+      <div className="card padded-lg col" style={{ gap: 4 }}>
+        <div className="card-head"><span className="card-title"><span className="dot" style={{ background: 'var(--accent)' }} />Pending evaluation ({pending.length})</span></div>
+        {pending.length === 0 && <div className="dim" style={{ fontSize: 12 }}>Nothing waiting. Run a scan to find new roles.</div>}
+        {pending.map((p, i) => (
+          <div key={i} className="row" style={rowStyle(i)}>
+            <span style={{ fontWeight: 600, fontSize: 13, minWidth: 170 }}>{p.company || '—'}</span>
+            <span style={{ fontSize: 13, flex: 1 }}>{p.title || '—'}</span>
+            {p.readable
+              ? <span className="mono dim" style={{ fontSize: 10.5 }}>ready</span>
+              : <span className="mono" style={{ fontSize: 10.5, color: 'var(--amber, #fbbf24)' }}>needs JD paste</span>}
+          </div>
+        ))}
+      </div>
+
+      <div className="card padded-lg col" style={{ gap: 4 }}>
+        <div className="card-head"><span className="card-title"><span className="dot" style={{ background: 'var(--red, #ef4444)' }} />Gated ({gated.length})</span></div>
+        {gated.length === 0 && <div className="dim" style={{ fontSize: 12 }}>No gated rows.</div>}
+        {gated.map((g, i) => (
+          <div key={i} className="col" style={{ gap: 2, padding: '5px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}>
+            <div className="row" style={{ gap: 10, alignItems: 'baseline' }}>
+              <span style={{ fontWeight: 600, fontSize: 13, minWidth: 170 }}>{g.company || '—'}</span>
+              <span style={{ fontSize: 13, flex: 1 }}>{g.title || '—'}</span>
+            </div>
+            <div className="dim mono" style={{ fontSize: 10.5, lineHeight: 1.4 }}>{g.reason || 'gated'}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFilters, onOpen, onQuickAction, onDataChanged, search, compTweaks }) {
   // Use the external view prop when it matches a known subtab, otherwise default to 'overview'.
   // This lets the command palette in app.jsx jump directly to the All subtab.
@@ -1990,6 +2046,22 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
     fetch('/api/triage/results').then(r => r.json()).then(d => setTriageCards(d.cards || [])).catch(() => {});
   }, []);
   useEffectP(() => { loadTriage(); }, [loadTriage]);
+
+  // Discovery Inbox: the raw pipeline.md queue (pending / gated / done), so a
+  // found-but-unevaluated or gated role is never invisible. Same refresh triggers
+  // as triage (mount, focus, and after any scan/eval that changes `apps`).
+  const [inbox, setInbox] = useStateP(null);
+  const loadInbox = useCallbackP(() => {
+    fetch('/api/pipeline/inbox').then(r => r.json()).then(setInbox).catch(() => {});
+  }, []);
+  useEffectP(() => { loadInbox(); }, [loadInbox]);
+  useEffectP(() => { loadInbox(); }, [apps, loadInbox]);
+  useEffectP(() => {
+    let last = 0;
+    const onFocus = () => { const now = Date.now(); if (now - last < 5000) return; last = now; loadInbox(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [loadInbox]);
   // Triage runs in Claude Code (background) or the workflow step, then writes
   // triage-results.tsv while this tab is already mounted. Without a re-fetch the
   // new rows only appear after a manual browser reload. That was the bug that hid
@@ -2188,6 +2260,9 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
       )}
       {subView === 'all' && (
         <AllEntriesView apps={[...apps, ...triageRows]} onOpen={handleOpen} search={search} isStale={isStale} staleDays={staleDays} triage={triage} />
+      )}
+      {subView === 'discovery' && (
+        <DiscoveryInbox inbox={inbox} onReload={loadInbox} />
       )}
       {subView === 'awaiting' && window.AwaitingResponseView && (
         <window.AwaitingResponseView

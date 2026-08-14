@@ -47,6 +47,43 @@
 # you would rather filter by hand at first.
 
 title_filter:
+  # -- MATRIX (recommended) --
+  # Define your target roles ONCE as functions x seniority; scan-core generates
+  # every surface form ("Director of Analytics" == "Analytics Director" == "VP,
+  # Data & Insights"). functions_bare pass at any level; functions_ranked need a
+  # seniority word adjacent (either order, optional modifier like "Global"
+  # between). When `matrix` is present the flat `positive:` list below is IGNORED
+  # (kept only as a reference / fallback for older scan-core builds). Delete the
+  # families you don't target and add your own.
+  matrix:
+    seniority: [manager, senior manager, sr manager, lead, director, senior director, sr director, executive director, head, vp, svp, evp, chief]
+    modifiers: [global, worldwide, international, regional, enterprise]
+    functions_bare:
+      - revenue operations
+      - revops
+      - revenue ops
+      - sales operations
+      - sales ops
+      - gtm operations
+      - commercial operations
+    functions_ranked:
+      - analytics
+      - business intelligence
+      - business analytics
+      - data analytics
+      - insights
+      - revenue analytics
+      - gtm analytics
+      - commercial analytics
+      - sales analytics
+      - revenue strategy
+      - gtm strategy
+      - sales strategy
+      - sales enablement
+      - revenue enablement
+      - deal desk
+      - sales development
+
   positive:
     # [CUSTOMIZE] Replace these with keywords matching YOUR target roles.
     # Broad on purpose: better to see too much on a first scan than nothing.

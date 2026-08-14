@@ -191,14 +191,24 @@ function parseLever(json, companyName) {
 
 function parseWorkday(json, companyName, baseUrl) {
   const jobs = json.jobPostings || [];
-  return jobs.map(j => ({
-    title: j.title || '',
-    url: j.externalPath ? `${baseUrl}${j.externalPath}` : '',
-    company: companyName,
-    // locationsText is a flat string; bulletFields[0] sometimes carries location
-    location: j.locationsText || (Array.isArray(j.bulletFields) ? j.bulletFields[0] : '') || '',
-    postedAt: j.postedOn || null,
-  }));
+  return jobs.map(j => {
+    const bullets = Array.isArray(j.bulletFields) ? j.bulletFields : [];
+    return {
+      title: j.title || '',
+      url: j.externalPath ? `${baseUrl}${j.externalPath}` : '',
+      company: companyName,
+      // locationsText is a flat string; bulletFields[0] sometimes carries location
+      location: j.locationsText || bullets[0] || '',
+      postedAt: j.postedOn || null,
+      // Workday's list API returns no JD body and no explicit remote flag, so a
+      // genuinely-remote role listing only its HQ city was geo-blocked as
+      // out-of-region — parseWorkday was the ONE parser with no remoteHint.
+      // Fold title + all bulletFields + locationsText into the hint so the
+      // location filter can still find a "remote" signal wherever Workday put it
+      // (commonly a "(Remote)" suffix in the title).
+      remoteHint: [j.title, ...bullets, j.locationsText].filter(Boolean).join(' '),
+    };
+  });
 }
 
 function parseWorkable(json, companyName) {
@@ -397,38 +407,42 @@ function loadSeenUrls(maxHistoryDays = 30) {
 
 // ── Pipeline writer ─────────────────────────────────────────────────
 
-function appendToPipeline(offers) {
-  if (offers.length === 0) return;
-
-  // Fresh install has no pipeline.md yet — start from empty and let the block
-  // below create the "## Pendientes" section. (Reading it unguarded ENOENT'd a
-  // brand-new install the moment the first scan found a new offer.)
-  let text = existsSync(PIPELINE_PATH) ? readFileSync(PIPELINE_PATH, 'utf-8') : '';
-
-  // Find "## Pendientes" section and append after it
+// Insert freshly-scanned offers into pipeline.md text. Pure (no fs) so the
+// ordering is unit-testable. Offers arrive already sorted best-fit-first (see
+// scoreOffer), and are placed at the TOP of the "## Pendientes" section — the
+// eval agent evaluates the top N pending rows, so putting them at the BOTTOM
+// (the old behavior) made every fresh find wait behind the entire stale backlog
+// before it was ever looked at.
+export function insertOffersIntoPipeline(text, offers) {
+  if (!offers || offers.length === 0) return text;
+  const rows = offers.map(o =>
+    `- [ ] ${sanitizeCell(o.url)} | ${sanitizeCell(o.company)} | ${sanitizeCell(o.title)}`
+  );
   const marker = '## Pendientes';
   const idx = text.indexOf(marker);
   if (idx === -1) {
-    // No Pendientes section — append at end before Procesadas
+    // No Pendientes section yet — create it (before Procesadas if present).
     const procIdx = text.indexOf('## Procesadas');
     const insertAt = procIdx === -1 ? text.length : procIdx;
-    const block = `\n${marker}\n\n` + offers.map(o =>
-      `- [ ] ${sanitizeCell(o.url)} | ${sanitizeCell(o.company)} | ${sanitizeCell(o.title)}`
-    ).join('\n') + '\n\n';
-    text = text.slice(0, insertAt) + block + text.slice(insertAt);
-  } else {
-    // Find the end of existing Pendientes content (next ## or end)
-    const afterMarker = idx + marker.length;
-    const nextSection = text.indexOf('\n## ', afterMarker);
-    const insertAt = nextSection === -1 ? text.length : nextSection;
-
-    const block = '\n' + offers.map(o =>
-      `- [ ] ${sanitizeCell(o.url)} | ${sanitizeCell(o.company)} | ${sanitizeCell(o.title)}`
-    ).join('\n') + '\n';
-    text = text.slice(0, insertAt) + block + text.slice(insertAt);
+    const block = `\n${marker}\n\n${rows.join('\n')}\n\n`;
+    return text.slice(0, insertAt) + block + text.slice(insertAt);
   }
+  // Prepend right after the marker line so the new rows become the FIRST pending
+  // entries. `sep` guards the rare case of the marker sitting at end-of-file with
+  // no trailing newline, so rows never glue onto the "## Pendientes" text.
+  const lineEnd = text.indexOf('\n', idx);
+  const at = lineEnd === -1 ? text.length : lineEnd + 1;
+  const sep = at > 0 && text[at - 1] !== '\n' ? '\n' : '';
+  return text.slice(0, at) + `${sep}${rows.join('\n')}\n` + text.slice(at);
+}
 
-  writeFileSync(PIPELINE_PATH, text, 'utf-8');
+function appendToPipeline(offers) {
+  if (offers.length === 0) return;
+  // Fresh install has no pipeline.md yet — start from empty and let
+  // insertOffersIntoPipeline create the "## Pendientes" section. (Reading it
+  // unguarded ENOENT'd a brand-new install the moment the first scan found one.)
+  const text = existsSync(PIPELINE_PATH) ? readFileSync(PIPELINE_PATH, 'utf-8') : '';
+  writeFileSync(PIPELINE_PATH, insertOffersIntoPipeline(text, offers), 'utf-8');
 }
 
 function appendToScanHistory(offers, date) {
@@ -472,9 +486,7 @@ async function main() {
   const companyFlag = args.indexOf('--company');
   const filterCompany = companyFlag !== -1 ? args[companyFlag + 1]?.toLowerCase() : null;
   const maxAgeDaysFlag = args.indexOf('--max-age-days');
-  const maxAgeDays = noAgeFilter ? 0
-    : maxAgeDaysFlag !== -1 ? parseInt(args[maxAgeDaysFlag + 1], 10) || 60
-    : 60;  // default: skip postings older than 60 days
+  const flagAge = maxAgeDaysFlag !== -1 ? parseInt(args[maxAgeDaysFlag + 1], 10) : NaN;
   const maxHistoryDaysFlag = args.indexOf('--max-history-days');
   const maxHistoryDays = maxHistoryDaysFlag !== -1 ? parseInt(args[maxHistoryDaysFlag + 1], 10) || 30 : 30;
 
@@ -488,6 +500,13 @@ async function main() {
   const companies = config.tracked_companies || [];
   const titleFilter = buildTitleFilter(config.title_filter);
   const locationFilter = buildLocationFilter(config.title_filter);  // reads location_policy from title_filter section
+
+  // Age cap resolution: the --max-age-days flag wins, then portals.yml
+  // `scan.max_age_days`, then a 90-day default. Raised from 60 — still-open
+  // senior roles routinely sit 60-90 days on a slow board, and dropping them as
+  // "stale" hid live matches the user would apply to. --no-age-filter sets 0.
+  const cfgAge = Number.isFinite(config.scan?.max_age_days) ? config.scan.max_age_days : 90;
+  const maxAgeDays = noAgeFilter ? 0 : (Number.isFinite(flagAge) ? flagAge : cfgAge);
 
   // 2. Filter to enabled companies with detectable APIs
   const targets = companies
