@@ -13,6 +13,7 @@
 import { analyzeCadence, formatCadenceReport } from '../dashboard-web/server/lib/text-hygiene.mjs';
 import { reviseForCadence } from '../dashboard-web/server/lib/cadence-revise.mjs';
 import { computeStreak } from '../dashboard-web/server/lib/cadence.mjs';
+import { experienceBullets } from '../dashboard-web/server/routes/resume-cadence.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -47,6 +48,32 @@ const empty = await reviseForCadence('');
 check(empty.revised === false && empty.reason === 'empty', 'revise: empty input short-circuits');
 const tiny = await reviseForCadence('One short line.\nAnother short line.');
 check(tiny.revised === false && tiny.reason === 'too-short', 'revise: too-short input is left unchanged');
+
+// ── resume bullet extraction (feeds GET /api/resume/cadence) ─────────────────
+const CV_FIXTURE = [
+  '# Jane Doe',
+  'City | 555-0100 | jane@example.com',
+  '## Professional Summary',
+  'A prose summary paragraph that is not a bullet and must be skipped.',
+  '## Core Competencies',
+  'Baking, Inventory, Scheduling',
+  '## Professional Experience',
+  '### Corner Bakery | Head Baker | 2020-2024',
+  '*An italic role-context line, not an achievement bullet.*',
+  '- Baked the morning bread and pastries for the front case.',
+  '- Trained three new hires on the proofing schedule.',
+  '#### Village Cafe | Line Cook | 2018-2020',
+  '- Ran the lunch line and kept ticket times under target.',
+  '## Earlier Experience',
+  '- This bullet is outside Professional Experience and must be skipped.',
+  '## Technical Skills',
+  '- Also outside; skip.',
+].join('\n');
+const cvBullets = experienceBullets(CV_FIXTURE);
+check(cvBullets.length === 3, `extracts only the 3 experience bullets (got ${cvBullets.length})`);
+check(cvBullets.every((b) => !b.startsWith('-')), 'bullet markers are stripped');
+check(!cvBullets.some((b) => /italics|Summary|outside|Also outside/.test(b)), 'skips italic context, summary, and out-of-section bullets');
+check(experienceBullets('# No experience section here\nsome text').length === 0, 'no Professional Experience heading -> no bullets');
 
 // ── regression: the WEEKLY cadence tracker is a different, intact module ─────
 check(typeof computeStreak === 'function', 'weekly-cadence tracker (cadence.mjs) still exports computeStreak');
