@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.25.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.25.0...v2.25.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* **triage:** resolve local:jds snapshots against the repo root, not data/jds ([#195](https://github.com/michaelinghilterra-creator/trajecktory/issues/195)) ([ef8c658](https://github.com/michaelinghilterra-creator/trajecktory/commit/ef8c658554419a7093500676a289581c3afebee9))
+
 ## [2.25.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.24.0...v2.25.0) (2026-08-14)
 
 
