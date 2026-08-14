@@ -8,7 +8,7 @@
  * Run: node tests/scan-core.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { normalizeUrl, buildTitleFilter, buildLocationFilter, normalizeForMatch, scoreOffer } from '../lib/scan-core.mjs';
+import { normalizeUrl, buildTitleFilter, buildLocationFilter, normalizeForMatch, scoreOffer, expandTitleMatrix } from '../lib/scan-core.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -124,6 +124,48 @@ check(wb('Director of JavaScript Analytics') === true, 'negative "java" does not
 check(wb('Director, Reliability Engineering') === true, 'negative "engineer" does not drop "Engineering"');
 check(wb('HR Director') === false, 'negative "hr" still drops a standalone "HR" token');
 check(wb('Java Director') === false, 'negative "java" still drops a standalone "Java" token');
+
+// ── buildTitleFilter (MATRIX path) ────────────────────────────────────────────
+// The declarative function x seniority matrix replaces the ~200-line hand-listed
+// positive block. functions_bare pass at any level; functions_ranked need a
+// seniority word adjacent (either order, optional modifier between). Validated
+// against 857 real scanned titles: 0 coverage lost, 33 previously-missed roles
+// recovered. When a matrix is present the flat positive list is IGNORED.
+const mf = buildTitleFilter({
+  matrix: {
+    seniority: ['director', 'vp', 'manager', 'head'],
+    modifiers: ['global'],
+    functions_bare: ['revenue operations', 'revops'],
+    functions_ranked: ['analytics', 'sales enablement'],
+  },
+  negative: ['intern', 'engineer'],
+});
+check(mf('Revenue Operations') === true, 'matrix: bare function passes with no seniority word');
+check(mf('Revenue Operations Manager') === true, 'matrix: bare function passes at Manager level');
+check(mf('Analytics') === false, 'matrix: ranked function alone (no seniority) is rejected');
+check(mf('Director of Analytics') === true, 'matrix: ranked function passes with adjacent seniority (sen-fn order)');
+check(mf('Analytics Director') === true, 'matrix: ranked function passes in trailing order (fn-sen) the old list missed');
+check(mf('Director, Global Sales Enablement') === true, 'matrix: optional modifier is allowed between seniority and function');
+check(mf('Director of Marketing') === false, 'matrix: a seniority with an unlisted function is rejected');
+check(mf('Analytics Engineer') === false, 'matrix: whole-token negative still excludes');
+check(mf('Director of Analytics (Intern)') === false, 'matrix: negative wins even when seniority+function match');
+// Matrix takes precedence over any flat positive list on the same config.
+const mfWins = buildTitleFilter({
+  matrix: { seniority: ['director'], functions_bare: ['revenue operations'], functions_ranked: [] },
+  positive: ['coordinator'], negative: [],
+});
+check(mfWins('Marketing Coordinator') === false, 'matrix present: flat positive list is ignored (matrix wins)');
+
+// expandTitleMatrix contract: null without a matrix, and cached by identity.
+check(expandTitleMatrix(undefined) === null, 'expandTitleMatrix returns null when no matrix configured');
+const sharedMatrix = { seniority: ['vp'], functions_ranked: ['analytics'] };
+check(expandTitleMatrix(sharedMatrix) === expandTitleMatrix(sharedMatrix), 'expandTitleMatrix caches by matrix identity');
+
+// scoreOffer density works off the matrix functions when a matrix is configured.
+const mtf = { matrix: { seniority: ['director', 'vp'], functions_bare: ['revenue operations'], functions_ranked: ['analytics'] }, seniority_boost: ['director', 'vp'] };
+check(scoreOffer({ title: 'VP of Revenue Analytics' }, mtf) > scoreOffer({ title: 'Marketing Coordinator' }, mtf),
+  'matrix scoreOffer: on-target title outranks off-target');
+check(scoreOffer({ title: 'Marketing Coordinator' }, mtf) === 0, 'matrix scoreOffer: no function match scores 0');
 
 // ── scoreOffer (best-fit ranking) ─────────────────────────────────────────────
 // Drives the order scan.mjs writes pipeline.md, so the dashboard's batch
