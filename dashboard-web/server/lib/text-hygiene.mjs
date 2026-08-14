@@ -27,3 +27,7 @@ export {
   cleanMarkdownProse,
   _replaceEmDashes,
 } from '../../../lib/text-hygiene-core.mjs';
+
+// Cadence analysis (the rhythm half). Mirror of the ai-text-hygiene OSS module;
+// keep lib/cadence-core.mjs in sync with that repo. Covered by lib/ in SYSTEM_PATHS.
+export { analyzeCadence, formatCadenceReport } from '../../../lib/cadence-core.mjs';
