@@ -16,7 +16,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { canonicalUrl } from '../lib/identity.mjs';
 import {
-  parsePipelineRow, readPipelineRows, markDone, handledOpenRows, reconcileHandled, sourceUrlOf,
+  parsePipelineRow, readPipelineRows, markDone, handledOpenRows, reconcileHandled, sourceUrlOf, pipelineInbox,
 } from '../lib/pipeline.mjs';
 
 let passed = 0, failed = 0;
@@ -165,6 +165,29 @@ check(parsePipelineRow('# a heading') === null, 'non-row returns null');
   check(out.includes(`- [x] ${evaled}`), 'staged-but-unmerged evaluated row is checked off from its tracker TSV');
   check(out.includes(`- [x] ${deferred}`), 'deferred (needs-manual) row is checked off');
   check(out.includes(`- [ ] ${fresh}`), 'a genuinely-new row is still left open');
+}
+
+// ── pipelineInbox (Discovery Inbox grouping) ─────────────────────────────────
+// Groups the queue into what the dashboard shows so a discovered role is never
+// invisible: pending ("- [ ]"), gated-with-reason ("- [!]"), and a done count.
+{
+  const md = [
+    '## Pendientes', '',
+    '- [ ] local:jds/e.md | Globex | Senior Director, GTM',
+    '- [ ] https://jobs.ashbyhq.com/x/abc | Initech | Revenue Operations Lead',
+    '- [!] https://job-boards.greenhouse.io/x/jobs/1 | Hooli | Director, GTM Ops — gated: unsupported ATS platform',
+    '- [x] local:jds/o.md | Acme | Sales Operations Manager',
+  ].join('\n');
+  const inbox = pipelineInbox(md);
+  check(inbox.counts.pending === 2 && inbox.counts.gated === 1 && inbox.counts.done === 1,
+    'pipelineInbox groups rows by state (2 pending, 1 gated, 1 done)');
+  check(inbox.pending[0].readable === true && inbox.pending[1].readable === false,
+    'pending readable flag distinguishes a local:jds snapshot from a raw ATS URL');
+  check(inbox.gated[0].title === 'Director, GTM Ops' && /unsupported ATS platform/.test(inbox.gated[0].reason),
+    'gated row splits the title from its gate reason');
+  check(inbox.pending[0].company === 'Globex' && inbox.pending[0].title === 'Senior Director, GTM',
+    'pending row parses company + title');
+  check(pipelineInbox('').counts.pending === 0, 'empty pipeline text is an empty inbox (no throw)');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
