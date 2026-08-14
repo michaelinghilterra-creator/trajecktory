@@ -26,12 +26,14 @@ import yaml from 'js-yaml';
 import { parsePostingUrl, fetchJdText } from './lib/ats-jd.mjs';
 import { workdaySiteFromCareersUrl } from './liveness-core.mjs';
 import { updatePipelineRows } from './lib/pipeline.mjs';
+import { appendGateHistory } from './lib/gate-history.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(__dirname, 'data/pipeline.md');
 const PORTALS = join(__dirname, 'portals.yml');
 const JDS_DIR = join(__dirname, 'jds');
 const FAIL_COUNTS = join(__dirname, 'data/resolve-fail-counts.json');
+const GATE_HISTORY = join(__dirname, 'data/gate-history.tsv');
 
 // A "recognized ATS but couldn't fetch" result might be a transient blip (network,
 // rate limit) — give it one more run before gating. An "unrecognized platform" is a
@@ -158,7 +160,10 @@ async function main() {
       resolved.set(row.url, `local:${file}`);
       report.resolved.push({ company: row.company, title: row.title, ats: desc.ats, chars: text.length, file });
     } catch (e) {
-      report.failed.push({ company: row.company, title: row.title, ats: desc.ats, reason: e.message });
+      // url is REQUIRED here: computeGating keys the retry/gate counter by r.url,
+      // so a failed row without it never advances past retry 1 and never gates
+      // (the fetch-failure retry logic was silently inert before this).
+      report.failed.push({ url: row.url, company: row.company, title: row.title, ats: desc.ats, reason: e.message });
     }
   }
 
@@ -189,6 +194,18 @@ async function main() {
       return { box: '!', rest: `${row.rest} — gated: ${reasonShort}` };
     });
     report.gated = changed;
+
+    // Durable audit trail. A resolve-jds gate previously left NO record outside
+    // the pipeline.md "- [!]" line itself, so losing that file lost the
+    // disposition — the exact failure lib/gate-history.mjs exists to prevent.
+    // Log each gated row as 'uncertain': we could not READ it, which is NOT a
+    // confirmed-dead liveness verdict (the posting may be live but unreadable).
+    const meta = new Map();
+    for (const r of [...report.unrecognized, ...report.failed]) meta.set(r.url, r);
+    appendGateHistory(GATE_HISTORY, toGate.map(g => {
+      const m = meta.get(g.url) || {};
+      return { url: g.url, company: m.company, role: m.title, result: 'uncertain', reason: g.reason };
+    }));
   } else {
     report.gated = 0;
   }
