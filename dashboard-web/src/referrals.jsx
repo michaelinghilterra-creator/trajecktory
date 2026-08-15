@@ -465,14 +465,24 @@ function refInitials(name) {
 // clickable contact card like every other book. Referral-specific fields (how you
 // know them, their reach, the target you want in) instead of email/correspondence,
 // since this channel is warm-intro / template driven, not direct outreach.
+// A referral now opens the SAME card as a TA or recruiter contact: the shared
+// window.ContactPanel, driven by the referral adapter (window.CONTACT_CFG_REFERRAL,
+// defined in target-talent.jsx). It fetches its own detail by id, so the drawer
+// only needs the id, a close handler, and a reload callback. The older ReferralPanel
+// and its prop contract are kept intact as a fallback for the brief window before
+// the shared panel is available in the bundle.
 function ReferralDrawer({ row, statuses, onClose, onPatch, onLogToday, onFindEmail, finding, onChanged, onRemove }) {
   const open = !!row;
+  const Shared = window.ContactPanel;
+  const refCfg = window.CONTACT_CFG_REFERRAL;
   return (
     <>
       <div className={"drawer-backdrop" + (open ? " open" : "")} onClick={onClose}
         style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }} />
       <div className={"drawer" + (open ? " open" : "")} style={{ transform: open ? "translateX(0)" : "translateX(100%)" }}>
-        {open && <ReferralPanel row={row} statuses={statuses} onClose={onClose} onPatch={onPatch} onLogToday={onLogToday} onFindEmail={onFindEmail} finding={finding} onChanged={onChanged} onRemove={onRemove} />}
+        {open && (Shared && refCfg
+          ? <Shared id={row.id} cfg={refCfg} onClose={onClose} onUpdate={onChanged} />
+          : <ReferralPanel row={row} statuses={statuses} onClose={onClose} onPatch={onPatch} onLogToday={onLogToday} onFindEmail={onFindEmail} finding={finding} onChanged={onChanged} onRemove={onRemove} />)}
       </div>
     </>
   );

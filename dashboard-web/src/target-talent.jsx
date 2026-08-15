@@ -516,6 +516,106 @@ const TT_STAGE_OPTS = [
   { v: "4th Interview", l: "4th Interview" },
 ];
 
+// ── Contact-book adapters ─────────────────────────────────────────────────────
+// One ContactPanel serves every book. The TA config is the default and reproduces
+// today's behavior exactly (so the TA drawer and the Pipeline embed are unchanged);
+// the referral config points the SAME card at the referral endpoints, maps the
+// referral record into the shape the panel renders, swaps the status ladder and
+// draft topics, and switches off the TA-only sections (LinkedIn axis, sequence,
+// website, phone/location, cross-log). This is what makes a referral open the same
+// card as a TA contact instead of a separate, thinner drawer.
+const TA_EDIT_FIELDS = [
+  { k: "salute", label: "Salutation", w: 90 }, { k: "first", label: "First name" }, { k: "last", label: "Last name" },
+  { k: "title", label: "Title", full: true }, { k: "company", label: "Company", full: true },
+  { k: "email", label: "Email", full: true }, { k: "linkedin", label: "LinkedIn URL", full: true },
+  { k: "phone", label: "Phone" }, { k: "city", label: "City" }, { k: "state", label: "State", w: 90 },
+];
+const REF_EDIT_FIELDS = [
+  { k: "name", label: "Name", full: true },
+  { k: "how", label: "How you know them", full: true },
+  { k: "where", label: "Where they are now / their reach", full: true },
+  { k: "target", label: "Target company or role you want in", full: true },
+  { k: "linkedin", label: "LinkedIn URL", full: true },
+  { k: "email", label: "Email", full: true },
+];
+const REF_LADDER = ["Not Asked", "Catching Up", "Asked", "Responded", "Intro Made", "Applied w/ Referral", "No", "Dormant"];
+
+const CONTACT_CFG_TA = {
+  kind: "ta",
+  base: (id) => `/api/target-talent/${id}`,
+  loadUrl: (id) => `/api/target-talent/${id}`,
+  mapData: (d) => d,
+  editFields: TA_EDIT_FIELDS,
+  features: { pipelineTrack: true, linkedinAxis: true, sequence: true, website: true, phone: true, location: true, crossLog: true, statusButtons: false },
+  sequenceSource: "ta",
+  stageOpts: TT_STAGE_OPTS,
+  buildDraftBody: (stage) => (stage === "reply" || stage === "followup-sent") ? { mode: stage } : { interviewStage: stage },
+  defaultStage: (d) => stageFromApps(d.relatedApps),
+  displayName: (d) => `${d.salute || ""} ${d.first || ""} ${d.last || ""}`.trim(),
+  subtitle: (d) => d.title,
+  org: (d) => d.company,
+  avatarName: (d) => `${d.first || ""} ${d.last || ""}`,
+  statusColor: (s) => (TT_STATUS_MAP[s] || {}).color || "var(--text-mute)",
+};
+
+const CONTACT_CFG_REFERRAL = {
+  kind: "referral",
+  base: (id) => `/api/referrals/${id}`,
+  loadUrl: (id) => `/api/referrals/${id}/detail`,
+  mapData: (d) => {
+    const r = (d && d.referral) || {};
+    const parts = String(r.name || "").trim().split(/\s+/).filter(Boolean);
+    return {
+      id: r.id, status: r.status, notes: r.notes || "", email: r.email || "", linkedin: r.linkedin || "",
+      lastTouch: r.lastTouch || "", salute: "", first: parts[0] || "", last: parts.slice(1).join(" "),
+      name: r.name || "", title: r.how || "", company: r.where || "", how: r.how || "", where: r.where || "", target: r.target || "",
+      relatedApps: (d && d.relatedApps) || [], correspondence: (d && d.correspondence) || [], link: (d && d.link) || null,
+    };
+  },
+  editFields: REF_EDIT_FIELDS,
+  features: { pipelineTrack: false, linkedinAxis: false, sequence: false, website: false, phone: false, location: false, crossLog: false, statusButtons: true },
+  statuses: REF_LADDER,
+  stageOpts: [
+    { v: "reconnect", l: "Reconnect" }, { v: "ask", l: "Referral ask" },
+    { v: "intro-thanks", l: "Thank for intro" }, { v: "nudge", l: "Nudge" },
+  ],
+  buildDraftBody: (stage) => (stage === "reply" || stage === "followup-sent") ? { mode: stage } : { topic: stage },
+  defaultStage: (d) => d.status === "Intro Made" ? "intro-thanks" : d.status === "Asked" ? "nudge" : "reconnect",
+  displayName: (d) => d.name || `${d.first || ""} ${d.last || ""}`.trim(),
+  subtitle: (d) => d.how || d.where,
+  org: (d) => d.where,
+  avatarName: (d) => d.name || `${d.first || ""} ${d.last || ""}`,
+  statusColor: (s) => (window.REF_STATUS_COLORS || {})[s] || "var(--text)",
+  // Referral-only row actions the TA card has no concept of.
+  extraActions: ({ data, reload, onClose }) => (
+    React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+      React.createElement("button", {
+        className: "btn sm",
+        title: "Find + verify an email via Hunter and MillionVerifier",
+        onClick: () => {
+          window.tjkMutate("/api/referrals/find-emails", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [data.id] }) })
+            .then(r => r.json()).then(d => {
+              const res = d.ok && (d.results || [])[0];
+              if (res && res.email) window.tjkToast && window.tjkToast(`Found ${res.email} · ${res.state}`, "success");
+              else if (d.ok) window.tjkToast && window.tjkToast("No verified email found", "warn");
+              else window.tjkToast && window.tjkToast(d.error || "Lookup failed", "error");
+              reload();
+            }).catch(() => window.tjkToast && window.tjkToast("Lookup failed", "error"));
+        },
+      }, data.email ? "Re-find email" : "Find email"),
+      React.createElement("button", {
+        className: "btn ghost sm", style: { color: "var(--red)" },
+        onClick: () => {
+          if (!window.confirm(`Remove ${data.name || "this person"} from your referral tracker?`)) return;
+          window.tjkMutate(`/api/referrals/${data.id}`, { method: "DELETE" })
+            .then(() => { window.tjkToast && window.tjkToast("Removed", "success"); onClose && onClose(); })
+            .catch(() => window.tjkToast && window.tjkToast("Could not remove", "error"));
+        },
+      }, "Remove from tracker")
+    )
+  ),
+};
+
 // ── Contact panel (shared body) ───────────────────────────────────────────────
 // The full single-contact management UI: header, contact info, pipeline stage
 // track, related apps, notes, stage-tuned outreach drafting, correspondence
@@ -524,7 +624,7 @@ const TT_STAGE_OPTS = [
 // window.ContactPanel) so there is a single implementation. When `embedded`, it
 // drops the drawer chrome (head/body classes, ESC-to-close) and shows a "Back"
 // control instead of a close X.
-function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
+function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_CFG_TA }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [composing, setComposing] = useState(false);
@@ -553,9 +653,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
   const load = useCallback(() => {
     if (id == null) return;
     setLoading(true);
-    fetch(`/api/target-talent/${id}`)
+    fetch(cfg.loadUrl(id))
       .then(r => r.json())
-      .then(d => {
+      .then(raw => {
+        const d = cfg.mapData(raw);
         setData(d);
         setNotes(d.notes || "");
         setWebsite(d.website || "");
@@ -568,13 +669,13 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
         );
         setCrossLogAppIds(preChecked);
         // Default the outreach stage from where the user actually is.
-        setDraftStage(stageFromApps(d.relatedApps));
+        setDraftStage(cfg.defaultStage(d));
         setLoading(false);
         setComposing(false);
         setDraftResult(null);
       })
       .catch(() => setLoading(false));
-  }, [id]);
+  }, [id, cfg]);
   const toggleCrossLogApp = (appId) => setCrossLogAppIds(prev => {
     const n = new Set(prev);
     n.has(appId) ? n.delete(appId) : n.add(appId);
@@ -592,30 +693,25 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
   }, [onClose, logModal, embedded]);
 
   const updateStatus = status => {
-    window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })
+    window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) })
       .then(() => { load(); onUpdate?.(); });
   };
   const updateLinkedIn = linkedinStatus => {
-    window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkedinStatus }) })
+    window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkedinStatus }) })
       .then(() => { load(); onUpdate?.(); });
   };
   const saveNotes = () => {
-    window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }) })
+    window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }) })
       .then(() => { load(); onUpdate?.(); });
   };
   const saveWebsite = () => {
-    window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ website: website.trim() }) })
+    window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ website: website.trim() }) })
       .then(() => { setEditingWeb(false); load(); onUpdate?.(); });
   };
   // Whole-contact edit mode: seed the draft from current values, then PATCH the
   // identity fields on save. Editing the email drops any verification tag server-side
-  // (a changed address is unverified until re-checked).
-  const EDIT_FIELDS = [
-    { k: "salute", label: "Salutation", w: 90 }, { k: "first", label: "First name" }, { k: "last", label: "Last name" },
-    { k: "title", label: "Title", full: true }, { k: "company", label: "Company", full: true },
-    { k: "email", label: "Email", full: true }, { k: "linkedin", label: "LinkedIn URL", full: true },
-    { k: "phone", label: "Phone" }, { k: "city", label: "City" }, { k: "state", label: "State", w: 90 },
-  ];
+  // (a changed address is unverified until re-checked). Fields come from the adapter.
+  const EDIT_FIELDS = cfg.editFields;
   const startEdit = () => {
     setEdit(Object.fromEntries(EDIT_FIELDS.map(f => [f.k, data[f.k] || ""])));
     setEditing(true);
@@ -627,18 +723,16 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
       if (v !== (data[f.k] || "")) payload[f.k] = v;
     }
     if (Object.keys(payload).length === 0) { setEditing(false); return; }
-    window.tjkMutate(`/api/target-talent/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+    window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       .then(() => { setEditing(false); load(); onUpdate?.(); });
   };
   const generateDraft = () => {
     setDrafting(true); setDraftResult(null);
     // "reply" and "followup-sent" are message MODES (they anchor on a specific
-    // prior message); every other value is an interview-stage tuning of fresh
-    // outreach. Send the right key so the server picks the matching branch.
-    const draftBody = (draftStage === "reply" || draftStage === "followup-sent")
-      ? { mode: draftStage }
-      : { interviewStage: draftStage };
-    window.tjkMutate(`/api/target-talent/${id}/draft`, {
+    // prior message); every other value tunes fresh outreach. The adapter builds
+    // the right payload (interview stage for TA, topic for referrals).
+    const draftBody = cfg.buildDraftBody(draftStage);
+    window.tjkMutate(`${cfg.base(id)}/draft`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(draftBody),
@@ -648,16 +742,18 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
       .catch(() => setDrafting(false));
   };
   const saveCorrAndClose = msg => {
-    const appIds = (msg.direction === "Sent") ? Array.from(crossLogAppIds) : [];
+    // Cross-logging a touch onto related applications is a TA-only concept, so it
+    // only rides along when the adapter enables it.
+    const appIds = (cfg.features.crossLog && msg.direction === "Sent") ? Array.from(crossLogAppIds) : [];
     const body = {
       ...msg,
       alsoLogToAppNums: appIds.length ? appIds : undefined,
       // Backwards-compat: keep the single-id field populated with the first selected
       // app so server endpoints that only support one id still work.
       alsoLogToAppNum: appIds.length ? appIds[0] : undefined,
-      alsoLogChannel: "Email",
+      alsoLogChannel: msg.channel || "Email",
     };
-    window.tjkMutate(`/api/target-talent/${id}/correspondence`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    window.tjkMutate(`${cfg.base(id)}/correspondence`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       .then(() => { load(); onUpdate?.(); setLogModal(null); setDraftResult(null); });
   };
 
@@ -676,7 +772,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
       <div className={embedded ? "" : "drawer-head"} style={headStyle}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
           <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-mute)" }}>#{data.id}</span>
-          <StatusBadge status={data.status} size="sm" />
+          {cfg.kind === "ta"
+            ? <StatusBadge status={data.status} size="sm" />
+            : <span className="status-badge" style={{ color: cfg.statusColor(data.status), borderColor: "var(--border)", fontSize: 9.5, padding: "2px 8px" }}><span className="sb-dot" style={{ background: cfg.statusColor(data.status) }} />{data.status}</span>}
+          {data.link && <span className="tag" style={{ background: data.link.source === "ta" ? "rgba(34,211,238,0.14)" : "rgba(167,139,250,0.14)", color: data.link.source === "ta" ? "#22d3ee" : "#a78bfa" }}>Also {data.link.source === "ta" ? "TA" : "Recruiter"} · shared timeline</span>}
           {data.relatedApps?.length > 0 && (
             <span className="tag accent">{data.relatedApps.length} related app{data.relatedApps.length !== 1 ? "s" : ""}</span>
           )}
@@ -685,11 +784,11 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
             : <button className="icon-btn" onClick={onClose} style={{ marginLeft: "auto" }}><TIcon d={TI.x} size={15} /></button>)}
         </div>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-          <span className="mono-av" style={{ width: 44, height: 44, fontSize: 14, borderRadius: 10, borderColor: (TT_STATUS_MAP[data.status] || {}).color, color: (TT_STATUS_MAP[data.status] || {}).color }}>{ttInitials(data.first + " " + data.last)}</span>
+          <span className="mono-av" style={{ width: 44, height: 44, fontSize: 14, borderRadius: 10, borderColor: cfg.statusColor(data.status), color: cfg.statusColor(data.status) }}>{ttInitials(cfg.avatarName(data) || "?")}</span>
           <div>
-            <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>{data.salute} {data.first} {data.last}</h3>
-            <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>{data.title}</div>
-            <div style={{ fontSize: 12, color: "var(--accent)", marginTop: 3, fontWeight: 500 }}>{data.company}</div>
+            <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>{cfg.displayName(data) || "(no name)"}</h3>
+            <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>{cfg.subtitle(data) || "—"}</div>
+            <div style={{ fontSize: 12, color: "var(--accent)", marginTop: 3, fontWeight: 500 }}>{cfg.org(data) || ""}</div>
           </div>
         </div>
       </div>
@@ -717,6 +816,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
             </div>
           ) : (
           <div className="info-card">
+            {cfg.features.website && (
             <div className="info-row">
               <span className="ik">Website</span>
               {editingWeb ? (
@@ -739,6 +839,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
                 );
               })()}
             </div>
+            )}
             <div className="info-row">
               <span className="ik">Email</span>
               <span className="iv">
@@ -755,18 +856,20 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
               </span>
               {data.email && <CopyBtn value={data.email} />}
             </div>
-            {data.phone && (
+            {cfg.features.phone && data.phone && (
               <div className="info-row">
                 <span className="ik">Phone</span>
                 <span className="iv">{data.phone}</span>
                 <CopyBtn value={data.phone} />
               </div>
             )}
+            {cfg.features.location && (
             <div className="info-row">
               <span className="ik">Location</span>
               <span className="iv">{[data.city, data.state].filter(Boolean).join(", ") || "-"}</span>
               <span />
             </div>
+            )}
             <div className="info-row">
               <span className="ik">LinkedIn</span>
               {data.linkedin
@@ -782,21 +885,40 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
           </div>
           )}
         </div>
-        {/* Pipeline */}
+        {/* Status */}
         <div className="ds-section">
-          <div className="ds-label"><TIcon d={TI.trend} size={12} /> Pipeline stage</div>
-          <PipelineTrack contact={data} onChange={updateStatus} />
+          <div className="ds-label"><TIcon d={TI.trend} size={12} /> {cfg.features.pipelineTrack ? "Pipeline stage" : "Status"}</div>
+          {cfg.features.pipelineTrack
+            ? <PipelineTrack contact={data} onChange={updateStatus} />
+            : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {(cfg.statuses || []).map(s => {
+                  const on = data.status === s;
+                  const c = cfg.statusColor(s);
+                  return (
+                    <button key={s} className="btn sm" onClick={() => updateStatus(s)}
+                      style={{ color: c, borderColor: on ? c : "var(--border)", background: on ? `color-mix(in srgb, ${c} 14%, transparent)` : "transparent", fontWeight: on ? 600 : 400 }}>
+                      {s}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
         </div>
-        {/* LinkedIn connection — separate axis from the pipeline above */}
-        <div className="ds-section">
-          <div className="ds-label"><TIcon d={TI.ext} size={12} /> LinkedIn connection</div>
-          <LinkedInControl status={data.linkedinStatus} onChange={updateLinkedIn} />
-        </div>
+        {/* LinkedIn connection — separate axis from the pipeline above (TA only) */}
+        {cfg.features.linkedinAxis && (
+          <div className="ds-section">
+            <div className="ds-label"><TIcon d={TI.ext} size={12} /> LinkedIn connection</div>
+            <LinkedInControl status={data.linkedinStatus} onChange={updateLinkedIn} />
+          </div>
+        )}
         {/* Outreach sequence (per-contact cadence; every step is an approved draft) */}
-        <div className="ds-section">
-          <div className="ds-label"><TIcon d={TI.spark} size={12} /> Outreach sequence</div>
-          {window.SequencePanel && <window.SequencePanel source="ta" id={data.id} toast={typeof toast !== "undefined" ? toast : undefined} />}
-        </div>
+        {cfg.features.sequence && (
+          <div className="ds-section">
+            <div className="ds-label"><TIcon d={TI.spark} size={12} /> Outreach sequence</div>
+            {window.SequencePanel && <window.SequencePanel source={cfg.sequenceSource} id={data.id} toast={typeof toast !== "undefined" ? toast : undefined} />}
+          </div>
+        )}
         {/* Related apps */}
         {data.relatedApps?.length > 0 && (
           <div className="ds-section">
@@ -827,17 +949,17 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
               {/* Reply is offered only when there is an inbound email to reply to;
                   Follow up on last sent only when you have actually sent one. */}
               {[
-                ...(corr.some(m => m.direction === "Received") ? [{ v: "reply", l: "↩ Reply to last email" }] : []),
+                ...(corr.some(m => m.direction === "Received") ? [{ v: "reply", l: "↩ Reply to last message" }] : []),
                 ...(corr.some(m => m.direction === "Sent") ? [{ v: "followup-sent", l: "↗ Follow up on last sent" }] : []),
-                ...TT_STAGE_OPTS,
+                ...cfg.stageOpts,
               ].map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
             </select>
           </div>
           {!composing && !draftResult && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button className="btn primary sm" onClick={() => { setComposing(true); generateDraft(); }}><TIcon d={TI.spark} size={12} /> Draft</button>
-              <button className="btn sm" onClick={() => setLogModal({ direction: "Sent", subject: "", body: "" })}><TIcon d={TI.outbound} size={12} /> Log sent</button>
-              <button className="btn sm" onClick={() => setLogModal({ direction: "Received", subject: "", body: "" })}><TIcon d={TI.inbound} size={12} /> Log reply</button>
+              <button className="btn sm" onClick={() => setLogModal({ direction: "Sent", channel: "Email", subject: "", body: "" })}><TIcon d={TI.outbound} size={12} /> Log sent</button>
+              <button className="btn sm" onClick={() => setLogModal({ direction: "Received", channel: "Email", subject: "", body: "" })}><TIcon d={TI.inbound} size={12} /> Log reply</button>
             </div>
           )}
           {composing && drafting && (
@@ -858,7 +980,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn primary sm" onClick={() => setLogModal({ direction: "Sent", subject: draftResult.subject, body: draftEmail })}><TIcon d={TI.check} size={12} /> I sent this</button>
+                <button className="btn primary sm" onClick={() => setLogModal({ direction: "Sent", channel: "Email", subject: draftResult.subject, body: draftEmail })}><TIcon d={TI.check} size={12} /> I sent this</button>
                 <button className="btn sm" onClick={() => saveCorrAndClose({ direction: "Draft", subject: draftResult.subject, body: draftEmail })}><TIcon d={TI.pen} size={12} /> Save as draft</button>
                 <window.GmailDraftBtn to={data.email} subject={draftResult.subject} body={draftEmail} />
                 <button className="btn sm" onClick={generateDraft}><TIcon d={TI.refresh} size={12} /> Regen</button>
@@ -866,6 +988,12 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
             </div>
           )}
         </div>
+        {/* Book-specific extras (e.g. referral: find email, remove from tracker) */}
+        {cfg.extraActions && (
+          <div className="ds-section">
+            {cfg.extraActions({ data, reload: load, onClose, onUpdate })}
+          </div>
+        )}
         {/* Correspondence */}
         <div className="ds-section">
           <div className="ds-label"><TIcon d={TI.mail} size={12} /> Correspondence<span className="r">{corr.length} message{corr.length !== 1 ? "s" : ""}</span></div>
@@ -885,6 +1013,20 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
             </div>
             <div className="modal-body" style={{ padding: "14px 22px" }}>
               <div className="field" style={{ marginBottom: 12 }}>
+                <label>Channel</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {["Email", "LinkedIn"].map(ch => {
+                    const on = (logModal.channel || "Email") === ch;
+                    return (
+                      <button key={ch} className="btn sm" onClick={() => setLogModal({ ...logModal, channel: ch })}
+                        style={{ borderColor: on ? "var(--accent)" : "var(--border)", background: on ? "var(--accent-bg)" : "transparent", color: on ? "var(--accent)" : "var(--text-dim)", fontWeight: on ? 600 : 400 }}>
+                        {ch}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="field" style={{ marginBottom: 12 }}>
                 <label>Subject</label>
                 <input className="inp" value={logModal.subject} onChange={e => setLogModal({ ...logModal, subject: e.target.value })} placeholder="Subject" />
               </div>
@@ -892,7 +1034,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
                 <label>Message body</label>
                 <textarea className="ta" value={logModal.body} onChange={e => setLogModal({ ...logModal, body: e.target.value })} placeholder="Message body…" rows={8} />
               </div>
-              {logModal.direction === "Sent" && data?.relatedApps?.length > 0 && (
+              {cfg.features.crossLog && logModal.direction === "Sent" && data?.relatedApps?.length > 0 && (
                 <div style={{ padding: 12, background: "var(--panel)", borderRadius: 8, marginBottom: 12 }}>
                   <div className="ds-label" style={{ marginBottom: 4, display: "flex", justifyContent: "space-between" }}>
                     <span>Cross-log as follow-up</span>
@@ -948,6 +1090,9 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false }) {
 }
 // Shared so the Pipeline drawer's Contacts tab renders the same panel inline.
 window.ContactPanel = ContactPanel;
+// Exposed so the Referrals book can open a referral in the SAME card as a TA
+// contact (referrals.jsx renders window.ContactPanel with this adapter).
+window.CONTACT_CFG_REFERRAL = CONTACT_CFG_REFERRAL;
 
 // Thin drawer shell around ContactPanel for the TA Outreach tab.
 function TTDrawer({ id, onClose, onUpdate }) {
