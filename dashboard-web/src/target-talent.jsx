@@ -67,7 +67,8 @@ function TIcon({ d, size = 16, stroke = 1.6, style }) {
 }
 
 function ttInitials(name) {
-  const parts = name.replace(/['"]/g, "").split(/\s+/).filter(Boolean);
+  const parts = String(name || "").replace(/['"]/g, "").split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
@@ -539,6 +540,20 @@ const REF_EDIT_FIELDS = [
   { k: "email", label: "Email", full: true },
 ];
 const REF_LADDER = ["Not Asked", "Catching Up", "Asked", "Responded", "Intro Made", "Applied w/ Referral", "No", "Dormant"];
+const REC_EDIT_FIELDS = [
+  { k: "salute", label: "Salutation", w: 90 }, { k: "first", label: "First name" }, { k: "last", label: "Last name" },
+  { k: "title", label: "Title", full: true }, { k: "firm", label: "Firm", full: true },
+  { k: "email", label: "Email", full: true }, { k: "linkedin", label: "LinkedIn URL", full: true },
+  { k: "phone", label: "Phone" }, { k: "city", label: "City" }, { k: "state", label: "State", w: 90 },
+];
+const REC_LADDER = ["Not Contacted", "Drafted", "Sent", "Replied", "Meeting Scheduled", "Connected", "Dormant", "Bounced"];
+// Mirrors REC_STATUS in recruiters.jsx (same ids/colors); kept local so the adapter
+// has no cross-file dependency.
+const REC_STATUS_COLORS = {
+  "Not Contacted": "var(--text-mute)", "Drafted": "var(--accent)", "Sent": "var(--blue)",
+  "Replied": "var(--cyan)", "Meeting Scheduled": "var(--orange)", "Connected": "var(--green)",
+  "Dormant": "var(--text-mute)", "Bounced": "var(--red)",
+};
 
 const CONTACT_CFG_TA = {
   kind: "ta",
@@ -614,6 +629,43 @@ const CONTACT_CFG_REFERRAL = {
             .catch(() => window.tjkToast && window.tjkToast("Could not remove", "error"));
         },
       }, "Remove from tracker")
+    )
+  ),
+};
+
+const CONTACT_CFG_RECRUITER = {
+  kind: "recruiter",
+  base: (id) => `/api/recruiters/${id}`,
+  loadUrl: (id) => `/api/recruiters/${id}`,
+  mapData: (d) => ({ ...d, company: d.firm || "", relatedApps: d.relatedApps || [] }),
+  editFields: REC_EDIT_FIELDS,
+  features: { pipelineTrack: false, linkedinAxis: false, sequence: false, website: false, phone: true, location: true, crossLog: false, statusButtons: true },
+  statuses: REC_LADDER,
+  stageOpts: [{ v: "general", l: "General" }],
+  buildDraftBody: (s) => (s === "reply" || s === "followup-sent") ? { mode: s } : {},
+  defaultStage: () => "general",
+  displayName: (d) => `${d.salute || ""} ${d.first || ""} ${d.last || ""}`.trim(),
+  subtitle: (d) => d.title,
+  org: (d) => d.firm,
+  avatarName: (d) => `${d.first || ""} ${d.last || ""}`,
+  statusColor: (s) => REC_STATUS_COLORS[s] || "var(--text-mute)",
+  linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ name: `${d.first || ""} ${d.last || ""}`.trim(), role: d.title, company: d.firm, firstName: d.first, tone }) },
+  extraActions: ({ data, reload }) => (
+    React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+      React.createElement("button", {
+        className: "btn sm",
+        title: "Find + verify an email via Hunter and MillionVerifier",
+        onClick: () => {
+          window.tjkMutate("/api/recruiters/find-emails", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [data.id] }) })
+            .then(r => r.json()).then(d => {
+              const res = d.ok && (d.results || [])[0];
+              if (res && res.email) window.tjkToast && window.tjkToast(`Found ${res.email} · ${res.state}`, "success");
+              else if (d.ok) window.tjkToast && window.tjkToast("No verified email found", "warn");
+              else window.tjkToast && window.tjkToast(d.error || "Lookup failed", "error");
+              reload();
+            }).catch(() => window.tjkToast && window.tjkToast("Lookup failed", "error"));
+        },
+      }, data.email ? "Re-find email" : "Find email")
     )
   ),
 };
@@ -1145,9 +1197,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
 }
 // Shared so the Pipeline drawer's Contacts tab renders the same panel inline.
 window.ContactPanel = ContactPanel;
-// Exposed so the Referrals book can open a referral in the SAME card as a TA
-// contact (referrals.jsx renders window.ContactPanel with this adapter).
+// Exposed so the Referrals and Recruiters books can open a contact in the SAME
+// card as a TA contact (they render window.ContactPanel with these adapters).
 window.CONTACT_CFG_REFERRAL = CONTACT_CFG_REFERRAL;
+window.CONTACT_CFG_RECRUITER = CONTACT_CFG_RECRUITER;
 
 // Thin drawer shell around ContactPanel for the TA Outreach tab.
 function TTDrawer({ id, onClose, onUpdate }) {
