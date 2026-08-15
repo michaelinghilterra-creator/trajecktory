@@ -556,6 +556,7 @@ const CONTACT_CFG_TA = {
   org: (d) => d.company,
   avatarName: (d) => `${d.first || ""} ${d.last || ""}`,
   statusColor: (s) => (TT_STATUS_MAP[s] || {}).color || "var(--text-mute)",
+  linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ name: `${d.first || ""} ${d.last || ""}`.trim(), role: d.title, company: d.company, firstName: d.first, tone }) },
 };
 
 const CONTACT_CFG_REFERRAL = {
@@ -586,6 +587,7 @@ const CONTACT_CFG_REFERRAL = {
   org: (d) => d.where,
   avatarName: (d) => d.name || `${d.first || ""} ${d.last || ""}`,
   statusColor: (s) => (window.REF_STATUS_COLORS || {})[s] || "var(--text)",
+  linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ name: d.name, role: d.how, company: d.where, reason: d.target || d.how, firstName: d.first, tone }) },
   // Referral-only row actions the TA card has no concept of.
   extraActions: ({ data, reload, onClose }) => (
     React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
@@ -630,12 +632,17 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
   const [composing, setComposing] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [draftResult, setDraftResult] = useState(null);
-  // Editable assembled email, seeded from the AI draft so the user can tweak the
-  // greeting, body, or signature before copying, logging, or saving it.
+  // Which surface the draft is for. Email drafts assemble a greeting + signature;
+  // LinkedIn notes are short and stand alone (no signature, no "Hi Name,").
+  const [outChannel, setOutChannel] = useState("Email");
+  const [liTone, setLiTone] = useState("Warm");
+  // Editable assembled message, seeded from the AI draft so the user can tweak it
+  // before copying, logging, or saving it.
   const [draftEmail, setDraftEmail] = useState("");
   useEffect(() => {
-    if (draftResult) setDraftEmail(`Hi ${data?.first || "there"},\n\n${(draftResult.body || "").replace(/^\s+/, "")}\n\n${window.myEmailSignature()}`);
-    else setDraftEmail("");
+    if (!draftResult) { setDraftEmail(""); return; }
+    if (draftResult.linkedin) setDraftEmail((draftResult.body || "").trim());
+    else setDraftEmail(`Hi ${data?.first || "there"},\n\n${(draftResult.body || "").replace(/^\s+/, "")}\n\n${window.myEmailSignature()}`);
   }, [draftResult]);
   const [draftStage, setDraftStage] = useState("general");
   const [notes, setNotes] = useState("");
@@ -728,9 +735,22 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
   };
   const generateDraft = () => {
     setDrafting(true); setDraftResult(null);
-    // "reply" and "followup-sent" are message MODES (they anchor on a specific
-    // prior message); every other value tunes fresh outreach. The adapter builds
-    // the right payload (interview stage for TA, topic for referrals).
+    // LinkedIn: generate a short connection-style note via the shared connect-note
+    // route (a different motion from email), and mark the result so the compose
+    // area drops the greeting/signature and the Gmail button.
+    if (outChannel === "LinkedIn" && cfg.linkedIn) {
+      window.tjkMutate("/api/linkedin-drafts/connect-note", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cfg.linkedIn.payload(data, liTone)),
+      })
+        .then(r => r.json())
+        .then(d => { setDrafting(false); if (d && d.response) setDraftResult({ body: d.response, subject: "", linkedin: true }); else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+        .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
+      return;
+    }
+    // Email. "reply" and "followup-sent" are message MODES (they anchor on a
+    // specific prior message); every other value tunes fresh outreach. The adapter
+    // builds the right payload (interview stage for TA, topic for referrals).
     const draftBody = cfg.buildDraftBody(draftStage);
     window.tjkMutate(`${cfg.base(id)}/draft`, {
       method: "POST",
@@ -944,22 +964,55 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         <div className="ds-section">
           <div className="ds-label">
             <TIcon d={TI.spark} size={12} /> Outreach
-            <select value={draftStage} onChange={e => setDraftStage(e.target.value)} title="Tune the draft: Reply responds to their last email; Follow up nudges the last email you sent; the stages tune fresh outreach"
-              style={{ marginLeft: "auto", fontSize: 11, padding: "2px 6px", borderRadius: 5, background: "var(--panel-2)", color: "var(--text-dim)", border: "1px solid var(--border)" }}>
-              {/* Reply is offered only when there is an inbound email to reply to;
-                  Follow up on last sent only when you have actually sent one. */}
-              {[
-                ...(corr.some(m => m.direction === "Received") ? [{ v: "reply", l: "↩ Reply to last message" }] : []),
-                ...(corr.some(m => m.direction === "Sent") ? [{ v: "followup-sent", l: "↗ Follow up on last sent" }] : []),
-                ...cfg.stageOpts,
-              ].map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-            </select>
+            {outChannel === "Email"
+              ? (
+                <select value={draftStage} onChange={e => setDraftStage(e.target.value)} title="Tune the draft: Reply responds to their last message; Follow up nudges the last message you sent; the stages tune fresh outreach"
+                  style={{ marginLeft: "auto", fontSize: 11, padding: "2px 6px", borderRadius: 5, background: "var(--panel-2)", color: "var(--text-dim)", border: "1px solid var(--border)" }}>
+                  {/* Reply is offered only when there is an inbound message to reply to;
+                      Follow up on last sent only when you have actually sent one. */}
+                  {[
+                    ...(corr.some(m => m.direction === "Received") ? [{ v: "reply", l: "↩ Reply to last message" }] : []),
+                    ...(corr.some(m => m.direction === "Sent") ? [{ v: "followup-sent", l: "↗ Follow up on last sent" }] : []),
+                    ...cfg.stageOpts,
+                  ].map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                </select>
+              )
+              : <span style={{ marginLeft: "auto" }} />}
           </div>
+          {/* Channel picker for the DRAFT: email or a LinkedIn note. Books that
+              cannot draft a LinkedIn note (none, today) simply hide it. */}
+          {cfg.linkedIn && !draftResult && !drafting && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 10.5, color: "var(--text-mute)" }}>Draft a</span>
+              {["Email", "LinkedIn"].map(ch => {
+                const on = outChannel === ch;
+                return (
+                  <button key={ch} className="btn sm" onClick={() => setOutChannel(ch)}
+                    style={{ borderColor: on ? "var(--accent)" : "var(--border)", background: on ? "var(--accent-bg)" : "transparent", color: on ? "var(--accent)" : "var(--text-dim)", fontWeight: on ? 600 : 400 }}>
+                    {ch === "LinkedIn" ? "LinkedIn note" : "Email"}
+                  </button>
+                );
+              })}
+              {outChannel === "LinkedIn" && (
+                <span style={{ display: "flex", gap: 4, flexWrap: "wrap", marginLeft: 4 }}>
+                  {cfg.linkedIn.tones.map(t => {
+                    const on = liTone === t;
+                    return (
+                      <button key={t} className="btn sm" onClick={() => setLiTone(t)}
+                        style={{ borderColor: on ? "var(--accent)" : "var(--border)", background: on ? "var(--accent-bg)" : "transparent", color: on ? "var(--accent)" : "var(--text-dim)", fontWeight: on ? 600 : 400 }}>
+                        {t}
+                      </button>
+                    );
+                  })}
+                </span>
+              )}
+            </div>
+          )}
           {!composing && !draftResult && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button className="btn primary sm" onClick={() => { setComposing(true); generateDraft(); }}><TIcon d={TI.spark} size={12} /> Draft</button>
-              <button className="btn sm" onClick={() => setLogModal({ direction: "Sent", channel: "Email", subject: "", body: "" })}><TIcon d={TI.outbound} size={12} /> Log sent</button>
-              <button className="btn sm" onClick={() => setLogModal({ direction: "Received", channel: "Email", subject: "", body: "" })}><TIcon d={TI.inbound} size={12} /> Log reply</button>
+              <button className="btn primary sm" onClick={() => { setComposing(true); generateDraft(); }}><TIcon d={TI.spark} size={12} /> Draft {outChannel === "LinkedIn" ? "LinkedIn note" : "email"}</button>
+              <button className="btn sm" onClick={() => setLogModal({ direction: "Sent", channel: outChannel, subject: "", body: "" })}><TIcon d={TI.outbound} size={12} /> Log sent</button>
+              <button className="btn sm" onClick={() => setLogModal({ direction: "Received", channel: outChannel, subject: "", body: "" })}><TIcon d={TI.inbound} size={12} /> Log reply</button>
             </div>
           )}
           {composing && drafting && (
@@ -967,22 +1020,24 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           )}
           {draftResult && (
             <div className="ai-compose">
-              <div className="ai-head"><TIcon d={TI.spark} size={13} /> AI draft <span style={{ marginLeft: 8, fontSize: 10.5, color: "var(--text-mute)", fontWeight: 400 }}>editable</span></div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                <span style={{ fontSize: 11, color: "var(--text-mute)" }}>Subject</span>
-                <input className="inp" value={draftResult.subject || ""} onChange={e => setDraftResult({ ...draftResult, subject: e.target.value })} style={{ flex: 1 }} />
-                <CopyBtn value={draftResult.subject || ""} />
-              </div>
+              <div className="ai-head"><TIcon d={TI.spark} size={13} /> AI {draftResult.linkedin ? "LinkedIn note" : "draft"} <span style={{ marginLeft: 8, fontSize: 10.5, color: "var(--text-mute)", fontWeight: 400 }}>editable{draftResult.linkedin ? " · no subject, paste into LinkedIn" : ""}</span></div>
+              {!draftResult.linkedin && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 11, color: "var(--text-mute)" }}>Subject</span>
+                  <input className="inp" value={draftResult.subject || ""} onChange={e => setDraftResult({ ...draftResult, subject: e.target.value })} style={{ flex: 1 }} />
+                  <CopyBtn value={draftResult.subject || ""} />
+                </div>
+              )}
               <div style={{ position: "relative" }}>
-                <textarea className="ta" value={draftEmail} onChange={e => setDraftEmail(e.target.value)} rows={10} aria-label="Editable email draft" style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }} />
+                <textarea className="ta" value={draftEmail} onChange={e => setDraftEmail(e.target.value)} rows={draftResult.linkedin ? 6 : 10} aria-label="Editable message draft" style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }} />
                 <div style={{ position: "absolute", top: 8, right: 8 }}>
                   <CopyBtn value={draftEmail} />
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn primary sm" onClick={() => setLogModal({ direction: "Sent", channel: "Email", subject: draftResult.subject, body: draftEmail })}><TIcon d={TI.check} size={12} /> I sent this</button>
-                <button className="btn sm" onClick={() => saveCorrAndClose({ direction: "Draft", subject: draftResult.subject, body: draftEmail })}><TIcon d={TI.pen} size={12} /> Save as draft</button>
-                <window.GmailDraftBtn to={data.email} subject={draftResult.subject} body={draftEmail} />
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button className="btn primary sm" onClick={() => setLogModal({ direction: "Sent", channel: draftResult.linkedin ? "LinkedIn" : "Email", subject: draftResult.linkedin ? "LinkedIn note" : draftResult.subject, body: draftEmail })}><TIcon d={TI.check} size={12} /> I sent this</button>
+                <button className="btn sm" onClick={() => saveCorrAndClose({ direction: "Draft", channel: draftResult.linkedin ? "LinkedIn" : "Email", subject: draftResult.linkedin ? "LinkedIn note" : draftResult.subject, body: draftEmail })}><TIcon d={TI.pen} size={12} /> Save as draft</button>
+                {!draftResult.linkedin && <window.GmailDraftBtn to={data.email} subject={draftResult.subject} body={draftEmail} />}
                 <button className="btn sm" onClick={generateDraft}><TIcon d={TI.refresh} size={12} /> Regen</button>
               </div>
             </div>
