@@ -336,6 +336,9 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   const ghosted = data.ghostedCandidates || [];
   // Applied roles with no contact at the company — the "find a contact" nudge.
   const contactlessApps = data.contactlessApps || [];
+  // Applied roles going stale where you DO have a contact — surface the person to
+  // ping, not a company card. Rendered in the Follow-ups queue with a stale pill.
+  const staleAppContacts = data.staleAppContacts || [];
 
   // Snooze defers a stale alert by N days without logging a touch (the clock
   // keeps running). Mute is the indefinite "done for now / awaiting reply": it
@@ -562,6 +565,35 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
       {subView === 'queue' && (
         <>
           <window.FollowupQueueTab toast={toast} />
+          {staleAppContacts.length > 0 && (
+            <div className="col" style={{ gap: 10, marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
+              <div style={{ padding: '0 24px' }}>
+                <h2 style={{ margin: '0 0 2px' }}>Applications going stale</h2>
+                <div className="sub">You have a contact at these companies. Ping the person instead of letting the application age out.</div>
+              </div>
+              <div className="col" style={{ gap: 6, padding: '0 24px' }}>
+                {staleAppContacts.map(it => (
+                  <div key={`sac-${it.source}-${it.id}`} className="action-card" role="button" tabIndex={0}
+                    onClick={() => openTaContact && openTaContact(it.id)} onKeyDown={window.kbdActivate(() => openTaContact && openTaContact(it.id))}
+                    style={{ cursor: 'pointer' }}>
+                    <div className="action-card-row">
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <span className="action-card-co">{it.name}</span>
+                          <span className="dim" style={{ fontSize: 12 }}>· {it.title ? it.title + ' · ' : ''}{it.company}</span>
+                          <span className="pill" style={{ fontSize: 10, color: 'var(--orange)', borderColor: 'var(--orange)' }}
+                            title={`Your application (${it.appStale.appRole || 'role'}, ${it.appStale.status}) has been quiet ${it.appStale.days}d`}>
+                            app going stale · {it.appStale.days}d
+                          </span>
+                        </div>
+                      </div>
+                      <button className="btn accent sm" onClick={(e) => { e.stopPropagation(); openTaContact && openTaContact(it.id); }}>Open contact</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {contactGroups.length > 0 && (
             <div className="col" style={{ gap: 14, marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
               <div style={{ padding: '0 24px' }}>

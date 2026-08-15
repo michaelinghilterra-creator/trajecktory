@@ -854,6 +854,49 @@ function computeContactlessApps({ apps, taRows, recruiterRows } = {}) {
   return out;
 }
 
+// The person-first counterpart to computeContactlessApps: applications going
+// stale at companies where you DO have a contact. You follow up with people, not
+// companies, so instead of a company card this surfaces the specific contact to
+// ping, tagged with an "app going stale" signal. One row per contact (the most
+// urgent stale app wins, since the stale list is sorted give-up/oldest first).
+// Muted apps ("done for now") are skipped. Companies with no contact fall through
+// to computeContactlessApps instead.
+function computeStaleAppContacts({ staleApps, taRows } = {}) {
+  const stale = staleApps ?? computeStaleApps();
+  const { ta } = _bothBooks({ taRows });
+  // company -> the single best contact to route a follow-up through: prefer the
+  // richest channel (email + LinkedIn), then the most recently touched. Only TA
+  // contacts qualify — they are internal talent AT the target company, so their
+  // company field genuinely matches the applied-to company. A recruiter's `firm`
+  // is their agency, not the company you applied to, so recruiters are excluded.
+  const byCompany = new Map();
+  const consider = (companyRaw, source, c) => {
+    const co = normalizeCompany(companyRaw);
+    if (!co) return;
+    const cand = { source, id: c.id, name: `${c.first || ''} ${c.last || ''}`.trim(), title: c.title || '', bucket: contactChannelBucket(c).bucket, lastTouch: c.lastTouch || '' };
+    const cur = byCompany.get(co);
+    if (!cur || cand.bucket > cur.bucket || (cand.bucket === cur.bucket && cand.lastTouch > cur.lastTouch)) byCompany.set(co, cand);
+  };
+  for (const c of ta)  if ((c.company || '').trim() && c.status !== 'Archived') consider(c.company, 'ta', c);
+
+  const out = [];
+  const seen = new Set();
+  for (const a of stale) {
+    if (a.muted) continue;                             // "done for now" — leave it alone
+    const contact = byCompany.get(normalizeCompany(a.company));
+    if (!contact) continue;                            // no contact → contactless nudge handles it
+    const key = `${contact.source}:${contact.id}`;
+    if (seen.has(key)) continue;                       // one row per contact, most-urgent app first
+    seen.add(key);
+    out.push({
+      source: contact.source, id: contact.id, name: contact.name || '(no name)', title: contact.title,
+      company: a.company,
+      appStale: { appId: a.id, appRole: a.role, status: a.status, days: a.daysSinceLastTouch, coachLevel: a.coachLevel, score: a.score },
+    });
+  }
+  return out;
+}
+
 // How many contacts are being held back purely because their address could not be
 // checked. The send gate refusing an unverified address is correct, but its effect
 // is INVISIBLE: the row simply does not appear, and fewer rows looks like a quiet
@@ -883,7 +926,7 @@ export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
   computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
   computeFollowupQueue, _followupRank,
-  isHighValueContact, computeContactlessApps, countWithheldContacts,
+  isHighValueContact, computeContactlessApps, computeStaleAppContacts, countWithheldContacts,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 
