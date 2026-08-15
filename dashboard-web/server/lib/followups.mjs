@@ -8,7 +8,7 @@ import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
 import { INTERVIEW_STAGES, isInterviewStage, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { isSendable } from '../../../lib/email-verify.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
-import { isLinkedInInvite } from './channels.mjs';
+import { isLinkedInEntry } from './channels.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
 // quickly each stage cools: warm Responded threads cool fastest, post-
@@ -571,7 +571,7 @@ function buildCompanyTouchIndex({ ta, rec }) {
       const date = (m.timestamp || '').slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
       if (!idx.has(co)) idx.set(co, []);
-      idx.get(co).push({ key, name, date, direction: m.direction, channel: isLinkedInInvite(m.subject) ? 'linkedin' : 'email' });
+      idx.get(co).push({ key, name, date, direction: m.direction, channel: isLinkedInEntry(m) ? 'linkedin' : 'email' });
     }
   };
   for (const r of (ta || []))  { try { add(r.company, `ta:${r.id}`, `${r.first || ''} ${r.last || ''}`.trim(), readTTCorrespondence(r.id)); } catch { /* skip unreadable */ } }
@@ -736,7 +736,7 @@ function _channelsDone(source, id) {
     const corr = source === 'recruiter' ? readRecruiterCorrespondence(id) : readTTCorrespondence(id);
     for (const m of (corr || [])) {
       if (m.direction !== 'Sent') continue;
-      if (isLinkedInInvite(m.subject)) linkedinDone = true;
+      if (isLinkedInEntry(m)) linkedinDone = true;
       else emailDone = true;
     }
   } catch { /* unreadable log → treat as nothing done yet */ }

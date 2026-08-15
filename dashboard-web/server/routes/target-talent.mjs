@@ -111,6 +111,7 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     const r = rows.find(x => x.id === id);
     if (!r) return res.status(404).json({ error: 'Contact not found' });
     const { direction, subject, body, timestamp, alsoLogToAppNum, alsoLogToAppNums, alsoLogChannel } = req.body || {};
+    const channel = req.body?.channel === 'LinkedIn' ? 'LinkedIn' : 'Email';
     if (!direction || !['Sent', 'Received', 'Draft'].includes(direction)) {
       return res.status(400).json({ error: 'direction must be Sent | Received | Draft' });
     }
@@ -118,7 +119,7 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
 
     const messages = readTTCorrespondence(id);
     const ts = timestamp || new Date().toISOString().replace('T', ' ').slice(0, 16);
-    messages.push({ timestamp: ts, direction, subject: subject.trim(), body: body.trim() });
+    messages.push({ timestamp: ts, direction, channel, subject: subject.trim(), body: body.trim() });
     writeTTCorrespondence(id, messages);
 
     // Auto-advance status — never regress. A Sent follow-up after a Reply
@@ -144,7 +145,7 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     // A LinkedIn connection request is a connect, NOT an email touch. Tally it in
     // the connects log so "LinkedIn connects" counts it and "verified touches"
     // (email only) does not. Idempotent on (date, name, source).
-    if (direction === 'Sent' && isLinkedInInvite(subject)) {
+    if (direction === 'Sent' && (channel === 'LinkedIn' || isLinkedInInvite(subject))) {
       logConnect({ name: `${r.first || ''} ${r.last || ''}`.trim(), source: 'ta', date: ts.slice(0, 10) });
       // The invite just went out → advance the LinkedIn axis to 'Invite Pending'.
       // Only from 'Not Connected'; never regress someone already 'Connected'. The
