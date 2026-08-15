@@ -873,7 +873,12 @@ function computeStaleAppContacts({ staleApps, taRows } = {}) {
   const consider = (companyRaw, source, c) => {
     const co = normalizeCompany(companyRaw);
     if (!co) return;
-    const cand = { source, id: c.id, name: `${c.first || ''} ${c.last || ''}`.trim(), title: c.title || '', bucket: contactChannelBucket(c).bucket, lastTouch: c.lastTouch || '' };
+    const ch = contactChannelBucket(c);
+    const cand = {
+      source, id: c.id, name: `${c.first || ''} ${c.last || ''}`.trim(), first: c.first || '',
+      title: c.title || '', email: c.email || '', linkedin: c.linkedin || '',
+      bucket: ch.bucket, hasEmail: ch.hasEmail, hasLinkedIn: ch.hasLinkedIn, lastTouch: c.lastTouch || '',
+    };
     const cur = byCompany.get(co);
     if (!cur || cand.bucket > cur.bucket || (cand.bucket === cur.bucket && cand.lastTouch > cur.lastTouch)) byCompany.set(co, cand);
   };
@@ -888,9 +893,16 @@ function computeStaleAppContacts({ staleApps, taRows } = {}) {
     const key = `${contact.source}:${contact.id}`;
     if (seen.has(key)) continue;                       // one row per contact, most-urgent app first
     seen.add(key);
+    // Emit the exact shape the click-and-go follow-up card (BothRow) consumes, so
+    // the going-stale list renders as the same inline draft/mark-sent cards as the
+    // main queue — plus a staleDays tag and the underlying app for context.
     out.push({
-      source: contact.source, id: contact.id, name: contact.name || '(no name)', title: contact.title,
-      company: a.company,
+      source: contact.source, id: contact.id, name: contact.name || '(no name)', firstName: contact.first,
+      role: contact.title, title: contact.title, company: a.company,
+      email: contact.email, linkedin: contact.linkedin,
+      channel: contact.hasEmail && contact.hasLinkedIn ? 'both' : contact.hasEmail ? 'email' : 'linkedin',
+      isHighValue: !!(contact.hasEmail && contact.hasLinkedIn),
+      staleDays: a.daysSinceLastTouch,
       appStale: { appId: a.id, appRole: a.role, status: a.status, days: a.daysSinceLastTouch, coachLevel: a.coachLevel, score: a.score },
     });
   }
