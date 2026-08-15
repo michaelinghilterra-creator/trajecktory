@@ -26,3 +26,16 @@ export const LINKEDIN_INVITE_SUBJECT = 'LinkedIn connection request';
 export function isLinkedInInvite(subject) {
   return /^linkedin connection request/i.test(String(subject || '').trim());
 }
+
+// True when a correspondence MESSAGE is a LinkedIn touch rather than an email one.
+// Honors the explicit `channel` field (written when a user logs a LinkedIn message
+// from the contact card) as well as the legacy connect-queue subject convention,
+// so both the old invite path and hand-logged LinkedIn DMs classify correctly.
+// Accepts a message object; falls back to subject-only for legacy callers.
+export function isLinkedInEntry(msg) {
+  if (msg && typeof msg === 'object') {
+    if (msg.channel === 'LinkedIn') return true;
+    return isLinkedInInvite(msg.subject);
+  }
+  return isLinkedInInvite(msg);
+}

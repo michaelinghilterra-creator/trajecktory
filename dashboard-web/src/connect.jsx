@@ -583,8 +583,10 @@ function BothRow({ c, toast, onChannelDone }) {
           <div style={{ fontWeight: 600 }}>
             {c.name || '(no name)'}{' '}
             <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
-            <span title="High value: reachable on both email and LinkedIn. Worked on both channels."
-              style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.4px', padding: '2px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff', verticalAlign: 'middle' }}>HIGH VALUE</span>
+            {c.isHighValue !== false && <span title="High value: reachable on both email and LinkedIn. Worked on both channels."
+              style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.4px', padding: '2px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff', verticalAlign: 'middle' }}>HIGH VALUE</span>}
+            {c.staleDays != null && <span title={`Your application here has been quiet ${c.staleDays} business days`}
+              style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--orange) 18%, transparent)', color: 'var(--orange)', border: '1px solid color-mix(in srgb, var(--orange) 45%, transparent)', verticalAlign: 'middle' }}>APP STALE · {c.staleDays}d</span>}
             {c.isPrincipal ? <span title="Hiring principal — the decision-maker you'd report to."
               style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)', verticalAlign: 'middle' }}>PRINCIPAL</span> : null}
             <OutreachPills c={c} />
@@ -799,6 +801,11 @@ window.BothQueueTab = function BothQueueTab({ toast }) {
 // (ConnectRow / EmailRow / BothRow), so the outreach actions are byte-identical.
 // Channel becomes a filter chip instead of a tab. Rows arrive pre-ranked from the
 // server (importance, then last-touch recency); we preserve that order.
+// Exposed so other surfaces (e.g. Follow-Ups → Applications going stale) can render
+// the SAME click-and-go card (draft note / draft email / mark sent) for a contact,
+// instead of a row that opens a drawer.
+window.FollowupContactCard = BothRow;
+
 window.FollowupQueueTab = function FollowupQueueTab({ toast }) {
   const [queue, setQueue] = useStateCq(null);
   const [err, setErr] = useStateCq(null);

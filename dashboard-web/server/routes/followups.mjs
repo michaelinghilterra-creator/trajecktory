@@ -10,7 +10,7 @@ import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeStaleAppContacts, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
@@ -96,7 +96,8 @@ router.get('/api/followups/both-queue', (req, res) => {
 // `source: 'app' | 'ta' | 'recruiter'`.
 router.get('/api/followups/stale', (req, res) => {
   try {
-    const apps = computeStaleApps().map(it => ({ source: 'app', ...it }));
+    const rawStaleApps = computeStaleApps();
+    const apps = rawStaleApps.map(it => ({ source: 'app', ...it }));
     const contacts = computeStaleContacts();
     const merged = [...apps, ...contacts].sort((a, b) => {
       if (a.coachLevel !== b.coachLevel) {
@@ -137,8 +138,18 @@ router.get('/api/followups/stale', (req, res) => {
       // Applied roles with no contact at the company — "find a contact" nudge.
       // Sorted by apply date descending; each row has: source:'app', id, company,
       // role, status, applyDate, score. Empty array when all applied companies
-      // already have at least one contact row.
-      contactlessApps: computeContactlessApps(),
+      // already have at least one contact row. Snoozed/muted nudges (the user
+      // checked and there is no reachable contact) are partitioned out using the
+      // 'contactless' snooze bucket so companies like these stop re-alerting.
+      contactlessApps: computeContactlessApps().filter(it => {
+        const until = snooze.contactless?.[String(it.id)];
+        return !(until && until > today);
+      }),
+      // People-first: applications going stale at companies where you HAVE a
+      // contact. Surfaces the specific person to ping (with an "app going stale"
+      // signal) instead of a company card. Company-only stale apps are covered by
+      // contactlessApps above; muted apps are excluded in the compute.
+      staleAppContacts: computeStaleAppContacts({ staleApps: rawStaleApps }),
       // Deprecated alias: legacy readers expect `items` to be the badge list.
       items: warm,
     });

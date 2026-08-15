@@ -74,14 +74,17 @@ function readTTCorrespondence(id) {
   if (!fs.existsSync(f)) return [];
   const text = fs.readFileSync(f, 'utf8');
   const messages = [];
-  const re = /^## (\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?) \| (Sent|Received|Draft) \| (.+?)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm;
+  // Optional channel token (Email|LinkedIn) between direction and subject; absent
+  // on legacy rows, which read back as Email. See referrals.mjs for the rationale.
+  const re = /^## (\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?) \| (Sent|Received|Draft) \| (?:(Email|LinkedIn) \| )?(.+?)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm;
   let m;
   while ((m = re.exec(text)) !== null) {
     messages.push({
       timestamp: m[1],
       direction: m[2],
-      subject:   m[3].trim(),
-      body:      m[4].trim(),
+      channel:   m[3] || 'Email',
+      subject:   m[4].trim(),
+      body:      m[5].trim(),
     });
   }
   return messages;
@@ -89,9 +92,10 @@ function readTTCorrespondence(id) {
 
 function writeTTCorrespondence(id, messages) {
   fs.mkdirSync(TT_CORR_DIR, { recursive: true });
-  const out = messages.map(m =>
-    `## ${m.timestamp} | ${m.direction} | ${m.subject}\n\n${m.body}\n`
-  ).join('\n');
+  const out = messages.map(m => {
+    const ch = m.channel && m.channel !== 'Email' ? `${m.channel} | ` : '';
+    return `## ${m.timestamp} | ${m.direction} | ${ch}${m.subject}\n\n${m.body}\n`;
+  }).join('\n');
   fs.writeFileSync(path.join(TT_CORR_DIR, `${id}.md`), out);
 }
 

@@ -14,7 +14,7 @@
  * relaunch, so a current-week count is trustworthy even while the old log is not.
  */
 
-import { isLinkedInInvite } from './channels.mjs';
+import { isLinkedInEntry } from './channels.mjs';
 
 // Inclusive date-window test on a YYYY-MM-DD (or ISO) string.
 function inRange(dateStr, start, end) {
@@ -43,7 +43,7 @@ export function weeklyMetrics({
     // Verified touches = EMAIL touches only. A LinkedIn connection request shares
     // this correspondence log but is a connect, counted separately (connects log),
     // so it must not book as a verified touch.
-    verifiedTouches = M(correspondence.filter(c => c.direction === 'Sent' && !isLinkedInInvite(c.subject) && inRange(c.date, start, end)).length, true, 'correspondence (email only)');
+    verifiedTouches = M(correspondence.filter(c => c.direction === 'Sent' && !isLinkedInEntry(c) && inRange(c.date, start, end)).length, true, 'correspondence (email only)');
     replies = M(correspondence.filter(c => c.direction === 'Received' && inRange(c.date, start, end)).length, true, 'correspondence');
   } else {
     verifiedTouches = M(0, false, 'correspondence not available');

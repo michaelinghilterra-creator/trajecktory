@@ -25,6 +25,16 @@ assert.ok(REFERRAL_STATUSES.includes('Not Asked'));
 assert.ok(REFERRAL_STATUSES.includes('Applied w/ Referral'));
 ok('statuses derive from states.yml (Not Asked .. Applied w/ Referral)');
 
+// The "Responded" rung (a positive reply, before an intro is made) sits between
+// Asked and Intro Made — the correspondence route auto-advances Asked → Responded
+// on a received reply, so the ordering must hold for that step to mean "forward".
+assert.ok(REFERRAL_STATUSES.includes('Responded'), 'Responded rung present');
+assert.ok(
+  REFERRAL_STATUSES.indexOf('Asked') < REFERRAL_STATUSES.indexOf('Responded') &&
+  REFERRAL_STATUSES.indexOf('Responded') < REFERRAL_STATUSES.indexOf('Intro Made'),
+  'Responded ordered between Asked and Intro Made');
+ok('statuses: Responded sits between Asked and Intro Made');
+
 // empty file -> empty list
 assert.deepEqual(parseReferralsMd(), []);
 ok('parse: missing file -> []');
@@ -130,5 +140,35 @@ assert.equal(corr[0].subject, 'reconnect');
 assert.equal(corr[1].direction, 'Received');
 assert.equal(corr[1].body, 'great to hear from you');
 ok('correspondence: write + read round-trips (2 messages, direction + body preserved)');
+
+// ── Channel (Email | LinkedIn), structured + backward-compatible ───────────────
+// A message carrying an explicit LinkedIn channel round-trips; one with no channel
+// defaults to Email on read; both directions preserve their channel.
+writeReferralCorrespondence(2, [
+  { timestamp: '2026-08-13 09:00', direction: 'Sent', channel: 'LinkedIn', subject: 'quick note', body: 'connecting here' },
+  { timestamp: '2026-08-13 12:00', direction: 'Received', channel: 'LinkedIn', subject: 'Re: quick note', body: 'sure, happy to' },
+  { timestamp: '2026-08-14 09:00', direction: 'Sent', subject: 'follow-up email', body: 'as promised' }, // no channel -> Email
+]);
+const chCorr = readReferralCorrespondence(2);
+assert.equal(chCorr.length, 3);
+assert.equal(chCorr[0].channel, 'LinkedIn');
+assert.equal(chCorr[1].channel, 'LinkedIn');
+assert.equal(chCorr[2].channel, 'Email');           // absent channel reads as Email
+assert.equal(chCorr[0].subject, 'quick note');       // subject intact past the channel token
+assert.equal(chCorr[1].body, 'sure, happy to');
+ok('correspondence: channel round-trips (LinkedIn preserved, absent defaults to Email)');
+
+// A legacy on-disk entry with NO channel token still parses, and the subject is
+// preserved even when it literally starts with "LinkedIn" (the connect-invite
+// subject) — the optional token requires a trailing "| ", which a subject lacks.
+fs.mkdirSync(path.join(tmp, 'referral-correspondence'), { recursive: true });
+fs.writeFileSync(
+  path.join(tmp, 'referral-correspondence', '3.md'),
+  '## 2026-08-10 08:00 | Sent | LinkedIn connection request\n\nhi there\n');
+const legacyCorr = readReferralCorrespondence(3);
+assert.equal(legacyCorr.length, 1);
+assert.equal(legacyCorr[0].channel, 'Email');        // no explicit token -> Email
+assert.equal(legacyCorr[0].subject, 'LinkedIn connection request'); // subject NOT eaten by the token
+ok('correspondence: legacy row without channel token parses, subject preserved');
 
 console.log(`\n  ${n} referrals checks passed`);
