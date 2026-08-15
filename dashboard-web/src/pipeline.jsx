@@ -1973,49 +1973,79 @@ window.PipelineDrawer = PipelineDrawer;
 // and why (gated), and a done count. Exists because every other Pipeline view
 // reads only evaluated rows, so a found-but-pending or gated role appeared
 // nowhere and looked "lost" — the #1 driver of the "we keep losing JDs" report.
+// A small outlined badge with a glowing dot, matching StatusBadge/.status-badge
+// used across the app. Discovery states are not pipeline statuses, so this takes
+// an explicit color rather than going through STATUS_MAP.
+function DiscoBadge({ label, color, title }) {
+  return (
+    <span className="status-badge" title={title} style={{ color, borderColor: color, fontSize: 9.5, padding: '2px 8px', whiteSpace: 'nowrap', flex: 'none' }}>
+      <span className="sb-dot" style={{ background: color }} />{label}
+    </span>
+  );
+}
+
+function discoInitials(name) {
+  const p = String(name || '').replace(/['"]/g, '').split(/\s+/).filter(Boolean);
+  if (!p.length) return '?';
+  return ((p[0][0] || '') + (p.length > 1 ? p[1][0] : '')).toUpperCase();
+}
+
+// One discovery row: avatar, company, title (a link to the posting when we have a
+// URL), and a trailing badge slot. Shared by the pending and gated lists so both
+// read as the same polished card, not two hand-rolled layouts.
+function DiscoRow({ company, title, url, accent, badge, sub, first }) {
+  return (
+    <div className="row" style={{ gap: 10, alignItems: 'center', padding: '9px 2px', borderTop: first ? 'none' : '1px solid var(--border)' }}>
+      <div className="mono-av sm" style={{ flex: 'none', borderColor: accent, color: accent }}>{discoInitials(company)}</div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company || '—'}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {url
+            ? <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-dim)' }} onClick={e => e.stopPropagation()}>{title || 'View posting'}</a>
+            : (title || '—')}
+        </div>
+        {sub && <div className="dim mono" style={{ fontSize: 10.5, lineHeight: 1.4, marginTop: 2 }}>{sub}</div>}
+      </div>
+      {badge}
+    </div>
+  );
+}
+
 function DiscoveryInbox({ inbox, onReload }) {
   if (!inbox) return <div className="card padded-lg dim" style={{ fontSize: 12 }}>Loading discovery queue…</div>;
   const { counts = { pending: 0, gated: 0, done: 0 }, pending = [], gated = [] } = inbox;
-  const rowStyle = (i) => ({ gap: 10, alignItems: 'baseline', padding: '5px 0', borderTop: i ? '1px solid var(--border)' : 'none' });
   return (
     <div className="col" style={{ gap: 16 }}>
-      <div className="card padded-lg col" style={{ gap: 8 }}>
-        <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-          The raw discovery queue. A scanned role lands here as <b>pending</b>, gets a JD snapshot, then is evaluated and moves to your pipeline. <b>Gated</b> rows were found dead or unreadable, with the reason shown. Nothing here is lost — pending roles simply have not been evaluated yet.
-        </div>
-        <div className="row" style={{ gap: 18, marginTop: 2, alignItems: 'center' }}>
-          <span className="mono" style={{ fontSize: 12 }}><b>{counts.pending}</b> pending eval</span>
-          <span className="mono" style={{ fontSize: 12 }}><b>{counts.gated}</b> gated</span>
-          <span className="mono dim" style={{ fontSize: 12 }}>{counts.done} done</span>
+      <div className="card padded-lg col" style={{ gap: 10 }}>
+        <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="stat-chip"><b>{counts.pending}</b> pending eval</span>
+          <span className="stat-chip"><b>{counts.gated}</b> gated</span>
+          <span className="stat-chip dim">{counts.done} done</span>
           <button type="button" className="btn sm" style={{ marginLeft: 'auto' }} onClick={onReload}>↻ Refresh</button>
+        </div>
+        <div className="dim" style={{ fontSize: 12, lineHeight: 1.5 }}>
+          A scanned role lands as <b>pending</b>, gets a JD snapshot, then is evaluated into your pipeline. <b>Gated</b> rows were dead or unreadable (reason shown). Nothing is lost — pending roles just aren't evaluated yet.
         </div>
       </div>
 
-      <div className="card padded-lg col" style={{ gap: 4 }}>
-        <div className="card-head"><span className="card-title"><span className="dot" style={{ background: 'var(--accent)' }} />Pending evaluation ({pending.length})</span></div>
-        {pending.length === 0 && <div className="dim" style={{ fontSize: 12 }}>Nothing waiting. Run a scan to find new roles.</div>}
+      <div className="card padded-lg col" style={{ gap: 0 }}>
+        <div className="card-head" style={{ marginBottom: 4 }}><span className="card-title">Pending evaluation ({pending.length})</span></div>
+        {pending.length === 0 && <div className="dim" style={{ fontSize: 12, padding: '6px 0' }}>Nothing waiting. Run a scan to find new roles.</div>}
         {pending.map((p, i) => (
-          <div key={i} className="row" style={rowStyle(i)}>
-            <span style={{ fontWeight: 600, fontSize: 13, minWidth: 170 }}>{p.company || '—'}</span>
-            <span style={{ fontSize: 13, flex: 1 }}>{p.title || '—'}</span>
-            {p.readable
-              ? <span className="mono dim" style={{ fontSize: 10.5 }}>ready</span>
-              : <span className="mono" style={{ fontSize: 10.5, color: 'var(--amber, #fbbf24)' }}>needs JD paste</span>}
-          </div>
+          <DiscoRow key={p.url || i} company={p.company} title={p.title} url={p.url} accent="var(--accent)" first={i === 0}
+            badge={p.readable
+              ? <DiscoBadge label="ready" color="var(--green)" title="JD is readable — ready to evaluate" />
+              : <DiscoBadge label="needs JD paste" color="var(--orange)" title="No readable JD yet — paste the description to evaluate" />} />
         ))}
       </div>
 
-      <div className="card padded-lg col" style={{ gap: 4 }}>
-        <div className="card-head"><span className="card-title"><span className="dot" style={{ background: 'var(--red, #ef4444)' }} />Gated ({gated.length})</span></div>
-        {gated.length === 0 && <div className="dim" style={{ fontSize: 12 }}>No gated rows.</div>}
+      <div className="card padded-lg col" style={{ gap: 0 }}>
+        <div className="card-head" style={{ marginBottom: 4 }}><span className="card-title">Gated ({gated.length})</span></div>
+        {gated.length === 0 && <div className="dim" style={{ fontSize: 12, padding: '6px 0' }}>No gated rows.</div>}
         {gated.map((g, i) => (
-          <div key={i} className="col" style={{ gap: 2, padding: '5px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}>
-            <div className="row" style={{ gap: 10, alignItems: 'baseline' }}>
-              <span style={{ fontWeight: 600, fontSize: 13, minWidth: 170 }}>{g.company || '—'}</span>
-              <span style={{ fontSize: 13, flex: 1 }}>{g.title || '—'}</span>
-            </div>
-            <div className="dim mono" style={{ fontSize: 10.5, lineHeight: 1.4 }}>{g.reason || 'gated'}</div>
-          </div>
+          <DiscoRow key={g.url || i} company={g.company} title={g.title} url={g.url} accent="var(--red)" first={i === 0}
+            sub={g.reason || 'gated'}
+            badge={<DiscoBadge label="gated" color="var(--red)" title={g.reason || 'gated'} />} />
         ))}
       </div>
     </div>
