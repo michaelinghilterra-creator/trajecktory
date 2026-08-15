@@ -364,6 +364,19 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
       body: JSON.stringify({ id: it.id }),
     }).then(() => load()).catch(() => {});
   };
+  // Defer (or effectively mute) the "find a contact" nudge for a company with no
+  // reachable contact. Uses the separate 'contactless' snooze bucket so it does
+  // not touch the application's own follow-up. A long snooze (a year) is the
+  // "there are no contacts here, stop asking" mute.
+  const snoozeContactless = (a, days) => {
+    window.tjkMutate('/api/followups/snooze', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'contactless', id: a.id, days }),
+    }).then(() => {
+      load();
+      window.tjkToast && window.tjkToast(days >= 300 ? `Muted — ${a.company} has no contacts to find` : `Snoozed ${a.company} for ${days} days`, 'success');
+    }).catch(() => {});
+  };
   const archiveGhosted = (ids) => {
     if (!ids.length) return;
     if (!window.confirm(`Archive ${ids.length} ghosted application${ids.length === 1 ? '' : 's'} to "No Response"?\n\nThey'll leave the active pipeline but still count as applications-with-no-reply in your analytics.`)) return;
@@ -606,9 +619,13 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
                         {a.applyDate ? <span className="dim" style={{ fontSize: 11 }}>applied {a.applyDate}</span> : null}
                       </div>
                     </div>
-                    <button className="btn accent sm" onClick={() => setFindFor({ company: a.company, role: a.role })}>
-                      Find a contact
-                    </button>
+                    <div className="row" style={{ gap: 6, flex: 'none' }}>
+                      <button className="btn ghost sm" title="Remind me about this one in two weeks" onClick={() => snoozeContactless(a, 14)}>Snooze 2w</button>
+                      <button className="btn ghost sm" title="There's no contact to find here — stop nudging me about it" onClick={() => snoozeContactless(a, 365)}>No contacts</button>
+                      <button className="btn accent sm" onClick={() => setFindFor({ company: a.company, role: a.role })}>
+                        Find a contact
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

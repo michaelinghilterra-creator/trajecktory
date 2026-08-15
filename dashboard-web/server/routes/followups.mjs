@@ -137,8 +137,13 @@ router.get('/api/followups/stale', (req, res) => {
       // Applied roles with no contact at the company — "find a contact" nudge.
       // Sorted by apply date descending; each row has: source:'app', id, company,
       // role, status, applyDate, score. Empty array when all applied companies
-      // already have at least one contact row.
-      contactlessApps: computeContactlessApps(),
+      // already have at least one contact row. Snoozed/muted nudges (the user
+      // checked and there is no reachable contact) are partitioned out using the
+      // 'contactless' snooze bucket so companies like these stop re-alerting.
+      contactlessApps: computeContactlessApps().filter(it => {
+        const until = snooze.contactless?.[String(it.id)];
+        return !(until && until > today);
+      }),
       // Deprecated alias: legacy readers expect `items` to be the badge list.
       items: warm,
     });
