@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.26.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.25.1...v2.26.0) (2026-08-15)
+
+
+### Features
+
+* unify contacts into one shared card and streamline follow-ups ([#197](https://github.com/michaelinghilterra-creator/trajecktory/issues/197)) ([e455dc5](https://github.com/michaelinghilterra-creator/trajecktory/commit/e455dc51fd51cbbf8696f4ec6491de826865e9a7))
+
 ## [2.25.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.25.0...v2.25.1) (2026-08-14)
 
 
