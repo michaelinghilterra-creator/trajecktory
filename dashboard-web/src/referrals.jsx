@@ -27,11 +27,22 @@ const REF_STATUS_COLORS = {
   'Not Asked': 'var(--text-mute)',
   'Catching Up': '#38bdf8',
   'Asked': '#a78bfa',
+  'Responded': '#22d3ee',
   'Intro Made': '#f59e0b',
   'Applied w/ Referral': '#22c55e',
   'No': 'var(--text-mute)',
   'Dormant': 'var(--text-mute)',
 };
+
+// AI-draft controls for the referral card. Email topics map to the referral
+// /draft route's `topic` param; tones map to the LinkedIn connect-note route.
+const REF_TOPICS = [
+  { v: 'reconnect', label: 'Reconnect' },
+  { v: 'ask', label: 'Referral ask' },
+  { v: 'intro-thanks', label: 'Thank for intro' },
+  { v: 'nudge', label: 'Nudge' },
+];
+const REF_TONES = ['Warm', 'Direct', 'Curious', 'Concise'];
 
 function refLocalToday() {
   const d = new Date();
@@ -93,6 +104,8 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
   const [form, setForm] = useState({ name: '', how: '', where: '', target: '', notes: '' });
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [subtab, setSubtab] = useState('stage1');
+  const [sortKey, setSortKey] = useState('name');
+  const [sortDir, setSortDir] = useState('asc');
   const [drawerId, setDrawerId] = useState(null);   // open contact drawer
   const [linkedin, setLinkedin] = useState({ count: 0, importedAt: null });
   const [reconciling, setReconciling] = useState(false);
@@ -121,8 +134,25 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
     const q = (search || '').trim().toLowerCase();
     let out = subtab === 'all' ? rows : rows.filter(r => r.stage === subtab);
     if (q) out = out.filter(r => [r.name, r.how, r.where, r.target, r.notes].some(v => (v || '').toLowerCase().includes(q)));
-    return out;
-  }, [rows, search, subtab]);
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const val = x => sortKey === 'last' ? (x.lastTouch || '')
+      : sortKey === 'how' ? (x.how || '').toLowerCase()
+      : sortKey === 'where' ? (x.where || '').toLowerCase()
+      : sortKey === 'target' ? (x.target || '').toLowerCase()
+      : sortKey === 'status' ? (x.status || '').toLowerCase()
+      : (x.name || '').toLowerCase();
+    return [...out].sort((a, b) => { const av = val(a), bv = val(b); if (av < bv) return -dir; if (av > bv) return dir; return (a.name || '').localeCompare(b.name || ''); });
+  }, [rows, search, subtab, sortKey, sortDir]);
+
+  const setSort = k => { if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir(k === 'last' ? 'desc' : 'asc'); } };
+  const REF_COLS = [
+    { k: 'name', label: 'Name', w: 210 },
+    { k: 'how', label: 'How you know them', w: 220 },
+    { k: 'where', label: 'Where now / reach', w: 200 },
+    { k: 'target', label: 'Target', w: 180 },
+    { k: 'status', label: 'Status', w: 150 },
+    { k: 'last', label: 'Last touch', w: 110 },
+  ];
 
   const stats = useMemo(() => ({
     total: rows.length,
@@ -337,12 +367,12 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
           <table className="tbl ssi-tbl" style={{ width: '100%' }}>
             <thead>
               <tr>
-                <th style={{ width: 210 }}>Name</th>
-                <th style={{ width: 220 }}>How you know them</th>
-                <th style={{ width: 200 }}>Where now / reach</th>
-                <th style={{ width: 180 }}>Target</th>
-                <th style={{ width: 150 }}>Status</th>
-                <th style={{ width: 110 }}>Last touch</th>
+                {REF_COLS.map(c => (
+                  <th key={c.k} style={{ width: c.w }} className={sortKey === c.k ? 'sorted' : ''} role="button" tabIndex={0}
+                    onClick={() => setSort(c.k)} onKeyDown={window.kbdActivate(() => setSort(c.k))}>
+                    {c.label}<span className="sort-ind">{sortKey === c.k ? (sortDir === 'asc' ? '↑' : '↓') : '·'}</span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -435,14 +465,24 @@ function refInitials(name) {
 // clickable contact card like every other book. Referral-specific fields (how you
 // know them, their reach, the target you want in) instead of email/correspondence,
 // since this channel is warm-intro / template driven, not direct outreach.
+// A referral now opens the SAME card as a TA or recruiter contact: the shared
+// window.ContactPanel, driven by the referral adapter (window.CONTACT_CFG_REFERRAL,
+// defined in target-talent.jsx). It fetches its own detail by id, so the drawer
+// only needs the id, a close handler, and a reload callback. The older ReferralPanel
+// and its prop contract are kept intact as a fallback for the brief window before
+// the shared panel is available in the bundle.
 function ReferralDrawer({ row, statuses, onClose, onPatch, onLogToday, onFindEmail, finding, onChanged, onRemove }) {
   const open = !!row;
+  const Shared = window.ContactPanel;
+  const refCfg = window.CONTACT_CFG_REFERRAL;
   return (
     <>
       <div className={"drawer-backdrop" + (open ? " open" : "")} onClick={onClose}
         style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }} />
       <div className={"drawer" + (open ? " open" : "")} style={{ transform: open ? "translateX(0)" : "translateX(100%)" }}>
-        {open && <ReferralPanel row={row} statuses={statuses} onClose={onClose} onPatch={onPatch} onLogToday={onLogToday} onFindEmail={onFindEmail} finding={finding} onChanged={onChanged} onRemove={onRemove} />}
+        {open && (Shared && refCfg
+          ? <Shared id={row.id} cfg={refCfg} onClose={onClose} onUpdate={onChanged} />
+          : <ReferralPanel row={row} statuses={statuses} onClose={onClose} onPatch={onPatch} onLogToday={onLogToday} onFindEmail={onFindEmail} finding={finding} onChanged={onChanged} onRemove={onRemove} />)}
       </div>
     </>
   );
@@ -459,6 +499,7 @@ function RefMsg({ m }) {
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.5px', padding: '1px 6px', borderRadius: 4, border: `1px solid ${c}`, color: c }}>{dir.toUpperCase()}</span>
+          {m.channel === 'LinkedIn' && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '.4px', padding: '1px 6px', borderRadius: 4, background: 'rgba(56,189,248,0.14)', color: '#38bdf8' }}>IN</span>}
           <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{m.subject || '(no subject)'}</span>
           <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-mute)' }}>{m.timestamp}</span>
         </div>
@@ -514,13 +555,43 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
     setSaving(true);
     window.tjkMutate(`/api/referrals/${row.id}/correspondence`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ direction: compose.direction, subject: compose.subject, body: compose.body }),
+      body: JSON.stringify({ direction: compose.direction, channel: compose.channel || 'Email', subject: compose.subject, body: compose.body }),
     }).then(r => r.json()).then(d => {
       setSaving(false);
       if (!d.ok) { toast(d.error || 'Could not log', 'error'); return; }
       setCompose(null); loadDetail(); onChanged && onChanged();
       toast(d.linkedTo ? `Logged to your ${d.linkedTo.source === 'ta' ? 'TA' : 'recruiter'} timeline for this person` : `Logged ${compose.direction.toLowerCase()}`, 'success');
     }).catch(() => { setSaving(false); toast('Could not log', 'error'); });
+  };
+
+  // Generate a draft into the compose card. LinkedIn → the shared connect-note
+  // route (raw fields, no twin needed); Email → the referral /draft route with a
+  // topic (or reply / follow-up when a thread exists). The user edits then logs.
+  const [generating, setGenerating] = useState(false);
+  const generate = () => {
+    if (!compose) return;
+    setGenerating(true);
+    const fail = (msg) => { setGenerating(false); toast(msg || 'Draft failed', 'error'); };
+    if ((compose.channel || 'Email') === 'LinkedIn') {
+      const first = String(row.name || '').trim().split(/\s+/)[0] || '';
+      window.tjkMutate('/api/linkedin-drafts/connect-note', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: row.name, role: row.how, company: row.where, reason: row.target || row.how, firstName: first, tone: compose.tone || 'Warm' }),
+      }).then(r => r.json()).then(d => {
+        if (d && d.response) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.response })); setGenerating(false); }
+        else fail(d && d.error);
+      }).catch(() => fail());
+    } else {
+      const topic = compose.topic || 'reconnect';
+      const mode = topic === 'reply' ? 'reply' : topic === 'followup-sent' ? 'followup-sent' : undefined;
+      window.tjkMutate(`/api/referrals/${row.id}/draft`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, mode }),
+      }).then(r => r.json()).then(d => {
+        if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: d.draft.subject || c.subject, body: d.draft.body || '' })); setGenerating(false); }
+        else fail(d && d.error);
+      }).catch(() => fail());
+    }
   };
 
   const color = REF_STATUS_COLORS[row.status] || 'var(--text)';
@@ -650,8 +721,9 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
             Correspondence<span className="r">{corr.length} message{corr.length !== 1 ? 's' : ''}</span>
             {!compose && (
               <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                <button className="btn ghost sm" onClick={() => setCompose({ direction: 'Sent', subject: '', body: '' })}>↑ Log sent</button>
-                <button className="btn ghost sm" onClick={() => setCompose({ direction: 'Received', subject: '', body: '' })}>↓ Log reply</button>
+                <button className="btn ghost sm" onClick={() => setCompose({ direction: 'Sent', channel: 'Email', subject: '', body: '', topic: 'reconnect', tone: 'Warm', ai: true })}>✨ AI draft</button>
+                <button className="btn ghost sm" onClick={() => setCompose({ direction: 'Sent', channel: 'Email', subject: '', body: '' })}>↑ Log sent</button>
+                <button className="btn ghost sm" onClick={() => setCompose({ direction: 'Received', channel: 'Email', subject: '', body: '' })}>↓ Log reply</button>
               </span>
             )}
           </div>
@@ -665,15 +737,62 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
           {compose && (
             <div className="info-card" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: compose.direction === 'Sent' ? '#a78bfa' : '#22d3ee' }}>
-                {compose.direction === 'Sent' ? 'Log a message you sent' : 'Log a reply you received'}
+                {compose.ai ? 'Draft a message with AI' : compose.direction === 'Sent' ? 'Log a message you sent' : 'Log a reply you received'}
               </div>
-              <input className="inp" placeholder="Subject (optional)" value={compose.subject} style={inputStyle}
+
+              {/* Channel — which surface this message went out on. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 10.5, color: 'var(--text-mute)' }}>Channel</span>
+                {['Email', 'LinkedIn'].map(ch => {
+                  const on = (compose.channel || 'Email') === ch;
+                  return (
+                    <button key={ch} className="btn sm" onClick={() => setCompose(c => ({ ...c, channel: ch }))}
+                      style={{ borderColor: on ? 'var(--accent)' : 'var(--border)', background: on ? 'var(--accent-bg)' : 'transparent', color: on ? 'var(--accent)' : 'var(--text-dim)', fontWeight: on ? 600 : 400 }}>
+                      {ch}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* AI controls — topic (email) or tone (LinkedIn), then Generate. */}
+              {compose.ai && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  {(compose.channel || 'Email') === 'Email' ? (
+                    <select value={compose.topic || 'reconnect'} style={{ ...inputStyle, width: 'auto' }}
+                      onChange={e => setCompose(c => ({ ...c, topic: e.target.value }))}>
+                      {REF_TOPICS.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
+                      {corr.length > 0 && <option value="reply">Reply to last</option>}
+                      {corr.length > 0 && <option value="followup-sent">Follow up on last sent</option>}
+                    </select>
+                  ) : (
+                    <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {REF_TONES.map(t => {
+                        const on = (compose.tone || 'Warm') === t;
+                        return (
+                          <button key={t} className="btn sm" onClick={() => setCompose(c => ({ ...c, tone: t }))}
+                            style={{ borderColor: on ? 'var(--accent)' : 'var(--border)', background: on ? 'var(--accent-bg)' : 'transparent', color: on ? 'var(--accent)' : 'var(--text-dim)', fontWeight: on ? 600 : 400 }}>
+                            {t}
+                          </button>
+                        );
+                      })}
+                    </span>
+                  )}
+                  <button className="btn ghost sm" disabled={generating} onClick={generate}>{generating ? 'Generating…' : '✨ Generate'}</button>
+                </div>
+              )}
+
+              <input className="inp" placeholder={(compose.channel || 'Email') === 'LinkedIn' ? 'Note label (optional)' : 'Subject (optional)'} value={compose.subject} style={inputStyle}
                 onChange={e => setCompose(c => ({ ...c, subject: e.target.value }))} />
-              <textarea placeholder="What was said…" value={compose.body} rows={4} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+              <textarea placeholder={compose.ai ? 'Generate a draft above, then edit it here…' : 'What was said…'} value={compose.body} rows={5} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
                 onChange={e => setCompose(c => ({ ...c, body: e.target.value }))} />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn primary sm" disabled={saving} onClick={submitMessage}>{saving ? 'Saving…' : 'Save to timeline'}</button>
-                <button className="btn ghost sm" onClick={() => setCompose(null)}>Cancel</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button className="btn primary sm" disabled={saving} onClick={submitMessage}>{saving ? 'Saving…' : (compose.direction === 'Sent' ? 'Log as sent' : 'Log as received')}</button>
+                {compose.ai && (
+                  <button className="btn ghost sm" onClick={() => setCompose(c => ({ ...c, direction: c.direction === 'Sent' ? 'Received' : 'Sent' }))} title="Toggle whether this is a message you sent or one you received">
+                    {compose.direction === 'Sent' ? 'Mark as received' : 'Mark as sent'}
+                  </button>
+                )}
+                <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={() => setCompose(null)}>Cancel</button>
               </div>
             </div>
           )}

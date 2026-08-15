@@ -229,6 +229,7 @@ router.post('/api/recruiters/:id/correspondence', (req, res) => {
     const r = rows.find(x => x.id === id);
     if (!r) return res.status(404).json({ error: 'Recruiter not found' });
     const { direction, subject, body, timestamp } = req.body || {};
+    const channel = req.body?.channel === 'LinkedIn' ? 'LinkedIn' : 'Email';
     if (!direction || !['Sent', 'Received', 'Draft'].includes(direction)) {
       return res.status(400).json({ error: 'direction must be Sent | Received | Draft' });
     }
@@ -236,7 +237,7 @@ router.post('/api/recruiters/:id/correspondence', (req, res) => {
 
     const messages = readRecruiterCorrespondence(id);
     const ts = timestamp || new Date().toISOString().replace('T', ' ').slice(0, 16);
-    messages.push({ timestamp: ts, direction, subject: subject.trim(), body: body.trim() });
+    messages.push({ timestamp: ts, direction, channel, subject: subject.trim(), body: body.trim() });
     writeRecruiterCorrespondence(id, messages);
 
     // Auto-advance status based on direction. Never regress:
@@ -259,7 +260,7 @@ router.post('/api/recruiters/:id/correspondence', (req, res) => {
     // A LinkedIn connection request is a connect, NOT an email touch. Tally it in
     // the connects log so "LinkedIn connects" counts it and "verified touches"
     // (email only) does not. Idempotent on (date, name, source).
-    if (direction === 'Sent' && isLinkedInInvite(subject)) {
+    if (direction === 'Sent' && (channel === 'LinkedIn' || isLinkedInInvite(subject))) {
       logConnect({ name: `${r.first || ''} ${r.last || ''}`.trim(), source: 'recruiter', date: ts.slice(0, 10) });
     }
     res.json({ ok: true, status: newStatus });

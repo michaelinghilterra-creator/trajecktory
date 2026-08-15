@@ -241,15 +241,20 @@ referral_states:
     description: Referral ask sent (either after catching up, or straight to a close contact).
     stage: 2
     asked: true
+  - id: responded
+    label: Responded
+    description: Positive reply received ("sure / happy to"), the introduction not yet made.
+    stage: 3
+    asked: true
   - id: intro_made
     label: Intro Made
     description: They made the introduction or flagged the application internally.
-    stage: 3
+    stage: 4
     asked: true
   - id: applied_referral
     label: Applied w/ Referral
     description: An application went out carrying this referral. The terminal win.
-    stage: 4
+    stage: 5
     asked: true
   - id: no
     label: No

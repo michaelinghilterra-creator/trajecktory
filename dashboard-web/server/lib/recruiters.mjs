@@ -55,15 +55,17 @@ function readRecruiterCorrespondence(id) {
   if (!fs.existsSync(f)) return [];
   const text = fs.readFileSync(f, 'utf8');
   const messages = [];
-  // Format per message: ## YYYY-MM-DD HH:MM | <direction> | <subject>\n<body>
-  const re = /^## (\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?) \| (Sent|Received|Draft) \| (.+?)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm;
+  // Format per message: ## YYYY-MM-DD HH:MM | <direction> | [<channel> |] <subject>\n<body>
+  // Channel (Email|LinkedIn) is optional; legacy rows lack it and read as Email.
+  const re = /^## (\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?) \| (Sent|Received|Draft) \| (?:(Email|LinkedIn) \| )?(.+?)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm;
   let m;
   while ((m = re.exec(text)) !== null) {
     messages.push({
       timestamp: m[1],
       direction: m[2],
-      subject: m[3].trim(),
-      body: m[4].trim(),
+      channel: m[3] || 'Email',
+      subject: m[4].trim(),
+      body: m[5].trim(),
     });
   }
   return messages;
@@ -71,9 +73,10 @@ function readRecruiterCorrespondence(id) {
 
 function writeRecruiterCorrespondence(id, messages) {
   fs.mkdirSync(RECRUITER_CORR_DIR, { recursive: true });
-  const out = messages.map(m =>
-    `## ${m.timestamp} | ${m.direction} | ${m.subject}\n\n${m.body}\n`
-  ).join('\n');
+  const out = messages.map(m => {
+    const ch = m.channel && m.channel !== 'Email' ? `${m.channel} | ` : '';
+    return `## ${m.timestamp} | ${m.direction} | ${ch}${m.subject}\n\n${m.body}\n`;
+  }).join('\n');
   fs.writeFileSync(path.join(RECRUITER_CORR_DIR, `${id}.md`), out);
 }
 

@@ -38,7 +38,7 @@ import { readApplyDates, parseStatusEvents } from './sidecars.mjs';
 import { parseFollowupsMd } from './followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence } from './target-talent.mjs';
 import { parseRecruitersMd, readRecruiterCorrespondence } from './recruiters.mjs';
-import { isLinkedInInvite } from './channels.mjs';
+import { isLinkedInEntry } from './channels.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
 import { appReached, isInterviewStage } from './statuses.mjs';
 import { readEmployerDirectory, employerKey, hasEmployer, mergeEmployers } from './employer-directory.mjs';
@@ -244,7 +244,7 @@ export function buildActivities({ from, to } = {}) {
         if (loggedSig.has(selfSig)) continue;
         loggedSig.add(selfSig);
 
-        const linkedin = isLinkedInInvite(subject);
+        const linkedin = isLinkedInEntry(msg);
         const emp = empFor(company);
         const { role, appId } = roleFor(company);
         activities.push({

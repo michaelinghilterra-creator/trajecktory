@@ -227,15 +227,33 @@ function AllContactsView({ search }) {
 window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, onTaOpenConsumed, pendingRecruiterOpen, onRecruiterOpenConsumed, openTaContact, openRecruiter, toast } = {}) {
   // Fall back to the unified All view for an unknown/stale saved view.
   const active = NET_SUBTABS.some(s => s.id === view) ? view : 'all';
+  // "All contacts" is the primary landing view — one list of everyone, with a type
+  // badge and a type filter, so you never have to guess a person's book or click
+  // between tabs to find them. The three book tabs are demoted to secondary tools:
+  // they only exist for each channel's own extras (recruiter analytics, referral
+  // LinkedIn import / reconcile, TA sequences), not for finding a contact.
+  const books = NET_SUBTABS.filter(s => s.id !== 'all');
   return (
     <div className="col" style={{ gap: 0 }}>
-      <div className="subtabs">
-        {NET_SUBTABS.map(s => (
-          <button type="button" key={s.id} className={'subtab' + (active === s.id ? ' active' : '')} onClick={() => setView(s.id)}>
+      <div className="subtabs" style={{ alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <button type="button" className={'subtab' + (active === 'all' ? ' active' : '')} onClick={() => setView('all')}
+          style={{ fontWeight: 600 }}>
+          All contacts
+        </button>
+        <span style={{ flex: 'none', width: 1, height: 18, background: 'var(--border)', margin: '0 6px' }} />
+        <span style={{ flex: 'none', fontSize: 10, fontWeight: 700, letterSpacing: '.6px', textTransform: 'uppercase', color: 'var(--text-mute)' }} title="Each book's own tools live here — you don't need them to find a person.">Books</span>
+        {books.map(s => (
+          <button type="button" key={s.id} className={'subtab sm' + (active === s.id ? ' active' : '')} onClick={() => setView(s.id)}
+            style={{ fontSize: 12, opacity: active === s.id ? 1 : 0.8 }}>
             {s.label}
           </button>
         ))}
       </div>
+      {active === 'all' && (
+        <div className="dim mono" style={{ fontSize: 10.5, padding: '2px 2px 8px' }}>
+          Everyone across referrals, TA, and recruiters in one list. Filter by type, or open the Books above for a channel's own tools.
+        </div>
+      )}
 
       {active === 'all'        && <AllContactsView search={search} />}
       {active === 'referrals'  && window.ReferralsTab && <window.ReferralsTab search={search} />}

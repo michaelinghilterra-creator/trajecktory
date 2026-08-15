@@ -1,8 +1,15 @@
 import express from 'express';
+import { ROOT_DIR } from '../config.mjs';
 import { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence } from '../lib/referrals.mjs';
 import { reconcile, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
 import { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine } from '../lib/recruiters.mjs';
+import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
+import { reviseForCadence } from '../lib/cadence-revise.mjs';
+import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
+import { getIdentity } from '../lib/profile.mjs';
+import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
 import { findAndVerify, hunterSearchesLeft } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
@@ -243,6 +250,7 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const { direction = 'Sent', subject = '', body = '' } = req.body || {};
+    const channel = req.body?.channel === 'LinkedIn' ? 'LinkedIn' : 'Email';
     if (!['Sent', 'Received', 'Draft'].includes(direction)) {
       return res.status(400).json({ error: 'direction must be Sent, Received, or Draft' });
     }
@@ -250,7 +258,7 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
     if (!ref) return res.status(404).json({ error: 'Referral not found' });
     const today = new Date().toISOString().slice(0, 10);
     const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
-    const entry = { timestamp: stamp, direction, subject: String(subject || '(no subject)').trim() || '(no subject)', body: String(body || '').trim() || '(no body)' };
+    const entry = { timestamp: stamp, direction, channel, subject: String(subject || '(no subject)').trim() || '(no subject)', body: String(body || '').trim() || '(no body)' };
     const link = resolveReferralLink(ref, parseTargetTalentMd(), parseRecruitersMd());
     if (link && link.source === 'ta') {
       const msgs = readTTCorrespondence(link.contact.id); msgs.push(entry); writeTTCorrespondence(link.contact.id, msgs);
@@ -262,11 +270,149 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
       const msgs = readReferralCorrespondence(id); msgs.push(entry); writeReferralCorrespondence(id, msgs);
     }
     if (direction !== 'Draft') {
+      // Auto-advance the ladder, never regressing. A received reply after an ask
+      // is a positive response (Asked → Responded); the existing Not Asked →
+      // Catching Up nudge stands for any first non-draft touch. Intro Made and
+      // beyond (a made intro, an application sent) are left alone — logging a
+      // later message must not knock those terminal wins backward.
       const upd = { lastTouch: today };
-      if (ref.status === 'Not Asked') upd.status = 'Catching Up';
+      if (ref.status === 'Not Asked' || !ref.status) upd.status = 'Catching Up';
+      else if (direction === 'Received' && ref.status === 'Asked') upd.status = 'Responded';
       updateReferralLine(id, upd);
     }
     res.json({ ok: true, linkedTo: link ? { source: link.source, id: link.contact.id } : null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/referrals/:id/draft — AI-draft a warm, in-network message.
+// Unlike the TA/recruiter drafters (candidate-to-employer outreach), this writes
+// in the voice of a personal relationship: a reconnect, a soft referral ask, a
+// thank-you for an intro, or a gentle nudge. Grounded in how the user knows the
+// person (ref.how), where they are now (ref.where), and the role being targeted
+// through them (ref.target), plus any live application at their company.
+//
+// Body: { topic?: 'reconnect'|'ask'|'intro-thanks'|'nudge', mode?: 'reply'|'followup-sent' }
+// reply / followup-sent read the shared TWIN thread when the referral is linked,
+// so a reply drafts against the real history the drawer shows.
+const REF_TOPIC_GUIDANCE = {
+  reconnect: 'RECONNECT (no ask yet). The goal is purely to reopen the relationship after time apart. Reference how you know each other warmly and specifically, share a light line on what you are up to now, and invite a catch-up. Do NOT make a referral ask in this message — the ask comes after they reply.',
+  ask: 'THE REFERRAL ASK. You are back in touch (or already close). Make one specific, easy-to-decline ask: a quick intro to the right person, or flagging your application internally at their company. Name the role/company you are targeting. Offer to send a short blurb and resume to make it a two-minute forward. Keep it low-pressure and gracious about a no.',
+  'intro-thanks': 'THANK-YOU FOR AN INTRODUCTION. They made an intro or flagged your application. Thank them warmly and specifically, tell them briefly how it is going or what your next step is, and make clear there is no further ask. Close the loop so they feel the intro was worth making.',
+  nudge: 'GENTLE NUDGE. An earlier ask has gone unanswered. Follow up once, lightly and without guilt-tripping. Re-state the ask in one line, make it even easier to say yes or no, and give them an explicit out so the relationship is protected either way.',
+};
+
+router.post('/api/referrals/:id/draft', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ref = parseReferralsMd().find(r => r.id === id);
+    if (!ref) return res.status(404).json({ error: 'Referral not found' });
+
+    const firstName = splitName(ref.name).first || (ref.name || 'there').trim();
+    const me = getIdentity();
+
+    // The correspondence thread lives on the TWIN when the referral is linked, so
+    // reply / follow-up draft against the same history the drawer displays.
+    const link = resolveReferralLink(ref, parseTargetTalentMd(), parseRecruitersMd());
+    const prior = link && link.source === 'ta' ? readTTCorrespondence(link.contact.id)
+      : link && link.source === 'recruiter' ? readRecruiterCorrespondence(link.contact.id)
+      : readReferralCorrespondence(id);
+
+    const cvMd            = readProjectFile(ROOT_DIR, 'cv.md');
+    const profileMd       = readProjectFile(ROOT_DIR, 'modes/_profile.md');
+    const articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md');
+
+    const contactLabel = `someone in ${me.firstName}'s own professional network (a warm personal contact, NOT a cold recruiter lead)`;
+    const contactBlock = `Name:            ${ref.name}\nHow you know them: ${ref.how || '(unspecified)'}\nWhere now / reach: ${ref.where || '(unspecified)'}\nTarget through them: ${ref.target || '(unspecified)'}`;
+
+    // REPLY mode: respond to their most recent inbound message.
+    if (req.body?.mode === 'reply') {
+      const inbound = lastReceived(prior);
+      if (!inbound) return res.status(400).json({ error: 'No received message from this contact yet — nothing to reply to.' });
+      const prompt = buildReplyPrompt({ me, cvMd, profileMd, prior, contactLabel, contactBlock, firstName });
+      const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return res.status(500).json({ error: 'Could not parse reply draft from model output', raw });
+      const draft = JSON.parse(jsonMatch[0]);
+      draft.body = _stripLeadingSalutation(draft.body, firstName);
+      draft.body = _stripTrailingSignature(draft.body);
+      draft.body = cleanEmailBody(draft.body);
+      draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
+      draft.subject = cleanEmailSubject(collapseRe(draft.subject, inbound.subject));
+      return res.json({ ok: true, draft, messageType: 'reply' });
+    }
+
+    // FOLLOW-UP-ON-LAST-SENT mode: nudge a thread built on your last sent message.
+    if (req.body?.mode === 'followup-sent') {
+      const sent = lastSent(prior);
+      if (!sent) return res.status(400).json({ error: 'No message sent to this contact yet — nothing to follow up on.' });
+      const prompt = buildFollowupFromSentPrompt({ me, cvMd, profileMd, prior, contactLabel, contactBlock, firstName });
+      const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return res.status(500).json({ error: 'Could not parse follow-up draft from model output', raw });
+      const draft = JSON.parse(jsonMatch[0]);
+      draft.body = _stripLeadingSalutation(draft.body, firstName);
+      draft.body = _stripTrailingSignature(draft.body);
+      draft.body = cleanEmailBody(draft.body);
+      draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
+      draft.subject = cleanEmailSubject(collapseRe(draft.subject, sent.subject));
+      return res.json({ ok: true, draft, messageType: 'followup-sent' });
+    }
+
+    // Fresh outreach. Topic defaults from the ladder: an already-asked contact
+    // gets a nudge, everyone else a reconnect.
+    const topic = req.body?.topic
+      || (ref.status === 'Intro Made' ? 'intro-thanks'
+        : ref.status === 'Asked' ? 'nudge'
+        : 'reconnect');
+    const topicGuidance = REF_TOPIC_GUIDANCE[topic] || REF_TOPIC_GUIDANCE.reconnect;
+
+    // Ground the ask in a live application at their company, when one exists.
+    const relatedApps = findRelatedApps(ref.where);
+    const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status)) || relatedApps[0];
+    const relatedContext = topApp
+      ? `== LIVE APPLICATION AT ${String(ref.where || '').toUpperCase()} ==\nRole:   ${topApp.role}\nStatus: ${topApp.status} (applied ${topApp.date})\nWhen the topic is a referral ask, this is the specific opening to reference. Do NOT generalize.`
+      : `No application currently logged at ${ref.where || 'their company'}. If the topic is an ask, frame it around the kind of roles ${me.firstName} targets (see profile) rather than a specific req.`;
+
+    const prompt = `You are drafting a warm, personal message from ${me.fullName} to ${contactLabel}. This is a real relationship, not a cold outreach: the tone is that of one person reaching out to another they genuinely know.
+
+== THE CONTACT ==
+${contactBlock}
+
+${relatedContext}
+
+== ${me.firstName.toUpperCase()}'S CV (source of truth — do not invent metrics or experience) ==
+${cvMd}
+${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md) ==\n${articleDigestMd}\n` : ''}
+== VOICE RULES (from modes/_profile.md — must follow) ==
+${profileMd}
+
+== MESSAGE INTENT ==
+${topicGuidance}
+
+== STYLE REQUIREMENTS ==
+- Warm and personal, grounded in HOW YOU KNOW THEM above. This is the single most important cue — reference the shared history naturally.
+- Direct, human, no corporate filler ("I hope this finds you well", "reaching out to touch base").
+- Maximum 130 words in body.
+- NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
+- Never invent metrics, claims, or a shared history not supported above or on the CV.
+- If (and only if) the intent is a referral ask, make it specific and trivially easy to decline, and offer to send a short blurb + resume.
+- Close with a low-friction next step or a genuine sign-off, matching the intent.
+${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slice().reverse().slice(0, 3).map(m => `--- ${m.direction} on ${m.timestamp} | Subject: ${m.subject}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold.\n` : ''}
+Output ONLY a JSON object — no markdown, no code fences, no explanation:
+{"subject": "<subject line — short and human>", "body": "<message body — plain text, no signature block, NO trailing sign-off (no '${me.firstName}', no 'Best,\\n${me.firstName}'), NO greeting and NO bare first-name address. STRUCTURE: 2-4 short paragraphs separated by a LITERAL \\n\\n between paragraphs. The UI prefills 'Hi ${firstName},' so the first sentence MUST begin with substantive content — do NOT start with '${firstName}', 'Hi', 'Hello', or 'Hey'.>"}`;
+
+    const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return res.status(500).json({ error: 'Could not parse draft from model output', raw });
+    const draft = JSON.parse(jsonMatch[0]);
+    draft.body = _stripLeadingSalutation(draft.body, firstName);
+    draft.body = _stripTrailingSignature(draft.body);
+    draft.body = cleanEmailBody(draft.body);
+    draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
+    draft.subject = cleanEmailSubject(draft.subject);
+    res.json({ ok: true, draft, messageType: topic, relatedApp: topApp || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

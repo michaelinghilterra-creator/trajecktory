@@ -336,6 +336,9 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   const ghosted = data.ghostedCandidates || [];
   // Applied roles with no contact at the company — the "find a contact" nudge.
   const contactlessApps = data.contactlessApps || [];
+  // Applied roles going stale where you DO have a contact — surface the person to
+  // ping, not a company card. Rendered in the Follow-ups queue with a stale pill.
+  const staleAppContacts = data.staleAppContacts || [];
 
   // Snooze defers a stale alert by N days without logging a touch (the clock
   // keeps running). Mute is the indefinite "done for now / awaiting reply": it
@@ -363,6 +366,19 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: it.id }),
     }).then(() => load()).catch(() => {});
+  };
+  // Defer (or effectively mute) the "find a contact" nudge for a company with no
+  // reachable contact. Uses the separate 'contactless' snooze bucket so it does
+  // not touch the application's own follow-up. A long snooze (a year) is the
+  // "there are no contacts here, stop asking" mute.
+  const snoozeContactless = (a, days) => {
+    window.tjkMutate('/api/followups/snooze', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'contactless', id: a.id, days }),
+    }).then(() => {
+      load();
+      window.tjkToast && window.tjkToast(days >= 300 ? `Muted — ${a.company} has no contacts to find` : `Snoozed ${a.company} for ${days} days`, 'success');
+    }).catch(() => {});
   };
   const archiveGhosted = (ids) => {
     if (!ids.length) return;
@@ -549,6 +565,19 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
       {subView === 'queue' && (
         <>
           <window.FollowupQueueTab toast={toast} />
+          {staleAppContacts.length > 0 && window.FollowupContactCard && (
+            <div className="col" style={{ gap: 10, marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
+              <div style={{ padding: '0 24px' }}>
+                <h2 style={{ margin: '0 0 2px' }}>Applications going stale</h2>
+                <div className="sub">You have a contact at these companies. Draft and mark sent right here, same as above — no need to open anything.</div>
+              </div>
+              <div style={{ padding: '0 24px' }}>
+                {staleAppContacts.map(it => (
+                  <window.FollowupContactCard key={`sac-${it.source}-${it.id}`} c={it} toast={toast} onChannelDone={() => load()} />
+                ))}
+              </div>
+            </div>
+          )}
           {contactGroups.length > 0 && (
             <div className="col" style={{ gap: 14, marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
               <div style={{ padding: '0 24px' }}>
@@ -606,9 +635,13 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
                         {a.applyDate ? <span className="dim" style={{ fontSize: 11 }}>applied {a.applyDate}</span> : null}
                       </div>
                     </div>
-                    <button className="btn accent sm" onClick={() => setFindFor({ company: a.company, role: a.role })}>
-                      Find a contact
-                    </button>
+                    <div className="row" style={{ gap: 6, flex: 'none' }}>
+                      <button className="btn ghost sm" title="Remind me about this one in two weeks" onClick={() => snoozeContactless(a, 14)}>Snooze 2w</button>
+                      <button className="btn ghost sm" title="There's no contact to find here — stop nudging me about it" onClick={() => snoozeContactless(a, 365)}>No contacts</button>
+                      <button className="btn accent sm" onClick={() => setFindFor({ company: a.company, role: a.role })}>
+                        Find a contact
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
