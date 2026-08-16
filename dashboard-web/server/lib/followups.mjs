@@ -414,13 +414,14 @@ function computeStaleContacts({ apps } = {}) {
       coachLevel,
       klass: 'warm',           // engaged threads are always warm
       muted: false,
-      ...(() => { const b = contactChannelBucket(c); return { channelBucket: b.bucket, channel: b.hasEmail ? 'email' : b.hasLinkedIn ? 'linkedin' : 'none' }; })(),
+      ...(() => { const b = contactChannelBucket(c); return { channelBucket: b.bucket, hasEmail: b.hasEmail, hasLinkedIn: b.hasLinkedIn, channel: b.hasEmail ? 'email' : b.hasLinkedIn ? 'linkedin' : 'none' }; })(),
       sector: null,
       notes: c.notes || '',
       followups: [],
       taFirst: c.first || '',
       taLast: c.last || '',
       taEmail: c.email || '',
+      linkedin: c.linkedin || '',
       // Hiring-principal flag: true when the contact carries the [principal] tag
       // in their notes (TA contacts only; recruiter contacts are never principals).
       isPrincipal: source === 'ta' ? (c.isPrincipal ?? false) : false,
@@ -909,6 +910,75 @@ function computeStaleAppContacts({ staleApps, taRows } = {}) {
   return out;
 }
 
+// ── Single source of truth: the contact follow-up list ───────────────────────
+// Everyone worth a touch, each listed ONCE, in the click-and-go card shape the
+// Follow-Ups tab renders. Merges three disjoint contact populations and dedupes
+// by source:id: (1) the outreach queue (applied companies, not contacted yet),
+// (2) applications going stale where you have a contact, (3) already-reached
+// contacts gone quiet. Returns PEOPLE only — never application/company rows — so
+// the Follow-Ups tab feeds its badge, overview, and queue from this one list,
+// with no per-view "is this an app?" filter for a company alert to slip past.
+function computeContactFollowups(opts = {}) {
+  const byKey = new Map();
+  const put = (item) => {
+    if (!item || item.channel === 'none') return;   // no reachable channel → nothing to action
+    const key = `${item.source}:${item.id}`;
+    const prev = byKey.get(key);
+    if (!prev) { byKey.set(key, item); return; }
+    // The same person surfaced by two triggers stays one row, keeping the
+    // strongest signal from each (a stale marker, a coach verdict, a rank), and
+    // the richer channel so a dual-channel contact is never downgraded to one.
+    const bestStale = Math.max(prev.staleDays ?? -1, item.staleDays ?? -1);
+    const CH_RANK = { none: 0, linkedin: 1, email: 2, both: 3 };
+    const richer = (CH_RANK[item.channel] ?? 0) > (CH_RANK[prev.channel] ?? 0) ? item.channel : prev.channel;
+    byKey.set(key, {
+      ...prev, ...item,
+      channel: richer,
+      email: prev.email || item.email || '',
+      linkedin: prev.linkedin || item.linkedin || '',
+      staleDays: bestStale >= 0 ? bestStale : undefined,
+      appStale: prev.appStale || item.appStale,
+      coachVerdict: prev.coachVerdict || item.coachVerdict,
+      coachLevel: prev.coachLevel || item.coachLevel,
+      rank: Math.max(prev.rank ?? 0, item.rank ?? 0),
+    });
+  };
+
+  // 1) Outreach queue — already the click-and-go shape; carries channel + rank.
+  for (const r of computeFollowupQueue(opts)) put({ ...r });
+  // 2) Applications going stale, contact-first — click-and-go shape + staleDays.
+  for (const r of computeStaleAppContacts({ staleApps: opts.staleApps })) {
+    put({ ...r, daysSinceLastTouch: r.staleDays ?? null, coachLevel: r.coachLevel || 'overdue' });
+  }
+  // 3) Already-reached contacts gone quiet — normalize taFirst/taLast/taEmail to
+  //    the card's name/firstName/email, and compute a proper channel (the stale
+  //    builder prioritizes email and never emits 'both', which the card needs).
+  for (const r of computeStaleContacts(opts)) {
+    const channel = r.hasEmail && r.hasLinkedIn ? 'both' : r.hasEmail ? 'email' : r.hasLinkedIn ? 'linkedin' : 'none';
+    put({
+      source: r.source, id: r.id,
+      name: `${r.taFirst || ''} ${r.taLast || ''}`.trim() || '(no name)',
+      firstName: r.taFirst || '',
+      role: r.role || '', title: r.role || '',
+      company: r.company || '',
+      email: r.taEmail || '', linkedin: r.linkedin || '',
+      channel, isHighValue: !!(r.hasEmail && r.hasLinkedIn),
+      isPrincipal: !!r.isPrincipal,
+      status: r.status,
+      coachVerdict: r.coachVerdict, coachLevel: r.coachLevel,
+      daysSinceLastTouch: r.daysSinceLastTouch, staleDays: r.daysSinceLastTouch,
+    });
+  }
+
+  // Rank desc (outreach rows carry a real rank; stale rows lean on staleDays so
+  // the most overdue rise), then company/name so equal rows don't shuffle.
+  const weight = (x) => (x.rank ?? 0) + (x.staleDays ?? 0);
+  return [...byKey.values()].sort((a, b) =>
+    (weight(b) - weight(a)) ||
+    (a.company || '').localeCompare(b.company || '') ||
+    (a.name || '').localeCompare(b.name || ''));
+}
+
 // How many contacts are being held back purely because their address could not be
 // checked. The send gate refusing an unverified address is correct, but its effect
 // is INVISIBLE: the row simply does not appear, and fewer rows looks like a quiet
@@ -938,7 +1008,7 @@ export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
   computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
   computeFollowupQueue, _followupRank,
-  isHighValueContact, computeContactlessApps, computeStaleAppContacts, countWithheldContacts,
+  isHighValueContact, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 
