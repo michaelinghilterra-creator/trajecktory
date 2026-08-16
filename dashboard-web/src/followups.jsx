@@ -279,9 +279,9 @@ function FUOverview({ items, thresholds, taThreshold, onOpen }) {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={iconPath} /></svg>
                 </span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.company}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name || `${it.taFirst || ''} ${it.taLast || ''}`.trim() || it.company || '-'}</div>
                   <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {it.role || `${it.taFirst || ''} ${it.taLast || ''}`.trim() || '-'}
+                    {[it.role || it.title, it.company].filter(Boolean).join(' · ') || '-'}
                   </div>
                 </div>
                 <span className="mono" style={{ fontSize: 11, color, whiteSpace: 'nowrap' }}>{label}</span>
