@@ -581,6 +581,29 @@ function buildCompanyTouchIndex({ ta, rec }) {
   return idx;
 }
 
+// Extracted from _queueRow so the merged contact-follow-up list can reuse it:
+// the stale-app and gone-quiet contacts otherwise arrive with no last-touch
+// context. Given a contact's key and their company's newest-first touch list,
+// returns the same companyOutreach shape the queue rows carry (this contact's own
+// last touch, the org's last comms, and the same-day hold-off signals).
+function _companyOutreachFor(selfKey, companyTouches, today = null) {
+  let lastTouch = null, selfLastTouch = null, companyLastComms = null, selfSentToday = null;
+  if (Array.isArray(companyTouches)) {
+    const sent = companyTouches.find(x => x.key !== selfKey && x.direction === 'Sent');
+    if (sent) lastTouch = { name: sent.name, date: sent.date, channel: sent.channel };
+    const self = companyTouches.find(x => x.key === selfKey);
+    if (self) selfLastTouch = { date: self.date, direction: self.direction, channel: self.channel };
+    const other = companyTouches.find(x => x.key !== selfKey);
+    if (other) companyLastComms = { name: other.name, date: other.date, direction: other.direction, channel: other.channel };
+    if (today) {
+      const st = companyTouches.find(x => x.key === selfKey && x.direction === 'Sent' && x.date === today);
+      if (st) selfSentToday = { channel: st.channel };
+    }
+  }
+  const touchedToday = (lastTouch && today && lastTouch.date === today) ? { name: lastTouch.name, channel: lastTouch.channel } : null;
+  return { lastTouch, touchedToday, selfLastTouch, companyLastComms, selfSentToday };
+}
+
 // One row shape for both queues. `email` is the clean address (verified.address),
 // empty on connect-queue rows. hasEmail/emailState keep the connect UI's "no email
 // on file" vs "email unverified" distinction.
@@ -602,31 +625,7 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
   const company = source === 'recruiter' ? row.firm : row.company;
   const status = row.status || '';
   const selfKey = `${source}:${row.id}`;
-  let lastTouch = null;
-  let selfLastTouch = null;
-  let companyLastComms = null;
-  let selfSentToday = null;   // { channel } when YOU sent to THIS contact today
-  if (Array.isArray(companyTouches)) {
-    // last SENT to someone else — keeps the "already reached out today" semantics
-    const sent = companyTouches.find(x => x.key !== selfKey && x.direction === 'Sent');
-    if (sent) lastTouch = { name: sent.name, date: sent.date, channel: sent.channel };
-    // this contact's own last message, either direction
-    const self = companyTouches.find(x => x.key === selfKey);
-    if (self) selfLastTouch = { date: self.date, direction: self.direction, channel: self.channel };
-    // last comms with anyone else at the org, either direction
-    const other = companyTouches.find(x => x.key !== selfKey);
-    if (other) companyLastComms = { name: other.name, date: other.date, direction: other.direction, channel: other.channel };
-    // did YOU send to THIS contact today? (an OUTBOUND today — a received reply does
-    // not count). Drives the per-contact same-day cross-channel hold-off: emailing and
-    // LinkedIn-inviting the same person on the same day reads as over-contacting.
-    if (today) {
-      const st = companyTouches.find(x => x.key === selfKey && x.direction === 'Sent' && x.date === today);
-      if (st) selfSentToday = { channel: st.channel };
-    }
-  }
-  const touchedToday = (lastTouch && today && lastTouch.date === today)
-    ? { name: lastTouch.name, channel: lastTouch.channel }
-    : null;
+  const companyOutreach = _companyOutreachFor(selfKey, companyTouches, today);
   return {
     source,                                       // 'ta' | 'recruiter'
     id: row.id,
@@ -642,7 +641,7 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
     reason: (row.notes || '').replace(/\s+/g, ' ').trim().slice(0, 160),
     isNew: baselineId != null && Number.isFinite(row.id) && row.id > baselineId,
     notContacted: !status.trim() || /^\s*not\s*contacted\s*$/i.test(status),
-    companyOutreach: { lastTouch, touchedToday, selfLastTouch, companyLastComms, selfSentToday },
+    companyOutreach,
     // Hiring-principal flag (TA contacts only; recruiters are never principals).
     isPrincipal: source === 'ta' ? (row.isPrincipal ?? false) : false,
     // Channel bucket: 1 = LinkedIn only, 2 = email only, 3 = both, 0 = neither.
@@ -940,15 +939,16 @@ function computeContactFollowups(opts = {}) {
       appStale: prev.appStale || item.appStale,
       coachVerdict: prev.coachVerdict || item.coachVerdict,
       coachLevel: prev.coachLevel || item.coachLevel,
+      queueReason: prev.queueReason || item.queueReason,
       rank: Math.max(prev.rank ?? 0, item.rank ?? 0),
     });
   };
 
   // 1) Outreach queue — already the click-and-go shape; carries channel + rank.
-  for (const r of computeFollowupQueue(opts)) put({ ...r });
+  for (const r of computeFollowupQueue(opts)) put({ ...r, queueReason: r.notContacted ? 'Reach out' : 'Follow up' });
   // 2) Applications going stale, contact-first — click-and-go shape + staleDays.
   for (const r of computeStaleAppContacts({ staleApps: opts.staleApps })) {
-    put({ ...r, daysSinceLastTouch: r.staleDays ?? null, coachLevel: r.coachLevel || 'overdue' });
+    put({ ...r, daysSinceLastTouch: r.staleDays ?? null, coachLevel: r.coachLevel || 'overdue', queueReason: 'App going stale' });
   }
   // 3) Already-reached contacts gone quiet — normalize taFirst/taLast/taEmail to
   //    the card's name/firstName/email, and compute a proper channel (the stale
@@ -967,7 +967,20 @@ function computeContactFollowups(opts = {}) {
       status: r.status,
       coachVerdict: r.coachVerdict, coachLevel: r.coachLevel,
       daysSinceLastTouch: r.daysSinceLastTouch, staleDays: r.daysSinceLastTouch,
+      queueReason: 'Went quiet',
     });
+  }
+
+  // Attach last-touch context to every contact so the card's CompanyOutreach block
+  // renders for the merged-in stale-app and gone-quiet contacts too (the outreach
+  // rows already carry it). One touch-index pass over both contact books.
+  const { ta, rec } = _bothBooks({});
+  const touchIdx = buildCompanyTouchIndex({ ta, rec });
+  const nowDay = _localToday();
+  for (const item of byKey.values()) {
+    if (!item.companyOutreach) {
+      item.companyOutreach = _companyOutreachFor(`${item.source}:${item.id}`, touchIdx.get(normalizeCompany(item.company)), nowDay);
+    }
   }
 
   // Rank desc (outreach rows carry a real rank; stale rows lean on staleDays so

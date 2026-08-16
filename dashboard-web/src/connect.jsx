@@ -25,6 +25,25 @@ function OutreachPills({ c }) {
   );
 }
 
+// Why this contact is in the follow-up queue: 'Reach out' (you applied at their
+// company, not worked yet), 'App going stale', or 'Went quiet'. One consistent tag
+// across all three card types, so the merged list never leaves you guessing why
+// someone is here. The timing ("last email sent 3 days ago") comes from the
+// CompanyOutreach block below it; this pill is the category.
+function QueueReasonPill({ c }) {
+  if (!c.queueReason) return null;
+  const urgent = c.queueReason === 'App going stale' || c.queueReason === 'Went quiet';
+  return (
+    <span title="Why this contact is in your follow-up queue"
+      style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4, verticalAlign: 'middle',
+        background: urgent ? 'color-mix(in srgb, var(--orange) 15%, transparent)' : 'color-mix(in srgb, var(--accent) 15%, transparent)',
+        color: urgent ? 'var(--orange)' : 'var(--accent)',
+        border: `1px solid ${urgent ? 'color-mix(in srgb, var(--orange) 40%, transparent)' : 'color-mix(in srgb, var(--accent) 40%, transparent)'}` }}>
+      {c.queueReason}
+    </span>
+  );
+}
+
 // Company outreach context, shown on every queue row so you can decide inside the
 // queue whether reaching a second person at the same company is doubling up —
 // instead of leaving to reconcile across the Pipeline drawer and Network tab.
@@ -170,6 +189,7 @@ function ConnectRow({ c, toast, onDone, onSnooze }) {
             {c.name || '(no name)'}{' '}
             <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
             <OutreachPills c={c} />
+            <QueueReasonPill c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
             {c.company} · <span className="mono">{c.source}</span> ·{' '}
@@ -370,6 +390,7 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
             {c.name || '(no name)'}{' '}
             <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
             <OutreachPills c={c} />
+            <QueueReasonPill c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
             {c.company} · <span className="mono">{c.source}</span> · <span className="mono">{c.email}</span>
@@ -587,8 +608,7 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
             <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
             {c.isHighValue !== false && <span title="High value: reachable on both email and LinkedIn. Worked on both channels."
               style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.4px', padding: '2px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff', verticalAlign: 'middle' }}>HIGH VALUE</span>}
-            {c.staleDays != null && <span title={`Your application here has been quiet ${c.staleDays} business days`}
-              style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--orange) 18%, transparent)', color: 'var(--orange)', border: '1px solid color-mix(in srgb, var(--orange) 45%, transparent)', verticalAlign: 'middle' }}>APP STALE · {c.staleDays}d</span>}
+            <QueueReasonPill c={c} />
             {c.isPrincipal ? <span title="Hiring principal — the decision-maker you'd report to."
               style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)', verticalAlign: 'middle' }}>PRINCIPAL</span> : null}
             <OutreachPills c={c} />
