@@ -275,12 +275,13 @@ function App() {
     if (fresh && fresh !== drawerApp) setDrawerApp(fresh);
   }, [apps]);
 
-  // Load pending follow-up count. The badge counts WARM threads only (replied /
-  // interviewing / a contact who engaged). Cold "applications out" don't nag.
+  // Load pending follow-up count. The badge counts the single contact follow-up
+  // list (people worth a touch) — never applications, which live in Pipeline →
+  // Awaiting response. Falls back to the legacy warm list only on an old payload.
   useEffect(() => {
     fetch('/api/followups/stale')
       .then(r => r.json())
-      .then(data => setFollowupCount((data.warm ?? data.items)?.length ?? 0))
+      .then(data => setFollowupCount((data.contactFollowups ?? data.warm ?? data.items)?.length ?? 0))
       .catch(() => {}); // non-critical — badge just stays at 0
   }, []);
 

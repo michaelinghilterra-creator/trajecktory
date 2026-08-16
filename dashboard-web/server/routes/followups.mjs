@@ -10,7 +10,7 @@ import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeStaleAppContacts, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 
@@ -126,6 +126,17 @@ router.get('/api/followups/stale', (req, res) => {
       else warm.push(it);
     }
 
+    // Single source of truth for the Follow-Ups tab, snooze-partitioned the same
+    // way as warm/cold: a snoozed contact leaves the active list and surfaces in
+    // the Snoozed section (where it can be un-snoozed) until its date passes.
+    const contactFollowups = [];
+    const snoozedContactFollowups = [];
+    for (const it of computeContactFollowups({ staleApps: rawStaleApps })) {
+      const until = snoozedUntil(it);
+      if (until && until > today) snoozedContactFollowups.push({ ...it, snoozeUntil: until });
+      else contactFollowups.push(it);
+    }
+
     res.json({
       thresholds: STALE_THRESHOLD_BY_STATUS,
       taThreshold: TA_STALE_THRESHOLD_DAYS,         // legacy alias
@@ -150,6 +161,12 @@ router.get('/api/followups/stale', (req, res) => {
       // signal) instead of a company card. Company-only stale apps are covered by
       // contactlessApps above; muted apps are excluded in the compute.
       staleAppContacts: computeStaleAppContacts({ staleApps: rawStaleApps }),
+      // Single source of truth for the Follow-Ups tab (badge + overview + queue):
+      // every CONTACT worth a touch, deduped, contacts-only, snooze-partitioned
+      // above. The warm/cold/staleAppContacts fields stay for Pipeline → Awaiting
+      // response and the Find-a-contact nudge, which need the app-level view.
+      contactFollowups,
+      snoozedContactFollowups,
       // Deprecated alias: legacy readers expect `items` to be the badge list.
       items: warm,
     });

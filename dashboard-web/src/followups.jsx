@@ -279,9 +279,9 @@ function FUOverview({ items, thresholds, taThreshold, onOpen }) {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={iconPath} /></svg>
                 </span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.company}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name || `${it.taFirst || ''} ${it.taLast || ''}`.trim() || it.company || '-'}</div>
                   <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {it.role || `${it.taFirst || ''} ${it.taLast || ''}`.trim() || '-'}
+                    {[it.role || it.title, it.company].filter(Boolean).join(' · ') || '-'}
                   </div>
                 </div>
                 <span className="mono" style={{ fontSize: 11, color, whiteSpace: 'nowrap' }}>{label}</span>
@@ -339,6 +339,11 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   // Applied roles going stale where you DO have a contact — surface the person to
   // ping, not a company card. Rendered in the Follow-ups queue with a stale pill.
   const staleAppContacts = data.staleAppContacts || [];
+  // The Snoozed list is the snoozed slice of the single contact source of truth,
+  // so anyone you snooze on a card lands here (with Un-snooze) until their date.
+  // Application snoozes are excluded by construction — they belong to Pipeline →
+  // Awaiting response, not this contacts-only tab.
+  const snoozedContacts = data.snoozedContactFollowups || [];
 
   // Snooze defers a stale alert by N days without logging a touch (the clock
   // keeps running). Mute is the indefinite "done for now / awaiting reply": it
@@ -491,7 +496,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   // queue tab below the outreach queue.
   const SUBTABS = [
     { id: 'overview', label: 'Overview',         n: null,        icon: window.ICON.pulse },
-    { id: 'queue',    label: 'Follow-ups',       n: contactGroups.reduce((s, g) => s + g.items.length, 0) || null, icon: window.ICON.send },
+    { id: 'queue',    label: 'Follow-ups',       n: (data.contactFollowups || []).length || null, icon: window.ICON.send },
     { id: 'findcontact', label: 'Find a contact', n: contactlessApps.length, icon: window.ICON.search || window.ICON.userPlus },
   ];
 
@@ -552,7 +557,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
 
       {subView === 'overview' && (
         <FUOverview
-          items={warmContacts}
+          items={data.contactFollowups || []}
           thresholds={data.thresholds}
           taThreshold={data.taThreshold}
           onOpen={openFromOverview}
@@ -562,49 +567,12 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
       {/* ── Follow-ups: the outreach queue (Connect + Email + High value merged;
              channel is a filter chip), then contact follow-up nudges for people
              you've already reached who have gone quiet. ─────────────────────── */}
+      {/* The single source of truth: one ranked, deduped list of every contact
+          worth a touch (not-yet-contacted, app-going-stale, and gone-quiet, all
+          merged server-side into data.contactFollowups). Contacts only — no
+          application/company rows reach this tab. */}
       {subView === 'queue' && (
-        <>
-          <window.FollowupQueueTab toast={toast} />
-          {staleAppContacts.length > 0 && window.FollowupContactCard && (
-            <div className="col" style={{ gap: 10, marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
-              <div style={{ padding: '0 24px' }}>
-                <h2 style={{ margin: '0 0 2px' }}>Applications going stale</h2>
-                <div className="sub">You have a contact at these companies. Draft and mark sent right here, same as above — no need to open anything.</div>
-              </div>
-              <div style={{ padding: '0 24px' }}>
-                {staleAppContacts.map(it => (
-                  <window.FollowupContactCard key={`sac-${it.source}-${it.id}`} c={it} toast={toast} onChannelDone={() => load()} />
-                ))}
-              </div>
-            </div>
-          )}
-          {contactGroups.length > 0 && (
-            <div className="col" style={{ gap: 14, marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
-              <div style={{ padding: '0 24px' }}>
-                <h2 style={{ margin: '0 0 2px' }}>Going quiet</h2>
-                <div className="sub">Contacts you've already reached who have not replied. Nudge, or mark done for now.</div>
-              </div>
-              <div className="col" style={{ gap: 14, padding: '0 24px' }}>
-                {contactGroups.map(group => (
-                  <div key={group.key} className="card padded-lg">
-                    <div className="card-head" style={{ marginBottom: 10 }}>
-                      <span className="card-title">{group.label}</span>
-                      <span className="card-meta mono">{group.items.length} contact{group.items.length === 1 ? '' : 's'}</span>
-                    </div>
-                    <div className="col" style={{ gap: 6 }}>
-                      {group.items.map(it => (
-                        <FollowupRow key={`${it.source || 'ta'}-${it.id}`} item={it}
-                          onSnooze={() => snooze(it, 14)}
-                          onMute={it.source !== 'ta' ? () => mute(it) : null}
-                          onOpen={() => openItem(it)} />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
+        <window.FollowupQueueTab toast={toast} items={data.contactFollowups || []} onReload={load} />
       )}
 
 
@@ -662,14 +630,14 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
         </div>
       )}
 
-      {data.snoozed && data.snoozed.length > 0 && (
+      {snoozedContacts.length > 0 && (
         <div className="card padded-lg" style={{ marginTop: 12, opacity: 0.85 }}>
           <div className="card-head" style={{ marginBottom: 10 }}>
-            <span className="card-title">💤 Snoozed ({data.snoozed.length})</span>
+            <span className="card-title">💤 Snoozed ({snoozedContacts.length})</span>
             <span className="card-meta mono">hidden until their date (clock still running)</span>
           </div>
           <div className="col" style={{ gap: 6 }}>
-            {data.snoozed.map(it => (
+            {snoozedContacts.map(it => (
               <div key={`snz-${it.source || 'app'}-${it.id}`} className="action-card" style={{ borderColor: 'rgba(113,113,122,0.25)' }}>
                 <div className="action-card-row">
                   <div style={{ minWidth: 0, flex: 1 }}>
@@ -680,7 +648,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
                       <FUStatusPill status={it.status} />
                     </div>
                     <div className="mono dim" style={{ fontSize: 11, marginTop: 4 }}>
-                      Snoozed until {it.snoozeUntil} · {it.daysSinceLastTouch}d since last touch
+                      Snoozed until {it.snoozeUntil}{it.daysSinceLastTouch != null ? ` · ${it.daysSinceLastTouch}d since last touch` : ''}
                     </div>
                   </div>
                   <button className="btn ghost sm" title="Bring this alert back now" onClick={() => unsnooze(it)}>↩ Un-snooze</button>
