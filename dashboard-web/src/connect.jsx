@@ -25,6 +25,25 @@ function OutreachPills({ c }) {
   );
 }
 
+// Why this contact is in the follow-up queue: 'Reach out' (you applied at their
+// company, not worked yet), 'App going stale', or 'Went quiet'. One consistent tag
+// across all three card types, so the merged list never leaves you guessing why
+// someone is here. The timing ("last email sent 3 days ago") comes from the
+// CompanyOutreach block below it; this pill is the category.
+function QueueReasonPill({ c }) {
+  if (!c.queueReason) return null;
+  const urgent = c.queueReason === 'App going stale' || c.queueReason === 'Went quiet';
+  return (
+    <span title="Why this contact is in your follow-up queue"
+      style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4, verticalAlign: 'middle',
+        background: urgent ? 'color-mix(in srgb, var(--orange) 15%, transparent)' : 'color-mix(in srgb, var(--accent) 15%, transparent)',
+        color: urgent ? 'var(--orange)' : 'var(--accent)',
+        border: `1px solid ${urgent ? 'color-mix(in srgb, var(--orange) 40%, transparent)' : 'color-mix(in srgb, var(--accent) 40%, transparent)'}` }}>
+      {c.queueReason}
+    </span>
+  );
+}
+
 // Company outreach context, shown on every queue row so you can decide inside the
 // queue whether reaching a second person at the same company is doubling up —
 // instead of leaving to reconcile across the Pipeline drawer and Network tab.
@@ -90,7 +109,7 @@ function CompanyOutreach({ c }) {
   );
 }
 
-function ConnectRow({ c, toast, onDone }) {
+function ConnectRow({ c, toast, onDone, onSnooze }) {
   const [note, setNote] = useStateCq(null);
   const [loading, setLoading] = useStateCq(false);
   const [sending, setSending] = useStateCq(false);
@@ -170,6 +189,7 @@ function ConnectRow({ c, toast, onDone }) {
             {c.name || '(no name)'}{' '}
             <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
             <OutreachPills c={c} />
+            <QueueReasonPill c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
             {c.company} · <span className="mono">{c.source}</span> ·{' '}
@@ -194,6 +214,7 @@ function ConnectRow({ c, toast, onDone }) {
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}
+          {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={sending}>💤 14d</button> : null}
           <button className="btn accent sm" onClick={draft} disabled={loading}>
             {loading ? 'Drafting…' : (note ? 'Redraft' : 'Draft note')}
           </button>
@@ -273,7 +294,7 @@ window.ConnectTab = function ConnectTab({ toast }) {
 // email, copy it, send it from your own client, then Mark sent — which logs a
 // "Sent" correspondence (a VERIFIED TOUCH, since the subject is not a LinkedIn
 // invite) and drops the row. This is the list that moves the 13/week touch floor.
-function EmailRow({ c, toast, onDone }) {
+function EmailRow({ c, toast, onDone, onSnooze }) {
   // draft is the EDITABLE email: { subject, body }. The /draft endpoint returns an
   // OBJECT { subject, body } (not a string like the LinkedIn note), and its body
   // has no greeting by design — the UI prepends "Hi <first>,". Once generated the
@@ -369,6 +390,7 @@ function EmailRow({ c, toast, onDone }) {
             {c.name || '(no name)'}{' '}
             <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
             <OutreachPills c={c} />
+            <QueueReasonPill c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
             {c.company} · <span className="mono">{c.source}</span> · <span className="mono">{c.email}</span>
@@ -391,6 +413,7 @@ function EmailRow({ c, toast, onDone }) {
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer" title="Open the LinkedIn profile to confirm they're still at the company before emailing.">Open ↗</a> : null}
+          {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={sending}>💤 14d</button> : null}
           <button className="btn accent sm" onClick={gen} disabled={loading}>
             {loading ? 'Drafting…' : (draft ? 'Redraft' : 'Draft email')}
           </button>
@@ -477,7 +500,7 @@ window.EmailQueueTab = function EmailQueueTab({ toast }) {
 // done state (c.linkedinDone / c.emailDone) and two independent draft+send blocks.
 // Nothing is sent from here: every note/email is copied or drafted to Gmail and
 // sent by hand, then logged with Mark sent.
-function BothRow({ c, toast, onChannelDone }) {
+function BothRow({ c, toast, onChannelDone, onSnooze }) {
   // LinkedIn side
   const [note, setNote] = useStateCq(null);
   const [liLoading, setLiLoading] = useStateCq(false);
@@ -585,8 +608,7 @@ function BothRow({ c, toast, onChannelDone }) {
             <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
             {c.isHighValue !== false && <span title="High value: reachable on both email and LinkedIn. Worked on both channels."
               style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.4px', padding: '2px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff', verticalAlign: 'middle' }}>HIGH VALUE</span>}
-            {c.staleDays != null && <span title={`Your application here has been quiet ${c.staleDays} business days`}
-              style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--orange) 18%, transparent)', color: 'var(--orange)', border: '1px solid color-mix(in srgb, var(--orange) 45%, transparent)', verticalAlign: 'middle' }}>APP STALE · {c.staleDays}d</span>}
+            <QueueReasonPill c={c} />
             {c.isPrincipal ? <span title="Hiring principal — the decision-maker you'd report to."
               style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)', verticalAlign: 'middle' }}>PRINCIPAL</span> : null}
             <OutreachPills c={c} />
@@ -600,7 +622,10 @@ function BothRow({ c, toast, onChannelDone }) {
             <span style={chipStyle(emDone)}>Email {emDone ? '✓ sent' : 'pending'}</span>
           </div>
         </div>
-        {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}>Open ↗</a> : null}
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'flex-start' }}>
+          {onSnooze ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)}>💤 14d</button> : null}
+          {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}
+        </div>
       </div>
 
       {/* LinkedIn channel */}
@@ -801,22 +826,43 @@ window.BothQueueTab = function BothQueueTab({ toast }) {
 // (ConnectRow / EmailRow / BothRow), so the outreach actions are byte-identical.
 // Channel becomes a filter chip instead of a tab. Rows arrive pre-ranked from the
 // server (importance, then last-touch recency); we preserve that order.
-// Exposed so other surfaces (e.g. Follow-Ups → Applications going stale) can render
-// the SAME click-and-go card (draft note / draft email / mark sent) for a contact,
-// instead of a row that opens a drawer.
-window.FollowupContactCard = BothRow;
+// Exposed so the Follow-Ups → "Applications going stale" list renders each stale
+// contact with the SAME per-channel card the main follow-up queue uses, instead of
+// forcing BothRow on everyone: a LinkedIn-only contact gets ConnectRow (note only),
+// an email-only contact gets EmailRow, and a dual-channel contact gets BothRow. The
+// old hardwired-BothRow showed an unusable Email panel (no address → no Gmail draft
+// button) on LinkedIn-only contacts. The going-stale caller passes onChannelDone; we
+// normalize it so the single-channel rows' onDone(source, id) still triggers a reload.
+window.FollowupContactCard = function FollowupContactCard({ c, toast, onChannelDone, onDone }) {
+  const finish = (source, id) => {
+    if (onDone) onDone(source, id);
+    else if (onChannelDone) onChannelDone(source, id, { linkedinDone: true, emailDone: true });
+  };
+  if (c.channel === 'linkedin') return <ConnectRow c={c} toast={toast} onDone={finish} />;
+  if (c.channel === 'email')    return <EmailRow   c={c} toast={toast} onDone={finish} />;
+  return <BothRow c={c} toast={toast} onChannelDone={onChannelDone} />;
+};
 
-window.FollowupQueueTab = function FollowupQueueTab({ toast }) {
-  const [queue, setQueue] = useStateCq(null);
+window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) {
+  // When `items` is supplied (the Follow-Ups tab passes the single contact
+  // follow-up list — the one source of truth), render those and let the parent
+  // own reloads. With no `items`, this stays self-contained and fetches the
+  // outreach queue itself (its original standalone behavior).
+  const externalItems = Array.isArray(items);
+  const [queue, setQueue] = useStateCq(externalItems ? items : null);
   const [err, setErr] = useStateCq(null);
   const [channel, setChannel] = useStateCq('all');
 
-  const load = () =>
-    fetch('/api/followups/queue').then(r => r.json())
+  const load = () => {
+    if (externalItems) { onReload && onReload(); return; }
+    return fetch('/api/followups/queue').then(r => r.json())
       .then(d => { if (d && d.error) setErr(d.error); else setQueue(d.queue || []); })
       .catch(e => setErr(e.message));
+  };
 
-  useEffectCq(() => { load(); }, []);
+  // Keep in sync when the parent re-supplies the list after a reload.
+  useEffectCq(() => { if (externalItems) setQueue(items); }, [items]);
+  useEffectCq(() => { if (!externalItems) load(); }, []);
 
   // Single-channel rows (LinkedIn / email) drop off after one touch; drop optimistically
   // then re-fetch so siblings at the same company refresh their "already reached out
@@ -835,6 +881,20 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast }) {
       return list.map(c => isRow(c) ? { ...c, linkedinDone: state.linkedinDone, emailDone: state.emailDone } : c);
     });
     load();
+  };
+
+  // Snooze a contact for 14 days: defer them without logging a touch. Drops the
+  // row immediately, then reloads so the parent's single source of truth
+  // (data.contactFollowups) re-partitions them into the Snoozed section.
+  const snoozeContact = (c) => {
+    window.tjkMutate('/api/followups/snooze', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: c.source, id: c.id, days: 14 }),
+    }).then(() => {
+      toast && toast(`Snoozed 14 days — ${c.name || 'contact'}`, 'success');
+      setQueue(q => (q || []).filter(x => !(x.source === c.source && String(x.id) === String(c.id))));
+      load();
+    }).catch(e => toast && toast(e.message, 'error'));
   };
 
   if (err) return <div className="dim" style={{ padding: 28 }}>Could not load the follow-up queue: {err}</div>;
@@ -884,9 +944,9 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast }) {
               : `No ${channel} contacts in the queue right now.`}
           </div>
         : rows.map(c =>
-            c.channel === 'linkedin' ? <ConnectRow key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} />
-          : c.channel === 'email'   ? <EmailRow   key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} />
-          :                           <BothRow    key={`${c.source}:${c.id}`} c={c} toast={toast} onChannelDone={onChannelDone} />
+            c.channel === 'linkedin' ? <ConnectRow key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onSnooze={snoozeContact} />
+          : c.channel === 'email'   ? <EmailRow   key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onSnooze={snoozeContact} />
+          :                           <BothRow    key={`${c.source}:${c.id}`} c={c} toast={toast} onChannelDone={onChannelDone} onSnooze={snoozeContact} />
         )}
     </div>
   );
