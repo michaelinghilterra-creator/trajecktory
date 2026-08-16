@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.27.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.26.0...v2.27.0) (2026-08-16)
+
+
+### Features
+
+* unify Follow-Ups into one contacts-only source of truth ([#199](https://github.com/michaelinghilterra-creator/trajecktory/issues/199)) ([6c99dea](https://github.com/michaelinghilterra-creator/trajecktory/commit/6c99dea4aabc564a12a893802130772021b4ae81))
+
 ## [2.26.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.25.1...v2.26.0) (2026-08-15)
 
 
