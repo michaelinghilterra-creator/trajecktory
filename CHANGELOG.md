@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.28.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.27.0...v2.28.0) (2026-08-17)
+
+
+### Features
+
+* smarter Follow-Ups queue (real follow-up messages, same-day hold, InMail budget) ([#202](https://github.com/michaelinghilterra-creator/trajecktory/issues/202)) ([1505f76](https://github.com/michaelinghilterra-creator/trajecktory/commit/1505f76758daf36d03cdaed03360401ce42dd845))
+
+
+### Bug Fixes
+
+* never downgrade Manager+ titles on the level score ([#201](https://github.com/michaelinghilterra-creator/trajecktory/issues/201)) ([71be61e](https://github.com/michaelinghilterra-creator/trajecktory/commit/71be61e0f907a92c5403c3fab2eb628f76d7f2e5))
+
 ## [2.27.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.26.0...v2.27.0) (2026-08-16)
 
 
