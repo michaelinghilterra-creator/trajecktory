@@ -109,13 +109,18 @@ function CompanyOutreach({ c }) {
   );
 }
 
-function ConnectRow({ c, toast, onDone, onSnooze }) {
+function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent }) {
   const [note, setNote] = useStateCq(null);
   const [loading, setLoading] = useStateCq(false);
   const [sending, setSending] = useStateCq(false);
   const [sentAt, setSentAt] = useStateCq(null);
   const [showArchive, setShowArchive] = useStateCq(false);
   const done = !!sentAt;
+  // A contact you have ALREADY sent a LinkedIn invite (or any 1:1 touch) to: the
+  // invite is out, so a "follow-up" is a real MESSAGE, not another connection note.
+  // selfLastTouch is only set once a touch to this specific contact exists, so its
+  // presence is what tells a follow-up apart from a first-touch connect.
+  const alreadyInvited = !!(c.companyOutreach && c.companyOutreach.selfLastTouch);
 
   // Record that the invite went out, right here — no jumping to the Network tab.
   // Posts the note as a "Sent" correspondence to the contact's own route (TA vs
@@ -128,15 +133,17 @@ function ConnectRow({ c, toast, onDone, onSnooze }) {
     const url = c.source === 'recruiter'
       ? `/api/recruiters/${c.id}/correspondence`
       : `/api/target-talent/${c.id}/correspondence`;
-    const body = (note?.response || '').trim() || `LinkedIn connection request sent to ${c.name || 'this contact'}.`;
+    const kind = alreadyInvited ? 'LinkedIn message' : 'LinkedIn connection request';
+    const body = (note?.response || '').trim() || `${kind} sent to ${c.name || 'this contact'}.`;
     window.tjkMutate(url, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ direction: 'Sent', subject: 'LinkedIn connection request', body }),
+      body: JSON.stringify({ direction: 'Sent', subject: kind, body }),
     }).then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); setSending(false); return; }
         setSentAt('just now');                 // brief ✓ so the click is confirmed,
         toast && toast(`Marked sent — ${c.name || 'contact'}`, 'success');
+        if (alreadyInvited && onInmailSent) onInmailSent();  // an InMail credit was just spent
         setTimeout(() => onDone && onDone(c.source, c.id), 1000); // then drop off the list
       })
       .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
@@ -163,7 +170,7 @@ function ConnectRow({ c, toast, onDone, onSnooze }) {
 
   const draft = () => {
     setLoading(true);
-    window.tjkMutate('/api/linkedin-drafts/connect-note', {
+    window.tjkMutate(alreadyInvited ? '/api/linkedin-drafts/followup-message' : '/api/linkedin-drafts/connect-note', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: c.source, id: c.id }),
     }).then(r => r.json())
@@ -198,6 +205,11 @@ function ConnectRow({ c, toast, onDone, onSnooze }) {
               : <span title="No email address on file. Find one (Hunter/MillionVerifier) to move this contact to the email motion.">no email on file</span>}
           </div>
           <CompanyOutreach c={c} />
+          {alreadyInvited && !done && (
+            <div className="dim" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.4 }}>
+              You already invited them, so a follow-up is a message, not another invite. While you are not connected, LinkedIn sends it as an InMail{typeof inmailRemaining === 'number' ? ` (${inmailRemaining} left this month)` : ' (uses a Premium credit)'}, so make it count.
+            </div>
+          )}
           {!done && (
             <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               {!showArchive
@@ -216,11 +228,11 @@ function ConnectRow({ c, toast, onDone, onSnooze }) {
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}
           {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={sending}>💤 14d</button> : null}
           <button className="btn accent sm" onClick={draft} disabled={loading}>
-            {loading ? 'Drafting…' : (note ? 'Redraft' : 'Draft note')}
+            {loading ? 'Drafting…' : (note ? (alreadyInvited ? 'Redraft message' : 'Redraft') : (alreadyInvited ? 'Draft message' : 'Draft note'))}
           </button>
           {done
             ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, whiteSpace: 'nowrap' }} title={`Recorded as sent (${sentAt})`}>✓ Sent</span>
-            : <button className="btn sm" onClick={markSent} disabled={sending} title="Record that you sent this invite. Advances the contact to Sent and stamps Last Touch.">
+            : <button className="btn sm" onClick={markSent} disabled={sending} title={alreadyInvited ? 'Record that you sent this message. Stamps Last Touch.' : 'Record that you sent this invite. Advances the contact to Sent and stamps Last Touch.'}>
                 {sending ? 'Saving…' : 'Mark sent'}
               </button>}
         </div>
@@ -231,12 +243,12 @@ function ConnectRow({ c, toast, onDone, onSnooze }) {
             {note.response}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-            <span className="dim mono" style={{ fontSize: 11 }}>{note.length}/300 chars</span>
+            <span className="dim mono" style={{ fontSize: 11 }}>{alreadyInvited ? `${note.length} chars` : `${note.length}/300 chars`}</span>
             <div style={{ display: 'flex', gap: 6 }}>
               <button className="btn sm" onClick={copy}>Copy</button>
               {done
                 ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, alignSelf: 'center' }}>✓ Sent</span>
-                : <button className="btn primary sm" onClick={markSent} disabled={sending} title="Log this note as the invite you sent. Advances the contact to Sent.">
+                : <button className="btn primary sm" onClick={markSent} disabled={sending} title={alreadyInvited ? 'Log this message as sent. Stamps Last Touch.' : 'Log this note as the invite you sent. Advances the contact to Sent.'}>
                     {sending ? 'Saving…' : 'Mark as sent'}
                   </button>}
             </div>
@@ -852,6 +864,10 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   const [queue, setQueue] = useStateCq(externalItems ? items : null);
   const [err, setErr] = useStateCq(null);
   const [channel, setChannel] = useStateCq('all');
+  const [showHeld, setShowHeld] = useStateCq(false);
+  const [inmail, setInmail] = useStateCq(null);
+  const [setBox, setSetBox] = useStateCq(false);
+  const [setVal, setSetVal] = useStateCq('');
 
   const load = () => {
     if (externalItems) { onReload && onReload(); return; }
@@ -863,6 +879,22 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   // Keep in sync when the parent re-supplies the list after a reload.
   useEffectCq(() => { if (externalItems) setQueue(items); }, [items]);
   useEffectCq(() => { if (!externalItems) load(); }, []);
+
+  // InMail budget (LinkedIn Premium monthly credits). Fetched on mount; spent when
+  // an InMail follow-up is marked sent; reconcilable to LinkedIn's real number.
+  const loadInmail = () => fetch('/api/linkedin-drafts/inmail-budget').then(r => r.json())
+    .then(d => { if (d && !d.error) setInmail(d); }).catch(() => {});
+  useEffectCq(() => { loadInmail(); }, []);
+  const spendInmail = () => window.tjkMutate('/api/linkedin-drafts/inmail-budget', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decrement: true }),
+  }).then(r => r.json()).then(d => { if (d && !d.error) setInmail(d); }).catch(() => {});
+  const saveInmail = () => {
+    const n = parseInt(setVal, 10);
+    if (isNaN(n)) { setSetBox(false); return; }
+    window.tjkMutate('/api/linkedin-drafts/inmail-budget', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ set: n }),
+    }).then(r => r.json()).then(d => { if (d && !d.error) setInmail(d); setSetBox(false); }).catch(() => setSetBox(false));
+  };
 
   // Single-channel rows (LinkedIn / email) drop off after one touch; drop optimistically
   // then re-fetch so siblings at the same company refresh their "already reached out
@@ -900,11 +932,32 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   if (err) return <div className="dim" style={{ padding: 28 }}>Could not load the follow-up queue: {err}</div>;
   if (!queue) return <div className="dim" style={{ padding: 28 }}>Loading follow-up queue…</div>;
 
+  // Same-day hold-off: a contact you should not message today because you already
+  // reached out at their company today (touchedToday), or already sent to this exact
+  // person today (selfSentToday). Hiding them prevents accidentally over-contacting a
+  // company in one day. The signal is date-derived, so they reappear tomorrow on their
+  // own and persist until actioned. "Show anyway" overrides for the current day.
+  const isHeldToday = (c) => !!(c.companyOutreach && (c.companyOutreach.touchedToday || c.companyOutreach.selfSentToday));
+  // Out of InMail credits: a LinkedIn follow-up to a non-connection (already invited,
+  // no email fallback, i.e. a linkedin-only card) can't be sent, so it is held until
+  // the credits reset. Contacts you can email, connection requests, and accepted
+  // contacts are unaffected.
+  const outOfInmail = !!(inmail && inmail.remaining === 0);
+  const isInmailBlocked = (c) => outOfInmail && c.channel === 'linkedin' && !!(c.companyOutreach && c.companyOutreach.selfLastTouch);
+  const isHeld = (c) => isHeldToday(c) || isInmailBlocked(c);
+  const heldCount = queue.filter(isHeld).length;
+  const anySameDay = queue.some(isHeldToday);
+  const anyInmailOut = queue.some(isInmailBlocked);
+  const heldReasons = [
+    anySameDay ? 'you already reached out at their company today' : null,
+    anyInmailOut ? 'you are out of InMail credits this month' : null,
+  ].filter(Boolean).join('; ');
+  const base = showHeld ? queue : queue.filter(c => !isHeld(c));
   const counts = {
-    all: queue.length,
-    linkedin: queue.filter(c => c.channel === 'linkedin').length,
-    email: queue.filter(c => c.channel === 'email').length,
-    both: queue.filter(c => c.channel === 'both').length,
+    all: base.length,
+    linkedin: base.filter(c => c.channel === 'linkedin').length,
+    email: base.filter(c => c.channel === 'email').length,
+    both: base.filter(c => c.channel === 'both').length,
   };
   const CHIPS = [
     { id: 'all', label: 'All' },
@@ -912,7 +965,7 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
     { id: 'email', label: 'Email' },
     { id: 'both', label: 'Both' },
   ];
-  const rows = channel === 'all' ? queue : queue.filter(c => c.channel === channel);
+  const rows = channel === 'all' ? base : base.filter(c => c.channel === channel);
 
   return (
     <div style={{ padding: 24, maxWidth: "none", marginLeft: 0, marginRight: 0 }}>
@@ -937,14 +990,38 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
           );
         })}
       </div>
+      {inmail && (
+        <div className="dim" style={{ fontSize: 12, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span>InMail credits: <b style={{ color: inmail.remaining === 0 ? 'var(--red)' : inmail.remaining <= 3 ? 'var(--orange)' : 'var(--text)' }}>{inmail.remaining}</b> of {inmail.allotment} left this month</span>
+          {setBox
+            ? <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                <input type="number" min="0" max="99" value={setVal} onChange={e => setSetVal(e.target.value)} style={{ width: 52, fontSize: 12, padding: '2px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)' }} />
+                <button className="btn accent sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={saveInmail}>Save</button>
+                <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setSetBox(false)}>Cancel</button>
+              </span>
+            : <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 8px' }} title="Set this to the number LinkedIn actually shows. It refunds InMails that get a reply and rolls credits over, so the two can drift." onClick={() => { setSetVal(String(inmail.remaining)); setSetBox(true); }}>Set</button>}
+          {inmail.remaining > 0 && inmail.remaining <= 3 && <span style={{ color: 'var(--orange)' }}>Low. Spend them on your highest-value contacts (top of the list).</span>}
+          {inmail.remaining === 0 && <span style={{ color: 'var(--red)' }}>Out. LinkedIn follow-ups to non-connections are hidden until your credits reset.</span>}
+        </div>
+      )}
+      {heldCount > 0 && (
+        <div className="dim" style={{ fontSize: 12, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 11px' }}>
+          <span>{heldCount} contact{heldCount === 1 ? '' : 's'} hidden right now ({heldReasons}). They return automatically once that clears (tomorrow, or when your InMail credits reset).</span>
+          <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setShowHeld(v => !v)}>
+            {showHeld ? 'Hide them' : 'Show anyway'}
+          </button>
+        </div>
+      )}
       {rows.length === 0
         ? <div className="card dim">
             {queue.length === 0
               ? 'Your follow-up queue is clear. Contacts appear here once you apply to a company where you have someone to reach.'
-              : `No ${channel} contacts in the queue right now.`}
+              : base.length === 0
+                ? 'Nothing to send right now: the remaining contacts are held (you already reached out at their company today, or you are out of InMail credits). They return automatically.'
+                : `No ${channel} contacts in the queue right now.`}
           </div>
         : rows.map(c =>
-            c.channel === 'linkedin' ? <ConnectRow key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onSnooze={snoozeContact} />
+            c.channel === 'linkedin' ? <ConnectRow key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onSnooze={snoozeContact} inmailRemaining={inmail ? inmail.remaining : undefined} onInmailSent={spendInmail} />
           : c.channel === 'email'   ? <EmailRow   key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onSnooze={snoozeContact} />
           :                           <BothRow    key={`${c.source}:${c.id}`} c={c} toast={toast} onChannelDone={onChannelDone} onSnooze={snoozeContact} />
         )}
