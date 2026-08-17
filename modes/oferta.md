@@ -80,6 +80,12 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
   **northStar** ← archetype / target fit (Step 0 + profile), **level** ← Block C,
   **comp** ← Block D, **location** ← remote/logistics vs the user's stated policy,
   **redFlags** ← Block G + any hard gaps.
+- **`level` has a floor: a title at or above `scoring.minimum_level` (config/profile.yml,
+  default "Manager") is a FULL level match — rate it 5, never a "downlevel," and do not let
+  it lower `northStar` either.** See the user's Level Scoring Policy in `modes/_profile.md`.
+  This is also enforced deterministically after the fact (compute-scores.mjs floors the
+  dimension for any Manager+ title), so a rating below 5 for an in-scope title will simply
+  be overwritten — rate it right the first time.
 - **`redFlags` is cleanliness on 0–5 where 5 = clean, 0 = severe.** It is NOT a negative
   number. A low rating subtracts up to `scoring.redFlagPenalty` points from the average.
 - **`comp` is rated but NOT scored.** Its weight is 0 in `config/profile.yml`, so it
@@ -172,7 +178,13 @@ Read `cv.md`. Create a table mapping each JD requirement to exact lines from the
 
 ## Block C — Level & Strategy
 
-1. **Detected level** in the JD vs **candidate's natural level for this archetype**
+> **Scoring note:** the search scope is open from `scoring.minimum_level` (default
+> "Manager") and UP. A title at Manager or above is a FULL level match — the `level`
+> dimension is 5 and it is NEVER a "downlevel." The plan below is candidate coaching for
+> the report body; it does not lower any score. See `modes/_profile.md` → Level Scoring
+> Policy.
+
+1. **Detected level** in the JD vs **candidate's natural level for this archetype** (for narrative/coaching only — a Manager+ title still scores `level` 5)
 2. **"Sell senior without lying" plan**: archetype-specific phrasing, concrete achievements to highlight, how to position founder experience as an advantage
 3. **"If they downlevel me" plan**: accept if comp is fair, negotiate a 6-month review, define clear promotion criteria
 
