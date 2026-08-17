@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.29.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.28.0...v2.29.0) (2026-08-17)
+
+
+### Features
+
+* Follow-Ups alert count reflects what you can act on now ([#204](https://github.com/michaelinghilterra-creator/trajecktory/issues/204)) ([e19f165](https://github.com/michaelinghilterra-creator/trajecktory/commit/e19f16595fd163e61fde947e5730c370c1639db7))
+
 ## [2.28.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.27.0...v2.28.0) (2026-08-17)
 
 
