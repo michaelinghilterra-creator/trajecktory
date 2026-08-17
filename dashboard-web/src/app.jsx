@@ -275,15 +275,17 @@ function App() {
     if (fresh && fresh !== drawerApp) setDrawerApp(fresh);
   }, [apps]);
 
-  // Load pending follow-up count. The badge counts the single contact follow-up
-  // list (people worth a touch) — never applications, which live in Pipeline →
-  // Awaiting response. Falls back to the legacy warm list only on an old payload.
+  // Load the follow-up alert count. It counts contacts you can act on RIGHT NOW
+  // (the queue's actionable subset), not the whole backlog: same-day holds and,
+  // when you are out of InMail credits, InMail-blocked contacts are excluded, so
+  // the badge matches the queue. Refetched on every tab change so it stops going
+  // stale after you act. Falls back to the raw list only on an old payload.
   useEffect(() => {
     fetch('/api/followups/stale')
       .then(r => r.json())
-      .then(data => setFollowupCount((data.contactFollowups ?? data.warm ?? data.items)?.length ?? 0))
+      .then(data => setFollowupCount(data.actionableCount ?? (data.contactFollowups ?? data.warm ?? data.items)?.length ?? 0))
       .catch(() => {}); // non-critical — badge just stays at 0
-  }, []);
+  }, [tab]);
 
   // Today-tab badge = cadence blocks still to do today + overdue to-dos. Keeps
   // the day's plan visible from every screen (the whole point of the Today tab).
