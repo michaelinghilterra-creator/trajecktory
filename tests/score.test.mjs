@@ -17,6 +17,7 @@ import os from 'os';
 import path from 'path';
 import {
   deriveScore, loadScoringWeights, DEFAULT_WEIGHTS, DEFAULT_RED_FLAG_PENALTY, SCORE_DIMENSIONS, dimensionLabel,
+  levelRank, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL,
 } from '../lib/score.mjs';
 
 let passed = 0, failed = 0;
@@ -146,6 +147,51 @@ fs.writeFileSync(pf, 'scoring:\n  weights:\n    fit: not-a-number\n    comp: -0.
 const badLoad = loadScoringWeights(pf);
 check(badLoad.weights.fit === DEFAULT_WEIGHTS.fit && badLoad.weights.comp === DEFAULT_WEIGHTS.comp, 'non-numeric and negative weights are ignored (typo cannot zero a dimension)');
 fs.rmSync(tmp, { recursive: true, force: true });
+
+// ── POLICY: level floor — Manager and up is a full level match (2026-08-17) ──
+// The search scope is open from Manager level up. A Manager+ title is NEVER a
+// downlevel, so the `level` dimension is floored to 5 before the headline is derived.
+// This drifted three times as prose, so it is locked here.
+check(DEFAULT_MINIMUM_LEVEL === 'Manager', 'the default minimum accepted level is Manager');
+
+// leadTitle strips trailing context so a role that REPORTS to a Director is not read
+// as one — the exact bug the Propel "Lead (reports to Director…)" title would trigger.
+check(leadTitle('Lead (reports to Director of Strategy & Operations)') === 'Lead', 'leadTitle drops "(reports to Director…)" context');
+check(leadTitle('Senior Manager, GTM Strategy') === 'Senior Manager', 'leadTitle keeps the title, drops the trailing comma clause');
+check(leadTitle('VP / Head of Revenue') === 'VP', 'leadTitle splits on a slash separator');
+
+// levelRank classifies the candidate's own title.
+check(levelRank('Manager') === 1 && levelRank('Senior Manager') === 1, 'Manager / Senior Manager rank at the Manager tier');
+check(levelRank('Director') === 2 && levelRank('Senior Director') === 2 && levelRank('Head of Analytics') === 2, 'Director / Head rank above Manager');
+check(levelRank('VP of RevOps') === 3 && levelRank('Chief Revenue Officer') === 3, 'VP / C-level rank highest');
+check(levelRank('Analyst') === 0 && levelRank('Associate') === 0, 'IC titles rank below Manager');
+check(levelRank('Lead') === null && levelRank('Principal') === null && levelRank('Staff Engineer') === null, 'ambiguous senior-IC titles are unclassified (not auto-promoted)');
+check(levelRank('Lead (reports to Director of Strategy & Operations)') === null, 'a Lead that reports to a Director is still unclassified, not a Director');
+
+// applyLevelFloor raises the level dimension only for in-scope titles.
+const dimsSM = [{ key: 'fit', val: 4 }, { key: 'level', val: 3, max: 5 }, { key: 'northStar', val: 4 }];
+const floored = applyLevelFloor(dimsSM, 'Senior Manager');
+check(floored.floored === true && floored.from === 3, 'a Senior Manager title floors the level dimension (from 3)');
+check(floored.dims.find(d => d.key === 'level').val === 5, 'the floored level dimension is raised to 5');
+check(dimsSM.find(d => d.key === 'level').val === 3, 'applyLevelFloor is pure — the input dims are not mutated');
+const notFloored = applyLevelFloor(dimsSM, 'Analyst');
+check(notFloored.floored === false && notFloored.dims.find(d => d.key === 'level').val === 3, 'a below-Manager title leaves the level rating alone');
+const leadNotFloored = applyLevelFloor(dimsSM, 'Lead (reports to Director of Strategy & Operations)');
+check(leadNotFloored.floored === false, 'a contaminated "Lead (reports to Director…)" title is NOT floored');
+const already5 = applyLevelFloor([{ key: 'level', val: 5, max: 5 }], 'VP');
+check(already5.floored === false, 'an already-maxed level dimension is not re-floored (idempotent)');
+
+// minimum_level is configurable: raise it to Director and a Senior Manager no longer floors.
+check(applyLevelFloor(dimsSM, 'Senior Manager', 'Director').floored === false, 'raising minimum_level to Director stops Senior Manager from flooring');
+check(applyLevelFloor(dimsSM, 'Director', 'Director').floored === true, 'at minimum_level Director, a Director title still floors');
+
+// loadScoringWeights surfaces minimum_level (default + override).
+const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-lvl-'));
+const pf2 = path.join(tmp2, 'profile.yml');
+check(loadScoringWeights(path.join(tmp2, 'none.yml')).minimumLevel === 'Manager', 'loadScoringWeights defaults minimumLevel to Manager');
+fs.writeFileSync(pf2, 'scoring:\n  minimum_level: "Director"\n');
+check(loadScoringWeights(pf2).minimumLevel === 'Director', 'loadScoringWeights reads scoring.minimum_level from profile.yml');
+fs.rmSync(tmp2, { recursive: true, force: true });
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

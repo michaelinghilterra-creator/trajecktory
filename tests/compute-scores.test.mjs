@@ -102,5 +102,44 @@ ${JSON.stringify({ schema: 'trajecktory-report/v1', id: 3, score: 2, globalScore
 const rj = deriveReportScore(junk);
 check(!rj.ok && rj.reason === 'no-keyed-dims', 'a report whose only keyed dim is unknown is left as-is');
 
+// ── POLICY: level floor — a Manager+ title is a full level match (2026-08-17) ──
+// The `level` dimension is floored to 5 for any Manager-or-above title BEFORE the
+// headline is derived, so a model rating can never downgrade an in-scope title.
+const leveledReport = (jdLevel, levelVal) => `---
+${JSON.stringify({
+  schema: 'trajecktory-report/v1', id: 4, company: 'Meridian', role: jdLevel,
+  date: '2026-08-17', url: 'https://example.test/m', score: 0,
+  summary: { seniority: jdLevel }, levelMatch: { jdLevel },
+  globalScore: [
+    { key: 'fit', dim: 'Fit / CV Match', val: 4, max: 5, evidence: 'ok' },
+    { key: 'northStar', dim: 'North Star Alignment', val: 4, max: 5 },
+    { key: 'level', dim: 'Level Match', val: levelVal, max: 5, evidence: 'title read' },
+    { key: 'comp', dim: 'Comp', val: 3, max: 5 },
+    { key: 'location', dim: 'Location / Logistics', val: 5, max: 5 },
+    { key: 'redFlags', dim: 'Red Flags', val: 5, max: 5 },
+  ],
+}, null, 2)}
+---
+# Meridian body
+`;
+
+// Senior Manager, model rated level 3 → floored to 5. 3.8 (unfloored) → 4.1 (floored).
+const rsm = deriveReportScore(leveledReport('Senior Manager', 3), { weights: BALANCED });
+check(rsm.ok && rsm.score === 4.1, `a Senior Manager title floors level and lifts the headline (got ${rsm.score}, want 4.1)`);
+check(rsm.scoreBasis.levelFloor && rsm.scoreBasis.levelFloor.applied === true && rsm.scoreBasis.levelFloor.from === 3, 'the level floor is recorded in scoreBasis for the audit trail');
+check(/"key": "level"[\s\S]*?"val": 5/.test(rsm.newMd), 'the raised level dimension (val 5) is persisted so the breakdown matches the headline');
+check(/Level floored to 5/.test(rsm.newMd), 'the floored level dimension carries a self-explaining evidence note');
+// idempotent: re-running finds level already 5, so nothing floors and the score holds.
+const rsm2 = deriveReportScore(rsm.newMd, { weights: BALANCED });
+check(rsm2.score === 4.1 && !rsm2.scoreBasis.levelFloor, 'the floor is idempotent — a second pass does not re-floor');
+
+// Below Manager: an Analyst title is NOT floored; the model rating stands.
+const ran = deriveReportScore(leveledReport('Analyst', 3), { weights: BALANCED });
+check(ran.ok && ran.score === 3.8 && !ran.scoreBasis.levelFloor, `a below-Manager title keeps the model level rating (got ${ran.score}, want 3.8)`);
+
+// Contamination guard: "Lead (reports to Director…)" must NOT be read as a Director.
+const rlead = deriveReportScore(leveledReport('Lead (reports to Director of Strategy & Operations)', 3), { weights: BALANCED });
+check(rlead.ok && rlead.score === 3.8 && !rlead.scoreBasis.levelFloor, 'a Lead that reports to a Director is not floored (title contamination guarded)');
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
