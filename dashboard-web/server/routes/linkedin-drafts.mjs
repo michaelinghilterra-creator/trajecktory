@@ -11,8 +11,25 @@ import { parseTargetTalentMd, updateTTLine, readTTCorrespondence } from '../lib/
 import { parseRecruitersMd, updateRecruiterLine, readRecruiterCorrespondence } from '../lib/recruiters.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
+import { getInmailBudget, decrementInmail, setInmailRemaining } from '../lib/inmail-budget.mjs';
 
 export const router = express.Router();
+
+// GET /api/linkedin-drafts/inmail-budget — remaining monthly InMail credits.
+// POST with { decrement: true } to spend one (an InMail follow-up was sent), or
+// { set: N } to reconcile the count to LinkedIn's real balance.
+router.get('/api/linkedin-drafts/inmail-budget', (req, res) => {
+  try { res.json(getInmailBudget()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.post('/api/linkedin-drafts/inmail-budget', (req, res) => {
+  try {
+    const { decrement, set } = req.body || {};
+    if (decrement) return res.json(decrementInmail());
+    if (set != null && `${set}`.trim() !== '') return res.json(setInmailRemaining(set));
+    res.status(400).json({ error: 'Pass { decrement: true } or { set: <number> }.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 router.post('/api/linkedin-ssi/generate-response', async (req, res) => {
   try {
