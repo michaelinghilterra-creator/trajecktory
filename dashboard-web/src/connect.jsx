@@ -863,6 +863,7 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   const [queue, setQueue] = useStateCq(externalItems ? items : null);
   const [err, setErr] = useStateCq(null);
   const [channel, setChannel] = useStateCq('all');
+  const [showHeld, setShowHeld] = useStateCq(false);
 
   const load = () => {
     if (externalItems) { onReload && onReload(); return; }
@@ -911,11 +912,19 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   if (err) return <div className="dim" style={{ padding: 28 }}>Could not load the follow-up queue: {err}</div>;
   if (!queue) return <div className="dim" style={{ padding: 28 }}>Loading follow-up queue…</div>;
 
+  // Same-day hold-off: a contact you should not message today because you already
+  // reached out at their company today (touchedToday), or already sent to this exact
+  // person today (selfSentToday). Hiding them prevents accidentally over-contacting a
+  // company in one day. The signal is date-derived, so they reappear tomorrow on their
+  // own and persist until actioned. "Show anyway" overrides for the current day.
+  const isHeldToday = (c) => !!(c.companyOutreach && (c.companyOutreach.touchedToday || c.companyOutreach.selfSentToday));
+  const heldCount = queue.filter(isHeldToday).length;
+  const base = showHeld ? queue : queue.filter(c => !isHeldToday(c));
   const counts = {
-    all: queue.length,
-    linkedin: queue.filter(c => c.channel === 'linkedin').length,
-    email: queue.filter(c => c.channel === 'email').length,
-    both: queue.filter(c => c.channel === 'both').length,
+    all: base.length,
+    linkedin: base.filter(c => c.channel === 'linkedin').length,
+    email: base.filter(c => c.channel === 'email').length,
+    both: base.filter(c => c.channel === 'both').length,
   };
   const CHIPS = [
     { id: 'all', label: 'All' },
@@ -923,7 +932,7 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
     { id: 'email', label: 'Email' },
     { id: 'both', label: 'Both' },
   ];
-  const rows = channel === 'all' ? queue : queue.filter(c => c.channel === channel);
+  const rows = channel === 'all' ? base : base.filter(c => c.channel === channel);
 
   return (
     <div style={{ padding: 24, maxWidth: "none", marginLeft: 0, marginRight: 0 }}>
@@ -948,11 +957,21 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
           );
         })}
       </div>
+      {heldCount > 0 && (
+        <div className="dim" style={{ fontSize: 12, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 11px' }}>
+          <span>{heldCount} contact{heldCount === 1 ? '' : 's'} hidden today: you already reached out at their company, so they are held until tomorrow to avoid over-contacting a company in one day.</span>
+          <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setShowHeld(v => !v)}>
+            {showHeld ? 'Hide them' : 'Show anyway'}
+          </button>
+        </div>
+      )}
       {rows.length === 0
         ? <div className="card dim">
             {queue.length === 0
               ? 'Your follow-up queue is clear. Contacts appear here once you apply to a company where you have someone to reach.'
-              : `No ${channel} contacts in the queue right now.`}
+              : base.length === 0
+                ? 'Nothing to send today: everyone left already had a teammate contacted, so they are held until tomorrow to avoid over-contacting a company in one day.'
+                : `No ${channel} contacts in the queue right now.`}
           </div>
         : rows.map(c =>
             c.channel === 'linkedin' ? <ConnectRow key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onSnooze={snoozeContact} />
