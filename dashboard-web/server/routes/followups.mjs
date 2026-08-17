@@ -13,6 +13,7 @@ import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
+import { getInmailBudget } from '../lib/inmail-budget.mjs';
 
 export const router = express.Router();
 
@@ -137,6 +138,19 @@ router.get('/api/followups/stale', (req, res) => {
       else contactFollowups.push(it);
     }
 
+    // Actionable now: the workable subset of contactFollowups the queue actually
+    // shows. Excludes same-day holds (you already reached out at that company
+    // today) and, when you are out of InMail credits, the LinkedIn follow-ups that
+    // would need one. This is what the nav badge and the Follow-ups subtab count,
+    // so an "alert" means something you can send right now, not the whole backlog.
+    const inmailOut = getInmailBudget().remaining === 0;
+    const actionableCount = contactFollowups.filter((c) => {
+      const co = c.companyOutreach;
+      const heldToday = !!(co && (co.touchedToday || co.selfSentToday));
+      const inmailBlocked = inmailOut && c.channel === 'linkedin' && !!(co && co.selfLastTouch);
+      return !heldToday && !inmailBlocked;
+    }).length;
+
     res.json({
       thresholds: STALE_THRESHOLD_BY_STATUS,
       taThreshold: TA_STALE_THRESHOLD_DAYS,         // legacy alias
@@ -165,6 +179,7 @@ router.get('/api/followups/stale', (req, res) => {
       // every CONTACT worth a touch, deduped, contacts-only, snooze-partitioned
       // above. The warm/cold/staleAppContacts fields stay for Pipeline → Awaiting
       // response and the Find-a-contact nudge, which need the app-level view.
+      actionableCount,
       contactFollowups,
       snoozedContactFollowups,
       // Deprecated alias: legacy readers expect `items` to be the badge list.

@@ -496,7 +496,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   // queue tab below the outreach queue.
   const SUBTABS = [
     { id: 'overview', label: 'Overview',         n: null,        icon: window.ICON.pulse },
-    { id: 'queue',    label: 'Follow-ups',       n: (data.contactFollowups || []).length || null, icon: window.ICON.send },
+    { id: 'queue',    label: 'Follow-ups',       n: (data.actionableCount ?? (data.contactFollowups || []).length) || null, icon: window.ICON.send },
     { id: 'findcontact', label: 'Find a contact', n: contactlessApps.length, icon: window.ICON.search || window.ICON.userPlus },
   ];
 
