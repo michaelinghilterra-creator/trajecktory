@@ -116,6 +116,11 @@ function ConnectRow({ c, toast, onDone, onSnooze }) {
   const [sentAt, setSentAt] = useStateCq(null);
   const [showArchive, setShowArchive] = useStateCq(false);
   const done = !!sentAt;
+  // A contact you have ALREADY sent a LinkedIn invite (or any 1:1 touch) to: the
+  // invite is out, so a "follow-up" is a real MESSAGE, not another connection note.
+  // selfLastTouch is only set once a touch to this specific contact exists, so its
+  // presence is what tells a follow-up apart from a first-touch connect.
+  const alreadyInvited = !!(c.companyOutreach && c.companyOutreach.selfLastTouch);
 
   // Record that the invite went out, right here — no jumping to the Network tab.
   // Posts the note as a "Sent" correspondence to the contact's own route (TA vs
@@ -128,10 +133,11 @@ function ConnectRow({ c, toast, onDone, onSnooze }) {
     const url = c.source === 'recruiter'
       ? `/api/recruiters/${c.id}/correspondence`
       : `/api/target-talent/${c.id}/correspondence`;
-    const body = (note?.response || '').trim() || `LinkedIn connection request sent to ${c.name || 'this contact'}.`;
+    const kind = alreadyInvited ? 'LinkedIn message' : 'LinkedIn connection request';
+    const body = (note?.response || '').trim() || `${kind} sent to ${c.name || 'this contact'}.`;
     window.tjkMutate(url, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ direction: 'Sent', subject: 'LinkedIn connection request', body }),
+      body: JSON.stringify({ direction: 'Sent', subject: kind, body }),
     }).then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); setSending(false); return; }
@@ -163,7 +169,7 @@ function ConnectRow({ c, toast, onDone, onSnooze }) {
 
   const draft = () => {
     setLoading(true);
-    window.tjkMutate('/api/linkedin-drafts/connect-note', {
+    window.tjkMutate(alreadyInvited ? '/api/linkedin-drafts/followup-message' : '/api/linkedin-drafts/connect-note', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: c.source, id: c.id }),
     }).then(r => r.json())
@@ -198,6 +204,11 @@ function ConnectRow({ c, toast, onDone, onSnooze }) {
               : <span title="No email address on file. Find one (Hunter/MillionVerifier) to move this contact to the email motion.">no email on file</span>}
           </div>
           <CompanyOutreach c={c} />
+          {alreadyInvited && !done && (
+            <div className="dim" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.4 }}>
+              You already invited them, so a follow-up is a message, not another invite. While you are not connected, LinkedIn sends it as an InMail (uses a Premium credit), so make it count.
+            </div>
+          )}
           {!done && (
             <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               {!showArchive
@@ -216,11 +227,11 @@ function ConnectRow({ c, toast, onDone, onSnooze }) {
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}
           {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={sending}>💤 14d</button> : null}
           <button className="btn accent sm" onClick={draft} disabled={loading}>
-            {loading ? 'Drafting…' : (note ? 'Redraft' : 'Draft note')}
+            {loading ? 'Drafting…' : (note ? (alreadyInvited ? 'Redraft message' : 'Redraft') : (alreadyInvited ? 'Draft message' : 'Draft note'))}
           </button>
           {done
             ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, whiteSpace: 'nowrap' }} title={`Recorded as sent (${sentAt})`}>✓ Sent</span>
-            : <button className="btn sm" onClick={markSent} disabled={sending} title="Record that you sent this invite. Advances the contact to Sent and stamps Last Touch.">
+            : <button className="btn sm" onClick={markSent} disabled={sending} title={alreadyInvited ? 'Record that you sent this message. Stamps Last Touch.' : 'Record that you sent this invite. Advances the contact to Sent and stamps Last Touch.'}>
                 {sending ? 'Saving…' : 'Mark sent'}
               </button>}
         </div>
@@ -231,12 +242,12 @@ function ConnectRow({ c, toast, onDone, onSnooze }) {
             {note.response}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-            <span className="dim mono" style={{ fontSize: 11 }}>{note.length}/300 chars</span>
+            <span className="dim mono" style={{ fontSize: 11 }}>{alreadyInvited ? `${note.length} chars` : `${note.length}/300 chars`}</span>
             <div style={{ display: 'flex', gap: 6 }}>
               <button className="btn sm" onClick={copy}>Copy</button>
               {done
                 ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, alignSelf: 'center' }}>✓ Sent</span>
-                : <button className="btn primary sm" onClick={markSent} disabled={sending} title="Log this note as the invite you sent. Advances the contact to Sent.">
+                : <button className="btn primary sm" onClick={markSent} disabled={sending} title={alreadyInvited ? 'Log this message as sent. Stamps Last Touch.' : 'Log this note as the invite you sent. Advances the contact to Sent.'}>
                     {sending ? 'Saving…' : 'Mark as sent'}
                   </button>}
             </div>
