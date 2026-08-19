@@ -111,18 +111,19 @@ Read `cv.md`. Ejecuta TODOS los bloques:
 
 #### Paso 0 — Detección de Arquetipo
 
-Clasifica la oferta en uno de los 6 arquetipos. Si es híbrido, indica los 2 más cercanos.
+Clasifica la oferta en uno de los 7 arquetipos. Si es híbrido, indica los 2 más cercanos.
 
-**Los 6 arquetipos (todos igual de válidos):**
+**Los 7 arquetipos (mapean 1:1 a `config/profile.yml` → `target_roles.archetypes`; la etiqueta `(high/medium)` es su prioridad allí):**
 
 | Arquetipo | Ejes temáticos | Qué compran |
 |-----------|----------------|-------------|
-| **AI Platform / LLMOps Engineer** | Evaluation, observability, reliability, pipelines | Alguien que ponga AI en producción con métricas |
-| **Agentic Workflows / Automation** | HITL, tooling, orchestration, multi-agent | Alguien que construya sistemas de agentes fiables |
-| **Technical AI Product Manager** | GenAI/Agents, PRDs, discovery, delivery | Alguien que traduzca negocio → producto AI |
-| **AI Solutions Architect** | Hyperautomation, enterprise, integrations | Alguien que diseñe arquitecturas AI end-to-end |
-| **AI Forward Deployed Engineer** | Client-facing, fast delivery, prototyping | Alguien que entregue soluciones AI a clientes rápido |
-| **AI Transformation Lead** | Change management, adoption, org enablement | Alguien que lidere el cambio AI en una organización |
+| **Director / VP of Analytics / Business Intelligence** (high) | Business intelligence, executive reporting, Power BI governance, semantic models, decision systems | Alguien que convierta datos comerciales fragmentados en el sistema de decisión que un negocio global usa a diario |
+| **Director / VP of Revenue Operations** (high) | RevOps, MEDDPICC, pipeline inspection, forecasting, GTM/CRM systems | Alguien que instrumente y gobierne el motor de ingresos end-to-end |
+| **Director / VP of GTM Analytics / Revenue Intelligence** (high) | Revenue intelligence, pipeline analytics, forecasting, seller productivity, account prioritization | Alguien que convierta datos de GTM en previsión y foco de pipeline |
+| **Director / VP of Sales Operations** (medium) | Sales ops, MEDDPICC, CRM governance, territory/quota, operating cadence | Alguien que haga que la organización de ventas funcione con disciplina |
+| **Director of Commercial Excellence** (medium) | Sales strategy, commercial excellence, GTM programs | Alguien que suba el rendimiento comercial con estrategia y programas |
+| **Director / VP of Sales / Revenue Enablement** (medium) | Sales enablement, seller productivity, sales process | Alguien que haga a los vendedores más productivos vía proceso y enablement |
+| **Director / Senior Director / VP of Sales Development** (medium) | Pipeline generation, SDR org design, team building & ramp | Alguien que construya y escale una organización SDR que genere pipeline |
 
 **Framing adaptativo:**
 
@@ -130,20 +131,15 @@ Clasifica la oferta en uno de los 6 arquetipos. Si es híbrido, indica los 2 má
 
 | Si el rol es... | Emphasize about the candidate... | Fuentes de proof points |
 |-----------------|--------------------------|--------------------------|
-| Platform / LLMOps | Builder de sistemas en producción, observability, evals, closed-loop | article-digest.md + cv.md |
-| Agentic / Automation | Orquestación multi-agente, HITL, reliability, cost | article-digest.md + cv.md |
-| Technical AI PM | Product discovery, PRDs, métricas, stakeholder mgmt | cv.md + article-digest.md |
-| Solutions Architect | Diseño de sistemas, integrations, enterprise-ready | article-digest.md + cv.md |
-| Forward Deployed Engineer | Fast delivery, client-facing, prototype → prod | cv.md + article-digest.md |
-| AI Transformation Lead | Change management, team enablement, adoption | cv.md + article-digest.md |
+| Analytics / BI | Executive reporting infrastructure, Power BI governance, semantic models, decision systems | cv.md + article-digest.md |
+| Revenue Operations | Pipeline inspection, MEDDPICC operationalization, forecasting, GTM/CRM systems | cv.md + article-digest.md |
+| GTM Analytics / Rev Intelligence | Pipeline analytics, forecasting, seller productivity, account prioritization | cv.md + article-digest.md |
+| Sales Operations | CRM governance, territory/quota design, operating cadence, MEDDPICC | cv.md + article-digest.md |
+| Commercial Excellence | Sales strategy, commercial programs, GTM execution | cv.md + article-digest.md |
+| Sales / Revenue Enablement | Seller productivity, enablement programs, sales process | cv.md + article-digest.md |
+| Sales Development | SDR org design, pod model, ramp, pipeline sourced | cv.md + article-digest.md |
 
-**Ventaja transversal**: Enmarcar perfil como **"Technical builder"** que adapta su framing al rol:
-- Para PM: "builder que reduce incertidumbre con prototipos y luego productioniza con disciplina"
-- Para FDE: "builder que entrega fast con observability y métricas desde día 1"
-- Para SA: "builder que diseña sistemas end-to-end con experiencia real en integrations"
-- Para LLMOps: "builder que pone AI en producción con closed-loop quality systems — leer métricas de article-digest.md"
-
-Convertir "builder" en señal profesional, no en "hobby maker". El framing cambia, la verdad es la misma.
+**Ventaja transversal**: Enmarcar el perfil como un **líder de Revenue Operations / Business Intelligence** que adapta su framing al rol: un operador que convierte datos comerciales en decisiones, pipeline y previsión, con experiencia real dirigiendo equipos e infraestructura de reporting. El framing cambia según el arquetipo; la verdad es la misma. Ver `resume_framing` en `config/profile.yml` para el título / summary / Areas of Expertise preferidos por arquetipo.
 
 #### Bloque A — Resumen del Rol
 
@@ -164,12 +160,12 @@ The dashboard surfaces this as the "Company Brief" card in the Overview drawer. 
 Read `cv.md`. Tabla con cada requisito del JD mapeado a líneas exactas del CV o keys de i18n.ts.
 
 **Adaptado al arquetipo:**
-- FDE → priorizar delivery rápida y client-facing
-- SA → priorizar diseño de sistemas e integrations
-- PM → priorizar product discovery y métricas
-- LLMOps → priorizar evals, observability, pipelines
-- Agentic → priorizar multi-agent, HITL, orchestration
-- Transformation → priorizar change management, adoption, scaling
+- Analytics / BI → priorizar executive reporting, Power BI governance, semantic models, decision systems
+- Revenue Operations → priorizar pipeline inspection, forecasting, MEDDPICC, GTM/CRM systems
+- GTM Analytics / Rev Intelligence → priorizar pipeline analytics, forecasting, seller productivity
+- Sales Operations → priorizar CRM governance, territory/quota, operating cadence
+- Commercial Excellence / Enablement → priorizar sales strategy, seller productivity, GTM programs
+- Sales Development → priorizar SDR org design, pod model, ramp, pipeline sourced
 
 Sección de **gaps** con estrategia de mitigación para cada uno:
 1. ¿Es hard blocker o nice-to-have?
@@ -251,7 +247,7 @@ score" rule. Set the field, do not fudge the dimension ratings.
 | Required physical presence in a `hard_no` city (see `portals.yml` location_policy: includes London, Barcelona, NYC, SF, Bay Area, Chicago, LA, Boston, Seattle, Amsterdam, Paris, Berlin, Madrid, Dublin, Toronto, Singapore, Sydney, Melbourne, Tokyo, Warsaw, Krakow, Vilnius, Tallinn) | **1.5** | International relocation or domestic hard-no, not viable regardless of role fit |
 | Visa sponsorship explicitly NOT offered AND candidate would need it (non-US JDs) | **1.5** | Hard blocker |
 | Role requires expertise candidate verifiably lacks (e.g., Xactly admin for a Sales Comp role, FedRAMP for federal sales, specific industry certifications) AND has no adjacent experience | **2.0** | Structural skill gap |
-| Title regression (e.g., evaluating a Manager role when candidate is already Director+) | **2.0** | Career step backward |
+| Title regression to a **sub-Manager individual-contributor** title (Analyst, Coordinator, Specialist, Representative, "individual contributor") when candidate is Director+ | **2.0** | Career step backward. **Manager and above (Manager, Senior Manager, Director, Senior Director, Head, VP, C-level) is IN SCOPE and a FULL level match — NEVER apply this ceiling to those.** Search scope is open from Manager up; `applyLevelFloor` in `score.mjs` floors the `level` dim to 5 for any Manager+ title, so capping the headline here would contradict it. |
 
 **Reasoning:** Auto-discard fires below 3.0. A 3.2 on a Barcelona-required role is
 misleading. Setting `scoreCeiling: 1.5` caps the derived headline so the number matches
