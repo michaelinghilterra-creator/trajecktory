@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.29.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.29.0...v2.29.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **batch:** don't title-cap Manager+ roles; repoint eval archetypes to profile.yml ([#206](https://github.com/michaelinghilterra-creator/trajecktory/issues/206)) ([68ab8aa](https://github.com/michaelinghilterra-creator/trajecktory/commit/68ab8aa7cc037c8905eb8a53c38710220dcbc1f9))
+
 ## [2.29.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.28.0...v2.29.0) (2026-08-17)
 
 
