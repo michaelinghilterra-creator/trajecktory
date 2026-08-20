@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.30.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.29.1...v2.30.0) (2026-08-20)
+
+
+### Features
+
+* unify Contacts into one follow-up queue with acceptance-aware, capped outreach ([#208](https://github.com/michaelinghilterra-creator/trajecktory/issues/208)) ([1a193fb](https://github.com/michaelinghilterra-creator/trajecktory/commit/1a193fb3ff09d8d6b058bd1c235048006e2f0f68))
+
 ## [2.29.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.29.0...v2.29.1) (2026-08-19)
 
 
