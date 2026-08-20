@@ -384,8 +384,8 @@ ${profileMd}
 - Never invent metrics or claims not on the CV.
 - Open with a specific reason for contacting this person at THIS company (role applied to, recent funding/news/leadership change, specific team context).
 - Lead with the most specific named artifact from the PORTFOLIO block above (a named project, initiative, or concrete outcome). If no PORTFOLIO block is present, use the most relevant quantified CV proof point. A named artifact hooks the reader far better than a generic role claim.
-- Make the ask soft: invite a conversation if useful. Do NOT request a specific meeting length (no "20-minute call"). Phrasing like "would welcome a conversation if there's mutual interest" is the target.
-- Close with a clear, low-friction next step.
+- Make the ask low-friction and time-respecting. Do NOT ask for a call, a chat, a conversation, a meeting, or any amount of their time (no "20-minute call", no "quick chat", no "would welcome a conversation"). Everyone is busy, and asking for their time reads as tone-deaf and needy. Instead signal genuine interest and, if anything, invite a reply or a pointer to the right person for the role.
+- Close with a clear, low-friction next step that does NOT request their time.
 - Do NOT ask them to forward your resume or do recruiting work for you. Frame as peer-to-peer candidate introduction.
 - TIMING: Use the exact phrasing from the TIMING LANGUAGE line in the RELATED APPLICATION block above. Do NOT invent your own gap — the server has computed days-since-application against today's date. If TIMING LANGUAGE says "31 days ago (use 'last month')", say "last month" — never "yesterday" or "this morning". Misreporting the timing reads as careless to the recipient.
 ${stageGuidance ? `- ${stageGuidance}` : ''}
@@ -401,7 +401,7 @@ Since prior messages exist, this should be a follow-up — acknowledge the prior
 `}
 
 Output ONLY a JSON object — no markdown, no code fences, no explanation:
-{"subject": "<email subject>", "body": "<email body — plain text, no signature block, NO trailing sign-off of any kind (no '${me.firstName}', no 'Best,\\n${me.firstName}', no contact info), NO greeting and NO bare first-name address. STRUCTURE: 3-4 short paragraphs separated by a LITERAL \\n\\n (double newline) between paragraphs in the JSON string — do NOT return one giant block. Each paragraph 1-2 sentences (~30-50 words). Pattern: (1) why-now opener referencing the application, (2) one quantified proof point, (3) why-here link to their team, (4) soft conversational ask. The UI prefills 'Hi ${r.first},' so the first sentence of body MUST begin with substantive content (e.g. 'I submitted my application…', 'Following up on…'). Do NOT start with '${r.first}', 'Hi', 'Hello', 'Hey', or any form of address.>"}`;
+{"subject": "<email subject>", "body": "<email body — plain text, no signature block, NO trailing sign-off of any kind (no '${me.firstName}', no 'Best,\\n${me.firstName}', no contact info), NO greeting and NO bare first-name address. STRUCTURE: 3-4 short paragraphs separated by a LITERAL \\n\\n (double newline) between paragraphs in the JSON string — do NOT return one giant block. Each paragraph 1-2 sentences (~30-50 words). Pattern: (1) why-now opener referencing the application, (2) one quantified proof point, (3) why-here link to their team, (4) a brief interest-signaling close that does NOT ask for a call, meeting, or any of their time. The UI prefills 'Hi ${r.first},' so the first sentence of body MUST begin with substantive content (e.g. 'I submitted my application…', 'Following up on…'). Do NOT start with '${r.first}', 'Hi', 'Hello', 'Hey', or any form of address.>"}`;
 
     const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
     const jsonMatch = raw.match(/\{[\s\S]*\}/);

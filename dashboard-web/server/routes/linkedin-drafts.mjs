@@ -8,6 +8,7 @@ import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { loadInfluencer, toneInstruction, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine, readTTCorrespondence } from '../lib/target-talent.mjs';
+import { getLinkedInStatus } from '../lib/tt-linkedin.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
 import { getInmailBudget, decrementInmail, setInmailRemaining } from '../lib/inmail-budget.mjs';
@@ -344,6 +345,10 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
     const recipientFirst = row.first || name.split(/\s+/)[0] || 'there';
     const recipientRole = row.title || '';
     const company = row.company || '';
+    // The invite ACCEPTED case (LinkedIn axis 'Connected') is a different message
+    // than a still-pending one: it is a free DM to a new 1st-degree connection, and
+    // it must NOT claim the invite is unanswered or ask if it arrived.
+    const connected = getLinkedInStatus(Number(id)) === 'Connected';
 
     // Prior 1:1 history with THIS contact, so the message names the earlier connect
     // (and when) and never repeats it. Cap the tail so the prompt stays bounded.
@@ -352,18 +357,24 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
     const firstTouchDate = (sent[0]?.timestamp || row.lastTouch || '').slice(0, 10);
     const history = corr.slice(-3)
       .map(m => `- ${(m.timestamp || '').slice(0, 10)} [${m.direction}] ${m.subject ? m.subject + ': ' : ''}${(m.body || '').replace(/\s+/g, ' ').slice(0, 140)}`)
-      .join('\n') || '- A LinkedIn connection request that has not been accepted or answered.';
+      .join('\n') || (connected
+        ? '- A LinkedIn connection request that they ACCEPTED, so you are now connected.'
+        : '- A LinkedIn connection request that has not been accepted or answered.');
 
     let cvMd = ''; try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
     let articleDigestMd = ''; try { articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md'); } catch {}
     const cvExcerpt = (articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 900)}\n\nCV:\n` : '') + (cvMd ? cvMd.slice(0, 3200) : '(CV not available)');
     const idn = getIdentity();
 
-    const purpose = `${name} works in Talent Acquisition or recruiting${company ? ` at ${company}` : ''}. ${idn.firstName} is genuinely interested in ${company || 'their company'} and has applied there (or is about to). The goal is candidacy: get on ${recipientFirst}'s radar as a strong fit and open a short conversation.`;
+    const purpose = `${name} works in Talent Acquisition or recruiting${company ? ` at ${company}` : ''}. ${idn.firstName} is genuinely interested in ${company || 'their company'} and has applied there (or is about to). The goal is candidacy: get on ${recipientFirst}'s radar as a strong fit and a name worth a reply.`;
 
-    const prompt = `You are drafting a brief LinkedIn FOLLOW-UP MESSAGE (an InMail) from ${idn.fullName} to a contact he ALREADY sent a connection request to${firstTouchDate ? ` on ${firstTouchDate}` : ''}. That request has not been accepted or answered.
+    const prompt = `You are drafting a brief LinkedIn ${connected ? 'DIRECT MESSAGE (a free DM)' : 'FOLLOW-UP MESSAGE (an InMail)'} from ${idn.fullName} to ${connected
+      ? `a contact he is now CONNECTED with on LinkedIn: they ACCEPTED his connection request${firstTouchDate ? ` (invite sent ${firstTouchDate})` : ''}, so this is the first real message in a brand-new 1st-degree connection.`
+      : `a contact he ALREADY sent a connection request to${firstTouchDate ? ` on ${firstTouchDate}` : ''}. That request has not been accepted or answered.`}
 
-THIS IS NOT A NEW CONNECTION REQUEST. The invite is already out, so do not write "I would like to connect" or restate it. Write the NEXT message: a real, purposeful note that moves things forward.
+${connected
+  ? 'YOU ARE ALREADY CONNECTED. The invite was accepted, so do NOT say you sent a request, do NOT ask whether it arrived, and do NOT imply the connection is still pending. A short, warm nod to having just connected is fine; then go to the real reason for writing.'
+  : 'THIS IS NOT A NEW CONNECTION REQUEST. The invite is already out, so do not write "I would like to connect" or restate it. Write the NEXT message: a real, purposeful note that moves things forward.'}
 
 THE RECIPIENT:
 - Name: ${name}
@@ -380,11 +391,13 @@ ABOUT ${idn.firstName.toUpperCase()} (ground the message in this, never copy ver
 ${cvExcerpt}
 
 HARD RULES:
-- Open with "Hi ${recipientFirst}," then go STRAIGHT to the real reason for writing: specific interest in ${company || 'their company'} and that ${idn.firstName} applied there. Lead with intent and value, in a confident tone.
-- Do NOT open by mentioning the earlier message, and NEVER say you "have not heard back" or that the silence is "fine". Being ignored is not the story; the candidacy is. If you reference the prior connection request at all, make it a brief, confident half-clause in the MIDDLE (for example, "I also sent a connection request recently, but wanted to reach you directly"), never an apology and never an opener.
+- Open with "Hi ${recipientFirst}," then ${connected ? 'optionally one short warm clause about having just connected, then ' : ''}go to the real reason for writing: specific interest in ${company || 'their company'} and that ${idn.firstName} applied there. Lead with intent and value, in a confident tone.
+- ${connected
+    ? 'You are ALREADY connected, so NEVER say you "sent a connection request", "wanted to make sure this reached you", "reach you directly", or reference a pending or unanswered invite in any way. Treat the connection as established.'
+    : 'Do NOT open by mentioning the earlier message, and NEVER say you "have not heard back" or that the silence is "fine". Being ignored is not the story; the candidacy is. If you reference the prior connection request at all, make it a brief, confident half-clause in the MIDDLE (for example, "I also sent a connection request recently, but wanted to reach you directly"), never an apology and never an opener.'}
 - Then give one concrete proof point about ${idn.firstName} from the CV or portfolio that makes him worth a reply.
-- Close with ONE clear, low-friction ask: a brief chat, or being pointed to the right person for the relevant role. Not a hard pitch.
-- Length: 90 to 150 words. An InMail is longer than a connection note but still tight. Never a wall of text.
+- Close with ONE clear, low-friction ask: a quick reply, or being pointed to the right person for the relevant role. Do NOT ask for a call, a chat, a quick call, time on their calendar, or "15/20/30 minutes" — everyone is busy and a meeting ask reads as tone-deaf. Not a hard pitch.
+- Length: 90 to 150 words. Longer than a connection note but still tight. Never a wall of text.
 - NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
 - BANNED phrasings, they read as needy and get the message deleted: "haven't heard back", "never heard back", "which is fine", "I know you are busy", "just following up", "circling back", "wanted to reconnect", "sorry to bother", "I hope this finds you well", "quick question", "pick your brain", and any apology for writing.
 - End with a sign-off line: "Thanks, ${idn.firstName}".
@@ -394,7 +407,7 @@ Return ONLY the message text, ready to paste, including the "Hi ${recipientFirst
 
     let response = cleanProse((await generateText(prompt, { model: draftModel(), maxTokens: 500 })).trim());
     response = (await reviseForCadence(response, { surface: 'prose' })).text;
-    res.json({ response, length: response.length, recipient: { source: 'ta', id, name }, inmail: true });
+    res.json({ response, length: response.length, recipient: { source: 'ta', id, name }, inmail: !connected });
   } catch (err) {
     console.error('Error generating follow-up message:', err);
     res.status(500).json({ error: err.message });
