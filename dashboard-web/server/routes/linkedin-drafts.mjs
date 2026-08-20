@@ -406,6 +406,7 @@ HARD RULES:
 - ${thread.recentPitch ? 'Do NOT dump a full proof point the thread already covered; at most add ONE new specific detail not previously mentioned.' : `Then give one concrete proof point about ${idn.firstName} from the CV or portfolio that makes him worth a reply.`}
 - Close with ONE clear, low-friction ask: a quick reply, or being pointed to the right person for the relevant role. Do NOT ask for a call, a chat, a quick call, time on their calendar, or "15/20/30 minutes" — everyone is busy and a meeting ask reads as tone-deaf. Not a hard pitch.
 - Length: ${thread.recentPitch ? '40 to 70 words. A nudge is short by design.' : '90 to 150 words. Longer than a connection note but still tight.'} Never a wall of text.
+- STRUCTURE: write the body as ${thread.recentPitch ? '1 to 2 very short paragraphs' : '2 or 3 short paragraphs'} separated by a BLANK LINE (a literal double newline, \\n\\n, between paragraphs). It must be easy to scan on a phone. Do NOT return one dense block of text.
 - NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
 - BANNED phrasings, they read as needy and get the message deleted: "haven't heard back", "never heard back", "which is fine", "I know you are busy", "just following up", "circling back", "wanted to reconnect", "sorry to bother", "I hope this finds you well", "quick question", "pick your brain", and any apology for writing.
 - End with a sign-off line: "Thanks, ${idn.firstName}".
