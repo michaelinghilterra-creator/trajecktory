@@ -143,7 +143,7 @@ function InsightsBody({ apps: rawApps, onOpen }) {
           <div className="sub">
             {insights?.generated_at
               ? <>Last analysis <InsAge iso={insights.generated_at} /> · across {insights.pipeline_size ?? 0} entries{insights.model ? ` · ${insights.model}` : ''}</>
-              : <>Run a Claude-powered synthesis across every tab: pipeline, follow-ups, TA, recruiters, LinkedIn.</>}
+              : <>Run a Claude-powered synthesis across every tab: pipeline, follow-ups, TA, LinkedIn.</>}
           </div>
         </div>
         <div className="act">
@@ -175,7 +175,7 @@ function InsightsBody({ apps: rawApps, onOpen }) {
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>No analysis yet.</div>
           <div className="dim" style={{ fontSize: 12, lineHeight: 1.55 }}>
             Click <b>Generate Analysis</b> and Claude will read your full pipeline ({apps.length} entries),
-            stale touchpoints, TA Outreach, recruiter rolodex, and engagement data, then return a tight
+            stale touchpoints, TA Outreach, and engagement data, then return a tight
             synthesis: what's working, what's not, recommended moves, and a focus list for this week.
             Each insight cites the specific rows or signals it's based on. Re-run anytime to refresh.
           </div>
@@ -427,7 +427,6 @@ function StatStrip({ metrics, which }) {
     const ta = (metrics.topArchetypes || [])[0];
     const ts = (metrics.topSectors || [])[0];
     if (ta) cards.push(rateCard({ label: ta.archetype + ' response', conf: ta.conf, color: 'var(--green)' }));
-    if (metrics.recruiter && metrics.recruiter.sent) cards.push(rateCard({ label: 'Recruiter channel', conf: metrics.recruiter.conf, color: 'var(--green)' }));
     if (ts) cards.push(rateCard({ label: ts.sector + ' sector', conf: ts.conf, color: 'var(--green)' }));
   } else if (which === 'not') {
     if (metrics.staleTotal != null) cards.push({ label: 'Stale touchpoints', value: String(metrics.staleTotal), sub: 'awaiting follow-up', color: 'var(--yellow)' });

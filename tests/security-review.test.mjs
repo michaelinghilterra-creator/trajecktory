@@ -247,7 +247,7 @@ if (shMatch) {
 // The invariant the fix enforces across the client: no data-derived href bypasses
 // safeHref. Flag any href={ expr } whose expression references a URL-ish field but
 // does not wrap it (outputHref is the legit wrapper for generated output files).
-for (const f of ['pipeline.jsx', 'followups.jsx', 'linkedin-ssi.jsx', 'recruiters.jsx', 'target-talent.jsx', 'shared.jsx']) {
+for (const f of ['pipeline.jsx', 'followups.jsx', 'linkedin-ssi.jsx', 'target-talent.jsx', 'shared.jsx']) {
   const src = read('dashboard-web/src/' + f);
   const bad = [...src.matchAll(/href=\{([^}]+)\}/g)]
     .map((x) => x[1])

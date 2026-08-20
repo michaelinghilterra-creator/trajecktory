@@ -113,7 +113,6 @@ export async function findAndVerify(company, first, last, hkey, mkey, domain) {
 
 const FILES = {
   tt: { path: join(ROOT, 'data/target-talent.md'), emailIdx: 11, statusIdx: 13, orgIdx: 2, lastIdx: 3, firstIdx: 4 },
-  rec: { path: join(ROOT, 'data/recruiters.md'), emailIdx: 11, statusIdx: 12, orgIdx: 2, lastIdx: 3, firstIdx: 4 },
 };
 
 // Contacts worth finding an address for: no address yet, a real name and company,
@@ -192,7 +191,7 @@ async function main() {
   if (!hkey) die('HUNTER_API_KEY not set in dashboard-web/.env (finding needs Hunter).');
   if (!mkey) die('MILLIONVERIFIER_API_KEY not set in dashboard-web/.env (found addresses are verified before writing).');
 
-  const targets = fileArg === 'tt' ? ['tt'] : fileArg === 'rec' ? ['rec'] : ['tt', 'rec'];
+  const targets = ['tt'];
   let needs = [];
   for (const fk of targets) for (const c of readNeedsEmail(FILES[fk])) needs.push({ ...c, fk });
 
@@ -215,7 +214,7 @@ async function main() {
   if (creditsLeft === 0) { say('\n   ⛔ No Hunter search credits left this month — nothing looked up.'); if (JSON_OUT) console.log(JSON.stringify({ ok: true, applied: true, tally: { found_ok: 0, found_risky: 0, found_invalid: 0, not_found: 0, error: 0 }, creditsLeft: 0, backups: [] }, null, 2)); return; }
   if (!capped.length) { say('\n   Nothing to find.'); return; }
 
-  const editsByFile = { tt: new Map(), rec: new Map() };
+  const editsByFile = { tt: new Map() };
   const tally = { found_ok: 0, found_risky: 0, found_invalid: 0, not_found: 0, error: 0 };
   const log = [];
   for (const c of capped) {

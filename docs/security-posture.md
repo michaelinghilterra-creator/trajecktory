@@ -53,7 +53,7 @@ Change any of these and something real breaks.
 | Client-side scheme allow-list on every data-derived link (`window.safeHref`) | A `javascript:` / `data:` URL in a tracker cell becoming a clickable XSS sink (React does not block it) |
 | Delimiter neutralization on scanned job fields (`lib/sanitize-cell.mjs`) | An attacker-controlled title/company/url forging extra pipeline or history rows the batch evaluator then reads |
 | Deny-list sandbox on the evaluation agent | A booby-trapped job posting talking the agent into editing server code/config/secrets or reading OAuth tokens |
-| Per-contact confirmation before a bounce flip | A forged "undeliverable" quietly removing a real recruiter from outreach |
+| Per-contact confirmation before a bounce flip | A forged "undeliverable" quietly removing a real contact from outreach |
 | Secret-pattern scan in the ship gate | A committed API key or token reaching the public repo and the git-archive installer payload |
 
 ## Accepted risks, with reasoning
@@ -166,7 +166,7 @@ is [`security-review-2026-07.md`](security-review-2026-07.md).
 | C7 | Med | Table/newline delimiters neutralized in scanned job fields before write. | `scan.mjs`, `lib/sanitize-cell.mjs` |
 | C10 | Med | Liveness probe refuses non-public / loopback / metadata URLs (SSRF). | `check-liveness.mjs`, `lib/safe-url.mjs` |
 | C11 | Med | Bounce flip requires per-contact confirmation and a sent-history cross-check. Live sweep: dozens of bounces, zero flipped. | `routes/google.mjs`, `src/review.jsx` |
-| C12-14 | Med | Client scheme allow-list on every data-derived anchor href. | `src/recruiters.jsx`, `target-talent.jsx`, `pipeline.jsx`, `followups.jsx`, `linkedin-ssi.jsx`, `shared.jsx` |
+| C12-14 | Med | Client scheme allow-list on every data-derived anchor href. | `target-talent.jsx`, `pipeline.jsx`, `followups.jsx`, `linkedin-ssi.jsx`, `shared.jsx` |
 | C3 | Low | Containment on the report path in `urlFromReport`. | `lib/identity.mjs` |
 | C6 | Low | Documented unreachable in the loopback posture (folded into C5). | `server/index.mjs` |
 | C8 | Low | TSV delimiters neutralized in scan history. | `scan.mjs` |

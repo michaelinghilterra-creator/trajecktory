@@ -26,14 +26,9 @@ function check(cond, msg) {
 
 console.log('connect-queue.test.mjs');
 
-// ── Fixtures: invented TA + recruiter rows, shaped like the parser output ─────
+// ── Fixtures: invented TA rows, shaped like the parser output ─────
 const ta = (o) => ({
   id: o.id, first: o.first, last: o.last, title: o.title, company: o.company,
-  email: o.email || '', verified: { state: o.state || 'unverified' },
-  linkedin: o.linkedin || '', status: o.status, notes: o.notes || '',
-});
-const rec = (o) => ({
-  id: o.id, first: o.first, last: o.last, title: o.title, firm: o.firm,
   email: o.email || '', verified: { state: o.state || 'unverified' },
   linkedin: o.linkedin || '', status: o.status, notes: o.notes || '',
 });
@@ -93,35 +88,21 @@ const apps = [
   { company: 'Cobalt Systems',     status: 'Phone Screen' }, // past Applied, still live
   { company: 'Aster Grid',         status: 'Applied' },
   { company: 'Meridian AI',        status: 'Applied' },
-  { company: 'Halcyon Partners',   status: 'Applied' },
   { company: 'Solstice Data',      status: 'Applied' },       // ta:9 excluded by status, not gate
   { company: 'Nimbus Health',      status: 'Evaluated' },     // ta:10 excluded by the gate (pre-application)
   { company: 'Ridgeline Legal',    status: 'Rejected' },      // ta:11 excluded by the gate (dead opportunity)
 ];
 
-const recruiterRows = [
-  // risky (catch-all) counts as sendable → email motion, NOT the queue
-  rec({ id: 101, first: 'Pat', last: 'Lindqvist', title: 'Partner', firm: 'Keystone Search',
-        email: 'pat@keystone.example', state: 'risky',
-        linkedin: 'linkedin.com/in/pat-lindqvist-ex', status: 'Sent' }),
-  // invalid mailbox + LinkedIn → IN the queue, company drawn from `firm`
-  rec({ id: 102, first: 'Robin', last: 'Achebe', title: 'Managing Director', firm: 'Halcyon Partners',
-        email: 'robin@halcyon.example', state: 'invalid',
-        linkedin: 'linkedin.com/in/robin-achebe-ex', status: 'Dormant' }),
-];
-
 // ── computeConnectQueue ──────────────────────────────────────────────────────
-const q = computeConnectQueue({ taRows, recruiterRows, apps });
+const q = computeConnectQueue({ taRows, apps });
 const ids = q.map(r => `${r.source}:${r.id}`);
 
-check(q.length === 5, `queue holds exactly the 5 reachable-only contacts (got ${q.length})`);
+check(q.length === 4, `queue holds exactly the 4 reachable-only contacts (got ${q.length})`);
 check(ids.includes('ta:2'), 'bounced-email TA contact with LinkedIn is queued');
 check(ids.includes('ta:3'), 'unverified-email TA contact with LinkedIn is queued');
 check(ids.includes('ta:7'), 'org-blocked TA contact with LinkedIn is queued');
 check(ids.includes('ta:8'), 'no-email TA contact with only a LinkedIn handle is queued');
-check(ids.includes('recruiter:102'), 'invalid-email recruiter with LinkedIn is queued');
 check(!ids.includes('ta:1'), 'contact with a verified email is NOT queued (email motion)');
-check(!ids.includes('recruiter:101'), 'recruiter with a risky-but-sendable email is NOT queued');
 check(!ids.includes('ta:4'), 'already-Connected contact is NOT queued');
 check(!ids.includes('ta:5'), 'Archived (dead-opp) contact is NOT queued');
 check(!ids.includes('ta:6'), 'contact with no LinkedIn handle is NOT queued');
@@ -129,10 +110,6 @@ check(!ids.includes('ta:9'), 'contact whose invite already went out (status Sent
 check(!ids.includes('ta:10'), 'contact at an Evaluated-only company is NOT queued (must have applied)');
 check(!ids.includes('ta:11'), 'contact at an applied-then-Rejected company is NOT queued (opportunity is dead)');
 
-const robin = q.find(r => r.id === 102);
-check(robin && robin.company === 'Halcyon Partners', 'recruiter company is taken from `firm`');
-check(robin && robin.source === 'recruiter', 'recruiter source tagged');
-check(robin && robin.emailState === 'invalid', 'emailState carries why they landed here');
 const reese = q.find(r => r.id === 2);
 check(reese && reese.name === 'Reese Calder', 'name assembled from first + last');
 
@@ -145,14 +122,13 @@ const alex = q.find(r => r.id === 3);
 check(alex && alex.hasEmail === true && alex.emailState === 'unverified',
   'unverified-email contact has hasEmail=true with emailState "unverified"');
 check(reese && reese.hasEmail === true, 'bounced-email contact still has an address on file (hasEmail=true)');
-check(robin && robin.hasEmail === true, 'invalid-email recruiter still has an address on file (hasEmail=true)');
 
 // sorted by company, then name
 check(q[0].company === 'Aster Grid', `sorted by company first (got "${q[0].company}")`);
 check(q[q.length - 1].company === 'Northwind Robotics', 'sort puts Northwind last');
 
 // empty input is safe
-check(computeConnectQueue({ taRows: [], recruiterRows: [] }).length === 0, 'empty rows → empty queue');
+check(computeConnectQueue({ taRows: [] }).length === 0, 'empty rows → empty queue');
 
 // ── channelFor: the corrected unverified-is-not-a-channel rule ────────────────
 check(channelFor('Brightwave Labs', taRows) === 'email', 'verified email → email channel');

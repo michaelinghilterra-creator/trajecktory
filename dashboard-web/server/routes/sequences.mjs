@@ -25,7 +25,7 @@ import {
 
 export const router = express.Router();
 
-const VALID_SOURCES = new Set(['ta', 'recruiter']);
+const VALID_SOURCES = new Set(['ta']);
 
 function parseContact(req, res) {
   const { source, id } = req.params;

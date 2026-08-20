@@ -108,7 +108,7 @@ server (`server/index.mjs`) that reads the same `data/applications.md` tracker
 (`build.mjs`). It is the single dashboard surface.
 
 - Pipeline view with filtering, sorting, and per-application drawers
-- Report viewer, follow-up cadence, recruiter CRM, and coaching analytics
+- Report viewer, follow-up cadence, contact CRM, and coaching analytics
 - A Launchpad onboarding tab and a headless runner that can spawn `claude -p`
 - `DEMO=1` repoints all paths to `data/demo` for safe demos
 - Runs locally only: binds `127.0.0.1` and requires a per-session token on

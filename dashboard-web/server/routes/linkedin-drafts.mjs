@@ -8,7 +8,8 @@ import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { loadInfluencer, toneInstruction, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine, readTTCorrespondence } from '../lib/target-talent.mjs';
-import { parseRecruitersMd, updateRecruiterLine, readRecruiterCorrespondence } from '../lib/recruiters.mjs';
+import { getLinkedInStatus } from '../lib/tt-linkedin.mjs';
+import { summarizeThread } from '../lib/correspondence-context.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
 import { getInmailBudget, decrementInmail, setInmailRemaining } from '../lib/inmail-budget.mjs';
@@ -229,7 +230,7 @@ Return ONLY the body of the connection note, ready to paste into LinkedIn. No qu
 
 // GET /api/linkedin-drafts/connect-queue — contacts reachable only via LinkedIn
 // (a real handle, no sendable email): the fallback outreach lane for people whose
-// address bounced, is org-blocked, or was never verifiable. Spans TA + recruiters.
+// address bounced, is org-blocked, or was never verifiable. TA contacts.
 router.get('/api/linkedin-drafts/connect-queue', (req, res) => {
   try {
     res.json({ queue: computeConnectQueue() });
@@ -241,7 +242,7 @@ router.get('/api/linkedin-drafts/connect-queue', (req, res) => {
 
 // POST /api/linkedin-drafts/connect-note — draft a <=300-char LinkedIn connection
 // note for a GENERIC recipient. Pass { source, id } to draft for a queue member
-// (TA or recruiter), or raw { name, role, company, reason, firstName } for an
+// (a TA contact), or raw { name, role, company, reason, firstName } for an
 // ad-hoc contact. Raw fields override the resolved row. The note is always the
 // user's to review and send; nothing is sent from here.
 router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
@@ -258,6 +259,25 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       // resolve here too, not only from the connect queue.
       const queue = [...computeConnectQueue(), ...computeBothQueue()];
       resolved = queue.find(r => r.source === source && String(r.id) === String(id)) || null;
+      // Defensive fallback: a valid source+id that isn't in either queue (e.g. a
+      // contact whose company isn't a live application, so it's filtered out) would
+      // otherwise 400 below with an empty name. Read the contact row directly so we
+      // can always resolve a recipient. The frontend already routes already-invited
+      // contacts to /followup-message, so anything reaching here is a genuine
+      // first-touch connect note; this only prevents a hard 400 on an edge case.
+      if (!resolved) {
+        const rows = parseTargetTalentMd();
+        const row = rows.find(r => String(r.id) === String(id));
+        if (row) resolved = {
+          source,
+          id: row.id,
+          name: `${row.first || ''} ${row.last || ''}`.trim(),
+          firstName: row.first || '',
+          role: row.title || '',
+          company: row.company || '',
+          reason: '',
+        };
+      }
     }
     const name            = (body.name    || resolved?.name    || '').trim();
     const recipientRole   = (body.role    || resolved?.role    || '').trim();
@@ -279,14 +299,11 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     const cvExcerpt = portfolioSnippet + (cvMd ? cvMd.slice(0, 3500) : '(CV not available)');
     const idn = getIdentity();
 
-    // Source-specific "why connect" anchor. External recruiters place GTM / RevOps
-    // leaders, so a credible-operator signal is appropriate; TA leads are peers.
+    // "Why connect" anchor for a TA / gatekeeper contact: a fellow-operator framing.
     const angleHint = angle ? ` (${angle})` : '';
     const guidance = reason
       ? `Anchor on this specific context${angleHint}: ${reason}`
-      : src === 'recruiter'
-        ? `${idn.firstName} is a Director / Senior Director Revenue Operations and analytics leader. ${name}${recipientCompany ? ` at ${recipientCompany}` : ''} places GTM / RevOps leaders. Connect as a credible operator worth knowing for current and future searches${angleHint}; professional, not desperate.`
-        : `Anchor on ${name}'s work${recipientRole ? ` as ${recipientRole}` : ''}${recipientCompany ? ` at ${recipientCompany}` : ''} and on ${idn.firstName} being a fellow operator in the GTM / RevOps / analytics space, not a job seeker${angleHint}.`;
+      : `Anchor on ${name}'s work${recipientRole ? ` as ${recipientRole}` : ''}${recipientCompany ? ` at ${recipientCompany}` : ''} and on ${idn.firstName} being a fellow operator in the GTM / RevOps / analytics space, not a job seeker${angleHint}.`;
 
     const buildPrompt = (targetMax) => buildConnectPrompt({
       senderName: idn.fullName, senderFirst: idn.firstName, senderHeadline: idn.headline,
@@ -313,54 +330,68 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
 // note: the invite is already out, so a follow-up is a real message (an InMail
 // while you are not connected, a free DM once they accept). It reads the prior
 // correspondence so it acknowledges the earlier touch instead of repeating it,
-// and for a TA / recruiter contact it leads with candidacy (interest in their
+// and for a TA contact it leads with candidacy (interest in their
 // company) plus one clear ask. Longer than the 300-char connect cap. The message
 // is always the user's to review and send; nothing is sent from here.
 router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
   try {
     const body = req.body || {};
-    const { source, id } = body;
-    if (id == null) return res.status(400).json({ error: 'A contact source and id are required.' });
-    const src = source === 'recruiter' ? 'recruiter' : 'ta';
-    const rows = src === 'recruiter' ? parseRecruitersMd() : parseTargetTalentMd();
+    const { id } = body;
+    if (id == null) return res.status(400).json({ error: 'A contact id is required.' });
+    const rows = parseTargetTalentMd();
     const row = rows.find(r => String(r.id) === String(id));
     if (!row) return res.status(404).json({ error: 'Contact not found.' });
 
     const name = `${row.first || ''} ${row.last || ''}`.trim() || (body.name || '').trim();
     const recipientFirst = row.first || name.split(/\s+/)[0] || 'there';
     const recipientRole = row.title || '';
-    const company = (src === 'recruiter' ? row.firm : row.company) || '';
+    const company = row.company || '';
+    // The invite ACCEPTED case (LinkedIn axis 'Connected') is a different message
+    // than a still-pending one: it is a free DM to a new 1st-degree connection, and
+    // it must NOT claim the invite is unanswered or ask if it arrived.
+    const connected = getLinkedInStatus(Number(id)) === 'Connected';
 
     // Prior 1:1 history with THIS contact, so the message names the earlier connect
     // (and when) and never repeats it. Cap the tail so the prompt stays bounded.
-    const corr = ((src === 'recruiter' ? readRecruiterCorrespondence : readTTCorrespondence)(Number(id)) || []);
+    const corr = (readTTCorrespondence(Number(id)) || []);
     const sent = corr.filter(m => m.direction === 'Sent');
     const firstTouchDate = (sent[0]?.timestamp || row.lastTouch || '').slice(0, 10);
-    const history = corr.slice(-3)
-      .map(m => `- ${(m.timestamp || '').slice(0, 10)} [${m.direction}] ${m.subject ? m.subject + ': ' : ''}${(m.body || '').replace(/\s+/g, ' ').slice(0, 140)}`)
-      .join('\n') || '- A LinkedIn connection request that has not been accepted or answered.';
+    // Full-thread state: whether a substantive message already went out recently
+    // and is unanswered, so the prompt writes a nudge instead of re-pitching.
+    const thread = summarizeThread(corr);
+    const history = thread.threadBlock || (connected
+      ? '- A LinkedIn connection request that they ACCEPTED, so you are now connected.'
+      : '- A LinkedIn connection request that has not been accepted or answered.');
 
     let cvMd = ''; try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
     let articleDigestMd = ''; try { articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md'); } catch {}
     const cvExcerpt = (articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 900)}\n\nCV:\n` : '') + (cvMd ? cvMd.slice(0, 3200) : '(CV not available)');
     const idn = getIdentity();
 
-    const purpose = src === 'recruiter'
-      ? `${name} is an external recruiter${company ? ` at ${company}` : ''} who places GTM, RevOps and analytics leaders. The goal is to be known as a credible candidate worth representing, for current and future searches.`
-      : `${name} works in Talent Acquisition or recruiting${company ? ` at ${company}` : ''}. ${idn.firstName} is genuinely interested in ${company || 'their company'} and has applied there (or is about to). The goal is candidacy: get on ${recipientFirst}'s radar as a strong fit and open a short conversation.`;
+    const purpose = `${name} works in Talent Acquisition or recruiting${company ? ` at ${company}` : ''}. ${idn.firstName} is genuinely interested in ${company || 'their company'} and has applied there (or is about to). The goal is candidacy: get on ${recipientFirst}'s radar as a strong fit and a name worth a reply.`;
 
-    const prompt = `You are drafting a brief LinkedIn FOLLOW-UP MESSAGE (an InMail) from ${idn.fullName} to a contact he ALREADY sent a connection request to${firstTouchDate ? ` on ${firstTouchDate}` : ''}. That request has not been accepted or answered.
+    const prompt = `You are drafting a brief LinkedIn ${connected ? 'DIRECT MESSAGE (a free DM)' : 'FOLLOW-UP MESSAGE (an InMail)'} from ${idn.fullName} to ${connected
+      ? `a contact he is now CONNECTED with on LinkedIn: they ACCEPTED his connection request${firstTouchDate ? ` (invite sent ${firstTouchDate})` : ''}, so this is the first real message in a brand-new 1st-degree connection.`
+      : `a contact he ALREADY sent a connection request to${firstTouchDate ? ` on ${firstTouchDate}` : ''}. That request has not been accepted or answered.`}
 
-THIS IS NOT A NEW CONNECTION REQUEST. The invite is already out, so do not write "I would like to connect" or restate it. Write the NEXT message: a real, purposeful note that moves things forward.
+${connected
+  ? 'YOU ARE ALREADY CONNECTED. The invite was accepted, so do NOT say you sent a request, do NOT ask whether it arrived, and do NOT imply the connection is still pending. A short, warm nod to having just connected is fine; then go to the real reason for writing.'
+  : 'THIS IS NOT A NEW CONNECTION REQUEST. The invite is already out, so do not write "I would like to connect" or restate it. Write the NEXT message: a real, purposeful note that moves things forward.'}
 
 THE RECIPIENT:
 - Name: ${name}
 - Their role: ${recipientRole || '(unknown)'}
 - Company: ${company || '(unknown)'}
 
-WHAT ALREADY WENT OUT (for YOUR context only, so you never repeat it. Do NOT open with it, and do NOT dwell on the lack of a reply):
+THE THREAD SO FAR (most recent last). Read it: never repeat a point, proof, or ask already made here, and do NOT open by narrating it or dwelling on the lack of a reply:
 ${history}
 
+THREAD STATE: ${thread.stateLine}
+${thread.recentPitch ? `
+NUDGE MODE (a substantive message already went out recently and is unanswered):
+- Write a SHORT nudge, not a new pitch. Do NOT reintroduce ${idn.firstName}, do NOT restate proof points already in the thread, and do NOT repeat the earlier ask word for word.
+- Reference the earlier note lightly and specifically, naming what it was about using the role/company from the thread above (e.g. "following up on my note from ${thread.lastSub ? String(thread.lastSub.timestamp).slice(0, 10) : 'the other day'} about the role at ${company || 'their company'}"). Do NOT use the bare, needy "just following up"; the reference must name the prior topic. Then add exactly ONE new, specific thing: a fresh detail, a relevant update, or a lighter, human touch. If there is genuinely nothing new to add, keep it to a one or two sentence friendly bump.
+` : ''}
 THE PURPOSE:
 ${purpose}
 
@@ -368,11 +399,14 @@ ABOUT ${idn.firstName.toUpperCase()} (ground the message in this, never copy ver
 ${cvExcerpt}
 
 HARD RULES:
-- Open with "Hi ${recipientFirst}," then go STRAIGHT to the real reason for writing: specific interest in ${company || 'their company'} and that ${idn.firstName} applied there. Lead with intent and value, in a confident tone.
-- Do NOT open by mentioning the earlier message, and NEVER say you "have not heard back" or that the silence is "fine". Being ignored is not the story; the candidacy is. If you reference the prior connection request at all, make it a brief, confident half-clause in the MIDDLE (for example, "I also sent a connection request recently, but wanted to reach you directly"), never an apology and never an opener.
-- Then give one concrete proof point about ${idn.firstName} from the CV or portfolio that makes him worth a reply.
-- Close with ONE clear, low-friction ask: a brief chat, or being pointed to the right person for the relevant role. Not a hard pitch.
-- Length: 90 to 150 words. An InMail is longer than a connection note but still tight. Never a wall of text.
+- Open with "Hi ${recipientFirst}," then ${connected ? 'optionally one short warm clause about having just connected, then ' : ''}go to the real reason for writing: specific interest in ${company || 'their company'} and that ${idn.firstName} applied there. Lead with intent and value, in a confident tone.
+- ${connected
+    ? 'You are ALREADY connected, so NEVER say you "sent a connection request", "wanted to make sure this reached you", "reach you directly", or reference a pending or unanswered invite in any way. Treat the connection as established.'
+    : 'Do NOT open by mentioning the earlier message, and NEVER say you "have not heard back" or that the silence is "fine". Being ignored is not the story; the candidacy is. If you reference the prior connection request at all, make it a brief, confident half-clause in the MIDDLE (for example, "I also sent a connection request recently, but wanted to reach you directly"), never an apology and never an opener.'}
+- ${thread.recentPitch ? 'Do NOT dump a full proof point the thread already covered; at most add ONE new specific detail not previously mentioned.' : `Then give one concrete proof point about ${idn.firstName} from the CV or portfolio that makes him worth a reply.`}
+- Close with ONE clear, low-friction ask: a quick reply, or being pointed to the right person for the relevant role. Do NOT ask for a call, a chat, a quick call, time on their calendar, or "15/20/30 minutes" — everyone is busy and a meeting ask reads as tone-deaf. Not a hard pitch.
+- Length: ${thread.recentPitch ? '40 to 70 words. A nudge is short by design.' : '90 to 150 words. Longer than a connection note but still tight.'} Never a wall of text.
+- STRUCTURE: write the body as ${thread.recentPitch ? '1 to 2 very short paragraphs' : '2 or 3 short paragraphs'} separated by a BLANK LINE (a literal double newline, \\n\\n, between paragraphs). It must be easy to scan on a phone. Do NOT return one dense block of text.
 - NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
 - BANNED phrasings, they read as needy and get the message deleted: "haven't heard back", "never heard back", "which is fine", "I know you are busy", "just following up", "circling back", "wanted to reconnect", "sorry to bother", "I hope this finds you well", "quick question", "pick your brain", and any apology for writing.
 - End with a sign-off line: "Thanks, ${idn.firstName}".
@@ -382,7 +416,7 @@ Return ONLY the message text, ready to paste, including the "Hi ${recipientFirst
 
     let response = cleanProse((await generateText(prompt, { model: draftModel(), maxTokens: 500 })).trim());
     response = (await reviseForCadence(response, { surface: 'prose' })).text;
-    res.json({ response, length: response.length, recipient: { source: src, id, name }, inmail: true });
+    res.json({ response, length: response.length, recipient: { source: 'ta', id, name }, inmail: !connected });
   } catch (err) {
     console.error('Error generating follow-up message:', err);
     res.status(500).json({ error: err.message });
@@ -401,14 +435,13 @@ router.post('/api/linkedin-drafts/archive-contact', (req, res) => {
     const reasonText = ARCHIVE_REASONS[reason];
     if (!source || id == null) return res.status(400).json({ error: 'source and id are required.' });
     if (!reasonText) return res.status(400).json({ error: `reason must be one of: ${Object.keys(ARCHIVE_REASONS).join(', ')}` });
-    const isRec = source === 'recruiter';
-    const rows = isRec ? parseRecruitersMd() : parseTargetTalentMd();
+    const rows = parseTargetTalentMd();
     const row = rows.find(r => String(r.id) === String(id));
     if (!row) return res.status(404).json({ error: 'Contact not found.' });
     const date = new Date().toISOString().slice(0, 10);
     const existing = (row.notes || '').trim();
     const notes = `${existing ? existing + ' · ' : ''}Archived ${date}: ${reasonText}`;
-    const ok = (isRec ? updateRecruiterLine : updateTTLine)(Number(id), { status: 'Archived', notes });
+    const ok = updateTTLine(Number(id), { status: 'Archived', notes });
     if (!ok) return res.status(404).json({ error: 'Contact not found.' });
     res.json({ ok: true, status: 'Archived', reason: reasonText });
   } catch (err) {

@@ -37,7 +37,6 @@ import { parseApplicationsMd } from './applications.mjs';
 import { readApplyDates, parseStatusEvents } from './sidecars.mjs';
 import { parseFollowupsMd } from './followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence } from './target-talent.mjs';
-import { parseRecruitersMd, readRecruiterCorrespondence } from './recruiters.mjs';
 import { isLinkedInEntry } from './channels.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
 import { appReached, isInterviewStage } from './statuses.mjs';
@@ -222,7 +221,6 @@ export function buildActivities({ from, to } = {}) {
   // the report reflect ALL outreach automatically, no manual cross-log required.
   const books = [
     { rows: safe(parseTargetTalentMd, []) || [], read: readTTCorrespondence, companyOf: (r) => r.company },
-    { rows: safe(parseRecruitersMd, []) || [], read: readRecruiterCorrespondence, companyOf: (r) => r.firm },
   ];
   for (const book of books) {
     for (const c of book.rows) {

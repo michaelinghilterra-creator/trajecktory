@@ -60,8 +60,6 @@ export const CONNECTS_PATH = path.join(DATA_DIR, 'linkedin-connects.json');
 // Activation log: how long setup took and whether the first scan and first apply
 // actually produced anything. Opt-in, local, and shape-only (see lib/activation.mjs).
 export const ACTIVATION_PATH = path.join(DATA_DIR, 'activation-log.tsv');
-export const RECRUITERS_MD = path.join(DATA_DIR, 'recruiters.md');
-export const RECRUITER_CORR_DIR = path.join(DATA_DIR, 'recruiter-correspondence');
 export const REFERRALS_MD = path.join(DATA_DIR, 'referrals.md');
 // Per-referral correspondence, only used for referrals with NO TA/recruiter twin.
 // A linked referral reuses the twin's correspondence dir (see routes/referrals.mjs

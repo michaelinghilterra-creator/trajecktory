@@ -213,19 +213,17 @@ const CHAPTERS = [
     body: (
       <>
         <p className="dg-lead">The <b>Contacts</b> tab is every person in one place, because the people around a role
-        matter as much as the role. <b>All contacts</b> is one table across all three books with a type filter; the
-        Referrals, TA Outreach, and Recruiters subtabs keep each book's own tools. Every message here is AI-drafted
+        matter as much as the role. <b>All contacts</b> is one table across both books with a type filter; the
+        Referrals and TA Outreach subtabs keep each book's own tools. Every message here is AI-drafted
         in your voice and fully editable before it goes.</p>
-        <Shot src="network-referrals.png" alt="Contacts: Referrals, TA Outreach, and Recruiters"
-          caption="Contacts holds three related lists in one table. Each is a person, not a form: warm intros, internal contacts, and external recruiters." />
+        <Shot src="network-referrals.png" alt="Contacts: Referrals and TA Outreach"
+          caption="Contacts holds two related lists in one table. Each is a person, not a form: warm intros and internal contacts." />
         <ul>
           <li><b>Referrals</b> is your warm channel, built from your LinkedIn connections. It splits into
           <b> Stage 1</b> (people already inside a company you are pursuing) and <b>Stage 2</b> (your wider
           referrer pool). A warm intro beats a cold application every time.</li>
           <li><b>TA Outreach</b> is the in-network talent-acquisition contacts: a real person at the company,
           reached warmly, not a portal.</li>
-          <li><b>Recruiters</b> is the external-recruiter CRM: the relationships that surface roles you would
-          never have found.</li>
         </ul>
         <Tip>Import your LinkedIn connections once and trajecktory reconciles them into the Referrals channel,
         flagging who sits inside a company you already track. That is where Stage 1 comes from.</Tip>

@@ -61,8 +61,7 @@ const apps = [
   { company: 'Aster Grid',         status: 'Applied' },
   { company: 'Meridian AI',        status: 'Applied' },
 ];
-const recruiterRows = [];
-const opts = { taRows, recruiterRows, apps };
+const opts = { taRows, apps };
 
 const q = computeFollowupQueue(opts);
 const byId = Object.fromEntries(q.map(r => [`${r.source}:${r.id}`, r]));

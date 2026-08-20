@@ -30,7 +30,6 @@ import fs from 'fs';
 import { BUILD_FLOOR_PATH } from '../config.mjs';
 import { FLOORS } from './review-thresholds.mjs';
 import { parseTargetTalentMd, readTTCorrespondence } from './target-talent.mjs';
-import { parseRecruitersMd, readRecruiterCorrespondence } from './recruiters.mjs';
 
 export const WINDOW_WORKING_DAYS = 5;
 export const GRACE_WORKING_DAYS = 3;
@@ -157,7 +156,6 @@ export function gatherSentTouchDates() {
   const dates = [];
   const add = (msgs) => { for (const m of (msgs || [])) if (m.direction === 'Sent' && m.timestamp) dates.push(String(m.timestamp).slice(0, 10)); };
   try { for (const c of parseTargetTalentMd()) add(readTTCorrespondence(c.id)); } catch { /* apps-only env */ }
-  try { for (const r of parseRecruitersMd()) add(readRecruiterCorrespondence(r.id)); } catch { /* apps-only env */ }
   return dates;
 }
 

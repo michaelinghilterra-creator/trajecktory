@@ -24,13 +24,13 @@ function snoozeToday() { return localYmd(); }
 function snoozeDateIn(days) { const d = new Date(); d.setDate(d.getDate() + days); return localYmd(d); }
 
 // All source buckets the snooze store tracks. Adding a new contact source
-// (e.g. 'recruiter') means adding it here and nowhere else: read/write/prune
+// means adding it here and nowhere else: read/write/prune
 // all iterate this list, so the file schema stays in sync automatically.
 // 'contactless' defers the "find a contact" nudge for an applied company that
 // has no reachable contact (e.g. a company you checked and confirmed has none).
 // It is a SEPARATE bucket from 'app' on purpose: muting the find-a-contact nudge
 // must not also suppress that application's own stale follow-up.
-const _SNOOZE_BUCKETS = ['app', 'ta', 'recruiter', 'contactless'];
+const _SNOOZE_BUCKETS = ['app', 'ta', 'contactless'];
 
 function readSnooze() {
   try {

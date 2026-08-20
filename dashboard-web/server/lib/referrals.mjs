@@ -77,7 +77,7 @@ function emailCell(r) {
 }
 
 // Append one or more referral rows. Auto-assigns the next sequential id; creates
-// the file with a header if missing. Mirrors appendRecruiterRows.
+// the file with a header if missing. Mirrors the target-talent row appender.
 function appendReferralRows(rows) {
   if (!rows || !rows.length) return [];
   if (!fs.existsSync(REFERRALS_MD)) fs.writeFileSync(REFERRALS_MD, REFERRAL_HEADER, 'utf8');

@@ -1,6 +1,6 @@
-// Shared, dependency-free CSV parsing for the TA Outreach + Recruiters bulk
-// importers. One header-mapped parser and one downloadable template, used by
-// both /api/tt-reconcile/* and /api/recruiters/*. The "Excel floor" for
+// Shared, dependency-free CSV parsing for the TA Outreach bulk importer.
+// One header-mapped parser and one downloadable template, used by
+// /api/tt-reconcile/*. The "Excel floor" for
 // non-power users: hand-enter contacts in a spreadsheet, save as CSV, upload.
 
 export function parseCsvLine(line) {

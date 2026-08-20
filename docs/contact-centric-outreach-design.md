@@ -43,7 +43,7 @@ Grounded in `dashboard-web/server/lib/followups.mjs` and related files:
   requires one. `channelFor()` picks a single best channel, email over LinkedIn.
   **Consequence: a contact who has BOTH an email and a LinkedIn is worked on email
   only, never also on LinkedIn.**
-- **Contact books:** `target-talent.md`, `recruiters.md`, `referrals`. Each row
+- **Contact books:** `target-talent.md`, `referrals`. Each row
   can carry a LinkedIn handle and/or a verified email. Per-contact touch history
   already exists as correspondence logs (direction Sent/Received).
 - **TA discovery** (`tt-reconcile discover`) searches for *"Internal Talent
@@ -108,7 +108,7 @@ anyone else at the company.
 
 ### 6. Hiring-principal contact type + discovery
 A new contact type for **the person you would report to** (the VP/Director of the
-target function), distinct from the recruiter/TA gatekeeper. Discovery aims at
+target function), distinct from the TA gatekeeper. Discovery aims at
 "who leads {function} at {company}," not "who recruits there." This is the move
 that reportedly works: put the decision-maker in the CRM, reach out, and demo.
 Hiring principals are prime bucket-3 / high-priority candidates.
@@ -139,7 +139,7 @@ this mirrors the "demo, don't describe" move that reportedly lands hires.
   independent cadence clocks in the bucket-3 case (email thread, LinkedIn thread).
 - **A `priority` signal on contacts** (or a derived "is hiring principal / warm")
   decides who is eligible for the bucket-3 double-touch.
-- **A new hiring-principal contact type** alongside recruiter / target-talent /
+- **A new hiring-principal contact type** alongside target-talent /
   referral, with its own discovery prompt.
 - **Sequence state** (which step a contact is on, next scheduled draft date,
   paused/active) persisted per contact per channel.
@@ -151,7 +151,7 @@ this mirrors the "demo, don't describe" move that reportedly lands hires.
   engine; `computeConnectQueue`/`computeEmailQueue` stop being mutually exclusive
   for bucket-3 high-priority contacts; `channelFor` stops being single-best-channel
   for those.
-- `statuses.mjs`: the contact ladders (recruiter/talent/referral) may gain a
+- `statuses.mjs`: the contact ladders (talent/referral) may gain a
   hiring-principal ladder or a priority flag.
 - `tt-reconcile.mjs` discover: a second discovery prompt aimed at the functional
   leader, not TA.

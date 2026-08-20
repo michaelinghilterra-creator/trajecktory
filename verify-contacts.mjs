@@ -113,7 +113,6 @@ async function hunterCredits(key) {
 
 const FILES = {
   tt: { path: join(ROOT, 'data/target-talent.md'), emailIdx: 11, statusIdx: 13, orgIdx: 2 },
-  rec: { path: join(ROOT, 'data/recruiters.md'), emailIdx: 11, statusIdx: 12, orgIdx: 2 },
 };
 
 // Warm contacts first, so a --limit run spends credits on the people most likely
@@ -196,7 +195,7 @@ async function main() {
   const verifyOne = source === 'mv' ? mvVerify : hunterVerify;
   const getCredits = source === 'mv' ? mvCredits : hunterCredits;
 
-  const targets = fileArg === 'tt' ? ['tt'] : fileArg === 'rec' ? ['rec'] : ['tt', 'rec'];
+  const targets = ['tt'];
   let candidates = [];
   for (const fk of targets) for (const c of readCandidates(FILES[fk], { force: FORCE })) candidates.push({ ...c, fk });
   candidates.sort((a, b) => (STATUS_PRIORITY[b.status] ?? 1) - (STATUS_PRIORITY[a.status] ?? 1) || a.id - b.id);
@@ -217,7 +216,7 @@ async function main() {
 
   // Verify sequentially (gentle on rate limits). Errors are skipped, not written,
   // so a re-run picks them up; a few wasted credits beats a bad write.
-  const editsByFile = { tt: new Map(), rec: new Map() };
+  const editsByFile = { tt: new Map() };
   const tally = { ok: 0, risky: 0, invalid: 0, error: 0 };
   const runnable = credits != null ? capped.slice(0, credits) : capped;
   for (let i = 0; i < runnable.length; i++) {

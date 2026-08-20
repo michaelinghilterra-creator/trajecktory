@@ -8,7 +8,7 @@
  *   - googleStatus: connection facts, scope parsing, no secrets.
  *   - parseGmailMessage / extractEmail: header + base64url body extraction.
  *   - classifyReply: positive / negative / neutral heuristics.
- *   - matchAddress: exact email match to a TA or recruiter row.
+ *   - matchAddress: exact email match to a TA row.
  *   - scanDecisions: hard bounce → flip, soft bounce → no flip, reply routing.
  *
  * Run: node tests/google.test.mjs   (exit 0 = pass, 1 = fail)
@@ -173,11 +173,13 @@ check(classifyReply({ text: 'Thanks for the note, will review and circle back.' 
 check(classifyReply({ subject: 'we interviewed many strong candidates', text: 'unfortunately not a fit' }) === 'negative', 'negative wins over an interview-ish word');
 
 // ── matchAddress ─────────────────────────────────────────────────────────────
-const taRows = [{ id: 2, first: 'Reese', last: 'Calder', company: 'Northwind Robotics', email: 'reese.calder@northwind.example' }];
-const recruiterRows = [{ id: 101, first: 'Pat', last: 'Lindqvist', firm: 'Keystone Search', email: 'pat@keystone.example' }];
-check(matchAddress('PAT@keystone.example', { taRows, recruiterRows })?.source === 'recruiter', 'recruiter matched case-insensitively');
-check(matchAddress('reese.calder@northwind.example', { taRows, recruiterRows })?.company === 'Northwind Robotics', 'TA match carries company');
-check(matchAddress('nobody@unknown.example', { taRows, recruiterRows }) === null, 'unknown sender → no match');
+const taRows = [
+  { id: 2, first: 'Reese', last: 'Calder', company: 'Northwind Robotics', email: 'reese.calder@northwind.example' },
+  { id: 101, first: 'Pat', last: 'Lindqvist', company: 'Keystone Search', email: 'pat@keystone.example' },
+];
+check(matchAddress('PAT@keystone.example', { taRows })?.source === 'ta', 'contact matched case-insensitively');
+check(matchAddress('reese.calder@northwind.example', { taRows })?.company === 'Northwind Robotics', 'TA match carries company');
+check(matchAddress('nobody@unknown.example', { taRows }) === null, 'unknown sender → no match');
 
 // ── scanDecisions ────────────────────────────────────────────────────────────
 const hardDsn = {
@@ -208,7 +210,7 @@ const unknownReply = {
     parts: [{ mimeType: 'text/plain', body: { data: b64('Here is your weekly digest.') } }] },
 };
 
-const dec = scanDecisions({ messages: [hardDsn, softDsn, rawReply, unknownReply], taRows, recruiterRows });
+const dec = scanDecisions({ messages: [hardDsn, softDsn, rawReply, unknownReply], taRows });
 const hard = dec.bounces.find(b => b.msgId === 'm-bounce');
 check(hard && hard.kind === 'hard', 'hard DSN classified as hard');
 check(hard && hard.address === 'reese.calder@northwind.example', 'bounced Final-Recipient extracted');
@@ -217,7 +219,7 @@ const soft = dec.bounces.find(b => b.msgId === 'm-soft');
 check(soft && soft.kind === 'soft', 'soft DSN classified as soft');
 check(soft && soft.flip === null, 'soft bounce produces no flip (transient, never kill an address)');
 const rep = dec.replies.find(r => r.msgId === 'm-reply');
-check(rep && rep.contact?.source === 'recruiter' && rep.sentiment === 'positive', 'reply from a known recruiter routed with sentiment');
+check(rep && rep.contact?.source === 'ta' && rep.sentiment === 'positive', 'reply from a known contact routed with sentiment');
 check(dec.other.some(o => o.msgId === 'm-other'), 'reply from an unknown sender surfaced as other, not dropped');
 
 // ── matchByCompanyDomain (tier-2: unknown sender, known company) ──────────────
@@ -242,7 +244,7 @@ const firstContact = {
   payload: { headers: [{ name: 'From', value: 'Talent Team <careers@northwind.example>' }, { name: 'Subject', value: 'Your application' }],
     parts: [{ mimeType: 'text/plain', body: { data: b64('Thanks for applying. We would love to set up a call.') } }] },
 };
-const dec2 = scanDecisions({ messages: [firstContact], taRows, recruiterRows, apps });
+const dec2 = scanDecisions({ messages: [firstContact], taRows, apps });
 const guessed = dec2.other.find(o => o.msgId === 'm-first');
 check(guessed && guessed.companyGuess?.appId === 501, 'unknown sender at a known company carries a companyGuess to the right app');
 check(guessed && guessed.sentiment === 'positive', 'the company-guessed first-contact email is still sentiment-classified');
@@ -304,7 +306,7 @@ const atsMsg = {
   payload: { headers: [{ name: 'From', value: 'no-reply@greenhouse-mail.test' }, { name: 'Subject', value: 'Update on your Kestrel application' }],
     parts: [{ mimeType: 'text/plain', body: { data: b64('We have decided not to move forward at this time.') } }] },
 };
-const decAts = scanDecisions({ messages: [atsMsg], taRows, recruiterRows, apps: subjApps });
+const decAts = scanDecisions({ messages: [atsMsg], taRows, apps: subjApps });
 const atsGuess = decAts.other.find(o => o.msgId === 'm-ats');
 check(atsGuess && atsGuess.companyGuess?.appId === 701, 'scanDecisions subject-matches an ATS-sent email the domain tier cannot');
 check(atsGuess && atsGuess.companyGuess?.confidence === 'subject', 'the subject-tier guess is labeled');

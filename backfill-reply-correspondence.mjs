@@ -25,7 +25,6 @@ import {
   extractEmail, matchAddress, readSync, logReplyToContact,
 } from './dashboard-web/server/lib/google.mjs';
 import { parseTargetTalentMd, readTTCorrespondence } from './dashboard-web/server/lib/target-talent.mjs';
-import { parseRecruitersMd, readRecruiterCorrespondence } from './dashboard-web/server/lib/recruiters.mjs';
 
 const APPLY = process.argv.includes('--apply');
 
@@ -66,15 +65,14 @@ const raws = await fetchMessagesConcurrent(msgIds.map(id => ({ id })), { accessT
 console.log(`Fetched from Gmail: ${raws.length}  (unfetchable/deleted: ${msgIds.length - raws.length})`);
 
 const taRows = parseTargetTalentMd();
-const recruiterRows = parseRecruitersMd();
 
 const toAdd = [];
 let noContact = 0, already = 0;
 for (const raw of raws) {
   const msg = parseGmailMessage(raw);
-  const contact = matchAddress(extractEmail(msg.from), { taRows, recruiterRows });
+  const contact = matchAddress(extractEmail(msg.from), { taRows });
   if (!contact) { noContact++; continue; }
-  const existing = contact.source === 'ta' ? readTTCorrespondence(contact.id) : readRecruiterCorrespondence(contact.id);
+  const existing = readTTCorrespondence(contact.id);
   const ts = corrTs(msg.date);
   const subject = String(msg.subject || '(no subject)').trim() || '(no subject)';
   const nsub = normSubject(subject);

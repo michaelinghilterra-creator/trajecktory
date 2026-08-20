@@ -3,7 +3,6 @@ import path from 'path';
 import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { computeStaleApps, computeStaleTA } from './followups.mjs';
-import { parseRecruitersMd, RECRUITER_CONTACTED } from './recruiters.mjs';
 import { parseTargetTalentMd } from './target-talent.mjs';
 import { parseStatusEvents } from './sidecars.mjs';
 import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, isInterviewStage, makeFurthestIdx, enteredFunnel } from './statuses.mjs';
@@ -57,7 +56,6 @@ function pruneInsightsHistory() {
 
 function buildInsightsContext() {
   const apps = parseApplicationsMd();
-  const recruiters = parseRecruitersMd().map(({ raw, ...r }) => r);
   const taContacts = parseTargetTalentMd();
 
   const activeStatuses = ACTIVE_STATUSES;
@@ -119,7 +117,7 @@ function buildInsightsContext() {
     .sort((a, b) => b.responseRate - a.responseRate)
     .slice(0, 10);
 
-  // TA + Recruiter funnel summaries.
+  // TA funnel summary.
   //
   // Outreach rates run over EVERY contact, not just the currently-active ones.
   // `Archived` is applied by the Reconcile flow after all related apps close, so
@@ -130,8 +128,7 @@ function buildInsightsContext() {
   const taActive = taContacts.filter(c => c.status !== 'Archived');   // still the honest "open contacts" count
   const REPLIED_SET = ['Replied', 'Meeting Scheduled', 'Connected'];
   // Bounced is a post-send state (per the comment below), so it belongs in the
-  // "sent" denominator — matching RECRUITER_CONTACTED, so the TA and Recruiter
-  // reply rates the user compares side-by-side are computed by the same rule.
+  // "sent" denominator.
   const TA_CONTACTED = ['Sent', 'Dormant', 'Bounced', ...REPLIED_SET];
   // Archiving OVERWRITES the outreach status in place, so an archived contact's
   // prior state is unrecoverable — but `lastTouch` survives and is only ever
@@ -144,9 +141,6 @@ function buildInsightsContext() {
     c.status === 'Archived' && /^\d{4}-\d{2}-\d{2}$/.test(String(c.lastTouch || '')));
   const taSent    = taContacts.filter(c => TA_CONTACTED.includes(c.status)).length + taTouchedArchive.length;
   const taReplied = taContacts.filter(c => REPLIED_SET.includes(c.status)).length;
-  // Dormant and Bounced are post-send states, so they belong in `sent`.
-  const recSent    = recruiters.filter(r => RECRUITER_CONTACTED.has(r.status)).length;
-  const recReplied = recruiters.filter(r => REPLIED_SET.includes(r.status)).length;
 
   // Stale touchpoints (apps + TA, top 15 by silence)
   const staleApps = computeStaleApps().map(it => ({ source: 'app', ...it }));
@@ -191,14 +185,11 @@ function buildInsightsContext() {
     },
     archetypes: archByPerf,
     sectors: sectorByPerf,
-    // `total` means the same thing on both rows: every contact on record. It
-    // previously meant "active" for talent and "all" for recruiters, one line apart.
+    // `total` means every contact on record, not just the currently-active ones.
     talent:     { total: taContacts.length, active: taActive.length, sent: taSent, replied: taReplied,
                   responseRate: taSent ? Math.round(taReplied / taSent * 100) : 0,
                   conf: rateStat(taReplied, taSent),
                   repliedIsFloor: taTouchedArchive.length > 0, archivedTouched: taTouchedArchive.length },
-    recruiters: { total: recruiters.length, sent: recSent,   replied: recReplied,   responseRate: recSent ? Math.round(recReplied / recSent * 100) : 0,
-                  conf: rateStat(recReplied, recSent) },
     staleTotal: staleApps.length + staleTA.length,
     topStale,
     pendingHot,
@@ -225,12 +216,6 @@ function buildInsightsMetrics(ctx) {
       applied: ctx.pipeline?.applied ?? 0,
       responseRate: ctx.pipeline?.responseRate ?? 0,
       interviewRate: ctx.pipeline?.interviewRate ?? 0,
-    },
-    recruiter: {
-      sent: ctx.recruiters?.sent ?? 0,
-      replied: ctx.recruiters?.replied ?? 0,
-      responseRate: ctx.recruiters?.responseRate ?? 0,
-      conf: ctx.recruiters?.conf ?? null,
     },
     talent: {
       sent: ctx.talent?.sent ?? 0,
