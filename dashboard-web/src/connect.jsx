@@ -160,7 +160,10 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
     const body = (note?.response || '').trim() || `${kind} sent to ${c.name || 'this contact'}.`;
     window.tjkMutate(url, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ direction: 'Sent', subject: kind, body }),
+      // This card is the LinkedIn motion, so tag the channel explicitly. Without
+      // it the server defaults to Email and the touch reads back as an email one,
+      // hiding the sent DM from the just-connected warm queue (which re-pitched).
+      body: JSON.stringify({ direction: 'Sent', channel: 'LinkedIn', subject: kind, body }),
     }).then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); setSending(false); return; }
