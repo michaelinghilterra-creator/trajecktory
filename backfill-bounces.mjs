@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * backfill-bounces.mjs — recover the bounce evidence that already exists in the
- * free-text Notes of data/recruiters.md and data/target-talent.md, and turn the
+ * free-text Notes of data/target-talent.md, and turn the
  * CERTAIN cases into structured state.
  *
  * WHY THIS EXISTS
@@ -76,7 +76,7 @@ const die = (msg) => {
 let CONTACTED = new Set(), REPLIED = new Set();
 try {
   const doc = yaml.load(readFileSync(join(ROOT, 'templates', 'states.yml'), 'utf8'));
-  for (const s of [...(doc.recruiter_states || []), ...(doc.talent_states || [])]) {
+  for (const s of [...(doc.talent_states || [])]) {
     if (s.contacted) CONTACTED.add(s.label);
     if (s.replied) REPLIED.add(s.label);
   }
@@ -92,10 +92,9 @@ const FLIPPABLE = new Set(['Not Contacted', 'Sent', 'Dormant', 'Archived']);
 // before those columns. Verified against the live headers in both files.
 const FILES = {
   tt: { path: join(ROOT, 'data', 'target-talent.md'), emailIdx: 11, statusIdx: 13, notesIdx: 15, nameIdx: 4, orgIdx: 2 },
-  rec: { path: join(ROOT, 'data', 'recruiters.md'), emailIdx: 11, statusIdx: 12, notesIdx: 14, nameIdx: 4, orgIdx: 2 },
 };
 
-const targets = fileArg === 'tt' ? ['tt'] : fileArg === 'rec' ? ['rec'] : ['tt', 'rec'];
+const targets = ['tt'];
 
 const summary = { ok: true, applied: APPLY, files: {} };
 let anyProblem = false;
@@ -107,7 +106,7 @@ for (const key of targets) {
   const originalText = readFileSync(cfg.path, 'utf-8');
   const mtimeBefore = statSync(cfg.path).mtimeMs;
   // Split on \n only; each line keeps its own trailing \r (target-talent.md is
-  // CRLF, recruiters.md is LF). Never normalize line endings — that would be a
+  // CRLF). Never normalize line endings: that would be a
   // far larger diff than the one being asked for.
   const originalLines = originalText.split('\n');
   const newLines = originalLines.slice();

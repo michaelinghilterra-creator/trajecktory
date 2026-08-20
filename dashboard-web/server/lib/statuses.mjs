@@ -13,13 +13,11 @@ import { ROOT_DIR } from '../config.mjs';
 const STATES_FILE = path.join(ROOT_DIR, 'templates', 'states.yml');
 
 let _states = [];
-let _recruiterStates = [];
 let _talentStates = [];
 let _referralStates = [];
 try {
   const doc = yaml.load(fs.readFileSync(STATES_FILE, 'utf8'));
   _states = Array.isArray(doc?.states) ? doc.states : [];
-  _recruiterStates = Array.isArray(doc?.recruiter_states) ? doc.recruiter_states : [];
   _talentStates = Array.isArray(doc?.talent_states) ? doc.talent_states : [];
   _referralStates = Array.isArray(doc?.referral_states) ? doc.referral_states : [];
 } catch (e) {
@@ -94,18 +92,14 @@ export function enteredFunnel(app) {
   return app?.status !== 'Closed';
 }
 
-// ─── Outreach ladders (recruiters + target talent) ──────────────────────────
-// Separate vocabularies from the application funnel, but loaded from the SAME
-// file so they cannot drift the way the hardcoded arrays did. `contacted` is
+// ─── Outreach ladder (target talent) ─────────────────────────────────────────
+// A separate vocabulary from the application funnel, but loaded from the SAME
+// file so it cannot drift the way the hardcoded arrays did. `contacted` is
 // intentionally not derived from `stage`: Dormant and Bounced are entered after
 // a message goes out yet sit off the ladder, so a stage comparison erases them.
-export const RECRUITER_STATES = _recruiterStates;
 export const TALENT_STATES = _talentStates;
-export const RECRUITER_STATUS_LABELS = _recruiterStates.map(s => s.label);
 export const TALENT_STATUS_LABELS = _talentStates.map(s => s.label);
-export const RECRUITER_CONTACTED = new Set(_recruiterStates.filter(s => s.contacted).map(s => s.label));
 export const TALENT_CONTACTED = new Set(_talentStates.filter(s => s.contacted).map(s => s.label));
-export const RECRUITER_REPLIED = new Set(_recruiterStates.filter(s => s.replied).map(s => s.label));
 export const TALENT_REPLIED = new Set(_talentStates.filter(s => s.replied).map(s => s.label));
 
 // Referral ladder (people in the user's own network). `asked` marks the rungs

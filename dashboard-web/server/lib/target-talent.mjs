@@ -75,14 +75,17 @@ function readTTCorrespondence(id) {
   const text = fs.readFileSync(f, 'utf8');
   const messages = [];
   // Optional channel token (Email|LinkedIn) between direction and subject; absent
-  // on legacy rows, which read back as Email. See referrals.mjs for the rationale.
-  const re = /^## (\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?) \| (Sent|Received|Draft) \| (?:(Email|LinkedIn) \| )?(.+?)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm;
+  // on legacy rows, which read back as Email. Case-insensitive + normalized so a
+  // token written as 'LINKEDIN' still parses as a LinkedIn touch rather than
+  // silently defaulting to Email. See referrals.mjs for the rationale.
+  const re = /^## (\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?) \| (Sent|Received|Draft) \| (?:(Email|Linked ?In) \| )?(.+?)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gim;
   let m;
   while ((m = re.exec(text)) !== null) {
+    const chRaw = (m[3] || '').trim();
     messages.push({
       timestamp: m[1],
       direction: m[2],
-      channel:   m[3] || 'Email',
+      channel:   /^linked ?in$/i.test(chRaw) ? 'LinkedIn' : 'Email',
       subject:   m[4].trim(),
       body:      m[5].trim(),
     });

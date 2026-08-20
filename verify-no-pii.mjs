@@ -231,11 +231,11 @@ const profileScalars = new Map();
 }
 
 // third-party emails: every address the owner has collected about someone else.
-// v1.14.0 shipped a real recruiter's work email in a tracked fixture, and on
-// 2026-07-23 test fixtures full of real recruiter addresses passed clean because
-// recruiters.md was NOT a source here. It is now.
+// v1.14.0 shipped a real contact's work email in a tracked fixture, and test
+// fixtures full of real contact addresses once passed clean because a contact
+// book was NOT a source here. The contact books are sources now.
 const thirdParty = new Set();
-for (const src of ['data/target-talent.md', 'data/recruiters.md', 'data/follow-ups.md']) {
+for (const src of ['data/target-talent.md', 'data/follow-ups.md']) {
   const t = read(src);
   if (!t) continue;
   for (const m of t.matchAll(/[\w.+-]+@[\w.-]+\.\w{2,}/g)) {

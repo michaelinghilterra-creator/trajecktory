@@ -32,13 +32,17 @@ function OutreachPills({ c }) {
 // CompanyOutreach block below it; this pill is the category.
 function QueueReasonPill({ c }) {
   if (!c.queueReason) return null;
-  const urgent = c.queueReason === 'App going stale' || c.queueReason === 'Went quiet';
+  // 'Just connected' is a positive event (they accepted) → green. The overdue
+  // reasons are orange. Everything else rides the neutral accent.
+  const cvar = c.queueReason === 'Just connected' ? 'var(--green)'
+    : (c.queueReason === 'App going stale' || c.queueReason === 'Went quiet') ? 'var(--orange)'
+    : 'var(--accent)';
   return (
     <span title="Why this contact is in your follow-up queue"
       style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4, verticalAlign: 'middle',
-        background: urgent ? 'color-mix(in srgb, var(--orange) 15%, transparent)' : 'color-mix(in srgb, var(--accent) 15%, transparent)',
-        color: urgent ? 'var(--orange)' : 'var(--accent)',
-        border: `1px solid ${urgent ? 'color-mix(in srgb, var(--orange) 40%, transparent)' : 'color-mix(in srgb, var(--accent) 40%, transparent)'}` }}>
+        background: `color-mix(in srgb, ${cvar} 15%, transparent)`,
+        color: cvar,
+        border: `1px solid color-mix(in srgb, ${cvar} 40%, transparent)` }}>
       {c.queueReason}
     </span>
   );
@@ -109,41 +113,69 @@ function CompanyOutreach({ c }) {
   );
 }
 
+// CRM statuses that mean the contact has already been reached out to. Once here,
+// a LinkedIn "follow-up" is a real message (an InMail while unconnected, a free DM
+// once accepted), not another connection note — so the draft must route to the
+// followup-message endpoint, which reads the contact row directly, rather than
+// connect-note, which resolves only from the connect/both queues that EXCLUDE these
+// statuses (and would 400 with "Provide a recipient").
+const CONTACTED_STATUSES = new Set(['Sent', 'Replied', 'Meeting Scheduled']);
+// Already invited when we hold a per-contact touch OR the CRM status says so. Status
+// is the reliable signal: selfLastTouch is derived from the correspondence-log index,
+// which can be empty even after status advanced to Sent — that gap is what wrongly
+// routed already-contacted contacts to the first-touch connect-note endpoint and 400'd.
+function isAlreadyInvited(c) {
+  return !!(c.companyOutreach && c.companyOutreach.selfLastTouch)
+    || CONTACTED_STATUSES.has(c.status);
+}
+
 function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent }) {
   const [note, setNote] = useStateCq(null);
   const [loading, setLoading] = useStateCq(false);
   const [sending, setSending] = useStateCq(false);
   const [sentAt, setSentAt] = useStateCq(null);
   const [showArchive, setShowArchive] = useStateCq(false);
+  const [referred, setReferred] = useStateCq(false);
   const done = !!sentAt;
   // A contact you have ALREADY sent a LinkedIn invite (or any 1:1 touch) to: the
   // invite is out, so a "follow-up" is a real MESSAGE, not another connection note.
-  // selfLastTouch is only set once a touch to this specific contact exists, so its
-  // presence is what tells a follow-up apart from a first-touch connect.
-  const alreadyInvited = !!(c.companyOutreach && c.companyOutreach.selfLastTouch);
+  // Keyed off the CRM status as well as selfLastTouch (see isAlreadyInvited) so a
+  // Sent contact whose correspondence-log index has no self-entry still routes to
+  // the followup-message endpoint instead of 400'ing against the connect queue.
+  const alreadyInvited = isAlreadyInvited(c);
+  // 1st-degree LinkedIn connection: a message is a FREE DM (no InMail credit).
+  // Drives the copy and suppresses the budget decrement on mark-sent.
+  const freeDm = c.linkedinStatus === 'Connected' || !!c.freeDm;
+  // A short "X/Y touches" label for a contact resting at the cold-outreach cap.
+  const capLabel = c.capState ? (
+    c.channel === 'email' ? `${c.capState.email.sent}/${c.capState.email.cap} emails`
+    : c.channel === 'both' ? `${c.capState.linkedin.sent}/${c.capState.linkedin.cap} LinkedIn + ${c.capState.email.sent}/${c.capState.email.cap} emails`
+    : `${c.capState.linkedin.sent}/${c.capState.linkedin.cap} LinkedIn touches`
+  ) : 'outreach cap reached';
 
   // Record that the invite went out, right here — no jumping to the Network tab.
-  // Posts the note as a "Sent" correspondence to the contact's own route (TA vs
-  // recruiter), which appends the message, advances status to Sent, and stamps
+  // Posts the note as a "Sent" correspondence to the contact's TA route, which
+  // appends the message, advances status to Sent, and stamps
   // Last Touch. Passing the drafted note as the body is how "I used the AI note"
   // gets captured; a self-written invite records a short generic line instead.
   const markSent = () => {
     if (sending || done) return;
     setSending(true);
-    const url = c.source === 'recruiter'
-      ? `/api/recruiters/${c.id}/correspondence`
-      : `/api/target-talent/${c.id}/correspondence`;
+    const url = `/api/target-talent/${c.id}/correspondence`;
     const kind = alreadyInvited ? 'LinkedIn message' : 'LinkedIn connection request';
     const body = (note?.response || '').trim() || `${kind} sent to ${c.name || 'this contact'}.`;
     window.tjkMutate(url, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ direction: 'Sent', subject: kind, body }),
+      // This card is the LinkedIn motion, so tag the channel explicitly. Without
+      // it the server defaults to Email and the touch reads back as an email one,
+      // hiding the sent DM from the just-connected warm queue (which re-pitched).
+      body: JSON.stringify({ direction: 'Sent', channel: 'LinkedIn', subject: kind, body }),
     }).then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); setSending(false); return; }
         setSentAt('just now');                 // brief ✓ so the click is confirmed,
         toast && toast(`Marked sent — ${c.name || 'contact'}`, 'success');
-        if (alreadyInvited && onInmailSent) onInmailSent();  // an InMail credit was just spent
+        if (alreadyInvited && !freeDm && onInmailSent) onInmailSent();  // InMail credit spent — a free DM to a connection spends none
         setTimeout(() => onDone && onDone(c.source, c.id), 1000); // then drop off the list
       })
       .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
@@ -166,6 +198,20 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
         onDone && onDone(c.source, c.id);
       })
       .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
+  };
+
+  // Just-connected offer: promote this now-1st-degree contact into the Referrals
+  // book (the user decides who is a real advocate; nothing auto-adds). Idempotent.
+  const addToReferral = () => {
+    window.tjkMutate(`/api/target-talent/${c.id}/to-referral`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    }).then(r => r.json())
+      .then(res => {
+        if (res.error) { toast && toast(res.error, 'error'); return; }
+        setReferred(true);
+        toast && toast(res.alreadyReferral ? `${c.name || 'This contact'} is already in Referrals` : `Added ${c.name || 'contact'} to Referrals`, 'success');
+      })
+      .catch(e => toast && toast(e.message, 'error'));
   };
 
   const draft = () => {
@@ -207,11 +253,22 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
           <CompanyOutreach c={c} />
           {alreadyInvited && !done && (
             <div className="dim" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.4 }}>
-              You already invited them, so a follow-up is a message, not another invite. While you are not connected, LinkedIn sends it as an InMail{typeof inmailRemaining === 'number' ? ` (${inmailRemaining} left this month)` : ' (uses a Premium credit)'}, so make it count.
+              {freeDm
+                ? <>They accepted your invite, so you're connected. This message is a free DM (no InMail credit). Strike while it's warm.</>
+                : <>You already invited them, so a follow-up is a message, not another invite. While you are not connected, LinkedIn sends it as an InMail{typeof inmailRemaining === 'number' ? ` (${inmailRemaining} left this month)` : ' (uses a Premium credit)'}, so make it count.</>}
+            </div>
+          )}
+          {c.capped && !done && (
+            <div style={{ fontSize: 11, marginTop: 4, color: 'var(--orange)', lineHeight: 1.4 }}>
+              Resting: {capLabel}, no reply. This contact has hit the cold-outreach cap. Messaging now overrides it; usually better to wait for a reply.
             </div>
           )}
           {!done && (
-            <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              {c.queueReason === 'Just connected' && (referred
+                ? <span style={{ color: 'var(--green)' }}>✓ Added to Referrals</span>
+                : <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={addToReferral} disabled={sending}
+                    title="Now a 1st-degree connection. Add them to your Referrals list; they'll share a timeline with this TA record.">+ Add to Referrals</button>)}
               {!showArchive
                 ? <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setShowArchive(true)} disabled={sending}
                     title="Contact left the company or changed to an unrelated role? Archive them so they drop off and never get outreach.">Not reachable?</button>
@@ -318,7 +375,7 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
   const [sentAt, setSentAt] = useStateCq(null);
   const [showArchive, setShowArchive] = useStateCq(false);
   const done = !!sentAt;
-  const base = c.source === 'recruiter' ? `/api/recruiters/${c.id}` : `/api/target-talent/${c.id}`;
+  const base = `/api/target-talent/${c.id}`;
   const firstName = c.firstName || (c.name || '').split(/\s+/)[0] || 'there';
   // LinkedIn profile link, same normalization as the Connect queue, so you can
   // confirm the TA is still at the company before you spend a draft on them.
@@ -524,7 +581,7 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
   const [emSending, setEmSending] = useStateCq(false);
   const [emDone, setEmDone] = useStateCq(!!c.emailDone);
 
-  const base = c.source === 'recruiter' ? `/api/recruiters/${c.id}` : `/api/target-talent/${c.id}`;
+  const base = `/api/target-talent/${c.id}`;
   const firstName = c.firstName || (c.name || '').split(/\s+/)[0] || 'there';
   const href = c.linkedin ? (/^https?:/.test(c.linkedin) ? c.linkedin : `https://${c.linkedin}`) : null;
 
@@ -943,16 +1000,25 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   // the credits reset. Contacts you can email, connection requests, and accepted
   // contacts are unaffected.
   const outOfInmail = !!(inmail && inmail.remaining === 0);
-  const isInmailBlocked = (c) => outOfInmail && c.channel === 'linkedin' && !!(c.companyOutreach && c.companyOutreach.selfLastTouch);
+  // A message to a 1st-degree connection (freeDm) is a free DM, not an InMail, so it
+  // is NEVER blocked by an empty credit balance — this is what makes the "Just
+  // connected" motion still actionable when you are out of InMail.
+  const isInmailBlocked = (c) => outOfInmail && c.channel === 'linkedin' && !c.freeDm && !!(c.companyOutreach && c.companyOutreach.selfLastTouch);
   const isHeld = (c) => isHeldToday(c) || isInmailBlocked(c);
+  // Cold-outreach cap reached with no reply (server sets c.capped). Unlike the
+  // same-day / InMail holds, resting does not clear on its own; it lifts when the
+  // contact replies. Hidden by default, revealed and overridable via Show anyway.
+  const isCapped = (c) => !!c.capped;
+  const isHiddenRow = (c) => isHeld(c) || isCapped(c);
   const heldCount = queue.filter(isHeld).length;
+  const restingCount = queue.filter(isCapped).length;
   const anySameDay = queue.some(isHeldToday);
   const anyInmailOut = queue.some(isInmailBlocked);
   const heldReasons = [
     anySameDay ? 'you already reached out at their company today' : null,
     anyInmailOut ? 'you are out of InMail credits this month' : null,
   ].filter(Boolean).join('; ');
-  const base = showHeld ? queue : queue.filter(c => !isHeld(c));
+  const base = showHeld ? queue : queue.filter(c => !isHiddenRow(c));
   const counts = {
     all: base.length,
     linkedin: base.filter(c => c.channel === 'linkedin').length,
@@ -1004,9 +1070,12 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
           {inmail.remaining === 0 && <span style={{ color: 'var(--red)' }}>Out. LinkedIn follow-ups to non-connections are hidden until your credits reset.</span>}
         </div>
       )}
-      {heldCount > 0 && (
+      {(heldCount > 0 || restingCount > 0) && (
         <div className="dim" style={{ fontSize: 12, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 11px' }}>
-          <span>{heldCount} contact{heldCount === 1 ? '' : 's'} hidden right now ({heldReasons}). They return automatically once that clears (tomorrow, or when your InMail credits reset).</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 240 }}>
+            {heldCount > 0 && <span>{heldCount} contact{heldCount === 1 ? '' : 's'} hidden right now ({heldReasons}). They return automatically once that clears (tomorrow, or when your InMail credits reset).</span>}
+            {restingCount > 0 && <span>{restingCount} contact{restingCount === 1 ? '' : 's'} resting — reached the outreach cap with no reply. They stay parked here until they reply, or you message anyway.</span>}
+          </div>
           <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setShowHeld(v => !v)}>
             {showHeld ? 'Hide them' : 'Show anyway'}
           </button>

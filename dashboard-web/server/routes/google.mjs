@@ -8,8 +8,7 @@ import {
   logReplyToContact,
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
-import { parseRecruitersMd, updateRecruiterLine } from '../lib/recruiters.mjs';
-import { PORT, RECRUITER_CORR_DIR, TT_CORR_DIR } from '../config.mjs';
+import { PORT, TT_CORR_DIR } from '../config.mjs';
 import { patchRowInMd, parseApplicationsMd } from '../lib/applications.mjs';
 import { addNote } from '../lib/notes.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
@@ -190,8 +189,7 @@ router.post('/api/google/scan-bounces', async (req, res) => {
     const raws = await fetchMessagesConcurrent(fresh, { accessToken });
 
     const taRows = parseTargetTalentMd();
-    const recruiterRows = parseRecruitersMd();
-    const { bounces } = scanDecisions({ messages: raws, taRows, recruiterRows });
+    const { bounces } = scanDecisions({ messages: raws, taRows });
 
     const today = new Date().toISOString().slice(0, 10);
     // SECURITY (CWE-345): a bounce is classified purely from attacker-controllable
@@ -206,7 +204,7 @@ router.post('/api/google/scan-bounces', async (req, res) => {
     );
     const hasSentHistory = (source, id) => {
       try {
-        const dir = source === 'ta' ? TT_CORR_DIR : RECRUITER_CORR_DIR;
+        const dir = TT_CORR_DIR;
         const f = path.join(dir, `${id}.md`);
         return fs.existsSync(f) && fs.readFileSync(f, 'utf8').includes('| Sent |');
       } catch { return false; }
@@ -215,7 +213,7 @@ router.post('/api/google/scan-bounces', async (req, res) => {
     const applied = [];
     for (const b of bounces) {
       if (!b.flip) continue; // soft, or no matched contact
-      const rows = b.flip.source === 'ta' ? taRows : recruiterRows;
+      const rows = taRows;
       const row = rows.find(r => r.id === b.flip.id);
       if (!row) continue;
       // Already marked bounced (a prior sweep flipped it) is NOT a pending change,
@@ -240,9 +238,7 @@ router.post('/api/google/scan-bounces', async (req, res) => {
       // The single-row updaters preserve every other cell (and each file's line
       // endings) byte for byte.
       const newCell = setVerifyTag(row.email, { state: 'bounced', source: 'gmail', date: today });
-      const ok = b.flip.source === 'ta'
-        ? updateTTLine(row.id, { email: newCell, status: 'Bounced' })
-        : updateRecruiterLine(row.id, { email: newCell, status: 'Bounced' });
+      const ok = updateTTLine(row.id, { email: newCell, status: 'Bounced' });
       if (ok) applied.push({ source: b.flip.source, id: row.id });
     }
 
@@ -298,9 +294,8 @@ router.get('/api/google/replies', async (req, res) => {
     const raws = await fetchMessagesConcurrent(ids, { accessToken });
 
     const taRows = parseTargetTalentMd();
-    const recruiterRows = parseRecruitersMd();
     const apps = (() => { try { return parseApplicationsMd(); } catch { return []; } })();
-    const { replies, other } = scanDecisions({ messages: raws, taRows, recruiterRows, apps });
+    const { replies, other } = scanDecisions({ messages: raws, taRows, apps });
     // Unmatched-by-contact senders are split: those the domain tier tied to a known
     // company (a likely first-contact email) vs. genuinely unknown. Both surfaced.
     const byCompany = other.filter(o => o.companyGuess);

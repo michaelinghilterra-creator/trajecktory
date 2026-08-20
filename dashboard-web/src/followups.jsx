@@ -121,9 +121,9 @@ function FUBarRow({ label, n, total, color }) {
   );
 }
 
-function FUOverview({ items, thresholds, taThreshold, onOpen }) {
+function FUOverview({ items, thresholds, taThreshold, onOpen, compact }) {
   // Contact-scoped: applications now live in Pipeline → Awaiting response, so this
-  // overview describes only the people (TA + recruiter contacts) going quiet.
+  // overview describes only the people (TA contacts) going quiet.
   const parseScore = (s) => {
     if (typeof s === 'number') return s;
     const m = String(s || '').match(/(\d+(?:\.\d+)?)/);
@@ -131,8 +131,6 @@ function FUOverview({ items, thresholds, taThreshold, onOpen }) {
   };
 
   const total = items.length;
-  const taCount  = items.filter(it => it.source === 'ta').length;
-  const recCount = items.filter(it => it.source === 'recruiter').length;
   const inConversation = items.filter(it => ['Replied', 'Meeting Scheduled'].includes(it.status)).length;
   const giveUpCount = items.filter(it => it.coachLevel === 'give-up').length;
   const avgSilence = total > 0 ? Math.round(items.reduce((s, it) => s + (it.daysSinceLastTouch || 0), 0) / total) : 0;
@@ -160,6 +158,7 @@ function FUOverview({ items, thresholds, taThreshold, onOpen }) {
   }, [items]);
 
   if (total === 0) {
+    if (compact) return null;
     return (
       <div className="card" style={{ padding: 20 }}>
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>No contacts going quiet.</div>
@@ -178,6 +177,26 @@ function FUOverview({ items, thresholds, taThreshold, onOpen }) {
   const convoTone     = inConversation > 0 ? 'good' : 'neutral';
   const silenceTone   = avgSilence >= 21 ? 'warn' : 'neutral';
 
+  // The 4 KPI tiles, reused by the compact strip (the merged Follow-ups lens under
+  // Contacts) and the full overview below.
+  const kpiRow = (
+    <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+      <FUKpi label="Contacts going quiet" value={total} sub="Work the list, oldest first" tone={staleTone} />
+      <FUKpi label="In conversation" value={inConversation} sub={inConversation > 0
+        ? 'Replied or meeting booked. Keep the momentum'
+        : 'No live threads right now'} tone={convoTone} />
+      <FUKpi label="Going cold (45d+)" value={goingCold} sub={goingCold > 0
+        ? 'Long silent. Send a final ping or let them go'
+        : 'Nothing stuck past 45 days. Good'} tone={coldTone} />
+      <FUKpi label="Avg silence" value={`${avgSilence}d`} sub={avgSilence >= 21
+        ? 'Threads are aging. Clear the 21d+ bucket'
+        : 'Healthy. Staying inside the window'} tone={silenceTone} />
+    </div>
+  );
+
+  // Compact: just the KPI strip, folded into the top of the merged Follow-ups lens.
+  if (compact) return kpiRow;
+
   // Visual data
   const ageOrder = ['0-10d', '10-21d', '21-45d', '45d+'];
   const ageColor = { '0-10d': '#60a5fa', '10-21d': '#a78bfa', '21-45d': '#f59e0b', '45d+': '#ef4444' };
@@ -188,25 +207,14 @@ function FUOverview({ items, thresholds, taThreshold, onOpen }) {
       <div className="ta-head">
         <div>
           <h1>Follow-Ups</h1>
-          <div className="sub">{total} contact{total === 1 ? '' : 's'} going quiet · {taCount} TA · {recCount} recruiter{giveUpCount ? ` · ${giveUpCount} ready to write off` : ''}</div>
+          <div className="sub">{total} contact{total === 1 ? '' : 's'} going quiet{giveUpCount ? ` · ${giveUpCount} ready to write off` : ''}</div>
         </div>
       </div>
 
       {/* KPI row */}
-      <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-        <FUKpi label="Contacts going quiet" value={total} sub={`${taCount} TA · ${recCount} recruiter. Work the list, oldest first`} tone={staleTone} />
-        <FUKpi label="In conversation" value={inConversation} sub={inConversation > 0
-          ? 'Replied or meeting booked. Keep the momentum'
-          : 'No live threads right now'} tone={convoTone} />
-        <FUKpi label="Going cold (45d+)" value={goingCold} sub={goingCold > 0
-          ? 'Long silent. Send a final ping or let them go'
-          : 'Nothing stuck past 45 days. Good'} tone={coldTone} />
-        <FUKpi label="Avg silence" value={`${avgSilence}d`} sub={avgSilence >= 21
-          ? 'Threads are aging. Clear the 21d+ bucket'
-          : 'Healthy. Staying inside the window'} tone={silenceTone} />
-      </div>
+      {kpiRow}
 
-      {/* Three visuals */}
+      {/* Two visuals */}
       <div className="row" style={{ gap: 12, alignItems: 'stretch', flexWrap: 'wrap' }}>
         <div className="card" style={{ padding: 14, flex: 1, minWidth: 280 }}>
           <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>By Age</div>
@@ -221,21 +229,6 @@ function FUOverview({ items, thresholds, taThreshold, onOpen }) {
               : (bucketCounts['21-45d'] || 0) > 0
                 ? 'Work the 21-45d bucket next. Last fair window to recover them.'
                 : 'Stale queue is fresh. Every item is recoverable.'}
-          </div>
-        </div>
-
-        <div className="card" style={{ padding: 14, flex: 1, minWidth: 240 }}>
-          <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>By Book</div>
-          <div className="col" style={{ gap: 10 }}>
-            <FUBarRow label="TA Outreach" n={taCount} total={total} color="#22d3ee" />
-            <FUBarRow label="Recruiters" n={recCount} total={total} color="#a78bfa" />
-          </div>
-          <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-            {taCount > recCount
-              ? 'Mostly TA contacts. Warm them before they cool.'
-              : recCount > taCount
-                ? 'Mostly recruiters. Keep those relationships alive.'
-                : 'Balanced across both books.'}
           </div>
         </div>
 
@@ -298,7 +291,7 @@ function FUOverview({ items, thresholds, taThreshold, onOpen }) {
   );
 }
 
-window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, apps = [], toast }) {
+window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, apps = [], toast, chromeless }) {
   const [data, setData]       = useStateF({ thresholds: { Applied: 7, Responded: 5, 'Phone Screen': 3, '1st Interview': 3, '2nd Interview': 3, '3rd Interview': 3, '4th Interview': 3 }, taThreshold: 14, ghostDays: 45, warm: [], cold: [], snoozed: [], ghostedCandidates: [] });
   const [loading, setLoading] = useStateF(true);
   const [selected, setSelected] = useStateF(null); // app id (only for 'app' source rows)
@@ -310,6 +303,10 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   // Subview: 'overview' (KPIs), 'warm' (the urgent queue + nav badge), 'cold'
   // ("Applications out": cold portal apps that should not nag daily).
   const [subView, setSubView] = useStateF('overview');
+  // Chromeless = rendered inside the Contacts tab as the "Follow-ups" lens: no own
+  // subtab bar, and the three subviews (Overview KPIs, the queue, Find a contact)
+  // fold into one stacked column ('merged').
+  const view = chromeless ? 'merged' : subView;
 
   const load = () => {
     setLoading(true);
@@ -330,6 +327,19 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
       .then(d => setWithheld(d && !d.error ? d : null)).catch(() => {});
   }, []);
   const withholding = !!(withheld && withheld.withheld > 0 && !withheld.hasVerifierKeys);
+
+  // TA contacts that look accepted from the latest LinkedIn import (a name+company
+  // match with no exact-slug auto-flip). The user confirms each into Connected,
+  // which then surfaces them in the queue as "Just connected".
+  const [pendingAccept, setPendingAccept] = useStateF([]);
+  useEffectF(() => { fetch('/api/referrals/pending-acceptances').then(r => r.json()).then(d => setPendingAccept(d && d.pending ? d.pending : [])).catch(() => {}); }, []);
+  const confirmAccepted = (id) => {
+    window.tjkMutate(`/api/target-talent/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ linkedinStatus: 'Connected' }) })
+      .then(r => r.json())
+      .then(res => { if (res.error) { toast && toast(res.error, 'error'); return; } setPendingAccept(prev => prev.filter(p => p.id !== id)); load(); toast && toast('Marked connected', 'success'); })
+      .catch(e => toast && toast(e.message, 'error'));
+  };
+  const dismissPending = (id) => setPendingAccept(prev => prev.filter(p => p.id !== id));
 
   const warm = data.warm || [];
   const cold = data.cold || [];
@@ -540,7 +550,8 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
 
   return (
     <div className="col" style={{ gap: 0 }}>
-      {/* Subtabs */}
+      {/* Subtabs (hidden in chromeless mode — the Contacts subtab bar drives it) */}
+      {!chromeless && (
       <div className="subtabs">
         {SUBTABS.map(s => (
           <button type="button" key={s.id} className={'subtab' + (subView === s.id ? ' active' : '')} onClick={() => setSubView(s.id)}>
@@ -552,15 +563,17 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
           </button>
         ))}
       </div>
+      )}
 
       <div className="col" style={{ gap: 14, paddingTop: 14 }}>
 
-      {subView === 'overview' && (
+      {(view === 'overview' || view === 'merged') && (
         <FUOverview
           items={data.contactFollowups || []}
           thresholds={data.thresholds}
           taThreshold={data.taThreshold}
           onOpen={openFromOverview}
+          compact={view === 'merged'}
         />
       )}
 
@@ -571,13 +584,39 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
           worth a touch (not-yet-contacted, app-going-stale, and gone-quiet, all
           merged server-side into data.contactFollowups). Contacts only — no
           application/company rows reach this tab. */}
-      {subView === 'queue' && (
+      {(view === 'queue' || view === 'merged') && pendingAccept.length > 0 && (
+        <div className="card padded-lg" style={{ borderColor: 'color-mix(in srgb, var(--green) 40%, transparent)' }}>
+          <div className="card-head" style={{ marginBottom: 8 }}>
+            <span className="card-title">✓ Recently accepted? Confirm</span>
+            <span className="card-meta mono">these look connected from your latest LinkedIn import</span>
+          </div>
+          <div className="col" style={{ gap: 6 }}>
+            {pendingAccept.map(p => (
+              <div key={`pa-${p.id}`} className="action-card">
+                <div className="action-card-row">
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <span className="action-card-co">{p.name}</span>
+                    <span className="dim"> · {p.company || 'unknown company'}</span>
+                    {p.connectedOn ? <span className="dim mono" style={{ fontSize: 11, marginLeft: 6 }}>connected {p.connectedOn}</span> : null}
+                  </div>
+                  <div className="row" style={{ gap: 6, flex: 'none' }}>
+                    <button className="btn accent sm" onClick={() => confirmAccepted(p.id)}>Confirm connected</button>
+                    <button className="btn ghost sm" onClick={() => dismissPending(p.id)}>Not yet</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(view === 'queue' || view === 'merged') && (
         <window.FollowupQueueTab toast={toast} items={data.contactFollowups || []} onReload={load} />
       )}
 
 
       {/* ── Find a contact: applied roles with nobody to talk to ───────────── */}
-      {subView === 'findcontact' && (
+      {(view === 'findcontact' || view === 'merged') && (
         <div style={{ padding: '4px 0' }}>
           <div className="ta-head">
             <div>

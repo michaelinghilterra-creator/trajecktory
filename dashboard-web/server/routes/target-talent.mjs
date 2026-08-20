@@ -12,6 +12,9 @@ import { logConnect } from '../lib/connects.mjs';
 import { isLinkedInInvite } from '../lib/channels.mjs';
 import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES } from '../lib/tt-linkedin.mjs';
 import { isHighValueContact } from '../lib/followups.mjs';
+import { appendReferralRows, parseReferralsMd } from '../lib/referrals.mjs';
+import { slugOf } from '../lib/linkedin-acceptance.mjs';
+import { summarizeThread } from '../lib/correspondence-context.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
 
@@ -93,6 +96,38 @@ router.patch('/api/target-talent/:id', (req, res) => {
       if (!ok) return res.status(404).json({ error: 'Contact not found' });
     }
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/target-talent/:id/to-referral — one-click offer: a TA contact who
+// accepted your LinkedIn invite is now a 1st-degree connection, so promote them into
+// the Referrals book. Appends a referrals.md row stamped "from TA Outreach #<id>"
+// (so resolveReferralLink re-links them into a shared timeline) plus the LinkedIn URL.
+// Idempotent: no-op if a referral already carries the backref or matches the slug.
+router.post('/api/target-talent/:id/to-referral', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const contact = parseTargetTalentMd().find(c => c.id === id);
+    if (!contact) return res.status(404).json({ error: 'Contact not found' });
+    const mySlug = slugOf(contact.linkedin);
+    const already = parseReferralsMd().find(r =>
+      new RegExp(`TA Outreach #${id}\\b`, 'i').test(r.notes || '') ||
+      (mySlug && slugOf(r.linkedin) === mySlug));
+    if (already) return res.json({ ok: true, alreadyReferral: true });
+    const written = appendReferralRows([{
+      name: `${contact.first || ''} ${contact.last || ''}`.trim(),
+      how: '1st-degree LinkedIn connection',
+      where: contact.company || '',
+      target: '',
+      status: 'Not Asked',
+      lastTouch: '',
+      linkedin: contact.linkedin || '',
+      email: contact.email || '',
+      notes: `from TA Outreach #${id}${contact.title ? ` · ${contact.title}` : ''}`,
+    }]);
+    res.json({ ok: true, added: written.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -229,6 +264,9 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
     const prior = readTTCorrespondence(id);
     const isFirstTouch = prior.length === 0;
     const messageType = req.body?.messageType || (isFirstTouch ? 'first-touch' : 'follow-up');
+    // Full-thread state so a follow-up nudges rather than re-pitching a message
+    // that already went out a few days ago (see correspondence-context.mjs).
+    const thread = summarizeThread(prior);
 
     // REPLY mode: respond to the contact's most recent received email instead of
     // drafting fresh outreach. Requires an inbound message to reply to.
@@ -350,8 +388,8 @@ ${profileMd}
 - Never invent metrics or claims not on the CV.
 - Open with a specific reason for contacting this person at THIS company (role applied to, recent funding/news/leadership change, specific team context).
 - Lead with the most specific named artifact from the PORTFOLIO block above (a named project, initiative, or concrete outcome). If no PORTFOLIO block is present, use the most relevant quantified CV proof point. A named artifact hooks the reader far better than a generic role claim.
-- Make the ask soft: invite a conversation if useful. Do NOT request a specific meeting length (no "20-minute call"). Phrasing like "would welcome a conversation if there's mutual interest" is the target.
-- Close with a clear, low-friction next step.
+- Make the ask low-friction and time-respecting. Do NOT ask for a call, a chat, a conversation, a meeting, or any amount of their time (no "20-minute call", no "quick chat", no "would welcome a conversation"). Everyone is busy, and asking for their time reads as tone-deaf and needy. Instead signal genuine interest and, if anything, invite a reply or a pointer to the right person for the role.
+- Close with a clear, low-friction next step that does NOT request their time.
 - Do NOT ask them to forward your resume or do recruiting work for you. Frame as peer-to-peer candidate introduction.
 - TIMING: Use the exact phrasing from the TIMING LANGUAGE line in the RELATED APPLICATION block above. Do NOT invent your own gap — the server has computed days-since-application against today's date. If TIMING LANGUAGE says "31 days ago (use 'last month')", say "last month" — never "yesterday" or "this morning". Misreporting the timing reads as careless to the recipient.
 ${stageGuidance ? `- ${stageGuidance}` : ''}
@@ -363,11 +401,14 @@ ${isFirstTouch ? '' : `
 == PRIOR CORRESPONDENCE (most recent first) ==
 ${prior.slice().reverse().slice(0, 3).map(m => `--- ${m.direction} on ${m.timestamp} | Subject: ${m.subject}\n${m.body}`).join('\n\n')}
 
-Since prior messages exist, this should be a follow-up — acknowledge the prior thread, add new value (e.g., recent thinking, an artifact, a specific role update), and re-issue the ask.
+THREAD STATE: ${thread.stateLine}
+${thread.recentPitch
+  ? 'A substantive message already went out recently and is UNANSWERED. Write a SHORT nudge, not a fresh pitch: acknowledge the prior note briefly, add exactly ONE new thing (a recent update, an artifact, a specific role development), and do NOT restate the proof points or re-issue the same ask verbatim. Keep the body to 2 or 3 short sentences.'
+  : 'Since prior messages exist, this should be a follow-up — acknowledge the prior thread, add new value (e.g., recent thinking, an artifact, a specific role update), and re-issue the ask without repeating what was already said.'}
 `}
 
 Output ONLY a JSON object — no markdown, no code fences, no explanation:
-{"subject": "<email subject>", "body": "<email body — plain text, no signature block, NO trailing sign-off of any kind (no '${me.firstName}', no 'Best,\\n${me.firstName}', no contact info), NO greeting and NO bare first-name address. STRUCTURE: 3-4 short paragraphs separated by a LITERAL \\n\\n (double newline) between paragraphs in the JSON string — do NOT return one giant block. Each paragraph 1-2 sentences (~30-50 words). Pattern: (1) why-now opener referencing the application, (2) one quantified proof point, (3) why-here link to their team, (4) soft conversational ask. The UI prefills 'Hi ${r.first},' so the first sentence of body MUST begin with substantive content (e.g. 'I submitted my application…', 'Following up on…'). Do NOT start with '${r.first}', 'Hi', 'Hello', 'Hey', or any form of address.>"}`;
+{"subject": "<email subject>", "body": "<email body — plain text, no signature block, NO trailing sign-off of any kind (no '${me.firstName}', no 'Best,\\n${me.firstName}', no contact info), NO greeting and NO bare first-name address. STRUCTURE: 3-4 short paragraphs separated by a LITERAL \\n\\n (double newline) between paragraphs in the JSON string — do NOT return one giant block. Each paragraph 1-2 sentences (~30-50 words). Pattern: (1) why-now opener referencing the application, (2) one quantified proof point, (3) why-here link to their team, (4) a brief interest-signaling close that does NOT ask for a call, meeting, or any of their time. The UI prefills 'Hi ${r.first},' so the first sentence of body MUST begin with substantive content (e.g. 'I submitted my application…', 'Following up on…'). Do NOT start with '${r.first}', 'Hi', 'Hello', 'Hey', or any form of address.>"}`;
 
     const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
     const jsonMatch = raw.match(/\{[\s\S]*\}/);

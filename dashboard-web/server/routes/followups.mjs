@@ -88,13 +88,13 @@ router.get('/api/followups/both-queue', (req, res) => {
 });
 
 // (The Network "High value" directory endpoint was removed: high value is now a
-// per-contact star + filter on the TA and Recruiter tables — see isHighValueContact
+// per-contact star + filter on the TA table, see isHighValueContact
 // in lib/followups.mjs and the isHighValue flag on the contact list endpoints.)
 
 // GET /api/followups/stale — computed stale list with coaching.
 // Merges applications.md (Applied/Responded/Interview) with per-contact stale
-// items from both target-talent.md and recruiters.md. Each row is tagged with
-// `source: 'app' | 'ta' | 'recruiter'`.
+// items from target-talent.md. Each row is tagged with
+// `source: 'app' | 'ta'`.
 router.get('/api/followups/stale', (req, res) => {
   try {
     const rawStaleApps = computeStaleApps();
@@ -140,15 +140,16 @@ router.get('/api/followups/stale', (req, res) => {
 
     // Actionable now: the workable subset of contactFollowups the queue actually
     // shows. Excludes same-day holds (you already reached out at that company
-    // today) and, when you are out of InMail credits, the LinkedIn follow-ups that
-    // would need one. This is what the nav badge and the Follow-ups subtab count,
-    // so an "alert" means something you can send right now, not the whole backlog.
+    // today), out-of-InMail LinkedIn follow-ups, and contacts resting at the
+    // cold-outreach cap (capped with no reply). This is what the nav badge and the
+    // Follow-ups subtab count, so an "alert" means something you can send right
+    // now, not the whole backlog.
     const inmailOut = getInmailBudget().remaining === 0;
     const actionableCount = contactFollowups.filter((c) => {
       const co = c.companyOutreach;
       const heldToday = !!(co && (co.touchedToday || co.selfSentToday));
-      const inmailBlocked = inmailOut && c.channel === 'linkedin' && !!(co && co.selfLastTouch);
-      return !heldToday && !inmailBlocked;
+      const inmailBlocked = inmailOut && c.channel === 'linkedin' && !c.freeDm && !!(co && co.selfLastTouch);
+      return !heldToday && !inmailBlocked && !c.capped;
     }).length;
 
     res.json({
@@ -208,7 +209,7 @@ router.post('/api/followups/snooze', (req, res) => {
 });
 
 // POST /api/followups/unsnooze — bring an alert back early.
-//   body: { source: 'app' | 'ta' | 'recruiter', id }
+//   body: { source: 'app' | 'ta', id }
 router.post('/api/followups/unsnooze', (req, res) => {
   try {
     const { source, id } = req.body || {};

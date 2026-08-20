@@ -7,7 +7,6 @@
 
 import { weeklyMetrics, weekBounds } from './weekly-metrics.mjs';
 import { parseTargetTalentMd, readTTCorrespondence } from './target-talent.mjs';
-import { parseRecruitersMd, readRecruiterCorrespondence } from './recruiters.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseFollowupsMd } from './followups.mjs';
 import { parseStatusEvents } from './sidecars.mjs';
@@ -46,7 +45,6 @@ function allCorrespondence() {
   const out = [];
   const add = (msgs) => { for (const m of (msgs || [])) out.push({ direction: m.direction, date: (m.timestamp || '').slice(0, 10), subject: m.subject || '', channel: m.channel || 'Email' }); };
   try { for (const c of parseTargetTalentMd()) add(readTTCorrespondence(c.id)); } catch { /* apps-only env */ }
-  try { for (const r of parseRecruitersMd()) add(readRecruiterCorrespondence(r.id)); } catch { /* apps-only env */ }
   return out;
 }
 
@@ -83,7 +81,6 @@ function deliveredReplyRatePct() {
     }
   };
   try { tally(parseTargetTalentMd(), readTTCorrespondence); } catch { /* apps-only env */ }
-  try { tally(parseRecruitersMd(), readRecruiterCorrespondence); } catch { /* apps-only env */ }
   if (sentContacts === 0) return null;
   return Math.round((repliedContacts / sentContacts) * 100);
 }

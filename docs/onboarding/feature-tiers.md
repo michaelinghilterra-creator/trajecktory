@@ -14,7 +14,7 @@ faster path you can switch on or off without deleting it:
 - **Claude subscription** (Pro/Max, via a one-time `claude login`): the rolling
   5-hour usage quota, no per-token dollar cost. By default it powers everything:
   onboarding, Agent Scan, Triage, Evaluate, and every AI writing draft (cover
-  letters, CV tailoring, recruiter and TA outreach, follow-ups, LinkedIn, and the
+  letters, CV tailoring, TA outreach, follow-ups, LinkedIn, and the
   Insights report).
 - **Anthropic API key** (optional, pasted into the dashboard): billed per token on
   your own API account. Nothing requires it. When a key is saved and billing is set
@@ -70,7 +70,7 @@ Claude Pro/Max account. Everything here runs with no API key.
 | Agent Scan | Web-searches the open web for new postings (Claude's WebSearch) | Claude subscription, defaults to Haiku |
 | Expand Coverage (Phase 1) | Registers companies already sitting in your pipeline into your tracked list | Pure Node, no cost |
 | Evaluate Pipeline | Scores each JD and writes the full report (Overview, CV Match, Comp, Interview, Customize, Legitimacy) | Claude subscription, defaults to Sonnet |
-| Drafts & Outreach | Cover letters, CV tailoring, recruiter / TA / LinkedIn outreach, follow-up emails | Claude subscription by default, defaults to Haiku (API key optional) |
+| Drafts & Outreach | Cover letters, CV tailoring, TA / LinkedIn outreach, follow-up emails | Claude subscription by default, defaults to Haiku (API key optional) |
 | Insights | A career-strategy narrative synthesized over your whole pipeline | Claude subscription by default, defaults to Sonnet |
 | Liveness Gate, Merge Tracker, Verify, Health Check | Pipeline hygiene (dead-link check, dedup, validation) | Pure Node, no cost |
 | All dashboard views + report drawer | Pipeline, Overview, Insights, Follow-Ups, reading reports | Pure display, no cost |
@@ -99,7 +99,6 @@ plus a batch Evaluate, in place of the plan's Triage-first flow).
 |---|---|---|
 | Apply | Tailored cover letter, tailored CV content, application-form answers | Haiku |
 | Follow-up drafts | Follow-up emails for stale applications | Haiku |
-| Recruiter outreach | Cold-outreach emails to recruiters | Haiku |
 | Target Talent outreach | Warm emails to internal TA contacts | Haiku |
 | TA Reconcile | Web search to find missing TA contacts | Haiku |
 | Visibility | Comment replies and connection notes | Haiku |

@@ -168,20 +168,6 @@ try {
   check(JSON.stringify(clientInterview) === JSON.stringify(INTERVIEW_STAGES),
     `data.js INTERVIEW_STAGES matches states.yml (client ${JSON.stringify(clientInterview)})`);
 
-  const recJsx = read('dashboard-web/src/recruiters.jsx');
-  const recIds = [...recJsx.matchAll(/\{\s*id:\s*'([^']+)'[^}]*stage:/g)].map(m => m[1]);
-  const yamlRecLabels = (doc.recruiter_states || []).map(s => s.label);
-  check(yamlRecLabels.every(l => recIds.includes(l)),
-    `recruiters.jsx REC_STATUS covers every recruiter_state (missing: ${yamlRecLabels.filter(l => !recIds.includes(l)).join(', ') || 'none'})`);
-
-  // `contacted` must agree too — the flag, not the stage, is what the rates use.
-  const yamlContacted = (doc.recruiter_states || []).filter(s => s.contacted).map(s => s.label).sort();
-  const jsxContacted = [...recJsx.matchAll(/\{\s*id:\s*'([^']+)'[^}]*contacted:\s*(true|false)/g)]
-    .filter(m => m[2] === 'true').map(m => m[1]).sort();
-  check(JSON.stringify(yamlContacted) === JSON.stringify(jsxContacted),
-    `recruiters.jsx contacted flags match states.yml (yaml ${yamlContacted.length}, jsx ${jsxContacted.length})`);
-  check(yamlContacted.includes('Dormant') && yamlContacted.includes('Bounced'),
-    'Dormant and Bounced count as contacted — they are entered AFTER a message goes out');
 } finally {
   fs.rmSync(sandbox, { recursive: true, force: true });
 }

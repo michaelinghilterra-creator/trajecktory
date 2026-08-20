@@ -502,7 +502,7 @@ function PublishTool({ posts, onChanged, toast }) {
         <div className="card" style={{ padding: 12 }}>
           <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>Already scheduled on Buffer ({onBuffer.length})</div>
           <div className="col" style={{ gap: 6 }}>
-            {onBuffer.map(p => (
+            {onBuffer.slice().sort((a, b) => String(a.buffer?.dueAt || a.scheduledFor || '~').localeCompare(String(b.buffer?.dueAt || b.scheduledFor || '~'))).map(p => (
               <div key={p.id} className="col" style={{ gap: 2 }}>
                 <div className="row" style={{ gap: 8, fontSize: 12, alignItems: 'baseline' }}>
                   <span style={{ color: 'var(--green)', width: 78, flexShrink: 0 }}>on Buffer</span>
