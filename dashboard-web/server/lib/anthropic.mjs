@@ -67,6 +67,13 @@ export function apiKeyActive() { return hasAnthropicKey() && !planForced(); }
 // Returns the model's text; callers do their own JSON.parse / stripping on it.
 // Pass `tools` (a web_search tool def) to enable web search on either path.
 export async function generateText(prompt, opts = {}) {
+  // Test seam: return a canned response without touching the model or the network,
+  // so route smoke-tests can exercise a handler's full path (including its response
+  // assembly) and fail on a dangling variable the way a real click would. Default
+  // is a JSON object string because most draft handlers JSON.parse the output.
+  if (process.env.TJK_FAKE_LLM) {
+    return process.env.TJK_FAKE_LLM_TEXT || '{"subject":"Stub subject","body":"Stub body."}';
+  }
   const { system, model, maxTokens = 1024, tools, ...rest } = opts;
   if (apiKeyActive()) {
     const msg = await anthropicClient().messages.create({
