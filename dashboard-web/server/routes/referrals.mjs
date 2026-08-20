@@ -3,7 +3,6 @@ import { ROOT_DIR } from '../config.mjs';
 import { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence } from '../lib/referrals.mjs';
 import { reconcile, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
-import { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine } from '../lib/recruiters.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
@@ -27,29 +26,25 @@ function splitName(name) {
 const _norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const _slug = u => { const m = String(u || '').match(/linkedin\.com\/in\/([^\/?#\s]+)/i); return m ? m[1].toLowerCase().replace(/\/$/, '') : ''; };
 
-// Resolve a referral to its TA-outreach or recruiter TWIN: the same human tracked
-// in another book. This is what makes the drawer "unified": a linked referral shows
-// (and logs to) the twin's correspondence, so a referral and its TA-contact twin
-// are one shared timeline. Match precedence, strongest first:
+// Resolve a referral to its TA-outreach TWIN: the same human tracked in the TA
+// book. This is what makes the drawer "unified": a linked referral shows (and
+// logs to) the twin's correspondence, so a referral and its TA-contact twin are
+// one shared timeline. Match precedence, strongest first:
 //   1) an explicit backref stamped in notes ("from TA Outreach #<id>")
 //   2) an exact LinkedIn-URL slug match (reliable identity)
 //   3) name + company (lower confidence, only when both agree)
-// Returns { source:'ta'|'recruiter', contact } or null (a pure-LinkedIn referral
-// with no twin — it uses its own correspondence store).
-function resolveReferralLink(refRow, taRows, recRows) {
+// Returns { source:'ta', contact } or null (a pure-LinkedIn referral with no twin,
+// using its own correspondence store).
+function resolveReferralLink(refRow, taRows) {
   const taRef = (refRow.notes || '').match(/TA Outreach #(\d+)/i);
   if (taRef) { const c = taRows.find(r => r.id === parseInt(taRef[1], 10)); if (c) return { source: 'ta', contact: c }; }
-  const recRef = (refRow.notes || '').match(/Recruiters? #(\d+)/i);
-  if (recRef) { const c = recRows.find(r => r.id === parseInt(recRef[1], 10)); if (c) return { source: 'recruiter', contact: c }; }
   const s = _slug(refRow.linkedin);
   if (s) {
     const ta = taRows.find(r => _slug(r.linkedin) === s); if (ta) return { source: 'ta', contact: ta };
-    const rc = recRows.find(r => _slug(r.linkedin) === s); if (rc) return { source: 'recruiter', contact: rc };
   }
   const nn = _norm(refRow.name), nc = _norm(refRow.where);
   if (nn && nn.length >= 4) {
     const ta = taRows.find(r => _norm(`${r.first} ${r.last}`) === nn && (!nc || _norm(r.company) === nc)); if (ta) return { source: 'ta', contact: ta };
-    const rc = recRows.find(r => _norm(`${r.first} ${r.last}`) === nn && (!nc || _norm(r.firm) === nc)); if (rc) return { source: 'recruiter', contact: rc };
   }
   return null;
 }
@@ -211,7 +206,7 @@ router.post('/api/referrals/find-emails', async (req, res) => {
 });
 
 // GET /api/referrals/:id/detail — the unified drawer's payload. Resolves the
-// TA/recruiter twin (if any) and returns THAT contact's correspondence, so a
+// TA twin (if any) and returns THAT contact's correspondence, so a
 // referral who is also a TA contact shows the real outreach history instead of a
 // hollow log. relatedApps is matched on the referral's company, same as the TA
 // drawer. `link` tells the UI which book the timeline belongs to.
@@ -221,16 +216,12 @@ router.get('/api/referrals/:id/detail', (req, res) => {
     const ref = parseReferralsMd().find(r => r.id === id);
     if (!ref) return res.status(404).json({ error: 'Referral not found' });
     const taRows = parseTargetTalentMd();
-    const recRows = parseRecruitersMd();
-    const link = resolveReferralLink(ref, taRows, recRows);
+    const link = resolveReferralLink(ref, taRows);
     let correspondence = [];
     let linkInfo = null;
     if (link && link.source === 'ta') {
       correspondence = readTTCorrespondence(link.contact.id);
       linkInfo = { source: 'ta', id: link.contact.id, name: `${link.contact.first} ${link.contact.last}`.trim(), title: link.contact.title, company: link.contact.company, email: link.contact.email, verified: link.contact.verified, status: link.contact.status, linkedinStatus: link.contact.linkedinStatus };
-    } else if (link && link.source === 'recruiter') {
-      correspondence = readRecruiterCorrespondence(link.contact.id);
-      linkInfo = { source: 'recruiter', id: link.contact.id, name: `${link.contact.first} ${link.contact.last}`.trim(), title: link.contact.title, company: link.contact.firm, email: link.contact.email, verified: link.contact.verified, status: link.contact.status };
     } else {
       correspondence = readReferralCorrespondence(id);
     }
@@ -259,13 +250,10 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
     const entry = { timestamp: stamp, direction, channel, subject: String(subject || '(no subject)').trim() || '(no subject)', body: String(body || '').trim() || '(no body)' };
-    const link = resolveReferralLink(ref, parseTargetTalentMd(), parseRecruitersMd());
+    const link = resolveReferralLink(ref, parseTargetTalentMd());
     if (link && link.source === 'ta') {
       const msgs = readTTCorrespondence(link.contact.id); msgs.push(entry); writeTTCorrespondence(link.contact.id, msgs);
       if (direction !== 'Draft') updateTTLine(link.contact.id, { lastTouch: today });
-    } else if (link && link.source === 'recruiter') {
-      const msgs = readRecruiterCorrespondence(link.contact.id); msgs.push(entry); writeRecruiterCorrespondence(link.contact.id, msgs);
-      if (direction !== 'Draft') updateRecruiterLine(link.contact.id, { lastTouch: today });
     } else {
       const msgs = readReferralCorrespondence(id); msgs.push(entry); writeReferralCorrespondence(id, msgs);
     }
@@ -314,9 +302,8 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
 
     // The correspondence thread lives on the TWIN when the referral is linked, so
     // reply / follow-up draft against the same history the drawer displays.
-    const link = resolveReferralLink(ref, parseTargetTalentMd(), parseRecruitersMd());
+    const link = resolveReferralLink(ref, parseTargetTalentMd());
     const prior = link && link.source === 'ta' ? readTTCorrespondence(link.contact.id)
-      : link && link.source === 'recruiter' ? readRecruiterCorrespondence(link.contact.id)
       : readReferralCorrespondence(id);
 
     const cvMd            = readProjectFile(ROOT_DIR, 'cv.md');

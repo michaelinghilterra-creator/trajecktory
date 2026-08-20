@@ -140,16 +140,14 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
   const alreadyInvited = isAlreadyInvited(c);
 
   // Record that the invite went out, right here — no jumping to the Network tab.
-  // Posts the note as a "Sent" correspondence to the contact's own route (TA vs
-  // recruiter), which appends the message, advances status to Sent, and stamps
+  // Posts the note as a "Sent" correspondence to the contact's TA route, which
+  // appends the message, advances status to Sent, and stamps
   // Last Touch. Passing the drafted note as the body is how "I used the AI note"
   // gets captured; a self-written invite records a short generic line instead.
   const markSent = () => {
     if (sending || done) return;
     setSending(true);
-    const url = c.source === 'recruiter'
-      ? `/api/recruiters/${c.id}/correspondence`
-      : `/api/target-talent/${c.id}/correspondence`;
+    const url = `/api/target-talent/${c.id}/correspondence`;
     const kind = alreadyInvited ? 'LinkedIn message' : 'LinkedIn connection request';
     const body = (note?.response || '').trim() || `${kind} sent to ${c.name || 'this contact'}.`;
     window.tjkMutate(url, {
@@ -335,7 +333,7 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
   const [sentAt, setSentAt] = useStateCq(null);
   const [showArchive, setShowArchive] = useStateCq(false);
   const done = !!sentAt;
-  const base = c.source === 'recruiter' ? `/api/recruiters/${c.id}` : `/api/target-talent/${c.id}`;
+  const base = `/api/target-talent/${c.id}`;
   const firstName = c.firstName || (c.name || '').split(/\s+/)[0] || 'there';
   // LinkedIn profile link, same normalization as the Connect queue, so you can
   // confirm the TA is still at the company before you spend a draft on them.
@@ -541,7 +539,7 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
   const [emSending, setEmSending] = useStateCq(false);
   const [emDone, setEmDone] = useStateCq(!!c.emailDone);
 
-  const base = c.source === 'recruiter' ? `/api/recruiters/${c.id}` : `/api/target-talent/${c.id}`;
+  const base = `/api/target-talent/${c.id}`;
   const firstName = c.firstName || (c.name || '').split(/\s+/)[0] || 'there';
   const href = c.linkedin ? (/^https?:/.test(c.linkedin) ? c.linkedin : `https://${c.linkedin}`) : null;
 

@@ -53,7 +53,7 @@ if they have not.
 | Surface | Needs | User can self-provision? | Modeled where today | What a new user hits |
 |---|---|---|---|---|
 | Gmail reply and bounce sweep (Review tab) | Own Google OAuth client, then consent | Yes, free, about 15 min | Nowhere. The card always renders with a Connect button | Full-page navigation to a raw 400 text page naming an env var. **Worst case in the app.** |
-| "Draft in Gmail" buttons (TA, recruiter, follow-up composers) | Same, plus the compose scope | Yes | Renders whenever a recipient exists | An error toast, "Google is not connected." |
+| "Draft in Gmail" buttons (TA, follow-up composers) | Same, plus the compose scope | Yes | Renders whenever a recipient exists | An error toast, "Google is not connected." |
 | Review nav attention badge | Same | Yes | Health poll | Silent and correct. No change needed |
 | Finding and verifying contact emails | `HUNTER_API_KEY` + `MILLIONVERIFIER_API_KEY` | Yes. Free tier, and a small one-time fee | Nowhere in the Launchpad. One after-the-fact warning inside the TA reconcile result | Contacts land UNVERIFIED, and the send gate then quietly removes them from Follow-Ups. **The most invisible gate in the app.** |
 | Expand Coverage, web phases | `BRAVE_API_KEY`, optional `MUSE_API_KEY` | Yes, free tier | Launchpad booster, "Web discovery keys" | Reports "0 new", which the booster copy already names as expected |

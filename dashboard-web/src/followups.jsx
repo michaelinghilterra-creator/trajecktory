@@ -123,7 +123,7 @@ function FUBarRow({ label, n, total, color }) {
 
 function FUOverview({ items, thresholds, taThreshold, onOpen }) {
   // Contact-scoped: applications now live in Pipeline → Awaiting response, so this
-  // overview describes only the people (TA + recruiter contacts) going quiet.
+  // overview describes only the people (TA contacts) going quiet.
   const parseScore = (s) => {
     if (typeof s === 'number') return s;
     const m = String(s || '').match(/(\d+(?:\.\d+)?)/);
@@ -131,8 +131,6 @@ function FUOverview({ items, thresholds, taThreshold, onOpen }) {
   };
 
   const total = items.length;
-  const taCount  = items.filter(it => it.source === 'ta').length;
-  const recCount = items.filter(it => it.source === 'recruiter').length;
   const inConversation = items.filter(it => ['Replied', 'Meeting Scheduled'].includes(it.status)).length;
   const giveUpCount = items.filter(it => it.coachLevel === 'give-up').length;
   const avgSilence = total > 0 ? Math.round(items.reduce((s, it) => s + (it.daysSinceLastTouch || 0), 0) / total) : 0;
@@ -188,13 +186,13 @@ function FUOverview({ items, thresholds, taThreshold, onOpen }) {
       <div className="ta-head">
         <div>
           <h1>Follow-Ups</h1>
-          <div className="sub">{total} contact{total === 1 ? '' : 's'} going quiet · {taCount} TA · {recCount} recruiter{giveUpCount ? ` · ${giveUpCount} ready to write off` : ''}</div>
+          <div className="sub">{total} contact{total === 1 ? '' : 's'} going quiet{giveUpCount ? ` · ${giveUpCount} ready to write off` : ''}</div>
         </div>
       </div>
 
       {/* KPI row */}
       <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-        <FUKpi label="Contacts going quiet" value={total} sub={`${taCount} TA · ${recCount} recruiter. Work the list, oldest first`} tone={staleTone} />
+        <FUKpi label="Contacts going quiet" value={total} sub="Work the list, oldest first" tone={staleTone} />
         <FUKpi label="In conversation" value={inConversation} sub={inConversation > 0
           ? 'Replied or meeting booked. Keep the momentum'
           : 'No live threads right now'} tone={convoTone} />
@@ -206,7 +204,7 @@ function FUOverview({ items, thresholds, taThreshold, onOpen }) {
           : 'Healthy. Staying inside the window'} tone={silenceTone} />
       </div>
 
-      {/* Three visuals */}
+      {/* Two visuals */}
       <div className="row" style={{ gap: 12, alignItems: 'stretch', flexWrap: 'wrap' }}>
         <div className="card" style={{ padding: 14, flex: 1, minWidth: 280 }}>
           <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>By Age</div>
@@ -221,21 +219,6 @@ function FUOverview({ items, thresholds, taThreshold, onOpen }) {
               : (bucketCounts['21-45d'] || 0) > 0
                 ? 'Work the 21-45d bucket next. Last fair window to recover them.'
                 : 'Stale queue is fresh. Every item is recoverable.'}
-          </div>
-        </div>
-
-        <div className="card" style={{ padding: 14, flex: 1, minWidth: 240 }}>
-          <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>By Book</div>
-          <div className="col" style={{ gap: 10 }}>
-            <FUBarRow label="TA Outreach" n={taCount} total={total} color="#22d3ee" />
-            <FUBarRow label="Recruiters" n={recCount} total={total} color="#a78bfa" />
-          </div>
-          <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-            {taCount > recCount
-              ? 'Mostly TA contacts. Warm them before they cool.'
-              : recCount > taCount
-                ? 'Mostly recruiters. Keep those relationships alive.'
-                : 'Balanced across both books.'}
           </div>
         </div>
 

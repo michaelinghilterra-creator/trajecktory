@@ -125,19 +125,17 @@ const rows = [
   { id: 6, first: 'Fay',  last: 'Oduya',   email: 'fay@example.test',   status: 'Archived', verified: { state: 'unverified' } },
   { id: 7, first: 'Gus',  last: 'Halvorsen', email: 'gus@example.test', status: 'Sent',    verified: { state: 'risky' } },
 ];
-check(countWithheldContacts({ taRows: rows, recruiterRows: [] }) === 2,
+check(countWithheldContacts({ taRows: rows }) === 2,
   'counts only the unverified-with-an-address rows (an explicit state and a missing one)');
-check(countWithheldContacts({ taRows: [rows[2]], recruiterRows: [] }) === 0,
+check(countWithheldContacts({ taRows: [rows[2]] }) === 0,
   'a contact with no address is not withheld: there is nothing to send to');
-check(countWithheldContacts({ taRows: [rows[4]], recruiterRows: [] }) === 0,
+check(countWithheldContacts({ taRows: [rows[4]] }) === 0,
   'a bounced address is not withheld: it was checked and it is dead, a key changes nothing');
-check(countWithheldContacts({ taRows: [rows[5]], recruiterRows: [] }) === 0,
+check(countWithheldContacts({ taRows: [rows[5]] }) === 0,
   'an archived contact is not withheld: the opportunity is over');
-check(countWithheldContacts({ taRows: [rows[3], rows[6]], recruiterRows: [] }) === 0,
+check(countWithheldContacts({ taRows: [rows[3], rows[6]] }) === 0,
   'sendable states (ok, risky) are not withheld');
-check(countWithheldContacts({ taRows: [], recruiterRows: [rows[0]] }) === 1,
-  'recruiters are counted on the same footing as target-talent contacts');
-check(countWithheldContacts({ taRows: [], recruiterRows: [] }) === 0,
+check(countWithheldContacts({ taRows: [] }) === 0,
   'no contacts → zero, not a crash');
 
 setClient(savedId, savedSecret);

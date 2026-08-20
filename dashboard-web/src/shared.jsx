@@ -1000,12 +1000,12 @@ window.SyncIndicator = function SyncIndicator({ lastSync }) {
 };
 
 // ---------- Universal search dropdown ----------
-// Results panel under the top search bar: people (TA / recruiters / referrals) and
+// Results panel under the top search bar: people (TA / referrals) and
 // companies (pipeline roles), each clickable to jump straight there. Positioned
 // `fixed` off the search box's measured rect because `.topbar` has overflow:hidden
 // and would clip an absolutely-positioned child. Reuses the cmdk-item/section
 // styles the command palette already ships.
-const USEARCH_ICON = { ta: '◎', recruiter: '☎', referral: '⇄', company: '▥' };
+const USEARCH_ICON = { ta: '◎', referral: '⇄', company: '▥' };
 window.UniversalSearchDropdown = function UniversalSearchDropdown({ anchorRef, results, active, onHover, onPick }) {
   const [rect, setRect] = React.useState(null);
   React.useLayoutEffect(() => {
@@ -1221,7 +1221,7 @@ function useGmailState() {
 // Create-a-Gmail-draft button. POSTs the composed email to /api/google/draft,
 // which creates a DRAFT and never sends (the server has no send path). If the
 // connected token predates the compose scope the route returns needsReconnect and
-// we nudge a reconnect. Shared by the TA, recruiter, and follow-up composers.
+// we nudge a reconnect. Shared by the TA and follow-up composers.
 // Renders nothing without a recipient address (a draft needs a "to").
 //
 // When Gmail is not usable the button is DISABLED, never hidden. Hiding it means a

@@ -43,7 +43,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/25-crm-overview.png" alt="Network hub: referrals, talent acquisition, and recruiters tracked in one place" width="405">
+  <img src="docs/screenshots/25-crm-overview.png" alt="Contacts hub: referrals and talent acquisition tracked in one place" width="405">
   <img src="docs/screenshots/21-outreach-composer.png" alt="Connect queue with a live AI-drafted note you edit before sending. Nothing auto-sends" width="405">
 </p>
 
@@ -77,7 +77,7 @@ the few roles worth it and the people who can actually help.
 - **Makes sure nothing goes cold.** It schedules your follow-ups on a sensible cadence, shows you at
   a glance who is overdue and who to give up on, and drafts the nudge for you. The thread you would
   have forgotten is the one it surfaces.
-- **Finds and works the right contacts.** A recruiter CRM and an in-network (target-talent) CRM, a
+- **Finds and works the right contacts.** An in-network (target-talent) CRM, a
   LinkedIn connection queue for people you can only reach there, and LinkedIn and X posts drafted in
   your voice and scheduled through Buffer, so you build inbound while you work outbound.
 - **Reads your inbox so you do not have to.** An optional, read-only Gmail connection catches
@@ -188,7 +188,7 @@ guides: **[docs/onboarding](docs/onboarding)**.
   full A-to-G evaluation as a cheat sheet.
 - **Follow-Ups** the stale-thread action queue, with coach intelligence on what is overdue and a
   drafted, editable nudge for each.
-- **Recruiters & Target Talent** two CRMs (external recruiters, in-network contacts) with
+- **Contacts** an in-network (target-talent) contact CRM plus your referral network, with
   AI-drafted, voice-matched, editable outreach.
 - **Social** a Visibility tracker (your LinkedIn Social Selling Index), a connection queue, an engagement drafter, and a **Posts** composer:
   write your own or have Claude draft them, edit either, queue them, and schedule to LinkedIn and X
@@ -205,7 +205,7 @@ guides: **[docs/onboarding](docs/onboarding)**.
    matching) and writes a structured report. The headline score is derived by code from keyed
    dimensions, with pay rated but deliberately kept from moving the score.
 4. **Tailor** generate a per-role docx resume + cover letter, bullets and all.
-5. **Track and act** manage status, follow-ups, and recruiter and in-network outreach from the
+5. **Track and act** manage status, follow-ups, and in-network outreach from the
    dashboard; capture replies from Gmail.
 6. **Learn** honest insights show what is actually converting, so you target better over time.
 

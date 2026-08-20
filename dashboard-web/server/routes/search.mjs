@@ -7,7 +7,6 @@
 // token-free like the rest of the UI's read endpoints.
 import express from 'express';
 import { parseTargetTalentMd } from '../lib/target-talent.mjs';
-import { parseRecruitersMd } from '../lib/recruiters.mjs';
 import { parseReferralsMd } from '../lib/referrals.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 
@@ -42,14 +41,6 @@ router.get('/api/search', (req, res) => {
       people.push({
         type: 'ta', id: r.id, name, company: r.company || '',
         subtitle: [r.title, r.isPrincipal ? 'hiring principal' : ''].filter(Boolean).join(' · '),
-      });
-    }
-    for (const r of safe(parseRecruitersMd)) {
-      const name = `${r.first || ''} ${r.last || ''}`.trim();
-      if (!match(name, r.firm, r.title)) continue;
-      people.push({
-        type: 'recruiter', id: r.id, name, company: r.firm || '',
-        subtitle: [r.title, 'recruiter'].filter(Boolean).join(' · '),
       });
     }
     for (const r of safe(parseReferralsMd)) {

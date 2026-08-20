@@ -8,7 +8,6 @@ import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { loadInfluencer, toneInstruction, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine, readTTCorrespondence } from '../lib/target-talent.mjs';
-import { parseRecruitersMd, updateRecruiterLine, readRecruiterCorrespondence } from '../lib/recruiters.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
 import { getInmailBudget, decrementInmail, setInmailRemaining } from '../lib/inmail-budget.mjs';
@@ -229,7 +228,7 @@ Return ONLY the body of the connection note, ready to paste into LinkedIn. No qu
 
 // GET /api/linkedin-drafts/connect-queue — contacts reachable only via LinkedIn
 // (a real handle, no sendable email): the fallback outreach lane for people whose
-// address bounced, is org-blocked, or was never verifiable. Spans TA + recruiters.
+// address bounced, is org-blocked, or was never verifiable. TA contacts.
 router.get('/api/linkedin-drafts/connect-queue', (req, res) => {
   try {
     res.json({ queue: computeConnectQueue() });
@@ -241,7 +240,7 @@ router.get('/api/linkedin-drafts/connect-queue', (req, res) => {
 
 // POST /api/linkedin-drafts/connect-note — draft a <=300-char LinkedIn connection
 // note for a GENERIC recipient. Pass { source, id } to draft for a queue member
-// (TA or recruiter), or raw { name, role, company, reason, firstName } for an
+// (a TA contact), or raw { name, role, company, reason, firstName } for an
 // ad-hoc contact. Raw fields override the resolved row. The note is always the
 // user's to review and send; nothing is sent from here.
 router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
@@ -265,7 +264,7 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       // contacts to /followup-message, so anything reaching here is a genuine
       // first-touch connect note; this only prevents a hard 400 on an edge case.
       if (!resolved) {
-        const rows = source === 'recruiter' ? parseRecruitersMd() : parseTargetTalentMd();
+        const rows = parseTargetTalentMd();
         const row = rows.find(r => String(r.id) === String(id));
         if (row) resolved = {
           source,
@@ -273,7 +272,7 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
           name: `${row.first || ''} ${row.last || ''}`.trim(),
           firstName: row.first || '',
           role: row.title || '',
-          company: (source === 'recruiter' ? row.firm : row.company) || '',
+          company: row.company || '',
           reason: '',
         };
       }
@@ -298,14 +297,11 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     const cvExcerpt = portfolioSnippet + (cvMd ? cvMd.slice(0, 3500) : '(CV not available)');
     const idn = getIdentity();
 
-    // Source-specific "why connect" anchor. External recruiters place GTM / RevOps
-    // leaders, so a credible-operator signal is appropriate; TA leads are peers.
+    // "Why connect" anchor for a TA / gatekeeper contact: a fellow-operator framing.
     const angleHint = angle ? ` (${angle})` : '';
     const guidance = reason
       ? `Anchor on this specific context${angleHint}: ${reason}`
-      : src === 'recruiter'
-        ? `${idn.firstName} is a Director / Senior Director Revenue Operations and analytics leader. ${name}${recipientCompany ? ` at ${recipientCompany}` : ''} places GTM / RevOps leaders. Connect as a credible operator worth knowing for current and future searches${angleHint}; professional, not desperate.`
-        : `Anchor on ${name}'s work${recipientRole ? ` as ${recipientRole}` : ''}${recipientCompany ? ` at ${recipientCompany}` : ''} and on ${idn.firstName} being a fellow operator in the GTM / RevOps / analytics space, not a job seeker${angleHint}.`;
+      : `Anchor on ${name}'s work${recipientRole ? ` as ${recipientRole}` : ''}${recipientCompany ? ` at ${recipientCompany}` : ''} and on ${idn.firstName} being a fellow operator in the GTM / RevOps / analytics space, not a job seeker${angleHint}.`;
 
     const buildPrompt = (targetMax) => buildConnectPrompt({
       senderName: idn.fullName, senderFirst: idn.firstName, senderHeadline: idn.headline,
@@ -332,27 +328,26 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
 // note: the invite is already out, so a follow-up is a real message (an InMail
 // while you are not connected, a free DM once they accept). It reads the prior
 // correspondence so it acknowledges the earlier touch instead of repeating it,
-// and for a TA / recruiter contact it leads with candidacy (interest in their
+// and for a TA contact it leads with candidacy (interest in their
 // company) plus one clear ask. Longer than the 300-char connect cap. The message
 // is always the user's to review and send; nothing is sent from here.
 router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
   try {
     const body = req.body || {};
-    const { source, id } = body;
-    if (id == null) return res.status(400).json({ error: 'A contact source and id are required.' });
-    const src = source === 'recruiter' ? 'recruiter' : 'ta';
-    const rows = src === 'recruiter' ? parseRecruitersMd() : parseTargetTalentMd();
+    const { id } = body;
+    if (id == null) return res.status(400).json({ error: 'A contact id is required.' });
+    const rows = parseTargetTalentMd();
     const row = rows.find(r => String(r.id) === String(id));
     if (!row) return res.status(404).json({ error: 'Contact not found.' });
 
     const name = `${row.first || ''} ${row.last || ''}`.trim() || (body.name || '').trim();
     const recipientFirst = row.first || name.split(/\s+/)[0] || 'there';
     const recipientRole = row.title || '';
-    const company = (src === 'recruiter' ? row.firm : row.company) || '';
+    const company = row.company || '';
 
     // Prior 1:1 history with THIS contact, so the message names the earlier connect
     // (and when) and never repeats it. Cap the tail so the prompt stays bounded.
-    const corr = ((src === 'recruiter' ? readRecruiterCorrespondence : readTTCorrespondence)(Number(id)) || []);
+    const corr = (readTTCorrespondence(Number(id)) || []);
     const sent = corr.filter(m => m.direction === 'Sent');
     const firstTouchDate = (sent[0]?.timestamp || row.lastTouch || '').slice(0, 10);
     const history = corr.slice(-3)
@@ -364,9 +359,7 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
     const cvExcerpt = (articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 900)}\n\nCV:\n` : '') + (cvMd ? cvMd.slice(0, 3200) : '(CV not available)');
     const idn = getIdentity();
 
-    const purpose = src === 'recruiter'
-      ? `${name} is an external recruiter${company ? ` at ${company}` : ''} who places GTM, RevOps and analytics leaders. The goal is to be known as a credible candidate worth representing, for current and future searches.`
-      : `${name} works in Talent Acquisition or recruiting${company ? ` at ${company}` : ''}. ${idn.firstName} is genuinely interested in ${company || 'their company'} and has applied there (or is about to). The goal is candidacy: get on ${recipientFirst}'s radar as a strong fit and open a short conversation.`;
+    const purpose = `${name} works in Talent Acquisition or recruiting${company ? ` at ${company}` : ''}. ${idn.firstName} is genuinely interested in ${company || 'their company'} and has applied there (or is about to). The goal is candidacy: get on ${recipientFirst}'s radar as a strong fit and open a short conversation.`;
 
     const prompt = `You are drafting a brief LinkedIn FOLLOW-UP MESSAGE (an InMail) from ${idn.fullName} to a contact he ALREADY sent a connection request to${firstTouchDate ? ` on ${firstTouchDate}` : ''}. That request has not been accepted or answered.
 
@@ -420,14 +413,13 @@ router.post('/api/linkedin-drafts/archive-contact', (req, res) => {
     const reasonText = ARCHIVE_REASONS[reason];
     if (!source || id == null) return res.status(400).json({ error: 'source and id are required.' });
     if (!reasonText) return res.status(400).json({ error: `reason must be one of: ${Object.keys(ARCHIVE_REASONS).join(', ')}` });
-    const isRec = source === 'recruiter';
-    const rows = isRec ? parseRecruitersMd() : parseTargetTalentMd();
+    const rows = parseTargetTalentMd();
     const row = rows.find(r => String(r.id) === String(id));
     if (!row) return res.status(404).json({ error: 'Contact not found.' });
     const date = new Date().toISOString().slice(0, 10);
     const existing = (row.notes || '').trim();
     const notes = `${existing ? existing + ' · ' : ''}Archived ${date}: ${reasonText}`;
-    const ok = (isRec ? updateRecruiterLine : updateTTLine)(Number(id), { status: 'Archived', notes });
+    const ok = updateTTLine(Number(id), { status: 'Archived', notes });
     if (!ok) return res.status(404).json({ error: 'Contact not found.' });
     res.json({ ok: true, status: 'Archived', reason: reasonText });
   } catch (err) {

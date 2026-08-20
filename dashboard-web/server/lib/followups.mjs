@@ -3,7 +3,6 @@ import path from 'path';
 import { FOLLOWUPS_MD } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, matchByCompany, getNewBaselineId } from './target-talent.mjs';
-import { parseRecruitersMd, readRecruiterCorrespondence } from './recruiters.mjs';
 import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
 import { INTERVIEW_STAGES, isInterviewStage, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { isSendable } from '../../../lib/email-verify.mjs';
@@ -364,13 +363,11 @@ function computeStaleContacts({ apps } = {}) {
 
   let taContacts = [];
   try { taContacts = parseTargetTalentMd(); } catch { /* */ }
-  let recruiterContacts = [];
-  try { recruiterContacts = parseRecruitersMd(); } catch { /* */ }
 
   const stale = [];
 
   const processContact = (c, source) => {
-    const company = source === 'recruiter' ? c.firm : c.company;
+    const company = c.company;
     if (!CONTACT_TRACKED_STATUSES.has(c.status)) return;
     if (!c.lastTouch) return;
     if (!eligible.has(normalizeCompany(company))) return;
@@ -378,9 +375,7 @@ function computeStaleContacts({ apps } = {}) {
     const daysSinceLastTouch = _businessDaysAgo(c.lastTouch);
     if (daysSinceLastTouch == null || daysSinceLastTouch < CONTACT_STALE_THRESHOLD_DAYS) return;
 
-    const corr = source === 'recruiter'
-      ? readRecruiterCorrespondence(c.id)
-      : readTTCorrespondence(c.id);
+    const corr = readTTCorrespondence(c.id);
     const sentCount = corr.filter(m => m.direction === 'Sent').length;
     const fuCount = Math.max(0, sentCount - 1); // first send = original touch, not a follow-up
     const overCap = fuCount >= CONTACT_FU_CAP;
@@ -428,8 +423,7 @@ function computeStaleContacts({ apps } = {}) {
     });
   };
 
-  for (const c of taContacts)        processContact(c, 'ta');
-  for (const c of recruiterContacts) processContact(c, 'recruiter');
+  for (const c of taContacts) processContact(c, 'ta');
 
   stale.sort((a, b) => {
     if (a.coachLevel !== b.coachLevel) return a.coachLevel === 'give-up' ? -1 : 1;
@@ -533,10 +527,9 @@ function outreachEligibleCompanies(apps) {
   return set;
 }
 
-function _bothBooks({ taRows, recruiterRows }) {
-  const ta  = taRows        ?? (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
-  const rec = recruiterRows ?? (() => { try { return parseRecruitersMd();  } catch { return []; } })();
-  return { ta, rec };
+function _bothBooks({ taRows } = {}) {
+  const ta = taRows ?? (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
+  return { ta };
 }
 
 // One row shape for both queues. `email` is the clean address (verified.address),
@@ -559,7 +552,7 @@ function _localToday() {
 // drawer and the Network tab. Sourced from the correspondence logs (both books):
 // a LinkedIn invite is logged there too, with a subject isLinkedInInvite detects,
 // so this one pass covers both channels. Each company's list is sorted newest-first.
-function buildCompanyTouchIndex({ ta, rec }) {
+function buildCompanyTouchIndex({ ta }) {
   const idx = new Map();
   const add = (companyRaw, key, name, msgs) => {
     const co = normalizeCompany(companyRaw);
@@ -575,8 +568,7 @@ function buildCompanyTouchIndex({ ta, rec }) {
       idx.get(co).push({ key, name, date, direction: m.direction, channel: isLinkedInEntry(m) ? 'linkedin' : 'email' });
     }
   };
-  for (const r of (ta || []))  { try { add(r.company, `ta:${r.id}`, `${r.first || ''} ${r.last || ''}`.trim(), readTTCorrespondence(r.id)); } catch { /* skip unreadable */ } }
-  for (const r of (rec || [])) { try { add(r.firm, `recruiter:${r.id}`, `${r.first || ''} ${r.last || ''}`.trim(), readRecruiterCorrespondence(r.id)); } catch { /* skip unreadable */ } }
+  for (const r of (ta || [])) { try { add(r.company, `ta:${r.id}`, `${r.first || ''} ${r.last || ''}`.trim(), readTTCorrespondence(r.id)); } catch { /* skip unreadable */ } }
   for (const arr of idx.values()) arr.sort((a, b) => b.date.localeCompare(a.date));
   return idx;
 }
@@ -622,12 +614,12 @@ function _companyOutreachFor(selfKey, companyTouches, today = null) {
 // to a different contact while you had emailed THIS person last week — invisible until
 // you opened the card.
 function _queueRow(row, source, baselineId = null, companyTouches = null, today = null) {
-  const company = source === 'recruiter' ? row.firm : row.company;
+  const company = row.company;
   const status = row.status || '';
   const selfKey = `${source}:${row.id}`;
   const companyOutreach = _companyOutreachFor(selfKey, companyTouches, today);
   return {
-    source,                                       // 'ta' | 'recruiter'
+    source,                                       // always 'ta'
     id: row.id,
     name: `${row.first || ''} ${row.last || ''}`.trim(),
     firstName: row.first || '',
@@ -671,11 +663,11 @@ function _sortByCompanyName(out) {
 // from both queues by CONNECT_QUEUE_EXCLUDE_STATUS, so a reply on either channel
 // automatically stops the other — the existing status-based gate serves as the
 // reply-anywhere-pauses-all mechanism.
-function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
-  const { ta, rec } = _bothBooks({ taRows, recruiterRows });
+function computeConnectQueue({ taRows, apps } = {}) {
+  const { ta } = _bothBooks({ taRows });
   const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const baselineId = getNewBaselineId();
-  const touchIdx = buildCompanyTouchIndex({ ta, rec });
+  const touchIdx = buildCompanyTouchIndex({ ta });
   const today = _localToday();
   const out = [];
   const consider = (row, source) => {
@@ -685,24 +677,22 @@ function computeConnectQueue({ taRows, recruiterRows, apps } = {}) {
     // worked in parallel — not here. This keeps the three buckets mutually exclusive.
     if (isSendable(row)) return;
     if (CONNECT_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
-    const company = source === 'recruiter' ? row.firm : row.company;
+    const company = row.company;
     if (!applied.has(normalizeCompany(company))) return;   // only companies you've applied to
     out.push(_queueRow(row, source, baselineId, touchIdx.get(normalizeCompany(company)), today));
   };
-  for (const r of ta)  consider(r, 'ta');
-  for (const r of rec) consider(r, 'recruiter');
-  return _sortByCompanyName(out);
+  for (const r of ta)  consider(r, 'ta');  return _sortByCompanyName(out);
 }
 
 // The email counterpart: contacts you CAN email (a sendable, verified address) at
 // companies you've applied to, that you have not emailed yet. Working this list
 // logs verified EMAIL touches (the 13/week floor) the same one-at-a-time way the
 // connect queue logs LinkedIn connects.
-function computeEmailQueue({ taRows, recruiterRows, apps } = {}) {
-  const { ta, rec } = _bothBooks({ taRows, recruiterRows });
+function computeEmailQueue({ taRows, apps } = {}) {
+  const { ta } = _bothBooks({ taRows });
   const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const baselineId = getNewBaselineId();
-  const touchIdx = buildCompanyTouchIndex({ ta, rec });
+  const touchIdx = buildCompanyTouchIndex({ ta });
   const today = _localToday();
   const out = [];
   const consider = (row, source) => {
@@ -711,13 +701,11 @@ function computeEmailQueue({ taRows, recruiterRows, apps } = {}) {
     // (reachable both ways) and belongs in the Both queue, not here.
     if (_hasLinkedIn(row)) return;
     if (EMAIL_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
-    const company = source === 'recruiter' ? row.firm : row.company;
+    const company = row.company;
     if (!applied.has(normalizeCompany(company))) return;
     out.push(_queueRow(row, source, baselineId, touchIdx.get(normalizeCompany(company)), today));
   };
-  for (const r of ta)  consider(r, 'ta');
-  for (const r of rec) consider(r, 'recruiter');
-  return _sortByCompanyName(out);
+  for (const r of ta)  consider(r, 'ta');  return _sortByCompanyName(out);
 }
 
 // The HIGH-VALUE bucket: contacts reachable BOTH ways (a verified email AND a
@@ -733,7 +721,7 @@ const BOTH_QUEUE_EXCLUDE_STATUS = new Set(['Archived', 'Replied', 'Meeting Sched
 function _channelsDone(source, id) {
   let linkedinDone = false, emailDone = false;
   try {
-    const corr = source === 'recruiter' ? readRecruiterCorrespondence(id) : readTTCorrespondence(id);
+    const corr = readTTCorrespondence(id);
     for (const m of (corr || [])) {
       if (m.direction !== 'Sent') continue;
       if (isLinkedInEntry(m)) linkedinDone = true;
@@ -742,25 +730,23 @@ function _channelsDone(source, id) {
   } catch { /* unreadable log → treat as nothing done yet */ }
   return { linkedinDone, emailDone };
 }
-function computeBothQueue({ taRows, recruiterRows, apps } = {}) {
-  const { ta, rec } = _bothBooks({ taRows, recruiterRows });
+function computeBothQueue({ taRows, apps } = {}) {
+  const { ta } = _bothBooks({ taRows });
   const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const baselineId = getNewBaselineId();
-  const touchIdx = buildCompanyTouchIndex({ ta, rec });
+  const touchIdx = buildCompanyTouchIndex({ ta });
   const today = _localToday();
   const out = [];
   const consider = (row, source) => {
     if (!(_hasLinkedIn(row) && isSendable(row))) return;   // must have BOTH channels
     if (BOTH_QUEUE_EXCLUDE_STATUS.has(row.status)) return; // a reply/acceptance pauses the multithread
-    const company = source === 'recruiter' ? row.firm : row.company;
+    const company = row.company;
     if (!applied.has(normalizeCompany(company))) return;
     const { linkedinDone, emailDone } = _channelsDone(source, row.id);
     if (linkedinDone && emailDone) return;                 // both channels already touched → done
     out.push({ ..._queueRow(row, source, baselineId, touchIdx.get(normalizeCompany(company)), today), linkedinDone, emailDone });
   };
-  for (const r of ta)  consider(r, 'ta');
-  for (const r of rec) consider(r, 'recruiter');
-  return _sortByCompanyName(out);
+  for (const r of ta)  consider(r, 'ta');  return _sortByCompanyName(out);
 }
 
 // ── Unified follow-up queue ──────────────────────────────────────────────────
@@ -829,12 +815,11 @@ function isHighValueContact(row) {
 // Excludes any company where at least one row exists in either contact book,
 // regardless of contact status (even Archived rows count — the user already mapped
 // that company and chose not to pursue contacts there).
-function computeContactlessApps({ apps, taRows, recruiterRows } = {}) {
+function computeContactlessApps({ apps, taRows } = {}) {
   const appList = apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })();
-  const { ta, rec } = _bothBooks({ taRows, recruiterRows });
+  const { ta } = _bothBooks({ taRows });
   const hasContact = new Set();
-  for (const r of ta)  if ((r.company || '').trim()) hasContact.add(normalizeCompany(r.company));
-  for (const r of rec) if ((r.firm   || '').trim()) hasContact.add(normalizeCompany(r.firm));
+  for (const r of ta) if ((r.company || '').trim()) hasContact.add(normalizeCompany(r.company));
   const out = [];
   for (const a of appList) {
     if (!OUTREACH_ELIGIBLE_STATUSES.includes(a.status)) continue;
@@ -974,8 +959,8 @@ function computeContactFollowups(opts = {}) {
   // Attach last-touch context to every contact so the card's CompanyOutreach block
   // renders for the merged-in stale-app and gone-quiet contacts too (the outreach
   // rows already carry it). One touch-index pass over both contact books.
-  const { ta, rec } = _bothBooks({});
-  const touchIdx = buildCompanyTouchIndex({ ta, rec });
+  const { ta } = _bothBooks({});
+  const touchIdx = buildCompanyTouchIndex({ ta });
   const nowDay = _localToday();
   for (const item of byKey.values()) {
     if (!item.companyOutreach) {
@@ -1004,11 +989,10 @@ function computeContactFollowups(opts = {}) {
 // blocked), where the address was checked and really is unusable. A key would not
 // rescue either group, so including them would overstate what turning it on buys.
 const _WITHHELD_STATES = new Set(['unverified', '', undefined, null]);
-function countWithheldContacts({ taRows, recruiterRows } = {}) {
-  const ta  = taRows        ?? (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
-  const rec = recruiterRows ?? (() => { try { return parseRecruitersMd();  } catch { return []; } })();
+function countWithheldContacts({ taRows } = {}) {
+  const ta = taRows ?? (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
   let withheld = 0;
-  for (const row of [...ta, ...rec]) {
+  for (const row of ta) {
     if (!row || row.status === 'Archived') continue;
     if (!(row.email || '').trim()) continue;
     if (isSendable(row)) continue;

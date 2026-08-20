@@ -88,13 +88,13 @@ router.get('/api/followups/both-queue', (req, res) => {
 });
 
 // (The Network "High value" directory endpoint was removed: high value is now a
-// per-contact star + filter on the TA and Recruiter tables — see isHighValueContact
+// per-contact star + filter on the TA table, see isHighValueContact
 // in lib/followups.mjs and the isHighValue flag on the contact list endpoints.)
 
 // GET /api/followups/stale — computed stale list with coaching.
 // Merges applications.md (Applied/Responded/Interview) with per-contact stale
-// items from both target-talent.md and recruiters.md. Each row is tagged with
-// `source: 'app' | 'ta' | 'recruiter'`.
+// items from target-talent.md. Each row is tagged with
+// `source: 'app' | 'ta'`.
 router.get('/api/followups/stale', (req, res) => {
   try {
     const rawStaleApps = computeStaleApps();
@@ -208,7 +208,7 @@ router.post('/api/followups/snooze', (req, res) => {
 });
 
 // POST /api/followups/unsnooze — bring an alert back early.
-//   body: { source: 'app' | 'ta' | 'recruiter', id }
+//   body: { source: 'app' | 'ta', id }
 router.post('/api/followups/unsnooze', (req, res) => {
   try {
     const { source, id } = req.body || {};

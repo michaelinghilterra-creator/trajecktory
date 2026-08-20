@@ -1,10 +1,10 @@
 // Contacts Module — the consolidated home for every 1:1 contact.
-// Referrals, TA Outreach, and Recruiters are the same interaction model (a contact
-// list + a status ladder + a detail drawer), so they live under one parent. The
-// default "All contacts" subtab is a single unified table across all three books
-// (type = Referral / TA / Recruiter), with per-type drawers; the three original
-// subtabs are kept as secondary views so each book's own tools survive (recruiter
-// analytics/activity, referral LinkedIn-import + warm-intro templates, reconcile).
+// Referrals and TA Outreach are the same interaction model (a contact list + a
+// status ladder + a detail drawer), so they live under one parent. The default
+// "All contacts" subtab is a single unified table across both books
+// (type = Referral / TA), with per-type drawers; the book subtabs are kept as
+// secondary views so each book's own tools survive (referral LinkedIn-import +
+// warm-intro templates, reconcile, TA sequences).
 (function () {
 const { useState, useEffect, useMemo } = React;
 
@@ -12,14 +12,12 @@ const NET_SUBTABS = [
   { id: 'all',        label: 'All contacts' },
   { id: 'referrals',  label: 'Referrals' },
   { id: 'ta',         label: 'TA Outreach' },
-  { id: 'recruiters', label: 'Recruiters' },
 ];
 
 // Per-type visual identity for the badge/avatar in the unified table.
 const TYPE_META = {
   referral:  { label: 'Referral',  color: '#22c55e', rgb: '34,197,94' },
   ta:        { label: 'TA',         color: '#22d3ee', rgb: '34,211,238' },
-  recruiter: { label: 'Recruiter',  color: '#a78bfa', rgb: '167,139,250' },
 };
 
 function uInitials(name) {
@@ -35,7 +33,6 @@ function uToday() {
 // ── Unified "All contacts" table ──────────────────────────────────────────────
 function AllContactsView({ search }) {
   const [ta, setTa] = useState(null);
-  const [rec, setRec] = useState(null);
   const [ref, setRef] = useState(null);
   const [refStatuses, setRefStatuses] = useState([]);
   const [typeFilter, setTypeFilter] = useState('all');
@@ -45,9 +42,8 @@ function AllContactsView({ search }) {
   const [sortDir, setSortDir] = useState('asc');
 
   const loadTa = () => fetch('/api/target-talent').then(r => r.json()).then(d => setTa(Array.isArray(d) ? d : [])).catch(() => setTa([]));
-  const loadRec = () => fetch('/api/recruiters').then(r => r.json()).then(d => setRec(Array.isArray(d) ? d : [])).catch(() => setRec([]));
   const loadRef = () => fetch('/api/referrals').then(r => r.json()).then(d => { setRef(d.referrals || []); setRefStatuses(d.statuses || []); }).catch(() => setRef([]));
-  useEffect(() => { loadTa(); loadRec(); loadRef(); }, []);
+  useEffect(() => { loadTa(); loadRef(); }, []);
 
   const rows = useMemo(() => {
     const out = [];
@@ -55,14 +51,11 @@ function AllContactsView({ search }) {
       if (c.status === 'Archived') continue;
       out.push({ type: 'ta', id: c.id, name: `${c.first || ''} ${c.last || ''}`.trim(), role: c.title || '', org: c.company || '', status: c.status || '', hv: !!c.isHighValue, lastTouch: c.lastTouch || '' });
     }
-    for (const c of (rec || [])) {
-      out.push({ type: 'recruiter', id: c.id, name: `${c.first || ''} ${c.last || ''}`.trim(), role: c.title || '', org: c.firm || '', status: c.status || '', hv: !!c.isHighValue, lastTouch: c.lastTouch || '' });
-    }
     for (const c of (ref || [])) {
       out.push({ type: 'referral', id: c.id, name: c.name || '', role: c.how || '', org: c.where || '', status: c.status || '', hv: false, lastTouch: c.lastTouch || '' });
     }
     return out;
-  }, [ta, rec, ref]);
+  }, [ta, ref]);
 
   const filtered = useMemo(() => {
     let r = rows;
@@ -84,7 +77,6 @@ function AllContactsView({ search }) {
     all: rows.length,
     referral: rows.filter(x => x.type === 'referral').length,
     ta: rows.filter(x => x.type === 'ta').length,
-    recruiter: rows.filter(x => x.type === 'recruiter').length,
   }), [rows]);
   const hvCount = useMemo(() => rows.filter(x => x.hv).length, [rows]);
 
@@ -115,7 +107,7 @@ function AllContactsView({ search }) {
 
   const setSort = k => { if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir(k === 'last' ? 'desc' : 'asc'); } };
 
-  if (ta === null || rec === null || ref === null) return <div className="dim" style={{ padding: 28 }}>Loading contacts…</div>;
+  if (ta === null || ref === null) return <div className="dim" style={{ padding: 28 }}>Loading contacts…</div>;
 
   const cols = [
     { k: 'name',   label: 'Name',            w: 220 },
@@ -129,7 +121,6 @@ function AllContactsView({ search }) {
     { id: 'all', label: 'All' },
     { id: 'referral', label: 'Referrals' },
     { id: 'ta', label: 'TA' },
-    { id: 'recruiter', label: 'Recruiters' },
   ];
   const drawerRow = drawer && drawer.type === 'referral' ? (ref || []).find(r => r.id === drawer.id) : null;
 
@@ -138,7 +129,7 @@ function AllContactsView({ search }) {
       <div className="ta-head">
         <div>
           <h1>All contacts</h1>
-          <div className="sub">{filtered.length} of {rows.length} across referrals, TA, and recruiters &middot; click a row for the full card</div>
+          <div className="sub">{filtered.length} of {rows.length} across referrals and TA &middot; click a row for the full card</div>
         </div>
       </div>
 
@@ -212,9 +203,6 @@ function AllContactsView({ search }) {
       {drawer && drawer.type === 'ta' && window.TargetTalentDrawer && (
         <window.TargetTalentDrawer id={drawer.id} onClose={() => setDrawer(null)} onUpdate={loadTa} />
       )}
-      {drawer && drawer.type === 'recruiter' && window.RecruiterDrawer && (
-        <window.RecruiterDrawer id={drawer.id} onClose={() => setDrawer(null)} onUpdate={loadRec} />
-      )}
       {drawer && drawer.type === 'referral' && drawerRow && window.ReferralDrawer && (
         <window.ReferralDrawer row={drawerRow} statuses={refStatuses} onClose={() => setDrawer(null)}
           onPatch={patchRef} onLogToday={logTodayRef} onFindEmail={findEmailRef} finding={findingRefId === drawerRow.id}
@@ -224,14 +212,14 @@ function AllContactsView({ search }) {
   );
 }
 
-window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, onTaOpenConsumed, pendingRecruiterOpen, onRecruiterOpenConsumed, openTaContact, openRecruiter, toast } = {}) {
+window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, onTaOpenConsumed, openTaContact, toast } = {}) {
   // Fall back to the unified All view for an unknown/stale saved view.
   const active = NET_SUBTABS.some(s => s.id === view) ? view : 'all';
   // "All contacts" is the primary landing view — one list of everyone, with a type
   // badge and a type filter, so you never have to guess a person's book or click
-  // between tabs to find them. The three book tabs are demoted to secondary tools:
-  // they only exist for each channel's own extras (recruiter analytics, referral
-  // LinkedIn import / reconcile, TA sequences), not for finding a contact.
+  // between tabs to find them. The book tabs are demoted to secondary tools:
+  // they only exist for each channel's own extras (referral LinkedIn import /
+  // reconcile, TA sequences), not for finding a contact.
   const books = NET_SUBTABS.filter(s => s.id !== 'all');
   return (
     <div className="col" style={{ gap: 0 }}>
@@ -251,13 +239,12 @@ window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, 
       </div>
       {active === 'all' && (
         <div className="dim mono" style={{ fontSize: 10.5, padding: '2px 2px 8px' }}>
-          Everyone across referrals, TA, and recruiters in one list. Filter by type, or open the Books above for a channel's own tools.
+          Everyone across referrals and TA in one list. Filter by type, or open the Books above for a channel's own tools.
         </div>
       )}
 
       {active === 'all'        && <AllContactsView search={search} />}
       {active === 'referrals'  && window.ReferralsTab && <window.ReferralsTab search={search} />}
-      {active === 'recruiters' && window.RecruitersTab && <window.RecruitersTab search={search} initialOpenId={pendingRecruiterOpen} onInitialOpenConsumed={onRecruiterOpenConsumed} />}
       {active === 'ta'         && window.TargetTalentTab && (
         <window.TargetTalentTab
           initialOpenId={pendingTaOpen}

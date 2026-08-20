@@ -29,7 +29,6 @@ import { GOOGLE_TOKENS_PATH, GOOGLE_SYNC_PATH } from '../config.mjs';
 import { classifyBounce } from '../../../lib/bounce-parse.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from './target-talent.mjs';
-import { parseRecruitersMd, readRecruiterCorrespondence, writeRecruiterCorrespondence, updateRecruiterLine } from './recruiters.mjs';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -422,16 +421,14 @@ function classifyReply({ subject = '', text = '' } = {}) {
   return 'neutral';
 }
 
-// Match an address to a known contact (target-talent or recruiter) by exact
-// email. Rows are passed in, so this is pure and test-covered. Returns null when
-// the sender is nobody we track (surfaced as "other", never acted on silently).
-function matchAddress(address, { taRows = [], recruiterRows = [] } = {}) {
+// Match an address to a known target-talent contact by exact email. Rows are
+// passed in, so this is pure and test-covered. Returns null when the sender is
+// nobody we track (surfaced as "other", never acted on silently).
+function matchAddress(address, { taRows = [] } = {}) {
   const addr = String(address || '').toLowerCase().trim();
   if (!addr) return null;
   const ta = taRows.find(r => (r.email || '').toLowerCase() === addr);
   if (ta) return { source: 'ta', id: ta.id, company: ta.company, name: `${ta.first || ''} ${ta.last || ''}`.trim() };
-  const rec = recruiterRows.find(r => (r.email || '').toLowerCase() === addr);
-  if (rec) return { source: 'recruiter', id: rec.id, company: rec.firm, name: `${rec.first || ''} ${rec.last || ''}`.trim() };
   return null;
 }
 
@@ -557,14 +554,14 @@ function candidateAppsFor(company, apps = []) {
 //   other[]   — everything else (unknown senders, automated mail), surfaced so a
 //               real reply from an unrecognized address is never dropped.
 // Pure: all inputs passed in.
-function scanDecisions({ messages = [], taRows = [], recruiterRows = [], apps = [] } = {}) {
+function scanDecisions({ messages = [], taRows = [], apps = [] } = {}) {
   const bounces = [], replies = [], other = [];
   for (const raw of messages) {
     const msg = parseGmailMessage(raw);
     const bounce = classifyBounce(msg.text, { subject: msg.subject, from: msg.from });
     if (bounce.kind === 'hard' || bounce.kind === 'soft') {
       const address = bounce.address ? bounce.address.toLowerCase() : null;
-      const contact = address ? matchAddress(address, { taRows, recruiterRows }) : null;
+      const contact = address ? matchAddress(address, { taRows }) : null;
       bounces.push({
         msgId: msg.id, kind: bounce.kind, code: bounce.code, address, contact,
         flip: (bounce.kind === 'hard' && contact) ? { source: contact.source, id: contact.id, state: 'bounced' } : null,
@@ -572,7 +569,7 @@ function scanDecisions({ messages = [], taRows = [], recruiterRows = [], apps = 
       continue;
     }
     const fromAddr = extractEmail(msg.from);
-    const contact = fromAddr ? matchAddress(fromAddr, { taRows, recruiterRows }) : null;
+    const contact = fromAddr ? matchAddress(fromAddr, { taRows }) : null;
     // For an unknown sender, guess the company two ways: tier-2 from the sender's
     // domain (a first email from careers@company.example), then tier-3 from the
     // SUBJECT (an ATS-sent "Update on your <Company> Application", whose sender
@@ -622,7 +619,7 @@ function normalizeCorrTimestamp(date) {
   return new Date(ms).toISOString().replace('T', ' ').slice(0, 16);
 }
 
-// Append a Received correspondence entry to a matched contact ({ source:'ta'|'recruiter', id })
+// Append a Received correspondence entry to a matched contact ({ source:'ta', id })
 // and advance its status to Replied. Returns true if it wrote, false if the
 // contact could not be resolved (so the caller can fall back to the app note
 // alone). Best-effort by contract: callers wrap it so a write failure never sinks
@@ -648,14 +645,6 @@ function logReplyToContact(contact, { subject, body, timestamp, advanceStatus = 
     const messages = readTTCorrespondence(id); messages.push(entry); writeTTCorrespondence(id, messages);
     const upd = advanceStatus ? replyStatusUpdate(r.status || '', today) : null;
     if (upd) updateTTLine(id, upd);
-    return true;
-  }
-  if (contact.source === 'recruiter') {
-    const r = parseRecruitersMd().find(x => x.id === id);
-    if (!r) return false;
-    const messages = readRecruiterCorrespondence(id); messages.push(entry); writeRecruiterCorrespondence(id, messages);
-    const upd = advanceStatus ? replyStatusUpdate(r.status || '', today) : null;
-    if (upd) updateRecruiterLine(id, upd);
     return true;
   }
   return false;

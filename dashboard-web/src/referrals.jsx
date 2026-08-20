@@ -3,7 +3,7 @@
 // internally. Referred candidates clear the recruiter screen far more often than
 // cold applicants, so this is the single highest-leverage, entirely-warm channel.
 //
-// Deliberately lighter than the Recruiters CRM: a tracker table plus reconnect /
+// Deliberately lightweight: a tracker table plus reconnect /
 // ask templates the user personalizes and sends themselves. No LLM, no per-person
 // correspondence log. Data lives in data/referrals.md via /api/referrals.
 //
@@ -461,11 +461,11 @@ function refInitials(name) {
 }
 
 // ─── Contact drawer ───────────────────────────────────────────────────────────
-// Same slide-over chrome as the TA and Recruiter drawers, so a referral is a
+// Same slide-over chrome as the TA drawer, so a referral is a
 // clickable contact card like every other book. Referral-specific fields (how you
 // know them, their reach, the target you want in) instead of email/correspondence,
 // since this channel is warm-intro / template driven, not direct outreach.
-// A referral now opens the SAME card as a TA or recruiter contact: the shared
+// A referral now opens the SAME card as a TA contact: the shared
 // window.ContactPanel, driven by the referral adapter (window.CONTACT_CFG_REFERRAL,
 // defined in target-talent.jsx). It fetches its own detail by id, so the drawer
 // only needs the id, a close handler, and a reload callback. The older ReferralPanel
@@ -488,7 +488,7 @@ function ReferralDrawer({ row, statuses, onClose, onPatch, onLogToday, onFindEma
   );
 }
 
-// One correspondence entry, rendered like the TA/recruiter timeline.
+// One correspondence entry, rendered like the TA timeline.
 function RefMsg({ m }) {
   const dir = m.direction || 'Sent';
   const isSent = dir === 'Sent';
@@ -560,7 +560,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
       setSaving(false);
       if (!d.ok) { toast(d.error || 'Could not log', 'error'); return; }
       setCompose(null); loadDetail(); onChanged && onChanged();
-      toast(d.linkedTo ? `Logged to your ${d.linkedTo.source === 'ta' ? 'TA' : 'recruiter'} timeline for this person` : `Logged ${compose.direction.toLowerCase()}`, 'success');
+      toast(d.linkedTo ? `Logged to your TA timeline for this person` : `Logged ${compose.direction.toLowerCase()}`, 'success');
     }).catch(() => { setSaving(false); toast('Could not log', 'error'); });
   };
 
@@ -606,7 +606,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           {row.stage === 'stage1' && <span className="tag" style={{ background: 'rgba(34,197,94,0.16)', color: '#22c55e' }}>Stage 1 · warm path into a target</span>}
           {row.stage === 'stage2' && <span className="tag">Stage 2 · warm referrer</span>}
-          {link && <span className="tag" style={{ background: link.source === 'ta' ? 'rgba(34,211,238,0.14)' : 'rgba(167,139,250,0.14)', color: link.source === 'ta' ? '#22d3ee' : '#a78bfa' }}>Also {link.source === 'ta' ? 'TA' : 'Recruiter'} #{link.id} · shared timeline</span>}
+          {link && <span className="tag" style={{ background: 'rgba(34,211,238,0.14)', color: '#22d3ee' }}>Also TA #{link.id} · shared timeline</span>}
           <button className="icon-btn" onClick={onClose} style={{ marginLeft: 'auto' }}>✕</button>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
@@ -730,7 +730,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
 
           {link && (
             <div className="dim mono" style={{ fontSize: 10.5, marginBottom: 8 }}>
-              Shared with this person's {link.source === 'ta' ? 'TA Outreach' : 'Recruiter'} record — messages logged here appear on both cards.
+              Shared with this person's TA Outreach record. Messages logged here appear on both cards.
             </div>
           )}
 
@@ -798,7 +798,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
           )}
 
           {corr.length === 0 && !compose
-            ? <div className="dim mono" style={{ fontSize: 11 }}>No messages logged yet. Use Log sent / Log reply to build the history{link ? ', or open their ' + (link.source === 'ta' ? 'TA' : 'recruiter') + ' card' : ''}.</div>
+            ? <div className="dim mono" style={{ fontSize: 11 }}>No messages logged yet. Use Log sent / Log reply to build the history{link ? ', or open their TA card' : ''}.</div>
             : <div>{corr.slice().reverse().map((m, i) => <RefMsg key={i} m={m} />)}</div>}
         </div>
 

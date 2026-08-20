@@ -173,16 +173,11 @@ function App() {
   // switches to Network → TA Outreach; TargetTalentTab consumes it once and
   // opens its own drawer.
   const [pendingTaOpen, setPendingTaOpen] = useState(null);
-  // Contacts parent-tab subtab (all | referrals | recruiters | ta), lifted here so
+  // Contacts parent-tab subtab (all | referrals | ta), lifted here so
   // the command palette and the Follow-Ups→TA jump can target a specific subtab,
   // mirroring pipelineView. Defaults to the unified "All contacts" table.
   const [networkSub, setNetworkSub] = useState(() => loadNav().networkSub || "all");
   const openTaContact = (id) => { setPendingTaOpen(id); setNetworkSub("ta"); setTab("network"); };
-  // Same cross-tab hand-off for a recruiter contact (e.g. a High value row whose
-  // source is 'recruiter'): push the id and switch to Network → Recruiters, which
-  // consumes it and opens its own drawer.
-  const [pendingRecruiterOpen, setPendingRecruiterOpen] = useState(null);
-  const openRecruiter = (id) => { setPendingRecruiterOpen(id); setNetworkSub("recruiters"); setTab("network"); };
   // Referrals has no per-id drawer, so a referral jump lands on Network → Referrals
   // and pre-filters the list to the person's name (via pendingSearch).
   const openReferral = (name) => { setPendingSearch(name || ""); setNetworkSub("referrals"); setTab("network"); };
@@ -342,7 +337,7 @@ function App() {
       .catch(() => {}); // non-critical — setup tab still reachable from the nav
   }, []);
 
-  // Load the user's identity once so draft signature blocks (recruiter / TA /
+  // Load the user's identity once so draft signature blocks (TA /
   // follow-up) render the real name + contact without hardcoding it in the
   // client bundle. Stashed on window for the shared signature helpers.
   useEffect(() => {
@@ -538,7 +533,6 @@ function App() {
       { section: "Navigate", icon: "≡", label: "Go to All Entries",  run: () => { setTab("pipeline"); setPipelineView("all"); } },
       { section: "Navigate", icon: "◍", label: "Go to LinkedIn",     run: () => setTab("linkedin-ssi") },
       { section: "Navigate", icon: "⇄", label: "Go to Referrals",    run: () => { setNetworkSub("referrals"); setTab("network"); } },
-      { section: "Navigate", icon: "☎", label: "Go to Recruiters",   run: () => { setNetworkSub("recruiters"); setTab("network"); } },
       { section: "Navigate", icon: "◎", label: "Go to TA Outreach",  run: () => { setNetworkSub("ta"); setTab("network"); } },
       { section: "Navigate", icon: "✦", label: "Go to Insights",     run: () => setTab("analytics") },
       { section: "Navigate", icon: "◇", label: "Go to Launchpad (setup)", run: () => setTab("launchpad") },
@@ -564,8 +558,8 @@ function App() {
   // Header-search persistence model: the input lives in <Topbar> and owns the
   // single `search` state. Some tabs share a namespace (company names — pipeline
   // / follow-ups / TA outreach / overview), so the search term carries across
-  // those tabs. Other tabs are different namespaces (recruiters: firm names;
-  // linkedin-ssi: influencer names; dictionary: jargon) and start fresh when
+  // those tabs. Other tabs are different namespaces (linkedin-ssi: influencer
+  // names; dictionary: jargon) and start fresh when
   // entered. Clearing on entry OR exit of cluster A keeps the term scoped to
   // the user's intent.
   const SEARCH_CLUSTER_A = useMemo(() => new Set(["pipeline", "followups", "network"]), []);
@@ -607,7 +601,6 @@ function App() {
     if (!item) return;
     switch (item.type) {
       case "ta":        openTaContact(item.id); setSearch(""); break;
-      case "recruiter": openRecruiter(item.id); setSearch(""); break;
       case "referral":  openReferral(item.name); break;
       case "company": {
         const app = apps.find(a => String(a.id) === String(item.id));
@@ -677,7 +670,7 @@ function App() {
           {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} toast={toast} />}
           {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} toast={toast} />}
           {tab === "interview" && <window.InterviewTab apps={apps} toast={toast} />}
-          {tab === "network" && <window.NetworkTab view={networkSub} setView={setNetworkSub} search={search} pendingTaOpen={pendingTaOpen} onTaOpenConsumed={() => setPendingTaOpen(null)} pendingRecruiterOpen={pendingRecruiterOpen} onRecruiterOpenConsumed={() => setPendingRecruiterOpen(null)} openTaContact={openTaContact} openRecruiter={openRecruiter} toast={toast} />}
+          {tab === "network" && <window.NetworkTab view={networkSub} setView={setNetworkSub} search={search} pendingTaOpen={pendingTaOpen} onTaOpenConsumed={() => setPendingTaOpen(null)} openTaContact={openTaContact} toast={toast} />}
           {tab === "linkedin-ssi" && <window.LinkedInSSITab toast={toast} />}
           {tab === "launchpad" && <window.SetupTab toast={toast} setTab={setTab} />}
         </div>

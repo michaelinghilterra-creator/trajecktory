@@ -2,8 +2,8 @@
 /**
  * stale-contacts.test.mjs — unit tests for computeStaleContacts().
  *
- * The unified per-contact stale engine covers both target-talent and recruiter
- * contact books. The clock lives on the CONTACT (lastTouch), not the application.
+ * The per-contact stale engine covers the target-talent contact book. The clock
+ * lives on the CONTACT (lastTouch), not the application.
  * Only contacts at companies with a CURRENTLY-LIVE application surface.
  *
  * All fixtures use invented names and .example domains — no real personal data.
@@ -43,14 +43,6 @@ const ta = (o) => ({
   linkedin: o.linkedin || '', status: o.status, notes: o.notes || '',
   lastTouch: o.lastTouch,
 });
-const rec = (o) => ({
-  id: o.id, first: o.first || 'A', last: o.last || 'B',
-  title: o.title || 'Recruiter', firm: o.firm || 'Acme Search',
-  email: o.email || '', verified: { state: o.state || 'unverified' },
-  linkedin: o.linkedin || '', status: o.status, notes: o.notes || '',
-  lastTouch: o.lastTouch,
-});
-
 const apps = [
   { company: 'Brightwave Labs',   status: 'Applied'      },
   { company: 'Cobalt Systems',    status: 'Phone Screen' },
@@ -82,17 +74,8 @@ const taRows = [
   ta({ id: 10, company: 'Unknown Corp', status: 'Sent', lastTouch: STALE_DATE }),
 ];
 
-const recruiterRows = [
-  // stale Sent recruiter at a live company → SHOULD surface as source 'recruiter'
-  rec({ id: 101, firm: 'Cobalt Systems', status: 'Sent', lastTouch: STALE_DATE }),
-  // fresh Sent recruiter → NOT stale
-  rec({ id: 102, firm: 'Cobalt Systems', status: 'Sent', lastTouch: FRESH_DATE }),
-  // stale recruiter at a DEAD company → gate blocks it
-  rec({ id: 103, firm: 'Vela Analytics', status: 'Sent', lastTouch: STALE_DATE }),
-];
-
 console.log('\n── basic inclusion / exclusion ─────────────────────────────────────');
-// computeStaleContacts accepts injectable rows (apps/taRows/recruiterRows) so the
+// computeStaleContacts accepts injectable rows (apps/taRows) so the
 // function is unit-testable without real files. The real implementation lazy-loads
 // files; the injection path is for tests only.
 // Note: the function signature is computeStaleContacts({ apps }) — it reads its
@@ -108,7 +91,7 @@ check(Array.isArray(resultNoApps), 'returns an array when no apps provided');
 check(resultNoApps.length === 0, 'no live apps → no stale contacts (all companies fail the gate)');
 
 const resultEmptyApps = computeStaleContacts({ apps: [] });
-check(resultEmptyApps.every(r => ['ta', 'recruiter'].includes(r.source)),
+check(resultEmptyApps.every(r => r.source === 'ta'),
   'every item carries a valid source tag');
 
 console.log('\n── shape contract ──────────────────────────────────────────────────');
