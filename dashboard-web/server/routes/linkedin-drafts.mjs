@@ -394,7 +394,7 @@ Return ONLY the message text, ready to paste, including the "Hi ${recipientFirst
 
     let response = cleanProse((await generateText(prompt, { model: draftModel(), maxTokens: 500 })).trim());
     response = (await reviseForCadence(response, { surface: 'prose' })).text;
-    res.json({ response, length: response.length, recipient: { source: src, id, name }, inmail: true });
+    res.json({ response, length: response.length, recipient: { source: 'ta', id, name }, inmail: true });
   } catch (err) {
     console.error('Error generating follow-up message:', err);
     res.status(500).json({ error: err.message });
