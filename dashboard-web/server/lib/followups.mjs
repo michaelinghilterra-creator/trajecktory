@@ -828,7 +828,7 @@ function computeContactlessApps({ apps, taRows } = {}) {
     if (!co || hasContact.has(co)) continue;
     out.push({
       source: 'app',
-      id: a.num,
+      id: a.id,   // parseApplicationsMd exposes the tracker number as `id`, not `num`
       company: a.company || '',
       role: a.role || '',
       status: a.status,
