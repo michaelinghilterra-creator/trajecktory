@@ -9,6 +9,7 @@ import { loadInfluencer, toneInstruction, fitConnectNote, buildConnectPrompt } f
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine, readTTCorrespondence } from '../lib/target-talent.mjs';
 import { getLinkedInStatus } from '../lib/tt-linkedin.mjs';
+import { summarizeThread } from '../lib/correspondence-context.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
 import { getInmailBudget, decrementInmail, setInmailRemaining } from '../lib/inmail-budget.mjs';
@@ -355,11 +356,12 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
     const corr = (readTTCorrespondence(Number(id)) || []);
     const sent = corr.filter(m => m.direction === 'Sent');
     const firstTouchDate = (sent[0]?.timestamp || row.lastTouch || '').slice(0, 10);
-    const history = corr.slice(-3)
-      .map(m => `- ${(m.timestamp || '').slice(0, 10)} [${m.direction}] ${m.subject ? m.subject + ': ' : ''}${(m.body || '').replace(/\s+/g, ' ').slice(0, 140)}`)
-      .join('\n') || (connected
-        ? '- A LinkedIn connection request that they ACCEPTED, so you are now connected.'
-        : '- A LinkedIn connection request that has not been accepted or answered.');
+    // Full-thread state: whether a substantive message already went out recently
+    // and is unanswered, so the prompt writes a nudge instead of re-pitching.
+    const thread = summarizeThread(corr);
+    const history = thread.threadBlock || (connected
+      ? '- A LinkedIn connection request that they ACCEPTED, so you are now connected.'
+      : '- A LinkedIn connection request that has not been accepted or answered.');
 
     let cvMd = ''; try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
     let articleDigestMd = ''; try { articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md'); } catch {}
@@ -381,9 +383,15 @@ THE RECIPIENT:
 - Their role: ${recipientRole || '(unknown)'}
 - Company: ${company || '(unknown)'}
 
-WHAT ALREADY WENT OUT (for YOUR context only, so you never repeat it. Do NOT open with it, and do NOT dwell on the lack of a reply):
+THE THREAD SO FAR (most recent last). Read it: never repeat a point, proof, or ask already made here, and do NOT open by narrating it or dwelling on the lack of a reply:
 ${history}
 
+THREAD STATE: ${thread.stateLine}
+${thread.recentPitch ? `
+NUDGE MODE (a substantive message already went out recently and is unanswered):
+- Write a SHORT nudge, not a new pitch. Do NOT reintroduce ${idn.firstName}, do NOT restate proof points already in the thread, and do NOT repeat the earlier ask word for word.
+- Reference the earlier note lightly and specifically, naming what it was about using the role/company from the thread above (e.g. "following up on my note from ${thread.lastSub ? String(thread.lastSub.timestamp).slice(0, 10) : 'the other day'} about the role at ${company || 'their company'}"). Do NOT use the bare, needy "just following up"; the reference must name the prior topic. Then add exactly ONE new, specific thing: a fresh detail, a relevant update, or a lighter, human touch. If there is genuinely nothing new to add, keep it to a one or two sentence friendly bump.
+` : ''}
 THE PURPOSE:
 ${purpose}
 
@@ -395,9 +403,9 @@ HARD RULES:
 - ${connected
     ? 'You are ALREADY connected, so NEVER say you "sent a connection request", "wanted to make sure this reached you", "reach you directly", or reference a pending or unanswered invite in any way. Treat the connection as established.'
     : 'Do NOT open by mentioning the earlier message, and NEVER say you "have not heard back" or that the silence is "fine". Being ignored is not the story; the candidacy is. If you reference the prior connection request at all, make it a brief, confident half-clause in the MIDDLE (for example, "I also sent a connection request recently, but wanted to reach you directly"), never an apology and never an opener.'}
-- Then give one concrete proof point about ${idn.firstName} from the CV or portfolio that makes him worth a reply.
+- ${thread.recentPitch ? 'Do NOT dump a full proof point the thread already covered; at most add ONE new specific detail not previously mentioned.' : `Then give one concrete proof point about ${idn.firstName} from the CV or portfolio that makes him worth a reply.`}
 - Close with ONE clear, low-friction ask: a quick reply, or being pointed to the right person for the relevant role. Do NOT ask for a call, a chat, a quick call, time on their calendar, or "15/20/30 minutes" — everyone is busy and a meeting ask reads as tone-deaf. Not a hard pitch.
-- Length: 90 to 150 words. Longer than a connection note but still tight. Never a wall of text.
+- Length: ${thread.recentPitch ? '40 to 70 words. A nudge is short by design.' : '90 to 150 words. Longer than a connection note but still tight.'} Never a wall of text.
 - NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
 - BANNED phrasings, they read as needy and get the message deleted: "haven't heard back", "never heard back", "which is fine", "I know you are busy", "just following up", "circling back", "wanted to reconnect", "sorry to bother", "I hope this finds you well", "quick question", "pick your brain", and any apology for writing.
 - End with a sign-off line: "Thanks, ${idn.firstName}".

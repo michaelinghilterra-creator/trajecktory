@@ -14,6 +14,7 @@ import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES 
 import { isHighValueContact } from '../lib/followups.mjs';
 import { appendReferralRows, parseReferralsMd } from '../lib/referrals.mjs';
 import { slugOf } from '../lib/linkedin-acceptance.mjs';
+import { summarizeThread } from '../lib/correspondence-context.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
 
@@ -263,6 +264,9 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
     const prior = readTTCorrespondence(id);
     const isFirstTouch = prior.length === 0;
     const messageType = req.body?.messageType || (isFirstTouch ? 'first-touch' : 'follow-up');
+    // Full-thread state so a follow-up nudges rather than re-pitching a message
+    // that already went out a few days ago (see correspondence-context.mjs).
+    const thread = summarizeThread(prior);
 
     // REPLY mode: respond to the contact's most recent received email instead of
     // drafting fresh outreach. Requires an inbound message to reply to.
@@ -397,7 +401,10 @@ ${isFirstTouch ? '' : `
 == PRIOR CORRESPONDENCE (most recent first) ==
 ${prior.slice().reverse().slice(0, 3).map(m => `--- ${m.direction} on ${m.timestamp} | Subject: ${m.subject}\n${m.body}`).join('\n\n')}
 
-Since prior messages exist, this should be a follow-up — acknowledge the prior thread, add new value (e.g., recent thinking, an artifact, a specific role update), and re-issue the ask.
+THREAD STATE: ${thread.stateLine}
+${thread.recentPitch
+  ? 'A substantive message already went out recently and is UNANSWERED. Write a SHORT nudge, not a fresh pitch: acknowledge the prior note briefly, add exactly ONE new thing (a recent update, an artifact, a specific role development), and do NOT restate the proof points or re-issue the same ask verbatim. Keep the body to 2 or 3 short sentences.'
+  : 'Since prior messages exist, this should be a follow-up — acknowledge the prior thread, add new value (e.g., recent thinking, an artifact, a specific role update), and re-issue the ask without repeating what was already said.'}
 `}
 
 Output ONLY a JSON object — no markdown, no code fences, no explanation:
