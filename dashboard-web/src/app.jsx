@@ -140,12 +140,17 @@ function useTweaks(defaults) {
 // callback still override it afterward (both run in their own effects post-mount).
 const NAV_STORAGE_KEY = 'trajecktory.nav';
 const KNOWN_TABS = new Set([
-  "pipeline", "focus", "coach", "analytics", "followups",
+  "pipeline", "focus", "coach", "analytics",
   "interview", "network", "linkedin-ssi", "launchpad",
 ]);
 function loadNav() {
   try {
     const o = JSON.parse(localStorage.getItem(NAV_STORAGE_KEY) || '{}') || {};
+    // Migrate the retired standalone Follow-Ups tab into the Contacts (network) tab's
+    // Follow-ups lens, so a returning user's saved nav lands on the merged view.
+    if (o.tab === 'followups') {
+      return { tab: 'network', pipelineView: typeof o.pipelineView === 'string' ? o.pipelineView : null, networkSub: 'followups' };
+    }
     return {
       tab: KNOWN_TABS.has(o.tab) ? o.tab : null,
       pipelineView: typeof o.pipelineView === 'string' ? o.pipelineView : null,
@@ -176,7 +181,7 @@ function App() {
   // Contacts parent-tab subtab (all | referrals | ta), lifted here so
   // the command palette and the Follow-Ups→TA jump can target a specific subtab,
   // mirroring pipelineView. Defaults to the unified "All contacts" table.
-  const [networkSub, setNetworkSub] = useState(() => loadNav().networkSub || "all");
+  const [networkSub, setNetworkSub] = useState(() => loadNav().networkSub || "followups");
   const openTaContact = (id) => { setPendingTaOpen(id); setNetworkSub("ta"); setTab("network"); };
   // Referrals has no per-id drawer, so a referral jump lands on Network → Referrals
   // and pre-filters the list to the person's name (via pendingSearch).
@@ -192,11 +197,11 @@ function App() {
     if (tab !== "pipeline" && pipelineView !== "overview") {
       setPipelineView("overview");
     }
-    // Same for Contacts: re-entry defaults back to the unified All view. A
-    // command-palette / Follow-Ups jump that sets networkSub in the same tick as
+    // Same for Contacts: re-entry defaults back to the act-first Follow-ups lens. A
+    // command-palette / TA / referral jump that sets networkSub in the same tick as
     // tab still wins (state updates batch, and tab === "network" skips this reset).
-    if (tab !== "network" && networkSub !== "all") {
-      setNetworkSub("all");
+    if (tab !== "network" && networkSub !== "followups") {
+      setNetworkSub("followups");
     }
   }, [tab]);
 
@@ -528,7 +533,7 @@ function App() {
   const commands = useMemo(() => {
     const navCmds = [
       { section: "Navigate", icon: "▥", label: "Go to Pipeline",     run: () => setTab("pipeline") },
-      { section: "Navigate", icon: "↻", label: "Go to Follow-Ups",   run: () => setTab("followups") },
+      { section: "Navigate", icon: "↻", label: "Go to Follow-Ups",   run: () => { setNetworkSub("followups"); setTab("network"); } },
       { section: "Navigate", icon: "◈", label: "Go to Interview",    run: () => setTab("interview") },
       { section: "Navigate", icon: "≡", label: "Go to All Entries",  run: () => { setTab("pipeline"); setPipelineView("all"); } },
       { section: "Navigate", icon: "◍", label: "Go to LinkedIn",     run: () => setTab("linkedin-ssi") },
@@ -668,9 +673,8 @@ function App() {
           {tab === "coach"     && window.CoachTab && <window.CoachTab toast={toast} />}
           {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} onQuickAction={handleAction} onDataChanged={refreshApps} search={search} compTweaks={compBands(setupState, tweaks)} />}
           {tab === "analytics" && <window.AnalyticsTab apps={apps} onOpen={setDrawerApp} setTab={setTab} toast={toast} />}
-          {tab === "followups" && <window.FollowupsTab apps={apps} onAction={handleAction} openTaContact={openTaContact} search={search} toast={toast} />}
           {tab === "interview" && <window.InterviewTab apps={apps} toast={toast} />}
-          {tab === "network" && <window.NetworkTab view={networkSub} setView={setNetworkSub} search={search} pendingTaOpen={pendingTaOpen} onTaOpenConsumed={() => setPendingTaOpen(null)} openTaContact={openTaContact} toast={toast} />}
+          {tab === "network" && <window.NetworkTab view={networkSub} setView={setNetworkSub} search={search} pendingTaOpen={pendingTaOpen} onTaOpenConsumed={() => setPendingTaOpen(null)} openTaContact={openTaContact} apps={apps} onAction={handleAction} toast={toast} />}
           {tab === "linkedin-ssi" && <window.LinkedInSSITab toast={toast} />}
           {tab === "launchpad" && <window.SetupTab toast={toast} setTab={setTab} />}
         </div>

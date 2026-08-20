@@ -9,6 +9,7 @@
 const { useState, useEffect, useMemo } = React;
 
 const NET_SUBTABS = [
+  { id: 'followups',  label: 'Follow-ups' },
   { id: 'all',        label: 'All contacts' },
   { id: 'referrals',  label: 'Referrals' },
   { id: 'ta',         label: 'TA Outreach' },
@@ -212,18 +213,22 @@ function AllContactsView({ search }) {
   );
 }
 
-window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, onTaOpenConsumed, openTaContact, toast } = {}) {
-  // Fall back to the unified All view for an unknown/stale saved view.
-  const active = NET_SUBTABS.some(s => s.id === view) ? view : 'all';
-  // "All contacts" is the primary landing view — one list of everyone, with a type
-  // badge and a type filter, so you never have to guess a person's book or click
-  // between tabs to find them. The book tabs are demoted to secondary tools:
-  // they only exist for each channel's own extras (referral LinkedIn import /
-  // reconcile, TA sequences), not for finding a contact.
-  const books = NET_SUBTABS.filter(s => s.id !== 'all');
+window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, onTaOpenConsumed, openTaContact, apps, onAction, toast } = {}) {
+  // Fall back to the act-first Follow-ups lens for an unknown/stale saved view.
+  const active = NET_SUBTABS.some(s => s.id === view) ? view : 'followups';
+  // Two primary lenses on the same people: "Follow-ups" (the ranked action queue,
+  // the daily starting point) and "All contacts" (browse the whole roster). The
+  // book tabs are demoted to secondary tools for each channel's own extras
+  // (referral LinkedIn import / reconcile, TA sequences), not for finding a person.
+  const PRIMARY = new Set(['followups', 'all']);
+  const books = NET_SUBTABS.filter(s => !PRIMARY.has(s.id));
   return (
     <div className="col" style={{ gap: 0 }}>
       <div className="subtabs" style={{ alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <button type="button" className={'subtab' + (active === 'followups' ? ' active' : '')} onClick={() => setView('followups')}
+          style={{ fontWeight: 600 }}>
+          Follow-ups
+        </button>
         <button type="button" className={'subtab' + (active === 'all' ? ' active' : '')} onClick={() => setView('all')}
           style={{ fontWeight: 600 }}>
           All contacts
@@ -243,6 +248,9 @@ window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, 
         </div>
       )}
 
+      {active === 'followups'  && window.FollowupsTab && (
+        <window.FollowupsTab chromeless apps={apps} onAction={onAction} openTaContact={openTaContact} search={search} toast={toast} />
+      )}
       {active === 'all'        && <AllContactsView search={search} />}
       {active === 'referrals'  && window.ReferralsTab && <window.ReferralsTab search={search} />}
       {active === 'ta'         && window.TargetTalentTab && (
