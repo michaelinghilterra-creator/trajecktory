@@ -258,6 +258,25 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       // resolve here too, not only from the connect queue.
       const queue = [...computeConnectQueue(), ...computeBothQueue()];
       resolved = queue.find(r => r.source === source && String(r.id) === String(id)) || null;
+      // Defensive fallback: a valid source+id that isn't in either queue (e.g. a
+      // contact whose company isn't a live application, so it's filtered out) would
+      // otherwise 400 below with an empty name. Read the contact row directly so we
+      // can always resolve a recipient. The frontend already routes already-invited
+      // contacts to /followup-message, so anything reaching here is a genuine
+      // first-touch connect note; this only prevents a hard 400 on an edge case.
+      if (!resolved) {
+        const rows = source === 'recruiter' ? parseRecruitersMd() : parseTargetTalentMd();
+        const row = rows.find(r => String(r.id) === String(id));
+        if (row) resolved = {
+          source,
+          id: row.id,
+          name: `${row.first || ''} ${row.last || ''}`.trim(),
+          firstName: row.first || '',
+          role: row.title || '',
+          company: (source === 'recruiter' ? row.firm : row.company) || '',
+          reason: '',
+        };
+      }
     }
     const name            = (body.name    || resolved?.name    || '').trim();
     const recipientRole   = (body.role    || resolved?.role    || '').trim();

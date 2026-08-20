@@ -109,6 +109,22 @@ function CompanyOutreach({ c }) {
   );
 }
 
+// CRM statuses that mean the contact has already been reached out to. Once here,
+// a LinkedIn "follow-up" is a real message (an InMail while unconnected, a free DM
+// once accepted), not another connection note — so the draft must route to the
+// followup-message endpoint, which reads the contact row directly, rather than
+// connect-note, which resolves only from the connect/both queues that EXCLUDE these
+// statuses (and would 400 with "Provide a recipient").
+const CONTACTED_STATUSES = new Set(['Sent', 'Replied', 'Meeting Scheduled']);
+// Already invited when we hold a per-contact touch OR the CRM status says so. Status
+// is the reliable signal: selfLastTouch is derived from the correspondence-log index,
+// which can be empty even after status advanced to Sent — that gap is what wrongly
+// routed already-contacted contacts to the first-touch connect-note endpoint and 400'd.
+function isAlreadyInvited(c) {
+  return !!(c.companyOutreach && c.companyOutreach.selfLastTouch)
+    || CONTACTED_STATUSES.has(c.status);
+}
+
 function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent }) {
   const [note, setNote] = useStateCq(null);
   const [loading, setLoading] = useStateCq(false);
@@ -118,9 +134,10 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
   const done = !!sentAt;
   // A contact you have ALREADY sent a LinkedIn invite (or any 1:1 touch) to: the
   // invite is out, so a "follow-up" is a real MESSAGE, not another connection note.
-  // selfLastTouch is only set once a touch to this specific contact exists, so its
-  // presence is what tells a follow-up apart from a first-touch connect.
-  const alreadyInvited = !!(c.companyOutreach && c.companyOutreach.selfLastTouch);
+  // Keyed off the CRM status as well as selfLastTouch (see isAlreadyInvited) so a
+  // Sent contact whose correspondence-log index has no self-entry still routes to
+  // the followup-message endpoint instead of 400'ing against the connect queue.
+  const alreadyInvited = isAlreadyInvited(c);
 
   // Record that the invite went out, right here — no jumping to the Network tab.
   // Posts the note as a "Sent" correspondence to the contact's own route (TA vs
