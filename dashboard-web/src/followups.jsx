@@ -328,6 +328,19 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   }, []);
   const withholding = !!(withheld && withheld.withheld > 0 && !withheld.hasVerifierKeys);
 
+  // TA contacts that look accepted from the latest LinkedIn import (a name+company
+  // match with no exact-slug auto-flip). The user confirms each into Connected,
+  // which then surfaces them in the queue as "Just connected".
+  const [pendingAccept, setPendingAccept] = useStateF([]);
+  useEffectF(() => { fetch('/api/referrals/pending-acceptances').then(r => r.json()).then(d => setPendingAccept(d && d.pending ? d.pending : [])).catch(() => {}); }, []);
+  const confirmAccepted = (id) => {
+    window.tjkMutate(`/api/target-talent/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ linkedinStatus: 'Connected' }) })
+      .then(r => r.json())
+      .then(res => { if (res.error) { toast && toast(res.error, 'error'); return; } setPendingAccept(prev => prev.filter(p => p.id !== id)); load(); toast && toast('Marked connected', 'success'); })
+      .catch(e => toast && toast(e.message, 'error'));
+  };
+  const dismissPending = (id) => setPendingAccept(prev => prev.filter(p => p.id !== id));
+
   const warm = data.warm || [];
   const cold = data.cold || [];
   const ghosted = data.ghostedCandidates || [];
@@ -571,6 +584,32 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
           worth a touch (not-yet-contacted, app-going-stale, and gone-quiet, all
           merged server-side into data.contactFollowups). Contacts only — no
           application/company rows reach this tab. */}
+      {(view === 'queue' || view === 'merged') && pendingAccept.length > 0 && (
+        <div className="card padded-lg" style={{ borderColor: 'color-mix(in srgb, var(--green) 40%, transparent)' }}>
+          <div className="card-head" style={{ marginBottom: 8 }}>
+            <span className="card-title">✓ Recently accepted? Confirm</span>
+            <span className="card-meta mono">these look connected from your latest LinkedIn import</span>
+          </div>
+          <div className="col" style={{ gap: 6 }}>
+            {pendingAccept.map(p => (
+              <div key={`pa-${p.id}`} className="action-card">
+                <div className="action-card-row">
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <span className="action-card-co">{p.name}</span>
+                    <span className="dim"> · {p.company || 'unknown company'}</span>
+                    {p.connectedOn ? <span className="dim mono" style={{ fontSize: 11, marginLeft: 6 }}>connected {p.connectedOn}</span> : null}
+                  </div>
+                  <div className="row" style={{ gap: 6, flex: 'none' }}>
+                    <button className="btn accent sm" onClick={() => confirmAccepted(p.id)}>Confirm connected</button>
+                    <button className="btn ghost sm" onClick={() => dismissPending(p.id)}>Not yet</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {(view === 'queue' || view === 'merged') && (
         <window.FollowupQueueTab toast={toast} items={data.contactFollowups || []} onReload={load} />
       )}

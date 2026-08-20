@@ -8,6 +8,7 @@ import { INTERVIEW_STAGES, isInterviewStage, OUTREACH_ELIGIBLE_STATUSES } from '
 import { isSendable } from '../../../lib/email-verify.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
 import { isLinkedInEntry } from './channels.mjs';
+import { readLinkedInMap } from './tt-linkedin.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
 // quickly each stage cools: warm Responded threads cool fastest, post-
@@ -902,6 +903,54 @@ function computeStaleAppContacts({ staleApps, taRows } = {}) {
 // contacts gone quiet. Returns PEOPLE only — never application/company rows — so
 // the Follow-Ups tab feeds its badge, overview, and queue from this one list,
 // with no per-view "is this an app?" filter for a company alert to slip past.
+// ── Just-connected warm queue ────────────────────────────────────────────────
+// A TA contact who ACCEPTED your LinkedIn invite (LinkedIn axis 'Connected', see
+// tt-linkedin.mjs) but whom you have not messaged since connecting. This is the
+// warm hand-off: you can now send a real message as a FREE DM (no InMail credit)
+// while the acceptance is fresh. It is distinct from every other queue, which all
+// exclude a contact at the pipeline-status level once the conversation is 'Sent'
+// or beyond — the LinkedIn axis is a separate signal. Gated to companies with a
+// live application, same as the outreach queues.
+function computeJustConnectedQueue({ taRows, apps } = {}) {
+  const ta = taRows ?? (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
+  const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
+  const liMap = readLinkedInMap();
+  const baselineId = getNewBaselineId();
+  const touchIdx = buildCompanyTouchIndex({ ta });
+  const today = _localToday();
+  const out = [];
+  for (const row of ta) {
+    if (row.linkedinStatus !== 'Connected') continue;            // accepted the invite
+    if (row.status === 'Archived') continue;
+    if (!applied.has(normalizeCompany(row.company))) continue;   // only live applications
+    const connectedOn = liMap[String(row.id)]?.updated || '';
+    // Not yet messaged since connecting: no Sent LinkedIn entry dated on/after the
+    // connect date. The original invite predates the connection, so it never counts.
+    // With no connect date on file, surface it rather than risk hiding a fresh DM cue.
+    let dmSent = false;
+    if (connectedOn) {
+      try {
+        for (const m of (readTTCorrespondence(row.id) || [])) {
+          if (m.direction === 'Sent' && isLinkedInEntry(m) && (m.timestamp || '').slice(0, 10) >= connectedOn) { dmSent = true; break; }
+        }
+      } catch { /* unreadable → treat as not messaged */ }
+    }
+    if (dmSent) continue;
+    // The motion is "send the free DM now", so this stays a single-channel LinkedIn
+    // card (ConnectRow) even when the contact also has a sendable email — the email
+    // motion surfaces separately. stickyChannel keeps the merge from upgrading it to
+    // 'both' if the same contact independently qualifies as a stale email contact.
+    out.push({
+      ..._queueRow(row, 'ta', baselineId, touchIdx.get(normalizeCompany(row.company)), today),
+      channel: 'linkedin', stickyChannel: true,
+      queueReason: 'Just connected', freeDm: true,
+      linkedinStatus: 'Connected', connectedOn,
+      rank: 200,   // fresh acceptance floats to the top of the merged feed
+    });
+  }
+  return _sortByCompanyName(out);
+}
+
 function computeContactFollowups(opts = {}) {
   const byKey = new Map();
   const put = (item) => {
@@ -917,7 +966,10 @@ function computeContactFollowups(opts = {}) {
     const richer = (CH_RANK[item.channel] ?? 0) > (CH_RANK[prev.channel] ?? 0) ? item.channel : prev.channel;
     byKey.set(key, {
       ...prev, ...item,
-      channel: richer,
+      // A stickyChannel row (the just-connected free-DM card) keeps its channel so
+      // the merge never upgrades it to 'both' and re-routes it to a different card.
+      channel: (prev.stickyChannel || item.stickyChannel) ? (prev.stickyChannel ? prev.channel : item.channel) : richer,
+      stickyChannel: prev.stickyChannel || item.stickyChannel,
       email: prev.email || item.email || '',
       linkedin: prev.linkedin || item.linkedin || '',
       staleDays: bestStale >= 0 ? bestStale : undefined,
@@ -929,6 +981,9 @@ function computeContactFollowups(opts = {}) {
     });
   };
 
+  // 0) Just connected (accepted your invite, no DM yet) — put FIRST so its reason
+  //    and free-DM framing win the dedup, and highest-ranked so it floats to the top.
+  for (const r of computeJustConnectedQueue(opts)) put(r);
   // 1) Outreach queue — already the click-and-go shape; carries channel + rank.
   for (const r of computeFollowupQueue(opts)) put({ ...r, queueReason: r.notContacted ? 'Reach out' : 'Follow up' });
   // 2) Applications going stale, contact-first — click-and-go shape + staleDays.
@@ -1006,6 +1061,7 @@ export {
   computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
   computeFollowupQueue, _followupRank,
   isHighValueContact, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts,
+  computeJustConnectedQueue,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 

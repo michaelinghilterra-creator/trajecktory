@@ -32,13 +32,17 @@ function OutreachPills({ c }) {
 // CompanyOutreach block below it; this pill is the category.
 function QueueReasonPill({ c }) {
   if (!c.queueReason) return null;
-  const urgent = c.queueReason === 'App going stale' || c.queueReason === 'Went quiet';
+  // 'Just connected' is a positive event (they accepted) → green. The overdue
+  // reasons are orange. Everything else rides the neutral accent.
+  const cvar = c.queueReason === 'Just connected' ? 'var(--green)'
+    : (c.queueReason === 'App going stale' || c.queueReason === 'Went quiet') ? 'var(--orange)'
+    : 'var(--accent)';
   return (
     <span title="Why this contact is in your follow-up queue"
       style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4, verticalAlign: 'middle',
-        background: urgent ? 'color-mix(in srgb, var(--orange) 15%, transparent)' : 'color-mix(in srgb, var(--accent) 15%, transparent)',
-        color: urgent ? 'var(--orange)' : 'var(--accent)',
-        border: `1px solid ${urgent ? 'color-mix(in srgb, var(--orange) 40%, transparent)' : 'color-mix(in srgb, var(--accent) 40%, transparent)'}` }}>
+        background: `color-mix(in srgb, ${cvar} 15%, transparent)`,
+        color: cvar,
+        border: `1px solid color-mix(in srgb, ${cvar} 40%, transparent)` }}>
       {c.queueReason}
     </span>
   );
@@ -131,6 +135,7 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
   const [sending, setSending] = useStateCq(false);
   const [sentAt, setSentAt] = useStateCq(null);
   const [showArchive, setShowArchive] = useStateCq(false);
+  const [referred, setReferred] = useStateCq(false);
   const done = !!sentAt;
   // A contact you have ALREADY sent a LinkedIn invite (or any 1:1 touch) to: the
   // invite is out, so a "follow-up" is a real MESSAGE, not another connection note.
@@ -138,6 +143,9 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
   // Sent contact whose correspondence-log index has no self-entry still routes to
   // the followup-message endpoint instead of 400'ing against the connect queue.
   const alreadyInvited = isAlreadyInvited(c);
+  // 1st-degree LinkedIn connection: a message is a FREE DM (no InMail credit).
+  // Drives the copy and suppresses the budget decrement on mark-sent.
+  const freeDm = c.linkedinStatus === 'Connected' || !!c.freeDm;
 
   // Record that the invite went out, right here — no jumping to the Network tab.
   // Posts the note as a "Sent" correspondence to the contact's TA route, which
@@ -158,7 +166,7 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
         if (res.error) { toast && toast(res.error, 'error'); setSending(false); return; }
         setSentAt('just now');                 // brief ✓ so the click is confirmed,
         toast && toast(`Marked sent — ${c.name || 'contact'}`, 'success');
-        if (alreadyInvited && onInmailSent) onInmailSent();  // an InMail credit was just spent
+        if (alreadyInvited && !freeDm && onInmailSent) onInmailSent();  // InMail credit spent — a free DM to a connection spends none
         setTimeout(() => onDone && onDone(c.source, c.id), 1000); // then drop off the list
       })
       .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
@@ -181,6 +189,20 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
         onDone && onDone(c.source, c.id);
       })
       .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
+  };
+
+  // Just-connected offer: promote this now-1st-degree contact into the Referrals
+  // book (the user decides who is a real advocate; nothing auto-adds). Idempotent.
+  const addToReferral = () => {
+    window.tjkMutate(`/api/target-talent/${c.id}/to-referral`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    }).then(r => r.json())
+      .then(res => {
+        if (res.error) { toast && toast(res.error, 'error'); return; }
+        setReferred(true);
+        toast && toast(res.alreadyReferral ? `${c.name || 'This contact'} is already in Referrals` : `Added ${c.name || 'contact'} to Referrals`, 'success');
+      })
+      .catch(e => toast && toast(e.message, 'error'));
   };
 
   const draft = () => {
@@ -222,11 +244,17 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
           <CompanyOutreach c={c} />
           {alreadyInvited && !done && (
             <div className="dim" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.4 }}>
-              You already invited them, so a follow-up is a message, not another invite. While you are not connected, LinkedIn sends it as an InMail{typeof inmailRemaining === 'number' ? ` (${inmailRemaining} left this month)` : ' (uses a Premium credit)'}, so make it count.
+              {freeDm
+                ? <>They accepted your invite, so you're connected. This message is a free DM (no InMail credit). Strike while it's warm.</>
+                : <>You already invited them, so a follow-up is a message, not another invite. While you are not connected, LinkedIn sends it as an InMail{typeof inmailRemaining === 'number' ? ` (${inmailRemaining} left this month)` : ' (uses a Premium credit)'}, so make it count.</>}
             </div>
           )}
           {!done && (
-            <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              {c.queueReason === 'Just connected' && (referred
+                ? <span style={{ color: 'var(--green)' }}>✓ Added to Referrals</span>
+                : <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={addToReferral} disabled={sending}
+                    title="Now a 1st-degree connection. Add them to your Referrals list; they'll share a timeline with this TA record.">+ Add to Referrals</button>)}
               {!showArchive
                 ? <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setShowArchive(true)} disabled={sending}
                     title="Contact left the company or changed to an unrelated role? Archive them so they drop off and never get outreach.">Not reachable?</button>
@@ -958,7 +986,10 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   // the credits reset. Contacts you can email, connection requests, and accepted
   // contacts are unaffected.
   const outOfInmail = !!(inmail && inmail.remaining === 0);
-  const isInmailBlocked = (c) => outOfInmail && c.channel === 'linkedin' && !!(c.companyOutreach && c.companyOutreach.selfLastTouch);
+  // A message to a 1st-degree connection (freeDm) is a free DM, not an InMail, so it
+  // is NEVER blocked by an empty credit balance — this is what makes the "Just
+  // connected" motion still actionable when you are out of InMail.
+  const isInmailBlocked = (c) => outOfInmail && c.channel === 'linkedin' && !c.freeDm && !!(c.companyOutreach && c.companyOutreach.selfLastTouch);
   const isHeld = (c) => isHeldToday(c) || isInmailBlocked(c);
   const heldCount = queue.filter(isHeld).length;
   const anySameDay = queue.some(isHeldToday);

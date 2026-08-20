@@ -2,6 +2,7 @@ import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence } from '../lib/referrals.mjs';
 import { reconcile, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
+import { detectAcceptances, computePendingAcceptances } from '../lib/linkedin-acceptance.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
@@ -77,7 +78,9 @@ router.get('/api/referrals', (req, res) => {
 router.post('/api/referrals/reconcile', (req, res) => {
   try {
     const result = reconcile({ seedPool: !!(req.body && req.body.seedPool) });
-    res.json({ ok: true, ...result });
+    // Same LinkedIn haystack tells us which invited TA contacts have now accepted.
+    const accepted = detectAcceptances({});
+    res.json({ ok: true, ...result, acceptedFlipped: accepted.flipped.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -95,7 +98,10 @@ router.post('/api/referrals/import-linkedin', (req, res) => {
     if (!connections.length) return res.status(400).json({ error: 'No connections parsed — is this a LinkedIn Connections.csv?' });
     saveConnections(connections, 'upload');
     const result = reconcile({ seedPool: true });
-    res.json({ ok: true, imported: connections.length, ...result });
+    // Detect TA contacts whose pending invite this import shows as accepted, and
+    // flip them to LinkedIn-Connected (exact slug match only; see linkedin-acceptance).
+    const accepted = detectAcceptances({ connections });
+    res.json({ ok: true, imported: connections.length, ...result, acceptedFlipped: accepted.flipped.length, accepted: accepted.flipped });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -104,6 +110,15 @@ router.post('/api/referrals/import-linkedin', (req, res) => {
 // GET /api/referrals/linkedin-status — is a haystack stored, how big, how fresh.
 router.get('/api/referrals/linkedin-status', (req, res) => {
   try { res.json(linkedinStatus()); }
+  catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/referrals/pending-acceptances — Invite-Pending TA contacts that match an
+// imported connection by name+company but NOT by slug: the "looks accepted, confirm?"
+// list. Derived from the stored haystack, so it survives reloads. Confirming one is a
+// PATCH /api/target-talent/:id { linkedinStatus: 'Connected' }.
+router.get('/api/referrals/pending-acceptances', (req, res) => {
+  try { res.json({ pending: computePendingAcceptances({}) }); }
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 

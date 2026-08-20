@@ -12,6 +12,8 @@ import { logConnect } from '../lib/connects.mjs';
 import { isLinkedInInvite } from '../lib/channels.mjs';
 import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES } from '../lib/tt-linkedin.mjs';
 import { isHighValueContact } from '../lib/followups.mjs';
+import { appendReferralRows, parseReferralsMd } from '../lib/referrals.mjs';
+import { slugOf } from '../lib/linkedin-acceptance.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
 
@@ -93,6 +95,38 @@ router.patch('/api/target-talent/:id', (req, res) => {
       if (!ok) return res.status(404).json({ error: 'Contact not found' });
     }
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/target-talent/:id/to-referral — one-click offer: a TA contact who
+// accepted your LinkedIn invite is now a 1st-degree connection, so promote them into
+// the Referrals book. Appends a referrals.md row stamped "from TA Outreach #<id>"
+// (so resolveReferralLink re-links them into a shared timeline) plus the LinkedIn URL.
+// Idempotent: no-op if a referral already carries the backref or matches the slug.
+router.post('/api/target-talent/:id/to-referral', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const contact = parseTargetTalentMd().find(c => c.id === id);
+    if (!contact) return res.status(404).json({ error: 'Contact not found' });
+    const mySlug = slugOf(contact.linkedin);
+    const already = parseReferralsMd().find(r =>
+      new RegExp(`TA Outreach #${id}\\b`, 'i').test(r.notes || '') ||
+      (mySlug && slugOf(r.linkedin) === mySlug));
+    if (already) return res.json({ ok: true, alreadyReferral: true });
+    const written = appendReferralRows([{
+      name: `${contact.first || ''} ${contact.last || ''}`.trim(),
+      how: '1st-degree LinkedIn connection',
+      where: contact.company || '',
+      target: '',
+      status: 'Not Asked',
+      lastTouch: '',
+      linkedin: contact.linkedin || '',
+      email: contact.email || '',
+      notes: `from TA Outreach #${id}${contact.title ? ` · ${contact.title}` : ''}`,
+    }]);
+    res.json({ ok: true, added: written.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -147,7 +147,7 @@ router.get('/api/followups/stale', (req, res) => {
     const actionableCount = contactFollowups.filter((c) => {
       const co = c.companyOutreach;
       const heldToday = !!(co && (co.touchedToday || co.selfSentToday));
-      const inmailBlocked = inmailOut && c.channel === 'linkedin' && !!(co && co.selfLastTouch);
+      const inmailBlocked = inmailOut && c.channel === 'linkedin' && !c.freeDm && !!(co && co.selfLastTouch);
       return !heldToday && !inmailBlocked;
     }).length;
 
