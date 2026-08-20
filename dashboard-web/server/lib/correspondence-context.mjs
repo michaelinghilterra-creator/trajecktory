@@ -15,9 +15,46 @@
  * a handshake, not a pitch, so it never triggers nudge mode. Pure (no I/O) so it
  * stays unit-testable; pass `now` to make the day math deterministic.
  */
-import { isLinkedInInvite } from './channels.mjs';
+import { isLinkedInInvite, isLinkedInEntry } from './channels.mjs';
+
+// Cold-outreach ceilings per channel. The LinkedIn count INCLUDES the connection
+// request, so 3 = connect + two follow-ups. A real reply lifts the cap entirely.
+export const COLD_OUTREACH_CAPS = { linkedin: 3, email: 3 };
 
 const DAY_MS = 86400000;
+
+// A bare "Accepted LinkedIn connection request" is logged as a Received entry but
+// it is NOT a conversation — it must not lift the cold-outreach cap.
+function isAcceptanceNotice(m) {
+  return /^accepted linkedin connection request/i.test(String(m?.subject || '').trim())
+      || /^accepted linkedin connection request/i.test(String(m?.body || '').trim());
+}
+
+// Per-channel cold-outreach cap state for a contact. Counts OUTBOUND touches per
+// channel (LinkedIn includes the connect request; email is everything else). A
+// real inbound reply — anything Received that is not the acceptance notice —
+// means a live conversation, which lifts BOTH caps (capped is then always false).
+export function outreachCapState(messages, opts = {}) {
+  const msgs = Array.isArray(messages) ? messages : [];
+  const caps = { ...COLD_OUTREACH_CAPS, ...(opts.caps || {}) };
+  const sent = msgs.filter(m => m.direction === 'Sent');
+  const hasReply = msgs.some(m => m.direction === 'Received' && !isAcceptanceNotice(m));
+  const liSent = sent.filter(m => isLinkedInEntry(m)).length;
+  const emSent = sent.filter(m => !isLinkedInEntry(m)).length;
+  const mk = (n, cap) => ({ sent: n, cap, capped: !hasReply && n >= cap });
+  return { hasReply, linkedin: mk(liSent, caps.linkedin), email: mk(emSent, caps.email) };
+}
+
+// Whether a queue row on `channel` should rest (capped with no reply). A 'both'
+// row rests only when BOTH channels are exhausted — an open channel is still
+// actionable.
+export function isChannelCapped(capState, channel) {
+  if (!capState) return false;
+  if (channel === 'linkedin') return !!capState.linkedin.capped;
+  if (channel === 'email') return !!capState.email.capped;
+  if (channel === 'both') return !!(capState.linkedin.capped && capState.email.capped);
+  return false;
+}
 const dayOf = (m) => String(m?.timestamp || '').slice(0, 10);
 
 function daysBetween(dateStr, now) {

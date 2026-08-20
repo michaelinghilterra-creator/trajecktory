@@ -146,6 +146,12 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
   // 1st-degree LinkedIn connection: a message is a FREE DM (no InMail credit).
   // Drives the copy and suppresses the budget decrement on mark-sent.
   const freeDm = c.linkedinStatus === 'Connected' || !!c.freeDm;
+  // A short "X/Y touches" label for a contact resting at the cold-outreach cap.
+  const capLabel = c.capState ? (
+    c.channel === 'email' ? `${c.capState.email.sent}/${c.capState.email.cap} emails`
+    : c.channel === 'both' ? `${c.capState.linkedin.sent}/${c.capState.linkedin.cap} LinkedIn + ${c.capState.email.sent}/${c.capState.email.cap} emails`
+    : `${c.capState.linkedin.sent}/${c.capState.linkedin.cap} LinkedIn touches`
+  ) : 'outreach cap reached';
 
   // Record that the invite went out, right here — no jumping to the Network tab.
   // Posts the note as a "Sent" correspondence to the contact's TA route, which
@@ -250,6 +256,11 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
               {freeDm
                 ? <>They accepted your invite, so you're connected. This message is a free DM (no InMail credit). Strike while it's warm.</>
                 : <>You already invited them, so a follow-up is a message, not another invite. While you are not connected, LinkedIn sends it as an InMail{typeof inmailRemaining === 'number' ? ` (${inmailRemaining} left this month)` : ' (uses a Premium credit)'}, so make it count.</>}
+            </div>
+          )}
+          {c.capped && !done && (
+            <div style={{ fontSize: 11, marginTop: 4, color: 'var(--orange)', lineHeight: 1.4 }}>
+              Resting: {capLabel}, no reply. This contact has hit the cold-outreach cap. Messaging now overrides it; usually better to wait for a reply.
             </div>
           )}
           {!done && (
@@ -994,14 +1005,20 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   // connected" motion still actionable when you are out of InMail.
   const isInmailBlocked = (c) => outOfInmail && c.channel === 'linkedin' && !c.freeDm && !!(c.companyOutreach && c.companyOutreach.selfLastTouch);
   const isHeld = (c) => isHeldToday(c) || isInmailBlocked(c);
+  // Cold-outreach cap reached with no reply (server sets c.capped). Unlike the
+  // same-day / InMail holds, resting does not clear on its own; it lifts when the
+  // contact replies. Hidden by default, revealed and overridable via Show anyway.
+  const isCapped = (c) => !!c.capped;
+  const isHiddenRow = (c) => isHeld(c) || isCapped(c);
   const heldCount = queue.filter(isHeld).length;
+  const restingCount = queue.filter(isCapped).length;
   const anySameDay = queue.some(isHeldToday);
   const anyInmailOut = queue.some(isInmailBlocked);
   const heldReasons = [
     anySameDay ? 'you already reached out at their company today' : null,
     anyInmailOut ? 'you are out of InMail credits this month' : null,
   ].filter(Boolean).join('; ');
-  const base = showHeld ? queue : queue.filter(c => !isHeld(c));
+  const base = showHeld ? queue : queue.filter(c => !isHiddenRow(c));
   const counts = {
     all: base.length,
     linkedin: base.filter(c => c.channel === 'linkedin').length,
@@ -1053,9 +1070,12 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
           {inmail.remaining === 0 && <span style={{ color: 'var(--red)' }}>Out. LinkedIn follow-ups to non-connections are hidden until your credits reset.</span>}
         </div>
       )}
-      {heldCount > 0 && (
+      {(heldCount > 0 || restingCount > 0) && (
         <div className="dim" style={{ fontSize: 12, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 11px' }}>
-          <span>{heldCount} contact{heldCount === 1 ? '' : 's'} hidden right now ({heldReasons}). They return automatically once that clears (tomorrow, or when your InMail credits reset).</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 240 }}>
+            {heldCount > 0 && <span>{heldCount} contact{heldCount === 1 ? '' : 's'} hidden right now ({heldReasons}). They return automatically once that clears (tomorrow, or when your InMail credits reset).</span>}
+            {restingCount > 0 && <span>{restingCount} contact{restingCount === 1 ? '' : 's'} resting — reached the outreach cap with no reply. They stay parked here until they reply, or you message anyway.</span>}
+          </div>
           <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setShowHeld(v => !v)}>
             {showHeld ? 'Hide them' : 'Show anyway'}
           </button>

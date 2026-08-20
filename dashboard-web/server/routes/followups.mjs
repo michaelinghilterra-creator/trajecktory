@@ -140,15 +140,16 @@ router.get('/api/followups/stale', (req, res) => {
 
     // Actionable now: the workable subset of contactFollowups the queue actually
     // shows. Excludes same-day holds (you already reached out at that company
-    // today) and, when you are out of InMail credits, the LinkedIn follow-ups that
-    // would need one. This is what the nav badge and the Follow-ups subtab count,
-    // so an "alert" means something you can send right now, not the whole backlog.
+    // today), out-of-InMail LinkedIn follow-ups, and contacts resting at the
+    // cold-outreach cap (capped with no reply). This is what the nav badge and the
+    // Follow-ups subtab count, so an "alert" means something you can send right
+    // now, not the whole backlog.
     const inmailOut = getInmailBudget().remaining === 0;
     const actionableCount = contactFollowups.filter((c) => {
       const co = c.companyOutreach;
       const heldToday = !!(co && (co.touchedToday || co.selfSentToday));
       const inmailBlocked = inmailOut && c.channel === 'linkedin' && !c.freeDm && !!(co && co.selfLastTouch);
-      return !heldToday && !inmailBlocked;
+      return !heldToday && !inmailBlocked && !c.capped;
     }).length;
 
     res.json({

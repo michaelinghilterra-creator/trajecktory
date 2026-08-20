@@ -9,6 +9,7 @@ import { isSendable } from '../../../lib/email-verify.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
 import { isLinkedInEntry } from './channels.mjs';
 import { readLinkedInMap } from './tt-linkedin.mjs';
+import { outreachCapState, isChannelCapped } from './correspondence-context.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
 // quickly each stage cools: warm Responded threads cool fastest, post-
@@ -1020,6 +1021,17 @@ function computeContactFollowups(opts = {}) {
   for (const item of byKey.values()) {
     if (!item.companyOutreach) {
       item.companyOutreach = _companyOutreachFor(`${item.source}:${item.id}`, touchIdx.get(normalizeCompany(item.company)), nowDay);
+    }
+    // Cold-outreach cap: once a TA contact has hit the per-channel ceiling with no
+    // reply, the queue rests them (the client hides capped rows behind Show anyway,
+    // so nothing is lost and a manual draft still overrides). Referrals are a warm
+    // motion and are not capped.
+    if (item.source === 'ta') {
+      try {
+        const cap = outreachCapState(readTTCorrespondence(item.id));
+        item.capState = cap;
+        item.capped = isChannelCapped(cap, item.channel);
+      } catch { /* unreadable correspondence → treat as not capped */ }
     }
   }
 
