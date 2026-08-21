@@ -97,7 +97,9 @@ export function parseSentInvites(text) {
     return false;
   };
 
-  for (let i = 0; i < lines.length; i++) {
+  // Explicit constant upper bound on the iteration (lines is already sliced to this,
+  // but Math.min(len, CONST) is what makes the bound provable to static analysis).
+  for (let i = 0, n = Math.min(lines.length, 20_000); i < n; i++) {
     if (!SENT.test(lines[i]) || !withdrawBelow(i)) continue;   // an invite row's timestamp
     // The two nearest MEANINGFUL lines above are [name, headline]. Skip blanks AND
     // interleaved UI/metadata (a "· 2nd" degree, a "Message" button, a mutual-
