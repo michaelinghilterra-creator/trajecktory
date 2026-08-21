@@ -36,8 +36,14 @@ export function nameTokens(s) { return cleanName(s).split(' ').filter(Boolean); 
 // Extract the /in/<slug> handle from a LinkedIn profile URL, lowercased, trailing
 // slash and query stripped. Returns '' when there is no LinkedIn profile URL.
 export function profileHandle(url) {
-  const m = String(url || '').match(/linkedin\.com\/in\/([A-Za-z0-9\-_%.]+)/i);
-  return m ? decodeURIComponent(m[1]).replace(/\/+$/, '').toLowerCase() : '';
+  const m = String(url || '').slice(0, 2000).match(/linkedin\.com\/in\/([A-Za-z0-9\-_%.]+)/i);
+  if (!m) return '';
+  let h; try { h = decodeURIComponent(m[1]); } catch { h = m[1]; }
+  // Strip trailing slashes without a backtracking regex on user-controlled input
+  // (decodeURIComponent can turn %2F into slashes). A plain scan is linear.
+  let end = h.length;
+  while (end > 0 && h.charCodeAt(end - 1) === 47 /* '/' */) end--;
+  return h.slice(0, end).toLowerCase();
 }
 
 // Lines that are LinkedIn UI chrome, a relative timestamp, or connection metadata —
@@ -67,8 +73,11 @@ const UI_LINE = /^(withdraw|pending|message|connect|following|follow|ignore|acce
  * @returns {{name:string, headline:string, handle:string}[]}
  */
 export function parseSentInvites(text) {
-  const raw = String(text || '');
-  const lines = raw.split(/\r?\n/).map(l => l.trim());
+  // Bound user-controlled input up front: a real Sent list is a few thousand lines, so
+  // cap raw size, line count, and per-line length. This stops a huge or crafted paste
+  // from driving unbounded iteration (loop-bound injection) or slow regex backtracking.
+  const raw = String(text || '').slice(0, 500_000);
+  const lines = raw.split(/\r?\n/).slice(0, 20_000).map(l => l.trim().slice(0, 300));
   const invites = [];
   const seen = new Set();
   const push = (inv) => {
@@ -104,8 +113,8 @@ export function parseSentInvites(text) {
     // Recover the name even if the copy dropped the blank and left the avatar-alt
     // ("Xxx's profile picture") or an "open to work"/"hiring" badge on the name line.
     const name = above[0]
-      .replace(/[’']s?\s+profile picture$/i, '')
-      .replace(/\s+(hiring|open to work),?\s*$/i, '')
+      .replace(/[’']s?\s{1,10}profile picture$/i, '')
+      .replace(/\s{1,10}(hiring|open to work),?\s{0,10}$/i, '')
       .trim();
     push({ name, headline: above[1], handle: '' });
   }
