@@ -1101,10 +1101,13 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
         </div>
       )}
       <div className="dim" style={{ fontSize: 12, marginBottom: 14 }}>
-        <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setRecOpen(v => !v)}
-          title="Capture LinkedIn invites you sent directly on LinkedIn, so the queue stops re-pitching people who already have a pending invite out.">
-          {recOpen ? '▾' : '▸'} Reconcile LinkedIn sent invites
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button className="btn sm" style={{ fontSize: 12, padding: '5px 12px', fontWeight: 600 }} onClick={() => setRecOpen(v => !v)}
+            title="Capture LinkedIn invites you sent directly on LinkedIn, so the queue stops re-pitching people who already have a pending invite out.">
+            🔗 Reconcile LinkedIn sent invites {recOpen ? '▾' : '▸'}
+          </button>
+          {!recOpen && <span>Invited people directly on LinkedIn? Import your Sent list so the queue stops re-pitching them.</span>}
+        </div>
         {recOpen && (
           <div style={{ marginTop: 8, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: 11 }}>
             <div style={{ marginBottom: 6 }}>
