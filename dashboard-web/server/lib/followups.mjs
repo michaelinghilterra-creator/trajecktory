@@ -595,7 +595,67 @@ function _companyOutreachFor(selfKey, companyTouches, today = null) {
     }
   }
   const touchedToday = (lastTouch && today && lastTouch.date === today) ? { name: lastTouch.name, channel: lastTouch.channel } : null;
-  return { lastTouch, touchedToday, selfLastTouch, companyLastComms, selfSentToday };
+  // How many DISTINCT contacts at this company you have already SENT to today. Drives
+  // the per-company daily cap (up to N different contacts per company per day): counting
+  // distinct keys, not raw messages, so a second touch to the same person never eats a
+  // slot meant for reaching a new one. Includes this contact if they were messaged today.
+  let companyContactsSentToday = 0;
+  if (today && Array.isArray(companyTouches)) {
+    const keys = new Set();
+    for (const x of companyTouches) if (x.direction === 'Sent' && x.date === today) keys.add(x.key);
+    companyContactsSentToday = keys.size;
+  }
+  return { lastTouch, touchedToday, selfLastTouch, companyLastComms, selfSentToday, companyContactsSentToday };
+}
+
+// Statuses that mean "you already sent this contact a 1:1 LinkedIn message/invite",
+// so the NEXT LinkedIn touch is a real message (InMail-costing for a non-connection),
+// not a free connection request. MUST match connect.jsx's CONTACTED_STATUSES.
+export const CONTACTED_STATUSES = new Set(['Sent', 'Replied', 'Meeting Scheduled']);
+
+// Would messaging this contact right now spend an InMail credit you do not have?
+// The gate the count USED to apply keyed only on selfLastTouch — but a contact whose
+// pipeline status is already 'Sent' can have an empty correspondence-log index (the
+// same gap isAlreadyInvited() guards on the send side), so a pending invite slipped
+// through and got surfaced with zero credits. Keying on the SAME alreadyInvited signal
+// the send button uses closes that gap. Email and dual-channel contacts (email still
+// sendable), free DMs (1st-degree connections), and not-yet-invited first touches
+// (a free connection request) are never blocked.
+export function isInmailBlocked(item, { inmailOut } = {}) {
+  if (!inmailOut) return false;
+  if (!item || item.channel !== 'linkedin' || item.freeDm) return false;
+  const co = item.companyOutreach;
+  const alreadyInvited = !!(co && co.selfLastTouch) || CONTACTED_STATUSES.has(item.status);
+  return alreadyInvited;
+}
+
+// Per-company daily cap: surface at most `perCompany` DISTINCT contacts per company
+// per day, so you spread across a company deliberately instead of the old behavior
+// (one touch anywhere → the whole company held for the day). Mutates each item's
+// `heldDaily` flag; nothing is dropped, so a held contact stays inspectable and
+// rotates into view on a future day. Counting rules:
+//   - Distinct CONTACTS, never raw messages: a second touch to someone already
+//     messaged today never consumes a slot meant for a new person.
+//   - `companyContactsSentToday` (distinct keys already sent today) seeds the count,
+//     so slots you already spent today are honored across reloads.
+//   - A contact you already messaged today is done for the day (held) and is already
+//     inside that seed, so it is not re-counted here.
+//   - Rows hidden for other reasons (inmailBlocked / capped) do not spend a slot.
+// Items MUST arrive in priority order (most important first) so the cap keeps the
+// best contacts and holds the overflow. `inmailBlocked` must already be assigned.
+export function assignPerCompanyDailyHeld(items, { perCompany = 3, normalize = normalizeCompany } = {}) {
+  const used = new Map();   // company -> distinct contacts counted so far today
+  for (const it of (items || [])) {
+    if (!it) continue;
+    const co = normalize(it.company || '');
+    const already = (it.companyOutreach && it.companyOutreach.companyContactsSentToday) || 0;
+    if (it.companyOutreach && it.companyOutreach.selfSentToday) { it.heldDaily = true; continue; }
+    if (it.inmailBlocked || it.capped) { it.heldDaily = false; continue; }
+    const cur = used.has(co) ? used.get(co) : already;
+    if (cur >= perCompany) { it.heldDaily = true; }
+    else { used.set(co, cur + 1); it.heldDaily = false; }
+  }
+  return items;
 }
 
 // One row shape for both queues. `email` is the clean address (verified.address),

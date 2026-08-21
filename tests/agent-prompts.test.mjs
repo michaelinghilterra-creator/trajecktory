@@ -73,6 +73,23 @@ check(/do NOT add anything to data\/pipeline\.md yourself/i.test(scan), 'scan pr
 check(/parsePortalAdditions/.test(src) && /mergePortalAdditions/.test(src),
   'scan route parses PORTAL_ADDITIONS and merges it server-side');
 
+// STALL HARDENING (2026-08-21): the discovery step is open-ended, and a small
+// model sometimes narrates it and quits without a single WebSearch. The prompt
+// half (belt) forbids narration-as-search and requires real calls; the server
+// half (braces) detects the zero-search signature and retries on Sonnet. Both
+// must stay present — the prompt line alone is advisory, exactly the failure
+// mode this whole test file exists to catch.
+check(/WebSearch tool/i.test(scan) && /at least \d+ WebSearch/i.test(scan),
+  'scan prompt requires actually CALLING WebSearch a minimum number of times');
+check(/narration is not a search/i.test(scan) || /narrating[\s\S]*is a FAILED run/i.test(scan),
+  'scan prompt forbids echoing/describing a search as a stand-in for calling the tool');
+check(/scanDiscoveryStalled/.test(src),
+  'scan route imports the stall detector (lib/scan-stall.mjs)');
+check(/forceModel:\s*'sonnet'/.test(src),
+  'scan route retries a stalled discovery on Sonnet');
+check(/webSearchCount/.test(src),
+  'scan route counts WebSearch calls (the stall discriminator)');
+
 const triage = branch('triage');
 check(triage.length > 0, 'triage-mode prompt branch exists');
 check(/SKIP any URL that already appears in data\/applications\.md/.test(triage),

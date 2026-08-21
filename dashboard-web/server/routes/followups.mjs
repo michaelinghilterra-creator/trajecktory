@@ -10,12 +10,62 @@ import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, isInmailBlocked, assignPerCompanyDailyHeld, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+
+// Different contacts per COMPANY the queue surfaces as actionable per day. Reaching
+// more than this at one company in a day reads as blasting; the overflow is HELD
+// (flagged, not dropped) and rotates into view on a later day.
+const PER_COMPANY_PER_DAY = 3;
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { getInmailBudget } from '../lib/inmail-budget.mjs';
+import { parseSentInvites, matchSentInvites } from '../lib/sent-invites-reconcile.mjs';
+import { markInvitePending } from '../lib/tt-linkedin.mjs';
+import { isLinkedInInvite, LINKEDIN_INVITE_SUBJECT } from '../lib/channels.mjs';
+import { logConnect } from '../lib/connects.mjs';
+import { reconcileInviteStatus } from '../lib/invite-status-reconcile.mjs';
 
 export const router = express.Router();
+
+// POST /api/followups/reconcile-sent-invites — capture LinkedIn invites you sent
+// DIRECTLY on LinkedIn (outside the app) so the queue stops re-pitching them. The
+// client pastes the copied "Manage invitations → Sent" text; we parse + match it to
+// target-talent contacts. Preview by default; { apply:true } records a
+// 'LinkedIn connection request' correspondence entry + advances the LinkedIn axis to
+// 'Invite Pending' for each confident match that has NO existing invite on file.
+// Ambiguous name matches (two contacts, no company tiebreak) are reported, never
+// auto-applied — matching must not guess someone was invited.
+router.post('/api/followups/reconcile-sent-invites', (req, res) => {
+  try {
+    const text = String((req.body && req.body.text) || '');
+    const apply = !!(req.body && req.body.apply);
+    const taRows = parseTargetTalentMd();
+    const invites = parseSentInvites(text);
+    const { matched, ambiguous, unmatched } = matchSentInvites(invites, taRows);
+    const today = new Date().toISOString().slice(0, 10);
+    const label = (c) => ({ id: c.id, name: `${c.first || ''} ${c.last || ''}`.trim(), company: c.company || '' });
+    const newlyMarked = [], alreadyRecorded = [];
+    for (const { contact } of matched) {
+      const msgs = readTTCorrespondence(contact.id);
+      const has = msgs.some(m => m.direction === 'Sent' && isLinkedInInvite(m.subject));
+      if (has) { alreadyRecorded.push(label(contact)); continue; }
+      if (apply) {
+        msgs.push({ timestamp: today, direction: 'Sent', channel: 'LinkedIn', subject: LINKEDIN_INVITE_SUBJECT, body: 'Reconciled from LinkedIn Sent invitations (exact send date unknown).' });
+        writeTTCorrespondence(contact.id, msgs);
+        markInvitePending(contact.id, today);
+        try { logConnect({ name: label(contact).name, source: 'ta', date: today }); } catch { /* metric best-effort */ }
+      }
+      newlyMarked.push(label(contact));
+    }
+    res.json({
+      applied: apply,
+      counts: { parsed: invites.length, newlyMarked: newlyMarked.length, alreadyRecorded: alreadyRecorded.length, ambiguous: ambiguous.length, unmatched: unmatched.length },
+      newlyMarked, alreadyRecorded,
+      ambiguous: ambiguous.map(a => ({ name: a.invite.name, candidates: a.candidates.map(label) })),
+      unmatched: unmatched.map(u => u.name || u.handle).filter(Boolean),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 // ── Follow-Ups (Stale Applications Action Queue) ─────────────────────────────
 // Reads/writes data/follow-ups.md (shared format with followup-cadence.mjs).
@@ -97,6 +147,13 @@ router.get('/api/followups/both-queue', (req, res) => {
 // `source: 'app' | 'ta'`.
 router.get('/api/followups/stale', (req, res) => {
   try {
+    // Self-heal the LinkedIn status axis from our own correspondence before building
+    // the queue: any contact with a recorded invite but a stale 'Not Connected' status
+    // is advanced to 'Invite Pending', so the queue never re-pitches someone already
+    // invited even if a write path missed the status update. Cheap (reads correspondence
+    // only for Not-Connected contacts) and best-effort — a failure never breaks the queue.
+    try { reconcileInviteStatus({ apply: true }); } catch { /* never break the queue on self-heal */ }
+
     const rawStaleApps = computeStaleApps();
     const apps = rawStaleApps.map(it => ({ source: 'app', ...it }));
     const contacts = computeStaleContacts();
@@ -138,19 +195,27 @@ router.get('/api/followups/stale', (req, res) => {
       else contactFollowups.push(it);
     }
 
-    // Actionable now: the workable subset of contactFollowups the queue actually
-    // shows. Excludes same-day holds (you already reached out at that company
-    // today), out-of-InMail LinkedIn follow-ups, and contacts resting at the
-    // cold-outreach cap (capped with no reply). This is what the nav badge and the
-    // Follow-ups subtab count, so an "alert" means something you can send right
-    // now, not the whole backlog.
+    // Flag each contact server-side (single source of truth the client renders from,
+    // instead of re-deriving these in FollowupQueueTab):
+    //   - inmailBlocked: a LinkedIn follow-up to an already-invited non-connection you
+    //     cannot send with 0 InMail credits. Keyed on the SAME alreadyInvited signal the
+    //     send button uses, so a pending-'Sent' invite no longer slips the gate.
+    //   - heldDaily: the per-company daily cap — at most PER_COMPANY_PER_DAY DIFFERENT
+    //     contacts per company per day; the rest are held (flagged, not dropped) and
+    //     rotate in on a later day. Assigned in priority order over the (pre-sorted)
+    //     list so the best contacts fill each company's slots.
+    // Order matters: inmailBlocked first (a blocked row does not spend a daily slot).
     const inmailOut = getInmailBudget().remaining === 0;
-    const actionableCount = contactFollowups.filter((c) => {
-      const co = c.companyOutreach;
-      const heldToday = !!(co && (co.touchedToday || co.selfSentToday));
-      const inmailBlocked = inmailOut && c.channel === 'linkedin' && !c.freeDm && !!(co && co.selfLastTouch);
-      return !heldToday && !inmailBlocked && !c.capped;
-    }).length;
+    for (const c of contactFollowups) c.inmailBlocked = isInmailBlocked(c, { inmailOut });
+    assignPerCompanyDailyHeld(contactFollowups, { perCompany: PER_COMPANY_PER_DAY });
+
+    // Actionable now: the subset the queue actually surfaces — not held by the
+    // per-company daily cap, not out-of-InMail-blocked, not resting at the cold-outreach
+    // cap. This is what the nav badge and the Follow-ups subtab count, so an "alert"
+    // means something you can send right now, not the whole backlog.
+    const actionableCount = contactFollowups.filter(c => !c.heldDaily && !c.inmailBlocked && !c.capped).length;
+    const withheldDailyCount = contactFollowups.filter(c => c.heldDaily).length;
+    const inmailBlockedCount = contactFollowups.filter(c => c.inmailBlocked).length;
 
     res.json({
       thresholds: STALE_THRESHOLD_BY_STATUS,
@@ -181,6 +246,12 @@ router.get('/api/followups/stale', (req, res) => {
       // above. The warm/cold/staleAppContacts fields stay for Pipeline → Awaiting
       // response and the Find-a-contact nudge, which need the app-level view.
       actionableCount,
+      // Counts behind the "N held for later" / "N waiting on InMail" affordances. Each
+      // held contact is FLAGGED (heldDaily / inmailBlocked) on contactFollowups, not
+      // removed, so the client can reveal them via "Show" and nothing is silently lost.
+      withheldDailyCount,
+      inmailBlockedCount,
+      perCompanyPerDay: PER_COMPANY_PER_DAY,
       contactFollowups,
       snoozedContactFollowups,
       // Deprecated alias: legacy readers expect `items` to be the badge list.
