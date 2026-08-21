@@ -687,8 +687,8 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
           </div>
           <CompanyOutreach c={c} />
           <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
-            <span style={chipStyle(liDone)}>LinkedIn {liDone ? '✓ sent' : 'pending'}</span>
-            <span style={chipStyle(emDone)}>Email {emDone ? '✓ sent' : 'pending'}</span>
+            <span style={chipStyle(liDone)}>LinkedIn {liDone ? '✓ sent' : 'not sent'}</span>
+            <span style={chipStyle(emDone)}>Email {emDone ? '✓ sent' : 'not sent'}</span>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'flex-start' }}>
@@ -925,6 +925,10 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   const [inmail, setInmail] = useStateCq(null);
   const [setBox, setSetBox] = useStateCq(false);
   const [setVal, setSetVal] = useStateCq('');
+  const [recOpen, setRecOpen] = useStateCq(false);
+  const [recText, setRecText] = useStateCq('');
+  const [recBusy, setRecBusy] = useStateCq(false);
+  const [recResult, setRecResult] = useStateCq(null);
 
   const load = () => {
     if (externalItems) { onReload && onReload(); return; }
@@ -951,6 +955,23 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
     window.tjkMutate('/api/linkedin-drafts/inmail-budget', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ set: n }),
     }).then(r => r.json()).then(d => { if (d && !d.error) setInmail(d); setSetBox(false); }).catch(() => setSetBox(false));
+  };
+
+  // Reconcile LinkedIn invites sent directly on LinkedIn (outside the app). The user
+  // pastes their "Manage invitations → Sent" list; the server matches each to a
+  // contact and (on apply) marks them 'Invite Pending' so the queue stops re-pitching
+  // people who already have an invite out. Preview first, then apply.
+  const runReconcile = (apply) => {
+    if (recBusy || !recText.trim()) return;
+    setRecBusy(true);
+    window.tjkMutate('/api/followups/reconcile-sent-invites', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: recText, apply }),
+    }).then(r => r.json()).then(d => {
+      setRecBusy(false);
+      if (d && d.error) { toast && toast(d.error, 'error'); return; }
+      setRecResult(d);
+      if (apply) { toast && toast(`Marked ${d.counts.newlyMarked} invite${d.counts.newlyMarked === 1 ? '' : 's'} pending`, 'success'); load(); }
+    }).catch(e => { setRecBusy(false); toast && toast(e.message, 'error'); });
   };
 
   // Single-channel rows (LinkedIn / email) drop off after one touch; drop optimistically
@@ -994,28 +1015,37 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   // person today (selfSentToday). Hiding them prevents accidentally over-contacting a
   // company in one day. The signal is date-derived, so they reappear tomorrow on their
   // own and persist until actioned. "Show anyway" overrides for the current day.
-  const isHeldToday = (c) => !!(c.companyOutreach && (c.companyOutreach.touchedToday || c.companyOutreach.selfSentToday));
-  // Out of InMail credits: a LinkedIn follow-up to a non-connection (already invited,
-  // no email fallback, i.e. a linkedin-only card) can't be sent, so it is held until
-  // the credits reset. Contacts you can email, connection requests, and accepted
-  // contacts are unaffected.
+  // The server (data.contactFollowups) is authoritative for both holds and sets them
+  // as flags: heldDaily = the per-company daily cap (at most a few DIFFERENT contacts
+  // per company per day, the rest held for a later day), inmailBlocked = a LinkedIn
+  // follow-up you cannot send with 0 InMail credits. The standalone queue endpoint
+  // (/api/followups/queue) does not set these, so fall back to a per-row estimate there.
+  const CONTACTED_STATUS = { Sent: 1, Replied: 1, 'Meeting Scheduled': 1 };
   const outOfInmail = !!(inmail && inmail.remaining === 0);
   // A message to a 1st-degree connection (freeDm) is a free DM, not an InMail, so it
   // is NEVER blocked by an empty credit balance — this is what makes the "Just
-  // connected" motion still actionable when you are out of InMail.
-  const isInmailBlocked = (c) => outOfInmail && c.channel === 'linkedin' && !c.freeDm && !!(c.companyOutreach && c.companyOutreach.selfLastTouch);
-  const isHeld = (c) => isHeldToday(c) || isInmailBlocked(c);
+  // connected" motion still actionable when you are out of InMail. The fallback keys on
+  // alreadyInvited (selfLastTouch OR a contacted status), matching the send button, so a
+  // pending invite whose touch is not yet logged is still recognized as InMail-needing.
+  const isInmailBlocked = (c) => (c.inmailBlocked !== undefined)
+    ? !!c.inmailBlocked
+    : (outOfInmail && c.channel === 'linkedin' && !c.freeDm
+        && (!!(c.companyOutreach && c.companyOutreach.selfLastTouch) || !!CONTACTED_STATUS[c.status]));
+  const isHeldDaily = (c) => (c.heldDaily !== undefined)
+    ? !!c.heldDaily
+    : !!(c.companyOutreach && (c.companyOutreach.touchedToday || c.companyOutreach.selfSentToday));
+  const isHeld = (c) => isHeldDaily(c) || isInmailBlocked(c);
   // Cold-outreach cap reached with no reply (server sets c.capped). Unlike the
-  // same-day / InMail holds, resting does not clear on its own; it lifts when the
+  // daily / InMail holds, resting does not clear on its own; it lifts when the
   // contact replies. Hidden by default, revealed and overridable via Show anyway.
   const isCapped = (c) => !!c.capped;
   const isHiddenRow = (c) => isHeld(c) || isCapped(c);
   const heldCount = queue.filter(isHeld).length;
   const restingCount = queue.filter(isCapped).length;
-  const anySameDay = queue.some(isHeldToday);
+  const anyDaily = queue.some(isHeldDaily);
   const anyInmailOut = queue.some(isInmailBlocked);
   const heldReasons = [
-    anySameDay ? 'you already reached out at their company today' : null,
+    anyDaily ? 'that company already has its allotment of contacts queued for today' : null,
     anyInmailOut ? 'you are out of InMail credits this month' : null,
   ].filter(Boolean).join('; ');
   const base = showHeld ? queue : queue.filter(c => !isHiddenRow(c));
@@ -1070,6 +1100,37 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
           {inmail.remaining === 0 && <span style={{ color: 'var(--red)' }}>Out. LinkedIn follow-ups to non-connections are hidden until your credits reset.</span>}
         </div>
       )}
+      <div className="dim" style={{ fontSize: 12, marginBottom: 14 }}>
+        <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setRecOpen(v => !v)}
+          title="Capture LinkedIn invites you sent directly on LinkedIn, so the queue stops re-pitching people who already have a pending invite out.">
+          {recOpen ? '▾' : '▸'} Reconcile LinkedIn sent invites
+        </button>
+        {recOpen && (
+          <div style={{ marginTop: 8, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: 11 }}>
+            <div style={{ marginBottom: 6 }}>
+              Open LinkedIn → <b>My Network → Manage invitations → Sent</b>, select all, copy, and paste below. We match each
+              pending invite to a contact and mark them "Invite Pending" so the queue stops re-pitching people you already
+              invited. Nothing is sent to LinkedIn.
+            </div>
+            <textarea value={recText} onChange={e => setRecText(e.target.value)} rows={5}
+              placeholder="Paste your LinkedIn 'Sent invitations' list here…"
+              style={{ width: '100%', fontSize: 12, padding: 8, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+            <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
+              <button className="btn sm" disabled={recBusy || !recText.trim()} onClick={() => runReconcile(false)}>{recBusy ? 'Matching…' : 'Preview'}</button>
+              <button className="btn accent sm" disabled={recBusy || !(recResult && recResult.counts && recResult.counts.newlyMarked)} onClick={() => runReconcile(true)}>
+                Apply{recResult && recResult.counts ? ` (${recResult.counts.newlyMarked})` : ''}
+              </button>
+            </div>
+            {recResult && recResult.counts && (
+              <div style={{ marginTop: 8 }}>
+                <div>Parsed {recResult.counts.parsed} · <b style={{ color: 'var(--accent)' }}>{recResult.counts.newlyMarked} to mark</b> · {recResult.counts.alreadyRecorded} already on file · {recResult.counts.ambiguous} ambiguous · {recResult.counts.unmatched} unmatched.</div>
+                {recResult.newlyMarked && recResult.newlyMarked.length > 0 && <div style={{ marginTop: 4 }}>{recResult.applied ? 'Marked: ' : 'Will mark: '}{recResult.newlyMarked.map(x => x.name).join(', ')}</div>}
+                {recResult.ambiguous && recResult.ambiguous.length > 0 && <div style={{ marginTop: 4, color: 'var(--orange)' }}>Ambiguous (skipped, resolve by hand): {recResult.ambiguous.map(a => a.name).join(', ')}</div>}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       {(heldCount > 0 || restingCount > 0) && (
         <div className="dim" style={{ fontSize: 12, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 11px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 240 }}>
