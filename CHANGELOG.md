@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.31.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.30.0...v2.31.0) (2026-08-21)
+
+
+### Features
+
+* Follow-Ups queue accuracy, sent-invites reconcile, and Agent Scan hardening ([#210](https://github.com/michaelinghilterra-creator/trajecktory/issues/210)) ([4fce2ce](https://github.com/michaelinghilterra-creator/trajecktory/commit/4fce2ce695aa91c9c1a7b0491f991ad328a125b4))
+
 ## [2.30.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.29.1...v2.30.0) (2026-08-20)
 
 
