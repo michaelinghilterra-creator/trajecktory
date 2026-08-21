@@ -23,6 +23,7 @@ import { parseSentInvites, matchSentInvites } from '../lib/sent-invites-reconcil
 import { markInvitePending } from '../lib/tt-linkedin.mjs';
 import { isLinkedInInvite, LINKEDIN_INVITE_SUBJECT } from '../lib/channels.mjs';
 import { logConnect } from '../lib/connects.mjs';
+import { reconcileInviteStatus } from '../lib/invite-status-reconcile.mjs';
 
 export const router = express.Router();
 
@@ -146,6 +147,13 @@ router.get('/api/followups/both-queue', (req, res) => {
 // `source: 'app' | 'ta'`.
 router.get('/api/followups/stale', (req, res) => {
   try {
+    // Self-heal the LinkedIn status axis from our own correspondence before building
+    // the queue: any contact with a recorded invite but a stale 'Not Connected' status
+    // is advanced to 'Invite Pending', so the queue never re-pitches someone already
+    // invited even if a write path missed the status update. Cheap (reads correspondence
+    // only for Not-Connected contacts) and best-effort — a failure never breaks the queue.
+    try { reconcileInviteStatus({ apply: true }); } catch { /* never break the queue on self-heal */ }
+
     const rawStaleApps = computeStaleApps();
     const apps = rawStaleApps.map(it => ({ source: 'app', ...it }));
     const contacts = computeStaleContacts();
