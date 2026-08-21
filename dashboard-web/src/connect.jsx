@@ -686,19 +686,22 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
             {c.company} · <span className="mono">{c.source}</span> · <span className="mono">{c.email}</span>
           </div>
           <CompanyOutreach c={c} />
-          <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
-            <span style={chipStyle(liDone)}>LinkedIn {liDone ? '✓ sent' : 'not sent'}</span>
-            <span style={chipStyle(emDone)}>Email {emDone ? '✓ sent' : 'not sent'}</span>
-          </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'flex-start' }}>
+        {/* Channel status chips live in the header now (top-right), next to the row
+            actions; the Email chip is hidden when there is no address on file. */}
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <span style={chipStyle(liDone)}>LinkedIn {liDone ? '✓ sent' : 'not sent'}</span>
+          {c.email ? <span style={chipStyle(emDone)}>Email {emDone ? '✓ sent' : 'not sent'}</span> : null}
           {onSnooze ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)}>💤 14d</button> : null}
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}
         </div>
       </div>
 
-      {/* LinkedIn channel */}
-      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+      {/* Both channels side by side (LinkedIn left, Email right); stack on narrow
+          widths. Each column carries its own action row AND its expandable draft,
+          so a long email draft only grows its own column. */}
+      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      <div style={{ flex: '1 1 300px', minWidth: 260 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 600 }}>LinkedIn invite</span>
           <div style={{ display: 'flex', gap: 6 }}>
@@ -719,8 +722,7 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
         ) : null}
       </div>
 
-      {/* Email channel */}
-      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+      <div style={{ flex: '1 1 300px', minWidth: 260 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 600 }}>Email</span>
           <div style={{ display: 'flex', gap: 6 }}>
@@ -743,6 +745,7 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
             </div>
           </div>
         ) : null}
+      </div>
       </div>
     </div>
   );
