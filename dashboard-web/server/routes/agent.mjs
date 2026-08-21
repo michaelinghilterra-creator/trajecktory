@@ -8,6 +8,7 @@ import { reconcileHandled } from '../../../lib/pipeline.mjs';
 import { reconcileTriageResults } from '../../../lib/reconcile-triage.mjs';
 import { parseTriageOutput, appendTriageResults, START_MARKER, END_MARKER } from '../../../lib/triage-results.mjs';
 import { parsePortalAdditions, mergePortalAdditions, START_MARKER as PORTAL_START, END_MARKER as PORTAL_END } from '../../../lib/portal-additions.mjs';
+import { scanDiscoveryStalled } from '../../../lib/scan-stall.mjs';
 import { logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
@@ -240,6 +241,7 @@ function dashboardConstraints(mode, opts) {
     const cap = limit > 0 ? ` TEST MODE (TJK_TEST_LIMIT=${limit}): list at most ${limit} new companies in the block, then stop.` : '';
     return ' ' + common + ' Your FIRST and mandatory step is to run `node scan.mjs` from the repo root ONCE. That script IS the entire ATS API tier: it hits every tracked_companies Greenhouse/Ashby/Lever board, applies the portals.yml title_filter, dedups against data/scan-history.tsv + data/pipeline.md + data/applications.md, and writes every new live posting into data/pipeline.md itself — all zero-token. Do NOT WebFetch ATS boards by hand, do NOT re-implement the title filter, and do NOT write any test/helper script (buildTitleFilter and the whole API tier already live in scan.mjs); doing so wastes the turn budget for no gain.' +
       ' After scan.mjs finishes, spend the REST of this run on the one thing it cannot do: use WebSearch to discover companies NOT yet in portals.yml tracked_companies that run their careers on a Greenhouse, Ashby, or Lever job board. Pace the searches a few at a time. Read portals.yml first so you do not re-list a company that is already tracked.' +
+      ' You MUST actually CALL the WebSearch tool to run these searches — issue at least 6 WebSearch queries this run. Do NOT print, echo, or describe a search in prose (e.g. a Bash echo "performing discovery searches…") as a stand-in for calling the tool: narration is not a search, and a run that announces searching without issuing a real WebSearch call is a FAILED run, not a completed one. Call WebSearch directly.' +
       ' Do NOT edit portals.yml, and do NOT add anything to data/pipeline.md yourself — you cannot write portals.yml here (it is intentionally read-only to this run), and a role you found only through WebSearch has not actually been read, so adding it would file a guessed posting. Instead, hand the companies to the dashboard as structured data and let it do the writing: for each genuinely new company, output ONE JSON object with exactly three keys — "name" (the company display name), "ats" (one of "greenhouse", "ashby", or "lever"), and "slug" (the board identifier, i.e. the path segment right after the ATS host: jobs.ashbyhq.com/<slug>, jobs.lever.co/<slug>, or job-boards.greenhouse.io/<slug>). Do NOT include a URL, careers_url, or api field — the dashboard builds those from ats+slug itself, verifies the board is live, adds the new companies to portals.yml, and then scans their real boards for live matching roles. Only list a company whose board slug you actually saw in a real ATS URL; never guess a slug.' +
       ` Emit the companies as a single valid JSON array between these two exact marker lines, each marker alone on its own line, standard double-quote JSON, no markdown code fence:` +
       ` ${PORTAL_START}` +
@@ -321,6 +323,19 @@ const WROTE_NOTHING_WHY =
   'read the job pages, or everything it looked at was already evaluated or dismissed. ' +
   'Open the run log to see which.';
 
+// The scan discovery stall (see lib/scan-stall.mjs): a precise cause the generic
+// message above cannot name, because it fires BEFORE we know the outcome — the
+// tell is zero WebSearch calls, not an empty result. Distinguishing it lets the
+// UI say what actually happened instead of listing three unrelated maybes.
+const SCAN_STALL_RETRY_WHY =
+  'The discovery step issued no web search — the model stalled before searching. ' +
+  'Retrying automatically on a stronger model…';
+const SCAN_STALL_FAILED_WHY =
+  'The discovery step issued no web search, even after an automatic retry on a ' +
+  'stronger model. This is a transient model stall, not a data problem — your ' +
+  'API-scanned roles are unaffected. Try Agent Scan again, or set Agent Scan to ' +
+  'Sonnet in Setup → Models & cost.';
+
 function summarizeToolUse(block) {
   const name = block.name || 'tool';
   const inp = block.input || {};
@@ -351,7 +366,7 @@ function completedEvalId(block) {
 // Spawn `claude -p "/trajecktory <mode>"` and stream-parse progress into the
 // job record. Resolves { ok, result, error } when the child closes and sets the
 // job's final status itself.
-function runClaudeAgent(jobId, mode, target) {
+function runClaudeAgent(jobId, mode, target, opts = {}) {
   return new Promise((resolve) => {
     const projectRoot = ROOT_DIR;
     const isWin = process.platform === 'win32';
@@ -399,6 +414,11 @@ function runClaudeAgent(jobId, mode, target) {
       // pipeline / deep — the Evaluate step. reqModel is the Opus deep-mode override.
       rawModelPref = (reqModel || process.env.TJK_EVAL_MODEL || process.env.TJK_AGENT_MODEL || 'sonnet').trim();
     }
+    // A caller-forced model wins over the per-mode default. Used by the scan stall
+    // guard to re-run a stalled Haiku discovery on Sonnet, which does not
+    // narrate-and-quit on the open-ended WebSearch step. Passes through the same
+    // allow-list below, so a bad value simply falls back to the CLI default.
+    if (opts.forceModel) rawModelPref = String(opts.forceModel).trim();
     // SECURITY: modelPref becomes a bare argv element and, under shell:true on
     // Windows (below), args are concatenated UNESCAPED — an attacker-supplied
     // value like `sonnet& <command>` would break out and run arbitrary commands.
@@ -531,6 +551,13 @@ function runClaudeAgent(jobId, mode, target) {
       if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content)) {
         const toolCalls = (job.toolCalls || []).slice();
         let toolCount = job.toolCount || 0;
+        // Count WebSearch calls SEPARATELY from toolCalls, which is sliced to the
+        // last 50 for display — a 59-turn scan would drop its early searches from
+        // that window, so a count derived from it would undercount. This is the
+        // discriminator the scan stall guard reads (see scanDiscoveryStalled): a
+        // scan that issued zero searches narrated-and-quit; one that searched and
+        // found nothing did honest work.
+        let webSearchCount = job.webSearchCount || 0;
         let activity = job.activity;
         for (const block of ev.message.content) {
           if (block.type === 'text' && block.text) {
@@ -539,6 +566,7 @@ function runClaudeAgent(jobId, mode, target) {
             const s = summarizeToolUse(block);
             toolCalls.push(s);
             toolCount += 1;
+            if (block.name === 'WebSearch') webSearchCount += 1;
             activity = s;
             // Progress signal: a completed evaluation writes a report AND a
             // tracker-additions TSV that share a leading number. The agent
@@ -556,7 +584,7 @@ function runClaudeAgent(jobId, mode, target) {
         const evaluationsDone = (typeof total === 'number' && total > 0)
           ? Math.min(doneEvalIds.size, total)
           : doneEvalIds.size;
-        update({ toolCalls: toolCalls.slice(-50), toolCount, evaluationsDone, activity });
+        update({ toolCalls: toolCalls.slice(-50), toolCount, webSearchCount, evaluationsDone, activity });
         return;
       }
       if (ev.type === 'result') {
@@ -738,13 +766,47 @@ async function runAgent(jobId, mode, target) {
     // 'done' in the scan-summary block below. Same reasoning as deep mode's merge.
     const j0 = agentJobs.get(jobId) || {};
     agentJobs.set(jobId, { ...j0, status: 'running', activity: 'Adding discovered companies to your scan list…' });
-    try {
-      const { companies, errors } = parsePortalAdditions(res.result || '');
-      portalMerge = await mergePortalAdditions(path.join(ROOT_DIR, 'portals.yml'), companies, { today: new Date().toISOString().slice(0, 10) });
-      portalMerge.parseErrors = errors;
-      portalMerge.rolesAdded = portalMerge.entries.length ? await scanNewCompanies(portalMerge.entries) : 0;
-    } catch (e) {
-      portalMerge = { added: 0, entries: [], skippedDuplicate: 0, skippedDead: 0, collisions: [], rolesAdded: 0, error: (e && e.message) || String(e) };
+    // Parse the agent's PORTAL_ADDITIONS block, merge validated companies into
+    // portals.yml, then scan their real boards. Reused verbatim for the retry.
+    const mergeDiscovery = async (resultText) => {
+      try {
+        const { companies, errors } = parsePortalAdditions(resultText || '');
+        const m = await mergePortalAdditions(path.join(ROOT_DIR, 'portals.yml'), companies, { today: new Date().toISOString().slice(0, 10) });
+        m.parseErrors = errors;
+        m.rolesAdded = m.entries.length ? await scanNewCompanies(m.entries) : 0;
+        return m;
+      } catch (e) {
+        return { added: 0, entries: [], skippedDuplicate: 0, skippedDead: 0, collisions: [], rolesAdded: 0, error: (e && e.message) || String(e) };
+      }
+    };
+    portalMerge = await mergeDiscovery(res.result || '');
+
+    // STALL GUARD (the enforced half of the fix; the prompt lines are advisory).
+    // A small model sometimes narrates the open-ended discovery step and ends the
+    // turn without issuing a single WebSearch. scanDiscoveryStalled reads the
+    // WebSearch count — zero searches AND nothing produced — to tell that apart
+    // from a legitimate run that searched and found no new company. On a stall,
+    // re-run the whole scan ONCE on Sonnet (which does not narrate-and-quit here).
+    // scan.mjs is idempotent (re-dedups to 0 new), so re-running the full prompt
+    // is safe; the extra API-tier pass is cheap next to a wasted widen.
+    const searches1 = (agentJobs.get(jobId) || {}).webSearchCount || 0;
+    if (scanDiscoveryStalled({ webSearchCount: searches1, added: portalMerge.added, rolesAdded: portalMerge.rolesAdded })) {
+      const j1 = agentJobs.get(jobId) || {};
+      agentJobs.set(jobId, { ...j1, status: 'running', scanStalled: true, scanRetried: true, activity: 'Discovery stalled — retrying on a stronger model…', warning: SCAN_STALL_RETRY_WHY });
+      const retry = await runClaudeAgent(jobId, mode, target, { forceModel: 'sonnet' });
+      if (retry.ok) {
+        const j2 = agentJobs.get(jobId) || {};
+        agentJobs.set(jobId, { ...j2, status: 'running', activity: 'Adding discovered companies to your scan list…' });
+        portalMerge = await mergeDiscovery(retry.result || '');
+      }
+      // Did the retry break the stall? webSearchCount is cumulative across both
+      // runClaudeAgent calls on this job, so a non-zero total means the retry did
+      // search. Clear the interim warning on success; name the failure on a
+      // second stall so the UI stops sending the user hunting.
+      const searches2 = (agentJobs.get(jobId) || {}).webSearchCount || 0;
+      const stillStalled = scanDiscoveryStalled({ webSearchCount: searches2, added: portalMerge.added, rolesAdded: portalMerge.rolesAdded });
+      const j3 = agentJobs.get(jobId) || {};
+      agentJobs.set(jobId, { ...j3, warning: stillStalled ? SCAN_STALL_FAILED_WHY : undefined });
     }
   }
 
