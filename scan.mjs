@@ -22,6 +22,7 @@ import { pathToFileURL } from 'url';
 import yaml from 'js-yaml';
 import { buildTitleFilter, buildLocationFilter, normalizeUrl, scoreOffer } from './lib/scan-core.mjs';
 import { sanitizeCell } from './lib/sanitize-cell.mjs';
+import { updateCoverage } from './lib/scan-coverage.mjs';
 const parseYaml = yaml.load;
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -30,6 +31,7 @@ const PORTALS_PATH = 'portals.yml';
 const SCAN_HISTORY_PATH = 'data/scan-history.tsv';
 const PIPELINE_PATH = 'data/pipeline.md';
 const APPLICATIONS_PATH = 'data/applications.md';
+const SCAN_COVERAGE_PATH = 'data/scan-coverage.json';
 
 // Ensure required directories exist (fresh setup)
 mkdirSync('data', { recursive: true });
@@ -445,17 +447,33 @@ function appendToPipeline(offers) {
   writeFileSync(PIPELINE_PATH, insertOffersIntoPipeline(text, offers), 'utf-8');
 }
 
-function appendToScanHistory(offers, date) {
-  // Ensure file + header exist
+function ensureScanHistory() {
   if (!existsSync(SCAN_HISTORY_PATH)) {
     writeFileSync(SCAN_HISTORY_PATH, 'url\tfirst_seen\tportal\ttitle\tcompany\tstatus\n', 'utf-8');
   }
+}
 
-  const clean = offers.map(o => ({ ...o, url: sanitizeCell(o.url), title: sanitizeCell(o.title), company: sanitizeCell(o.company) }));
-  const lines = clean.map(o =>
-    `${o.url}\t${date}\t${o.source}\t${o.title}\t${o.company}\tadded`
-  ).join('\n') + '\n';
+function scanHistoryRow(o, date, status) {
+  return `${sanitizeCell(o.url)}\t${date}\t${o.source}\t${sanitizeCell(o.title)}\t${sanitizeCell(o.company)}\t${status}`;
+}
 
+function appendToScanHistory(offers, date) {
+  ensureScanHistory();
+  const lines = offers.map(o => scanHistoryRow(o, date, 'added')).join('\n') + '\n';
+  appendFileSync(SCAN_HISTORY_PATH, lines, 'utf-8');
+}
+
+// Log postings the filter dropped, so a real role the filter wrongly rejected (a
+// false negative) is auditable — grep scan-history.tsv for skipped_title /
+// skipped_location and you can see exactly what was thrown away. Without this the
+// live scanner discarded every reject silently and false negatives were
+// unmeasurable. status is 'skipped_title' | 'skipped_location', both already
+// understood by loadSeenUrls (skipped_title ages out; skipped_location is
+// permanent), so logging a reject also stops it being re-processed every scan.
+function appendRejectsToScanHistory(rejects, date) {
+  if (rejects.length === 0) return;
+  ensureScanHistory();
+  const lines = rejects.map(r => scanHistoryRow(r, date, r.status)).join('\n') + '\n';
   appendFileSync(SCAN_HISTORY_PATH, lines, 'utf-8');
 }
 
@@ -560,9 +578,12 @@ async function main() {
   let totalDupes = 0;
   const newOffers = [];
   const errors = [];
+  const rejects = [];            // title/location rejects, logged for false-negative auditing
+  const coverageOutcomes = [];   // per-company result, for the durable coverage log
 
   const tasks = targets.map(company => async () => {
     const { type, url, meta } = company._api;
+    const covKey = company.api || company.careers_url || company.name;
     try {
       let jobs;
       if (type === 'workday') {
@@ -574,30 +595,48 @@ async function main() {
         jobs = PARSERS[type](json, company.name);
       }
       totalFound += jobs.length;
+      coverageOutcomes.push({
+        key: covKey, name: company.name, ats: type,
+        result: jobs.length > 0 ? 'found' : 'zero', found: jobs.length,
+      });
 
       for (const job of jobs) {
+        const nurl = normalizeUrl(job.url);
         if (!titleFilter(job.title)) {
           totalFiltered++;
+          // Log once (new URLs only), then dedup so it is not re-logged next scan.
+          if (!seenUrls.has(nurl)) {
+            rejects.push({ url: job.url, title: job.title, company: job.company, source: `${type}-api`, status: 'skipped_title' });
+            seenUrls.add(nurl);
+          }
           continue;
         }
         if (!locationFilter(job.location, job.remoteHint)) {
           totalGeoBlocked++;
+          if (!seenUrls.has(nurl)) {
+            rejects.push({ url: job.url, title: job.title, company: job.company, source: `${type}-api`, status: 'skipped_location' });
+            seenUrls.add(nurl);
+          }
           continue;
         }
         if (maxAgeDays > 0 && !isWithinAge(job.postedAt, maxAgeDays)) {
           totalStale++;
           continue;
         }
-        if (seenUrls.has(normalizeUrl(job.url))) {
+        if (seenUrls.has(nurl)) {
           totalDupes++;
           continue;
         }
         // Mark as seen to avoid intra-scan dupes
-        seenUrls.add(normalizeUrl(job.url));
+        seenUrls.add(nurl);
         newOffers.push({ ...job, source: `${type}-api` });
       }
     } catch (err) {
       errors.push({ company: company.name, error: err.message });
+      coverageOutcomes.push({
+        key: covKey, name: company.name, ats: type,
+        result: /HTTP 404/.test(err.message) ? 'http_404' : 'error',
+      });
     }
   });
 
@@ -615,10 +654,34 @@ async function main() {
     newOffers.splice(TEST_LIMIT);
   }
 
+  // Coverage log: fold this scan's per-company outcomes into the durable map so a
+  // board that has gone silent (dead/migrated slug) becomes a visible alert
+  // instead of looking identical to "no openings today". Only on a full scan — a
+  // --company run must not touch the other companies' consecutive-zero counters.
+  let coverageAlerts = [];
+  if (!filterCompany) {
+    for (const c of skipped) {
+      coverageOutcomes.push({
+        key: c.api || c.careers_url || c.name, name: c.name, ats: skipPlatform(c),
+        result: 'skipped_no_api',
+      });
+    }
+    let prevCoverage = {};
+    if (existsSync(SCAN_COVERAGE_PATH)) {
+      try { prevCoverage = JSON.parse(readFileSync(SCAN_COVERAGE_PATH, 'utf-8')); } catch { prevCoverage = {}; }
+    }
+    const { coverage, alerts } = updateCoverage(prevCoverage, coverageOutcomes, date);
+    coverageAlerts = alerts;
+    if (!dryRun) writeFileSync(SCAN_COVERAGE_PATH, JSON.stringify(coverage, null, 2), 'utf-8');
+  }
+
   // 5. Write results
   if (!dryRun && newOffers.length > 0) {
     appendToPipeline(newOffers);
     appendToScanHistory(newOffers, date);
+  }
+  if (!dryRun) {
+    appendRejectsToScanHistory(rejects, date);
   }
 
   // 6. Print summary
@@ -634,11 +697,24 @@ async function main() {
   }
   console.log(`Duplicates:            ${totalDupes} skipped`);
   console.log(`New offers added:      ${newOffers.length}`);
+  console.log(`Rejects logged:        ${rejects.length} (skipped_title/skipped_location)`);
 
   if (errors.length > 0) {
     console.log(`\nErrors (${errors.length}):`);
     for (const e of errors) {
       console.log(`  ✗ ${e.company}: ${e.error}`);
+    }
+  }
+
+  // Coverage alerts: boards that 404 or have gone quiet across many scans. This is
+  // the signal that separates a dead/migrated slug from a board with no opening.
+  if (coverageAlerts.length > 0) {
+    console.log(`\n⚠  Coverage alerts (${coverageAlerts.length}) — boards that may be dead or migrated:`);
+    for (const a of coverageAlerts.slice(0, 30)) {
+      console.log(`  ⚠ ${a.name} [${a.ats}]: ${a.reason}`);
+    }
+    if (coverageAlerts.length > 30) {
+      console.log(`  … and ${coverageAlerts.length - 30} more (see ${SCAN_COVERAGE_PATH})`);
     }
   }
 
