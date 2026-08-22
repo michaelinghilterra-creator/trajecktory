@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.31.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.31.0...v2.31.1) (2026-08-22)
+
+
+### Bug Fixes
+
+* dedupe LinkedIn referral imports on a canonical profile URL ([#212](https://github.com/michaelinghilterra-creator/trajecktory/issues/212)) ([d08ccc0](https://github.com/michaelinghilterra-creator/trajecktory/commit/d08ccc097c901276a58d269fef8f83a0f6b3f94b))
+
 ## [2.31.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.30.0...v2.31.0) (2026-08-21)
 
 
