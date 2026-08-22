@@ -3,9 +3,10 @@
  * discard.test.mjs — unit tests for lib/discard.mjs, the auto-discard gate
  * that decides whether a low-fit evaluation silently leaves the pipeline.
  *
- * Replaces the orphaned, drifted test-auto-discard.mjs (which asserted a
- * `score < 3.0` threshold and no cowork exemption, neither of which the real
- * code does). These tests assert the ACTUAL merge-tracker behavior.
+ * Replaces the orphaned, drifted test-auto-discard.mjs. The threshold is
+ * `score < 3.0` (raised from <= 2.5 on 2026-08-22); the cowork/self-sourced/
+ * referral exemptions still apply. These tests assert the ACTUAL merge-tracker
+ * behavior against the single source of truth (lib/discard.mjs AUTO_DISCARD_SCORE).
  *
  * Run: node tests/discard.test.mjs   (exit 0 = pass, 1 = fail)
  */
@@ -26,16 +27,16 @@ function check(cond, msg) {
 
 console.log('discard.test.mjs');
 
-// ── Threshold boundary (the exact value the orphan test got wrong) ──────────────
-check(AUTO_DISCARD_SCORE === 2.5, 'threshold is 2.5');
+// ── Threshold boundary: score < 3.0 is discarded, 3.0 is kept ───────────────────
+check(AUTO_DISCARD_SCORE === 3.0, 'threshold is 3.0');
+check(shouldAutoDiscard({ status: 'Evaluated', score: '3.0/5', notes: '' }) === false,
+  'score 3.0 is KEPT (strictly-below boundary)');
+check(shouldAutoDiscard({ status: 'Evaluated', score: '2.9/5', notes: '' }) === true,
+  'score 2.9 is discarded (below 3.0)');
 check(shouldAutoDiscard({ status: 'Evaluated', score: '2.5/5', notes: '' }) === true,
-  'score 2.5 is discarded (at-or-below boundary)');
-check(shouldAutoDiscard({ status: 'Evaluated', score: '2.4/5', notes: '' }) === true,
-  'score 2.4 is discarded');
-check(shouldAutoDiscard({ status: 'Evaluated', score: '2.6/5', notes: '' }) === false,
-  'score 2.6 is kept');
-check(shouldAutoDiscard({ status: 'Evaluated', score: '2.9/5', notes: '' }) === false,
-  'score 2.9 is KEPT (the orphan test wrongly discarded this)');
+  'score 2.5 is discarded');
+check(shouldAutoDiscard({ status: 'Evaluated', score: '3.1/5', notes: '' }) === false,
+  'score 3.1 is kept');
 check(shouldAutoDiscard({ status: 'Evaluated', score: '4.2/5', notes: '' }) === false,
   'score 4.2 is kept');
 
