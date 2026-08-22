@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.32.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.31.1...v2.32.0) (2026-08-22)
+
+
+### Features
+
+* log scanner rejects and per-company coverage outcomes ([#214](https://github.com/michaelinghilterra-creator/trajecktory/issues/214)) ([9cb58d9](https://github.com/michaelinghilterra-creator/trajecktory/commit/9cb58d924c9de25e010a3c4862454e42029fe894))
+* single-rail billing, honest labels, and model version pinning ([#217](https://github.com/michaelinghilterra-creator/trajecktory/issues/217)) ([1ee0b7b](https://github.com/michaelinghilterra-creator/trajecktory/commit/1ee0b7be725017c4c34ed69caa94cc1b40f4aa70))
+
+
+### Bug Fixes
+
+* raise auto-discard threshold to &lt; 3.0 with a broken-eval retry guard ([#216](https://github.com/michaelinghilterra-creator/trajecktory/issues/216)) ([d961d4d](https://github.com/michaelinghilterra-creator/trajecktory/commit/d961d4d27de431bfb4fbdcd46a8fce5c6c8fca31))
+* stop the "associate" negative from vetoing Associate Director titles ([#215](https://github.com/michaelinghilterra-creator/trajecktory/issues/215)) ([df75555](https://github.com/michaelinghilterra-creator/trajecktory/commit/df755552b4b01b6cd050b78187a948eb7930be8b))
+
 ## [2.31.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.31.0...v2.31.1) (2026-08-22)
 
 
