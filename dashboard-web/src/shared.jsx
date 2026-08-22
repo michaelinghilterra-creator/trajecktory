@@ -660,28 +660,48 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     await runAutoStepAsync('health');
   }
 
-  // Open the pre-eval spend gate for the batch Evaluate step. Pulls the effective
-  // batch size + per-eval cost from /api/setup/models and the queue depth from the
-  // already-loaded pendingCount, so the confirm can say "up to N for ~$X". N is the
-  // queue capped by one batch (a single manual Evaluate run does one batch). If the
-  // models fetch fails we still open the gate (cost unknown) rather than spending
-  // silently — the whole point is that no paid run starts without a look.
+  // Open the pre-eval spend gate for the batch Evaluate step. Evaluate rolls
+  // through the queue in batches (7.1), so N is the queue capped by the rolling
+  // session cap (TJK_EVAL_ROLL_MAX) — the real walk-away amount, which is exactly
+  // what the guardrail should price. Per-eval cost comes from /api/setup/models
+  // (batch cost ÷ batch size); the queue depth and cap from /api/pipeline/pending
+  // and /api/agent/roll-config. If a fetch fails we still open the gate (cost
+  // unknown) rather than spending silently — no paid run starts without a look.
   function openSpendGate(step) {
-    fetch('/api/setup/models')
-      .then(r => r.json())
-      .then(m => {
+    Promise.all([
+      fetch('/api/setup/models').then(r => r.json()),
+      fetch('/api/agent/roll-config').then(r => r.json()).catch(() => ({})),
+      // Fetch the queue depth FRESH here rather than trust the pendingCount state,
+      // which can lag a scan/reconcile and would make the gate say "nothing queued"
+      // when there is real work. Falls back to the state if the fetch fails.
+      fetch('/api/pipeline/pending').then(r => r.json()).then(d => d.pending).catch(() => null),
+    ])
+      .then(([m, roll, freshPending]) => {
         const evalS = (m.sections || []).find(s => s.key === 'eval') || {};
-        const batch = evalS.unitsPerRun || 5;
-        const pend = pendingCount != null ? pendingCount : batch;
-        const n = Math.max(0, Math.min(pend, batch));
-        const perEval = (evalS.costs && evalS.current && batch) ? (evalS.costs[evalS.current] / batch) : null;
+        // Cost math divides the batch estimate by the batch it was priced at
+        // (models units); the copy shows the real runtime batch (roll.batch,
+        // which honors the test cap). They match in normal operation.
+        const modelUnits = evalS.unitsPerRun || roll.batch || 5;
+        const displayBatch = roll.batch || evalS.unitsPerRun || 5;
+        const cap = roll.rollMax || displayBatch;
+        const pend = freshPending != null ? freshPending : (pendingCount != null ? pendingCount : cap);
+        const n = Math.max(0, Math.min(pend, cap));
+        const perEval = (evalS.costs && evalS.current && modelUnits) ? (evalS.costs[evalS.current] / modelUnits) : null;
         const cost = perEval != null ? perEval * n : null;
-        setSpendGate({ step, n, cost, hasKey: !!m.hasKey, batch, pending: pend });
+        setSpendGate({ step, n, cost, hasKey: !!m.hasKey, batch: displayBatch, cap, pending: pend });
       })
       .catch(() => {
         const pend = pendingCount != null ? pendingCount : null;
-        setSpendGate({ step, n: pend, cost: null, hasKey, batch: null, pending: pend });
+        setSpendGate({ step, n: pend, cost: null, hasKey, batch: null, cap: null, pending: pend });
       });
+  }
+
+  // Stop the rolling Evaluate chain (7.1). Clears the server's rolling flag so no
+  // further batch starts; the batch in flight finishes on its own. Optimistically
+  // flag the job so the button flips to "Stopping…" without waiting for a poll.
+  function stopRolling() {
+    setJobs(j => ({ ...j, ['cli-eval']: { ...(j['cli-eval'] || {}), rollStopping: true } }));
+    window.tjkMutate('/api/agent/roll/stop', { method: 'POST' }).catch(() => {});
   }
 
   function runStep(step, opts = {}) {
@@ -943,6 +963,23 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                   </div>
                 );
               })()}
+              {/* Rolling Evaluate (7.1): while a pipeline chain is auto-continuing,
+                  show a whole-chain tally and a Stop control. The batch-aware meter
+                  (done/remaining/stalled) is enriched in 7.2. */}
+              {isAgent && isRunning && step.id === 'cli-eval' && job?.rolling && (
+                <div className="workflow-summary" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ flex: 1, color: 'var(--text-mute)' }}>
+                    Rolling · batch {job.rollBatches || 1}{typeof job.rollTotal === 'number' ? ` · ${job.rollTotal} evaluated` : ''}{job.rollCap ? ` (cap ${job.rollCap})` : ''}
+                  </span>
+                  <button
+                    disabled={job.rollStopping || job.rollStopped}
+                    onClick={stopRolling}
+                    title="Stop after the current batch finishes"
+                    style={{ background: 'none', border: '1px solid var(--orange, #ff8c42)', color: 'var(--orange, #ff8c42)', borderRadius: 4, padding: '1px 8px', fontSize: 10.5, cursor: (job.rollStopping || job.rollStopped) ? 'default' : 'pointer', opacity: (job.rollStopping || job.rollStopped) ? 0.6 : 1, flexShrink: 0 }}>
+                    {(job.rollStopping || job.rollStopped) ? 'Stopping…' : 'Stop'}
+                  </button>
+                </div>
+              )}
               {job?.summary && !(isAgent && isRunning) && (
                 <div className="workflow-summary" title={job.output || ''}>{job.summary}</div>
               )}
@@ -1030,6 +1067,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                 Up to <b style={{ color: 'var(--text)' }}>{spendGate.n}</b> role{spendGate.n === 1 ? '' : 's'} will be evaluated
                 {spendGate.cost != null ? <>, about <b style={{ color: 'var(--text)' }}>${spendGate.cost < 0.01 ? '0.01' : spendGate.cost.toFixed(2)}</b></> : null} on your API key.
                 <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--text-mute)' }}>
+                  {spendGate.batch ? <>Runs in batches of {spendGate.batch}, rolling through the queue until it drains or you press Stop. </> : null}
                   This is a local estimate from token counts, not your invoice. Set your real ceiling in your Anthropic console.
                 </div>
               </div>
@@ -1037,6 +1075,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               <div style={{ color: 'var(--text-dim)' }}>
                 Up to <b style={{ color: 'var(--text)' }}>{spendGate.n}</b> role{spendGate.n === 1 ? '' : 's'} will be evaluated on your Claude plan.
                 <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--text-mute)' }}>
+                  {spendGate.batch ? <>Runs in batches of {spendGate.batch}, rolling through the queue until it drains or you press Stop. </> : null}
                   No API charge — this runs on your subscription.
                 </div>
               </div>

@@ -138,7 +138,11 @@ function evalBatchSize(power) {
 function countPipelinePending() {
   try {
     const txt = fs.readFileSync(path.join(ROOT_DIR, 'data/pipeline.md'), 'utf8');
-    const m = txt.match(/^\s*-\s*\[ \]/gm);
+    // Only rows the eval can actually read: an http(s) posting or a local:jds/
+    // snapshot. A bare "- [ ]" with garbage (a broken $file url) is not evaluable
+    // and must not inflate the meter denominator or keep a rolling chain alive.
+    // Keep in sync with /api/pipeline/pending in routes/workflow.mjs.
+    const m = txt.match(/^\s*-\s*\[ \]\s+(?:https?:\/\/|local:)/gm);
     return m ? m.length : 0;
   } catch { return null; }
 }
@@ -153,6 +157,91 @@ function pipelineEvalTotal(power) {
   const cap = evalBatchSize(power);
   const pending = countPipelinePending();
   return pending === null ? cap : Math.min(cap, pending);
+}
+
+// ── Rolling Evaluate (Slice 7.1) ──────────────────────────────────────────────
+// One click, then walk away: after a clean pipeline batch that still leaves
+// pending work, the SAME job auto-continues into the next batch until the queue
+// drains, a session cap is reached, or Stop is pressed. The chain is sequential
+// (one batch at a time), so it lives inside the existing single-flight lock and
+// needs no lock rework — the job simply stays 'running' across every batch.
+// TJK_EVAL_ROLL_MAX bounds total evaluations per chain (the hard cap that keeps a
+// bug from over-running); set it to 1 to effectively disable rolling (one batch).
+function rollMax() {
+  const n = parseInt(process.env.TJK_EVAL_ROLL_MAX, 10);
+  return Number.isFinite(n) && n > 0 ? n : 60;
+}
+// Stop control: the roll/stop endpoint sets this; rollPipeline checks it before
+// starting each next batch (it cannot interrupt a batch already in flight). Reset
+// at the start of every new pipeline chain.
+let rollingStop = false;
+
+// Self-heal the pending queue after a batch: check off any pipeline row already
+// evaluated, dismissed, staged, deferred to needs-manual, or triage-scored, so
+// the next batch sees real remaining work instead of re-evaluating the same
+// top-of-queue rows. Both passes are best-effort and idempotent; a reconcile
+// failure never breaks a run. Called between rolling batches AND once in the
+// post-run block, so it is the single reconcile implementation for this route.
+function reconcilePipelineQueue() {
+  try {
+    reconcileHandled(path.join(DATA_DIR, 'pipeline.md'), {
+      appsPath: APPS_MD,
+      dismissedPath: path.join(DATA_DIR, 'triage-dismissed.tsv'),
+      additionsDir: path.join(ROOT_DIR, 'batch/tracker-additions'),
+      needsManualPath: path.join(DATA_DIR, 'needs-manual-jd.tsv'),
+      rootDir: ROOT_DIR,
+      apply: true,
+    });
+  } catch { /* never break a run on reconcile */ }
+  try {
+    reconcileTriageResults(path.join(DATA_DIR, 'pipeline.md'), {
+      triageResultsPath: path.join(DATA_DIR, 'triage-results.tsv'),
+      appsPath: APPS_MD,
+      apply: true,
+    });
+  } catch { /* never break a run on reconcile */ }
+}
+
+function clampedDone(jobId) {
+  return (agentJobs.get(jobId) || {}).evaluationsDone || 0;
+}
+
+// Continue a pipeline run into further batches within the same job. `firstRes` is
+// the result of the first (already-run) batch; returns the LAST batch's result so
+// the caller's post-run block reports on the whole chain. Terminates on: a batch
+// error, Stop, an empty/unreadable queue, the session cap, or the queue failing
+// to shrink between batches (a stall guard so unreadable rows cannot loop forever).
+async function rollPipeline(jobId, target, firstRes) {
+  const cap = rollMax();
+  let res = firstRes;
+  let rollTotal = clampedDone(jobId);
+  let batches = 1;
+  const mark = (patch) => { const j = agentJobs.get(jobId) || {}; agentJobs.set(jobId, { ...j, ...patch }); };
+  mark({ rolling: true, rollCap: cap, rollBatches: batches, rollTotal });
+
+  let lastPending = null;
+  while (true) {
+    if (!res.ok) break;                                  // a failed batch stops the chain
+    if (rollingStop) { mark({ rollStopped: true }); break; }
+    reconcilePipelineQueue();                            // advance the queue past what this batch handled
+    const pending = countPipelinePending();
+    if (pending === null || pending <= 0) break;         // drained (or pipeline unreadable)
+    if (rollTotal >= cap) { mark({ rollCapped: true }); break; }
+    if (lastPending !== null && pending >= lastPending) break;  // stall: last batch advanced nothing
+    lastPending = pending;
+
+    // Next batch, same job. Set status back to 'running' (the batch that just
+    // closed flipped it to 'done') and reset the per-batch meter. This runs with
+    // NO await before the next spawn, so the single-flight window never opens.
+    batches += 1;
+    const power = effectivePower(target, 'pipeline');
+    mark({ status: 'running', rollBatches: batches, progressTotal: pipelineEvalTotal(power), evaluationsDone: 0, activity: `Rolling batch ${batches}…`, error: undefined, summary: undefined });
+    res = await runClaudeAgent(jobId, 'pipeline', target);
+    rollTotal += clampedDone(jobId);
+    mark({ rollTotal });
+  }
+  mark({ rolling: false });
+  return res;
 }
 
 // Reserve report numbers SERVER-SIDE and hand them to the eval agent in the
@@ -744,7 +833,13 @@ async function runAgent(jobId, mode, target) {
     progressTotal: mode === 'pipeline' ? pipelineEvalTotal(effectivePower(target, mode)) : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
   persistJobs();   // capture the running record immediately so a restart can mark it interrupted
   const before = probeArtifacts(mode);
-  const res = await runClaudeAgent(jobId, mode, target);
+  // Rolling Evaluate (7.1): reset the Stop flag for this new chain, run the first
+  // batch, then auto-continue in the same job until the queue drains / the cap is
+  // hit / Stop. res becomes the LAST batch's result so the post-run block reports
+  // on the whole chain. Non-pipeline modes run exactly one batch as before.
+  if (mode === 'pipeline') rollingStop = false;
+  let res = await runClaudeAgent(jobId, mode, target);
+  if (mode === 'pipeline') res = await rollPipeline(jobId, target, res);
 
   // TRIAGE: the agent never touches triage-results.tsv itself (see
   // lib/triage-results.mjs's file header for why). It emits its scores as a
@@ -842,35 +937,12 @@ async function runAgent(jobId, mode, target) {
       : grew;
 
   // SELF-HEALING (the permanent fix for the recurring "queue clogged" bug): after
-  // EVERY run, check off any pipeline row that is already evaluated or dismissed.
-  // This does not depend on any single writer (the LLM's in-prompt check-off,
-  // merge-tracker, the dismiss route) having worked — whichever one misfired, the
-  // queue self-corrects here, so handled rows can no longer pile up between manual
-  // catches. Best-effort and idempotent; a reconcile failure never fails the run.
-  try {
-    reconcileHandled(path.join(DATA_DIR, 'pipeline.md'), {
-      appsPath: APPS_MD,
-      dismissedPath: path.join(DATA_DIR, 'triage-dismissed.tsv'),
-      additionsDir: path.join(ROOT_DIR, 'batch/tracker-additions'),
-      needsManualPath: path.join(DATA_DIR, 'needs-manual-jd.tsv'),
-      rootDir: ROOT_DIR,
-      apply: true,
-    });
-  } catch { /* never break a run on reconcile */ }
-
-  // reconcileHandled (above) covers applications.md / dismissed / staged, but NOT
-  // triage-results.tsv. A row that's been triage-SCORED but not yet fully
-  // evaluated would otherwise stay "- [ ]" and re-surface (and get re-verified as
-  // a duplicate) on every subsequent triage run — the exact clog that caused the
-  // repeated "wrote nothing, all already in triage-results.tsv" incidents. This
-  // second pass checks those off too. Best-effort and idempotent.
-  try {
-    reconcileTriageResults(path.join(DATA_DIR, 'pipeline.md'), {
-      triageResultsPath: path.join(DATA_DIR, 'triage-results.tsv'),
-      appsPath: APPS_MD,
-      apply: true,
-    });
-  } catch { /* never break a run on reconcile */ }
+  // EVERY run, check off any pipeline row that is already evaluated, dismissed,
+  // staged, deferred, or triage-scored. This does not depend on any single writer
+  // (the LLM's in-prompt check-off, merge-tracker, the dismiss route) having
+  // worked — whichever one misfired, the queue self-corrects here. Same helper the
+  // rolling chain calls between batches, so there is one reconcile implementation.
+  reconcilePipelineQueue();
 
   // Tier-B text hygiene: evaluation reports and interview prep are authored by the
   // `claude` agent SUBPROCESS, so that text never passed through the server's
@@ -897,7 +969,9 @@ async function runAgent(jobId, mode, target) {
   if (mode === 'scan' || mode === 'pipeline' || mode === 'deep') {
     const job = agentJobs.get(jobId) || {};
     recordActivation(mode === 'scan' ? 'scan_finished' : 'evaluate_finished', {
-      count: job.evaluationsDone,
+      // For a rolling chain the meaningful count is the whole-chain total, not the
+      // last batch's per-batch count.
+      count: job.rollTotal != null ? job.rollTotal : job.evaluationsDone,
       detail: !res.ok ? 'error' : (wroteSomething ? 'ok' : 'empty'),
     });
   }
@@ -1064,6 +1138,26 @@ router.post('/api/agent/:mode', (req, res) => {
   res.json({ jobId });
 });
 
+// POST /api/agent/roll/stop — stop the rolling Evaluate chain after the current
+// batch. It cannot interrupt a batch already in flight (there is no safe way to
+// kill `claude -p` mid-eval here), so it clears the rolling flag and the chain
+// ends once the running batch closes. Idempotent: fine to call when nothing rolls.
+router.post('/api/agent/roll/stop', (req, res) => {
+  rollingStop = true;
+  res.json({ ok: true, stopping: true });
+});
+
+// GET /api/agent/roll-config — the rolling cap and whether a chain is active now.
+// The spend gate reads rollMax to price the whole walk-away run (up to the cap),
+// not just one batch; the UI reads `active` to show a Stop control.
+router.get('/api/agent/roll-config', (req, res) => {
+  let active = false;
+  for (const job of agentJobs.values()) {
+    if (job.mode === 'pipeline' && job.status === 'running' && job.rolling) { active = true; break; }
+  }
+  res.json({ rollMax: rollMax(), batch: evalBatchSize(apiKeyActive()), active });
+});
+
 // GET /api/agent/status/:jobId — poll a headless agent job
 router.get('/api/agent/status/:jobId', (req, res) => {
   const job = agentJobs.get(req.params.jobId);
@@ -1085,6 +1179,7 @@ router.get('/api/agent/active', (req, res) => {
       error: job.error, summary: job.summary, activity: job.activity,
       toolCount: job.toolCount, startedAt: job.startedAt,
       billedTo: job.billedTo, batch: job.batch,
+      rolling: job.rolling, rollTotal: job.rollTotal, rollBatches: job.rollBatches, rollCap: job.rollCap,
     });
   }
   out.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
