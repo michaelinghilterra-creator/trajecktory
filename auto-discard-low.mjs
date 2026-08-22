@@ -13,6 +13,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
+import { AUTO_DISCARD_SCORE } from './lib/discard.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APPS = path.join(__dirname, 'data/applications.md');
@@ -48,14 +49,14 @@ for (const line of lines) {
   const score = m ? parseFloat(m[1]) : null;
   const notesLower = (notes || '').toLowerCase();
   const recommendsAgainst = /\b(do not apply|do not pursue|recommend against|hard\s*(?:no|blocker|disqualifier)|hard.?disqualifier|location\s+(?:blocker|hard.?no|mismatch|disqualifier)|international\s+relocation|requires\s+(?:relocation|presence\s+in)|not recommended|not applicable)\b/.test(notesLower);
-  const lowScore = score != null && !isNaN(score) && score < 3.0;
+  const lowScore = score != null && !isNaN(score) && score < AUTO_DISCARD_SCORE;
 
   if (!lowScore && !recommendsAgainst) { out.push(line); continue; }
 
   // Flip to Discarded
   const reason = recommendsAgainst
     ? `auto-discarded: agent recommends against`
-    : `auto-discarded: score ${score} < 3.0`;
+    : `auto-discarded: score ${score} < ${AUTO_DISCARD_SCORE.toFixed(1)}`;
   const newNotes = notes ? `${reason}. ${notes}` : reason;
   out.push(formatTrackerLine({ ...row, status: 'Discarded', notes: newNotes }));
   changes.push({ id, score: score ?? '–', company, role, why: recommendsAgainst ? 'rec' : 'score' });

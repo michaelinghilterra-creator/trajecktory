@@ -21,7 +21,7 @@ import { join, basename, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
 import yaml from 'js-yaml';
-import { parseScore, shouldAutoDiscard, recommendsAgainst } from './lib/discard.mjs';
+import { parseScore, shouldAutoDiscard, recommendsAgainst, AUTO_DISCARD_SCORE } from './lib/discard.mjs';
 import { parseTrackerLine, formatTrackerLine, TRACKER_HEADER, TRACKER_SEPARATOR } from './lib/tracker.mjs';
 // Read a report's DERIVED headline (see lib/score.mjs). Same v1 frontmatter reader
 // compute-scores.mjs uses, so the tracker score comes from the one source of truth.
@@ -578,7 +578,7 @@ for (const { addition, existing: duplicate } of updatesByExisting.values()) {
       const newNotesLower = (addition.notes || '').toLowerCase();
       const newRecAgainst = /\b(do not apply|do not pursue|recommend against|hard\s*(?:no|blocker|disqualifier)|location\s+(?:blocker|hard.?no|mismatch|disqualifier)|international\s+relocation|not recommended|not applicable)\b/.test(newNotesLower);
       const isSelfSourced = /\[self-sourced\]|\[referral:|\[cowork\]/i.test(addition.notes || '');
-      const wouldAutoDiscard = !isSelfSourced && (newScore <= 2.5 || newRecAgainst);
+      const wouldAutoDiscard = !isSelfSourced && (newScore < AUTO_DISCARD_SCORE || newRecAgainst);
       let resolvedStatus = duplicate.status;
       if (!userTerminal && autoDiscarded && !wouldAutoDiscard) {
         resolvedStatus = 'Evaluated';
@@ -627,7 +627,7 @@ for (const addition of pendingNew) {
   if (entryNum > maxNum) maxNum = entryNum;
 
   // Auto-discard entries that aren't worth pursuing:
-  //   (a) numerical score <= 2.5  OR
+  //   (a) numerical score < AUTO_DISCARD_SCORE (3.0)  OR
   //   (b) notes contain "do not apply" / "recommend against" / "hard no" /
   //       "not recommended" — catches cases where the agent gave a 3+
   //       score on individual dimensions but flagged the role as a
@@ -646,7 +646,7 @@ for (const addition of pendingNew) {
     finalStatus = 'Discarded';
     const reason = recommendsAgainst(finalNotes)
       ? `auto-discarded: agent recommends against`
-      : `auto-discarded: score ${numScore} <= 2.5`;
+      : `auto-discarded: score ${numScore} < ${AUTO_DISCARD_SCORE.toFixed(1)}`;
     finalNotes = finalNotes ? `${reason}. ${finalNotes}` : reason;
   }
 
