@@ -147,6 +147,25 @@ check(mf('Director of Analytics') === true, 'matrix: ranked function passes with
 check(mf('Analytics Director') === true, 'matrix: ranked function passes in trailing order (fn-sen) the old list missed');
 check(mf('Director, Global Sales Enablement') === true, 'matrix: optional modifier is allowed between seniority and function');
 check(mf('Director of Marketing') === false, 'matrix: a seniority with an unlisted function is rejected');
+
+// ── buildTitleFilter: "Associate Director" is director-tier, not junior ────────
+// The "associate" IC-negative was vetoing real "Associate Director, Revenue
+// Operations" roles (audit 2026-08-22). promoteSeniorCompounds drops "associate"
+// when it directly precedes a seniority word, so the compound is judged by its
+// real rank; a standalone "Associate" is still blocked.
+const af = buildTitleFilter({
+  matrix: {
+    seniority: ['director', 'vp', 'manager', 'head'],
+    functions_bare: ['revenue operations', 'revops'],
+    functions_ranked: ['analytics'],
+  },
+  negative: ['associate', 'intern'],
+});
+check(af('Associate Director, Revenue Operations') === true, 'matrix: "Associate Director" passes (director-tier, not the associate negative)');
+check(af('Associate VP, RevOps') === true, 'matrix: "Associate VP" is promoted past the associate negative');
+check(af('Associate Director of Analytics') === true, 'matrix: Associate Director + ranked function passes');
+check(af('Associate') === false, 'matrix: a standalone "Associate" is still blocked');
+check(af('Associate Coordinator, Revenue Operations') === false, 'matrix: "Associate" before a non-seniority word is still blocked');
 check(mf('Analytics Engineer') === false, 'matrix: whole-token negative still excludes');
 check(mf('Director of Analytics (Intern)') === false, 'matrix: negative wins even when seniority+function match');
 // Matrix takes precedence over any flat positive list on the same config.
