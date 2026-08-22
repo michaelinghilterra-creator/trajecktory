@@ -329,8 +329,8 @@ const CHAPTERS = [
         <ul>
           <li>Choose the Claude model for each step (Triage, Agent Scan, Evaluate, Insights, Drafts). The defaults
           are the cheaper, calibrated choices, so most people never touch this.</li>
-          <li>An optional Anthropic API key is a faster path for the writing features. It is never required, and
-          you can add or remove it any time.</li>
+          <li>An optional Anthropic API key is a faster path. When you switch billing to it, the whole workflow
+          (not just the writing features) bills your key. It is never required, and you can add or remove it any time.</li>
           <li>The "Bill workflow &amp; drafts to" toggle switches between your Claude plan and the key. The dollar
           estimates apply only to the key path; on the plan there is no per-token cost.</li>
         </ul>
