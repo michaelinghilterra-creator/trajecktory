@@ -21,6 +21,24 @@ import { parseReferralsMd, appendReferralRows } from './referrals.mjs';
 export const LINKEDIN_STORE = path.join(ROOT_DIR, 'data', 'linkedin-connections.json');
 
 const norm = (s) => (s || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// A LinkedIn profile has many equivalent URL spellings: http vs https, a country
+// subdomain (in./uk./de.) or www. or none, a trailing slash, tracking query
+// params. The CSV export and the stored referral rows routinely disagree on these
+// — e.g. `www.linkedin.com/in/foo/` in the tracker vs `www.linkedin.com/in/foo`
+// in the export, or `in.linkedin.com/...` vs `www.linkedin.com/...`. Comparing the
+// raw strings silently defeated URL-dedup and re-imported people already in the
+// tracker as fresh duplicate rows. Canonicalize BOTH sides to
+// `linkedin.com/in/<slug>` so every spelling of one profile collapses to one key.
+// Only used for COMPARISON; the raw (clickable) URL is still what gets stored.
+export function canonicalLinkedinUrl(u) {
+  if (!u) return '';
+  let s = u.toString().trim().toLowerCase();
+  if (!s) return '';
+  s = s.replace(/[?#].*$/, '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const m = s.match(/linkedin\.com\/in\/([^/?#]+)/);
+  return m ? `linkedin.com/in/${m[1]}` : s;
+}
 // Titles that make a connection a plausible REFERRER (Stage 2): a senior or
 // director-level operator in the user's function, who can refer or hear of
 // openings. Deliberately excludes bare ICs.
@@ -123,13 +141,15 @@ export function matchConnections({ connections, active = activeCompanies(), exis
   const seenInBatch = new Set();
   const dupe = (c) => {
     const nm = norm(`${c.first} ${c.last}`);
-    const url = (c.url && c.url.trim()) ? c.url.trim().toLowerCase() : null;
+    const url = canonicalLinkedinUrl(c.url) || null;
     // A LinkedIn URL is the reliable identity. When the connection has one, dedup
-    // on URL ONLY — matching on name would drop a distinct person who happens to
-    // share a name with an existing referral (a real warm path silently lost).
-    // Fall back to name matching only when there is no URL to key on. (Tradeoff:
-    // re-importing a urless existing referral that now carries a URL can create
-    // one visible duplicate row, which is far cheaper than dropping a warm path.)
+    // on the CANONICAL URL ONLY — matching on name would drop a distinct person who
+    // happens to share a name with an existing referral (a real warm path silently
+    // lost). Fall back to name matching only when there is no URL to key on.
+    // (Tradeoff: re-importing a genuinely urless existing referral that now carries
+    // a URL can create one visible duplicate row, which is far cheaper than dropping
+    // a warm path. Spelling variants of the SAME url no longer duplicate — that is
+    // what canonicalLinkedinUrl fixes.)
     if (url) {
       if (existing.urls.has(url) || seenInBatch.has(url)) return true;
       seenInBatch.add(url); return false;
@@ -156,7 +176,8 @@ function existingReferralKeys() {
     // Prefer the structured LinkedIn column; fall back to a URL still embedded in
     // notes on any row written before the migration.
     const u = (r.linkedin || '').trim() || ((r.notes || '').match(/https?:\/\/[^\s|]+/i)?.[0] || '');
-    if (u) urls.add(u.trim().toLowerCase());
+    const cu = canonicalLinkedinUrl(u);
+    if (cu) urls.add(cu);
   }
   return { names, urls };
 }
