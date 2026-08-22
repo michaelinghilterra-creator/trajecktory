@@ -115,7 +115,7 @@ export async function generateText(prompt, opts = {}) {
         messages: [{ role: 'user', content: prompt }],
       });
     } catch (err) {
-      throw new Error(apiKeyErrorMessage(err));
+      throw new Error(apiKeyErrorMessage(err), { cause: err });
     }
     return (msg.content || [])
       .filter((b) => b.type === 'text')
