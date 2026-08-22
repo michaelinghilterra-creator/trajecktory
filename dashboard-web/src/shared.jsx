@@ -403,6 +403,10 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [pendingCount, setPendingCount] = useState(null);   // URLs waiting to evaluate
   const [needsManual, setNeedsManual] = useState([]);       // URLs the eval couldn't read → paste
   const [evalSummary, setEvalSummary] = useState('');       // plain "what the last batch did" line
+  // Pre-eval spend gate (Slice 7.3). Holds { step, n, cost, hasKey, batch, pending }
+  // while the confirm is open; null when closed. The one paid, walk-away step
+  // (batch Evaluate) gets an "evaluate N for ~$X" confirm before it spends.
+  const [spendGate, setSpendGate] = useState(null);
   const pollersRef = useRef({});
 
   // Agent Scan and Evaluate Pipeline spawn the bundled Claude CLI, which needs a
@@ -656,8 +660,40 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     await runAutoStepAsync('health');
   }
 
-  function runStep(step) {
+  // Open the pre-eval spend gate for the batch Evaluate step. Pulls the effective
+  // batch size + per-eval cost from /api/setup/models and the queue depth from the
+  // already-loaded pendingCount, so the confirm can say "up to N for ~$X". N is the
+  // queue capped by one batch (a single manual Evaluate run does one batch). If the
+  // models fetch fails we still open the gate (cost unknown) rather than spending
+  // silently — the whole point is that no paid run starts without a look.
+  function openSpendGate(step) {
+    fetch('/api/setup/models')
+      .then(r => r.json())
+      .then(m => {
+        const evalS = (m.sections || []).find(s => s.key === 'eval') || {};
+        const batch = evalS.unitsPerRun || 5;
+        const pend = pendingCount != null ? pendingCount : batch;
+        const n = Math.max(0, Math.min(pend, batch));
+        const perEval = (evalS.costs && evalS.current && batch) ? (evalS.costs[evalS.current] / batch) : null;
+        const cost = perEval != null ? perEval * n : null;
+        setSpendGate({ step, n, cost, hasKey: !!m.hasKey, batch, pending: pend });
+      })
+      .catch(() => {
+        const pend = pendingCount != null ? pendingCount : null;
+        setSpendGate({ step, n: pend, cost: null, hasKey, batch: null, pending: pend });
+      });
+  }
+
+  function runStep(step, opts = {}) {
     if (step.type === 'agent') {
+      // Pre-eval spend gate (7.3): the batch Evaluate step is the one paid,
+      // walk-away action, so confirm "N for ~$X" before it spends — unless the
+      // user opted out for this session. Deep Dive / paste carry their own single
+      // cost and are gated elsewhere; other agent steps (scan/triage) are free.
+      if (step.mode === 'pipeline' && !opts.bypassGate && sessionStorage.getItem('trj.skipSpendGate') !== '1') {
+        openSpendGate(step);
+        return;
+      }
       // Drives the user's local Claude Code in the background via /api/agent.
       setJobs(j => ({ ...j, [step.id]: { status: 'running', activity: 'Starting agent…' } }));
       // The batch Evaluate step routes through the API key (power) when one is set,
@@ -975,6 +1011,58 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         </button>
         <div style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.4 }}>{pasteMsg || 'Self-sourced → full deep eval, skips triage.'}</div>
       </div>
+
+      {/* Pre-eval spend gate (7.3). The one paid, walk-away step confirms before it
+          spends. Cost is shown only on the API-key rail (real per-token charge); on
+          the plan rail it says plainly there is no charge. "Don't ask again" sets a
+          sessionStorage flag so a heavy day isn't nagged every batch. */}
+      {spendGate && (
+        <div role="dialog" aria-modal="true" aria-label="Confirm evaluation spend"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+          onClick={() => setSpendGate(null)}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 'var(--r-card)', padding: 18, width: 340, maxWidth: '90vw', fontSize: 13, lineHeight: 1.5 }}>
+            <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Evaluate now?</div>
+            {spendGate.n === 0 ? (
+              <div style={{ color: 'var(--text-dim)' }}>Nothing is queued to evaluate right now. Scan or paste a JD first.</div>
+            ) : spendGate.hasKey ? (
+              <div style={{ color: 'var(--text-dim)' }}>
+                Up to <b style={{ color: 'var(--text)' }}>{spendGate.n}</b> role{spendGate.n === 1 ? '' : 's'} will be evaluated
+                {spendGate.cost != null ? <>, about <b style={{ color: 'var(--text)' }}>${spendGate.cost < 0.01 ? '0.01' : spendGate.cost.toFixed(2)}</b></> : null} on your API key.
+                <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--text-mute)' }}>
+                  This is a local estimate from token counts, not your invoice. Set your real ceiling in your Anthropic console.
+                </div>
+              </div>
+            ) : (
+              <div style={{ color: 'var(--text-dim)' }}>
+                Up to <b style={{ color: 'var(--text)' }}>{spendGate.n}</b> role{spendGate.n === 1 ? '' : 's'} will be evaluated on your Claude plan.
+                <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--text-mute)' }}>
+                  No API charge — this runs on your subscription.
+                </div>
+              </div>
+            )}
+            {spendGate.n !== 0 && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 11.5, color: 'var(--text-mute)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!spendGate.dontAsk}
+                  onChange={e => setSpendGate(s => ({ ...s, dontAsk: e.target.checked }))} />
+                Don't ask again this session
+              </label>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button className="btn ghost sm" onClick={() => setSpendGate(null)}>Cancel</button>
+              {spendGate.n !== 0 && (
+                <button className="btn sm" style={{ background: 'var(--accent)', color: '#0a0a0c', border: '1px solid var(--accent)' }}
+                  onClick={() => {
+                    if (spendGate.dontAsk) { try { sessionStorage.setItem('trj.skipSpendGate', '1'); } catch {} }
+                    const step = spendGate.step;
+                    setSpendGate(null);
+                    runStep(step, { bypassGate: true });
+                  }}>Evaluate</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
