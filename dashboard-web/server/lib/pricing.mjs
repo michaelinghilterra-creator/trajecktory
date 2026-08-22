@@ -30,12 +30,38 @@ const MODEL_IDS = {
   opus:   'claude-opus-4-8',
 };
 
-// Resolve a stored alias (or an already-full id) to a full model id for the SDK.
-// Returns the input unchanged if it's not a known alias, so passing a full id
-// through is a no-op.
+// Per-family version pins the user can choose in Setup -> Models & cost. The FIRST
+// entry of each family is the default and MUST equal MODEL_IDS above. This is what
+// lets a user pin "Opus 4.8" instead of getting whatever the bare `opus` alias
+// resolves to — the Claude CLI expands a bare alias to its own current latest
+// (e.g. Opus 5), which is the drift this fixes. Add a new id when a version ships;
+// never remove one that might be stored, or currentModelVersion falls back to the
+// default. Keep the labels short (they render in a dropdown).
+export const MODEL_VERSIONS = {
+  haiku:  [{ id: 'claude-haiku-4-5', label: 'Haiku 4.5' }],
+  sonnet: [{ id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' }, { id: 'claude-sonnet-5', label: 'Sonnet 5' }],
+  opus:   [{ id: 'claude-opus-4-8', label: 'Opus 4.8' }, { id: 'claude-opus-5', label: 'Opus 5' }],
+};
+
+// The full model id a family currently resolves to, honoring the user's version
+// pin (TJK_{FAMILY}_VERSION) and falling back to the family default (the first
+// MODEL_VERSIONS entry) for an unset OR unrecognized/retired pin. That stale-pin
+// fallback is deliberate: a pin naming a model that no longer exists must not
+// hard-break a run, it should quietly use the current default.
+export function currentModelVersion(family, env = process.env) {
+  const list = MODEL_VERSIONS[family];
+  if (!list) return MODEL_IDS[family] || family;
+  const raw = (env[`TJK_${family.toUpperCase()}_VERSION`] || '').trim();
+  return list.some((v) => v.id === raw) ? raw : list[0].id;
+}
+
+// Resolve a stored alias (or an already-full id) to a full model id. A known
+// family alias resolves to its PINNED version (see currentModelVersion); an
+// already-full id passes through unchanged; anything else is returned as-is.
 export function resolveModelId(alias) {
   const key = String(alias || '').trim().toLowerCase();
-  return MODEL_IDS[key] || alias;
+  if (MODEL_VERSIONS[key]) return currentModelVersion(key);
+  return alias;
 }
 
 // Per-section cost model. `tokensPerUnit` is the approximate total (in+out)
@@ -175,6 +201,15 @@ export function validateSetting(section, value) {
     }
     return { ok: true, envKey: b.envKey, value: String(n) };
   }
+  const vm = section.match(/^(haiku|sonnet|opus)_version$/);
+  if (vm) {
+    const fam = vm[1];
+    const v = String(value || '').trim();
+    if (!MODEL_VERSIONS[fam].some((x) => x.id === v)) {
+      return { ok: false, error: `Invalid ${fam} version "${value}".` };
+    }
+    return { ok: true, envKey: `TJK_${fam.toUpperCase()}_VERSION`, value: v };
+  }
   if (section === 'billing') {
     const v = String(value || '').trim().toLowerCase();
     if (v !== 'key' && v !== 'plan') return { ok: false, error: 'Billing must be "key" or "plan".' };
@@ -197,13 +232,12 @@ export function modelsState({ keyPresent, evalBatch } = {}) {
   const batchKey = currentBatch('batch_key');
   const effEvalBatch = evalBatch != null ? evalBatch : (hasKey ? batchKey : batchPlan);
 
-  // Which credential each step actually uses. Triage / Agent Scan / Evaluate run via
-  // `claude -p`, which authenticates with the Claude subscription (the API key is only
-  // a fallback if the subscription auth is down), so their $ figures are hypothetical
-  // "what the API path would cost" estimates. Insights and Drafts call the Anthropic
-  // SDK directly, so they DO bill the API key — but only when the key is active (in
-  // plan mode / no key, everything runs on the subscription).
-  const SDK_SECTIONS = new Set(['insights', 'draft']);
+  // SINGLE-RAIL: the billing toggle picks the rail and the WHOLE workflow bills it.
+  // In key mode (hasKey) every step bills the API key — Triage, Agent Scan, and
+  // Evaluate via `claude -p` (Claude Code bills the key whenever it sees it), plus
+  // Insights and Drafts via the SDK. In plan mode / no key, nothing bills the key
+  // and every step runs on the flat Claude subscription. So billsTo is uniform
+  // across steps: it follows the rail, not the step.
   const sections = SECTIONS.map((s) => {
     const units = s.key === 'eval' ? effEvalBatch : (s.unitsPerRun || 1);
     return {
@@ -211,9 +245,8 @@ export function modelsState({ keyPresent, evalBatch } = {}) {
       options: s.options, default: s.default, warn: s.warn,
       unitLabel: s.unitLabel, unitsPerRun: units,
       current: currentModel(s.key),
-      // 'api' = billed to the API key (SDK path); 'plan' = runs on the Claude
-      // subscription. Only SDK sections bill the key, and only when a key is active.
-      billsTo: (hasKey && SDK_SECTIONS.has(s.key)) ? 'api' : 'plan',
+      // 'api' = bills the API key; 'plan' = runs on the Claude subscription.
+      billsTo: hasKey ? 'api' : 'plan',
       // Approx US$ per representative run, per allowed model (API-key path estimate).
       costs: Object.fromEntries(s.options.map((a) => [a, costPerRun(s.key, a, units)])),
     };
@@ -229,13 +262,17 @@ export function modelsState({ keyPresent, evalBatch } = {}) {
     keyPresent: !!keyPresent,
     billingMode,
     sections,
+    // Per-family version pins (e.g. Opus 4.8 vs Opus 5), for the Setup picker.
+    modelVersions: Object.fromEntries(Object.keys(MODEL_VERSIONS).map((f) => [f, {
+      current: currentModelVersion(f), options: MODEL_VERSIONS[f],
+    }])),
     batch: BATCH.map((b) => ({ key: b.key, label: b.label, min: b.min, max: b.max, current: currentBatch(b.key) })),
     pricing: PRICING,
     totalPerRun,
     note: hasKey
-      ? 'All $ figures are local estimates from token counts, not your API invoice. The scan/evaluate workflow (Triage, Agent Scan, Evaluate) runs on your Claude subscription and only falls back to your API key if the subscription is unavailable, so it usually does not bill the key. Only Insights and Drafts reliably bill the key.'
+      ? 'Billing set to your API key: the ENTIRE workflow bills your key while this is on — Triage, Agent Scan, and Evaluate (via claude -p), plus Insights and Drafts. $ figures are local estimates from token counts, not your invoice; set your real ceiling in your Anthropic console. Switch billing to your Claude plan to stop charging the key.'
       : (keyPresent
-          ? 'Billing set to your Claude plan: your saved API key is not charged. $ figures are estimates of what the API-key path would cost, not real charges.'
-          : 'No API key set: workflow steps run on your Claude subscription (no per-token cost). $ figures are estimates of what the API-key path would cost.'),
+          ? 'Billing set to your Claude plan: NOTHING bills your saved API key — the whole workflow runs on your subscription (no per-token cost). $ figures are estimates of what the API-key path would cost, not real charges.'
+          : 'No API key set: the whole workflow runs on your Claude subscription (no per-token cost). $ figures are estimates of what the API-key path would cost.'),
   };
 }

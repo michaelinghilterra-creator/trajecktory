@@ -101,7 +101,9 @@ RULES:
     parts.push(`Write the "Tell me about yourself" answer now, honoring the parameters above.`);
 
     const pitch = cleanProse((await generateText(parts.join('\n\n'), {
-      model: 'claude-sonnet-4-6',
+      // Alias, not a hardcoded id, so it honors the user's Sonnet version pin
+      // (generateText resolves it via resolveModelId).
+      model: 'sonnet',
       maxTokens: 1200,
       system: sys,
     })).trim());
