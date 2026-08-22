@@ -566,6 +566,15 @@ function ModelsCostPanel() {
         </div>
       )}
 
+      {/* Spend cap lives in the user's own Anthropic console, not in the app. */}
+      {state.keyPresent && (
+        <div style={{ fontSize: 11, marginBottom: 14 }}>
+          <a href="https://console.anthropic.com/settings/limits" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>
+            Set your API-key spend limit in the Anthropic console →
+          </a>
+        </div>
+      )}
+
       {/* Per-section model dropdowns */}
       {state.sections.map(s => {
         const warnMsg = s.warn && s.warn[s.current];
@@ -597,6 +606,25 @@ function ModelsCostPanel() {
           </div>
         );
       })}
+
+      {/* Model versions — pin a specific version per family (e.g. Opus 4.8 vs 5),
+          so a bare alias does not drift to the CLI's newest release. */}
+      {state.modelVersions && Object.entries(state.modelVersions).some(([, v]) => v.options.length > 1) && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ ...LP_SUB, marginBottom: 6 }}>Model versions</div>
+          <div style={{ fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5, marginBottom: 8 }}>
+            Pin the exact version each family uses. Without a pin a bare "opus" can resolve to the newest release; pin it here to stay on the one you prefer.
+          </div>
+          {Object.entries(state.modelVersions).filter(([, v]) => v.options.length > 1).map(([fam, v]) => (
+            <div key={fam} className="field" style={{ marginBottom: 8 }}>
+              <label style={{ textTransform: 'capitalize' }}>{fam}</label>
+              <select className="inp" value={v.current} disabled={busy} onChange={e => save(`${fam}_version`, e.target.value)}>
+                {v.options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Batch-size knobs */}
       <div style={{ display: 'flex', gap: 16, marginTop: 4, marginBottom: 6 }}>
@@ -648,7 +676,7 @@ function ModelsCostPanel() {
             </tfoot>
           </table>
           <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.5 }}>
-            These runs are Triage, Agent Scan, and Evaluate, which all run on your Claude plan. Machine time is wall-clock per run (hover a row for the scan/evaluate split). Cost is a local token estimate of Claude-plan usage, not an API charge.
+            These runs are Triage, Agent Scan, and Evaluate. Machine time is wall-clock per run (hover a row for the scan/evaluate split). Cost is a local token estimate from token counts, not your Anthropic invoice.
           </div>
         </div>
       )}

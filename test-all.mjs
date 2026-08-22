@@ -504,6 +504,7 @@ for (const suite of [
   'tests/linkedin-acceptance.test.mjs',
   'tests/draft-endpoints.test.mjs',
   'tests/api-key-error.test.mjs',
+  'tests/model-versions.test.mjs',
   'tests/correspondence-context.test.mjs',
   'tests/debrief.test.mjs',
   'tests/google.test.mjs',

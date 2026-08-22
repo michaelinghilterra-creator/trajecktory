@@ -11,6 +11,7 @@ import { parsePortalAdditions, mergePortalAdditions, START_MARKER as PORTAL_STAR
 import { scanDiscoveryStalled } from '../../../lib/scan-stall.mjs';
 import { logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
+import { resolveModelId } from '../lib/pricing.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
 import { record as recordActivation } from '../lib/activation.mjs';
 import { issueJd } from '../../../next-jd.mjs';
@@ -432,7 +433,17 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     // Allow-list the model id to the known aliases or a claude-* id; anything
     // else (including inherit/default/none, which mean "no override") falls back
     // to the CLI default with NO --model flag.
-    const modelPref = /^(?:opus|sonnet|haiku|claude-[a-z0-9.-]+)$/i.test(rawModelPref) ? rawModelPref : '';
+    // Resolve the family alias (opus/sonnet/haiku) to its PINNED full id
+    // (Opus 4.8, etc.) so `claude -p --model` gets an explicit version instead of
+    // expanding a bare alias to the CLI's own current latest — the "opus -> Opus 5"
+    // drift the user hit. A full id passes through unchanged; an unknown value
+    // (e.g. inherit/default) returns as-is and fails the allow-list, yielding no
+    // --model flag. HONEST LIMIT: this sends an explicit id to the plan CLI too; if
+    // a future CLI/subscription build rejects a specific older id, pick a different
+    // version in Setup -> Models & cost (or the run errors visibly rather than
+    // silently drifting).
+    const resolvedModel = resolveModelId(rawModelPref);
+    const modelPref = /^(?:opus|sonnet|haiku|claude-[a-z0-9.-]+)$/i.test(resolvedModel) ? resolvedModel : '';
     const modelFlag = modelPref ? ['--model', modelPref] : [];
     // SECURITY (CWE-94): this eval agent WebFetches attacker-controlled job postings,
     // so a booby-trapped posting can attempt prompt injection. Blast radius is

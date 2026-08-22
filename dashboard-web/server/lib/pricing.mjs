@@ -30,12 +30,38 @@ const MODEL_IDS = {
   opus:   'claude-opus-4-8',
 };
 
-// Resolve a stored alias (or an already-full id) to a full model id for the SDK.
-// Returns the input unchanged if it's not a known alias, so passing a full id
-// through is a no-op.
+// Per-family version pins the user can choose in Setup -> Models & cost. The FIRST
+// entry of each family is the default and MUST equal MODEL_IDS above. This is what
+// lets a user pin "Opus 4.8" instead of getting whatever the bare `opus` alias
+// resolves to — the Claude CLI expands a bare alias to its own current latest
+// (e.g. Opus 5), which is the drift this fixes. Add a new id when a version ships;
+// never remove one that might be stored, or currentModelVersion falls back to the
+// default. Keep the labels short (they render in a dropdown).
+export const MODEL_VERSIONS = {
+  haiku:  [{ id: 'claude-haiku-4-5', label: 'Haiku 4.5' }],
+  sonnet: [{ id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' }, { id: 'claude-sonnet-5', label: 'Sonnet 5' }],
+  opus:   [{ id: 'claude-opus-4-8', label: 'Opus 4.8' }, { id: 'claude-opus-5', label: 'Opus 5' }],
+};
+
+// The full model id a family currently resolves to, honoring the user's version
+// pin (TJK_{FAMILY}_VERSION) and falling back to the family default (the first
+// MODEL_VERSIONS entry) for an unset OR unrecognized/retired pin. That stale-pin
+// fallback is deliberate: a pin naming a model that no longer exists must not
+// hard-break a run, it should quietly use the current default.
+export function currentModelVersion(family, env = process.env) {
+  const list = MODEL_VERSIONS[family];
+  if (!list) return MODEL_IDS[family] || family;
+  const raw = (env[`TJK_${family.toUpperCase()}_VERSION`] || '').trim();
+  return list.some((v) => v.id === raw) ? raw : list[0].id;
+}
+
+// Resolve a stored alias (or an already-full id) to a full model id. A known
+// family alias resolves to its PINNED version (see currentModelVersion); an
+// already-full id passes through unchanged; anything else is returned as-is.
 export function resolveModelId(alias) {
   const key = String(alias || '').trim().toLowerCase();
-  return MODEL_IDS[key] || alias;
+  if (MODEL_VERSIONS[key]) return currentModelVersion(key);
+  return alias;
 }
 
 // Per-section cost model. `tokensPerUnit` is the approximate total (in+out)
@@ -175,6 +201,15 @@ export function validateSetting(section, value) {
     }
     return { ok: true, envKey: b.envKey, value: String(n) };
   }
+  const vm = section.match(/^(haiku|sonnet|opus)_version$/);
+  if (vm) {
+    const fam = vm[1];
+    const v = String(value || '').trim();
+    if (!MODEL_VERSIONS[fam].some((x) => x.id === v)) {
+      return { ok: false, error: `Invalid ${fam} version "${value}".` };
+    }
+    return { ok: true, envKey: `TJK_${fam.toUpperCase()}_VERSION`, value: v };
+  }
   if (section === 'billing') {
     const v = String(value || '').trim().toLowerCase();
     if (v !== 'key' && v !== 'plan') return { ok: false, error: 'Billing must be "key" or "plan".' };
@@ -227,6 +262,10 @@ export function modelsState({ keyPresent, evalBatch } = {}) {
     keyPresent: !!keyPresent,
     billingMode,
     sections,
+    // Per-family version pins (e.g. Opus 4.8 vs Opus 5), for the Setup picker.
+    modelVersions: Object.fromEntries(Object.keys(MODEL_VERSIONS).map((f) => [f, {
+      current: currentModelVersion(f), options: MODEL_VERSIONS[f],
+    }])),
     batch: BATCH.map((b) => ({ key: b.key, label: b.label, min: b.min, max: b.max, current: currentBatch(b.key) })),
     pricing: PRICING,
     totalPerRun,
