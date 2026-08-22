@@ -107,18 +107,21 @@ const PRESSURE_WARNING = 'Anthropic returned a transient rate-limit or overload 
 // The per-run Evaluate batch size: a small test cap (TJK_TEST_LIMIT) wins if set,
 // else TJK_EVAL_BATCH (default 5). Shared by the eval constraint and the progress
 // meter (it is the denominator for "Evaluated X of Y").
-// A "power" run KEEPS the user's Anthropic API key in the `claude -p` environment
-// (instead of stripping it) and lifts the batch cap + no-subagents throttle.
-// IMPORTANT: keeping the key does NOT guarantee the API is billed. Claude Code
-// prefers a healthy Claude subscription and only falls back to the key when the
-// subscription auth is unavailable, so a power run usually still bills the
-// subscription. The key is a fallback, not a guarantee.
-// HARD GUARD: only the full Evaluate paths (pipeline / deep) may ever be power.
-// Triage and Agent Scan ALWAYS run on the subscription, so a stray power flag from
-// the UI can never push them onto the key. Also requires a key to actually exist.
+// SINGLE-RAIL BILLING. The billing toggle (TJK_BILLING_MODE) picks the rail and
+// the ENTIRE workflow bills it. apiKeyActive() (a key is saved AND billing = key)
+// is the one switch: when true, every `claude -p` spawn KEEPS the key and bills it
+// (Claude Code bills the key whenever it sees it); when false, every spawn strips
+// the key and runs on the flat Claude plan. That key-strip lives at the spawn (see
+// `billsKey` in runClaudeAgent), so it covers ALL modes — Triage and Agent Scan
+// included — not just the Evaluate paths.
+//
+// effectivePower is the NARROWER question of the key rail's THROUGHPUT boost (a
+// bigger Evaluate batch + bounded parallelism), which only applies to the full
+// Evaluate paths (pipeline / deep). It is not a separate billing axis: there is no
+// per-run "power" toggle any more, the rail decides.
 function effectivePower(opts, mode) {
   if (mode !== 'pipeline' && mode !== 'deep') return false;
-  return !!(opts && opts.power) && apiKeyActive();
+  return apiKeyActive();
 }
 function evalBatchSize(power) {
   const limit = parseInt(process.env.TJK_TEST_LIMIT, 10) || 0;
@@ -402,6 +405,10 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     // Evaluate=Sonnet (the tuned scorer; the cost driver). The legacy shared
     // TJK_AGENT_MODEL is honored as a fallback for the split keys.
     const power = effectivePower(target, mode);
+    // Single-rail: this run bills the key iff a key is saved AND billing = key.
+    // Governs the key-strip + billedTo below for EVERY mode (power is only the
+    // eval-throughput boost, pipeline/deep only).
+    const billsKey = apiKeyActive();
     // A per-request model override drives the Opus "deep mode" toggle (pipeline /
     // deep only). Triage stays on its calibrated Haiku regardless.
     const reqModel = ((target && target.model) || '').trim();
@@ -476,22 +483,21 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
       resolve({ ok: false, error: msg });
     };
 
-    // Record the ROUTING decision (did we leave the API key available to `claude -p`),
-    // NOT verified billing: Claude Code prefers a healthy Claude subscription and only
-    // falls back to the key when the subscription auth is down, so an 'api' run usually
-    // still bills the subscription. `cost` (set later from the CLI) is a local token
-    // estimate, not the actual API invoice.
-    update({ billedTo: power ? 'api' : 'plan', evalModel: modelFlag.length ? modelPref : 'default', batch: mode === 'pipeline' ? evalBatchSize(power) : undefined });
+    // billedTo reflects the RAIL this run actually bills. Under single-rail billing
+    // that is exactly apiKeyActive(): in key mode the key is kept in the spawn env
+    // below and Claude Code bills it; in plan mode the key is stripped and the flat
+    // Claude subscription is billed. `cost` (set later from the CLI) is a local
+    // token estimate, not the actual API invoice.
+    update({ billedTo: billsKey ? 'api' : 'plan', evalModel: modelFlag.length ? modelPref : 'default', batch: mode === 'pipeline' ? evalBatchSize(power) : undefined });
 
     let child;
-    // Plan path (default): strip ANTHROPIC_API_KEY so `claude -p` bills the user's
-    // flat Claude subscription, not the key — the key is reserved for the SDK-based
-    // draft features. Power path (eval launched with a key present): KEEP the key so
-    // the run bills the API (off the 5-hour plan quota); Claude Code bills the key
-    // whenever it sees it. That separate quota is what lets the eval batch grow and
-    // parallelize.
+    // SINGLE-RAIL: keep the key in the `claude -p` environment iff this run bills
+    // the key (key saved AND billing = key). Claude Code bills the key whenever it
+    // sees it, so keeping it is what actually moves the whole workflow — Triage and
+    // Agent Scan included — onto the key. In plan mode the key is stripped, so the
+    // run bills the flat Claude subscription and nothing touches the key.
     const claudeEnv = { ...process.env };
-    if (!power) delete claudeEnv.ANTHROPIC_API_KEY;
+    if (!billsKey) delete claudeEnv.ANTHROPIC_API_KEY;
     try {
       child = spawn('claude', args, {
         cwd: projectRoot,

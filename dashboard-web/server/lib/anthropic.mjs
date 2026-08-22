@@ -61,6 +61,28 @@ export function planForced() { return currentBilling() === 'plan'; }
 // generateText (below) and effectivePower in routes/agent.mjs.
 export function apiKeyActive() { return hasAnthropicKey() && !planForced(); }
 
+// Turn a raw Anthropic SDK error into a clear, actionable message for the user.
+// The single-rail rule is "no silent fallback": when billing is the key and the
+// key is refused (usage limit / spend cap / rate limit / bad key), we stop with a
+// message that names the fix, rather than quietly re-running on the plan. This is
+// the exact failure that shipped as a raw 400 ("You have reached your specified
+// API usage limits") and killed draft generation with no explanation.
+export const CONSOLE_LIMITS_URL = 'https://console.anthropic.com/settings/limits';
+export function apiKeyErrorMessage(err) {
+  const status = err?.status ?? err?.statusCode;
+  const raw = (err?.message || String(err || '')).trim();
+  const capped = status === 429
+    || /usage limit|spend|quota|rate limit|reached your|credit balance|insufficient|billing/i.test(raw);
+  if (capped) {
+    return `Your Anthropic API key was refused (usage limit or spend cap): ${raw}. `
+      + `Raise or check the cap at ${CONSOLE_LIMITS_URL}, or switch Setup -> Models & cost `
+      + `billing to your Claude plan to run this on your subscription instead. No automatic `
+      + `fallback: your billing choice is respected.`;
+  }
+  return `The Anthropic API call failed on your API key: ${raw}. Check the key in `
+    + `dashboard-web/.env, or switch Setup -> Models & cost billing to your Claude plan.`;
+}
+
 // Unified text generation. When an ANTHROPIC_API_KEY is present we use the API
 // directly (fast, model-pinned, supports tools/thinking). Otherwise we run the
 // prompt on the user's Claude PLAN via the bundled `claude` CLI — no key needed.
@@ -76,16 +98,25 @@ export async function generateText(prompt, opts = {}) {
   }
   const { system, model, maxTokens = 1024, tools, ...rest } = opts;
   if (apiKeyActive()) {
-    const msg = await anthropicClient().messages.create({
-      // Callers may pass a bare alias (haiku/sonnet/opus) or a full id; the SDK
-      // needs a full id, so resolve. Falls back to Haiku when unset.
-      model: resolveModelId(model) || 'claude-haiku-4-5',
-      max_tokens: maxTokens,
-      ...(system ? { system } : {}),
-      ...(tools ? { tools } : {}),
-      ...rest, // e.g. thinking / output_config for insights
-      messages: [{ role: 'user', content: prompt }],
-    });
+    // Single-rail: billing is set to the key, so a capped/failing key does NOT
+    // silently fall back to the plan (that would bill a rail the user did not
+    // choose). Surface a clear, actionable message and let the user decide —
+    // raise the console cap, or switch Setup -> Models & cost billing to the plan.
+    let msg;
+    try {
+      msg = await anthropicClient().messages.create({
+        // Callers may pass a bare alias (haiku/sonnet/opus) or a full id; the SDK
+        // needs a full id, so resolve. Falls back to Haiku when unset.
+        model: resolveModelId(model) || 'claude-haiku-4-5',
+        max_tokens: maxTokens,
+        ...(system ? { system } : {}),
+        ...(tools ? { tools } : {}),
+        ...rest, // e.g. thinking / output_config for insights
+        messages: [{ role: 'user', content: prompt }],
+      });
+    } catch (err) {
+      throw new Error(apiKeyErrorMessage(err));
+    }
     return (msg.content || [])
       .filter((b) => b.type === 'text')
       .map((b) => b.text)
