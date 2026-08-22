@@ -16,6 +16,7 @@ import {
   recommendsAgainst,
   isExemptFromAutoDiscard,
   parseScore,
+  scoreIsParseable,
   AUTO_DISCARD_SCORE,
 } from '../lib/discard.mjs';
 
@@ -70,8 +71,17 @@ check(recommendsAgainst('great fit, apply now') === false, 'positive note does n
 check(parseScore('4.2/5') === 4.2, 'parseScore reads 4.2/5');
 check(parseScore('**3.5**') === 3.5, 'parseScore strips bold');
 check(parseScore('') === 0, 'parseScore of empty is 0');
-check(shouldAutoDiscard({ status: 'Evaluated', score: 'n/a', notes: '' }) === true,
-  'unparseable score (0) is discarded, matching original behavior');
+
+// ── Drift guard: an unparseable/empty score is a broken eval, kept for retry ────
+check(scoreIsParseable('2.4/5') === true, 'scoreIsParseable true for a real score');
+check(scoreIsParseable('n/a') === false && scoreIsParseable('') === false,
+  'scoreIsParseable false for "n/a" and empty');
+check(shouldAutoDiscard({ status: 'Evaluated', score: 'n/a', notes: '' }) === false,
+  'unparseable score is NOT discarded (broken eval → retry, not a real 0)');
+check(shouldAutoDiscard({ status: 'Evaluated', score: '', notes: '' }) === false,
+  'empty score is NOT discarded');
+check(shouldAutoDiscard({ status: 'Evaluated', score: 'n/a', notes: 'do not apply' }) === true,
+  'an explicit do-not-apply verdict still discards even without a number');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
