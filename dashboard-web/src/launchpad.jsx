@@ -538,14 +538,14 @@ function ModelsCostPanel() {
     <div>
       <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>Models &amp; cost</h3>
       <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>
-        Choose which Claude model runs each step. <strong>Triage, Agent Scan, and Evaluate always run on your Claude plan</strong> — they go through Claude Code, which uses your subscription, so there is no per-token API charge. <strong>Only Insights and Drafts bill your API key.</strong> Cheaper defaults are already applied; every step stays overridable.
+        Choose which Claude model runs each step. The billing toggle below picks one rail and the <strong>whole workflow bills it</strong>: with <strong>Claude plan</strong> selected, every step (Triage, Agent Scan, Evaluate, Insights, Drafts) runs on your subscription with no per-token charge; with <strong>API key</strong> selected, every step bills your key. Cheaper defaults are already applied; every step stays overridable.
       </p>
       <div style={{ fontSize: 12, marginBottom: 14, padding: '8px 12px', borderRadius: 'var(--r-ctl)',
         background: showCost ? 'rgba(34,197,94,0.07)' : 'var(--panel-2)', border: `1px solid ${showCost ? 'rgba(34,197,94,0.22)' : 'var(--border)'}`,
         color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        {showCost ? '● API-key mode. Only Insights & Drafts bill your key; Triage, Agent Scan & Evaluate still run on your Claude plan. '
-          : state.keyPresent ? '○ Billing: Claude plan. Your saved key is not charged. '
-          : '○ No API key. Steps run on your Claude subscription (no per-token cost). '}
+        {showCost ? '● API-key mode. The whole workflow bills your API key — Triage, Agent Scan, Evaluate, Insights, and Drafts. Set your ceiling in your Anthropic console. '
+          : state.keyPresent ? '○ Billing: Claude plan. Nothing bills your saved key; the whole workflow runs on your subscription. '
+          : '○ No API key. The whole workflow runs on your Claude subscription (no per-token cost). '}
         {state.note}
       </div>
 
@@ -572,7 +572,7 @@ function ModelsCostPanel() {
         return (
           <div key={s.key} className="field" style={{ marginBottom: 14 }}>
             <label>{s.label} <span style={{ color: 'var(--text-mute)', fontWeight: 400 }}>· {s.hint}</span>
-              <span title={s.billsTo === 'api' ? 'Calls the Anthropic API directly and bills your API key.' : 'Runs on your Claude subscription via claude -p; only falls back to your API key if the subscription is unavailable.'}
+              <span title={s.billsTo === 'api' ? 'Billing is set to your API key, so this step bills your key.' : 'Billing is set to your Claude plan, so this step runs on your subscription and your API key is not charged.'}
                 style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 500, color: s.billsTo === 'api' ? 'var(--accent)' : 'var(--text-mute)' }}>
                 {s.billsTo === 'api' ? 'API key' : 'subscription'}
               </span>
