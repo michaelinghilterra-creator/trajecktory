@@ -51,6 +51,8 @@ function runScript(script, rows, args = []) {
   copyFileSync(join(ROOT, script), join(sb, script));
   copyFileSync(join(ROOT, 'lib/tracker.mjs'), join(sb, 'lib/tracker.mjs'));
   copyFileSync(join(ROOT, 'lib/identity.mjs'), join(sb, 'lib/identity.mjs'));
+  // auto-discard-low.mjs imports the shared threshold from lib/discard.mjs.
+  copyFileSync(join(ROOT, 'lib/discard.mjs'), join(sb, 'lib/discard.mjs'));
   writeFileSync(join(sb, 'data/applications.md'), [HEADER, ...rows, ''].join('\n'));
   let output = '';
   try {
