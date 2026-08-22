@@ -3,7 +3,7 @@
 // touches the user's real applications.md / referrals.md. Every company, role
 // and person below is invented — no real pipeline value appears in this file.
 import assert from 'node:assert';
-import { parseConnectionsCsv, matchConnections, stageForRow } from '../dashboard-web/server/lib/linkedin-referrals.mjs';
+import { parseConnectionsCsv, matchConnections, stageForRow, canonicalLinkedinUrl } from '../dashboard-web/server/lib/linkedin-referrals.mjs';
 
 let pass = 0, fail = 0;
 const ok = (name, fn) => { try { fn(); console.log(`  ✅ ${name}`); pass++; } catch (e) { console.log(`  ❌ ${name}\n       ${e.message}`); fail++; } };
@@ -57,6 +57,39 @@ ok('"Zephyr Labs" matches "Zephyr" too (trailing-generic form)', () => {
 });
 ok('dedup: a connection already in `existing` (by url) is skipped', () => {
   const r = matchConnections({ connections: [sample[0]], active, existing: { names: new Set(), urls: new Set(['u1']) } });
+  assert.equal(r.stage1.length, 0);
+});
+
+console.log('\n2b. canonicalLinkedinUrl collapses equivalent profile spellings (re-import dup bug)');
+ok('trailing slash, subdomain, protocol, and query all canonicalize equal', () => {
+  const want = 'linkedin.com/in/jane-doe';
+  assert.equal(canonicalLinkedinUrl('https://www.linkedin.com/in/jane-doe/'), want); // trailing slash
+  assert.equal(canonicalLinkedinUrl('http://in.linkedin.com/in/jane-doe'), want);    // country subdomain
+  assert.equal(canonicalLinkedinUrl('www.linkedin.com/in/jane-doe'), want);          // no protocol
+  assert.equal(canonicalLinkedinUrl('https://www.linkedin.com/in/jane-doe?utm=x'), want); // tracking query
+});
+ok('different profiles stay distinct', () =>
+  assert.notEqual(canonicalLinkedinUrl('https://www.linkedin.com/in/jane-doe'),
+                  canonicalLinkedinUrl('https://www.linkedin.com/in/john-doe')));
+ok('empty / null → empty string', () => {
+  assert.equal(canonicalLinkedinUrl(''), '');
+  assert.equal(canonicalLinkedinUrl(null), '');
+});
+ok('existing /in/foo/ dedupes an imported /in/foo (the exact re-import bug)', () => {
+  // existing.urls holds the CANONICAL form, which is what existingReferralKeys now produces.
+  const existing = { names: new Set(), urls: new Set(['linkedin.com/in/ada']) };
+  const r = matchConnections({
+    connections: [{ first: 'Ada', last: 'Lovelace', company: 'Zephyr Labs', position: 'Director, RevOps', url: 'https://www.linkedin.com/in/ada/' }],
+    active, existing,
+  });
+  assert.equal(r.stage1.length, 0, 'trailing-slash variant must dedupe, not re-import');
+});
+ok('subdomain-only difference (in. vs www.) also dedupes', () => {
+  const existing = { names: new Set(), urls: new Set(['linkedin.com/in/marie-curie']) };
+  const r = matchConnections({
+    connections: [{ first: 'Marie', last: 'Curie', company: 'Zephyr Labs', position: 'RevOps Lead', url: 'https://in.linkedin.com/in/marie-curie' }],
+    active, existing,
+  });
   assert.equal(r.stage1.length, 0);
 });
 
