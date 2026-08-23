@@ -5,7 +5,7 @@ import {
   readTokens, writeTokens, readSync, writeSync, googleStatus, checkHealth, clientConfigured,
   getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions,
   buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, candidateAppsFor, createDraft,
-  logReplyToContact,
+  getMessage, parseGmailMessage, extractEmail, logReplyToContact, previewEntry,
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { PORT, TT_CORR_DIR } from '../config.mjs';
@@ -310,7 +310,7 @@ router.get('/api/google/replies', async (req, res) => {
     // forward, so a random email that got picked up once stops resurfacing.
     const notRelated = sync.notRelatedSenders || {};
     const notSuppressed = (r) => { const a = senderAddress(r.from); return !(a && notRelated[a]); };
-    const withMeta = (rows, companyOf) => rows.filter(notSuppressed).map(r => ({ ...r, candidateApps: candidateAppsFor(companyOf(r), apps), handled: handled[r.msgId] || null }));
+    const withMeta = (rows, companyOf) => rows.filter(notSuppressed).map(r => previewEntry({ ...r, candidateApps: candidateAppsFor(companyOf(r), apps), handled: handled[r.msgId] || null }));
     // Stamp that a preview sweep ran (manual "Check email" or the auto-scan on
     // Review open), so /health can show "last checked …" and nudge when it has
     // been a while. Best-effort: a freshness write must never fail the read.
@@ -318,7 +318,7 @@ router.get('/api/google/replies', async (req, res) => {
     res.json({
       replies: withMeta(replies, r => r.contact?.company),
       byCompany: withMeta(byCompany, r => r.companyGuess?.company),
-      unknown: unknown.filter(notSuppressed),
+      unknown: unknown.filter(notSuppressed).map(r => previewEntry(r)),
       unmatched: other.length,
     });
   } catch (err) {
@@ -332,10 +332,10 @@ router.get('/api/google/replies', async (req, res) => {
 // also flip the application status (which logs a status event, so the debrief
 // prompt picks it up). The appId is explicit so a reply is never auto-attached to
 // the wrong application when a company has several.
-router.post('/api/google/replies/:msgId/:action', (req, res) => {
+router.post('/api/google/replies/:msgId/:action', async (req, res) => {
   try {
     const { msgId, action } = req.params;
-    const { appId, note, company, contact, subject, snippet, date } = req.body || {};
+    const { appId, company, contact, sentiment, from, subject, snippet, bodyPreview, date } = req.body || {};
     const today = new Date().toISOString().slice(0, 10);
     // Best-effort: the log/status may already be written, so a sync failure must not 500.
     const markHandled = (rec) => {
@@ -367,8 +367,17 @@ router.post('/api/google/replies/:msgId/:action', (req, res) => {
     const id = parseInt(appId, 10);
     if (Number.isNaN(id)) return res.status(400).json({ error: 'appId is required (which application this reply belongs to).' });
 
-    const text = String(note || '').trim();
-    if (text) addNote(id, `### Reply logged (${today})\n${text}`);
+    let message = { from, subject, snippet, text: bodyPreview || snippet || '', date };
+    try {
+      const tokens = readTokens();
+      const accessToken = await getAccessToken({ tokens });
+      message = parseGmailMessage(await getMessage({ id: msgId, accessToken }));
+    } catch { /* request fields are the fallback when Gmail is unavailable */ }
+
+    const sender = extractEmail(message.from) || from || '';
+    const header = `${sender}: ${message.subject || subject || '(no subject)'} [${sentiment || 'neutral'}]`;
+    const fullBody = String(message.text || bodyPreview || snippet || '').trim();
+    addNote(id, `### Reply logged (${today})\n${header}${fullBody ? `\n\n${fullBody}` : ''}`);
 
     let statusFlip = null;
     if (action === 'responded') statusFlip = 'Responded';
@@ -385,7 +394,7 @@ router.post('/api/google/replies/:msgId/:action', (req, res) => {
     // no card to log to, so this simply no-ops.
     let contactLogged = false;
     if (contact) {
-      try { contactLogged = logReplyToContact(contact, { subject, body: snippet, timestamp: date }); }
+      try { contactLogged = logReplyToContact(contact, { subject: message.subject || subject, body: fullBody, timestamp: message.date || date }); }
       catch { /* contact correspondence logging is best-effort */ }
     }
 

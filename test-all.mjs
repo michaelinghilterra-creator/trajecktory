@@ -525,6 +525,7 @@ for (const suite of [
   'tests/reply-draft.test.mjs',
   'tests/google-connect.test.mjs',
   'tests/google-sync.test.mjs',
+  'tests/reply-body.test.mjs',
   'tests/google-draft.test.mjs',
   'tests/gating.test.mjs',
   'tests/board-theme.test.mjs',
