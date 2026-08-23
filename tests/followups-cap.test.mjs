@@ -8,14 +8,21 @@
  *    contact slipped the gate and was surfaced with zero credits — you cannot send it.
  *    isInmailBlocked now keys on the SAME alreadyInvited signal the send button uses.
  * 2. The old "reached out today → hold the whole company" rule capped a company at ONE
- *    contact/day. assignPerCompanyDailyHeld raises that to N DIFFERENT contacts/company/
- *    day, counting distinct people (not raw messages) and seeding from those already
- *    reached today.
+ *    contact/day. The cap raises that to N DIFFERENT contacts/company/day, counting
+ *    distinct people rather than raw messages and seeding from those already reached
+ *    today.
+ *
+ * The cap is exercised through canContact (lib/outreach-policy.mjs), which is the
+ * one place it lives. It used to have a second implementation in followups.mjs,
+ * assignPerCompanyDailyHeld, which survived the move to a single decider with
+ * nothing but this file still calling it. Tests that keep dead code alive are how
+ * a duplicate rule looks maintained, so both were removed together.
  *
  * Run: node tests/followups-cap.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { isInmailBlocked, assignPerCompanyDailyHeld } from '../dashboard-web/server/lib/followups.mjs';
+import { isInmailBlocked } from '../dashboard-web/server/lib/followups.mjs';
+import { canContact } from '../dashboard-web/server/lib/outreach-policy.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -43,64 +50,47 @@ check(isInmailBlocked({ channel: 'linkedin', status: 'Responded', companyOutreac
 check(isInmailBlocked({ channel: 'linkedin', status: 'Sent', companyOutreach: {} }, OUT) === true,
   "pending 'Sent' invite with no logged touch is STILL recognized as InMail-needing");
 
-// ── assignPerCompanyDailyHeld ────────────────────────────────────────────────
-const mk = (company, extra = {}) => ({ company, companyOutreach: {}, ...extra });
+// ── the per-company daily cap, via canContact ────────────────────────────────
+// Only the perCompanyPerDay rule is under test, so the policy disables the other
+// time-based rules; otherwise a fixture would trip the minimum-gap rule instead
+// and the assertions would pass for the wrong reason.
+const POLICY = { perCompanyPerDay: 3, minDaysBetweenTouches: 0, maxTouchesPer30d: Infinity, awaitingReplyHold: 0 };
+const NOW = new Date('2026-08-22T00:00:00Z');
+const held = (opts) => canContact({
+  timeline: [], channel: 'email', policy: POLICY, now: NOW, ...opts,
+}).blocks.some(b => b.rule === 'perCompanyPerDay');
 
-// 5 fresh contacts at one company, cap 3 → first 3 shown, last 2 held.
-{
-  const items = [mk('Acme'), mk('Acme'), mk('Acme'), mk('Acme'), mk('Acme')];
-  assignPerCompanyDailyHeld(items, { perCompany: 3 });
-  const held = items.map(i => i.heldDaily);
-  check(JSON.stringify(held) === JSON.stringify([false, false, false, true, true]),
-    'cap 3: first 3 at a company surface, the rest are held');
-}
+// The cap counts people already reached at that company today.
+check(held({ source: 'ta', company: 'Acme', companyTouches: { count: 2 } }) === false,
+  'under the cap at a company, a target-talent contact surfaces');
+check(held({ source: 'ta', company: 'Acme', companyTouches: { count: 3 } }) === true,
+  'at the cap, the next target-talent contact at that company is held');
 
-// Seeded by contacts already reached today: 2 already → only 1 more surfaces.
-{
-  const co = { companyContactsSentToday: 2 };
-  const items = [mk('Globex', { companyOutreach: { ...co } }), mk('Globex', { companyOutreach: { ...co } }), mk('Globex', { companyOutreach: { ...co } })];
-  assignPerCompanyDailyHeld(items, { perCompany: 3 });
-  check(JSON.stringify(items.map(i => i.heldDaily)) === JSON.stringify([false, true, true]),
-    '2 already reached today + cap 3 → only 1 more new contact surfaces');
-}
+// Already messaged this PERSON today. A per-person guard, so it holds for every
+// book, including the ones exempt from the per-company cap below.
+check(held({ source: 'ta', company: 'Acme', companyTouches: { count: 0, selfSentToday: true } }) === true,
+  'a contact already messaged today is held');
+check(held({ source: 'referral', company: 'Acme', companyTouches: { count: 0, selfSentToday: true } }) === true,
+  'an exempt book is still held after messaging that person today');
 
-// A contact already messaged today is held (done) and does NOT consume an extra slot
-// beyond the seed it is already inside.
-{
-  const items = [
-    mk('Initech', { companyOutreach: { companyContactsSentToday: 1, selfSentToday: { channel: 'email' } } }),
-    mk('Initech', { companyOutreach: { companyContactsSentToday: 1 } }),
-    mk('Initech', { companyOutreach: { companyContactsSentToday: 1 } }),
-    mk('Initech', { companyOutreach: { companyContactsSentToday: 1 } }),
-  ];
-  assignPerCompanyDailyHeld(items, { perCompany: 3 });
-  // row0 held (already messaged today); rows 1-2 fill the remaining 2 slots; row3 held.
-  check(JSON.stringify(items.map(i => i.heldDaily)) === JSON.stringify([true, false, false, true]),
-    'already-messaged-today contact is held and does not eat an extra slot');
-}
+// Referrals are your own network spread across many companies, so two sharing an
+// employer is coincidence, not a coordinated approach at one target.
+check(held({ source: 'referral', company: 'Acme', companyTouches: { count: 9 } }) === false,
+  'referrals are exempt from the per-company cap');
+check(held({ source: 'influencer', company: 'Acme', companyTouches: { count: 9 } }) === false,
+  'influencers are exempt from the per-company cap');
 
-// Blocked/capped rows do not spend a company's daily slots.
-{
-  const items = [
-    mk('Umbrella', { inmailBlocked: true }),
-    mk('Umbrella', { capped: true }),
-    mk('Umbrella'), mk('Umbrella'), mk('Umbrella'),
-  ];
-  assignPerCompanyDailyHeld(items, { perCompany: 3 });
-  // The 3 real rows all fit under the cap because the blocked/capped rows spent nothing.
-  check(items[2].heldDaily === false && items[3].heldDaily === false && items[4].heldDaily === false,
-    'inmailBlocked / capped rows do not consume daily slots');
-}
+// Every influencer has a blank company, so before this they all normalized to one
+// empty key and the whole book competed for three slots a day.
+check(held({ source: 'ta', company: '', companyTouches: { count: 9 } }) === false,
+  'a blank company never groups rows into one bucket');
+check(held({ source: 'ta', company: '   ', companyTouches: { count: 9 } }) === false,
+  'a whitespace-only company counts as blank');
 
-// Companies are independent.
-{
-  const items = [mk('A'), mk('A'), mk('B'), mk('A'), mk('B')];
-  assignPerCompanyDailyHeld(items, { perCompany: 2 });
-  check(items[0].heldDaily === false && items[1].heldDaily === false && items[3].heldDaily === true,
-    'per-company counters are independent (A hits its cap without affecting B)');
-  check(items[2].heldDaily === false && items[4].heldDaily === false,
-    'B still has slots after A is capped');
-}
+// A guard that skips when unsure is not a guard.
+check(held({ company: 'Acme', companyTouches: { count: 9 } }) === true,
+  'a row with no source is still capped');
 
-console.log(`\n${passed} passed, ${failed} failed`);
+console.log(`
+${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

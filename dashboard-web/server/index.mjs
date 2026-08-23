@@ -37,6 +37,7 @@ import { router as buildFloorRoutes } from './routes/build-floor.mjs';
 import { router as systemRoutes, updateJobs } from './routes/system.mjs';
 import { router as sequencesRoutes } from './routes/sequences.mjs';
 import { router as searchRoutes } from './routes/search.mjs';
+import { router as peopleRoutes } from './routes/people.mjs';
 import { getIdentity } from './lib/profile.mjs';
 
 // ── Process-level safety net ─────────────────────────────────────────────────
@@ -212,6 +213,7 @@ app.use(buildFloorRoutes);
 app.use(systemRoutes);
 app.use(sequencesRoutes);
 app.use(searchRoutes);
+app.use(peopleRoutes);
 
 // Public identity for the frontend's signature blocks, so no name/email/phone
 // is hardcoded in the client bundle. Reads config/profile.yml via the cached

@@ -19,7 +19,8 @@
  * Run: node tests/sent-invites-reconcile.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { parseSentInvites, matchSentInvites, cleanName, profileHandle } from '../dashboard-web/server/lib/sent-invites-reconcile.mjs';
+import { parseSentInvites, matchSentInvites } from '../dashboard-web/server/lib/sent-invites-reconcile.mjs';
+import { cleanName, linkedinKey } from '../dashboard-web/server/lib/contact-identity.mjs';
 import { isLinkedInInvite, LINKEDIN_INVITE_SUBJECT } from '../dashboard-web/server/lib/channels.mjs';
 
 let passed = 0, failed = 0;
@@ -34,13 +35,13 @@ console.log('sent-invites-reconcile.test.mjs');
 check(isLinkedInInvite(LINKEDIN_INVITE_SUBJECT) === true,
   'SYNC: the subject the reconcile writes is recognized by isLinkedInInvite (writer↔reader agree)');
 
-// ── cleanName / profileHandle ────────────────────────────────────────────────
+// ── cleanName / LinkedIn key ─────────────────────────────────────────────────
 check(cleanName('Dana (Reyes) Whitfield') === 'dana whitfield',
   'cleanName strips a parenthetical maiden name');
 check(cleanName('José Núñez, MBA 🚀') === 'jose nunez',
   'cleanName strips diacritics, post-comma credentials, and emoji');
-check(profileHandle('https://www.linkedin.com/in/dana-reyes/') === 'dana-reyes',
-  'profileHandle extracts the /in/ slug, lowercased, no trailing slash');
+check(linkedinKey('https://www.linkedin.com/in/dana-reyes/') === 'dana-reyes',
+  'linkedinKey extracts the /in/ slug, lowercased, no trailing slash');
 
 // ── parseSentInvites — the "Manage invitations → Sent" copy format ────────────
 // avatar-alt line, name, blank, headline, blank, "Sent <when>", blank, "Withdraw",

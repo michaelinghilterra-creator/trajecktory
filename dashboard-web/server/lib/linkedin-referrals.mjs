@@ -13,12 +13,18 @@
 // (match-linkedin-referrals.mjs) and the dashboard routes so there is one engine.
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT_DIR } from '../config.mjs';
+import { DATA_DIR } from '../config.mjs';
 import { ACTIVE_STATUSES } from './statuses.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseReferralsMd, appendReferralRows } from './referrals.mjs';
 
-export const LINKEDIN_STORE = path.join(ROOT_DIR, 'data', 'linkedin-connections.json');
+// DATA_DIR, never ROOT_DIR + 'data'. Those look equivalent and are not: only
+// DATA_DIR honors TJK_DATA_DIR, so a hardcoded ROOT_DIR path escapes the test
+// sandbox and writes to the user's real tracker. saveConnections() is a
+// whole-file overwrite, so on 2026-08-22 a routine `node test-all.mjs` replaced
+// a real LinkedIn export with two fixture rows, and data/ is gitignored so
+// there was nothing to restore from. See tests/data-dir-sandbox.test.mjs.
+export const LINKEDIN_STORE = path.join(DATA_DIR, 'linkedin-connections.json');
 
 const norm = (s) => (s || '').toString().toLowerCase().replace(/[^a-z0-9]/g, '');
 

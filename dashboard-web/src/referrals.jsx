@@ -576,7 +576,13 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
       const first = String(row.name || '').trim().split(/\s+/)[0] || '';
       window.tjkMutate('/api/linkedin-drafts/connect-note', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: row.name, role: row.how, company: row.where, reason: row.target || row.how, firstName: first, tone: compose.tone || 'Warm' }),
+        // source and id are what let the server run the outreach guardrail and read
+        // this person's prior messages. Sending only name and company left `resolved`
+        // null on the server, and its canContact call sits inside `if (resolved?.id
+        // != null)`, so this path silently skipped the cooldown, the caps and the
+        // per-company throttle, and drafted with no knowledge of the thread. The raw
+        // fields stay as a fallback for the ad-hoc case.
+        body: JSON.stringify({ source: 'referral', id: row.id, name: row.name, role: row.how, company: row.where, reason: row.target || row.how, firstName: first, tone: compose.tone || 'Warm' }),
       }).then(r => r.json()).then(d => {
         if (d && d.response) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.response })); setGenerating(false); }
         else fail(d && d.error);

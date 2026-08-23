@@ -8,11 +8,14 @@ import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readPro
 import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
-import { getIdentity } from '../lib/profile.mjs';
+import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
+import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
+import { getPersonContext } from '../lib/person-context.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
 import { findAndVerify, hunterSearchesLeft } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
+import { linkedinKey } from '../lib/contact-identity.mjs';
 
 export const router = express.Router();
 
@@ -25,7 +28,6 @@ function splitName(name) {
 }
 
 const _norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-const _slug = u => { const m = String(u || '').match(/linkedin\.com\/in\/([^\/?#\s]+)/i); return m ? m[1].toLowerCase().replace(/\/$/, '') : ''; };
 
 // Resolve a referral to its TA-outreach TWIN: the same human tracked in the TA
 // book. This is what makes the drawer "unified": a linked referral shows (and
@@ -39,9 +41,9 @@ const _slug = u => { const m = String(u || '').match(/linkedin\.com\/in\/([^\/?#
 function resolveReferralLink(refRow, taRows) {
   const taRef = (refRow.notes || '').match(/TA Outreach #(\d+)/i);
   if (taRef) { const c = taRows.find(r => r.id === parseInt(taRef[1], 10)); if (c) return { source: 'ta', contact: c }; }
-  const s = _slug(refRow.linkedin);
+  const s = linkedinKey(refRow.linkedin);
   if (s) {
-    const ta = taRows.find(r => _slug(r.linkedin) === s); if (ta) return { source: 'ta', contact: ta };
+    const ta = taRows.find(r => linkedinKey(r.linkedin) === s); if (ta) return { source: 'ta', contact: ta };
   }
   const nn = _norm(refRow.name), nc = _norm(refRow.where);
   if (nn && nn.length >= 4) {
@@ -228,7 +230,8 @@ router.post('/api/referrals/find-emails', async (req, res) => {
 router.get('/api/referrals/:id/detail', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const ref = parseReferralsMd().find(r => r.id === id);
+    const referralRows = parseReferralsMd();
+    const ref = referralRows.find(r => r.id === id);
     if (!ref) return res.status(404).json({ error: 'Referral not found' });
     const taRows = parseTargetTalentMd();
     const link = resolveReferralLink(ref, taRows);
@@ -241,7 +244,18 @@ router.get('/api/referrals/:id/detail', (req, res) => {
       correspondence = readReferralCorrespondence(id);
     }
     const { raw, ...referral } = ref;
-    res.json({ referral, link: linkInfo, correspondence, relatedApps: findRelatedApps(ref.where) });
+    const context = getPersonContext('referral', id, { ta: taRows, referrals: referralRows });
+    res.json({
+      referral,
+      link: linkInfo,
+      correspondence,
+      relatedApps: findRelatedApps(ref.where),
+      ...(context ? {
+        person: context.person,
+        timeline: context.displayTimeline,
+        personLastTouch: context.lastTouch,
+      } : {}),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -320,6 +334,10 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
     const link = resolveReferralLink(ref, parseTargetTalentMd());
     const prior = link && link.source === 'ta' ? readTTCorrespondence(link.contact.id)
       : readReferralCorrespondence(id);
+    const context = getPersonContext('referral', id);
+    const decision = canContact({ timeline: context?.timeline || [], channel: 'email', company: ref.where, policy: getOutreachPolicy() });
+    if (!decision.allowed && !req.body?.override) return res.json({ blocked: true, blocks: decision.blocks, nextEligible: decision.nextEligible });
+    if (!decision.allowed) logOutreachOverride({ contactRef: `referral:${id}`, channel: 'email', blocks: decision.blocks });
 
     const cvMd            = readProjectFile(ROOT_DIR, 'cv.md');
     const profileMd       = readProjectFile(ROOT_DIR, 'modes/_profile.md');

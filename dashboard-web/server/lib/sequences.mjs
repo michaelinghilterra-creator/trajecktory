@@ -22,9 +22,10 @@
 
 import fs from 'fs';
 import path from 'path';
-import { ROOT_DIR } from '../config.mjs';
+import { ROOT_DIR, DATA_DIR } from '../config.mjs';
 
-const SEQUENCES_PATH = path.join(ROOT_DIR, 'data', 'contact-sequences.json');
+// DATA_DIR, never ROOT_DIR + 'data'. See tests/data-dir-sandbox.test.mjs.
+const SEQUENCES_PATH = path.join(DATA_DIR, 'contact-sequences.json');
 const TEMPLATES_PATH = path.join(ROOT_DIR, 'templates', 'outreach-sequences.json');
 
 // Load the static template library. Returns [] if the file is missing.

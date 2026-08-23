@@ -56,7 +56,7 @@ const CHAPTERS = [
         <h3>Add these as you go</h3>
         <ul>
           <li><b>Follow-Ups</b> when threads go quiet, <b>Interview</b> when you land one.</li>
-          <li><b>Contacts</b> and <b>Social</b> once you start talking to people and building visibility.</li>
+          <li><b>Network</b> and <b>Social</b> once you start talking to people and building visibility.</li>
           <li><b>AI Coach</b> any time you want a second opinion, and <b>Insights</b> once you have enough
           history to learn from.</li>
         </ul>
@@ -209,15 +209,14 @@ const CHAPTERS = [
     ),
   },
   {
-    id: 'network', mk: '08', label: 'Contacts', title: 'Contacts: the relationships that compound',
+    id: 'network', mk: '08', label: 'Network', title: 'Network: the relationships that compound',
     body: (
       <>
-        <p className="dg-lead">The <b>Contacts</b> tab is every person in one place, because the people around a role
-        matter as much as the role. <b>All contacts</b> is one table across both books with a type filter; the
-        Referrals and TA Outreach subtabs keep each book's own tools. Every message here is AI-drafted
+        <p className="dg-lead">The <b>Network</b> tab is where you manage relationship follow-ups, because the people around a role
+        matter as much as the role. The Follow-ups, Referrals, TA Outreach and Influencers subtabs each keep their own tools. Every message here is AI-drafted
         in your voice and fully editable before it goes.</p>
-        <Shot src="network-referrals.png" alt="Contacts: Referrals and TA Outreach"
-          caption="Contacts holds two related lists in one table. Each is a person, not a form: warm intros and internal contacts." />
+        <Shot src="network-referrals.png" alt="Network: Referrals and TA Outreach"
+          caption="Network brings follow-ups and three relationship books together: warm intros, internal contacts and influencers." />
         <ul>
           <li><b>Referrals</b> is your warm channel, built from your LinkedIn connections. It splits into
           <b> Stage 1</b> (people already inside a company you are pursuing) and <b>Stage 2</b> (your wider
@@ -371,7 +370,7 @@ const CHAPTERS = [
           <li>Let roles flow in through <b>Scan</b> and <b>Triage</b>, and only Evaluate the strongest.</li>
           <li>Read a report top-down: the score answers "worth it," the tabs hold the evidence.</li>
           <li>Chase warm threads in <b>Follow-Ups</b> before they go cold. That is the highest-value habit.</li>
-          <li>Work the people in <b>Contacts</b> and build visibility in <b>Social</b>. Warm beats cold.</li>
+          <li>Work the people in <b>Network</b> and build visibility in <b>Social</b>. Warm beats cold.</li>
           <li>Trust the honest numbers in <b>Insights</b>, and ask the <b>AI Coach</b> when you are unsure.</li>
         </ul>
         <p>Everything trajecktory produces is yours to edit, and it never submits anything on your behalf. It is a

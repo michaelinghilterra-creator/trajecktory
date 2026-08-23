@@ -8,13 +8,70 @@ import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { loadInfluencer, toneInstruction, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine, readTTCorrespondence } from '../lib/target-talent.mjs';
+import { parseReferralsMd } from '../lib/referrals.mjs';
 import { getLinkedInStatus } from '../lib/tt-linkedin.mjs';
 import { summarizeThread } from '../lib/correspondence-context.mjs';
-import { getIdentity } from '../lib/profile.mjs';
+import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
+import { getPersonContext } from '../lib/person-context.mjs';
+import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
 import { getInmailBudget, decrementInmail, setInmailRemaining } from '../lib/inmail-budget.mjs';
 
 export const router = express.Router();
+
+// Resolve {source, id} to a recipient FROM THE BOOK THAT SOURCE NAMES.
+//
+// The three books number their rows independently, so an id on its own is
+// ambiguous: referral 88 and target-talent 88 are two different people. Three
+// handlers here used to look a contact up by id alone, against target talent,
+// whatever source was requested. That was harmless while target talent was the
+// only book that reached the follow-up queue, and it stopped being harmless the
+// moment referrals and influencers joined it: asking for referral 88 drafted a
+// note to target-talent 88 instead, addressed to the wrong person at the wrong
+// company, and the UI showed it under the row you had clicked. Live example on
+// real data: referral 88 is one person at one employer, target-talent 88 is
+// somebody else entirely at another.
+//
+// Returns null when the source is unknown or the row is missing. It never falls
+// back to another book, because guessing is what caused this.
+function resolveRecipient(source, id) {
+  if (id == null || !source) return null;
+  const key = String(source);
+  if (key === 'ta') {
+    const row = parseTargetTalentMd().find(r => String(r.id) === String(id));
+    return row && {
+      source: 'ta', id: row.id,
+      name: `${row.first || ''} ${row.last || ''}`.trim(),
+      firstName: row.first || '',
+      role: row.title || '', company: row.company || '', reason: '',
+    };
+  }
+  if (key === 'referral') {
+    const row = parseReferralsMd().find(r => String(r.id) === String(id));
+    if (!row) return null;
+    const parts = String(row.name || '').trim().split(/\s+/).filter(Boolean);
+    return {
+      source: 'referral', id: row.id,
+      name: String(row.name || '').trim(),
+      firstName: parts[0] || '',
+      // A referral has no title column; "how you know them" is the closest thing
+      // to context, and `where` is where they actually work now.
+      role: row.how || '', company: row.where || '', reason: row.target || '',
+    };
+  }
+  if (key === 'influencer') {
+    const row = loadInfluencer({ influencerId: id });
+    if (!row) return null;
+    const parts = String(row.name || '').trim().split(/\s+/).filter(Boolean);
+    return {
+      source: 'influencer', id: row.id,
+      name: String(row.name || '').trim(),
+      firstName: parts[0] || '',
+      role: row.role || '', company: '', reason: row.whyFollow || '',
+    };
+  }
+  return null;
+}
 
 // GET /api/linkedin-drafts/inmail-budget — remaining monthly InMail credits.
 // POST with { decrement: true } to spend one (an InMail follow-up was sent), or
@@ -265,19 +322,7 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       // can always resolve a recipient. The frontend already routes already-invited
       // contacts to /followup-message, so anything reaching here is a genuine
       // first-touch connect note; this only prevents a hard 400 on an edge case.
-      if (!resolved) {
-        const rows = parseTargetTalentMd();
-        const row = rows.find(r => String(r.id) === String(id));
-        if (row) resolved = {
-          source,
-          id: row.id,
-          name: `${row.first || ''} ${row.last || ''}`.trim(),
-          firstName: row.first || '',
-          role: row.title || '',
-          company: row.company || '',
-          reason: '',
-        };
-      }
+      if (!resolved) resolved = resolveRecipient(source, id);
     }
     const name            = (body.name    || resolved?.name    || '').trim();
     const recipientRole   = (body.role    || resolved?.role    || '').trim();
@@ -287,6 +332,12 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     const src             = source || resolved?.source || 'ta';
     if (!name) {
       return res.status(400).json({ error: 'Provide a recipient: source+id from the connect queue, or a name.' });
+    }
+    if (resolved?.id != null) {
+      const context = getPersonContext(src, resolved.id);
+      const decision = canContact({ timeline: context?.timeline || [], channel: 'linkedin', company: recipientCompany, policy: getOutreachPolicy() });
+      if (!decision.allowed && !body.override) return res.json({ blocked: true, blocks: decision.blocks, nextEligible: decision.nextEligible });
+      if (!decision.allowed) logOutreachOverride({ contactRef: `${src}:${resolved.id}`, channel: 'linkedin', blocks: decision.blocks });
     }
 
     let cvMd = '';
@@ -338,24 +389,45 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
     const body = req.body || {};
     const { id } = body;
     if (id == null) return res.status(400).json({ error: 'A contact id is required.' });
-    const rows = parseTargetTalentMd();
-    const row = rows.find(r => String(r.id) === String(id));
-    if (!row) return res.status(404).json({ error: 'Contact not found.' });
+    // Source-aware: an id alone is ambiguous across the three books. Defaulting to
+    // target talent here drafted to whoever happened to hold that id in THAT book.
+    const source = body.source || 'ta';
+    const recipient = resolveRecipient(source, id);
+    if (!recipient) return res.status(404).json({ error: 'Contact not found.' });
+    const row = source === 'ta'
+      ? parseTargetTalentMd().find(r => String(r.id) === String(id))
+      : null;
 
-    const name = `${row.first || ''} ${row.last || ''}`.trim() || (body.name || '').trim();
-    const recipientFirst = row.first || name.split(/\s+/)[0] || 'there';
-    const recipientRole = row.title || '';
-    const company = row.company || '';
+    const name = recipient.name || (body.name || '').trim();
+    const recipientFirst = recipient.firstName || name.split(/\s+/)[0] || 'there';
+    const recipientRole = recipient.role || '';
+    const company = recipient.company || '';
     // The invite ACCEPTED case (LinkedIn axis 'Connected') is a different message
     // than a still-pending one: it is a free DM to a new 1st-degree connection, and
     // it must NOT claim the invite is unanswered or ask if it arrived.
-    const connected = getLinkedInStatus(Number(id)) === 'Connected';
+    // The LinkedIn connection axis is a target-talent sidecar keyed by TA id, so it
+    // is only meaningful for that book. Reading it for a referral would report some
+    // unrelated contact's connection state.
+    const connected = source === 'ta' && getLinkedInStatus(Number(id)) === 'Connected';
 
-    // Prior 1:1 history with THIS contact, so the message names the earlier connect
-    // (and when) and never repeats it. Cap the tail so the prompt stays bounded.
-    const corr = (readTTCorrespondence(Number(id)) || []);
+    // Prior 1:1 history with THIS PERSON, merged across whichever books they are
+    // filed in, rather than one book's correspondence file. A referral has no entry
+    // in the target-talent log at all, so reading that directly returned either
+    // nothing or, worse, the thread belonging to whoever shares their id.
+    const context = getPersonContext(source, id);
+    const corr = context?.timeline || [];
+    const decision = canContact({
+      timeline: corr,
+      channel: 'linkedin',
+      source,
+      company,
+      inmail: { exhausted: getInmailBudget().remaining === 0, alreadyInvited: true, freeDm: connected },
+      policy: getOutreachPolicy(),
+    });
+    if (!decision.allowed && !body.override) return res.json({ blocked: true, blocks: decision.blocks, nextEligible: decision.nextEligible });
+    if (!decision.allowed) logOutreachOverride({ contactRef: `${source}:${id}`, channel: 'linkedin', blocks: decision.blocks });
     const sent = corr.filter(m => m.direction === 'Sent');
-    const firstTouchDate = (sent[0]?.timestamp || row.lastTouch || '').slice(0, 10);
+    const firstTouchDate = (sent[0]?.timestamp || sent[0]?.at || row?.lastTouch || '').slice(0, 10);
     // Full-thread state: whether a substantive message already went out recently
     // and is unanswered, so the prompt writes a nudge instead of re-pitching.
     const thread = summarizeThread(corr);
@@ -435,6 +507,14 @@ router.post('/api/linkedin-drafts/archive-contact', (req, res) => {
     const reasonText = ARCHIVE_REASONS[reason];
     if (!source || id == null) return res.status(400).json({ error: 'source and id are required.' });
     if (!reasonText) return res.status(400).json({ error: `reason must be one of: ${Object.keys(ARCHIVE_REASONS).join(', ')}` });
+    // This WRITES, and it writes to the target-talent book by id. It accepted a
+    // source and then ignored it, so archiving a referral would have set some
+    // unrelated target-talent contact to Archived. Refuse rather than write to the
+    // wrong person: archiving the other books needs their own writers, and a
+    // clear error is far better than a silent mis-write to real data.
+    if (String(source) !== 'ta') {
+      return res.status(400).json({ error: 'Archiving is only supported for TA Outreach contacts right now. Change the status on the contact itself.' });
+    }
     const rows = parseTargetTalentMd();
     const row = rows.find(r => String(r.id) === String(id));
     if (!row) return res.status(404).json({ error: 'Contact not found.' });

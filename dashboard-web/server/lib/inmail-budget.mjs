@@ -10,9 +10,10 @@
 // the real balance re-enters the system when the two drift.
 import fs from 'fs';
 import path from 'path';
-import { ROOT_DIR } from '../config.mjs';
+import { DATA_DIR } from '../config.mjs';
 
-const FILE = path.join(ROOT_DIR, 'data', 'inmail-usage.json');
+// DATA_DIR, never ROOT_DIR + 'data'. See tests/data-dir-sandbox.test.mjs.
+const FILE = path.join(DATA_DIR, 'inmail-usage.json');
 const ALLOTMENT = 15;   // LinkedIn Premium monthly default
 const CAP = 99;         // generous ceiling for reconcile (rollover accumulates)
 

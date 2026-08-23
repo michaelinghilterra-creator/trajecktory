@@ -25,6 +25,38 @@ function OutreachPills({ c }) {
   );
 }
 
+// Which book a queue row came from. The queue merges three populations that used
+// to live on separate tabs, and once merged every row looked identical: the source
+// was rendered as a bare lowercase word AFTER the company name, so its position
+// shifted on every row and there was nothing for the eye to lock onto.
+//
+// So this is a colored chip at a FIXED position, first on the meta line. The label
+// matches the subtab name deliberately, so the chip also tells you where to go to
+// find that person. Colors are theme tokens, never literals, because there are
+// nine themes.
+const BOOK_META = {
+  ta:         { label: 'TA Outreach', cvar: 'var(--cyan)',  title: 'A talent-acquisition contact, from the TA Outreach book.' },
+  referral:   { label: 'Referral',    cvar: 'var(--green)', title: 'Someone in your own network, from the Referrals book.' },
+  influencer: { label: 'Influencer',  cvar: 'var(--blue)',  title: 'A voice you engage with publicly, from the Influencers book.' },
+};
+// Shared so the drawer's "Filed in" chips tint identically. One map, or the two
+// surfaces drift and the colors stop meaning anything.
+window.BOOK_META = BOOK_META;
+function BookChip({ source }) {
+  const meta = BOOK_META[source];
+  if (!meta) return null;
+  return (
+    <span title={meta.title}
+      style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4,
+        verticalAlign: 'middle', whiteSpace: 'nowrap',
+        background: `color-mix(in srgb, ${meta.cvar} 15%, transparent)`,
+        color: meta.cvar,
+        border: `1px solid color-mix(in srgb, ${meta.cvar} 40%, transparent)` }}>
+      {meta.label}
+    </span>
+  );
+}
+
 // Why this contact is in the follow-up queue: 'Reach out' (you applied at their
 // company, not worked yet), 'App going stale', or 'Went quiet'. One consistent tag
 // across all three card types, so the merged list never leaves you guessing why
@@ -124,9 +156,53 @@ const CONTACTED_STATUSES = new Set(['Sent', 'Replied', 'Meeting Scheduled']);
 // is the reliable signal: selfLastTouch is derived from the correspondence-log index,
 // which can be empty even after status advanced to Sent — that gap is what wrongly
 // routed already-contacted contacts to the first-touch connect-note endpoint and 400'd.
+// The API base for a queue row, chosen by which BOOK the row came from.
+//
+// These three row components used to hardcode `/api/target-talent/${c.id}`. That
+// was correct while the queue held only target talent, and became data corruption
+// the moment referrals and influencers joined it: the books number rows
+// independently, so Mark sent on referral 160 wrote a Sent entry onto
+// target-talent 160, a different person, advancing their status, stamping their
+// last touch and marking their invite pending. The endpoint is book-scoped by its
+// own URL and cannot detect a caller aiming the wrong id at it, so the caller has
+// to be right.
+//
+// The row already carries `source`; it was being used for the React key and the
+// drop callback and then dropped when the URL was built.
+//
+// Influencers return null: they have no per-contact correspondence store, their
+// touches live in the engagement log, and writing them into either contact book
+// would be the same mistake in a new place. Callers must refuse instead.
+function contactBase(c) {
+  if (!c || c.id == null) return null;
+  if (c.source === 'referral') return `/api/referrals/${c.id}`;
+  if (c.source === 'influencer') return null;
+  return `/api/target-talent/${c.id}`;
+}
+
 function isAlreadyInvited(c) {
+  // Being CONNECTED is proof on its own: you cannot become a first-degree
+  // connection without an invite having gone out and been accepted. Without this,
+  // a row badged "Just connected" still routed to the first-touch endpoint and
+  // drafted "would love to connect" to somebody already connected.
+  //
+  // It matters because the other two signals are target-talent-shaped and a
+  // referral matches neither. CONTACTED_STATUSES holds TA vocabulary (Sent,
+  // Replied, Meeting Scheduled) while a referral sits at "Not Asked", and
+  // selfLastTouch comes from a touch index built only from TA correspondence and
+  // keyed ta:<id>, so a referral row has none. Both read as never-invited.
+  if (c.linkedinStatus === 'Connected' || c.freeDm) return true;
   return !!(c.companyOutreach && c.companyOutreach.selfLastTouch)
     || CONTACTED_STATUSES.has(c.status);
+}
+
+function DraftBlockBanner({ block }) {
+  if (!block) return null;
+  return <div className="card" style={{ borderColor: 'var(--yellow)', padding: 10, marginTop: 10, fontSize: 12 }}>
+    {(block.blocks || []).map((item, i) => <div key={`${item.rule || 'block'}:${i}`}>{item.reason}</div>)}
+    <div className="dim" style={{ marginTop: 5 }}>{block.nextEligible ? `You can reach out again on ${block.nextEligible}` : 'Blocked until they reply'}</div>
+    {block.overridden && <div style={{ color: 'var(--yellow)', marginTop: 5 }}>Guardrail overridden for this draft.</div>}
+  </div>;
 }
 
 function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent }) {
@@ -136,6 +212,7 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
   const [sentAt, setSentAt] = useStateCq(null);
   const [showArchive, setShowArchive] = useStateCq(false);
   const [referred, setReferred] = useStateCq(false);
+  const [draftBlock, setDraftBlock] = useStateCq(null);
   const done = !!sentAt;
   // A contact you have ALREADY sent a LinkedIn invite (or any 1:1 touch) to: the
   // invite is out, so a "follow-up" is a real MESSAGE, not another connection note.
@@ -161,7 +238,9 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
   const markSent = () => {
     if (sending || done) return;
     setSending(true);
-    const url = `/api/target-talent/${c.id}/correspondence`;
+    const cbase = contactBase(c);
+    if (!cbase) { setSending(false); toast && toast('Log this engagement from the Social tab: influencers have no correspondence store.', 'warn'); return; }
+    const url = `${cbase}/correspondence`;
     const kind = alreadyInvited ? 'LinkedIn message' : 'LinkedIn connection request';
     const body = (note?.response || '').trim() || `${kind} sent to ${c.name || 'this contact'}.`;
     window.tjkMutate(url, {
@@ -214,13 +293,13 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
       .catch(e => toast && toast(e.message, 'error'));
   };
 
-  const draft = () => {
+  const draft = (override = false) => {
     setLoading(true);
     window.tjkMutate(alreadyInvited ? '/api/linkedin-drafts/followup-message' : '/api/linkedin-drafts/connect-note', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: c.source, id: c.id }),
+      body: JSON.stringify({ source: c.source, id: c.id, override }),
     }).then(r => r.json())
-      .then(res => { if (res.error) { toast && toast(res.error, 'error'); } else setNote(res); })
+      .then(res => { if (res.error) toast && toast(res.error, 'error'); else if (res.blocked) setDraftBlock(res); else { setNote(res); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
       .catch(e => toast && toast(e.message, 'error'))
       .finally(() => setLoading(false));
   };
@@ -245,7 +324,7 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
             <QueueReasonPill c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
-            {c.company} · <span className="mono">{c.source}</span> ·{' '}
+            <BookChip source={c.source} /> {c.company} ·{' '}
             {c.hasEmail
               ? <span title="An address is on file but is not verified deliverable. Verify it to move this contact to the email motion.">email {c.emailState}</span>
               : <span title="No email address on file. Find one (Hunter/MillionVerifier) to move this contact to the email motion.">no email on file</span>}
@@ -265,7 +344,10 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
           )}
           {!done && (
             <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              {c.queueReason === 'Just connected' && (referred
+              {/* Target talent only. The endpoint promotes a TA row by id, so on a
+                  referral row it would have promoted whoever holds that id in the TA
+                  book, and a referral is already in Referrals anyway. */}
+              {c.queueReason === 'Just connected' && c.source === 'ta' && (referred
                 ? <span style={{ color: 'var(--green)' }}>✓ Added to Referrals</span>
                 : <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={addToReferral} disabled={sending}
                     title="Now a 1st-degree connection. Add them to your Referrals list; they'll share a timeline with this TA record.">+ Add to Referrals</button>)}
@@ -284,8 +366,8 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}
           {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={sending}>💤 14d</button> : null}
-          <button className="btn accent sm" onClick={draft} disabled={loading}>
-            {loading ? 'Drafting…' : (note ? (alreadyInvited ? 'Redraft message' : 'Redraft') : (alreadyInvited ? 'Draft message' : 'Draft note'))}
+          <button className={draftBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => draft(!!draftBlock)} disabled={loading}>
+            {loading ? 'Drafting…' : draftBlock ? 'Draft anyway' : (note ? (alreadyInvited ? 'Redraft message' : 'Redraft') : (alreadyInvited ? 'Draft message' : 'Draft note'))}
           </button>
           {done
             ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, whiteSpace: 'nowrap' }} title={`Recorded as sent (${sentAt})`}>✓ Sent</span>
@@ -294,6 +376,7 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
               </button>}
         </div>
       </div>
+      <DraftBlockBanner block={draftBlock} />
       {note ? (
         <div style={{ marginTop: 10 }}>
           <div style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px', fontSize: 13, whiteSpace: 'pre-wrap' }}>
@@ -374,8 +457,9 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
   const [sending, setSending] = useStateCq(false);
   const [sentAt, setSentAt] = useStateCq(null);
   const [showArchive, setShowArchive] = useStateCq(false);
+  const [draftBlock, setDraftBlock] = useStateCq(null);
   const done = !!sentAt;
-  const base = `/api/target-talent/${c.id}`;
+  const base = contactBase(c);
   const firstName = c.firstName || (c.name || '').split(/\s+/)[0] || 'there';
   // LinkedIn profile link, same normalization as the Connect queue, so you can
   // confirm the TA is still at the company before you spend a draft on them.
@@ -399,12 +483,15 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
       .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
   };
 
-  const gen = () => {
+  const gen = (override = false) => {
     setLoading(true);
-    window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    // contactBase is null for influencers, who have no correspondence store.
+    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
+    window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ override }) })
       .then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); return; }
+        if (res.blocked) { setDraftBlock(res); return; }
         const d = res.draft || {};
         if (!d.body) { toast && toast('The model returned an empty draft. Try Redraft.', 'warn'); return; }
         // Compose the full editable email the same way the Network → TA drawer does:
@@ -412,6 +499,7 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
         // Gmail draft, so the draft is complete and needs no typing.
         const sig = (window.myEmailSignature && window.myEmailSignature()) || '';
         setDraft({ subject: (d.subject || '').trim(), body: `Hi ${firstName},\n\n${(d.body || '').trim()}${sig ? `\n\n${sig}` : ''}` });
+        if (override) setDraftBlock(b => ({ ...b, overridden: true }));
       })
       .catch(e => toast && toast(e.message, 'error'))
       .finally(() => setLoading(false));
@@ -438,6 +526,8 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
     if (sending || done) return;
     setSending(true);
     const sentBody = (body || '').trim() || `Emailed ${c.name || 'this contact'}${c.company ? ` at ${c.company}` : ''}.`;
+    // contactBase is null for influencers, who have no correspondence store.
+    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
     window.tjkMutate(`${base}/correspondence`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ direction: 'Sent', subject: subject || 'Outreach email', body: sentBody }),
@@ -462,7 +552,7 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
             <QueueReasonPill c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
-            {c.company} · <span className="mono">{c.source}</span> · <span className="mono">{c.email}</span>
+            <BookChip source={c.source} /> {c.company} · <span className="mono">{c.email}</span>
             {c.emailState === 'risky' ? <span title="Catch-all domain: usually deliverable."> · risky</span> : null}
           </div>
           <CompanyOutreach c={c} />
@@ -483,8 +573,8 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer" title="Open the LinkedIn profile to confirm they're still at the company before emailing.">Open ↗</a> : null}
           {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={sending}>💤 14d</button> : null}
-          <button className="btn accent sm" onClick={gen} disabled={loading}>
-            {loading ? 'Drafting…' : (draft ? 'Redraft' : 'Draft email')}
+          <button className={draftBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => gen(!!draftBlock)} disabled={loading}>
+            {loading ? 'Drafting…' : draftBlock ? 'Draft anyway' : (draft ? 'Redraft' : 'Draft email')}
           </button>
           {done
             ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, whiteSpace: 'nowrap' }} title="Recorded as a verified touch">✓ Sent</span>
@@ -493,6 +583,7 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
               </button>}
         </div>
       </div>
+      <DraftBlockBanner block={draftBlock} />
       {draft ? (
         <div style={{ marginTop: 10 }}>
           <input
@@ -575,24 +666,26 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
   const [liLoading, setLiLoading] = useStateCq(false);
   const [liSending, setLiSending] = useStateCq(false);
   const [liDone, setLiDone] = useStateCq(!!c.linkedinDone);
+  const [liBlock, setLiBlock] = useStateCq(null);
   // Email side
   const [draft, setDraft] = useStateCq(null);
+  const [emailBlock, setEmailBlock] = useStateCq(null);
   const [emLoading, setEmLoading] = useStateCq(false);
   const [emSending, setEmSending] = useStateCq(false);
   const [emDone, setEmDone] = useStateCq(!!c.emailDone);
 
-  const base = `/api/target-talent/${c.id}`;
+  const base = contactBase(c);
   const firstName = c.firstName || (c.name || '').split(/\s+/)[0] || 'there';
   const href = c.linkedin ? (/^https?:/.test(c.linkedin) ? c.linkedin : `https://${c.linkedin}`) : null;
 
   // ── LinkedIn actions ──
-  const draftNote = () => {
+  const draftNote = (override = false) => {
     setLiLoading(true);
     window.tjkMutate('/api/linkedin-drafts/connect-note', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: c.source, id: c.id }),
+      body: JSON.stringify({ source: c.source, id: c.id, override }),
     }).then(r => r.json())
-      .then(res => { if (res.error) toast && toast(res.error, 'error'); else setNote(res); })
+      .then(res => { if (res.error) toast && toast(res.error, 'error'); else if (res.blocked) setLiBlock(res); else { setNote(res); if (override) setLiBlock(b => ({ ...b, overridden: true })); } })
       .catch(e => toast && toast(e.message, 'error'))
       .finally(() => setLiLoading(false));
   };
@@ -605,6 +698,8 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
     if (liSending || liDone) return;
     setLiSending(true);
     const body = (note?.response || '').trim() || `LinkedIn connection request sent to ${c.name || 'this contact'}.`;
+    // contactBase is null for influencers, who have no correspondence store.
+    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
     window.tjkMutate(`${base}/correspondence`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ direction: 'Sent', subject: 'LinkedIn connection request', body }),
@@ -620,16 +715,20 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
   };
 
   // ── Email actions ──
-  const genEmail = () => {
+  const genEmail = (override = false) => {
     setEmLoading(true);
-    window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    // contactBase is null for influencers, who have no correspondence store.
+    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
+    window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ override }) })
       .then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); return; }
+        if (res.blocked) { setEmailBlock(res); return; }
         const d = res.draft || {};
         if (!d.body) { toast && toast('The model returned an empty draft. Try Redraft.', 'warn'); return; }
         const sig = (window.myEmailSignature && window.myEmailSignature()) || '';
         setDraft({ subject: (d.subject || '').trim(), body: `Hi ${firstName},\n\n${(d.body || '').trim()}${sig ? `\n\n${sig}` : ''}` });
+        if (override) setEmailBlock(b => ({ ...b, overridden: true }));
       })
       .catch(e => toast && toast(e.message, 'error'))
       .finally(() => setEmLoading(false));
@@ -648,6 +747,8 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
     if (emSending || emDone) return;
     setEmSending(true);
     const sentBody = (emBody || '').trim() || `Emailed ${c.name || 'this contact'}${c.company ? ` at ${c.company}` : ''}.`;
+    // contactBase is null for influencers, who have no correspondence store.
+    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
     window.tjkMutate(`${base}/correspondence`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ direction: 'Sent', subject: emSubject || 'Outreach email', body: sentBody }),
@@ -683,7 +784,7 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
             <OutreachPills c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
-            {c.company} · <span className="mono">{c.source}</span> · <span className="mono">{c.email}</span>
+            <BookChip source={c.source} /> {c.company} · <span className="mono">{c.email}</span>
           </div>
           <CompanyOutreach c={c} />
         </div>
@@ -705,12 +806,13 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 600 }}>LinkedIn invite</span>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn accent sm" onClick={draftNote} disabled={liLoading || liDone}>{liLoading ? 'Drafting…' : (note ? 'Redraft' : 'Draft note')}</button>
+            <button className={liBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => draftNote(!!liBlock)} disabled={liLoading || liDone}>{liLoading ? 'Drafting…' : liBlock ? 'Draft anyway' : (note ? 'Redraft' : 'Draft note')}</button>
             {liDone
               ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span>
               : <button className="btn sm" onClick={markLiSent} disabled={liSending} title="Record that you sent the LinkedIn invite.">{liSending ? 'Saving…' : 'Mark sent'}</button>}
           </div>
         </div>
+        <DraftBlockBanner block={liBlock} />
         {note ? (
           <div style={{ marginTop: 8 }}>
             <div style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px', fontSize: 13, whiteSpace: 'pre-wrap' }}>{note.response}</div>
@@ -726,12 +828,13 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 600 }}>Email</span>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn accent sm" onClick={genEmail} disabled={emLoading || emDone}>{emLoading ? 'Drafting…' : (draft ? 'Redraft' : 'Draft email')}</button>
+            <button className={emailBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => genEmail(!!emailBlock)} disabled={emLoading || emDone}>{emLoading ? 'Drafting…' : emailBlock ? 'Draft anyway' : (draft ? 'Redraft' : 'Draft email')}</button>
             {emDone
               ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span>
               : <button className="btn sm" onClick={markEmSent} disabled={emSending} title="Record that you emailed this contact. Logs a verified touch.">{emSending ? 'Saving…' : 'Mark sent'}</button>}
           </div>
         </div>
+        <DraftBlockBanner block={emailBlock} />
         {draft ? (
           <div style={{ marginTop: 8 }}>
             <input value={emSubject} onChange={e => setEmSubject(e.target.value)} placeholder="Subject"
@@ -924,6 +1027,7 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   const [queue, setQueue] = useStateCq(externalItems ? items : null);
   const [err, setErr] = useStateCq(null);
   const [channel, setChannel] = useStateCq('all');
+  const [book, setBook] = useStateCq('all');   // contact type: referral / ta / influencer
   const [showHeld, setShowHeld] = useStateCq(false);
   const [inmail, setInmail] = useStateCq(null);
   const [setBox, setSetBox] = useStateCq(false);
@@ -1064,7 +1168,28 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
     { id: 'email', label: 'Email' },
     { id: 'both', label: 'Both' },
   ];
-  const rows = channel === 'all' ? base : base.filter(c => c.channel === channel);
+  // Contact type, alongside channel. The queue merges three books that used to be
+  // separate tabs, and 140 referrals can bury 15 TA contacts, so "show me only the
+  // warm ones" has to be one click.
+  //
+  // Counts are computed against the CHANNEL-filtered set, not the whole queue, so
+  // the two filters describe what you will actually see when you combine them. A
+  // count that ignores the other filter reads as a bug the first time you click
+  // both and get fewer rows than the number promised.
+  const bookBase = channel === 'all' ? base : base.filter(c => c.channel === channel);
+  const bookCounts = {
+    all: bookBase.length,
+    referral: bookBase.filter(c => c.source === 'referral').length,
+    ta: bookBase.filter(c => c.source === 'ta').length,
+    influencer: bookBase.filter(c => c.source === 'influencer').length,
+  };
+  const BOOK_CHIPS = [
+    { id: 'all', label: 'All' },
+    { id: 'referral', label: 'Referral' },
+    { id: 'ta', label: 'TA' },
+    { id: 'influencer', label: 'Influencer' },
+  ];
+  const rows = book === 'all' ? bookBase : bookBase.filter(c => c.source === book);
 
   return (
     <div style={{ padding: 24, maxWidth: "none", marginLeft: 0, marginRight: 0 }}>
@@ -1086,6 +1211,25 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
               color: active ? '#15101f' : 'var(--text-dim)',
               border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
             }}>{ch.label} <span style={{ opacity: 0.7, marginLeft: 3 }}>{n}</span></span>
+          );
+        })}
+        {/* Contact type, pushed to the right of the same row so the two filters read
+            as one control strip rather than stacking and eating vertical space. */}
+        <span style={{ flex: '1 1 auto' }} />
+        <span className="dim mono" style={{ fontSize: 10.5, marginRight: 2 }}>CONTACT TYPE</span>
+        {BOOK_CHIPS.map(bk => {
+          const active = book === bk.id;
+          const n = bookCounts[bk.id];
+          // The active chip takes the book's own color, so the filter and the row
+          // chips agree: click the green one, get the green rows.
+          const cvar = bk.id === 'all' ? 'var(--accent)' : (BOOK_META[bk.id] || {}).cvar || 'var(--accent)';
+          return (
+            <span key={bk.id} onClick={() => setBook(bk.id)} style={{
+              cursor: 'pointer', padding: '4px 11px', borderRadius: 5, fontSize: 11.5, fontWeight: 600,
+              background: active ? cvar : 'var(--panel-2)',
+              color: active ? '#15101f' : 'var(--text-dim)',
+              border: `1px solid ${active ? cvar : 'var(--border)'}`,
+            }}>{bk.label} <span style={{ opacity: 0.7, marginLeft: 3 }}>{n}</span></span>
           );
         })}
       </div>

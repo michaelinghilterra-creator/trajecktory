@@ -19,32 +19,7 @@
  * name (two contacts, no company tiebreak) is reported, never auto-applied.
  */
 import { normalizeCompany } from '../../../lib/identity.mjs';
-
-// Normalize a person name for matching: drop diacritics, parentheticals (maiden
-// names), post-comma credentials (", MBA"), and emoji/symbols; lowercase; collapse
-// whitespace. Returns the cleaned string.
-export function cleanName(s) {
-  return String(s || '')
-    .normalize('NFKD').replace(/[̀-ͯ]/g, '')   // strip diacritics
-    .replace(/\([^)]*\)/g, ' ')                          // (maiden) / (nickname)
-    .replace(/,.*$/, '')                                 // ", MBA" credentials
-    .replace(/[^\p{L}\s'-]/gu, ' ')                      // drop emoji/symbols
-    .toLowerCase().replace(/\s+/g, ' ').trim();
-}
-export function nameTokens(s) { return cleanName(s).split(' ').filter(Boolean); }
-
-// Extract the /in/<slug> handle from a LinkedIn profile URL, lowercased, trailing
-// slash and query stripped. Returns '' when there is no LinkedIn profile URL.
-export function profileHandle(url) {
-  const m = String(url || '').slice(0, 2000).match(/linkedin\.com\/in\/([A-Za-z0-9\-_%.]+)/i);
-  if (!m) return '';
-  let h; try { h = decodeURIComponent(m[1]); } catch { h = m[1]; }
-  // Strip trailing slashes without a backtracking regex on user-controlled input
-  // (decodeURIComponent can turn %2F into slashes). A plain scan is linear.
-  let end = h.length;
-  while (end > 0 && h.charCodeAt(end - 1) === 47 /* '/' */) end--;
-  return h.slice(0, end).toLowerCase();
-}
+import { linkedinKey, cleanName, nameTokens } from './contact-identity.mjs';
 
 // Lines that are LinkedIn UI chrome, a relative timestamp, or connection metadata —
 // never a name/headline. Skipped while collecting the name + headline above a "Sent"
@@ -125,7 +100,7 @@ export function parseSentInvites(text) {
   const urlRe = /linkedin\.com\/in\/[A-Za-z0-9\-_%.]+/gi;
   let m;
   while ((m = urlRe.exec(raw)) !== null) {
-    const handle = profileHandle(m[0]);
+    const handle = linkedinKey(m[0]);
     if (handle) push({ name: '', headline: '', handle });
   }
   return invites;
@@ -140,7 +115,7 @@ export function parseSentInvites(text) {
 export function matchSentInvites(invites, taRows) {
   const rows = (taRows || []).map(r => ({
     r,
-    handle: profileHandle(r.linkedin),
+    handle: linkedinKey(r.linkedin),
     first: cleanName(r.first),
     last: cleanName(r.last),
     company: normalizeCompany(r.company || ''),
