@@ -124,18 +124,28 @@ check(referralCap.email.capped === false, 'referral email is not capped');
 check(referralCap.hasReply === false, 'referral thread has no reply');
 
 console.log('\n3. Thread state');
-const now = new Date('2026-08-05T00:00:00Z');
+// Local midnight, NOT a UTC instant. A fixed UTC instant lands on a different
+// calendar day depending on the runner's timezone, so a Z-suffixed date made this
+// suite pass locally and fail in CI. Correspondence dates are stamped locally, so
+// the fixture clock has to be local too.
+const now = new Date(2026, 7, 5);
 const taThread = summarizeThread(taMessages, { now });
 const referralThread = summarizeThread(referralMessages, { now });
 check(taThread.count === 2, 'TA thread count is 2');
 // Lap 3 changed this from null to 2 after normalizing the later sent message.
-check(taThread.daysSinceLastSub === 2, 'TA days since last substantive message is 2');
+// Was 2. The day count floored only the message date to local midnight and
+// compared it against a raw instant, so it moved with the timezone. Both ends
+// are floored now, and 2026-08-02 to 2026-08-05 is 3 calendar days in any zone.
+check(taThread.daysSinceLastSub === 3, 'TA days since last substantive message is 3');
 // Lap 3 changed this from false to true after normalizing the later sent message.
 check(taThread.recentPitch === true, 'TA recent pitch is true');
 // Lap 3 changed the referral thread count from 1 to 2.
 check(referralThread.count === 2, 'referral thread count is 2');
 // Lap 3 changed this from 3 to 2 after the later referral entry became visible.
-check(referralThread.daysSinceLastSub === 2, 'referral days since last substantive message is 2');
+// Was 2. The day count floored only the message date to local midnight and
+// compared it against a raw instant, so it moved with the timezone. Both ends
+// are floored now, and 2026-08-02 to 2026-08-05 is 3 calendar days in any zone.
+check(referralThread.daysSinceLastSub === 3, 'referral days since last substantive message is 3');
 check(referralThread.recentPitch === true, 'referral recent pitch is true');
 
 console.log('\n4. Referral twin resolution through the route');

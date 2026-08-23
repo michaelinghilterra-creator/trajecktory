@@ -57,11 +57,24 @@ export function isChannelCapped(capState, channel) {
 }
 const dayOf = (m) => String(m?.timestamp || '').slice(0, 10);
 
+// Calendar days between a stamped date and now, in the user's own timezone.
+//
+// This used to floor only ONE side: the message date was parsed to local midnight
+// and then subtracted from `now` as a raw instant, so the answer moved with the
+// timezone. The same thread read as 2 days old in one zone and 3 in another,
+// which surfaced as a test that passed locally and failed in CI. Correspondence
+// timestamps are stamped with LOCAL dates, so the honest comparison floors both
+// ends to local midnight and counts whole calendar days, which is what a person
+// means by "three days ago".
+//
+// It matters more than it did: this now feeds awaitingReplyHold in the outreach
+// guardrail, so an off-by-one here decides whether somebody is contactable.
 function daysBetween(dateStr, now) {
   if (!/^\d{4}-\d{2}-\d{2}/.test(String(dateStr || ''))) return null;
   const d = new Date(dateStr.slice(0, 10) + 'T00:00:00');
   if (isNaN(d)) return null;
-  return Math.floor((now - d) / DAY_MS);
+  const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((nowMidnight - d) / DAY_MS);
 }
 
 export function summarizeThread(messages, opts = {}) {
