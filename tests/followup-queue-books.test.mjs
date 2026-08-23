@@ -1,0 +1,57 @@
+#!/usr/bin/env node
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-fuq-books-'));
+process.env.TJK_DATA_DIR = tmp;
+
+const { computeFollowupQueue, computeContactFollowups } = await import('../dashboard-web/server/lib/followups.mjs');
+
+let passed = 0;
+let failed = 0;
+const check = (condition, message) => {
+  if (condition) { console.log(`  ok ${message}`); passed++; }
+  else { console.log(`  not ok ${message}`); failed++; }
+};
+const verified = { state: 'ok' };
+const ta = (id, first, last, company, extra = {}) => ({ id, first, last, company, title: 'Recruiter', status: 'Not Contacted', linkedin: `https://linkedin.com/in/${first.toLowerCase()}-${last.toLowerCase()}`, email: '', verified: { state: 'unverified' }, ...extra });
+const referral = (id, name, status, extra = {}) => ({ id, name, status, where: 'No Requisition Inc', target: 'Operator', linkedin: `https://linkedin.com/in/${name.toLowerCase().replace(/\s+/g, '-')}`, email: '', verified: { state: 'unverified' }, ...extra });
+const old = '2020-01-02';
+
+console.log('followup-queue-books.test.mjs');
+
+const notAsked = referral(1, 'Warm Person', 'Not Asked');
+let queue = computeFollowupQueue({ taRows: [], referralRows: [notAsked], influencers: [], apps: [], pins: {} });
+check(queue.some(row => row.source === 'referral' && row.id === 1 && row.queueReason === 'Reach out'), 'Not Asked referral appears as Reach out');
+
+queue = computeFollowupQueue({ taRows: [], referralRows: [referral(2, 'Finished Intro', 'Intro Made')], influencers: [], apps: [], pins: {} });
+check(!queue.some(row => row.source === 'referral' && row.id === 2), 'Intro Made referral never appears');
+check(computeFollowupQueue({ taRows: [], referralRows: [notAsked], influencers: [], apps: [], pins: {} }).length === 1, 'referral without a live application appears');
+
+const coldTa = ta(3, 'Cold', 'Gatekeeper', 'No Requisition Inc');
+check(computeFollowupQueue({ taRows: [coldTa], referralRows: [], influencers: [], apps: [], pins: {} }).length === 0, 'TA contact without a live application does not appear');
+
+const influencer = { id: 4, name: 'Visible Voice', linkedinUrl: 'https://linkedin.com/in/visible-voice', following: true, connected: false, engaged: false };
+const untouched = { id: 5, name: 'Untouched Voice', linkedinUrl: 'https://linkedin.com/in/untouched-voice', following: false, connected: false, engaged: false };
+queue = computeFollowupQueue({ taRows: [], referralRows: [], influencers: [influencer, untouched], apps: [], pins: {} });
+check(queue.some(row => row.id === 4) && !queue.some(row => row.id === 5), 'eligible unconnected influencer appears and untouched influencer does not');
+
+const engaged = { id: 6, name: 'Engaged Voice', linkedinUrl: 'https://linkedin.com/in/engaged-voice', following: true, connected: true, engaged: true, lastEngagement: old };
+queue = computeContactFollowups({ taRows: [], referralRows: [], influencers: [engaged], apps: [], pins: {}, timelineOpts: { engagementLog: [{ influencerId: 6, date: old, actionType: 'Comment' }] } });
+const engagedRow = queue.find(row => row.source === 'influencer' && row.id === 6);
+check(engagedRow?.capState?.linkedin?.sent === 0 && engagedRow?.capped === false, 'engagement does not consume the DM cap');
+
+const twinTa = ta(7, 'Same', 'Person', 'Live Co', { linkedin: 'https://linkedin.com/in/same-person' });
+const twinReferral = referral(7, 'Same Person', 'Not Asked', { linkedin: 'https://linkedin.com/in/same-person', where: 'Live Co' });
+queue = computeFollowupQueue({ taRows: [twinTa], referralRows: [twinReferral], influencers: [], apps: [{ company: 'Live Co', status: 'Applied' }], pins: {} });
+check(queue.filter(row => row.name === 'Same Person').length === 1, 'person merged across referral and TA appears once');
+
+const rankedTa = ta(8, 'Ranked', 'Cold', 'Live Co');
+const rankedReferral = referral(8, 'Ranked Warm', 'Not Asked', { where: 'Live Co' });
+queue = computeFollowupQueue({ taRows: [rankedTa], referralRows: [rankedReferral], influencers: [], apps: [{ company: 'Live Co', status: 'Applied' }], pins: {} });
+check(queue.findIndex(row => row.source === 'referral') < queue.findIndex(row => row.source === 'ta'), 'warm referral outranks cold TA at equal staleness');
+
+try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+console.log(`${passed} passed, ${failed} failed`);
+process.exit(failed ? 1 : 0);

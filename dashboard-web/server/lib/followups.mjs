@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { FOLLOWUPS_MD } from '../config.mjs';
+import { FOLLOWUPS_MD, LINKEDIN_SSI_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, matchByCompany, getNewBaselineId } from './target-talent.mjs';
 import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
@@ -10,6 +10,10 @@ import { normalizeCompany } from '../../../lib/identity.mjs';
 import { isLinkedInEntry } from './channels.mjs';
 import { readLinkedInMap } from './tt-linkedin.mjs';
 import { outreachCapState, isChannelCapped } from './correspondence-context.mjs';
+import { parseReferralsMd, readReferralCorrespondence } from './referrals.mjs';
+import { resolvePeople } from './contact-identity.mjs';
+import { readPins } from './contact-links.mjs';
+import { buildTimeline } from './contact-timeline.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
 // quickly each stage cools: warm Responded threads cool fastest, post-
@@ -529,9 +533,31 @@ function outreachEligibleCompanies(apps) {
   return set;
 }
 
-function _bothBooks({ taRows } = {}) {
+function _readInfluencers() {
+  try {
+    const rows = JSON.parse(fs.readFileSync(path.join(LINKEDIN_SSI_DIR, 'influencers.json'), 'utf8'));
+    return Array.isArray(rows) ? rows : [];
+  } catch { return []; }
+}
+
+function _bothBooks({ taRows, referralRows, influencers } = {}) {
   const ta = taRows ?? (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
-  return { ta };
+  const referrals = referralRows ?? (() => { try { return parseReferralsMd(); } catch { return []; } })();
+  const influencerRows = influencers ?? _readInfluencers();
+  return { ta, referrals, influencers: influencerRows };
+}
+
+const QUEUE_POLICY_BY_STORE = {
+  ta: { gateOnLiveApplication: true, reason: row => !String(row.status || '').trim() || row.status === 'Not Contacted' ? 'Reach out' : 'Follow up' },
+  referral: { gateOnLiveApplication: false, reason: row => ['Not Asked', 'Catching Up'].includes(row.status) ? 'Reach out' : ['Asked', 'Responded'].includes(row.status) ? 'Follow up' : '' },
+  influencer: { gateOnLiveApplication: false, reason: row => !row.connected ? ((!row.engaged && !row.following) ? '' : 'Reach out') : 'Follow up' },
+};
+
+function _passesCompanyGate(source, company, eligible) {
+  // The live application gate protects cold TA outreach from becoming noise.
+  // Referrals and influencers skip it because warm relationships remain useful
+  // even when the company has no current requisition.
+  return !QUEUE_POLICY_BY_STORE[source].gateOnLiveApplication || eligible.has(normalizeCompany(company));
 }
 
 // One row shape for both queues. `email` is the clean address (verified.address),
@@ -740,7 +766,7 @@ function computeConnectQueue({ taRows, apps } = {}) {
     if (isSendable(row)) return;
     if (CONNECT_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
     const company = row.company;
-    if (!applied.has(normalizeCompany(company))) return;   // only companies you've applied to
+    if (!_passesCompanyGate(source, company, applied)) return;
     out.push(_queueRow(row, source, baselineId, touchIdx.get(normalizeCompany(company)), today));
   };
   for (const r of ta)  consider(r, 'ta');  return _sortByCompanyName(out);
@@ -764,7 +790,7 @@ function computeEmailQueue({ taRows, apps } = {}) {
     if (_hasLinkedIn(row)) return;
     if (EMAIL_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
     const company = row.company;
-    if (!applied.has(normalizeCompany(company))) return;
+    if (!_passesCompanyGate(source, company, applied)) return;
     out.push(_queueRow(row, source, baselineId, touchIdx.get(normalizeCompany(company)), today));
   };
   for (const r of ta)  consider(r, 'ta');  return _sortByCompanyName(out);
@@ -803,7 +829,7 @@ function computeBothQueue({ taRows, apps } = {}) {
     if (!(_hasLinkedIn(row) && isSendable(row))) return;   // must have BOTH channels
     if (BOTH_QUEUE_EXCLUDE_STATUS.has(row.status)) return; // a reply/acceptance pauses the multithread
     const company = row.company;
-    if (!applied.has(normalizeCompany(company))) return;
+    if (!_passesCompanyGate(source, company, applied)) return;
     const { linkedinDone, emailDone } = _channelsDone(source, row.id);
     if (linkedinDone && emailDone) return;                 // both channels already touched → done
     out.push({ ..._queueRow(row, source, baselineId, touchIdx.get(normalizeCompany(company)), today), linkedinDone, emailDone });
@@ -831,8 +857,11 @@ const _FUQ_STATUS_WEIGHT = {
   '1st Interview': 45, '2nd Interview': 50, '3rd Interview': 55, '4th Interview': 60,
   'Sent': 5, 'Drafted': 3,
 };
+// Store weights keep book size from deciding priority. A warm referral gets a
+// clear edge over cold TA at equal staleness; influencers sit between them.
+const _FUQ_STORE_WEIGHT = { ta: 0, influencer: 20, referral: 40 };
 function _followupRank(r) {
-  let score = 0;
+  let score = _FUQ_STORE_WEIGHT[r.source] || 0;
   if (r.isPrincipal) score += 50;
   if (r.channel === 'both') score += 20;
   score += _FUQ_STATUS_WEIGHT[r.status] || 0;
@@ -845,19 +874,50 @@ function _followupRank(r) {
   return score;
 }
 function computeFollowupQueue(opts = {}) {
+  const books = _bothBooks(opts);
   const rows = [
     ...computeConnectQueue(opts).map(r => ({ ...r, channel: 'linkedin' })),
     ...computeEmailQueue(opts).map(r => ({ ...r, channel: 'email' })),
     ...computeBothQueue(opts).map(r => ({ ...r, channel: 'both' })),
   ];
+  const staleEnough = date => {
+    const days = _businessDaysAgo(String(date || '').slice(0, 10));
+    return days != null && days >= CONTACT_STALE_THRESHOLD_DAYS;
+  };
+  for (const row of books.referrals) {
+    const reason = QUEUE_POLICY_BY_STORE.referral.reason(row);
+    if (!reason || (reason === 'Follow up' && !staleEnough(row.lastTouch))) continue;
+    const parts = String(row.name || '').trim().split(/\s+/);
+    const shaped = { ...row, first: parts[0] || '', last: parts.slice(1).join(' '), title: row.target || '', company: row.where || '' };
+    const channel = _hasLinkedIn(shaped) && isSendable(shaped) ? 'both' : isSendable(shaped) ? 'email' : _hasLinkedIn(shaped) ? 'linkedin' : 'none';
+    if (channel === 'none') continue;
+    rows.push({ ..._queueRow(shaped, 'referral'), channel, queueReason: reason, notContacted: reason === 'Reach out' });
+  }
+  for (const row of books.influencers) {
+    const reason = QUEUE_POLICY_BY_STORE.influencer.reason(row);
+    if (!reason || (reason === 'Follow up' && !staleEnough(row.lastEngagement))) continue;
+    const parts = String(row.name || '').trim().split(/\s+/);
+    const shaped = { ...row, first: parts[0] || '', last: parts.slice(1).join(' '), title: row.role || '', company: row.company || '', linkedin: row.linkedinUrl || row.linkedin || '', status: row.connected ? 'Connected' : 'Not Connected' };
+    if (!_hasLinkedIn(shaped)) continue;
+    rows.push({ ..._queueRow(shaped, 'influencer'), channel: 'linkedin', queueReason: reason, notContacted: reason === 'Reach out' });
+  }
   for (const r of rows) r.rank = _followupRank(r);
+  const people = resolvePeople({ ta: books.ta, referrals: books.referrals, influencers: books.influencers, pins: opts.pins ?? readPins() });
+  const personByRef = new Map(people.flatMap(person => person.refs.map(ref => [ref, person.id])));
+  const deduped = new Map();
+  for (const row of rows) {
+    const key = personByRef.get(`${row.source}:${row.id}`) || `${row.source}:${row.id}`;
+    const prior = deduped.get(key);
+    if (!prior || row.rank > prior.rank) deduped.set(key, row);
+  }
   // Rank desc; company then name as a stable tiebreak so equal-rank rows don't
   // shuffle between reloads.
-  rows.sort((a, b) =>
+  const result = [...deduped.values()];
+  result.sort((a, b) =>
     (b.rank - a.rank) ||
     (a.company || '').localeCompare(b.company || '') ||
     (a.name || '').localeCompare(b.name || ''));
-  return rows;
+  return result;
 }
 
 // "High value" = reachable BOTH ways (a verified/sendable email AND a LinkedIn
@@ -1014,9 +1074,29 @@ function computeJustConnectedQueue({ taRows, apps } = {}) {
 
 function computeContactFollowups(opts = {}) {
   const byKey = new Map();
+  // Key the merge on the PERSON, not the row. A referral and its target-talent
+  // twin are two rows with different ids, so a row-level key lets one human enter
+  // the queue twice and get worked twice, which is the whole failure this build
+  // exists to remove. computeFollowupQueue already dedupes this way; doing it
+  // there and not here left the gap open, because these four populations are
+  // merged after that point.
+  //
+  // Only rows whose ref resolves to a person are collapsed; anything unresolved
+  // falls back to its own row key and behaves exactly as before.
+  let personByRef = new Map();
+  try {
+    const books = _bothBooks(opts);
+    const people = resolvePeople({
+      ta: books.ta, referrals: books.referrals, influencers: books.influencers,
+      pins: opts.pins ?? readPins(),
+    });
+    personByRef = new Map(people.flatMap(p => p.refs.map(ref => [ref, p.id])));
+  } catch { /* resolution unavailable → fall back to row keys, never throw here */ }
+
   const put = (item) => {
     if (!item || item.channel === 'none') return;   // no reachable channel → nothing to action
-    const key = `${item.source}:${item.id}`;
+    const rowKey = `${item.source}:${item.id}`;
+    const key = personByRef.get(rowKey) || rowKey;
     const prev = byKey.get(key);
     if (!prev) { byKey.set(key, item); return; }
     // The same person surfaced by two triggers stays one row, keeping the
@@ -1082,16 +1162,23 @@ function computeContactFollowups(opts = {}) {
     if (!item.companyOutreach) {
       item.companyOutreach = _companyOutreachFor(`${item.source}:${item.id}`, touchIdx.get(normalizeCompany(item.company)), nowDay);
     }
-    // Cold-outreach cap: once a TA contact has hit the per-channel ceiling with no
+    // Cold-outreach cap: once a TA or referral contact hits the channel ceiling with no
     // reply, the queue rests them (the client hides capped rows behind Show anyway,
-    // so nothing is lost and a manual draft still overrides). Referrals are a warm
-    // motion and are not capped.
-    if (item.source === 'ta') {
+    // so nothing is lost and a manual draft still overrides). Influencer likes
+    // and comments are engagement, not DMs, and consume no DM budget.
+    if (item.source === 'ta' || item.source === 'referral') {
       try {
-        const cap = outreachCapState(readTTCorrespondence(item.id));
+        const messages = item.source === 'ta' ? readTTCorrespondence(item.id) : readReferralCorrespondence(item.id);
+        const cap = outreachCapState(messages);
         item.capState = cap;
         item.capped = isChannelCapped(cap, item.channel);
       } catch { /* unreadable correspondence → treat as not capped */ }
+    } else if (item.source === 'influencer') {
+      const person = { members: { influencer: { id: item.id, name: item.name } } };
+      const messages = buildTimeline(person, opts.timelineOpts || {}).filter(event => event.kind !== 'engagement');
+      const cap = outreachCapState(messages.map(event => ({ direction: event.direction, channel: event.channel, subject: event.subject })));
+      item.capState = cap;
+      item.capped = isChannelCapped(cap, item.channel);
     }
   }
 

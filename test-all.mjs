@@ -499,6 +499,7 @@ for (const suite of [
   'tests/tt-linkedin.test.mjs',
   'tests/connect-queue.test.mjs',
   'tests/followup-queue.test.mjs',
+  'tests/followup-queue-books.test.mjs',
   'tests/followups-cap.test.mjs',
   'tests/outreach-policy.test.mjs',
   'tests/sent-invites-reconcile.test.mjs',
