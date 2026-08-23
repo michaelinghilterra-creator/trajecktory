@@ -35,6 +35,7 @@ export function weeklyMetrics({
   influencerEngagements = null,   // number | null (null = no engagement log yet)
   cadencePct = null,              // number 0..100 | null
   unservicedApplications = null,  // number | null
+  applications = null,            // [{ date, score, source }] | null
 } = {}) {
   const start = weekStart, end = weekEnd;
 
@@ -86,12 +87,27 @@ export function weeklyMetrics({
     ? M(unservicedApplications, true, 'applications (Applied, no follow-up)')
     : M(0, false, 'applications not available');
 
+  const sourceMixCaveat = 'applications tracker source classification. The categories are not mutually exclusive, but self-sourced tags take precedence, so roles also found by the scanner are counted as self-sourced and scan-found is undercounted (38 of 93 strong self-sourced roles also appear in scan history).';
+  let sourceMix;
+  if (Array.isArray(applications)) {
+    const rows = applications.filter(a => inRange(a.date, start, end));
+    const scanRows = rows.filter(a => a.source === 'API Scan' || a.source === 'Agent Scan');
+    sourceMix = M({
+      scanFound: scanRows.length,
+      selfSourced: rows.filter(a => a.source === 'Self-sourced').length,
+      scanFoundAtOrAbove3_3: scanRows.filter(a => Number.isFinite(Number(a.score)) && Number(a.score) >= 3.3).length,
+    }, true, sourceMixCaveat);
+  } else {
+    sourceMix = M({ scanFound: 0, selfSourced: 0, scanFoundAtOrAbove3_3: 0 }, false, 'applications not available');
+  }
+
   return {
     weekStart: start, weekEnd: end,
     verifiedTouches, replies, deliveredReplyRatePct: deliveredReplyRate,
     screensBooked, objectionsLogged,
     linkedinConnects, influencerEngagements: weeklyInfluencerEngagements, cadencePct: cadence,
     unservicedApplications: unserviced,
+    sourceMix,
   };
 }
 

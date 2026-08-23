@@ -5,6 +5,7 @@ import { OUTPUT_DIR, ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd, patchRowInMd, removeRowFromMd, rejectionTimingStats } from '../lib/applications.mjs';
 import { readResponseProgressStats } from '../lib/response-timing.mjs';
 import { recordApplyDate } from '../lib/sidecars.mjs';
+import { assignSplitTest, splitTestSummary } from '../lib/split-test.mjs';
 import { pushObsidianNote } from '../lib/obsidian.mjs';
 import { ALL_STATUSES } from '../lib/statuses.mjs';
 import { mdToHtml, escapeHtml } from '../lib/html.mjs';
@@ -71,6 +72,14 @@ router.get('/api/applications', (req, res) => {
   }
 });
 
+router.get('/api/split-test', (req, res) => {
+  try {
+    res.json(splitTestSummary());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /api/applications/:id — update status and/or notes
 router.patch('/api/applications/:id', (req, res) => {
   try {
@@ -124,6 +133,10 @@ router.patch('/api/applications/:id', (req, res) => {
     // evaluation/scrape date in the Date column. An explicit eventDate is the
     // user correcting the anchor, so it is allowed to overwrite.
     if (status === 'Applied') recordApplyDate(id, when, { force: !!when });
+    if (becomingApplied && prevRow) {
+      try { assignSplitTest(id, prevRow.score, when); }
+      catch (err) { console.warn(`[split-test] failed to assign app ${id}: ${err.message}`); }
+    }
 
     // Read back the updated row — use company to disambiguate duplicate ids
     const rows = parseApplicationsMd();

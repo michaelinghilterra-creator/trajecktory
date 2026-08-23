@@ -120,6 +120,7 @@ export function collectWeeklyMetrics(now = new Date()) {
     influencerEngagements: engagementLogExists() ? engagementsInWeek(now) : null,
     cadencePct: cadenceThisWeekPct(),
     unservicedApplications: unservicedCount(),
+    applications: (() => { try { return parseApplicationsMd(); } catch { return null; } })(),
   });
   return { weekStart, weekEnd, metrics };
 }
