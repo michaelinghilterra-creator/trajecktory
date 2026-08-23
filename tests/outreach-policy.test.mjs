@@ -39,5 +39,30 @@ for (const raw of ['', 'abc', '-1', undefined]) {
   check(parsed.minDaysBetweenTouches === OUTREACH_DEFAULTS.minDaysBetweenTouches, `invalid numeric value ${raw === undefined ? 'missing' : JSON.stringify(raw)} uses the default`);
 }
 
+// A DM to someone who ACCEPTED your invite costs no InMail credit, so an empty
+// credit balance must not block it. This regressed for referrals specifically: the
+// connection axis is a target-talent sidecar keyed by TA id, so a guard stopped it
+// being read with a referral id, and the guard was then treated as "a referral is
+// never connected". An accepted referral was told no credits remained on a card
+// that said, two lines above, that the message was a free DM.
+//
+// The caller derives freeDm from the merged person timeline now, so the assertion
+// here is the rule it feeds: freeDm wins over an exhausted balance regardless of
+// which book the contact came from.
+{
+  const exhausted = { exhausted: true, alreadyInvited: true };
+  const ask = (source, freeDm) => canContact({
+    timeline: [], channel: 'linkedin', source, company: 'Acme',
+    inmail: { ...exhausted, freeDm },
+    policy: { minDaysBetweenTouches: 0, maxTouchesPer30d: Infinity, awaitingReplyHold: 0, perCompanyPerDay: 99 },
+    now,
+  }).blocks.some(b => b.rule === 'inmailBudget');
+
+  check(ask('referral', true) === false, 'an accepted referral is a free DM, not an InMail block');
+  check(ask('ta', true) === false, 'an accepted target-talent contact is a free DM too');
+  check(ask('referral', false) === true, 'a referral who has NOT accepted still blocks at zero credits');
+  check(ask('ta', false) === true, 'and so does a target-talent contact');
+}
+
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed} passed, ${failed} failed`);
 process.exitCode = failed ? 1 : 0;
