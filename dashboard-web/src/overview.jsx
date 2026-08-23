@@ -292,7 +292,7 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
           offers were invisible. The relaunch plan names seven metrics to manage
           to; they lived two clicks deep on Insights -> Review. A landing page
           should answer "am I on pace" first, and it now does. */}
-      <div className="grid cols-4">
+      <div className="grid cols-5">
         {(() => {
           const m = weekly && weekly.metrics ? weekly.metrics : null;
           const floors = (weekly && weekly.floors) || {};
@@ -335,7 +335,7 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
       </div>
 
       {/* ── OUTCOMES: lagging, and honest about which channel produced them ──── */}
-      <div className="grid cols-4" style={{ marginTop: 12 }}>
+      <div className="grid cols-5" style={{ marginTop: 12 }}>
         {(() => {
           const iApplied = window.FUNNEL_ORDER.indexOf('Applied');
           const iResp = window.FUNNEL_ORDER.indexOf('Responded');
@@ -365,6 +365,7 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
             const k = warmKind(a); if (k) m[k] = (m[k] || 0) + 1; return m;
           }, {});
           const kindLabel = Object.entries(kinds).map(([k, n]) => `${n} ${k}`).join(', ') || 'none tagged';
+          const referral = weekly && weekly.referralConversion ? weekly.referralConversion : null;
           return [
             <div className="kpi" key="cold" title="Applications with no prior contact. Benchmark is Ashby's cold-apply-to-screen median across ~100M applications.">
               <span className="kpi-label">Cold reply rate</span>
@@ -380,6 +381,15 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
               </span>
               <span className="kpi-delta">
                 {warm.n} of {sent.length} applied · {kindLabel}
+              </span>
+            </div>,
+            <div className="kpi" key="referral" title="Live applications that went out carrying a referral, plus introductions made from the referral book.">
+              <span className="kpi-label">Referral conversion</span>
+              <span className="kpi-value" style={{ color: referral && !referral.available ? 'var(--text-mute)' : 'var(--text)' }}>
+                {!referral ? '·' : !referral.available ? '-' : referral.referredApplications}
+              </span>
+              <span className="kpi-delta">
+                {!referral ? 'loading' : !referral.available ? 'not logged' : `${referral.percentage == null ? '-' : `${referral.percentage}%`} of ${referral.denominator} live · ${referral.introductions} ${referral.introductions === 1 ? 'introduction' : 'introductions'} made`}
               </span>
             </div>,
             <div className="kpi" key="stale" title="Postings that closed before you could act. Evaluation effort spent on roles that expired.">

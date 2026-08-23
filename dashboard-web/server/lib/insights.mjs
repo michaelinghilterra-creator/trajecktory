@@ -2,10 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import { ROOT_DIR, DATA_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
+import { parseReferralsMd } from './referrals.mjs';
 import { computeStaleApps, computeStaleTA } from './followups.mjs';
 import { parseTargetTalentMd } from './target-talent.mjs';
 import { parseStatusEvents } from './sidecars.mjs';
-import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, isInterviewStage, makeFurthestIdx, enteredFunnel } from './statuses.mjs';
+import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, OUTREACH_ELIGIBLE_STATUSES, REFERRAL_STATES, isInterviewStage, makeFurthestIdx, enteredFunnel } from './statuses.mjs';
 import { rateStat, MIN_SAMPLE } from './rate-confidence.mjs';
 
 // DATA_DIR, never ROOT_DIR + 'data'. See tests/data-dir-sandbox.test.mjs.
@@ -13,6 +14,24 @@ const INSIGHTS_DIR = path.resolve(DATA_DIR, 'insights');
 const INSIGHTS_LATEST = path.join(INSIGHTS_DIR, 'latest.json');
 const INSIGHTS_HISTORY_MAX = 5;
 const PROFILE_PATH = path.resolve(ROOT_DIR, 'modes', '_profile.md');
+
+const referralStatus = id => REFERRAL_STATES.find(state => state.id === id)?.label;
+
+export function referralConversion(referrals, applications) {
+  const referralRows = referrals ?? parseReferralsMd();
+  const appRows = applications ?? parseApplicationsMd();
+  const denominator = appRows.filter(app => OUTREACH_ELIGIBLE_STATUSES.includes(app.status)).length;
+  const referredApplications = referralRows.filter(row => row.status === referralStatus('applied_referral')).length;
+  const introductions = referralRows.filter(row => row.status === referralStatus('intro_made')).length;
+
+  return {
+    available: referralRows.length > 0,
+    referredApplications,
+    introductions,
+    denominator,
+    percentage: denominator ? Math.round((referredApplications / denominator) * 1000) / 10 : null,
+  };
+}
 
 // Load the user's profile context for the Claude call. Strips the long
 // "## Writing Style" calibration block (verbose, not load-bearing for
