@@ -532,6 +532,7 @@ for (const suite of [
   'tests/contact-identity.test.mjs',
   'tests/contact-resolution.test.mjs',
   'tests/contact-timeline.test.mjs',
+  'tests/person-context.test.mjs',
   'tests/data-dir-sandbox.test.mjs',
   'tests/linkedin-referrals.test.mjs',
   'tests/rolling-floor.test.mjs',

@@ -17,6 +17,7 @@ import { linkedinKey } from '../lib/contact-identity.mjs';
 import { summarizeThread } from '../lib/correspondence-context.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
+import { getPersonContext } from '../lib/person-context.mjs';
 
 export const router = express.Router();
 
@@ -60,11 +61,17 @@ router.get('/api/target-talent/:id', (req, res) => {
     const r = rows.find(x => x.id === id);
     if (!r) return res.status(404).json({ error: 'Contact not found' });
     const { raw, ...contact } = r;
+    const context = getPersonContext('ta', id, { ta: rows });
     res.json({
       ...contact,
       isHighValue: isHighValueContact(contact),
       correspondence: readTTCorrespondence(id),
       relatedApps: findRelatedApps(r.company),
+      ...(context ? {
+        person: context.person,
+        timeline: context.displayTimeline,
+        personLastTouch: context.lastTouch,
+      } : {}),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

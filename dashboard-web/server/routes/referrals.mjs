@@ -10,6 +10,7 @@ import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
+import { getPersonContext } from '../lib/person-context.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
 import { findAndVerify, hunterSearchesLeft } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
@@ -228,7 +229,8 @@ router.post('/api/referrals/find-emails', async (req, res) => {
 router.get('/api/referrals/:id/detail', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const ref = parseReferralsMd().find(r => r.id === id);
+    const referralRows = parseReferralsMd();
+    const ref = referralRows.find(r => r.id === id);
     if (!ref) return res.status(404).json({ error: 'Referral not found' });
     const taRows = parseTargetTalentMd();
     const link = resolveReferralLink(ref, taRows);
@@ -241,7 +243,18 @@ router.get('/api/referrals/:id/detail', (req, res) => {
       correspondence = readReferralCorrespondence(id);
     }
     const { raw, ...referral } = ref;
-    res.json({ referral, link: linkInfo, correspondence, relatedApps: findRelatedApps(ref.where) });
+    const context = getPersonContext('referral', id, { ta: taRows, referrals: referralRows });
+    res.json({
+      referral,
+      link: linkInfo,
+      correspondence,
+      relatedApps: findRelatedApps(ref.where),
+      ...(context ? {
+        person: context.person,
+        timeline: context.displayTimeline,
+        personLastTouch: context.lastTouch,
+      } : {}),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
