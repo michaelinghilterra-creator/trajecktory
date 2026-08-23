@@ -151,7 +151,12 @@ export function assertEnvValue(value) {
 function writeEnvKey(name, value) {
   const v = assertEnvValue(value);
   let text = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, 'utf8') : '';
-  const re = new RegExp(`^${name}=.*$`, 'm');
+  // Escape the key name before interpolating it into the line-matcher. Every
+  // caller passes an allow-listed constant name today, so this is defense-in-depth
+  // (and clears the js/regex-injection scanner alert): a future caller passing a
+  // dynamic name can never inject regex metacharacters into this pattern.
+  const reName = String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`^${reName}=.*$`, 'm');
   // Function replacement, not a string one: String.replace treats $& and $` in a
   // STRING replacement as references to the match and the text before it, so a
   // value containing them would splice surrounding file content into itself. A
