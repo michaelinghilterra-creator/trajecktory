@@ -552,21 +552,23 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
       .catch(e => { setPasteBusy(false); setPasteMsg(e.message); });
   }
 
-  // Default flow (Slice 7.5): Scan → Liveness Gate → Evaluate, identical on both
-  // rails (only who-pays differs). Evaluate rolls through the queue in batches, so
-  // it IS the filter — triage is no longer the front door. Triage, Agent Scan,
-  // Expand Coverage, and the manual housekeeping steps live under Advanced.
+  // Default flow (Slice 7.5): the three daily scans (Expand Coverage → API Scan →
+  // Agent Scan) → Liveness Gate → Evaluate, identical on both rails (only who-pays
+  // differs). Evaluate rolls through the queue in batches, so it IS the filter —
+  // triage is no longer the front door and, with the manual housekeeping, lives
+  // under Advanced. The `section` field is metadata only; DEFAULT_ORDER /
+  // ADVANCED_ORDER below decide what shows where.
   const STEPS = [
+    { id: 'discover',  label: 'Expand Coverage',     hint: 'Register new companies',    type: 'auto'   },
     { id: 'api-scan',  label: 'API Scan',            hint: 'Greenhouse/Ashby/Lever',    type: 'auto'   },
+    { id: 'cli-scan',  label: 'Agent Scan',          hint: 'Widen via Claude search',   type: 'agent', mode: 'scan',
+      command: '/trajecktory scan' },
     { id: 'gate',      label: 'Liveness Gate',       hint: 'Drop dead URLs first',      type: 'auto'   },
     { id: 'cli-eval',  label: 'Evaluate',            hint: 'Full reports, rolling',      type: 'agent', mode: 'pipeline',
       command: '/trajecktory pipeline' },
     // ── Advanced (collapsed by default) ─────────────────────────────────────────
-    { id: 'cli-scan',  label: 'Agent Scan',          hint: 'Widen via Claude search',   type: 'agent', mode: 'scan',
-      command: '/trajecktory scan', section: 'advanced' },
     { id: 'triage',    label: 'Triage',              hint: 'Haiku pre-filter (optional)', type: 'agent', mode: 'triage',
       command: '/trajecktory triage', section: 'advanced' },
-    { id: 'discover',  label: 'Expand Coverage',     hint: 'Register companies (keys)',  type: 'auto',  section: 'advanced' },
     { id: 'merge',     label: 'Merge Tracker',       hint: 'TSVs → applications.md',     type: 'auto',  section: 'advanced' },
     { id: 'verify',    label: 'Verify Actionable',   hint: 'Safety-net dead links',      type: 'auto',  section: 'advanced' },
     { id: 'health',    label: 'Health Check',        hint: 'Report parser drift',        type: 'auto',  section: 'advanced' },
@@ -803,15 +805,18 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // Cards the user hasn't dismissed (and that haven't auto-cleared post-deep-dive).
   const visibleTriage = triageCards.filter(c => !dismissed.has(c.url));
 
-  // ONE flow, both rails (Slice 7.5): Scan → Liveness Gate → Evaluate. Only who
-  // pays and the batch size differ (handled server-side by the billing rail), so
-  // the visible steps no longer branch on hasKey. A finished Evaluate auto-runs
-  // Merge → Health (runPostEvalChain), so those are not manual default steps.
-  const DEFAULT_ORDER  = ['api-scan', 'gate', 'cli-eval'];
-  // Triage (now an optional pre-filter, not the front door), the Claude-search
-  // Agent Scan, coverage expansion, and the manual housekeeping live behind an
-  // Advanced disclosure. Nothing is removed — just demoted from the default path.
-  const ADVANCED_ORDER = ['cli-scan', 'triage', 'discover', 'merge', 'verify', 'health'];
+  // ONE flow, both rails (Slice 7.5): the three daily scans in the order they are
+  // run — Expand Coverage (register new companies) → API Scan (free ATS sweep) →
+  // Agent Scan (widen via Claude search) — then Liveness Gate → Evaluate. The
+  // three scans complement each other and run every session, so all three are
+  // front-and-centre; only who-pays/batch-size differ by rail (handled server-
+  // side). A finished Evaluate auto-runs Merge → Health (runPostEvalChain), so
+  // those stay out of the default list.
+  const DEFAULT_ORDER  = ['discover', 'api-scan', 'cli-scan', 'gate', 'cli-eval'];
+  // Triage is now an optional pre-filter (not the front door), and Merge/Verify/
+  // Health are the manual housekeeping the auto-chain normally runs — all behind
+  // an Advanced disclosure. Nothing is removed, just demoted from the default path.
+  const ADVANCED_ORDER = ['triage', 'merge', 'verify', 'health'];
   const stepById = Object.fromEntries(STEPS.map(s => [s.id, s]));
   const defaultSteps  = DEFAULT_ORDER.map(id => stepById[id]).filter(Boolean);
   const advancedSteps = ADVANCED_ORDER.map(id => stepById[id]).filter(Boolean);
