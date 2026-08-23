@@ -29,6 +29,36 @@ export const router = express.Router();
 
 const agentJobs = new Map();
 
+// ── Admission control (Slice 7.4) ─────────────────────────────────────────────
+// The old lock was global single-flight: ANY running agent blocked every other,
+// so a long rolling Evaluate locked the user out for its whole duration. Its real
+// job is narrower — keep two operations from writing data/pipeline.md at once.
+//
+// Parent-side reconciles (reconcilePipelineQueue / markDone) are SYNCHRONOUS, so
+// the event loop serializes them: two agent runs can never interleave a
+// pipeline.md write, no matter how their spawns overlap. The ONE writer that CAN
+// race a parent write is `scan` (scan.mjs appends from a CHILD process). So the
+// safe rule is: `scan` is fully exclusive; the other modes are single-flight per
+// mode but may overlap each other — a deep-dive or triage can run alongside a
+// rolling Evaluate. `activeAgents` tracks in-flight modes; it is deliberately
+// separate from job.status, which blips to 'done' between rolling batches and
+// would otherwise read as "nothing running" mid-chain.
+const activeAgents = new Set();
+function admitAgent(mode) {
+  if (activeAgents.has('scan')) {
+    return 'A scan is running (it updates the job queue). Wait for it to finish.';
+  }
+  if (mode === 'scan' && activeAgents.size) {
+    return 'Another run is in progress; a scan needs exclusive access to the queue. Wait for it to finish.';
+  }
+  if (activeAgents.has(mode)) {
+    return mode === 'pipeline'
+      ? 'An evaluation run is already going. Wait for it, or press Stop first.'
+      : `A ${mode} run is already in progress. Wait for it to finish.`;
+  }
+  return null;   // may start (possibly alongside a pipeline chain)
+}
+
 // ── Restart resilience ────────────────────────────────────────────────────────
 // agentJobs lives only in memory, and each run's `claude -p` worker is a child of
 // THIS server process. A server restart kills the workers and drops the job
@@ -1128,12 +1158,12 @@ router.post('/api/agent/:mode', (req, res) => {
   if (!['scan', 'pipeline', 'triage', 'deep'].includes(mode)) {
     return res.status(400).json({ error: `Unknown agent mode: ${mode}` });
   }
-  // Single-flight: agent runs share data/pipeline.md and the Pro quota
-  for (const job of agentJobs.values()) {
-    if (job.status === 'running') {
-      return res.status(409).json({ error: 'An agent step is already running. Wait for it to finish.' });
-    }
-  }
+  // Admission control (see admitAgent): scan is exclusive; other modes are
+  // single-flight per mode but may overlap (e.g. a deep-dive during a rolling
+  // Evaluate). Kept BEFORE the deep-target parsing so a rejected run writes no
+  // jds/ file and reserves nothing.
+  const conflict = admitAgent(mode);
+  if (conflict) return res.status(409).json({ error: conflict });
   // Deep eval needs a target: a posting URL, or pasted JD text (persisted to
   // jds/ so the eval reads it as a local: path and the prompt stays one line).
   let target;
@@ -1187,10 +1217,17 @@ router.post('/api/agent/:mode', (req, res) => {
     target = { ...(target || {}), power, model: model || undefined };
   }
   const jobId = `agent-${mode}-${Date.now()}`;
+  // Mark the mode in-flight for admission control, and clear it when the WHOLE
+  // run settles (a rolling chain keeps 'pipeline' held across all its batches, so
+  // a second chain is refused for the whole duration even though job.status blips
+  // to 'done' between batches). Cleared in .finally so an error still releases it.
+  activeAgents.add(mode);
   const start = runAgent(jobId, mode, target);
-  Promise.resolve(start).catch((e) => {
-    agentJobs.set(jobId, { mode, status: 'error', error: (e && e.message) || 'Agent run failed', finishedAt: Date.now() });
-  });
+  Promise.resolve(start)
+    .catch((e) => {
+      agentJobs.set(jobId, { mode, status: 'error', error: (e && e.message) || 'Agent run failed', finishedAt: Date.now() });
+    })
+    .finally(() => { activeAgents.delete(mode); });
   res.json({ jobId });
 });
 
@@ -1282,5 +1319,5 @@ router.get('/api/agent/cost-history', (req, res) => {
   res.json(out.slice(0, 20));
 });
 
-export { agentJobs, batchRetries, batchRetryable };
+export { agentJobs, batchRetries, batchRetryable, activeAgents, admitAgent };
 

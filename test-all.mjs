@@ -474,6 +474,7 @@ for (const suite of [
   'tests/audit-orphan-reports.test.mjs',
   'tests/agent-prompts.test.mjs',
   'tests/eval-retry.test.mjs',
+  'tests/agent-admission.test.mjs',
   'tests/scan-stall.test.mjs',
   'tests/agent-cost-rollup.test.mjs',
   'tests/portals.test.mjs',

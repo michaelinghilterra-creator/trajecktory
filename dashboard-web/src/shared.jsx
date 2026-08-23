@@ -787,11 +787,15 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     return { ch: '○', color: 'var(--text-mute)' };
   }
 
-  // Agent steps share data/pipeline.md + the Claude quota — only one at a time.
+  // The step buttons stay single-flight per the (conservative) UI: while any agent
+  // step runs, the other step buttons are disabled.
   const anyAgentRunning = STEPS.some(s => s.type === 'agent' && jobs[s.id]?.status === 'running');
-  // Deep-dive + paste share the single-flight Claude agent, so disable them while
-  // any agent step or another deep eval is running.
-  const agentBusy2 = anyAgentRunning || pasteBusy || Object.values(deepJobs).some(d => d?.status === 'running');
+  // Slice 7.4: a pasted-JD deep-dive may run ALONGSIDE a rolling Evaluate (or a
+  // triage) — the server only makes `scan` exclusive and allows one deep at a
+  // time. So the paste box is gated on a running scan or another in-flight deep,
+  // NOT on the pipeline chain that used to lock everything out.
+  const scanRunning = jobs['cli-scan']?.status === 'running';
+  const deepBusy = scanRunning || pasteBusy || Object.values(deepJobs).some(d => d?.status === 'running');
   // Merge/Verify/Health consume Evaluate Pipeline's output. Keep them disabled
   // while Evaluate is still running so clicking ahead doesn't show "0 to review".
   const evalRunning = jobs['cli-eval']?.status === 'running';
@@ -1111,8 +1115,8 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 6 }}>PASTE A JD</div>
         <textarea value={pasteVal} onChange={e => setPasteVal(e.target.value)} aria-label="Paste a job URL or JD text" placeholder="Paste a job URL or the full JD text…"
           style={{ width: '100%', height: 52, fontSize: 11, color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 6, padding: 6, background: 'var(--panel-2)', fontFamily: 'var(--mono)', resize: 'vertical', boxSizing: 'border-box' }} />
-        <button onClick={submitPaste} disabled={pasteBusy || agentBusy2 || !pasteVal.trim()}
-          style={{ width: '100%', marginTop: 6, background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 'not-allowed' : 'pointer', opacity: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 0.5 : 1 }}>
+        <button onClick={submitPaste} disabled={deepBusy || !pasteVal.trim()}
+          style={{ width: '100%', marginTop: 6, background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: (deepBusy || !pasteVal.trim()) ? 'not-allowed' : 'pointer', opacity: (deepBusy || !pasteVal.trim()) ? 0.5 : 1 }}>
           {pasteBusy ? 'Evaluating…' : 'Evaluate (Sonnet) ⧉'}
         </button>
         <div style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.4 }}>{pasteMsg || 'Self-sourced → full deep eval, skips triage.'}</div>
