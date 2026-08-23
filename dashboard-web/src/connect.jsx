@@ -453,8 +453,19 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
         </div>
       </div>
 
-      {(channels.linkedin || channels.email) ? <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-      {channels.linkedin ? <div style={{ flex: '1 1 300px', minWidth: 260 }}>
+      {/* Two fixed lanes: LinkedIn always left, email always right, whether or not
+          the other channel exists. These were flex: 1 1 300px, so a single-channel
+          card stretched its one section across the full width and its internal
+          space-between threw the buttons to the far right, landing them exactly
+          where the EMAIL controls sit on a two-channel card. One card, two
+          different homes for the same button, depending on the contact.
+
+          A missing channel renders an EMPTY cell rather than being omitted; that
+          empty cell is what holds the surviving lane in place. minmax(0, 1fr)
+          rather than 1fr so a long draft cannot widen its own column and shove
+          the other one sideways. */}
+      {(channels.linkedin || channels.email) ? <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 16, alignItems: 'flex-start' }}>
+      {channels.linkedin ? <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 600 }}>{alreadyInvited ? 'LinkedIn message' : 'LinkedIn invite'}</span>
           <div style={{ display: 'flex', gap: 6 }}>
@@ -472,7 +483,9 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
         </div> : null}
       </div> : null}
 
-      {channels.email ? <div style={{ flex: '1 1 300px', minWidth: 260 }}>
+      {!channels.linkedin ? <div /> : null}
+
+      {channels.email ? <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 600 }}>Email</span>
           <div style={{ display: 'flex', gap: 6 }}>
