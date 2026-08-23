@@ -71,7 +71,7 @@ const decodeEntities = (s) => String(s || '')
   .replace(/&amp;/gi, '&');   // last, so &amp;#39; does not double-decode
 const comparable = (s) => decodeEntities(s)
   .replace(/[‘’‛]/g, "'").replace(/[“”]/g, '"')
-  .replace(/[–—]/g, '-').replace(/ /g, ' ')
+  .replace(/[–—]/g, '-').replace(/\u00a0/g, ' ')
   .replace(/\s+/g, ' ').trim().toLowerCase();
 function preparedBody(body) {
   let text = String(body || '').trim() || '(no preview available)';
