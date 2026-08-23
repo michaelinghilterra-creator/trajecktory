@@ -16,12 +16,11 @@
 import { readLinkedInMap, setLinkedInStatus } from './tt-linkedin.mjs';
 import { parseTargetTalentMd } from './target-talent.mjs';
 import { loadConnections } from './linkedin-referrals.mjs';
+import { linkedinKey } from './contact-identity.mjs';
 
 // The /in/<slug> identity of a LinkedIn URL, lowercased. '' when there is none.
-export const slugOf = (u) => {
-  const m = String(u || '').match(/linkedin\.com\/in\/([^\/?#\s]+)/i);
-  return m ? m[1].toLowerCase().replace(/\/$/, '') : '';
-};
+// This now delegates and will be removed in the next change.
+export const slugOf = (u) => linkedinKey(u);
 
 // Name/company normalizer: lowercase, alphanumerics only. Matches routes/referrals
 // resolveReferralLink so twin-matching and acceptance-matching agree.

@@ -528,6 +528,7 @@ for (const suite of [
   'tests/posts-composer.test.mjs',
   'tests/referrals.test.mjs',
   'tests/contacts-characterization.test.mjs',
+  'tests/contact-identity.test.mjs',
   'tests/data-dir-sandbox.test.mjs',
   'tests/linkedin-referrals.test.mjs',
   'tests/rolling-floor.test.mjs',

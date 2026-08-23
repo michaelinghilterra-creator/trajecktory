@@ -194,12 +194,14 @@ const URL_CASES = [
    'would merge.'],
 
   ['https://www.linkedin.com/in/jos%C3%A9-ex',
-   'jos%c3%a9-ex', 'josé-ex', 'linkedin.com/in/jos%c3%a9-ex',
+   // Lap 2a changed slugOf from 'jos%c3%a9-ex' to 'josé-ex'.
+   'josé-ex', 'josé-ex', 'linkedin.com/in/jos%c3%a9-ex',
    'WRONG: only profileHandle decodes, so the same profile keys three different ' +
    'ways depending on which parser a code path happens to call.'],
 
   ['https://www.linkedin.com/in/josé-ex',
-   'josé-ex', 'jos', 'linkedin.com/in/josé-ex',
+   // Lap 2a changed profileHandle from 'jos' to 'josé-ex'.
+   'josé-ex', 'josé-ex', 'linkedin.com/in/josé-ex',
    'WRONG: profileHandle truncates at the first non-ASCII character because its ' +
    'charset is [A-Za-z0-9-_%.]. Combined with the row above, the encoded and ' +
    'literal spellings of one profile never agree under any single parser.'],

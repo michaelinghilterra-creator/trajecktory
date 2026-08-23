@@ -13,6 +13,7 @@ import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
 import { findAndVerify, hunterSearchesLeft } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
+import { linkedinKey } from '../lib/contact-identity.mjs';
 
 export const router = express.Router();
 
@@ -25,7 +26,8 @@ function splitName(name) {
 }
 
 const _norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-const _slug = u => { const m = String(u || '').match(/linkedin\.com\/in\/([^\/?#\s]+)/i); return m ? m[1].toLowerCase().replace(/\/$/, '') : ''; };
+// This now delegates and will be removed in the next change.
+const _slug = (u) => linkedinKey(u);
 
 // Resolve a referral to its TA-outreach TWIN: the same human tracked in the TA
 // book. This is what makes the drawer "unified": a linked referral shows (and

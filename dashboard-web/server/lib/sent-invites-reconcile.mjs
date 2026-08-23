@@ -19,6 +19,7 @@
  * name (two contacts, no company tiebreak) is reported, never auto-applied.
  */
 import { normalizeCompany } from '../../../lib/identity.mjs';
+import { linkedinKey } from './contact-identity.mjs';
 
 // Normalize a person name for matching: drop diacritics, parentheticals (maiden
 // names), post-comma credentials (", MBA"), and emoji/symbols; lowercase; collapse
@@ -35,15 +36,9 @@ export function nameTokens(s) { return cleanName(s).split(' ').filter(Boolean); 
 
 // Extract the /in/<slug> handle from a LinkedIn profile URL, lowercased, trailing
 // slash and query stripped. Returns '' when there is no LinkedIn profile URL.
+// This now delegates and will be removed in the next change.
 export function profileHandle(url) {
-  const m = String(url || '').slice(0, 2000).match(/linkedin\.com\/in\/([A-Za-z0-9\-_%.]+)/i);
-  if (!m) return '';
-  let h; try { h = decodeURIComponent(m[1]); } catch { h = m[1]; }
-  // Strip trailing slashes without a backtracking regex on user-controlled input
-  // (decodeURIComponent can turn %2F into slashes). A plain scan is linear.
-  let end = h.length;
-  while (end > 0 && h.charCodeAt(end - 1) === 47 /* '/' */) end--;
-  return h.slice(0, end).toLowerCase();
+  return linkedinKey(url);
 }
 
 // Lines that are LinkedIn UI chrome, a relative timestamp, or connection metadata —
