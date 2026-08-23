@@ -44,6 +44,8 @@ export const GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.reado
 // stays too so the reply/bounce sweep keeps working. The user re-consents to both.
 export const GMAIL_COMPOSE_SCOPE = 'https://www.googleapis.com/auth/gmail.compose';
 export const GMAIL_SCOPES = `${GMAIL_READONLY_SCOPE} ${GMAIL_COMPOSE_SCOPE}`;
+export const MAX_CORR_BODY = 20000;
+const CORR_BODY_TRUNCATION_MARKER = '\n\n[Message truncated at 20000 characters]';
 
 // ── Token + sync-cursor storage ──────────────────────────────────────────────
 function readTokens() {
@@ -401,8 +403,16 @@ function parseGmailMessage(raw) {
 }
 
 // Pull the bare address out of a "Name <alex@example.test>" header value.
+//
+// The quantifiers are BOUNDED, not open-ended (CodeQL js/polynomial-redos). With
+// `[a-z0-9._%+-]+@`, a header of many '%' and no '@' makes the engine retry from
+// every start position, which is quadratic in the header length. That became
+// reachable when the reply route started parsing a re-fetched message, so the
+// From header is attacker-influenced: anyone who can send mail to the connected
+// inbox chooses this input. RFC 5321 caps the local part at 64 and the domain at
+// 255, so bounding costs nothing real and makes each start position O(1).
 function extractEmail(s) {
-  const m = String(s || '').match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
+  const m = String(s || '').match(/[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,255}\.[a-z]{2,24}/i);
   return m ? m[0].toLowerCase() : null;
 }
 
@@ -579,11 +589,17 @@ function scanDecisions({ messages = [], taRows = [], apps = [] } = {}) {
     const entry = {
       msgId: msg.id, from: fromAddr, subject: msg.subject, date: msg.date,
       sentiment: classifyReply({ subject: msg.subject, text: msg.text }),
-      contact, companyGuess, snippet: msg.snippet,
+      contact, companyGuess, snippet: msg.snippet, body: msg.text,
     };
     (contact ? replies : other).push(entry);
   }
   return { bounces, replies, other };
+}
+
+function previewEntry(entry, { max = 1000 } = {}) {
+  const { body, ...preview } = entry || {};
+  const text = String(body || '');
+  return { ...preview, bodyPreview: text.slice(0, Math.max(0, max)), bodyChars: text.length };
 }
 
 // ── Logging a detected reply onto the CONTACT's timeline ─────────────────────
@@ -632,11 +648,16 @@ function logReplyToContact(contact, { subject, body, timestamp, advanceStatus = 
   if (!contact || contact.id == null || !contact.source) return false;
   const id = parseInt(contact.id, 10);
   if (Number.isNaN(id)) return false;
+  let storedBody = String(body || '').trim() || '(no preview available)';
+  if (storedBody.length > MAX_CORR_BODY) {
+    storedBody = storedBody.slice(0, MAX_CORR_BODY - CORR_BODY_TRUNCATION_MARKER.length) + CORR_BODY_TRUNCATION_MARKER;
+  }
+  storedBody = storedBody.replace(/^(#+ )/gm, ' $1');
   const entry = {
     timestamp: normalizeCorrTimestamp(timestamp),
     direction: 'Received',
     subject: String(subject || '(no subject)').trim() || '(no subject)',
-    body: String(body || '').trim() || '(no preview available)',
+    body: storedBody,
   };
   const today = new Date().toISOString().slice(0, 10);
   if (contact.source === 'ta') {
@@ -654,5 +675,5 @@ export {
   readTokens, writeTokens, readSync, writeSync, tokenScopes,
   clientConfigured, googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
   parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions,
-  exchangeCode, fetchProfileEmail, candidateAppsFor, createDraft, logReplyToContact,
+  exchangeCode, fetchProfileEmail, candidateAppsFor, createDraft, logReplyToContact, previewEntry,
 };
