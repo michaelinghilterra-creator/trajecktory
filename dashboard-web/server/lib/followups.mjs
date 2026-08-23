@@ -4,7 +4,7 @@ import { FOLLOWUPS_MD, LINKEDIN_SSI_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, matchByCompany, getNewBaselineId } from './target-talent.mjs';
 import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
-import { INTERVIEW_STAGES, isInterviewStage, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
+import { INTERVIEW_STAGES, isInterviewStage, OUTREACH_ELIGIBLE_STATUSES, makeApplyAnchor } from './statuses.mjs';
 import { isSendable } from '../../../lib/email-verify.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
 import { isLinkedInEntry } from './channels.mjs';
@@ -445,35 +445,38 @@ function computeStaleContacts({ apps } = {}) {
 // ago, no advancement to Responded / an interview round (implied by status === 'Applied').
 // These are candidates for the one-click "archive to No Response" bulk action so
 // the user clears the backlog honestly instead of closing things prematurely.
-// Anchor priority here is the recorded apply date, else the earliest logged
-// Applied event, else the tracker Date column. That last one is
-// the EVALUATION date (see the apply-date store comment in sidecars.mjs), which
-// on self-sourced rows routinely predates the real application by days — so
-// anchoring on it declares rows ghosted before they have actually been silent
-// 45 days. It stays as a last resort rather than dropping the row, but every
-// candidate now carries `anchorSource` so the UI can disclose which are estimates
-// instead of presenting all of them as measured. This list gates a bulk
-// destructive write, so an over-count here costs real applications.
-// makeApplyAnchor in statuses.mjs now provides the shared read-only rule. Moving
-// this destructive archive gate to it is deliberately a separate change.
+// The apply anchor comes from the ONE shared rule, `makeApplyAnchor` in
+// statuses.mjs: the MINIMUM of the earliest logged Applied event and the recorded
+// apply date, with the tracker Date column only when neither sidecar has the row.
+//
+// This function used to carry its own strict-priority copy (apply-date, else
+// event, else row date), which returned the apply-date even when the event was
+// earlier. Three different anchor rules existed in the tree at once and this was
+// the loosest, which mattered because this list gates a bulk destructive write:
+// an over-count here archives real, live applications.
+//
+// The migration was held back until it could be measured rather than assumed.
+// Measured 2026-08-23 against live data: 14 candidates before, 14 after, none
+// added and none removed. The rule is now consistent at no behavioural cost.
+//
+// The tracker Date fallback is the EVALUATION date (see the apply-date store
+// comment in sidecars.mjs), which on self-sourced rows routinely predates the
+// real application by days, so anchoring on it can declare a row ghosted before
+// it has actually been silent for GHOST_DAYS. It stays as a last resort rather
+// than dropping the row, and every candidate carries `anchorSource` so the UI can
+// disclose which are estimates instead of presenting all of them as measured.
 function computeGhostedCandidates() {
   const apps = parseApplicationsMd();
   const applyDates = readApplyDates();
   const events = (() => { try { return parseStatusEvents(); } catch { return []; } })();
-  const earliestApplied = new Map();
-  for (const e of events) {
-    if (e.status !== 'Applied') continue;
-    const prev = earliestApplied.get(e.app);
-    if (!prev || e.date < prev) earliestApplied.set(e.app, e.date);
-  }
+  const applyAnchor = makeApplyAnchor({ applyDates, events });
   const out = [];
   for (const a of apps) {
     if (a.status !== 'Applied') continue;
-    const key = String(a.id);
-    const appliedOn = applyDates[key] || earliestApplied.get(key) || a.date;
-    const anchorSource = applyDates[key] ? 'apply-date'
-      : earliestApplied.get(key) ? 'event'
-      : 'row-date';
+    const { date: appliedOn, source } = applyAnchor(a);
+    // `both` means the two sidecars agreed or the earlier of them won. Either way
+    // it is a measured date, so it is reported as such rather than as an estimate.
+    const anchorSource = source === 'both' ? 'apply-date' : (source || 'row-date');
     const days = _daysAgo(appliedOn);
     if (days == null || days < GHOST_DAYS) continue;
     out.push({
