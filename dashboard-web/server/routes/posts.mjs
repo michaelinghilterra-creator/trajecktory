@@ -5,7 +5,7 @@ import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs'
 import { cleanProse } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { getIdentity } from '../lib/profile.mjs';
-import { listChannels, createScheduledPost, fetchPostMetrics, splitThread, toDueIso, SERVICE_FOR } from '../lib/buffer.mjs';
+import { listChannels, createScheduledPost, fetchPostMetrics, toDueIso, SERVICE_FOR } from '../lib/buffer.mjs';
 
 export const router = express.Router();
 
@@ -80,26 +80,39 @@ router.post('/api/posts/push-to-buffer', async (req, res) => {
     const dryRun = !!body.dryRun;
     if (!ids.length) return res.status(400).json({ error: 'Select at least one post to push.' });
 
-    // Resolve channels once; this also live-verifies the Buffer key.
-    let channels;
-    try { channels = await listChannels(); }
-    catch (err) { return res.status(400).json({ error: err.message }); }
-
     const selected = ids.map(getPost).filter(Boolean);
     const missing = ids.length - selected.length;
+    const results = selected
+      .filter(p => p.channel === 'x')
+      .map(p => ({
+        id: p.id,
+        title: p.title,
+        channel: 'x',
+        ok: false,
+        status: 'stood-down',
+        message: 'The X channel has been stood down. This post was not sent.',
+      }));
 
-    // Group by channel and schedule each group earliest-first.
-    const byChannel = { linkedin: [], x: [] };
-    for (const p of selected) byChannel[p.channel === 'x' ? 'x' : 'linkedin'].push(p);
-    for (const key of ['linkedin', 'x']) {
-      byChannel[key].sort((a, b) => String(a.scheduledFor || '').localeCompare(String(b.scheduledFor || '')));
+    // Only LinkedIn remains schedulable. Historical X posts are reported above.
+    const byChannel = { linkedin: selected.filter(p => p.channel !== 'x') };
+    byChannel.linkedin.sort((a, b) => String(a.scheduledFor || '').localeCompare(String(b.scheduledFor || '')));
+
+    let channels = {};
+    if (byChannel.linkedin.length) {
+      try { channels = await listChannels(); }
+      catch (err) {
+        if (!results.length) return res.status(400).json({ error: err.message });
+        for (const p of byChannel.linkedin) {
+          results.push({ id: p.id, title: p.title, channel: 'linkedin', ok: false, status: 'no-channel', message: err.message });
+        }
+        byChannel.linkedin = [];
+      }
     }
 
-    const results = [];
-    for (const key of ['linkedin', 'x']) {
+    for (const key of ['linkedin']) {
       const group = byChannel[key];
       if (!group.length) continue;
-      const label = key === 'x' ? 'X' : 'LinkedIn';
+      const label = 'LinkedIn';
       const chan = channels[key];
       if (!chan || !chan.id) {
         for (const p of group) results.push({ id: p.id, title: p.title, channel: key, ok: false, status: 'no-channel', message: `No ${label} account is connected in Buffer.` });
@@ -112,9 +125,9 @@ router.post('/api/posts/push-to-buffer', async (req, res) => {
         if (queueFull) { results.push({ id: p.id, title: p.title, channel: key, ok: false, status: 'waiting', message: `${label} queue is full on your Buffer plan. This one waits for a slot to open.` }); continue; }
 
         // Shape the create input for this channel.
-        let text = p.text, firstComment = '', threadParts = [];
-        if (key === 'x') { const parts = splitThread(p.text); text = parts[0] || p.text; threadParts = parts.slice(1); }
-        else { firstComment = p.linkComment || ''; }
+        const text = p.text;
+        const firstComment = p.linkComment || '';
+        const threadParts = [];
 
         let dueAtIso;
         try { dueAtIso = toDueIso(p.scheduledFor); }
