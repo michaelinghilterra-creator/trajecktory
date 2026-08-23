@@ -16,11 +16,11 @@
  * Run: node tests/audit-orphan-reports.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, statSync, rmSync } from 'fs';
+import { mkdirSync, writeFileSync, readdirSync, statSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { auditOrphanReports } from '../audit-orphan-reports.mjs';
-import { trackSandbox } from './helpers/sandbox.mjs';
+import { makeRepoSandbox } from './helpers/sandbox.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -31,7 +31,7 @@ function check(cond, msg) {
   else { console.log(`  ❌ ${msg}`); failed++; }
 }
 
-const sb = trackSandbox(mkdtempSync(join(ROOT, "orphan-audit-test-")));
+const sb = makeRepoSandbox(ROOT, "orphan-audit-test");
 try {
   mkdirSync(join(sb, 'reports'), { recursive: true });
   mkdirSync(join(sb, 'data'), { recursive: true });
@@ -150,7 +150,7 @@ try {
   check(snapshot() === before, 'not one byte on disk changed');
 
   console.log('\n7. Degrades quietly');
-  const bare = trackSandbox(mkdtempSync(join(ROOT, "orphan-audit-empty-")));
+  const bare = makeRepoSandbox(ROOT, "orphan-audit-empty");
   try {
     const e = auditOrphanReports(bare);
     check(e.counts.reports === 0 && e.lost.length === 0, 'no reports dir and no tracker returns empty, does not throw');

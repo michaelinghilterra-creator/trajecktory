@@ -11,11 +11,11 @@
  * Run: node tests/merge-tracker.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, copyFileSync, rmSync, existsSync } from 'fs';
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, copyFileSync, rmSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
-import { trackSandbox } from './helpers/sandbox.mjs';
+import { makeRepoSandbox } from './helpers/sandbox.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -31,7 +31,7 @@ function check(cond, msg) {
 // merge-tracker.mjs (js-yaml) resolve against the real node_modules by walking up
 // the tree. The script still resolves all its own paths relative to its own
 // location, so it only ever reads/writes sandbox files.
-const sandbox = trackSandbox(mkdtempSync(join(ROOT, "merge-tracker-test-")));
+const sandbox = makeRepoSandbox(ROOT, "merge-tracker-test");
 mkdirSync(join(sandbox, 'data'));
 mkdirSync(join(sandbox, 'batch/tracker-additions'), { recursive: true });
 copyFileSync(join(ROOT, 'merge-tracker.mjs'), join(sandbox, 'merge-tracker.mjs'));
@@ -238,7 +238,7 @@ rmSync(sandbox, { recursive: true, force: true });
 // The seed file is written CRLF to prove the in-place update splice
 // (appLines.indexOf(existing.raw)) is EOL-tolerant.
 function runMerge(seedRows, caseMap, extraFiles = {}) {
-  const sb = trackSandbox(mkdtempSync(join(ROOT, "merge-tracker-test-")));
+  const sb = makeRepoSandbox(ROOT, "merge-tracker-test");
   mkdirSync(join(sb, 'data'));
   mkdirSync(join(sb, 'batch/tracker-additions'), { recursive: true });
   // Sandbox-relative files the scenario needs (reports/*.md for source

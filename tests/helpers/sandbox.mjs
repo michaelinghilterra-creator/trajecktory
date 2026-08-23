@@ -47,14 +47,27 @@ export function makeSandbox(prefix = 'test') {
 }
 
 /**
- * Register a directory the suite made itself, so it is removed on exit too.
+ * A sandbox that must live INSIDE the repo, contained in one ignored directory.
  *
- * A few suites deliberately create their sandbox INSIDE the repo rather than in
- * the system temp dir, because the code under test resolves paths relative to
- * the repo root. Those are the worst ones to leak: the leftovers are untracked
- * directories in the working tree, not tucked away in temp. Keep where they are
- * created, fix whether they are removed.
+ * Four suites copy a script into their sandbox and run it. Those copies use bare
+ * imports (js-yaml and friends), which Node resolves by walking parent
+ * directories looking for node_modules. From the system temp dir there is nothing
+ * to find, so those suites genuinely cannot run there.
+ *
+ * They used to mkdtemp straight into the repo root, which made every leftover an
+ * untracked directory in the working tree, one `git add -A` away from being
+ * committed. Nesting them under a single gitignored directory keeps the module
+ * resolution that made the root necessary and removes the reason it was risky.
+ * Cleanup is registered the same way as makeSandbox.
  */
+export function makeRepoSandbox(repoRoot, prefix = 'test') {
+  const holder = path.join(repoRoot, '.test-sandboxes');
+  fs.mkdirSync(holder, { recursive: true });
+  const dir = fs.mkdtempSync(path.join(holder, `${prefix}-`));
+  return trackSandbox(dir);
+}
+
+/** Register a directory the suite made itself, so it is removed on exit too. */
 export function trackSandbox(dir) {
   pending.add(dir);
   if (!hooked) {

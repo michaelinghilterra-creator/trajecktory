@@ -127,7 +127,7 @@ console.log('\n4. Test sandboxes clean themselves up');
     // reason section 1 skips its own owner.
     if (f === 'data-dir-sandbox.test.mjs') continue;
     const text = readFileSync(join(ROOT, 'tests', f), 'utf-8');
-    if (/mkdtempSync/.test(text) && !/makeSandbox|trackSandbox/.test(text)) {
+    if (/mkdtempSync/.test(text) && !/makeSandbox|makeRepoSandbox|trackSandbox/.test(text)) {
       raw.push(`tests/${f} calls mkdtempSync without the self-cleaning helper`);
     }
     // A bulk edit once rewrote `fs.mkdtempSync(...)` into `fs.makeSandbox(...)`,
