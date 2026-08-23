@@ -108,7 +108,6 @@ function ContentPostCard({ post, onChanged, onReply, toast }) {
             <label className="dim" style={{ fontSize: 12 }}>Channel
               <select style={{ ...cInput, marginLeft: 6 }} value={post.channel} onChange={e => patch({ channel: e.target.value })}>
                 <option value="linkedin">LinkedIn</option>
-                <option value="x">X</option>
               </select>
             </label>
             <label className="dim" style={{ fontSize: 12 }}>Status
@@ -165,7 +164,7 @@ function AddPostForm({ onAdded, toast }) {
     setBusy(true);
     window.tjkMutate('/api/posts', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text, title: text, type, channel, lane: channel === 'x' ? 'trajecktory' : 'professional', linkComment: link.trim(), status: 'published', source: 'user' }),
+      body: JSON.stringify({ text, title: text, type, channel, lane: 'professional', linkComment: link.trim(), status: 'published', source: 'user' }),
     }).then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(() => { setLabel(''); setLink(''); setType(''); onAdded(); toast && toast('Added to tracker', 'ok'); })
       .catch(() => toast && toast('Could not add post', 'warn'))
@@ -190,7 +189,6 @@ function AddPostForm({ onAdded, toast }) {
           Channel
           <select style={cInput} value={channel} onChange={e => setChannel(e.target.value)}>
             <option value="linkedin">LinkedIn</option>
-            <option value="x">X</option>
           </select>
         </label>
         <label className="dim" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 140 }}>
@@ -452,7 +450,7 @@ function PublishTool({ posts, onChanged, toast }) {
       <div className="card" style={{ padding: 12 }}>
         <div className="row" style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span className="dim" style={{ fontSize: 12 }}>Publishing through Buffer to:</span>
-          {channels === null ? <span className="dim" style={{ fontSize: 12 }}>checking…</span> : (<>{chChip(channels.linkedin, 'LinkedIn')}{chChip(channels.x, 'X')}</>)}
+          {channels === null ? <span className="dim" style={{ fontSize: 12 }}>checking…</span> : chChip(channels.linkedin, 'LinkedIn')}
           <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={loadChannels}>Refresh</button>
         </div>
         <div className="dim" style={{ fontSize: 11, marginTop: 8, lineHeight: 1.5 }}>

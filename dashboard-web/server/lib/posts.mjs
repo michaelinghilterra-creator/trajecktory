@@ -21,8 +21,8 @@ const SOURCES  = new Set(['claude', 'user']);
 const LANES     = new Set(['professional', 'trajecktory']);
 const CHANNELS  = new Set(['linkedin', 'x']);
 const STATUSES  = new Set(['draft', 'queued', 'scheduled', 'published']);
-// Default channel per lane: professional lands on LinkedIn, build-in-public on X.
-const LANE_CHANNEL = { professional: 'linkedin', trajecktory: 'x' };
+// Default channel per lane: professional and build-in-public land on LinkedIn.
+const LANE_CHANNEL = { professional: 'linkedin', trajecktory: 'linkedin' };
 const MAX_ACTIVITY = 200; // keep the log bounded; oldest events fall off
 
 // Content-series post types (the recurring "lens" of each post) and the
