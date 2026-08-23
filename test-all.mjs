@@ -511,6 +511,7 @@ for (const suite of [
   'tests/linkedin-acceptance.test.mjs',
   'tests/draft-endpoints.test.mjs',
   'tests/draft-guardrail.test.mjs',
+  'tests/draft-recipient.test.mjs',
   'tests/api-key-error.test.mjs',
   'tests/model-versions.test.mjs',
   'tests/correspondence-context.test.mjs',
