@@ -22,8 +22,9 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-activation-'));
+const sandbox = makeSandbox("activation");
 fs.mkdirSync(path.join(sandbox, 'data'), { recursive: true });
 process.env.TJK_DATA_DIR = path.join(sandbox, 'data');
 

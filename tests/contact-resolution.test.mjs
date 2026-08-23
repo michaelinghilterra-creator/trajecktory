@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { resolvePeople } from '../dashboard-web/server/lib/contact-identity.mjs';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 const li = 'https://www.linkedin.com/in/jane-example';
 const signature = people => people.map(person => ({ refs: person.refs, matchedBy: person.matchedBy }));
@@ -36,7 +37,7 @@ const input = { ta: [{ id: 2, linkedin: li }, { id: 1 }], referrals: [{ id: 4 },
 const shuffled = { ta: [...input.ta].reverse(), referrals: [...input.referrals].reverse() };
 assert.deepEqual(signature(resolvePeople(input)), signature(resolvePeople(shuffled)));
 
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'contact-links-'));
+const sandbox = makeSandbox("contact-links");
 process.env.TJK_DATA_DIR = sandbox;
 const links = await import(`../dashboard-web/server/lib/contact-links.mjs?test=${Date.now()}`);
 assert.deepEqual(links.readPins(), {});

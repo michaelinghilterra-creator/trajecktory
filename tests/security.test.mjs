@@ -27,11 +27,12 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // Sandbox before importing anything that resolves data paths at import time.
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-security-'));
+const tmp = makeSandbox("security");
 process.env.TJK_DATA_DIR = tmp;
 
 let passed = 0, failed = 0;

@@ -24,13 +24,14 @@ import os from 'os';
 import path from 'path';
 import { execFileSync } from 'child_process';
 import { UPDATER_IDENTITY } from '../update-system.mjs';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0, failed = 0;
 const check = (c, m) => { if (c) { console.log(`  ✅ ${m}`); passed++; } else { console.log(`  ❌ ${m}`); failed++; } };
 
 console.log('update-commit-identity.test.mjs');
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-commit-id-'));
+const tmp = makeSandbox("commit-id");
 const repo = path.join(tmp, 'repo');
 fs.mkdirSync(repo, { recursive: true });
 

@@ -24,6 +24,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -36,7 +37,7 @@ function eq(actual, expected, msg) {
 
 console.log('metrics.test.mjs');
 
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-metrics-'));
+const sandbox = makeSandbox("metrics");
 process.env.TJK_DATA_DIR = sandbox;
 
 // ── Fixture ────────────────────────────────────────────────────────────────

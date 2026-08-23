@@ -30,6 +30,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { checkWorkspaceTrust, trustWorkspace, trustKeyFor } from '../dashboard-web/server/lib/workspace-trust.mjs';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -39,7 +40,7 @@ function check(cond, msg) {
 
 console.log('workspace-trust.test.mjs');
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-trust-'));
+const tmp = makeSandbox("trust");
 
 // A workspace with an allow list, plus the config that may or may not trust it.
 const mkWorkspace = (name, allow) => {

@@ -26,6 +26,7 @@ import path from 'path';
 import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { verifyTag, signedUpdatesEnabled, SYSTEM_PATHS } from '../update-system.mjs';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0, failed = 0;
 const check = (c, m) => { if (c) { console.log(`  ✅ ${m}`); passed++; } else { console.log(`  ❌ ${m}`); failed++; } };
@@ -33,7 +34,7 @@ const check = (c, m) => { if (c) { console.log(`  ✅ ${m}`); passed++; } else {
 console.log('update-signing.test.mjs');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-signing-'));
+const tmp = makeSandbox("signing");
 const repo = path.join(tmp, 'repo');
 const run = (args, cwd = repo) => execFileSync('git', args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 

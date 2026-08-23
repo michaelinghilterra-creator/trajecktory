@@ -2,10 +2,11 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 process.env.TJK_FAKE_LLM = '1';
 process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({ subject: 'Stub subject', body: 'Stub body.' });
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-guardrail-'));
+const sandbox = makeSandbox("guardrail");
 process.env.TJK_DATA_DIR = sandbox;
 const profile = path.join(sandbox, 'profile.yml');
 process.env.TJK_PROFILE_YML = profile;

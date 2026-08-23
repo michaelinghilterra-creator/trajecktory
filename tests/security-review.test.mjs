@@ -27,6 +27,7 @@ import os from 'os';
 import path from 'path';
 import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -98,7 +99,7 @@ for (const [f, src] of [['scan.mjs', read('scan.mjs')], ['discover.mjs', read('d
 // Run the REAL gate over a payload dir. Values are FAKE but pattern-matching, so
 // this test file carries no real credential; the gate must still refuse them.
 {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-secret-'));
+  const dir = makeSandbox("secret");
   try {
     const fakes = {
       'Anthropic API key': 'sk-ant-api03-' + 'A'.repeat(48),
@@ -126,7 +127,7 @@ for (const [f, src] of [['scan.mjs', read('scan.mjs')], ['discover.mjs', read('d
     for (const label of Object.keys(fakes)) check(out.includes(label), `caught: ${label}`);
 
     // And a benign payload passes, so the scan is not simply always-fail.
-    const clean2 = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-clean-'));
+    const clean2 = makeSandbox("clean");
     try {
       fs.writeFileSync(path.join(clean2, 'ok.md'), '# Just some ordinary documentation with no keys in it.\n');
       let okCode = 0;
@@ -147,7 +148,7 @@ check(/SECRET_PATTERNS/.test(read('verify-no-pii.mjs')), 'verify-no-pii defines 
 // ── C3: urlFromReport is contained (real files) ──────────────────────────────
 const { urlFromReport } = await import('../lib/identity.mjs');
 {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-report-'));
+  const tmp = makeSandbox("report");
   try {
     fs.mkdirSync(path.join(tmp, 'reports'));
     fs.writeFileSync(path.join(tmp, 'reports', '1234-inside.md'), '**URL:** https://inside.example/job-1234\n');

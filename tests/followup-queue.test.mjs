@@ -17,8 +17,9 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-fuq-'));
+const tmp = makeSandbox("fuq");
 process.env.TJK_DATA_DIR = tmp;
 
 const { computeFollowupQueue, computeConnectQueue, computeEmailQueue, computeBothQueue } =

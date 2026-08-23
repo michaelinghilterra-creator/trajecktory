@@ -22,8 +22,9 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-interview-'));
+const sandbox = makeSandbox("interview");
 const dataDir = path.join(sandbox, 'data');
 const prepDir = path.join(sandbox, 'interview-prep');
 fs.mkdirSync(dataDir, { recursive: true });

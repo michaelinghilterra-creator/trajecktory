@@ -20,6 +20,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { canonicalUrl } from '../lib/identity.mjs';
 import { parseTriageOutput, appendTriageResults, START_MARKER, END_MARKER, HEADER } from '../lib/triage-results.mjs';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -28,7 +29,7 @@ function check(cond, msg) {
 }
 
 console.log('triage-results.test.mjs');
-const dir = mkdtempSync(join(tmpdir(), 'triage-results-test-'));
+const dir = makeSandbox("triage-results-test");
 
 // ── parseTriageOutput ─────────────────────────────────────────────────────
 {

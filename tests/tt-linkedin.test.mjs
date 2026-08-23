@@ -16,9 +16,10 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 // Point config at a throwaway data dir BEFORE importing anything that reads it.
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-tt-linkedin-'));
+const tmp = makeSandbox("tt-linkedin");
 process.env.TJK_DATA_DIR = tmp;
 
 const {

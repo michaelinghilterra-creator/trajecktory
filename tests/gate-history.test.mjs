@@ -19,6 +19,7 @@ import { mkdtempSync, writeFileSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { appendGateHistory, lastVerdictFor, HEADER } from '../lib/gate-history.mjs';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -27,7 +28,7 @@ function check(cond, msg) {
 }
 
 console.log('gate-history.test.mjs');
-const dir = mkdtempSync(join(tmpdir(), 'gate-history-test-'));
+const dir = makeSandbox("gate-history-test");
 
 // ── appendGateHistory ─────────────────────────────────────────────────────
 {

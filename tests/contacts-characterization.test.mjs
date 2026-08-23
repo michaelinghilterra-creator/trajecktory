@@ -44,8 +44,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-contacts-characterization-'));
+const sandbox = makeSandbox("contacts-characterization");
 process.env.TJK_DATA_DIR = sandbox;
 const rule = Array(16).fill(['-', '-', '-'].join('')).join('|');
 
