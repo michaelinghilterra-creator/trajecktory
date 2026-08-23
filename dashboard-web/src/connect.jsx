@@ -158,7 +158,7 @@ const CONTACTED_STATUSES = new Set(['Sent', 'Replied', 'Meeting Scheduled']);
 // routed already-contacted contacts to the first-touch connect-note endpoint and 400'd.
 // The API base for a queue row, chosen by which BOOK the row came from.
 //
-// These three row components used to hardcode `/api/target-talent/${c.id}`. That
+// The old row components each hardcoded the target talent contact route. That
 // was correct while the queue held only target talent, and became data corruption
 // the moment referrals and influencers joined it: the books number rows
 // independently, so Mark sent on referral 160 wrote a Sent entry onto
@@ -196,6 +196,14 @@ function isAlreadyInvited(c) {
     || CONTACTED_STATUSES.has(c.status);
 }
 
+function followupChannels(c) {
+  const channel = c && c.stickyChannel ? 'linkedin' : c && c.channel;
+  return {
+    linkedin: !!(c && c.linkedin && (channel === 'linkedin' || channel === 'both')),
+    email: !!(c && c.email && (channel === 'email' || channel === 'both')),
+  };
+}
+
 function DraftBlockBanner({ block }) {
   if (!block) return null;
   return <div className="card" style={{ borderColor: 'var(--yellow)', padding: 10, marginTop: 10, fontSize: 12 }}>
@@ -205,15 +213,21 @@ function DraftBlockBanner({ block }) {
   </div>;
 }
 
-function ConnectRow({ c, toast, onDone, onSnooze, onMute, inmailRemaining, onInmailSent }) {
+function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmailRemaining, onInmailSent }) {
   const [note, setNote] = useStateCq(null);
-  const [loading, setLoading] = useStateCq(false);
-  const [sending, setSending] = useStateCq(false);
-  const [sentAt, setSentAt] = useStateCq(null);
+  const [liLoading, setLiLoading] = useStateCq(false);
+  const [liSending, setLiSending] = useStateCq(false);
   const [showArchive, setShowArchive] = useStateCq(false);
   const [referred, setReferred] = useStateCq(false);
-  const [draftBlock, setDraftBlock] = useStateCq(null);
-  const done = !!sentAt;
+  const [liBlock, setLiBlock] = useStateCq(null);
+  const [draft, setDraft] = useStateCq(null);
+  const [emailBlock, setEmailBlock] = useStateCq(null);
+  const [emLoading, setEmLoading] = useStateCq(false);
+  const [emSending, setEmSending] = useStateCq(false);
+  const channels = followupChannels(c);
+  const [liDone, setLiDone] = useStateCq(!!c.linkedinDone || !channels.linkedin);
+  const [emDone, setEmDone] = useStateCq(!!c.emailDone || !channels.email);
+  const done = (channels.linkedin || channels.email) && liDone && emDone;
   // A contact you have ALREADY sent a LinkedIn invite (or any 1:1 touch) to: the
   // invite is out, so a "follow-up" is a real MESSAGE, not another connection note.
   // Keyed off the CRM status as well as selfLastTouch (see isAlreadyInvited) so a
@@ -235,15 +249,25 @@ function ConnectRow({ c, toast, onDone, onSnooze, onMute, inmailRemaining, onInm
   // appends the message, advances status to Sent, and stamps
   // Last Touch. Passing the drafted note as the body is how "I used the AI note"
   // gets captured; a self-written invite records a short generic line instead.
-  const markSent = () => {
-    if (sending || done) return;
-    setSending(true);
-    const cbase = contactBase(c);
-    if (!cbase) { setSending(false); toast && toast('Log this engagement from the Social tab: influencers have no correspondence store.', 'warn'); return; }
-    const url = `${cbase}/correspondence`;
+  const base = contactBase(c);
+  const firstName = c.firstName || (c.name || '').split(/\s+/)[0] || 'there';
+  const href = channels.linkedin ? (/^https?:/.test(c.linkedin) ? c.linkedin : `https://${c.linkedin}`) : null;
+  const finishChannel = (channel) => {
+    const state = {
+      linkedinDone: channel === 'linkedin' ? true : liDone,
+      emailDone: channel === 'email' ? true : emDone,
+    };
+    if (onChannelDone) onChannelDone(c.source, c.id, state);
+    else if (state.linkedinDone && state.emailDone && onDone) onDone(c.source, c.id);
+  };
+
+  const markLiSent = () => {
+    if (liSending || liDone) return;
+    setLiSending(true);
+    if (!base) { setLiSending(false); toast && toast('Log this engagement from the Social tab: influencers have no correspondence store.', 'warn'); return; }
     const kind = alreadyInvited ? 'LinkedIn message' : 'LinkedIn connection request';
     const body = (note?.response || '').trim() || `${kind} sent to ${c.name || 'this contact'}.`;
-    window.tjkMutate(url, {
+    window.tjkMutate(`${base}/correspondence`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       // This card is the LinkedIn motion, so tag the channel explicitly. Without
       // it the server defaults to Email and the touch reads back as an email one,
@@ -251,13 +275,14 @@ function ConnectRow({ c, toast, onDone, onSnooze, onMute, inmailRemaining, onInm
       body: JSON.stringify({ direction: 'Sent', channel: 'LinkedIn', subject: kind, body }),
     }).then(r => r.json())
       .then(res => {
-        if (res.error) { toast && toast(res.error, 'error'); setSending(false); return; }
-        setSentAt('just now');                 // brief ✓ so the click is confirmed,
+        if (res.error) { toast && toast(res.error, 'error'); setLiSending(false); return; }
+        setLiDone(true);
+        setLiSending(false);
         toast && toast(`Marked sent — ${c.name || 'contact'}`, 'success');
-        if (alreadyInvited && !freeDm && onInmailSent) onInmailSent();  // InMail credit spent — a free DM to a connection spends none
-        setTimeout(() => onDone && onDone(c.source, c.id), 1000); // then drop off the list
+        if (alreadyInvited && !freeDm && onInmailSent) onInmailSent();
+        finishChannel('linkedin');
       })
-      .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
+      .catch(e => { toast && toast(e.message, 'error'); setLiSending(false); });
   };
 
   // Dispo a stale contact (left the company, or changed to an unrelated role) so
@@ -265,24 +290,27 @@ function ConnectRow({ c, toast, onDone, onSnooze, onMute, inmailRemaining, onInm
   // (status Archived + a dated reason note) and drops the row. If they moved to a
   // target company, re-add them fresh there — this only retires the stale record.
   const archive = (reason) => {
-    if (sending || done) return;
-    setSending(true);
+    if (liSending || emSending || done) return;
+    setLiSending(true);
     window.tjkMutate('/api/linkedin-drafts/archive-contact', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: c.source, id: c.id, reason }),
     }).then(r => r.json())
       .then(res => {
-        if (res.error) { toast && toast(res.error, 'error'); setSending(false); return; }
+        if (res.error) { toast && toast(res.error, 'error'); setLiSending(false); return; }
         toast && toast(`Archived — ${c.name || 'contact'}`, 'success');
-        onDone && onDone(c.source, c.id);
+        if (onDone) onDone(c.source, c.id);
+        else if (onChannelDone) onChannelDone(c.source, c.id, { linkedinDone: true, emailDone: true });
       })
-      .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
+      .catch(e => { toast && toast(e.message, 'error'); setLiSending(false); });
   };
 
   // Just-connected offer: promote this now-1st-degree contact into the Referrals
   // book (the user decides who is a real advocate; nothing auto-adds). Idempotent.
   const addToReferral = () => {
-    window.tjkMutate(`/api/target-talent/${c.id}/to-referral`, {
+    if (c.source !== 'ta') return;
+    const cbase = contactBase(c);
+    window.tjkMutate(`${cbase}/to-referral`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
     }).then(r => r.json())
       .then(res => {
@@ -293,15 +321,15 @@ function ConnectRow({ c, toast, onDone, onSnooze, onMute, inmailRemaining, onInm
       .catch(e => toast && toast(e.message, 'error'));
   };
 
-  const draft = (override = false) => {
-    setLoading(true);
+  const draftNote = (override = false) => {
+    setLiLoading(true);
     window.tjkMutate(alreadyInvited ? '/api/linkedin-drafts/followup-message' : '/api/linkedin-drafts/connect-note', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: c.source, id: c.id, override }),
     }).then(r => r.json())
-      .then(res => { if (res.error) toast && toast(res.error, 'error'); else if (res.blocked) setDraftBlock(res); else { setNote(res); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
+      .then(res => { if (res.error) toast && toast(res.error, 'error'); else if (res.blocked) setLiBlock(res); else { setNote(res); if (override) setLiBlock(b => ({ ...b, overridden: true })); } })
       .catch(e => toast && toast(e.message, 'error'))
-      .finally(() => setLoading(false));
+      .finally(() => setLiLoading(false));
   };
   const copy = () => {
     // navigator.clipboard is undefined on http / a LAN IP; guard so the button
@@ -311,26 +339,79 @@ function ConnectRow({ c, toast, onDone, onSnooze, onMute, inmailRemaining, onInm
               .catch(() => toast && toast('Copy failed. Select the text and copy it manually', 'warn'));
     else toast && toast('Copy not available here. Select the text and copy it manually', 'warn');
   };
-  const href = c.linkedin ? (/^https?:/.test(c.linkedin) ? c.linkedin : `https://${c.linkedin}`) : null;
+  const genEmail = (override = false) => {
+    setEmLoading(true);
+    if (!base) { setEmLoading(false); toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
+    window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ override }) })
+      .then(r => r.json())
+      .then(res => {
+        if (res.error) { toast && toast(res.error, 'error'); return; }
+        if (res.blocked) { setEmailBlock(res); return; }
+        const d = res.draft || {};
+        if (!d.body) { toast && toast('The model returned an empty draft. Try Redraft.', 'warn'); return; }
+        const sig = (window.myEmailSignature && window.myEmailSignature()) || '';
+        setDraft({ subject: (d.subject || '').trim(), body: `Hi ${firstName},\n\n${(d.body || '').trim()}${sig ? `\n\n${sig}` : ''}` });
+        if (override) setEmailBlock(b => ({ ...b, overridden: true }));
+      })
+      .catch(e => toast && toast(e.message, 'error'))
+      .finally(() => setEmLoading(false));
+  };
+  const emSubject = draft?.subject || '';
+  const emBody = draft?.body || '';
+  const setEmSubject = (v) => setDraft(d => ({ ...(d || {}), subject: v }));
+  const setEmBody = (v) => setDraft(d => ({ ...(d || {}), body: v }));
+  const copyEmail = () => {
+    const cp = navigator.clipboard?.writeText(emBody);
+    if (cp) cp.then(() => toast && toast('Email body copied', 'success')).catch(() => toast && toast('Copy failed. Select the text and copy it manually', 'warn'));
+    else toast && toast('Copy not available here. Select the text and copy it manually', 'warn');
+  };
+  const mailtoUrl = c.email ? `mailto:${c.email}?subject=${encodeURIComponent(emSubject)}&body=${encodeURIComponent(emBody)}` : null;
+  const markEmSent = () => {
+    if (emSending || emDone) return;
+    setEmSending(true);
+    if (!base) { setEmSending(false); toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
+    const sentBody = (emBody || '').trim() || `Emailed ${c.name || 'this contact'}${c.company ? ` at ${c.company}` : ''}.`;
+    window.tjkMutate(`${base}/correspondence`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction: 'Sent', subject: emSubject || 'Outreach email', body: sentBody }),
+    }).then(r => r.json())
+      .then(res => {
+        if (res.error) { toast && toast(res.error, 'error'); setEmSending(false); return; }
+        setEmDone(true);
+        setEmSending(false);
+        toast && toast(`Email logged (verified touch): ${c.name || 'contact'}`, 'success');
+        finishChannel('email');
+      })
+      .catch(e => { toast && toast(e.message, 'error'); setEmSending(false); });
+  };
+
+  const chipStyle = (channelDone) => ({
+    fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 7px', borderRadius: 4, verticalAlign: 'middle',
+    background: channelDone ? 'color-mix(in srgb, var(--green) 18%, transparent)' : 'var(--panel-2)',
+    color: channelDone ? 'var(--green)' : 'var(--text-mute)',
+    border: `1px solid ${channelDone ? 'color-mix(in srgb, var(--green) 45%, transparent)' : 'var(--border)'}`,
+  });
 
   return (
-    <div className="card" style={{ marginBottom: 10 }}>
+    <div className="card" style={{ marginBottom: 12, borderLeft: '3px solid var(--accent)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <div>
           <div style={{ fontWeight: 600 }}>
             {c.name || '(no name)'}{' '}
             <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
+            {' '}<BookChip source={c.source} />
+            {channels.linkedin && channels.email && c.isHighValue !== false ? <span title="High value: reachable on both email and LinkedIn. Worked on both channels."
+              style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.4px', padding: '2px 6px', borderRadius: 4, background: 'var(--accent)', color: 'var(--panel)', verticalAlign: 'middle' }}>HIGH VALUE</span> : null}
+            {c.isPrincipal ? <span title="Hiring principal: the decision-maker you would report to."
+              style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)', verticalAlign: 'middle' }}>PRINCIPAL</span> : null}
             <OutreachPills c={c} />
             <QueueReasonPill c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
-            <BookChip source={c.source} /> {c.company} ·{' '}
-            {c.hasEmail
-              ? <span title="An address is on file but is not verified deliverable. Verify it to move this contact to the email motion.">email {c.emailState}</span>
-              : <span title="No email address on file. Find one (Hunter/MillionVerifier) to move this contact to the email motion.">no email on file</span>}
+            {c.company}{c.email ? <> · <span className="mono">{c.email}</span>{c.emailState === 'risky' ? <span title="Catch-all domain: usually deliverable."> · risky</span> : null}</> : null}
           </div>
           <CompanyOutreach c={c} />
-          {alreadyInvited && !done && (
+          {channels.linkedin && alreadyInvited && !done && (
             <div className="dim" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.4 }}>
               {freeDm
                 ? <>They accepted your invite, so you're connected. This message is a free DM (no InMail credit). Strike while it's warm.</>
@@ -347,55 +428,72 @@ function ConnectRow({ c, toast, onDone, onSnooze, onMute, inmailRemaining, onInm
               {/* Target talent only. The endpoint promotes a TA row by id, so on a
                   referral row it would have promoted whoever holds that id in the TA
                   book, and a referral is already in Referrals anyway. */}
-              {c.queueReason === 'Just connected' && c.source === 'ta' && (referred
+              {channels.linkedin && c.queueReason === 'Just connected' && c.source === 'ta' && (referred
                 ? <span style={{ color: 'var(--green)' }}>✓ Added to Referrals</span>
-                : <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={addToReferral} disabled={sending}
+                : <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={addToReferral} disabled={liSending || emSending}
                     title="Now a 1st-degree connection. Add them to your Referrals list; they'll share a timeline with this TA record.">+ Add to Referrals</button>)}
               {!showArchive
-                ? <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setShowArchive(true)} disabled={sending}
+                ? <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setShowArchive(true)} disabled={liSending || emSending}
                     title="Contact left the company or changed to an unrelated role? Archive them so they drop off and never get outreach.">Not reachable?</button>
                 : <>
                     <span>Archive — reason:</span>
-                    <button className="btn sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => archive('left-company')} disabled={sending}>Left company</button>
-                    <button className="btn sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => archive('changed-role')} disabled={sending}>Changed role</button>
-                    <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setShowArchive(false)} disabled={sending}>Cancel</button>
+                    <button className="btn sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => archive('left-company')} disabled={liSending || emSending}>Left company</button>
+                    <button className="btn sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => archive('changed-role')} disabled={liSending || emSending}>Changed role</button>
+                    <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setShowArchive(false)} disabled={liSending || emSending}>Cancel</button>
                   </>}
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {channels.linkedin ? <span style={chipStyle(liDone)}>LinkedIn {liDone ? '✓ sent' : 'not sent'}</span> : null}
+          {channels.email ? <span style={chipStyle(emDone)}>Email {emDone ? '✓ sent' : 'not sent'}</span> : null}
+          {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={liSending || emSending}>💤 14d</button> : null}
+          {onMute && !done ? <button className="btn ghost sm" title="Done for now. Removes them from the queue indefinitely without changing their status or logging a touch." onClick={() => onMute(c)} disabled={liSending || emSending}>Done for now</button> : null}
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}
-          {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={sending}>💤 14d</button> : null}
-          {onMute && !done ? <button className="btn ghost sm" title="Done for now. Removes them from the queue indefinitely without changing their status or logging a touch. Bring them back from the contact book." onClick={() => onMute(c)} disabled={sending}>Done for now</button> : null}
-          <button className={draftBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => draft(!!draftBlock)} disabled={loading}>
-            {loading ? 'Drafting…' : draftBlock ? 'Draft anyway' : (note ? (alreadyInvited ? 'Redraft message' : 'Redraft') : (alreadyInvited ? 'Draft message' : 'Draft note'))}
-          </button>
-          {done
-            ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, whiteSpace: 'nowrap' }} title={`Recorded as sent (${sentAt})`}>✓ Sent</span>
-            : <button className="btn sm" onClick={markSent} disabled={sending} title={alreadyInvited ? 'Record that you sent this message. Stamps Last Touch.' : 'Record that you sent this invite. Advances the contact to Sent and stamps Last Touch.'}>
-                {sending ? 'Saving…' : 'Mark sent'}
-              </button>}
         </div>
       </div>
-      <DraftBlockBanner block={draftBlock} />
-      {note ? (
-        <div style={{ marginTop: 10 }}>
-          <div style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px', fontSize: 13, whiteSpace: 'pre-wrap' }}>
-            {note.response}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-            <span className="dim mono" style={{ fontSize: 11 }}>{alreadyInvited ? `${note.length} chars` : `${note.length}/300 chars`}</span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button className="btn sm" onClick={copy}>Copy</button>
-              {done
-                ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, alignSelf: 'center' }}>✓ Sent</span>
-                : <button className="btn primary sm" onClick={markSent} disabled={sending} title={alreadyInvited ? 'Log this message as sent. Stamps Last Touch.' : 'Log this note as the invite you sent. Advances the contact to Sent.'}>
-                    {sending ? 'Saving…' : 'Mark as sent'}
-                  </button>}
-            </div>
+
+      {(channels.linkedin || channels.email) ? <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      {channels.linkedin ? <div style={{ flex: '1 1 300px', minWidth: 260 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 600 }}>{alreadyInvited ? 'LinkedIn message' : 'LinkedIn invite'}</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className={liBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => draftNote(!!liBlock)} disabled={liLoading || liDone}>{liLoading ? 'Drafting…' : liBlock ? 'Draft anyway' : (note ? (alreadyInvited ? 'Redraft message' : 'Redraft') : (alreadyInvited ? 'Draft message' : 'Draft note'))}</button>
+            {liDone ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span> : <button className="btn sm" onClick={markLiSent} disabled={liSending}>{liSending ? 'Saving…' : 'Mark sent'}</button>}
           </div>
         </div>
-      ) : null}
+        <DraftBlockBanner block={liBlock} />
+        {note ? <div style={{ marginTop: 8 }}>
+          <div style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px', fontSize: 13, whiteSpace: 'pre-wrap' }}>{note.response}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+            <span className="dim mono" style={{ fontSize: 11 }}>{alreadyInvited ? `${note.length} chars` : `${note.length}/300 chars`}</span>
+            <button className="btn sm" onClick={copy}>Copy</button>
+          </div>
+        </div> : null}
+      </div> : null}
+
+      {channels.email ? <div style={{ flex: '1 1 300px', minWidth: 260 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 600 }}>Email</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className={emailBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => genEmail(!!emailBlock)} disabled={emLoading || emDone}>{emLoading ? 'Drafting…' : emailBlock ? 'Draft anyway' : (draft ? 'Redraft' : 'Draft email')}</button>
+            {emDone ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span> : <button className="btn sm" onClick={markEmSent} disabled={emSending}>{emSending ? 'Saving…' : 'Mark sent'}</button>}
+          </div>
+        </div>
+        <DraftBlockBanner block={emailBlock} />
+        {draft ? <div style={{ marginTop: 8 }}>
+          <input value={emSubject} onChange={e => setEmSubject(e.target.value)} placeholder="Subject"
+            style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', marginBottom: 6, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }} />
+          <textarea value={emBody} onChange={e => setEmBody(e.target.value)} rows={8}
+            style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, lineHeight: 1.5, padding: '8px 10px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', whiteSpace: 'pre-wrap', resize: 'vertical' }} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+            <button className="btn sm" onClick={copyEmail}>Copy body</button>
+            {mailtoUrl ? <a className="btn ghost sm" href={mailtoUrl}>Open in mail ↗</a> : null}
+            <window.GmailDraftBtn to={c.email} subject={emSubject} body={emBody} size="sm" />
+          </div>
+        </div> : null}
+      </div> : null}
+      </div> : null}
     </div>
   );
 }
@@ -436,7 +534,7 @@ window.ConnectTab = function ConnectTab({ toast }) {
       </p>
       {queue.length === 0
         ? <div className="card dim">Nobody in the queue. Every reachable contact has a sendable email.</div>
-        : queue.map(c => <ConnectRow key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} />)}
+        : queue.map(c => <FollowupCard key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} />)}
     </div>
   );
 };
@@ -447,176 +545,6 @@ window.ConnectTab = function ConnectTab({ toast }) {
 // email, copy it, send it from your own client, then Mark sent — which logs a
 // "Sent" correspondence (a VERIFIED TOUCH, since the subject is not a LinkedIn
 // invite) and drops the row. This is the list that moves the 13/week touch floor.
-function EmailRow({ c, toast, onDone, onSnooze, onMute }) {
-  // draft is the EDITABLE email: { subject, body }. The /draft endpoint returns an
-  // OBJECT { subject, body } (not a string like the LinkedIn note), and its body
-  // has no greeting by design — the UI prepends "Hi <first>,". Once generated the
-  // user can edit both fields; every action (Gmail, mailto, copy, mark sent) reads
-  // the live edited values.
-  const [draft, setDraft] = useStateCq(null);
-  const [loading, setLoading] = useStateCq(false);
-  const [sending, setSending] = useStateCq(false);
-  const [sentAt, setSentAt] = useStateCq(null);
-  const [showArchive, setShowArchive] = useStateCq(false);
-  const [draftBlock, setDraftBlock] = useStateCq(null);
-  const done = !!sentAt;
-  const base = contactBase(c);
-  const firstName = c.firstName || (c.name || '').split(/\s+/)[0] || 'there';
-  // LinkedIn profile link, same normalization as the Connect queue, so you can
-  // confirm the TA is still at the company before you spend a draft on them.
-  const href = c.linkedin ? (/^https?:/.test(c.linkedin) ? c.linkedin : `https://${c.linkedin}`) : null;
-
-  // Same "Not reachable?" disposition as the Connect queue: a contact who left the
-  // company or changed roles gets Archived (status Archived + dated reason) and
-  // drops off, so you never email a dead lead. Shares the archive-contact endpoint.
-  const archive = (reason) => {
-    if (sending || done) return;
-    setSending(true);
-    window.tjkMutate('/api/linkedin-drafts/archive-contact', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: c.source, id: c.id, reason }),
-    }).then(r => r.json())
-      .then(res => {
-        if (res.error) { toast && toast(res.error, 'error'); setSending(false); return; }
-        toast && toast(`Archived — ${c.name || 'contact'}`, 'success');
-        onDone && onDone(c.source, c.id);
-      })
-      .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
-  };
-
-  const gen = (override = false) => {
-    setLoading(true);
-    // contactBase is null for influencers, who have no correspondence store.
-    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
-    window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ override }) })
-      .then(r => r.json())
-      .then(res => {
-        if (res.error) { toast && toast(res.error, 'error'); return; }
-        if (res.blocked) { setDraftBlock(res); return; }
-        const d = res.draft || {};
-        if (!d.body) { toast && toast('The model returned an empty draft. Try Redraft.', 'warn'); return; }
-        // Compose the full editable email the same way the Network → TA drawer does:
-        // greeting + body + the user's signature. This is what gets saved as the
-        // Gmail draft, so the draft is complete and needs no typing.
-        const sig = (window.myEmailSignature && window.myEmailSignature()) || '';
-        setDraft({ subject: (d.subject || '').trim(), body: `Hi ${firstName},\n\n${(d.body || '').trim()}${sig ? `\n\n${sig}` : ''}` });
-        if (override) setDraftBlock(b => ({ ...b, overridden: true }));
-      })
-      .catch(e => toast && toast(e.message, 'error'))
-      .finally(() => setLoading(false));
-  };
-
-  const subject = draft?.subject || '';
-  const body = draft?.body || '';
-  const setSubject = (v) => setDraft(d => ({ ...(d || {}), subject: v }));
-  const setBody = (v) => setDraft(d => ({ ...(d || {}), body: v }));
-
-  const copy = () => {
-    const cp = navigator.clipboard?.writeText(body);
-    if (cp) cp.then(() => toast && toast('Email body copied', 'success')).catch(() => toast && toast('Copy failed. Select the text and copy it manually', 'warn'));
-    else toast && toast('Copy not available here. Select the text and copy it manually', 'warn');
-  };
-
-  // mailto fallback for non-Gmail clients. Only the query params are URL-encoded;
-  // the ADDRESS must NOT be (mailto:name%40host is malformed and does nothing).
-  const mailtoUrl = c.email
-    ? `mailto:${c.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-    : null;
-
-  const markSent = () => {
-    if (sending || done) return;
-    setSending(true);
-    const sentBody = (body || '').trim() || `Emailed ${c.name || 'this contact'}${c.company ? ` at ${c.company}` : ''}.`;
-    // contactBase is null for influencers, who have no correspondence store.
-    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
-    window.tjkMutate(`${base}/correspondence`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ direction: 'Sent', subject: subject || 'Outreach email', body: sentBody }),
-    }).then(r => r.json())
-      .then(res => {
-        if (res.error) { toast && toast(res.error, 'error'); setSending(false); return; }
-        setSentAt('just now');
-        toast && toast(`Logged sent — ${c.name || 'contact'} (verified touch)`, 'success');
-        setTimeout(() => onDone && onDone(c.source, c.id), 1000);
-      })
-      .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
-  };
-
-  return (
-    <div className="card" style={{ marginBottom: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>
-            {c.name || '(no name)'}{' '}
-            <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
-            <OutreachPills c={c} />
-            <QueueReasonPill c={c} />
-          </div>
-          <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
-            <BookChip source={c.source} /> {c.company} · <span className="mono">{c.email}</span>
-            {c.emailState === 'risky' ? <span title="Catch-all domain: usually deliverable."> · risky</span> : null}
-          </div>
-          <CompanyOutreach c={c} />
-          {!done && (
-            <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-              {!showArchive
-                ? <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setShowArchive(true)} disabled={sending}
-                    title="Contact left the company or changed to an unrelated role? Archive them so they drop off and never get emailed.">Not reachable?</button>
-                : <>
-                    <span>Archive — reason:</span>
-                    <button className="btn sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => archive('left-company')} disabled={sending}>Left company</button>
-                    <button className="btn sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => archive('changed-role')} disabled={sending}>Changed role</button>
-                    <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => setShowArchive(false)} disabled={sending}>Cancel</button>
-                  </>}
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
-          {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer" title="Open the LinkedIn profile to confirm they're still at the company before emailing.">Open ↗</a> : null}
-          {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={sending}>💤 14d</button> : null}
-          {onMute && !done ? <button className="btn ghost sm" title="Done for now. Removes them from the queue indefinitely without changing their status or logging a touch. Bring them back from the contact book." onClick={() => onMute(c)} disabled={sending}>Done for now</button> : null}
-          <button className={draftBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => gen(!!draftBlock)} disabled={loading}>
-            {loading ? 'Drafting…' : draftBlock ? 'Draft anyway' : (draft ? 'Redraft' : 'Draft email')}
-          </button>
-          {done
-            ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, whiteSpace: 'nowrap' }} title="Recorded as a verified touch">✓ Sent</span>
-            : <button className="btn sm" onClick={markSent} disabled={sending} title="Record that you emailed this contact. Logs a verified touch and stamps Last Touch.">
-                {sending ? 'Saving…' : 'Mark sent'}
-              </button>}
-        </div>
-      </div>
-      <DraftBlockBanner block={draftBlock} />
-      {draft ? (
-        <div style={{ marginTop: 10 }}>
-          <input
-            value={subject}
-            onChange={e => setSubject(e.target.value)}
-            placeholder="Subject"
-            style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', marginBottom: 6, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }}
-          />
-          <textarea
-            value={body}
-            onChange={e => setBody(e.target.value)}
-            rows={9}
-            style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, lineHeight: 1.5, padding: '8px 10px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', whiteSpace: 'pre-wrap', resize: 'vertical' }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-            <button className="btn sm" onClick={copy}>Copy body</button>
-            {mailtoUrl ? <a className="btn ghost sm" href={mailtoUrl}>Open in mail ↗</a> : null}
-            <window.GmailDraftBtn to={c.email} subject={subject} body={body} size="sm" />
-            {done
-              ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, alignSelf: 'center' }}>✓ Sent</span>
-              : <button className="btn primary sm" onClick={markSent} disabled={sending}>{sending ? 'Saving…' : 'Mark as sent'}</button>}
-          </div>
-          <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
-            Edit the subject and body above, then “Gmail draft” creates a complete, ready-to-send draft in your Gmail Drafts folder (it never sends). Send it from Gmail, then click Mark as sent to log the verified touch.
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 window.EmailQueueTab = function EmailQueueTab({ toast }) {
   const [queue, setQueue] = useStateCq(null);
   const [err, setErr] = useStateCq(null);
@@ -649,7 +577,7 @@ window.EmailQueueTab = function EmailQueueTab({ toast }) {
       </p>
       {queue.length === 0
         ? <div className="card dim">No email-only contacts waiting. Contacts who also have a LinkedIn handle appear under High value.</div>
-        : queue.map(c => <EmailRow key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} />)}
+        : queue.map(c => <FollowupCard key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} />)}
     </div>
   );
 };
@@ -662,201 +590,6 @@ window.EmailQueueTab = function EmailQueueTab({ toast }) {
 // done state (c.linkedinDone / c.emailDone) and two independent draft+send blocks.
 // Nothing is sent from here: every note/email is copied or drafted to Gmail and
 // sent by hand, then logged with Mark sent.
-function BothRow({ c, toast, onChannelDone, onSnooze, onMute }) {
-  // LinkedIn side
-  const [note, setNote] = useStateCq(null);
-  const [liLoading, setLiLoading] = useStateCq(false);
-  const [liSending, setLiSending] = useStateCq(false);
-  const [liDone, setLiDone] = useStateCq(!!c.linkedinDone);
-  const [liBlock, setLiBlock] = useStateCq(null);
-  // Email side
-  const [draft, setDraft] = useStateCq(null);
-  const [emailBlock, setEmailBlock] = useStateCq(null);
-  const [emLoading, setEmLoading] = useStateCq(false);
-  const [emSending, setEmSending] = useStateCq(false);
-  const [emDone, setEmDone] = useStateCq(!!c.emailDone);
-
-  const base = contactBase(c);
-  const firstName = c.firstName || (c.name || '').split(/\s+/)[0] || 'there';
-  const href = c.linkedin ? (/^https?:/.test(c.linkedin) ? c.linkedin : `https://${c.linkedin}`) : null;
-
-  // ── LinkedIn actions ──
-  const draftNote = (override = false) => {
-    setLiLoading(true);
-    window.tjkMutate('/api/linkedin-drafts/connect-note', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: c.source, id: c.id, override }),
-    }).then(r => r.json())
-      .then(res => { if (res.error) toast && toast(res.error, 'error'); else if (res.blocked) setLiBlock(res); else { setNote(res); if (override) setLiBlock(b => ({ ...b, overridden: true })); } })
-      .catch(e => toast && toast(e.message, 'error'))
-      .finally(() => setLiLoading(false));
-  };
-  const copyNote = () => {
-    const cp = navigator.clipboard?.writeText(note.response);
-    if (cp) cp.then(() => toast && toast('Note copied', 'success')).catch(() => toast && toast('Copy failed. Select the text and copy it manually', 'warn'));
-    else toast && toast('Copy not available here. Select the text and copy it manually', 'warn');
-  };
-  const markLiSent = () => {
-    if (liSending || liDone) return;
-    setLiSending(true);
-    const body = (note?.response || '').trim() || `LinkedIn connection request sent to ${c.name || 'this contact'}.`;
-    // contactBase is null for influencers, who have no correspondence store.
-    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
-    window.tjkMutate(`${base}/correspondence`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ direction: 'Sent', subject: 'LinkedIn connection request', body }),
-    }).then(r => r.json())
-      .then(res => {
-        if (res.error) { toast && toast(res.error, 'error'); setLiSending(false); return; }
-        setLiDone(true); setLiSending(false);
-        toast && toast(`LinkedIn invite logged — ${c.name || 'contact'}`, 'success');
-        // Both channels done → drop the row after a beat; else it stays with LinkedIn ✓.
-        onChannelDone && onChannelDone(c.source, c.id, { linkedinDone: true, emailDone: emDone });
-      })
-      .catch(e => { toast && toast(e.message, 'error'); setLiSending(false); });
-  };
-
-  // ── Email actions ──
-  const genEmail = (override = false) => {
-    setEmLoading(true);
-    // contactBase is null for influencers, who have no correspondence store.
-    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
-    window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ override }) })
-      .then(r => r.json())
-      .then(res => {
-        if (res.error) { toast && toast(res.error, 'error'); return; }
-        if (res.blocked) { setEmailBlock(res); return; }
-        const d = res.draft || {};
-        if (!d.body) { toast && toast('The model returned an empty draft. Try Redraft.', 'warn'); return; }
-        const sig = (window.myEmailSignature && window.myEmailSignature()) || '';
-        setDraft({ subject: (d.subject || '').trim(), body: `Hi ${firstName},\n\n${(d.body || '').trim()}${sig ? `\n\n${sig}` : ''}` });
-        if (override) setEmailBlock(b => ({ ...b, overridden: true }));
-      })
-      .catch(e => toast && toast(e.message, 'error'))
-      .finally(() => setEmLoading(false));
-  };
-  const emSubject = draft?.subject || '';
-  const emBody = draft?.body || '';
-  const setEmSubject = (v) => setDraft(d => ({ ...(d || {}), subject: v }));
-  const setEmBody = (v) => setDraft(d => ({ ...(d || {}), body: v }));
-  const copyEmail = () => {
-    const cp = navigator.clipboard?.writeText(emBody);
-    if (cp) cp.then(() => toast && toast('Email body copied', 'success')).catch(() => toast && toast('Copy failed. Select the text and copy it manually', 'warn'));
-    else toast && toast('Copy not available here. Select the text and copy it manually', 'warn');
-  };
-  const mailtoUrl = c.email ? `mailto:${c.email}?subject=${encodeURIComponent(emSubject)}&body=${encodeURIComponent(emBody)}` : null;
-  const markEmSent = () => {
-    if (emSending || emDone) return;
-    setEmSending(true);
-    const sentBody = (emBody || '').trim() || `Emailed ${c.name || 'this contact'}${c.company ? ` at ${c.company}` : ''}.`;
-    // contactBase is null for influencers, who have no correspondence store.
-    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
-    window.tjkMutate(`${base}/correspondence`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ direction: 'Sent', subject: emSubject || 'Outreach email', body: sentBody }),
-    }).then(r => r.json())
-      .then(res => {
-        if (res.error) { toast && toast(res.error, 'error'); setEmSending(false); return; }
-        setEmDone(true); setEmSending(false);
-        toast && toast(`Email logged (verified touch) — ${c.name || 'contact'}`, 'success');
-        onChannelDone && onChannelDone(c.source, c.id, { linkedinDone: liDone, emailDone: true });
-      })
-      .catch(e => { toast && toast(e.message, 'error'); setEmSending(false); });
-  };
-
-  const chipStyle = (done) => ({
-    fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 7px', borderRadius: 4, verticalAlign: 'middle',
-    background: done ? 'color-mix(in srgb, var(--green) 18%, transparent)' : 'var(--panel-2)',
-    color: done ? 'var(--green)' : 'var(--text-mute)',
-    border: `1px solid ${done ? 'color-mix(in srgb, var(--green) 45%, transparent)' : 'var(--border)'}`,
-  });
-
-  return (
-    <div className="card" style={{ marginBottom: 12, borderLeft: '3px solid var(--accent)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <div>
-          <div style={{ fontWeight: 600 }}>
-            {c.name || '(no name)'}{' '}
-            <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
-            {c.isHighValue !== false && <span title="High value: reachable on both email and LinkedIn. Worked on both channels."
-              style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.4px', padding: '2px 6px', borderRadius: 4, background: 'var(--accent)', color: '#fff', verticalAlign: 'middle' }}>HIGH VALUE</span>}
-            <QueueReasonPill c={c} />
-            {c.isPrincipal ? <span title="Hiring principal — the decision-maker you'd report to."
-              style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)', border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)', verticalAlign: 'middle' }}>PRINCIPAL</span> : null}
-            <OutreachPills c={c} />
-          </div>
-          <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
-            <BookChip source={c.source} /> {c.company} · <span className="mono">{c.email}</span>
-          </div>
-          <CompanyOutreach c={c} />
-        </div>
-        {/* Channel status chips live in the header now (top-right), next to the row
-            actions; the Email chip is hidden when there is no address on file. */}
-        <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <span style={chipStyle(liDone)}>LinkedIn {liDone ? '✓ sent' : 'not sent'}</span>
-          {c.email ? <span style={chipStyle(emDone)}>Email {emDone ? '✓ sent' : 'not sent'}</span> : null}
-          {onSnooze ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)}>💤 14d</button> : null}
-          {onMute ? <button className="btn ghost sm" title="Done for now. Removes them from the queue indefinitely without changing their status or logging a touch. Bring them back from the contact book." onClick={() => onMute(c)}>Done for now</button> : null}
-          {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}
-        </div>
-      </div>
-
-      {/* Both channels side by side (LinkedIn left, Email right); stack on narrow
-          widths. Each column carries its own action row AND its expandable draft,
-          so a long email draft only grows its own column. */}
-      <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-      <div style={{ flex: '1 1 300px', minWidth: 260 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>LinkedIn invite</span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className={liBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => draftNote(!!liBlock)} disabled={liLoading || liDone}>{liLoading ? 'Drafting…' : liBlock ? 'Draft anyway' : (note ? 'Redraft' : 'Draft note')}</button>
-            {liDone
-              ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span>
-              : <button className="btn sm" onClick={markLiSent} disabled={liSending} title="Record that you sent the LinkedIn invite.">{liSending ? 'Saving…' : 'Mark sent'}</button>}
-          </div>
-        </div>
-        <DraftBlockBanner block={liBlock} />
-        {note ? (
-          <div style={{ marginTop: 8 }}>
-            <div style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px', fontSize: 13, whiteSpace: 'pre-wrap' }}>{note.response}</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-              <span className="dim mono" style={{ fontSize: 11 }}>{note.length}/300 chars</span>
-              <button className="btn sm" onClick={copyNote}>Copy</button>
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      <div style={{ flex: '1 1 300px', minWidth: 260 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>Email</span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className={emailBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => genEmail(!!emailBlock)} disabled={emLoading || emDone}>{emLoading ? 'Drafting…' : emailBlock ? 'Draft anyway' : (draft ? 'Redraft' : 'Draft email')}</button>
-            {emDone
-              ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span>
-              : <button className="btn sm" onClick={markEmSent} disabled={emSending} title="Record that you emailed this contact. Logs a verified touch.">{emSending ? 'Saving…' : 'Mark sent'}</button>}
-          </div>
-        </div>
-        <DraftBlockBanner block={emailBlock} />
-        {draft ? (
-          <div style={{ marginTop: 8 }}>
-            <input value={emSubject} onChange={e => setEmSubject(e.target.value)} placeholder="Subject"
-              style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', marginBottom: 6, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }} />
-            <textarea value={emBody} onChange={e => setEmBody(e.target.value)} rows={8}
-              style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, lineHeight: 1.5, padding: '8px 10px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', whiteSpace: 'pre-wrap', resize: 'vertical' }} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-              <button className="btn sm" onClick={copyEmail}>Copy body</button>
-              {mailtoUrl ? <a className="btn ghost sm" href={mailtoUrl}>Open in mail ↗</a> : null}
-              <window.GmailDraftBtn to={c.email} subject={emSubject} body={emBody} size="sm" />
-            </div>
-          </div>
-        ) : null}
-      </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Sequence panel ──────────────────────────────────────────────────────────────
 // Per-contact outreach sequence: pick a template, and the engine tracks which step
 // you're on and when the next is due. Each step is a DRAFT you approve — nothing
@@ -992,7 +725,7 @@ window.BothQueueTab = function BothQueueTab({ toast }) {
       </p>
       {queue.length === 0
         ? <div className="card dim">No high-value contacts waiting. They appear once you apply to a company where a contact has both a verified email and a LinkedIn handle.</div>
-        : queue.map(c => <BothRow key={`${c.source}:${c.id}`} c={c} toast={toast} onChannelDone={onChannelDone} />)}
+        : queue.map(c => <FollowupCard key={`${c.source}:${c.id}`} c={c} toast={toast} onChannelDone={onChannelDone} />)}
     </div>
   );
 };
@@ -1000,25 +733,14 @@ window.BothQueueTab = function BothQueueTab({ toast }) {
 // ── Unified follow-up queue ─────────────────────────────────────────────────
 // The single work queue that replaces the three channel tabs (Connect / Email /
 // High value). Reads GET /api/followups/queue (one ranked, channel-tagged list)
-// and renders each row with the SAME per-channel row component the old tabs used
-// (ConnectRow / EmailRow / BothRow), so the outreach actions are byte-identical.
+// and renders each row with the same FollowupCard component.
 // Channel becomes a filter chip instead of a tab. Rows arrive pre-ranked from the
 // server (importance, then last-touch recency); we preserve that order.
 // Exposed so the Follow-Ups → "Applications going stale" list renders each stale
-// contact with the SAME per-channel card the main follow-up queue uses, instead of
-// forcing BothRow on everyone: a LinkedIn-only contact gets ConnectRow (note only),
-// an email-only contact gets EmailRow, and a dual-channel contact gets BothRow. The
-// old hardwired-BothRow showed an unusable Email panel (no address → no Gmail draft
-// button) on LinkedIn-only contacts. The going-stale caller passes onChannelDone; we
-// normalize it so the single-channel rows' onDone(source, id) still triggers a reload.
-window.FollowupContactCard = function FollowupContactCard({ c, toast, onChannelDone, onDone }) {
-  const finish = (source, id) => {
-    if (onDone) onDone(source, id);
-    else if (onChannelDone) onChannelDone(source, id, { linkedinDone: true, emailDone: true });
-  };
-  if (c.channel === 'linkedin') return <ConnectRow c={c} toast={toast} onDone={finish} />;
-  if (c.channel === 'email')    return <EmailRow   c={c} toast={toast} onDone={finish} />;
-  return <BothRow c={c} toast={toast} onChannelDone={onChannelDone} />;
+// contact with the same card the main follow-up queue uses. Channel availability
+// decides which action sections appear.
+window.FollowupContactCard = function FollowupContactCard(props) {
+  return <FollowupCard {...props} />;
 };
 
 window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) {
@@ -1039,6 +761,14 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   const [recText, setRecText] = useStateCq('');
   const [recBusy, setRecBusy] = useStateCq(false);
   const [recResult, setRecResult] = useStateCq(null);
+  // Who is hidden by "Done for now", read from the SERVER. The mute itself lives
+  // in a data file, so the restore list has to come from there: keeping it in
+  // localStorage meant clearing site data left contacts muted with nothing that
+  // knew about them, which is the no-undo trap the control exists to avoid.
+  const [mutedContacts, setMutedContacts] = useStateCq([]);
+  const loadMuted = () => fetch('/api/followups/muted?sources=ta,referral,influencer').then(r => r.json())
+    .then(d => setMutedContacts(Array.isArray(d.muted) ? d.muted : []))
+    .catch(() => { /* the list is a convenience; never break the queue over it */ });
 
   const load = () => {
     if (externalItems) { onReload && onReload(); return; }
@@ -1050,6 +780,8 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   // Keep in sync when the parent re-supplies the list after a reload.
   useEffectCq(() => { if (externalItems) setQueue(items); }, [items]);
   useEffectCq(() => { if (!externalItems) load(); }, []);
+  // On mount too, or a contact muted in an earlier session has no way back.
+  useEffectCq(() => { loadMuted(); }, []);
 
   // InMail budget (LinkedIn Premium monthly credits). Fetched on mount; spent when
   // an InMail follow-up is marked sent; reconcilable to LinkedIn's real number.
@@ -1126,8 +858,22 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
     }).then(async r => {
       const res = await r.json().catch(() => ({}));
       if (!r.ok || res.error) throw new Error(res.error || `Mute failed (${r.status})`);
-      toast && toast(`Done for now — ${c.name || 'contact'}`, 'success');
+      toast && toast(`Done for now: ${c.name || 'contact'}`, 'success');
       setQueue(q => (q || []).filter(x => !(x.source === c.source && String(x.id) === String(c.id))));
+      loadMuted();
+      load();
+    }).catch(e => toast && toast(e.message, 'error'));
+  };
+
+  const unmuteContact = (c) => {
+    window.tjkMutate('/api/followups/unmute', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: c.source, id: c.id }),
+    }).then(async r => {
+      const res = await r.json().catch(() => ({}));
+      if (!r.ok || res.error) throw new Error(res.error || `Restore failed (${r.status})`);
+      loadMuted();
+      toast && toast(`Restored: ${c.name || 'contact'}`, 'success');
       load();
     }).catch(e => toast && toast(e.message, 'error'));
   };
@@ -1299,15 +1045,19 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
           </div>
         )}
       </div>
-      {(heldCount > 0 || restingCount > 0) && (
+      {(heldCount > 0 || restingCount > 0 || mutedContacts.length > 0) && (
         <div className="dim" style={{ fontSize: 12, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '7px 11px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 240 }}>
             {heldCount > 0 && <span>{heldCount} contact{heldCount === 1 ? '' : 's'} hidden right now ({heldReasons}). They return automatically once that clears (tomorrow, or when your InMail credits reset).</span>}
             {restingCount > 0 && <span>{restingCount} contact{restingCount === 1 ? '' : 's'} resting — reached the outreach cap with no reply. They stay parked here until they reply, or you message anyway.</span>}
+            {mutedContacts.length > 0 && <span>
+              {mutedContacts.length} contact{mutedContacts.length === 1 ? '' : 's'} marked Done for now.{' '}
+              {mutedContacts.map((c, i) => <span key={`${c.source}:${c.id}`}>{i ? ', ' : ''}<button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={() => unmuteContact(c)}>Restore {c.name}</button></span>)}
+            </span>}
           </div>
-          <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setShowHeld(v => !v)}>
+          {(heldCount > 0 || restingCount > 0) ? <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setShowHeld(v => !v)}>
             {showHeld ? 'Hide them' : 'Show anyway'}
-          </button>
+          </button> : null}
         </div>
       )}
       {rows.length === 0
@@ -1318,11 +1068,7 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
                 ? 'Nothing to send right now: the remaining contacts are held (you already reached out at their company today, or you are out of InMail credits). They return automatically.'
                 : `No ${channel} contacts in the queue right now.`}
           </div>
-        : rows.map(c =>
-            c.channel === 'linkedin' ? <ConnectRow key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onSnooze={snoozeContact} onMute={muteContact} inmailRemaining={inmail ? inmail.remaining : undefined} onInmailSent={spendInmail} />
-          : c.channel === 'email'   ? <EmailRow   key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onSnooze={snoozeContact} onMute={muteContact} />
-          :                           <BothRow    key={`${c.source}:${c.id}`} c={c} toast={toast} onChannelDone={onChannelDone} onSnooze={snoozeContact} onMute={muteContact} />
-        )}
+        : rows.map(c => <FollowupCard key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onChannelDone={onChannelDone} onSnooze={snoozeContact} onMute={muteContact} inmailRemaining={inmail ? inmail.remaining : undefined} onInmailSent={spendInmail} />)}
     </div>
   );
 };
