@@ -15,7 +15,7 @@ assert.equal(people[0].matchedBy, 'linkedinKey');
 people = resolvePeople({ ta: [{ id: 1, linkedin: 'n/a' }], referrals: [{ id: 2, linkedin: 'n/a' }] });
 assert.equal(people.length, 2);
 
-people = resolvePeople({ ta: [{ id: 42 }], referrals: [{ id: 7, notes: 'Created FROM ta outreach #42 today' }] });
+people = resolvePeople({ ta: [{ id: 7042 }], referrals: [{ id: 7007, notes: 'Created FROM ta outreach #7042 today' }] });
 assert.equal(people.length, 1);
 assert.equal(people[0].matchedBy, 'backref');
 assert.equal(resolvePeople({ referrals: [{ id: 7, notes: 'from TA Outreach #404' }] }).length, 1);

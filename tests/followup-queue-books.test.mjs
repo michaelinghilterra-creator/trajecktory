@@ -68,11 +68,11 @@ console.log('\nconnected contacts are not first touches');
     !!(c.companyOutreach && c.companyOutreach.selfLastTouch) ||
     ['Sent', 'Replied', 'Meeting Scheduled'].includes(c.status);
 
-  const jennifer = { source: 'referral', id: 160, status: 'Not Asked', linkedinStatus: 'Connected', freeDm: true, companyOutreach: {} };
-  check(alreadyInvited(jennifer) === true,
+  const connectedReferral = { source: 'referral', id: 7001, status: 'Not Asked', linkedinStatus: 'Connected', freeDm: true, companyOutreach: {} };
+  check(alreadyInvited(connectedReferral) === true,
     'a connected referral counts as already invited, so it drafts a message not a connect note');
 
-  const stranger = { source: 'referral', id: 161, status: 'Not Asked', companyOutreach: {} };
+  const stranger = { source: 'referral', id: 7002, status: 'Not Asked', companyOutreach: {} };
   check(alreadyInvited(stranger) === false,
     'a referral you have never touched is still a genuine first touch');
 
