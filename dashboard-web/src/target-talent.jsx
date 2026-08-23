@@ -930,7 +930,17 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           <div className="chips">{data.person.refs.map(ref => {
             const [store, rowId] = ref.split(":");
             const label = store === "referral" ? "Referrals" : store === "ta" ? "TA Outreach" : "Influencers";
-            return <span className="chip" key={ref}>{label} #{rowId}</span>;
+            // Same colors as the queue's book chips, from the one shared map, so a
+            // green chip means Referral everywhere it appears. Resolved at render
+            // time and tolerant of absence: connect.js loads first today, and a
+            // plain chip is a fine fallback if that ever changes.
+            const cvar = (window.BOOK_META || {})[store]?.cvar;
+            const tint = cvar ? {
+              background: `color-mix(in srgb, ${cvar} 15%, transparent)`,
+              color: cvar,
+              borderColor: `color-mix(in srgb, ${cvar} 40%, transparent)`,
+            } : undefined;
+            return <span className="chip" key={ref} style={tint}>{label} #{rowId}</span>;
           })}</div>
           {data.person.refs.length > 1 && <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
             {data.person.matchedBy === "linkedinKey" ? "Matched on their LinkedIn profile." : data.person.matchedBy === "backref" ? "Linked when you promoted them from TA Outreach." : data.person.matchedBy === "pin" ? "You merged these by hand." : ""}

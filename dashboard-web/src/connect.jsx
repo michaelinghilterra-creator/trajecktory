@@ -25,6 +25,38 @@ function OutreachPills({ c }) {
   );
 }
 
+// Which book a queue row came from. The queue merges three populations that used
+// to live on separate tabs, and once merged every row looked identical: the source
+// was rendered as a bare lowercase word AFTER the company name, so its position
+// shifted on every row and there was nothing for the eye to lock onto.
+//
+// So this is a colored chip at a FIXED position, first on the meta line. The label
+// matches the subtab name deliberately, so the chip also tells you where to go to
+// find that person. Colors are theme tokens, never literals, because there are
+// nine themes.
+const BOOK_META = {
+  ta:         { label: 'TA Outreach', cvar: 'var(--cyan)',  title: 'A talent-acquisition contact, from the TA Outreach book.' },
+  referral:   { label: 'Referral',    cvar: 'var(--green)', title: 'Someone in your own network, from the Referrals book.' },
+  influencer: { label: 'Influencer',  cvar: 'var(--blue)',  title: 'A voice you engage with publicly, from the Influencers book.' },
+};
+// Shared so the drawer's "Filed in" chips tint identically. One map, or the two
+// surfaces drift and the colors stop meaning anything.
+window.BOOK_META = BOOK_META;
+function BookChip({ source }) {
+  const meta = BOOK_META[source];
+  if (!meta) return null;
+  return (
+    <span title={meta.title}
+      style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 6px', borderRadius: 4,
+        verticalAlign: 'middle', whiteSpace: 'nowrap',
+        background: `color-mix(in srgb, ${meta.cvar} 15%, transparent)`,
+        color: meta.cvar,
+        border: `1px solid color-mix(in srgb, ${meta.cvar} 40%, transparent)` }}>
+      {meta.label}
+    </span>
+  );
+}
+
 // Why this contact is in the follow-up queue: 'Reach out' (you applied at their
 // company, not worked yet), 'App going stale', or 'Went quiet'. One consistent tag
 // across all three card types, so the merged list never leaves you guessing why
@@ -255,7 +287,7 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
             <QueueReasonPill c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
-            {c.company} · <span className="mono">{c.source}</span> ·{' '}
+            <BookChip source={c.source} /> {c.company} ·{' '}
             {c.hasEmail
               ? <span title="An address is on file but is not verified deliverable. Verify it to move this contact to the email motion.">email {c.emailState}</span>
               : <span title="No email address on file. Find one (Hunter/MillionVerifier) to move this contact to the email motion.">no email on file</span>}
@@ -476,7 +508,7 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
             <QueueReasonPill c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
-            {c.company} · <span className="mono">{c.source}</span> · <span className="mono">{c.email}</span>
+            <BookChip source={c.source} /> {c.company} · <span className="mono">{c.email}</span>
             {c.emailState === 'risky' ? <span title="Catch-all domain: usually deliverable."> · risky</span> : null}
           </div>
           <CompanyOutreach c={c} />
@@ -702,7 +734,7 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
             <OutreachPills c={c} />
           </div>
           <div className="dim" style={{ fontSize: 12, marginTop: 2 }}>
-            {c.company} · <span className="mono">{c.source}</span> · <span className="mono">{c.email}</span>
+            <BookChip source={c.source} /> {c.company} · <span className="mono">{c.email}</span>
           </div>
           <CompanyOutreach c={c} />
         </div>
@@ -945,6 +977,7 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   const [queue, setQueue] = useStateCq(externalItems ? items : null);
   const [err, setErr] = useStateCq(null);
   const [channel, setChannel] = useStateCq('all');
+  const [book, setBook] = useStateCq('all');   // contact type: referral / ta / influencer
   const [showHeld, setShowHeld] = useStateCq(false);
   const [inmail, setInmail] = useStateCq(null);
   const [setBox, setSetBox] = useStateCq(false);
@@ -1085,7 +1118,28 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
     { id: 'email', label: 'Email' },
     { id: 'both', label: 'Both' },
   ];
-  const rows = channel === 'all' ? base : base.filter(c => c.channel === channel);
+  // Contact type, alongside channel. The queue merges three books that used to be
+  // separate tabs, and 140 referrals can bury 15 TA contacts, so "show me only the
+  // warm ones" has to be one click.
+  //
+  // Counts are computed against the CHANNEL-filtered set, not the whole queue, so
+  // the two filters describe what you will actually see when you combine them. A
+  // count that ignores the other filter reads as a bug the first time you click
+  // both and get fewer rows than the number promised.
+  const bookBase = channel === 'all' ? base : base.filter(c => c.channel === channel);
+  const bookCounts = {
+    all: bookBase.length,
+    referral: bookBase.filter(c => c.source === 'referral').length,
+    ta: bookBase.filter(c => c.source === 'ta').length,
+    influencer: bookBase.filter(c => c.source === 'influencer').length,
+  };
+  const BOOK_CHIPS = [
+    { id: 'all', label: 'All' },
+    { id: 'referral', label: 'Referral' },
+    { id: 'ta', label: 'TA' },
+    { id: 'influencer', label: 'Influencer' },
+  ];
+  const rows = book === 'all' ? bookBase : bookBase.filter(c => c.source === book);
 
   return (
     <div style={{ padding: 24, maxWidth: "none", marginLeft: 0, marginRight: 0 }}>
@@ -1107,6 +1161,25 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
               color: active ? '#15101f' : 'var(--text-dim)',
               border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
             }}>{ch.label} <span style={{ opacity: 0.7, marginLeft: 3 }}>{n}</span></span>
+          );
+        })}
+        {/* Contact type, pushed to the right of the same row so the two filters read
+            as one control strip rather than stacking and eating vertical space. */}
+        <span style={{ flex: '1 1 auto' }} />
+        <span className="dim mono" style={{ fontSize: 10.5, marginRight: 2 }}>CONTACT TYPE</span>
+        {BOOK_CHIPS.map(bk => {
+          const active = book === bk.id;
+          const n = bookCounts[bk.id];
+          // The active chip takes the book's own color, so the filter and the row
+          // chips agree: click the green one, get the green rows.
+          const cvar = bk.id === 'all' ? 'var(--accent)' : (BOOK_META[bk.id] || {}).cvar || 'var(--accent)';
+          return (
+            <span key={bk.id} onClick={() => setBook(bk.id)} style={{
+              cursor: 'pointer', padding: '4px 11px', borderRadius: 5, fontSize: 11.5, fontWeight: 600,
+              background: active ? cvar : 'var(--panel-2)',
+              color: active ? '#15101f' : 'var(--text-dim)',
+              border: `1px solid ${active ? cvar : 'var(--border)'}`,
+            }}>{bk.label} <span style={{ opacity: 0.7, marginLeft: 3 }}>{n}</span></span>
           );
         })}
       </div>
