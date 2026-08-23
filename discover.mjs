@@ -28,6 +28,7 @@ import yaml from 'js-yaml';
 import { buildCompanyIndex, addCompanyToIndex, findKnownCompany, buildPortalsEntry, slugToName, insertPortalsEntries } from './lib/portals.mjs';
 import { canonicalUrl } from './lib/identity.mjs';
 import { sanitizeCell } from './lib/sanitize-cell.mjs';
+import { buildTitleFilter } from './lib/scan-core.mjs';
 
 const DRY_RUN   = process.argv.includes('--dry-run');
 const VERBOSE   = process.argv.includes('--verbose');
@@ -190,16 +191,6 @@ function loadSeenUrls() {
   return seen;
 }
 
-// ─── Title filter ───────────────────────────────────────────────────
-
-function passesFilter(title, filter) {
-  if (!title) return true;
-  const t = title.toLowerCase();
-  if (!filter.positive.some(p => t.includes(p.toLowerCase()))) return false;
-  if (filter.negative.some(n => t.includes(n.toLowerCase()))) return false;
-  return true;
-}
-
 // ─── portals.yml entry builder ──────────────────────────────────────
 // buildPortalsEntry + insertPortalsEntries now live in lib/portals.mjs so the
 // dashboard agent-scan path writes entries through the same one implementation.
@@ -283,7 +274,7 @@ async function fetchMusePage(level, page) {
   return await resp.json();
 }
 
-async function searchMuse(level, titleFilter, seenUrls) {
+async function searchMuse(level, titleOk, seenUrls) {
   const results = [];
   let page = 0;
 
@@ -305,7 +296,7 @@ async function searchMuse(level, titleFilter, seenUrls) {
       const url     = job.refs?.landing_page || '';
 
       if (!url || !title) continue;
-      if (!passesFilter(title, titleFilter)) {
+      if (!titleOk(title)) {
         if (VERBOSE) console.log(`\n    SKIP (filter): "${title}"`);
         continue;
       }
@@ -336,7 +327,7 @@ async function main() {
   }
   const portalsRaw    = readFileSync(PORTALS_PATH, 'utf8');
   const portals       = yaml.load(portalsRaw);
-  const titleFilter   = portals.title_filter;
+  const titleOk       = buildTitleFilter(portals.title_filter);
   const braveQueries  = buildBraveQueries(portals);
   const trackedCos    = portals.tracked_companies || [];
   const companyIndex  = buildCompanyIndex(trackedCos);
@@ -380,7 +371,7 @@ async function main() {
       for (const { url, title } of results) {
         const parsed = parseAtsUrl(url);
         if (!parsed) continue;
-        if (!passesFilter(title, titleFilter)) continue;
+        if (title && !titleOk(title)) continue;
         if (seenUrls.has(canonicalUrl(parsed.url))) continue;
         seenUrls.add(canonicalUrl(parsed.url));
         // Brave results carry no company hint, so only the slug is available to
@@ -407,7 +398,7 @@ async function main() {
     for (let i = 0; i < MUSE_QUERIES.length; i++) {
       const { level } = MUSE_QUERIES[i];
       process.stdout.write(`   [${i + 1}/${MUSE_QUERIES.length}] level=${level} (${MUSE_MAX_PAGES} pages) ... `);
-      const results = await searchMuse(level, titleFilter, seenUrls);
+      const results = await searchMuse(level, titleOk, seenUrls);
       phase3Jobs.push(...results);
       console.log(`${results.length} new`);
       if (i < MUSE_QUERIES.length - 1) await sleep(500);

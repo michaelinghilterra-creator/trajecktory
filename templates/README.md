@@ -42,7 +42,7 @@ node generate-latex.mjs output/cv-name-company-date.tex output/custom-name.pdf
 
 Pre-configured portal scanner with 45+ tracked companies and search queries. Contains title filters, company career page URLs, Greenhouse API endpoints, and WebSearch queries.
 
-**To activate:** Copy to project root as `portals.yml` and customize `title_filter.positive` keywords for your target roles. Add or remove companies as needed.
+**To activate:** Copy to project root as `portals.yml` and customize the `title_filter.matrix` blocks (functions_bare, functions_ranked, seniority) for your target roles. Add or remove companies as needed.
 
 ### states.yml
 

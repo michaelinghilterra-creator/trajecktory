@@ -129,7 +129,7 @@ Fill in `config/profile.yml` with their answers. For archetypes and targeting na
 If `portals.yml` is missing:
 > "I'll set up the job scanner with a broad starter list of 123 employers across 15 industries. It's a starting point, not a list picked for you. Want me to customize the search keywords for your target roles?"
 
-Copy `templates/portals.example.yml` → `portals.yml`. If they gave target roles in Step 2, update `title_filter.positive` to match.
+Copy `templates/portals.example.yml` → `portals.yml`. If they gave target roles in Step 2, update `title_filter.matrix.functions_bare`, `functions_ranked`, and `seniority` to match.
 
 #### Step 4: Tracker
 If `data/applications.md` doesn't exist, create it:

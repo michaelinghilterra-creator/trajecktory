@@ -3,10 +3,11 @@ import fs from 'node:fs';
 import yaml from 'js-yaml';
 import { canonicalUrl, normalizeCompany, sameRole } from '../lib/identity.mjs';
 import { parseTracker } from '../lib/tracker.mjs';
+import { buildTitleFilter } from '../lib/scan-core.mjs';
 
 const candidates = JSON.parse(fs.readFileSync('batch/scan-candidates.json', 'utf8'));
 const portals = yaml.load(fs.readFileSync('portals.yml', 'utf8'));
-const tf = portals.title_filter;
+const passesTitle = buildTitleFilter(portals.title_filter);
 
 const histRaw = fs.readFileSync('data/scan-history.tsv', 'utf8');
 const histUrls = new Set(histRaw.split('\n').slice(1).map(l => canonicalUrl(l.split('\t')[0])).filter(Boolean));
@@ -20,13 +21,6 @@ for (const m of pipeRaw.matchAll(/https?:\/\/[^\s|)]+/g)) pipeUrls.add(canonical
 // AGENTS.md exists to prevent: it counted pipes positionally and drifted the
 // moment a column was added.
 const appRows = parseTracker(fs.readFileSync('data/applications.md', 'utf8'));
-
-const passesTitle = title => {
-  const t = title.toLowerCase();
-  const hasPos = tf.positive.some(k => t.includes(k.toLowerCase()));
-  const hasNeg = tf.negative.some(k => t.includes(k.toLowerCase()));
-  return hasPos && !hasNeg;
-};
 
 const out = { added: [], dupUrl: [], dupApp: [], filtered: [] };
 const seen = new Set();
