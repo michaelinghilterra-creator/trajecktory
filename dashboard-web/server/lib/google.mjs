@@ -422,8 +422,16 @@ function parseGmailMessage(raw) {
 }
 
 // Pull the bare address out of a "Name <alex@example.test>" header value.
+//
+// The quantifiers are BOUNDED, not open-ended (CodeQL js/polynomial-redos). With
+// `[a-z0-9._%+-]+@`, a header of many '%' and no '@' makes the engine retry from
+// every start position, which is quadratic in the header length. That became
+// reachable when the reply route started parsing a re-fetched message, so the
+// From header is attacker-influenced: anyone who can send mail to the connected
+// inbox chooses this input. RFC 5321 caps the local part at 64 and the domain at
+// 255, so bounding costs nothing real and makes each start position O(1).
 function extractEmail(s) {
-  const m = String(s || '').match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
+  const m = String(s || '').match(/[a-z0-9._%+-]{1,64}@[a-z0-9.-]{1,255}\.[a-z]{2,24}/i);
   return m ? m[0].toLowerCase() : null;
 }
 
