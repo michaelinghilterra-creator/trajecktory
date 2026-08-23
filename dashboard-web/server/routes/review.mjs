@@ -6,6 +6,7 @@ import { runWeeklyReview } from '../lib/weekly-run.mjs';
 import { REVIEW_LOG_PATH } from '../config.mjs';
 import { logConnect, readConnects } from '../lib/connects.mjs';
 import { actionSeries, applicationCohorts } from '../lib/activity.mjs';
+import { referralConversion } from '../lib/insights.mjs';
 
 export const router = express.Router();
 
@@ -14,7 +15,7 @@ export const router = express.Router();
 router.get('/api/metrics/weekly', (req, res) => {
   try {
     const { weekStart, weekEnd, metrics } = collectWeeklyMetrics(new Date());
-    res.json({ weekStart, weekEnd, metrics, floors: evaluateFloors(metrics) });
+    res.json({ weekStart, weekEnd, metrics, floors: evaluateFloors(metrics), referralConversion: referralConversion() });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
