@@ -50,11 +50,41 @@ const s2 = readSync();
 check(s2.lastPreviewAt === stamp, 'an unrelated writeSync round-trip preserves lastPreviewAt');
 check(!!s2.handledReplies.m2, 'the unrelated change was written');
 
+// The SAME regression this suite was written for, one key later. notRelatedSenders
+// (the "stop surfacing this sender" list) was added after readSync's whitelist and
+// was therefore dropped on every read, so the route wrote it and the next sweep's
+// freshness stamp wiped it. The live file held 40 recorded not-related actions and
+// 1 surviving sender. A read-modify-write helper must not decide which keys exist.
+fs.writeFileSync(syncPath, JSON.stringify({
+  seenMessageIds: ['a'], lastCheckedAt: null, handledReplies: {}, lastPreviewAt: stamp,
+  notRelatedSenders: { 'noreply@example.com': { date: '2026-08-01' } },
+  someFutureKey: { kept: true },
+}) + '\n');
+
+const n1 = readSync();
+check(!!n1.notRelatedSenders['noreply@example.com'], 'readSync surfaces notRelatedSenders');
+check(n1.someFutureKey && n1.someFutureKey.kept === true, 'readSync preserves a key it does not know about');
+
+// The exact live failure: a freshness-stamp write must not clobber the suppression list.
+n1.lastPreviewAt = new Date().toISOString();
+writeSync(n1);
+const n2 = readSync();
+check(!!n2.notRelatedSenders['noreply@example.com'], 'a freshness-stamp round-trip preserves notRelatedSenders');
+check(!!n2.someFutureKey, 'a freshness-stamp round-trip preserves an unknown key');
+
+// A null in the file must not defeat a shape guarantee callers depend on.
+fs.writeFileSync(syncPath, JSON.stringify({ handledReplies: null, notRelatedSenders: null }) + '\n');
+const n3 = readSync();
+check(n3.handledReplies && typeof n3.handledReplies === 'object', 'a null handledReplies still reads as an object');
+check(n3.notRelatedSenders && typeof n3.notRelatedSenders === 'object', 'a null notRelatedSenders still reads as an object');
+
 // A brand-new cursor (no file yet) defaults cleanly, lastPreviewAt included.
 fs.rmSync(syncPath, { force: true });
 const s3 = readSync();
 check(s3.lastPreviewAt === null && Array.isArray(s3.seenMessageIds) && s3.seenMessageIds.length === 0,
   'missing cursor file → clean defaults incl. lastPreviewAt:null');
+check(s3.notRelatedSenders && Object.keys(s3.notRelatedSenders).length === 0,
+  'missing cursor file → notRelatedSenders defaults to an empty object');
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} passed, ${failed} failed`);
