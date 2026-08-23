@@ -12,11 +12,14 @@
 
 ---
 
-> **Standing closing move, every round, non-negotiable.** Before you wrap, ask some version of:
-> "Before we finish, is there anything in my background that gives you pause, or that you think the
-> hiring manager would want me to address?" People answer this honestly in conversation far more
-> often than they answer a post-rejection email. Whatever they say, log it as a screen objection.
-> Six conversations becomes six real data points on why rounds end. This fires on every round.
+> **Standing closing move, every round, non-negotiable.** Ask both, in this order, every round:
+> "Before we wrap, is there anything in my background that gives you pause, or that the hiring manager would want addressed?"
+> "If I don't move forward, what will the reason most likely be?"
+> The second asks for a prediction rather than a flaw, so even someone outside the decision often gives a different and more useful answer.
+> People answer both far more honestly in conversation than they ever answer a post-rejection email, and six conversations becomes six real data points on why rounds end.
+> Whatever they say is the objection to fix. Write both answers down the moment the call ends, along with who said them and whether that person decides. A soft "nothing gives me pause" from someone who is not the decision maker is missing data, not reassurance.
+>
+> **Standing rule, every round, non-negotiable.** Never volunteer the boundary of your capability. Answer what is asked. If a gap is raised, address it directly and reframe to the altitude you do operate at. Do not pre-empt it, and do not offer it as proof of self-awareness. A prepared concession does not read as honesty to a hiring manager who is still forming the profile; it reads as the specification for the person they should hire instead.
 
 ## §0 — 30-Second Pre-Call Strip
 
@@ -137,6 +140,8 @@ This is a recruiter-driven screen. {Recruiter}'s job is to:
 - Is this a backfill, a reorg consolidation, or a newly created seat?
 - {Question about the #1 problem the hiring manager is hoping this person solves in the first 6 months}
 - {Question about how success is measured at 12 months}
+- What is the hiring manager's name, how long have they been in the seat, and what do they optimize for?
+- A new hiring manager is still writing the profile. That is an opportunity to shape it and a risk of being measured against a profile that does not exist yet.
 
 **Comp & logistics**
 - {Bonus target % on base? Variable structure?}
@@ -144,7 +149,8 @@ This is a recruiter-driven screen. {Recruiter}'s job is to:
 
 **Direct read on fit (ask near the end, every round)**
 - "Before we wrap, is there anything in my background that gives you pause, or that the hiring manager would want addressed?"
-- This is the single highest-value question you can ask. Whatever they say is the objection to fix. Capture it in the debrief (§10) the moment the call ends. If they say "nothing," that is data too.
+- "If I don't move forward, what will the reason most likely be?"
+- Ask both, in that order. The second asks for a prediction rather than a flaw, so it often gets a different answer.
 
 **Save for the hiring manager (don't ask recruiter):**
 - Tooling stack inside the team
@@ -182,5 +188,6 @@ This is a recruiter-driven screen. {Recruiter}'s job is to:
 
 - [ ] Send a short thank-you note to {recruiter} (3–4 sentences, reference one specific thing she said, reiterate interest, confirm next step)
 - [ ] Log call notes in `data/applications.md` notes column for #{NNN}
-- [ ] Capture the debrief while it is fresh: the objection you heard (their answer to the "anything that gives you pause" question), what landed, what you would change, and intel for the next round. The dashboard prompts for this on any interview-stage change; it saves to `data/app-notes.json` for #{NNN}.
+- [ ] Capture the debrief while it is fresh: both closing answers, who answered and whether they decide, what landed, what you would change, and intel for the next round. The dashboard prompts for this on any interview-stage change; it saves to `data/app-notes.json` for #{NNN}.
+- [ ] Record the hiring manager's name, how long they have been in the seat, and what they optimize for. If the recruiter did not know, record that too.
 - [ ] If advanced: open `interview-prep/{Company Folder}/{company-slug}-round-2-hiring-manager.md` from the `interview-cheatsheet-hm-round` template (descriptor is the STAGE, never the interviewer's name)

@@ -9,6 +9,9 @@ const { useState: useStateDb } = React;
 const DEBRIEF_FIELDS = [
   { key: 'outcome',   label: 'Outcome',                     placeholder: 'advanced / rejected / pending, and how it felt in one line', rows: 2 },
   { key: 'objection', label: 'The objection (most important)', placeholder: 'Their answer to: is there anything in my background that gives you pause? Verbatim if you can. If nothing was raised, say so.', rows: 3, emphasize: true },
+  { key: 'reason',     label: 'The likely reason (most important)', placeholder: "Their answer to: if I don't move forward, what will the reason most likely be? Verbatim if you can.", rows: 3, emphasize: true },
+  { key: 'answeredBy', label: 'Answered by',                 placeholder: 'Who answered, and are they the decision maker? The recruiter, not the hiring manager, is a complete and valuable answer.', rows: 2 },
+  { key: 'hm',         label: 'Hiring manager',              placeholder: 'Name, how long they have been in the seat, and what they optimize for. She did not know is itself worth writing down.', rows: 2 },
   { key: 'landed',    label: 'What landed',                 placeholder: 'The stories or points that clearly connected', rows: 2 },
   { key: 'change',    label: 'What I would change',         placeholder: 'Anything that fell flat, ran long, or that I fumbled', rows: 2 },
   { key: 'intel',     label: 'Intel captured',             placeholder: 'Facts about the seat, team, process, or people to reuse next round', rows: 2 },
@@ -43,7 +46,7 @@ window.DebriefModal = function DebriefModal({ prompt, onClose, toast }) {
           <span className="dim mono" style={{ fontSize: 12 }}>{prompt.company}</span>
         </div>
         <p className="dim" style={{ fontSize: 12, marginTop: 2, marginBottom: 12 }}>
-          Capture it while it is fresh. The objection is the whole point. Skip if you must; it stays on the pending list.
+          Capture it while it is fresh. The two closing questions together are the point. Skip if you must; it stays on the pending list.
         </p>
         {DEBRIEF_FIELDS.map(fl => (
           <div key={fl.key} style={{ marginBottom: 10 }}>
