@@ -49,6 +49,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
+import yaml from 'js-yaml';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -84,9 +85,24 @@ for (const src of ['portals.yml', 'templates/portals.example.yml']) {
   const p = join(ROOT, src);
   if (!existsSync(p)) continue;
   const text = readFileSync(p, 'utf-8');
-  const block = text.slice(text.indexOf('positive:'), text.indexOf('negative:'));
-  for (const m of block.matchAll(/^\s*-\s*["']?([^"'\n#]+)/gm)) {
-    for (const w of m[1].toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)) if (w.length > 2) vocab.add(w);
+  // Parse rather than slice the raw text. The matrix mixes block sequences
+  // (functions_bare, functions_ranked) with inline flow arrays (seniority,
+  // modifiers), and a "- item" regex silently misses every flow array. That
+  // shrinks the vocabulary, which makes this guard fire on the product's own
+  // subject matter. Do not paper over that by hardcoding the missing words:
+  // read them from the config they actually live in.
+  let tf;
+  try { tf = (yaml.load(text) || {}).title_filter || {}; } catch { continue; }
+  const matrix = tf.matrix || {};
+  const phrases = [
+    ...(matrix.seniority || []), ...(matrix.modifiers || []),
+    ...(matrix.functions_bare || []), ...(matrix.functions_ranked || []),
+    // A portals.yml predating the matrix still carries the flat list, and it is
+    // still that user's target vocabulary. buildTitleFilter honors it, so do we.
+    ...(tf.positive || []),
+  ];
+  for (const phrase of phrases) {
+    for (const w of String(phrase).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)) if (w.length > 2) vocab.add(w);
   }
 }
 // Seniority words carry no information about WHICH posting a title refers to.
