@@ -375,6 +375,30 @@ function patchRowInMd(id, updates, hint = {}) {
   if (updates.status !== undefined) logStatusEvent(id, updates.status, { company: target.company, date: hint.eventDate });
   return true;
 }
+
+// Remove one tracker row by id (company disambiguates a shared id). Used by the
+// re-queue flow: a near-threshold Discarded role is DELETED from the tracker so it
+// leaves the decided-index — otherwise reconcileHandled would instantly re-check
+// off its fresh pipeline row and merge-tracker would dedup the new eval against
+// the stale reject. Returns the removed row's { url, company, role } (for the
+// caller to re-queue), or null if no matching row was found. Rewrites through the
+// same line array as patchRowInMd so no other row's formatting is touched.
+function removeRowFromMd(id, hint = {}) {
+  const text = fs.readFileSync(APPS_MD, 'utf8');
+  const lines = text.split('\n');
+  const candidates = [];
+  lines.forEach((line, idx) => {
+    const row = parseTrackerLine(line);
+    if (!row || row.num !== id) return;
+    candidates.push({ idx, row });
+  });
+  if (candidates.length === 0) return null;
+  const target = (hint.company && candidates.find(c => c.row.company === hint.company)) || candidates[0];
+  const removed = { url: target.row.url || null, company: target.row.company, role: target.row.role, status: target.row.status, score: target.row.score };
+  const newLines = lines.filter((_, idx) => idx !== target.idx);
+  fs.writeFileSync(APPS_MD, newLines.join('\n'), 'utf8');
+  return removed;
+}
 // Days from application to rejection, using the date each app was MARKED
 // Rejected in the dashboard (its Rejected status event). The apply baseline is
 // the logged Applied event date when present, else the app row's Date column.
@@ -422,5 +446,5 @@ function rejectionTimingStats() {
   return { n, avgDays, medianDays, excluded };
 }
 
-export { parseApplicationsMd, patchRowInMd, rejectionTimingStats };
+export { parseApplicationsMd, patchRowInMd, removeRowFromMd, rejectionTimingStats };
 

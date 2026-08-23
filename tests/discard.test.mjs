@@ -17,7 +17,9 @@ import {
   isExemptFromAutoDiscard,
   parseScore,
   scoreIsParseable,
+  isRequeueableDiscard,
   AUTO_DISCARD_SCORE,
+  REQUEUE_FLOOR,
 } from '../lib/discard.mjs';
 
 let passed = 0, failed = 0;
@@ -82,6 +84,20 @@ check(shouldAutoDiscard({ status: 'Evaluated', score: '', notes: '' }) === false
   'empty score is NOT discarded');
 check(shouldAutoDiscard({ status: 'Evaluated', score: 'n/a', notes: 'do not apply' }) === true,
   'an explicit do-not-apply verdict still discards even without a number');
+
+// ── Re-queueable near-threshold discard (Slice 7.5) ─────────────────────────────
+// A Discarded row scored in [REQUEUE_FLOOR, AUTO_DISCARD_SCORE) is eligible for a
+// one-click re-evaluate; anything else is not.
+check(REQUEUE_FLOOR === 2.5, 'requeue floor is 2.5');
+check(isRequeueableDiscard({ status: 'Discarded', score: 2.9 }) === true, '2.9 Discarded is re-queueable');
+check(isRequeueableDiscard({ status: 'Discarded', score: 2.5 }) === true, '2.5 (the floor) is re-queueable');
+check(isRequeueableDiscard({ status: 'Discarded', score: 2.4 }) === false, '2.4 is below the floor — not re-queueable');
+check(isRequeueableDiscard({ status: 'Discarded', score: 3.0 }) === false, '3.0 is at the cut (kept, not discarded) — not re-queueable');
+check(isRequeueableDiscard({ status: 'Discarded', score: 3.2 }) === false, 'an above-cut score is not re-queueable');
+check(isRequeueableDiscard({ status: 'Evaluated', score: 2.9 }) === false, 'a live (non-Discarded) status is never re-queued this way');
+check(isRequeueableDiscard({ status: 'Rejected', score: 2.9 }) === false, 'a company rejection is not a near-threshold auto-discard');
+check(isRequeueableDiscard({ status: 'Discarded', score: '2.8/5' }) === true, 'accepts a raw score cell');
+check(isRequeueableDiscard({ status: 'Discarded', score: 'n/a' }) === false, 'an unparseable score is not re-queueable');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
