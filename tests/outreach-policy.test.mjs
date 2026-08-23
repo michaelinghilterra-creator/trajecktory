@@ -23,7 +23,10 @@ const capPolicy = { minDaysBetweenTouches: 0, awaitingReplyHold: 0, maxTouchesPe
 result = canContact({ timeline: [sent('2026-08-10'), sent('2026-08-11', 'Email', 'Received', 'Reply')], channel: 'email', now, policy: capPolicy });
 check(!result.blocks.some(b => b.rule === 'coldOutreachCap'), 'inbound reply lifts the cold outreach cap');
 
-result = canContact({ timeline: [sent('2026-08-19'), sent('2026-08-20')], channel: 'email', companyTouches: 3, now, policy: { maxTouchesPer30d: 2, awaitingReplyHold: 10, coldOutreachCap: { email: 2, linkedin: 3 }, perCompanyPerDay: 3 } });
+// source and company are required for the per-company rule to apply at all: it is
+// skipped for the exempt books and for a blank company, so a fixture without them
+// would be asserting on four blocks while claiming five.
+result = canContact({ timeline: [sent('2026-08-19'), sent('2026-08-20')], channel: 'email', source: 'ta', company: 'Acme', companyTouches: 3, now, policy: { maxTouchesPer30d: 2, awaitingReplyHold: 10, coldOutreachCap: { email: 2, linkedin: 3 }, perCompanyPerDay: 3 } });
 check(result.blocks.length >= 5, 'all simultaneous blocks are returned');
 check(result.nextEligible === null, 'a cap with no reply has no next eligible date');
 check(canContact({ timeline: [sent('2026-08-22')], policy: { enabled: false }, now }).allowed, 'disabled policy allows everything');

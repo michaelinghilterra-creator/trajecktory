@@ -25,8 +25,28 @@ function normalizedPolicy(policy = {}) {
   };
 }
 
-export function canContact({ timeline = [], channel = 'email', company = '', companyTouches = 0, inmail = {}, policy = {}, now = new Date() } = {}) {
-  void company;
+// Which books the per-company daily cap applies to.
+//
+// It exists to stop you landing in three inboxes at one employer on the same
+// morning, which is a real risk when you are working several gatekeepers at a
+// company you have applied to. Referrals are not that: they are your own network
+// spread across a hundred companies, and two of them sharing an employer is a
+// coincidence, not a coordinated approach. Capping them held warm contacts back
+// for no benefit.
+//
+// A blank company is skipped for every book. Every influencer has one, so they
+// all normalized to the same empty key and the entire book competed for three
+// slots a day. An empty company is not a company.
+//
+// Written as an EXEMPT list, not an applies-to list, so an unknown or missing
+// source still gets the cap. A guard that skips when it is unsure is not a guard.
+const PER_COMPANY_EXEMPT_SOURCES = new Set(['referral', 'influencer']);
+function perCompanyApplies(source, company) {
+  if (!String(company || '').trim()) return false;
+  return !PER_COMPANY_EXEMPT_SOURCES.has(source);
+}
+
+export function canContact({ timeline = [], channel = 'email', source = '', company = '', companyTouches = 0, inmail = {}, policy = {}, now = new Date() } = {}) {
   const p = normalizedPolicy(policy);
   if (p.enabled === false) return { allowed: true, blocks: [], nextEligible: null };
   const events = Array.isArray(timeline) ? timeline : [];
@@ -97,7 +117,13 @@ export function canContact({ timeline = [], channel = 'email', company = '', com
 
   const companyCount = Array.isArray(companyTouches) ? companyTouches.length : Number(companyTouches?.count ?? companyTouches) || 0;
   const selfSentToday = !!companyTouches?.selfSentToday;
-  if (selfSentToday || companyCount >= p.perCompanyPerDay) blocks.push({ rule: 'perCompanyPerDay', reason: selfSentToday ? 'You already contacted this person today.' : `You have already contacted ${companyCount} people at this company today.`, until: addDays(today, 1) });
+  // Already messaged this PERSON today. Applies to every book, and is not the
+  // per-company rule despite sharing its name here.
+  if (selfSentToday) {
+    blocks.push({ rule: 'perCompanyPerDay', reason: 'You already contacted this person today.', until: addDays(today, 1) });
+  } else if (perCompanyApplies(source, company) && companyCount >= p.perCompanyPerDay) {
+    blocks.push({ rule: 'perCompanyPerDay', reason: `You have already contacted ${companyCount} people at this company today.`, until: addDays(today, 1) });
+  }
 
   if (wanted === 'linkedin' && inmail.alreadyInvited && inmail.exhausted && !inmail.freeDm) {
     blocks.push({ rule: 'inmailBudget', reason: 'No InMail credits remain for this LinkedIn message.', until: null });

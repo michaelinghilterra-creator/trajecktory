@@ -655,34 +655,12 @@ export function isInmailBlocked(item, { inmailOut } = {}) {
   return alreadyInvited;
 }
 
-// Per-company daily cap: surface at most `perCompany` DISTINCT contacts per company
-// per day, so you spread across a company deliberately instead of the old behavior
-// (one touch anywhere → the whole company held for the day). Mutates each item's
-// `heldDaily` flag; nothing is dropped, so a held contact stays inspectable and
-// rotates into view on a future day. Counting rules:
-//   - Distinct CONTACTS, never raw messages: a second touch to someone already
-//     messaged today never consumes a slot meant for a new person.
-//   - `companyContactsSentToday` (distinct keys already sent today) seeds the count,
-//     so slots you already spent today are honored across reloads.
-//   - A contact you already messaged today is done for the day (held) and is already
-//     inside that seed, so it is not re-counted here.
-//   - Rows hidden for other reasons (inmailBlocked / capped) do not spend a slot.
-// Items MUST arrive in priority order (most important first) so the cap keeps the
-// best contacts and holds the overflow. `inmailBlocked` must already be assigned.
-export function assignPerCompanyDailyHeld(items, { perCompany = 3, normalize = normalizeCompany } = {}) {
-  const used = new Map();   // company -> distinct contacts counted so far today
-  for (const it of (items || [])) {
-    if (!it) continue;
-    const co = normalize(it.company || '');
-    const already = (it.companyOutreach && it.companyOutreach.companyContactsSentToday) || 0;
-    if (it.companyOutreach && it.companyOutreach.selfSentToday) { it.heldDaily = true; continue; }
-    if (it.inmailBlocked || it.capped) { it.heldDaily = false; continue; }
-    const cur = used.has(co) ? used.get(co) : already;
-    if (cur >= perCompany) { it.heldDaily = true; }
-    else { used.set(co, cur + 1); it.heldDaily = false; }
-  }
-  return items;
-}
+// The per-company daily cap used to live here as assignPerCompanyDailyHeld. It
+// moved into canContact (lib/outreach-policy.mjs) when the scattered queue flags
+// were replaced by one decider, and the old copy lingered with nothing but its
+// tests still calling it. Two implementations of one rule is the exact shape this
+// rework exists to remove, so it is gone rather than kept just in case:
+// routes/followups.mjs derives heldDaily from the policy perCompanyPerDay block.
 
 // One row shape for both queues. `email` is the clean address (verified.address),
 // empty on connect-queue rows. hasEmail/emailState keep the connect UI's "no email

@@ -218,6 +218,7 @@ router.get('/api/followups/stale', (req, res) => {
       const decision = canContact({
         timeline: context?.timeline || [],
         channel: c.channel,
+        source: c.source,        // decides whether the per-company cap applies
         company: c.company,
         companyTouches: { count: used, selfSentToday: !!c.companyOutreach?.selfSentToday },
         inmail: { exhausted: inmailOut, alreadyInvited, freeDm: !!c.freeDm },
