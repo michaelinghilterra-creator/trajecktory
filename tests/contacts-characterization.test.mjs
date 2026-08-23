@@ -20,12 +20,8 @@
  * Lap 2b collapsed the three LinkedIn parsers into one, so the table now tracks two.
  *
  * The defects pinned here, all real as of 2026-08-22:
- *   - The two correspondence parsers disagree. The referral one is
- *     case-sensitive `/gm`, so an entry written "SENT" is invisible to it. The
- *     TA one is `/gim`, so the same entry parses but keeps its original casing,
- *     and `outreachCapState` filters on `direction === 'Sent'` exactly, so the
- *     touch is parsed and then not counted. Both under-count outreach, by two
- *     different mechanisms.
+ *   - Lap 3 replaced the two correspondence parsers with one shared parser and
+ *     normalized direction and channel casing.
  *   - `resolveReferralLink` skips its company check when the referral's "where"
  *     cell is blank, so two different people who share a name are merged into
  *     one timeline.
@@ -100,32 +96,29 @@ console.log('contacts-characterization.test.mjs');
 const taMessages = readTTCorrespondence(1);
 const referralMessages = readReferralCorrespondence(referrals[0].id);
 
-console.log('\n1. Correspondence parsing differs between the two stores');
+console.log('\n1. Correspondence parsing is shared by the two stores');
 check(taMessages.length === 2, 'TA parser returns exactly 2 entries');
-check(referralMessages.length === 1, 'referral parser returns exactly 1 entry');
+// Lap 3 changed the referral count from 1 to 2.
+check(referralMessages.length === 2, 'referral parser returns exactly 2 entries');
 check(taMessages[0].direction === 'Sent', 'TA first direction is Sent');
 check(taMessages[0].channel === 'LinkedIn', 'TA first channel is LinkedIn');
-// WRONG, recorded deliberately: the TA parser preserves an upper case direction,
-// so downstream code does not recognize the second message as sent.
-check(taMessages[1].direction === 'SENT', 'TA second direction is SENT');
+// Lap 3 changed the normalized direction from SENT to Sent.
+check(taMessages[1].direction === 'Sent', 'TA second direction is Sent');
 check(taMessages[1].channel === 'LinkedIn', 'TA second channel is LinkedIn');
-// WRONG, recorded deliberately: the referral parser is case-sensitive, so an
-// entry written "SENT" is invisible to it.
 check(referralMessages.every(m => m.direction === 'Sent'), 'every parsed referral direction is Sent');
 
 console.log('\n2. Cap counting');
 const taCap = outreachCapState(taMessages);
 const referralCap = outreachCapState(referralMessages);
-// WRONG, recorded deliberately: the upper case TA entry is not counted as sent.
-check(taCap.linkedin.sent === 1, 'TA LinkedIn sent count is 1');
+// Lap 3 changed the TA LinkedIn sent count from 1 to 2.
+check(taCap.linkedin.sent === 2, 'TA LinkedIn sent count is 2');
 check(taCap.email.sent === 0, 'TA email sent count is 0');
 check(taCap.linkedin.capped === false, 'TA LinkedIn is not capped');
 check(taCap.email.capped === false, 'TA email is not capped');
 check(taCap.hasReply === false, 'TA thread has no reply');
 check(referralCap.linkedin.sent === 0, 'referral LinkedIn sent count is 0');
-// WRONG, recorded deliberately: the missing upper case referral entry leaves the
-// email sent count at one instead of two.
-check(referralCap.email.sent === 1, 'referral email sent count is 1');
+// Lap 3 changed the referral email sent count from 1 to 2.
+check(referralCap.email.sent === 2, 'referral email sent count is 2');
 check(referralCap.linkedin.capped === false, 'referral LinkedIn is not capped');
 check(referralCap.email.capped === false, 'referral email is not capped');
 check(referralCap.hasReply === false, 'referral thread has no reply');
@@ -135,15 +128,14 @@ const now = new Date('2026-08-05T00:00:00Z');
 const taThread = summarizeThread(taMessages, { now });
 const referralThread = summarizeThread(referralMessages, { now });
 check(taThread.count === 2, 'TA thread count is 2');
-// WRONG, recorded deliberately: the upper case TA message is ignored as a
-// substantive sent message, so there is no days-since value.
-check(taThread.daysSinceLastSub === null, 'TA days since last substantive message is null');
-// WRONG, recorded deliberately: the ignored TA message hides a recent pitch.
-check(taThread.recentPitch === false, 'TA recent pitch is false');
-// WRONG, recorded deliberately: the referral parser dropped its second entry.
-check(referralThread.count === 1, 'referral thread count is 1');
-// WRONG, recorded deliberately: day math uses the older surviving referral entry.
-check(referralThread.daysSinceLastSub === 3, 'referral days since last substantive message is 3');
+// Lap 3 changed this from null to 2 after normalizing the later sent message.
+check(taThread.daysSinceLastSub === 2, 'TA days since last substantive message is 2');
+// Lap 3 changed this from false to true after normalizing the later sent message.
+check(taThread.recentPitch === true, 'TA recent pitch is true');
+// Lap 3 changed the referral thread count from 1 to 2.
+check(referralThread.count === 2, 'referral thread count is 2');
+// Lap 3 changed this from 3 to 2 after the later referral entry became visible.
+check(referralThread.daysSinceLastSub === 2, 'referral days since last substantive message is 2');
 check(referralThread.recentPitch === true, 'referral recent pitch is true');
 
 console.log('\n4. Referral twin resolution through the route');

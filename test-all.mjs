@@ -511,6 +511,7 @@ for (const suite of [
   'tests/api-key-error.test.mjs',
   'tests/model-versions.test.mjs',
   'tests/correspondence-context.test.mjs',
+  'tests/correspondence-format.test.mjs',
   'tests/debrief.test.mjs',
   'tests/google.test.mjs',
   'tests/reply-draft.test.mjs',
