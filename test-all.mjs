@@ -448,6 +448,7 @@ for (const suite of [
   'tests/discard.test.mjs',
   'tests/auto-close-stale.test.mjs',
   'tests/scan-core.test.mjs',
+  'tests/title-filter-consumers.test.mjs',
   'tests/scan-parsers.test.mjs',
   'tests/scan-coverage.test.mjs',
   'tests/resolve-jds.test.mjs',

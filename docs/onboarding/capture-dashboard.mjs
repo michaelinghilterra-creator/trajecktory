@@ -135,7 +135,7 @@ const MODELS_STATE = {
 // Synthetic Haiku-triage cards for the sidebar plan flow (scored list under the steps).
 const TRIAGE = { cards: [
   { url: 'https://jobs.example.com/1', score: 4.6, company: 'Northwind Analytics', title: 'VP, Revenue Operations', rationale: 'Strong title + comp match; remote-friendly.' },
-  { url: 'https://jobs.example.com/2', score: 4.1, company: 'Globex Health', title: 'Director of GTM Systems', rationale: 'Adjacent role, good industry fit.' },
+  { url: 'https://jobs.example.com/2', score: 4.1, company: 'Globex Health', title: 'Director, GTM Operations', rationale: 'Adjacent role, good industry fit.' },
   { url: 'https://jobs.example.com/3', score: 3.4, company: 'Initech Cloud', title: 'Sr. Manager, Sales Ops', rationale: 'A notch junior; worth a look.' },
 ] };
 
@@ -201,7 +201,7 @@ const INTERVIEW_SESSIONS = {
       docs: [{ key: 'northwind-analytics-vp-revenue-operations', kind: 'intel', label: 'Company intel', name: 'Vp Revenue Operations', title: 'Northwind Analytics: company intel', path: `${IPREP}\\Northwind Analytics\\northwind-analytics-vp-revenue-operations.md` }],
     },
     {
-      id: 'globex-health', company: 'Globex Health', role: 'Director of GTM Systems',
+      id: 'globex-health', company: 'Globex Health', role: 'Director, GTM Operations',
       status: 'Phone Screen', round: 1, prepDir: `${IPREP}\\Globex Health`, appId: 408,
       rounds: [
         { round: 1, stage: 'Phone Screen', descriptor: 'recruiter-screen', prepPath: `${IPREP}\\Globex Health\\globex-health-round-1-recruiter-screen.md`, runPath: null, hasBoard: false },
@@ -263,7 +263,7 @@ const IDENTITY = {
 // company, which is not something to publish.
 const APPS = [
   { id: 412, date: '2026-07-02', company: 'Northwind Analytics', role: 'VP, Revenue Operations',     score: 4.6, status: '2nd Interview', archetype: 'RevOps',    sector: 'Logistics',  source: 'Greenhouse', compStated: '$190,000 - $230,000', url: 'https://jobs.example.com/northwind-vp-revops',  report: 'reports/412-northwind-analytics-2026-07-02.md', resume: 'trajecktory', seniority: 'VP',       remote: 'Remote' },
-  { id: 408, date: '2026-07-06', company: 'Globex Health',       role: 'Director of GTM Systems',    score: 4.1, status: 'Phone Screen',  archetype: 'RevOps',    sector: 'Health tech', source: 'Ashby',     compStated: '$170,000 - $200,000', url: 'https://jobs.example.com/globex-dir-gtm',       report: 'reports/408-globex-health-2026-07-06.md',       resume: 'trajecktory', seniority: 'Director', remote: 'Hybrid' },
+  { id: 408, date: '2026-07-06', company: 'Globex Health',       role: 'Director, GTM Operations',    score: 4.1, status: 'Phone Screen',  archetype: 'RevOps',    sector: 'Health tech', source: 'Ashby',     compStated: '$170,000 - $200,000', url: 'https://jobs.example.com/globex-dir-gtm',       report: 'reports/408-globex-health-2026-07-06.md',       resume: 'trajecktory', seniority: 'Director', remote: 'Hybrid' },
   { id: 405, date: '2026-07-08', company: 'Contoso Freight',     role: 'Director, Revenue Operations', score: 4.4, status: 'Offer',       archetype: 'RevOps',    sector: 'Logistics',  source: 'Lever',      compStated: '$180,000 - $210,000', url: 'https://jobs.example.com/contoso-dir-revops',   report: 'reports/405-contoso-freight-2026-07-08.md',    resume: 'trajecktory', seniority: 'Director', remote: 'Remote' },
   { id: 401, date: '2026-07-09', company: 'Acme Robotics',       role: 'Head of Revenue Operations', score: 4.3, status: 'Applied',       archetype: 'RevOps',    sector: 'Robotics',   source: 'Greenhouse', compStated: '$185,000 - $215,000', url: 'https://jobs.example.com/acme-head-revops',     report: 'reports/401-acme-robotics-2026-07-09.md',      resume: 'trajecktory', seniority: 'Director', remote: 'Remote' },
   { id: 397, date: '2026-07-11', company: 'Fabrikam Freight',    role: 'Manager, Sales Operations',  score: 3.6, status: 'Applied',       archetype: 'SalesOps',  sector: 'Logistics',  source: 'Ashby',      compStated: 'Not Stated',          url: 'https://jobs.example.com/fabrikam-mgr-salesops', report: 'reports/397-fabrikam-freight-2026-07-11.md',  resume: 'trajecktory', seniority: 'Manager',  remote: 'Onsite' },
@@ -428,7 +428,7 @@ const ARTIFACTS = {
 const FOLLOWUPS_STALE = {
   warm: [
     { id: 401, company: 'Acme Robotics', role: 'Head of Revenue Operations', score: 4.3, status: 'Applied', applyDate: '2026-07-09', lastTouchDate: '2026-07-09', daysSinceLastTouch: 8, daysSinceApply: 8, fuCount: 0, cap: 3, coachVerdict: '8d since application sent. 1st follow-up is overdue.', coachLevel: 'overdue', channel: 'email', muted: false, klass: 'warm', sector: 'Robotics', url: 'https://jobs.example.com/acme-head-revops', notes: '', followups: [] },
-    { id: 408, company: 'Globex Health', role: 'Director of GTM Systems', score: 4.1, status: 'Phone Screen', applyDate: '2026-07-06', lastTouchDate: '2026-07-12', daysSinceLastTouch: 5, daysSinceApply: 11, fuCount: 1, cap: 3, coachVerdict: '5d since last follow-up. 2nd follow-up due now.', coachLevel: 'overdue', channel: 'email', muted: false, klass: 'warm', sector: 'Health tech', url: 'https://jobs.example.com/globex-dir-gtm', notes: '', followups: [{ date: '2026-07-12', channel: 'email' }] },
+    { id: 408, company: 'Globex Health', role: 'Director, GTM Operations', score: 4.1, status: 'Phone Screen', applyDate: '2026-07-06', lastTouchDate: '2026-07-12', daysSinceLastTouch: 5, daysSinceApply: 11, fuCount: 1, cap: 3, coachVerdict: '5d since last follow-up. 2nd follow-up due now.', coachLevel: 'overdue', channel: 'email', muted: false, klass: 'warm', sector: 'Health tech', url: 'https://jobs.example.com/globex-dir-gtm', notes: '', followups: [{ date: '2026-07-12', channel: 'email' }] },
   ],
   cold: [
     { id: 397, company: 'Fabrikam Freight', role: 'Manager, Sales Operations', score: 3.6, status: 'Applied', applyDate: '2026-07-11', lastTouchDate: '2026-07-11', daysSinceLastTouch: 6, daysSinceApply: 6, fuCount: 0, cap: 3, coachVerdict: '6d since application sent. 1st follow-up is overdue.', coachLevel: 'overdue', channel: 'none', muted: false, klass: 'cold', sector: 'Logistics', url: 'https://jobs.example.com/fabrikam-mgr-salesops', notes: '', followups: [] },
@@ -585,7 +585,7 @@ const GOOGLE_NOT_SETUP_400 = { error: 'Gmail is not set up on this install yet. 
 const GOOGLE_REPLIES = {
   replies: [
     { msgId: 'm1', from: 'Alex Kim <alex.kim@example.com>', subject: 'Re: VP, Revenue Operations', date: '2026-07-15', sentiment: 'positive', contact: { name: 'Alex Kim', email: 'alex.kim@example.com' }, candidateApps: [{ id: 412, company: 'Northwind Analytics', role: 'VP, Revenue Operations' }], handled: null },
-    { msgId: 'm2', from: 'Rosa Delgado <rosa.delgado@example.com>', subject: 'Re: Director of GTM Systems', date: '2026-07-13', sentiment: 'neutral', contact: { name: 'Rosa Delgado', email: 'rosa.delgado@example.com' }, candidateApps: [{ id: 408, company: 'Globex Health', role: 'Director of GTM Systems' }], handled: null },
+    { msgId: 'm2', from: 'Rosa Delgado <rosa.delgado@example.com>', subject: 'Re: Director, GTM Operations', date: '2026-07-13', sentiment: 'neutral', contact: { name: 'Rosa Delgado', email: 'rosa.delgado@example.com' }, candidateApps: [{ id: 408, company: 'Globex Health', role: 'Director, GTM Operations' }], handled: null },
   ],
   byCompany: [], unknown: [], unmatched: 0,
 };

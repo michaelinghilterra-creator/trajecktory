@@ -118,6 +118,12 @@ function setupGetList(text, section, key) {
   return out;
 }
 
+function setupGetMatrixFunctions(text) {
+  const portals = setupParseYaml(text) || {};
+  const matrix = portals.title_filter?.matrix || {};
+  return [...(matrix.functions_bare || []), ...(matrix.functions_ranked || [])];
+}
+
 // Surgical scalar write: replace the value on an existing `key:` line (preserving
 // its indentation), insert under an existing `section:`, or append a new section.
 // Comment-safe for every line except the one value being changed.
@@ -327,13 +333,13 @@ function setupComputeState() {
         // as a broken counter: the chip list above shows the titles the user
         // picked (from data/setup/roles.json), while this counts the keyword
         // variants the roles handoff generated from them into
-        // portals.yml title_filter.positive. Seeing "8 titles" beside "23" with
+        // portals.yml title_filter.matrix. Seeing "8 titles" beside "23" with
         // no way to inspect the 23 cost a tester their trust in the whole
         // mechanism ("can't trust this b/c the numbers don't tie off").
         // Ship the keywords themselves, not just a count, so the relationship is
         // inspectable rather than asserted.
-        scannerTitles: setupGetList(portals, 'title_filter', 'positive').length,
-        scannerKeywords: setupGetList(portals, 'title_filter', 'positive'),
+        scannerTitles: setupGetMatrixFunctions(portals).length,
+        scannerKeywords: setupGetMatrixFunctions(portals),
         locationPolicy: !!(lp.home || (Array.isArray(lp.hard_no) && lp.hard_no.length)),
         evalTuning: !!(modeProfile && /evaluation tuning/i.test(modeProfile)),
         // Rich read-backs (best-effort; null when absent/unparseable):
@@ -380,7 +386,7 @@ const SETUP_CV_FULL =
   ' (2) Target roles — from my recent titles and trajectory, set target_roles.primary and target_roles.secondary to the roles I am most likely targeting next (a best guess I can adjust), and add archetypes with title_variants and resume_framing (summary_lead, aoe_priority).' +
   ' (3) Edge — draft narrative in config/profile.yml: a one-line headline, my top 3 superpowers, and 3 to 5 proof_points each with a hero metric, all drawn from the CV.' +
   ' (4) Location — fill location.country and location.city from the CV.' +
-  ' (5) Scanner — if portals.yml does not exist, create it from templates/portals.example.yml, then set title_filter.positive and search_queries to match the target roles above; if modes/_profile.md does not exist, create it from modes/_profile.template.md.' +
+  ' (5) Scanner: if portals.yml does not exist, create it from templates/portals.example.yml, then set title_filter.matrix functions_bare, functions_ranked, seniority, and search_queries to match the target roles above; if modes/_profile.md does not exist, create it from modes/_profile.template.md.' +
   ' Leave compensation, visa status, and specific company picks blank for now. Finish with a short, friendly summary of what you filled in. IMPORTANT for that summary: do NOT tell me to hand-edit config/profile.yml or any file. Every remaining field (compensation, visa, GitHub, company picks) is editable right in the dashboard Setup tab, so just note which are still blank and that I can fill them there. Do NOT end with a "Next Steps" list and do NOT tell me to run any terminal or CLI commands (no npm start, no /trajecktory scan, no pasting a URL into the CLI). My trajecktory dashboard is already open in my browser, so just give the friendly summary and point me back to the dashboard itself (the Setup tab to refine anything, then the Pipeline to start evaluating roles) to continue.';
 
 // The CV step's friendly recap was a hit in testing, so end every paste-into-Claude
@@ -410,7 +416,7 @@ function setupHandoffPrompt(section) {
     case 'identity-certs':
       return `Read my cv.md and detect certifications / completed coursework. Write what you find into data/setup/certs.json under a "detected" array (each {name, issuer}) so the Launchpad can show them. Then merge any entries in that file's "items" array into config/profile.yml under credentials.certifications.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     case 'roles':
-      return `Read my picks in data/setup/roles.json (the "seniority" levels and "titles" I chose in the Launchpad). Populate config/profile.yml target_roles (primary/secondary) and archetypes (with title_variants and resume_framing), and regenerate portals.yml title_filter.positive, seniority_boost, and search_queries to match. Then suggest AT LEAST 15 adjacent roles that widen my funnel and write them back into data/setup/roles.json under a "suggestions" array (each {title, why}) so I can pick them in the Launchpad. Aim wide, not safe: include the different names employers give the SAME job (a title that varies by company is the most common reason a scanner misses a good posting), one level up and one level down, and adjacent functions I could credibly move into. I would rather reject 10 of your suggestions than never see the one that was worded differently.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
+      return `Read my picks in data/setup/roles.json (the "seniority" levels and "titles" I chose in the Launchpad). Populate config/profile.yml target_roles (primary/secondary) and archetypes (with title_variants and resume_framing), and regenerate portals.yml title_filter.matrix functions_bare, functions_ranked, seniority, seniority_boost, and search_queries to match. Then suggest AT LEAST 15 adjacent roles that widen my funnel and write them back into data/setup/roles.json under a "suggestions" array (each {title, why}) so I can pick them in the Launchpad. Aim wide, not safe: include the different names employers give the SAME job (a title that varies by company is the most common reason a scanner misses a good posting), one level up and one level down, and adjacent functions I could credibly move into. I would rather reject 10 of your suggestions than never see the one that was worded differently.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     case 'edge':
       return `Read my cv.md and draft my narrative for config/profile.yml: a one-line headline, my top 3 superpowers, and 3 to 5 proof points (each with a hero metric). Also fill resume_framing summary_lead and aoe_priority per archetype. Show me drafts to confirm.${SETUP_SUMMARY} ${SETUP_GUARDRAIL}`;
     case 'location':

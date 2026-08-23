@@ -21,7 +21,7 @@ Agent(
 Read `portals.yml`, which contains:
 - `search_queries`: List of WebSearch queries with `site:` filters per portal (broad discovery)
 - `tracked_companies`: Specific companies with `careers_url` for direct navigation
-- `title_filter`: positive/negative/seniority_boost keywords for title filtering
+- `title_filter`: matrix, negative, and seniority_boost settings for title filtering
 
 ## Discovery strategy (3 tiers)
 
@@ -105,8 +105,8 @@ Tiers are additive — all run, results are merged and deduplicated.
    c. Accumulate into the candidate list (dedup against Tier 1+2)
 
 6. **Filter by title** using `title_filter` from `portals.yml`:
-   - At least 1 keyword from `positive` must appear in the title (case-insensitive)
-   - 0 keywords from `negative` must appear
+   - A `functions_bare` phrase may appear at any level, or a `functions_ranked` phrase must appear near a `seniority` word
+   - 0 tokens from `negative` may appear
    - `seniority_boost` keywords give priority but are not required
 
 7. **Deduplicate** against 3 sources:

@@ -1,4 +1,4 @@
-# Evaluación: Acme AI, Director of Revenue Systems & AI
+# Evaluación: Acme AI, Director of Revenue Analytics
 
 **Fecha:** 2026-01-20
 **Arquetipo:** Director / VP of Revenue Operations (primary fit), hybrid with Director / VP of Analytics / BI
@@ -139,7 +139,7 @@ No salary on JD. Remote-friendly posture keeps the band national. **Comp Score: 
 | Layoff signals | None |
 | Adjacent posting confirmed | Yes, Acme AI has a Director of Customer Support also posted on their main careers site |
 
-Cannot confirm full JD content in batch mode. The title variant "Director of Revenue Systems & AI" is distinct from the standard "Director of Customer Support" listed on their main careers page, so it could be a re-titled or sibling role. Recommend the user verify the JD live before applying.
+Cannot confirm full JD content in batch mode. The title variant "Director of Revenue Analytics" is distinct from the standard "Director of Customer Support" listed on their main careers page, so it could be a re-titled or sibling role. Recommend the user verify the JD live before applying.
 
 ---
 

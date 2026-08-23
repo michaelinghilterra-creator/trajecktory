@@ -28,7 +28,7 @@ Also update the "Adaptive Framing" table to map YOUR specific projects to each a
 
 Copy from `templates/portals.example.yml` and customize:
 
-1. **title_filter.positive**: Keywords matching your target roles
+1. **title_filter.matrix**: Bare functions, ranked functions, and seniority matching your target roles
 2. **title_filter.negative**: Tech stacks or domains to exclude
 3. **search_queries**: WebSearch queries for job boards (Ashby, Greenhouse, Lever)
 4. **tracked_companies**: Companies to check directly
