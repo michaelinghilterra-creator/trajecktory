@@ -89,7 +89,13 @@ function main() {
   for (const d of drift) {
     console.log(`  #${d.num} ${d.company}: tracker ${d.trackerScore} vs report ${d.reportScore ?? 'none'}  (${d.reason})`);
   }
-  console.log('\nFix: re-run `node compute-scores.mjs --all --apply` then `node merge-tracker.mjs` so both read the report.\n');
+  // The old hint here said to re-run compute-scores then merge-tracker. That does
+  // not work and left this guard permanently red: merge-tracker only rewrites a
+  // Score cell for a row it is CURRENTLY merging, so for an already-merged row it
+  // is a no-op. resync-tracker-scores.mjs is the half that was missing.
+  console.log('\nFix: `node resync-tracker-scores.mjs` (dry run, then --apply) to copy each');
+  console.log('report headline into its tracker Score cell. The report is the source of truth.');
+  console.log('If a REPORT itself looks wrong, re-derive it first: `node compute-scores.mjs --all --apply`.\n');
   process.exit(1);
 }
 
