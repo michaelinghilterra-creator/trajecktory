@@ -150,5 +150,24 @@ check(JSON.stringify(read) === JSON.stringify(pure)
   && read.population && read.silence && read.fastDecision && read.cohorts && read.anchorSources,
   'the reader consumes the tracker and both sidecars and returns the pure shape');
 
+// ── the ghosted-candidate list shares the one anchor rule ───────────────────
+// That list gates a bulk destructive "archive to No Response" write, and it used
+// to carry its own strict-priority copy of the anchor (apply-date, else event,
+// else row date) which returned the apply-date even when the event was earlier.
+// It now uses makeApplyAnchor like everything else. The shape below is exactly
+// what separates the two rules: an apply-date LATER than its own Applied event.
+{
+  const gApplyDates = { 7301: '2026-03-20' };
+  const gEvents = [{ app: '7301', date: '2026-03-04', status: 'Applied' }];
+  const g = makeApplyAnchor({ applyDates: gApplyDates, events: gEvents })({ id: 7301, date: '2026-02-01' });
+  check(g.date === '2026-03-04',
+    `ghost anchor takes the earlier event over a later apply-date (got ${g.date})`);
+  check(g.source === 'both', `both sidecars present is reported as such (got ${g.source})`);
+  // The retired rule would have returned 2026-03-20, making the row look 16 days
+  // younger than it is and delaying a real archive by that long.
+  check(gApplyDates['7301'] !== g.date,
+    'the retired priority rule and the shared rule genuinely differ on this shape');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
