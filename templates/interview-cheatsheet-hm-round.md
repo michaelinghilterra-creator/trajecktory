@@ -16,11 +16,14 @@
 
 ---
 
-> **Standing closing move, every round, non-negotiable.** Before you wrap, ask some version of:
-> "Before we finish, is there anything in my background that gives you pause, or that you think the
-> hiring manager would want me to address?" People answer this honestly in conversation far more
-> often than they answer a post-rejection email. Whatever they say, log it as a screen objection.
-> Six conversations becomes six real data points on why rounds end. This fires on every round.
+> **Standing closing move, every round, non-negotiable.** Ask both, in this order, every round:
+> "Before we wrap, is there anything in my background that gives you pause, or that the hiring manager would want addressed?"
+> "If I don't move forward, what will the reason most likely be?"
+> The second asks for a prediction rather than a flaw, so even someone outside the decision often gives a different and more useful answer.
+> People answer both far more honestly in conversation than they ever answer a post-rejection email, and six conversations becomes six real data points on why rounds end.
+> Whatever they say is the objection to fix. Write both answers down the moment the call ends, along with who said them and whether that person decides. A soft "nothing gives me pause" from someone who is not the decision maker is missing data, not reassurance.
+>
+> **Standing rule, every round, non-negotiable.** Never volunteer the boundary of your capability. Answer what is asked. If a gap is raised, address it directly and reframe to the altitude you do operate at. Do not pre-empt it, and do not offer it as proof of self-awareness. A prepared concession does not read as honesty to a hiring manager who is still forming the profile; it reads as the specification for the person they should hire instead.
 
 ## §0 — 30-Second Pre-Call Strip
 
@@ -154,6 +157,8 @@ The HM is evaluating:
 - What does success look like at the 12-month mark for this role — what would you say to your boss to defend the hire?
 - What's the #1 problem you're hoping this person solves in the first 6 months, and what's the second one?
 - What's something the prior person in this seat got wrong that you'd want me to avoid?
+- How long have you been in this seat, and what do you optimize for when you make this hire?
+- Record the hiring manager's name with the answers. A new hiring manager is still writing the profile, which is an opportunity to shape it and a risk of being measured against a profile that does not exist yet.
 
 **About the team:**
 - How is the team structured today, and where do you see the structure shifting in the next year?
@@ -166,8 +171,9 @@ The HM is evaluating:
 - What's a recent decision you made in this function that you'd make differently with hindsight?
 
 **Direct read on fit (ask near the end, every round)**
-- "Before we wrap, is there anything in my background that gives you pause, or that you'd want addressed before the next round?"
-- Ask the hiring manager directly. Their answer is the objection that decides the loop. Capture it in the debrief (§10) immediately after. Silence is data too.
+- "Before we wrap, is there anything in my background that gives you pause, or that the hiring manager would want addressed?"
+- "If I don't move forward, what will the reason most likely be?"
+- Ask both, in that order. The second asks for a prediction rather than a flaw, so it often gets a different answer.
 
 **Save for the final loop (don't ask in HM round):**
 - Comp specifics — base/bonus/equity/grant refresh — those belong with the recruiter, not this round
@@ -191,6 +197,7 @@ The HM is evaluating:
 
 - [ ] **Thank-you to {HM}** within 2 hours — 4–6 sentences, NOT a form letter. Reference ONE specific thing they said that you've been thinking about. Reaffirm interest. Suggest one next-step artifact (e.g., "happy to share a one-pager on how I'd structure the first 90 days" — only if you'd actually do it).
 - [ ] Log call notes in `data/applications.md` notes column for #{NNN}
-- [ ] Capture the debrief in the dashboard (it prompts on any interview-stage change): the objection you heard, what landed, what you would change, and intel for the next round. Saves to `data/app-notes.json` for #{NNN}.
+- [ ] Capture the debrief in the dashboard (it prompts on any interview-stage change): both closing answers, who answered and whether they decide, what landed, what you would change, and intel for the next round. Saves to `data/app-notes.json` for #{NNN}.
+- [ ] Record the hiring manager's name, how long they have been in the seat, and what they optimize for. If you could not determine one of these, record that too.
 - [ ] Self-debrief in this file: 3 bullets — what landed, what didn't, what you'd say differently. Future-you will use this in round 3.
 - [ ] If advanced: open `interview-prep/{Company Folder}/{company-slug}-round-{N+1}-final-loop.md` from the `interview-cheatsheet-final-loop` template

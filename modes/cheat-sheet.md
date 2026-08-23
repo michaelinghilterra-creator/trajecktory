@@ -123,6 +123,23 @@ must not restate them. Include only the items relevant to this role and archetyp
 {If _profile.md has no sensitive framing section, omit this whole section rather than
 improvising a framing for the candidate's background.}
 
+> **Standing closing move, every round, non-negotiable.** Ask both, in this order, every round:
+> "Before we wrap, is there anything in my background that gives you pause, or that the hiring manager would want addressed?"
+> "If I don't move forward, what will the reason most likely be?"
+> The second asks for a prediction rather than a flaw, so even someone outside the decision often gives a different and more useful answer.
+> People answer both far more honestly in conversation than they ever answer a post-rejection email, and six conversations becomes six real data points on why rounds end.
+> Whatever they say is the objection to fix. Write both answers down the moment the call ends, along with who said them and whether that person decides. A soft "nothing gives me pause" from someone who is not the decision maker is missing data, not reassurance.
+>
+> **Standing rule, every round, non-negotiable.** Never volunteer the boundary of your capability. Answer what is asked. If a gap is raised, address it directly and reframe to the altitude you do operate at. Do not pre-empt it, and do not offer it as proof of self-awareness. A prepared concession does not read as honesty to a hiring manager who is still forming the profile; it reads as the specification for the person they should hire instead.
+
+**Questions to ask:**
+- What is the hiring manager's name, how long have they been in the seat, and what do they optimize for?
+- A new hiring manager is still writing the profile. That is an opportunity to shape it and a risk of being measured against a profile that does not exist yet.
+
+**After the call:**
+- Record both closing answers and who gave them, including whether that person is the decision maker.
+- Record the hiring manager's name, how long they have been in the seat, and what they optimize for. If the interviewer did not know, record that too.
+
 ---
 
 ## Comp Anchor
@@ -223,6 +240,7 @@ Push immediately without asking. The job is already applied to — the cheat she
 
 ## Rules
 
+- **Never volunteer the boundary of your capability.** Answer what is asked. If a gap is raised, address it directly and reframe to the altitude you do operate at. Do not pre-empt it, and do not offer it as proof of self-awareness. A prepared concession does not read as honesty to a hiring manager who is still forming the profile; it reads as the specification for the person they should hire instead.
 - **NEVER invent proof points or metrics** — pull all quantified claims from the evaluation report (which sourced them from cv.md)
 - **NEVER use prohibited phrases** (read from _profile.md) — even in verbatim sections, flag if any appear in the original report
 - **Verbatim answer framing** for red flag questions — copy the exact words from Block F, don't paraphrase; these are trained responses
