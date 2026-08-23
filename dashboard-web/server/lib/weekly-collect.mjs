@@ -13,7 +13,7 @@ import { parseStatusEvents } from './sidecars.mjs';
 import { readAppNotes } from './notes.mjs';
 import { DEBRIEF_HEADER_RE } from './debrief.mjs';
 import { readConnects } from './connects.mjs';
-import { influencerConnects } from './engagement-log.mjs';
+import { influencerConnects, engagementsInWeek, engagementLogExists } from './engagement-log.mjs';
 import { isLinkedInEntry } from './channels.mjs';
 import { computeStreak } from './cadence.mjs';
 
@@ -117,6 +117,7 @@ export function collectWeeklyMetrics(now = new Date()) {
     statusEvents: (() => { try { return parseStatusEvents().map(e => ({ status: e.status, date: (e.date || '').slice(0, 10) })); } catch { return null; } })(),
     debriefs: allDebriefs(),
     connects: allConnects(),
+    influencerEngagements: engagementLogExists() ? engagementsInWeek(now) : null,
     cadencePct: cadenceThisWeekPct(),
     unservicedApplications: unservicedCount(),
   });

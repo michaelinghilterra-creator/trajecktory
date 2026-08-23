@@ -16,11 +16,12 @@
  * trip the build lock.
  */
 
-// The three floors with teeth. Applications are deliberately uncapped; the WIP
+// The floors with teeth. Applications are deliberately uncapped; the WIP
 // limit (unserviced applications) governs volume instead of a cap.
 export const FLOORS = {
   verifiedTouches:  { min: 13, label: 'Verified touches sent',   unit: '' },
   linkedinConnects: { min: 50, label: 'LinkedIn connects sent',  unit: '' },
+  influencerEngagements: { min: 3, label: 'Influencer engagements', unit: '' },
   cadencePct:       { min: 70, label: 'Cadence adherence',       unit: '%' },
 };
 
@@ -47,7 +48,11 @@ export const OUTREACH_FLOOR_KEY = 'verifiedTouches';
 // Evaluate the three floors against a weekly-metrics object. Each metric is
 // { value, available }. `met` is true/false when available, `null` when not.
 export function evaluateFloors(metrics) {
-  const results = Object.keys(FLOORS).map((key) => {
+  // Older frozen metric shapes predate influencerEngagements. Do not synthesize
+  // a floor row when the metric key itself is absent; current collection always
+  // provides the key and marks a missing log as explicitly unavailable.
+  const keys = Object.keys(FLOORS).filter(key => key !== 'influencerEngagements' || Object.prototype.hasOwnProperty.call(metrics || {}, key));
+  const results = keys.map((key) => {
     const f = FLOORS[key];
     const m = (metrics && metrics[key]) || {};
     if (!m.available) return { key, label: f.label, value: null, floor: f.min, unit: f.unit, met: null, available: false };

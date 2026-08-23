@@ -32,6 +32,7 @@ export function weeklyMetrics({
   statusEvents = null,            // [{ status, date }] | null
   debriefs = null,                // [{ date, hasObjection }] | null
   connects = null,                // [{ date }] | null (null = no connects log yet)
+  influencerEngagements = null,   // number | null (null = no engagement log yet)
   cadencePct = null,              // number 0..100 | null
   unservicedApplications = null,  // number | null
 } = {}) {
@@ -73,6 +74,10 @@ export function weeklyMetrics({
     ? M(connects.filter(c => inRange(c.date, start, end)).length, true, 'linkedin-connects log')
     : M(0, false, 'not logged (no connects log)');
 
+  const weeklyInfluencerEngagements = (typeof influencerEngagements === 'number')
+    ? M(influencerEngagements, true, 'influencer engagement log')
+    : M(0, false, 'not logged (no engagement log)');
+
   const cadence = (typeof cadencePct === 'number')
     ? M(cadencePct, true, 'cadence log')
     : M(0, false, 'cadence not available');
@@ -85,7 +90,7 @@ export function weeklyMetrics({
     weekStart: start, weekEnd: end,
     verifiedTouches, replies, deliveredReplyRatePct: deliveredReplyRate,
     screensBooked, objectionsLogged,
-    linkedinConnects, cadencePct: cadence,
+    linkedinConnects, influencerEngagements: weeklyInfluencerEngagements, cadencePct: cadence,
     unservicedApplications: unserviced,
   };
 }
