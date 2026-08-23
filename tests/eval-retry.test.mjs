@@ -31,6 +31,7 @@ check('an error with no message IS retryable (assume transient)', batchRetryable
 check('CLI-not-found is NOT retried', batchRetryable('nope', { ok: false, error: 'Claude Code CLI not found. Make sure `claude` is installed and on your PATH' }) === false);
 check('a hard billing error is NOT retried', batchRetryable('nope', { ok: false, error: 'Your credit balance is insufficient' }) === false);
 check('an auth error is NOT retried', batchRetryable('nope', { ok: false, error: 'authentication failed: invalid API key' }) === false);
+check('a reached usage-limit is NOT retried', batchRetryable('nope', { ok: false, error: 'You have reached your specified API usage limits. You will regain access on 2026-09-01.' }) === false);
 
 // An untrusted workspace is deterministic (flagged on the job), so no retry.
 agentJobs.set('trust-job', { needsTrust: true, status: 'error' });

@@ -259,6 +259,8 @@ function batchRetryable(jobId, res) {
   const e = String((res && res.error) || '').toLowerCase();
   if (/not found|not recognized|command not found|on your path/.test(e)) return false;  // CLI missing
   if (/credit|billing|payment|insufficient|quota exceeded|invalid api key|authentication/.test(e)) return false; // hard account error
+  // A reached usage/spend cap is a wall until it resets — retrying just re-hits it.
+  if (/usage limit|reached your|regain access/.test(e)) return false;
   return true;                                                        // otherwise treat as transient
 }
 // Retry ONE batch after a transient failure. Reconciles BEFORE each retry so the
