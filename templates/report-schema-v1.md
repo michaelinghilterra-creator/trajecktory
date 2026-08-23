@@ -88,17 +88,19 @@ weight; a `dim` label and `evidence` string are for display.
   { "key": "level",     "dim": "Level Match",           "val": 4, "max": 5, "evidence": "JD asks VP; the candidate sits Director/Senior Director. Title stretch, scope fits" },
   { "key": "comp",      "dim": "Comp",                  "val": 3, "max": 5, "evidence": "Band clears the floor, trails the ceiling" },
   { "key": "location",  "dim": "Location / Logistics",  "val": 5, "max": 5, "evidence": "Remote, US time zones" },
+  { "key": "buildDepth", "dim": "Build Depth",           "val": 3, "max": 5, "evidence": "Light dashboard and SQL building follows defined patterns adjacent to the CV" },
   { "key": "redFlags",  "dim": "Red Flags",             "val": 5, "max": 5, "evidence": "Clean: fresh posting, funded round, scoped mandate" }
 ]
 ```
 
 **Canonical keys** (match `SCORE_DIMENSIONS` / `RED_FLAGS_KEY` in `lib/score.mjs`):
-`fit`, `northStar`, `level`, `comp`, `location` are the weighted positive
+`fit`, `northStar`, `level`, `comp`, `location`, `buildDepth` are the weighted positive
 dimensions; `redFlags` is a **penalty** rated 0–5 where **5 = clean, 0 = severe**
 (NOT a negative value; it subtracts up to `scoring.redFlagPenalty` points after the
 average). `max` is per-dimension (usually 5). Weights renormalize over whichever
 dimensions are present, so omitting one (e.g. `location` for a remote-anywhere role)
-is fine.
+is fine. `comp` and `buildDepth` both carry weight 0 by default. They are rated and
+displayed but never scored, and each expresses itself through `scoreCeiling` instead.
 
 Legacy reports predate this: their entries have no `key` (labels like
 `"Cultural Signals"`, and `Red Flags` stored as a negative `val`). Those are NOT
