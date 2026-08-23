@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.37.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.36.1...v2.37.0) (2026-08-23)
+
+
+### Features
+
+* instrument the follow-up split test and the scan-found weekly target ([#241](https://github.com/michaelinghilterra-creator/trajecktory/issues/241)) ([04a62e4](https://github.com/michaelinghilterra-creator/trajecktory/commit/04a62e4d3836fc9f02f0a1dd1b73a9fbf3bbf9c0))
+* make the prep templates and the debrief capture the answer ([#242](https://github.com/michaelinghilterra-creator/trajecktory/issues/242)) ([a0c8399](https://github.com/michaelinghilterra-creator/trajecktory/commit/a0c839951054bd70c270aa347dc624a19ef0982b))
+* replace average days to rejection with metrics that measure progress ([#238](https://github.com/michaelinghilterra-creator/trajecktory/issues/238)) ([0119a48](https://github.com/michaelinghilterra-creator/trajecktory/commit/0119a481a8d3e60165f4534039cb887ed7d10e2a))
+* score how much hands-on building a req demands, and cap when it does ([#235](https://github.com/michaelinghilterra-creator/trajecktory/issues/235)) ([e8289ac](https://github.com/michaelinghilterra-creator/trajecktory/commit/e8289ac96e72aec245ea229c530fd8a9b6513f94))
+* stand down the X channel and keep its published posts as history ([#239](https://github.com/michaelinghilterra-creator/trajecktory/issues/239)) ([9db9c74](https://github.com/michaelinghilterra-creator/trajecktory/commit/9db9c742c3a96c1d980783f0bcf8573987d30517))
+* stop grading influencer engagement as a search motion, keep the asset ([#240](https://github.com/michaelinghilterra-creator/trajecktory/issues/240)) ([51d3185](https://github.com/michaelinghilterra-creator/trajecktory/commit/51d318595b7ddc588f352c2ac415929ee79c8634))
+
+
+### Bug Fixes
+
+* give the score-drift guard a recovery that actually works ([#245](https://github.com/michaelinghilterra-creator/trajecktory/issues/245)) ([c11ac31](https://github.com/michaelinghilterra-creator/trajecktory/commit/c11ac312d961bc154fcb9d37012992f717e70146))
+* put the ghosted-candidate gate on the one shared apply anchor ([#244](https://github.com/michaelinghilterra-creator/trajecktory/issues/244)) ([4fd8696](https://github.com/michaelinghilterra-creator/trajecktory/commit/4fd869687cccc80bede14d95631695e9935bbd7c))
+* route every discovery path through the shared title matcher ([#234](https://github.com/michaelinghilterra-creator/trajecktory/issues/234)) ([7f1dff7](https://github.com/michaelinghilterra-creator/trajecktory/commit/7f1dff7548d7edfeb2b9b6945782a813a32c24b2))
+* stop the sync-cursor reader from silently deleting keys it does not know ([#243](https://github.com/michaelinghilterra-creator/trajecktory/issues/243)) ([47f80e3](https://github.com/michaelinghilterra-creator/trajecktory/commit/47f80e33da6d3ddb6a00570c38c8588f5815c85b))
+* store the whole inbound reply, not the first 200 characters ([#237](https://github.com/michaelinghilterra-creator/trajecktory/issues/237)) ([5b723dd](https://github.com/michaelinghilterra-creator/trajecktory/commit/5b723dd9131a71c4cd338b973c46cc5947a58a3e))
+
 ## [2.36.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.36.0...v2.36.1) (2026-08-23)
 
 
