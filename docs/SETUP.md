@@ -44,7 +44,7 @@ cp templates/portals.example.yml portals.yml
 ```
 
 Edit `portals.yml`:
-- Update `title_filter.positive` with keywords matching your target roles
+- Update `title_filter.matrix.functions_bare`, `functions_ranked`, and `seniority` to match your target roles
 - Add companies you want to track in `tracked_companies`
 - Customize `search_queries` for your preferred job boards
 

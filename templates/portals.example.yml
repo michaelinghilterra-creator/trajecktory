@@ -15,7 +15,7 @@
 #
 # HOW TO CUSTOMIZE:
 #   1. Copy this file to portals.yml in the project root
-#   2. Edit title_filter.positive with YOUR target role keywords
+#   2. Edit the title_filter matrix with YOUR target functions and seniority
 #   3. Add/remove companies in tracked_companies
 #   4. Adjust search_queries for your preferred job boards
 #   5. Set enabled: false on companies you don't care about
@@ -41,10 +41,9 @@
 # ATS-migration notes in AGENTS.md before you remove or re-add one.
 
 # -- Title filter --
-# The scanner uses these keywords to decide if a title is relevant.
-# At least 1 positive must match AND 0 negatives must match (case-insensitive).
-# An EMPTY positive list passes every title through, which is a valid choice if
-# you would rather filter by hand at first.
+# The scanner uses the matrix and negative tokens to decide if a title is relevant.
+# A title passes when it contains a functions_bare phrase, or a functions_ranked
+# phrase near a seniority word, and contains no negative token.
 
 title_filter:
   # -- MATRIX (recommended) --
@@ -52,9 +51,8 @@ title_filter:
   # every surface form ("Director of Analytics" == "Analytics Director" == "VP,
   # Data & Insights"). functions_bare pass at any level; functions_ranked need a
   # seniority word adjacent (either order, optional modifier like "Global"
-  # between). When `matrix` is present the flat `positive:` list below is IGNORED
-  # (kept only as a reference / fallback for older scan-core builds). Delete the
-  # families you don't target and add your own.
+  # between). An older portals.yml carrying positive and no matrix keeps working
+  # unchanged. Delete the families you don't target and add your own.
   matrix:
     seniority: [manager, senior manager, sr manager, lead, director, senior director, sr director, executive director, head, vp, svp, evp, chief]
     modifiers: [global, worldwide, international, regional, enterprise]
@@ -84,74 +82,6 @@ title_filter:
       - deal desk
       - sales development
 
-  positive:
-    # [CUSTOMIZE] Replace these with keywords matching YOUR target roles.
-    # Broad on purpose: better to see too much on a first scan than nothing.
-    # -- Analysis & business roles --
-    - "Analyst"
-    - "Business Analyst"
-    - "Systems Analyst"
-    - "Data Analyst"
-    - "Business Intelligence"
-    - "Insights"
-    - "Strategy"
-    - "Consultant"
-    # -- Product, project & delivery --
-    - "Product Manager"
-    - "Product Owner"
-    - "Project Manager"
-    - "Program Manager"
-    - "Scrum Master"
-    - "Agile"
-    - "Delivery Manager"
-    - "Transformation"
-    - "Process Improvement"
-    - "Continuous Improvement"
-    # -- Operations --
-    - "Operations"
-    - "Business Operations"
-    - "Revenue Operations"
-    - "Sales Operations"
-    - "Supply Chain"
-    - "Procurement"
-    - "Logistics"
-    - "Quality"
-    # -- Technical & engineering --
-    - "Engineer"
-    - "Developer"
-    - "Architect"
-    - "Solutions Architect"
-    - "Solutions Engineer"
-    - "Sales Engineer"
-    - "Implementation"
-    - "Integration"
-    - "Platform"
-    - "Data Engineer"
-    - "Analytics Engineer"
-    - "DevOps"
-    - "Site Reliability"
-    - "Security"
-    - "Automation"
-    # -- Customer-facing --
-    - "Customer Success"
-    - "Account Manager"
-    - "Partner Manager"
-    - "Solutions Consultant"
-    # -- Corporate functions --
-    - "Finance"
-    - "Accounting"
-    - "Controller"
-    - "Marketing"
-    - "People Operations"
-    - "Human Resources"
-    - "Talent"
-    - "Compliance"
-    - "Risk"
-    - "Legal"
-    # -- Design --
-    - "Designer"
-    - "User Experience"
-    - "Product Design"
   negative:
     # [CUSTOMIZE] Add keywords for roles you want to exclude.
     # Kept SHORT on purpose. A long default negative list silently deletes good
