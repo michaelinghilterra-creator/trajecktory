@@ -129,6 +129,15 @@ function isAlreadyInvited(c) {
     || CONTACTED_STATUSES.has(c.status);
 }
 
+function DraftBlockBanner({ block }) {
+  if (!block) return null;
+  return <div className="card" style={{ borderColor: 'var(--yellow)', padding: 10, marginTop: 10, fontSize: 12 }}>
+    {(block.blocks || []).map((item, i) => <div key={`${item.rule || 'block'}:${i}`}>{item.reason}</div>)}
+    <div className="dim" style={{ marginTop: 5 }}>{block.nextEligible ? `You can reach out again on ${block.nextEligible}` : 'Blocked until they reply'}</div>
+    {block.overridden && <div style={{ color: 'var(--yellow)', marginTop: 5 }}>Guardrail overridden for this draft.</div>}
+  </div>;
+}
+
 function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent }) {
   const [note, setNote] = useStateCq(null);
   const [loading, setLoading] = useStateCq(false);
@@ -136,6 +145,7 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
   const [sentAt, setSentAt] = useStateCq(null);
   const [showArchive, setShowArchive] = useStateCq(false);
   const [referred, setReferred] = useStateCq(false);
+  const [draftBlock, setDraftBlock] = useStateCq(null);
   const done = !!sentAt;
   // A contact you have ALREADY sent a LinkedIn invite (or any 1:1 touch) to: the
   // invite is out, so a "follow-up" is a real MESSAGE, not another connection note.
@@ -214,13 +224,13 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
       .catch(e => toast && toast(e.message, 'error'));
   };
 
-  const draft = () => {
+  const draft = (override = false) => {
     setLoading(true);
     window.tjkMutate(alreadyInvited ? '/api/linkedin-drafts/followup-message' : '/api/linkedin-drafts/connect-note', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: c.source, id: c.id }),
+      body: JSON.stringify({ source: c.source, id: c.id, override }),
     }).then(r => r.json())
-      .then(res => { if (res.error) { toast && toast(res.error, 'error'); } else setNote(res); })
+      .then(res => { if (res.error) toast && toast(res.error, 'error'); else if (res.blocked) setDraftBlock(res); else { setNote(res); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
       .catch(e => toast && toast(e.message, 'error'))
       .finally(() => setLoading(false));
   };
@@ -284,8 +294,8 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}
           {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={sending}>💤 14d</button> : null}
-          <button className="btn accent sm" onClick={draft} disabled={loading}>
-            {loading ? 'Drafting…' : (note ? (alreadyInvited ? 'Redraft message' : 'Redraft') : (alreadyInvited ? 'Draft message' : 'Draft note'))}
+          <button className={draftBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => draft(!!draftBlock)} disabled={loading}>
+            {loading ? 'Drafting…' : draftBlock ? 'Draft anyway' : (note ? (alreadyInvited ? 'Redraft message' : 'Redraft') : (alreadyInvited ? 'Draft message' : 'Draft note'))}
           </button>
           {done
             ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, whiteSpace: 'nowrap' }} title={`Recorded as sent (${sentAt})`}>✓ Sent</span>
@@ -294,6 +304,7 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
               </button>}
         </div>
       </div>
+      <DraftBlockBanner block={draftBlock} />
       {note ? (
         <div style={{ marginTop: 10 }}>
           <div style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px', fontSize: 13, whiteSpace: 'pre-wrap' }}>
@@ -374,6 +385,7 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
   const [sending, setSending] = useStateCq(false);
   const [sentAt, setSentAt] = useStateCq(null);
   const [showArchive, setShowArchive] = useStateCq(false);
+  const [draftBlock, setDraftBlock] = useStateCq(null);
   const done = !!sentAt;
   const base = `/api/target-talent/${c.id}`;
   const firstName = c.firstName || (c.name || '').split(/\s+/)[0] || 'there';
@@ -399,12 +411,13 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
       .catch(e => { toast && toast(e.message, 'error'); setSending(false); });
   };
 
-  const gen = () => {
+  const gen = (override = false) => {
     setLoading(true);
-    window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ override }) })
       .then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); return; }
+        if (res.blocked) { setDraftBlock(res); return; }
         const d = res.draft || {};
         if (!d.body) { toast && toast('The model returned an empty draft. Try Redraft.', 'warn'); return; }
         // Compose the full editable email the same way the Network → TA drawer does:
@@ -412,6 +425,7 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
         // Gmail draft, so the draft is complete and needs no typing.
         const sig = (window.myEmailSignature && window.myEmailSignature()) || '';
         setDraft({ subject: (d.subject || '').trim(), body: `Hi ${firstName},\n\n${(d.body || '').trim()}${sig ? `\n\n${sig}` : ''}` });
+        if (override) setDraftBlock(b => ({ ...b, overridden: true }));
       })
       .catch(e => toast && toast(e.message, 'error'))
       .finally(() => setLoading(false));
@@ -483,8 +497,8 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer" title="Open the LinkedIn profile to confirm they're still at the company before emailing.">Open ↗</a> : null}
           {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={sending}>💤 14d</button> : null}
-          <button className="btn accent sm" onClick={gen} disabled={loading}>
-            {loading ? 'Drafting…' : (draft ? 'Redraft' : 'Draft email')}
+          <button className={draftBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => gen(!!draftBlock)} disabled={loading}>
+            {loading ? 'Drafting…' : draftBlock ? 'Draft anyway' : (draft ? 'Redraft' : 'Draft email')}
           </button>
           {done
             ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600, whiteSpace: 'nowrap' }} title="Recorded as a verified touch">✓ Sent</span>
@@ -493,6 +507,7 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
               </button>}
         </div>
       </div>
+      <DraftBlockBanner block={draftBlock} />
       {draft ? (
         <div style={{ marginTop: 10 }}>
           <input
@@ -575,8 +590,10 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
   const [liLoading, setLiLoading] = useStateCq(false);
   const [liSending, setLiSending] = useStateCq(false);
   const [liDone, setLiDone] = useStateCq(!!c.linkedinDone);
+  const [liBlock, setLiBlock] = useStateCq(null);
   // Email side
   const [draft, setDraft] = useStateCq(null);
+  const [emailBlock, setEmailBlock] = useStateCq(null);
   const [emLoading, setEmLoading] = useStateCq(false);
   const [emSending, setEmSending] = useStateCq(false);
   const [emDone, setEmDone] = useStateCq(!!c.emailDone);
@@ -586,13 +603,13 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
   const href = c.linkedin ? (/^https?:/.test(c.linkedin) ? c.linkedin : `https://${c.linkedin}`) : null;
 
   // ── LinkedIn actions ──
-  const draftNote = () => {
+  const draftNote = (override = false) => {
     setLiLoading(true);
     window.tjkMutate('/api/linkedin-drafts/connect-note', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: c.source, id: c.id }),
+      body: JSON.stringify({ source: c.source, id: c.id, override }),
     }).then(r => r.json())
-      .then(res => { if (res.error) toast && toast(res.error, 'error'); else setNote(res); })
+      .then(res => { if (res.error) toast && toast(res.error, 'error'); else if (res.blocked) setLiBlock(res); else { setNote(res); if (override) setLiBlock(b => ({ ...b, overridden: true })); } })
       .catch(e => toast && toast(e.message, 'error'))
       .finally(() => setLiLoading(false));
   };
@@ -620,16 +637,18 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
   };
 
   // ── Email actions ──
-  const genEmail = () => {
+  const genEmail = (override = false) => {
     setEmLoading(true);
-    window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ override }) })
       .then(r => r.json())
       .then(res => {
         if (res.error) { toast && toast(res.error, 'error'); return; }
+        if (res.blocked) { setEmailBlock(res); return; }
         const d = res.draft || {};
         if (!d.body) { toast && toast('The model returned an empty draft. Try Redraft.', 'warn'); return; }
         const sig = (window.myEmailSignature && window.myEmailSignature()) || '';
         setDraft({ subject: (d.subject || '').trim(), body: `Hi ${firstName},\n\n${(d.body || '').trim()}${sig ? `\n\n${sig}` : ''}` });
+        if (override) setEmailBlock(b => ({ ...b, overridden: true }));
       })
       .catch(e => toast && toast(e.message, 'error'))
       .finally(() => setEmLoading(false));
@@ -705,12 +724,13 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 600 }}>LinkedIn invite</span>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn accent sm" onClick={draftNote} disabled={liLoading || liDone}>{liLoading ? 'Drafting…' : (note ? 'Redraft' : 'Draft note')}</button>
+            <button className={liBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => draftNote(!!liBlock)} disabled={liLoading || liDone}>{liLoading ? 'Drafting…' : liBlock ? 'Draft anyway' : (note ? 'Redraft' : 'Draft note')}</button>
             {liDone
               ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span>
               : <button className="btn sm" onClick={markLiSent} disabled={liSending} title="Record that you sent the LinkedIn invite.">{liSending ? 'Saving…' : 'Mark sent'}</button>}
           </div>
         </div>
+        <DraftBlockBanner block={liBlock} />
         {note ? (
           <div style={{ marginTop: 8 }}>
             <div style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px', fontSize: 13, whiteSpace: 'pre-wrap' }}>{note.response}</div>
@@ -726,12 +746,13 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 600 }}>Email</span>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn accent sm" onClick={genEmail} disabled={emLoading || emDone}>{emLoading ? 'Drafting…' : (draft ? 'Redraft' : 'Draft email')}</button>
+            <button className={emailBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => genEmail(!!emailBlock)} disabled={emLoading || emDone}>{emLoading ? 'Drafting…' : emailBlock ? 'Draft anyway' : (draft ? 'Redraft' : 'Draft email')}</button>
             {emDone
               ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span>
               : <button className="btn sm" onClick={markEmSent} disabled={emSending} title="Record that you emailed this contact. Logs a verified touch.">{emSending ? 'Saving…' : 'Mark sent'}</button>}
           </div>
         </div>
+        <DraftBlockBanner block={emailBlock} />
         {draft ? (
           <div style={{ marginTop: 8 }}>
             <input value={emSubject} onChange={e => setEmSubject(e.target.value)} placeholder="Subject"

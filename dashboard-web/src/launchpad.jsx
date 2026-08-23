@@ -2395,7 +2395,7 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                     {tpl('contacts', 'Contacts', 'People you already know.')}
                   </div>
                   <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 'var(--r-ctl)', background: 'var(--panel-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6 }}>
-                    <b style={{ color: 'var(--text)' }}>Contacts upload is on the Contacts tab, under TA Outreach.</b> Fill in the contacts sheet and use the bulk import there.
+                    <b style={{ color: 'var(--text)' }}>Contacts upload is on the Network tab, under TA Outreach.</b> Fill in the contacts sheet and use the bulk import there.
                     <div style={{ marginTop: 6, color: 'var(--text-mute)' }}>
                       Applications is download only for now. Bringing filled-in rows into the tracker has to go through the same merge step everything else uses, and a half-built importer that scrambles a tracker is worse than none. Fill the sheet in and it will be ready when that lands.
                     </div>
