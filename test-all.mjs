@@ -473,6 +473,7 @@ for (const suite of [
   'tests/backfill-tracker-urls.test.mjs',
   'tests/audit-orphan-reports.test.mjs',
   'tests/agent-prompts.test.mjs',
+  'tests/eval-retry.test.mjs',
   'tests/scan-stall.test.mjs',
   'tests/agent-cost-rollup.test.mjs',
   'tests/portals.test.mjs',

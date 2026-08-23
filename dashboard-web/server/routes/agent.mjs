@@ -210,6 +210,44 @@ function batchCost(jobId) {
   return Number.isFinite(c) ? c : 0;
 }
 
+// ── Bounded per-batch retry (Slice 7.6) ───────────────────────────────────────
+// How many times a single transiently-failed batch may be retried before the
+// chain gives up. Default 1; TJK_EVAL_BATCH_RETRIES overrides. 0 disables.
+function batchRetries() {
+  const n = parseInt(process.env.TJK_EVAL_BATCH_RETRIES, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 1;
+}
+// A failed batch is worth retrying only if the failure looks transient (a CLI
+// rate-limit/overload blip, a dropped process). A deterministic failure — an
+// untrusted workspace, a missing CLI, a hard billing/credit error — will fail
+// identically on retry and must NOT be retried (it would burn quota re-hitting a
+// wall). Fail toward NOT retrying when the error clearly names one of those.
+function batchRetryable(jobId, res) {
+  if (res && res.ok) return false;
+  const job = agentJobs.get(jobId) || {};
+  if (job.needsTrust) return false;                                   // trust is deterministic
+  const e = String((res && res.error) || '').toLowerCase();
+  if (/not found|not recognized|command not found|on your path/.test(e)) return false;  // CLI missing
+  if (/credit|billing|payment|insufficient|quota exceeded|invalid api key|authentication/.test(e)) return false; // hard account error
+  return true;                                                        // otherwise treat as transient
+}
+// Retry ONE batch after a transient failure. Reconciles BEFORE each retry so the
+// retry resumes from what the failed attempt already finished (checkpoint) rather
+// than re-evaluating and duplicating it — the durable `- [ ]` state is the
+// checkpoint. Stops early if reconcile shows the queue already drained (the batch
+// wrote everything, then hiccuped). Returns the latest result.
+async function retryBatch(jobId, target, res) {
+  const max = batchRetries();
+  for (let attempt = 1; !res.ok && attempt <= max && batchRetryable(jobId, res); attempt++) {
+    reconcilePipelineQueue();                             // checkpoint what the failed attempt finished
+    if (!(countPipelinePending() > 0)) break;             // nothing left → let the caller see it drained
+    const j = agentJobs.get(jobId) || {};
+    agentJobs.set(jobId, { ...j, status: 'running', activity: `Batch failed — retrying (${attempt}/${max})…`, error: undefined, rollRetries: (j.rollRetries || 0) + 1 });
+    res = await runClaudeAgent(jobId, 'pipeline', target);
+  }
+  return res;
+}
+
 // Continue a pipeline run into further batches within the same job. `firstRes` is
 // the result of the first (already-run) batch; returns the LAST batch's result so
 // the caller's post-run block reports on the whole chain. Terminates on: a batch
@@ -221,7 +259,9 @@ function batchCost(jobId) {
 // why the chain stopped rather than resetting per batch or freezing on a bar.
 async function rollPipeline(jobId, target, firstRes) {
   const cap = rollMax();
-  let res = firstRes;
+  // 7.6: give even the first batch a bounded retry on a transient failure, so a
+  // one-off CLI blip doesn't lose the whole run before the chain starts.
+  let res = await retryBatch(jobId, target, firstRes);
   let rollTotal = clampedDone(jobId);
   let rollCost = batchCost(jobId);
   let batches = 1;
@@ -231,12 +271,15 @@ async function rollPipeline(jobId, target, firstRes) {
   let lastPending = null;
   let endReason = 'drained';
   while (true) {
-    if (!res.ok) { endReason = 'error'; break; }         // a failed batch stops the chain
     if (rollingStop) { endReason = 'stopped'; mark({ rollStopped: true }); break; }
-    reconcilePipelineQueue();                            // advance the queue past what this batch handled
+    // Reconcile FIRST, then judge. If the queue drained we are done even if the
+    // batch's exit was an error (it wrote everything, then hiccuped) — checkpoint
+    // over exit code. Only a failure that ALSO left work behind stops the chain.
+    reconcilePipelineQueue();
     const pending = countPipelinePending();
     mark({ rollPending: pending == null ? undefined : pending });
     if (pending === null || pending <= 0) { endReason = 'drained'; break; }
+    if (!res.ok) { endReason = 'error'; break; }         // failed AND work remains → stop (retries already spent)
     if (rollTotal >= cap) { endReason = 'capped'; mark({ rollCapped: true }); break; }
     if (lastPending !== null && pending >= lastPending) { endReason = 'stall'; break; }  // last batch advanced nothing
     lastPending = pending;
@@ -248,6 +291,7 @@ async function rollPipeline(jobId, target, firstRes) {
     const power = effectivePower(target, 'pipeline');
     mark({ status: 'running', rollBatches: batches, progressTotal: pipelineEvalTotal(power), evaluationsDone: 0, activity: `Rolling batch ${batches}…`, error: undefined, summary: undefined });
     res = await runClaudeAgent(jobId, 'pipeline', target);
+    res = await retryBatch(jobId, target, res);          // 7.6: bounded retry on a transient batch failure
     rollTotal += clampedDone(jobId);
     rollCost += batchCost(jobId);
     mark({ rollTotal, rollCost });
@@ -1193,6 +1237,7 @@ router.get('/api/agent/active', (req, res) => {
       billedTo: job.billedTo, batch: job.batch,
       rolling: job.rolling, rollTotal: job.rollTotal, rollBatches: job.rollBatches, rollCap: job.rollCap,
       rollCost: job.rollCost, rollPending: job.rollPending, rollEndReason: job.rollEndReason, cost: job.cost,
+      rollRetries: job.rollRetries,
     });
   }
   out.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
@@ -1237,5 +1282,5 @@ router.get('/api/agent/cost-history', (req, res) => {
   res.json(out.slice(0, 20));
 });
 
-export { agentJobs };
+export { agentJobs, batchRetries, batchRetryable };
 
