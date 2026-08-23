@@ -78,8 +78,27 @@ function readSync() {
     // can show "checked N days ago" and nudge when stale. Surfaced here so every
     // writeSync round-trip preserves it — a caller that read a stripped object and
     // wrote it back would otherwise clobber the stamp to absent.
-    return { seenMessageIds: s.seenMessageIds || [], lastCheckedAt: s.lastCheckedAt || null, handledReplies: s.handledReplies || {}, lastPreviewAt: s.lastPreviewAt || null };
-  } catch { return { seenMessageIds: [], lastCheckedAt: null, handledReplies: {}, lastPreviewAt: null }; }
+    //
+    // SPREAD FIRST, DEFAULT SECOND. This used to be a whitelist that named its four
+    // known keys and dropped everything else, which silently destroyed any key added
+    // later: notRelatedSenders (the "stop showing me this sender" list) was written
+    // by its route, then wiped by the very next writeSync, and every reply sweep does
+    // one to stamp lastPreviewAt. The live file held 40 recorded not-related actions
+    // and 1 surviving sender. A read-modify-write helper must never be the place that
+    // decides which keys exist.
+    // Spread FIRST so unknown keys survive, then re-apply the known ones so their
+    // shape guarantees still hold. Order matters both ways: spreading last would let
+    // a null in the file override a default and hand callers a null where they
+    // expect an object.
+    return {
+      ...s,
+      seenMessageIds: s.seenMessageIds || [],
+      lastCheckedAt: s.lastCheckedAt || null,
+      handledReplies: s.handledReplies || {},
+      lastPreviewAt: s.lastPreviewAt || null,
+      notRelatedSenders: s.notRelatedSenders || {},
+    };
+  } catch { return { seenMessageIds: [], lastCheckedAt: null, handledReplies: {}, lastPreviewAt: null, notRelatedSenders: {} }; }
 }
 function writeSync(s) {
   fs.writeFileSync(GOOGLE_SYNC_PATH, JSON.stringify(s, null, 2) + '\n');
