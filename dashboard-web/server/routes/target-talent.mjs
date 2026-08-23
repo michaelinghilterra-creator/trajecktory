@@ -13,7 +13,7 @@ import { isLinkedInInvite } from '../lib/channels.mjs';
 import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES } from '../lib/tt-linkedin.mjs';
 import { isHighValueContact } from '../lib/followups.mjs';
 import { appendReferralRows, parseReferralsMd } from '../lib/referrals.mjs';
-import { slugOf } from '../lib/linkedin-acceptance.mjs';
+import { linkedinKey } from '../lib/contact-identity.mjs';
 import { summarizeThread } from '../lib/correspondence-context.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
@@ -111,10 +111,10 @@ router.post('/api/target-talent/:id/to-referral', (req, res) => {
     const id = parseInt(req.params.id, 10);
     const contact = parseTargetTalentMd().find(c => c.id === id);
     if (!contact) return res.status(404).json({ error: 'Contact not found' });
-    const mySlug = slugOf(contact.linkedin);
+    const mySlug = linkedinKey(contact.linkedin);
     const already = parseReferralsMd().find(r =>
       new RegExp(`TA Outreach #${id}\\b`, 'i').test(r.notes || '') ||
-      (mySlug && slugOf(r.linkedin) === mySlug));
+      (mySlug && linkedinKey(r.linkedin) === mySlug));
     if (already) return res.json({ ok: true, alreadyReferral: true });
     const written = appendReferralRows([{
       name: `${contact.first || ''} ${contact.last || ''}`.trim(),

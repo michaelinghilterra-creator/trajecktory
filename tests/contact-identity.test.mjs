@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 import { linkedinKey, contactRef } from '../dashboard-web/server/lib/contact-identity.mjs';
-import { slugOf } from '../dashboard-web/server/lib/linkedin-acceptance.mjs';
-import { profileHandle } from '../dashboard-web/server/lib/sent-invites-reconcile.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -69,18 +67,6 @@ check(contactRef('ta', '42') === 'ta:42', 'numeric string id normalizes');
 check(contactRef('ta', 'abc') === '', 'non-numeric string id is empty');
 check(contactRef('ta', 4.5) === '', 'fractional id is empty');
 check(contactRef('ta', '') === '', 'empty string id is empty');
-
-console.log('\n9. Delegation');
-for (const value of [
-  'n/a',
-  'https://www.linkedin.com/in/jane-doe-ex',
-  'https://www.linkedin.com/in/jane-doe-ex (personal)',
-  'https://www.linkedin.com/in/jos%C3%A9-ex',
-]) {
-  const expected = linkedinKey(value);
-  check(slugOf(value) === expected, `slugOf delegates for ${value}`);
-  check(profileHandle(value) === expected, `profileHandle delegates for ${value}`);
-}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exitCode = failed ? 1 : 0;

@@ -3,10 +3,9 @@
 // rows are the same POSTING. Guarded by tests/identity-single-source.test.mjs.
 //
 // It exists because there were four answers to that question and they disagreed:
-// canonicalLinkedinUrl, slugOf, a byte-identical redeclaration of slugOf in the
-// referrals route, and profileHandle. A profile therefore keyed three different
-// ways depending on which code path reached it, which is how the same human ended
-// up filed twice with two separate outreach histories.
+// the CSV canonicalizer plus three separate profile parsers. A profile therefore
+// keyed three different ways depending on which code path reached it, which is how
+// the same human ended up filed twice with two separate outreach histories.
 //
 // WHY THIS IS NOT canonicalLinkedinUrl
 //
@@ -22,8 +21,8 @@
 // Two more things it fixes, both of which cost real merges before:
 //   - Whitespace. canonicalLinkedinUrl's capture excludes / ? # but not spaces,
 //     so ".../in/jane-doe (personal)" keyed differently from ".../in/jane-doe".
-//   - Unicode. profileHandle's charset is ASCII-only, so it truncated
-//     ".../in/josé-ex" to "jos", while slugOf left "%C3%A9" encoded. The encoded
+//   - Unicode. One old parser's charset was ASCII-only, so it truncated
+//     ".../in/josé-ex" to "jos", while another left "%C3%A9" encoded. The encoded
 //     and literal spellings of one profile could never agree. The pre-pass below
 //     percent-encodes non-ASCII before matching and decodes after, so both
 //     spellings land on the same key.
@@ -49,6 +48,19 @@ export function linkedinKey(url) {
   while (end > 0 && slug.charCodeAt(end - 1) === 47) end--;
   return slug.slice(0, end).toLowerCase();
 }
+
+// Normalize a person name for matching: drop diacritics, parentheticals (maiden
+// names), post-comma credentials (", MBA"), and emoji/symbols; lowercase; collapse
+// whitespace. Returns the cleaned string.
+export function cleanName(s) {
+  return String(s || '')
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')   // strip diacritics
+    .replace(/\([^)]*\)/g, ' ')                          // (maiden) / (nickname)
+    .replace(/,.*$/, '')                                 // ", MBA" credentials
+    .replace(/[^\p{L}\s'-]/gu, ' ')                      // drop emoji/symbols
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+}
+export function nameTokens(s) { return cleanName(s).split(' ').filter(Boolean); }
 
 // The stable address of one row: "ta:42", "referral:7", "influencer:3". The three
 // stores each number from 1 with their own counter, so an id alone is ambiguous

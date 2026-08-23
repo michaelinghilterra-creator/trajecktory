@@ -26,8 +26,6 @@ function splitName(name) {
 }
 
 const _norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-// This now delegates and will be removed in the next change.
-const _slug = (u) => linkedinKey(u);
 
 // Resolve a referral to its TA-outreach TWIN: the same human tracked in the TA
 // book. This is what makes the drawer "unified": a linked referral shows (and
@@ -41,9 +39,9 @@ const _slug = (u) => linkedinKey(u);
 function resolveReferralLink(refRow, taRows) {
   const taRef = (refRow.notes || '').match(/TA Outreach #(\d+)/i);
   if (taRef) { const c = taRows.find(r => r.id === parseInt(taRef[1], 10)); if (c) return { source: 'ta', contact: c }; }
-  const s = _slug(refRow.linkedin);
+  const s = linkedinKey(refRow.linkedin);
   if (s) {
-    const ta = taRows.find(r => _slug(r.linkedin) === s); if (ta) return { source: 'ta', contact: ta };
+    const ta = taRows.find(r => linkedinKey(r.linkedin) === s); if (ta) return { source: 'ta', contact: ta };
   }
   const nn = _norm(refRow.name), nc = _norm(refRow.where);
   if (nn && nn.length >= 4) {

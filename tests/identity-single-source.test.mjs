@@ -145,10 +145,11 @@ console.log('\n4. The guard can actually see a violation');
     ['function sameRole(a, b) { return a === b; }', ['sameRole']],
     ['const canonicalUrl = (u) => u;', ['canonicalUrl']],
     ['export function normalizeCompany(n) { return n; }', ['normalizeCompany']],
+    ['let cleanName = (n) => n;', ['cleanName']],
   ];
   let sees = 0;
   for (const [src, expect] of planted) {
-    const hits = definesAny(src, ['canonicalUrl', 'normalizeCompany', 'sameRole']);
+    const hits = definesAny(src, ['canonicalUrl', 'normalizeCompany', 'sameRole', 'cleanName']);
     if (JSON.stringify(hits) === JSON.stringify(expect)) sees++;
   }
   check(sees === planted.length, `detects a planted definition in all ${planted.length} declaration forms`);
@@ -160,10 +161,28 @@ console.log('\n4. The guard can actually see a violation');
     "export { canonicalUrl as normalizeUrl } from './identity.mjs';",
     '// normalizeCompany and sameRole now live in lib/identity.mjs',
     'const x = sameRole(a, b) && canonicalUrl(u);',
+    "import { cleanName } from './contact-identity.mjs';",
+    'const y = cleanName(name);',
   ];
-  const falsePositives = allowed.filter(s => definesAny(s, ['canonicalUrl', 'normalizeCompany', 'sameRole']).length);
+  const falsePositives = allowed.filter(s => definesAny(s, ['canonicalUrl', 'normalizeCompany', 'sameRole', 'cleanName']).length);
   check(falsePositives.length === 0,
     'does not fire on imports, re-exports, comments, or call sites', falsePositives);
+}
+
+console.log('\n5. Contact identity is defined in exactly one place');
+{
+  const CONTACT_IDENTITY_FNS = [
+    'linkedinKey', 'slugOf', 'profileHandle', '_slug', 'cleanName', 'nameTokens',
+  ];
+  const owner = 'dashboard-web/server/lib/contact-identity.mjs';
+  const offenders = [];
+  for (const f of files) {
+    if (rel(f) === owner) continue;
+    const hits = definesAny(readFileSync(f, 'utf-8'), CONTACT_IDENTITY_FNS);
+    if (hits.length) offenders.push(`${rel(f)} defines ${hits.join(', ')}`);
+  }
+  check(offenders.length === 0,
+    `no file outside ${owner} defines a contact identity function`, offenders);
 }
 
 console.log(`\n${failed === 0 ? '🟢' : '🔴'} identity-single-source: ${passed} passed, ${failed} failed`);

@@ -17,6 +17,7 @@
  * gitignored. There is no `git checkout` for a number that silently shifts in
  * a user's live tracker. This suite is the closest thing to an undo we get:
  * before-and-after evidence for the two laps that touch the parsers.
+ * Lap 2b collapsed the three LinkedIn parsers into one, so the table now tracks two.
  *
  * The defects pinned here, all real as of 2026-08-22:
  *   - The two correspondence parsers disagree. The referral one is
@@ -82,8 +83,7 @@ const express = (await import('express')).default;
 const { router: referralsRouter } = await import('../dashboard-web/server/routes/referrals.mjs');
 const { readTTCorrespondence } = await import('../dashboard-web/server/lib/target-talent.mjs');
 const { outreachCapState, summarizeThread } = await import('../dashboard-web/server/lib/correspondence-context.mjs');
-const { slugOf } = await import('../dashboard-web/server/lib/linkedin-acceptance.mjs');
-const { profileHandle, cleanName } = await import('../dashboard-web/server/lib/sent-invites-reconcile.mjs');
+const { linkedinKey, cleanName } = await import('../dashboard-web/server/lib/contact-identity.mjs');
 const { canonicalLinkedinUrl } = await import('../dashboard-web/server/lib/linkedin-referrals.mjs');
 
 const app = express();
@@ -162,53 +162,50 @@ check(details[1].link.id === 2, 'Dana referral resolves to TA id 2');
 check(details[2].link !== null, 'Jane referral has a link');
 check(details[2].link.id === 3, 'Jane referral resolves to TA id 3');
 
-console.log('\n5. The three LinkedIn URL parsers disagree');
-// One row per input: [input, slugOf, profileHandle, canonicalLinkedinUrl, note].
+console.log('\n5. The two LinkedIn URL parsers disagree');
+// One row per input: [input, linkedinKey, canonicalLinkedinUrl, note].
 // The note travels with the values it explains, so a later lap that changes one
 // expectation can see immediately whether it is correcting a defect or breaking
 // something that was right.
 const URL_CASES = [
   ['n/a',
-   '', '', 'n/a',
+   '', 'n/a',
    'WRONG: canonicalLinkedinUrl falls through and hands back its own input, so a ' +
    '"not on LinkedIn" sentinel becomes a truthy identity key. Group people on it ' +
-   'and every contact carrying n/a merges into one person. slugOf and ' +
-   'profileHandle correctly return empty. This is why the join key cannot be ' +
+   'and every contact carrying n/a merges into one person. linkedinKey correctly ' +
+   'returns empty. This is why the join key cannot be ' +
    'canonicalLinkedinUrl.'],
 
   ['https://www.linkedin.com/in/jane-doe-ex',
-   'jane-doe-ex', 'jane-doe-ex', 'linkedin.com/in/jane-doe-ex',
-   'The happy path. All three agree, modulo the prefix.'],
+   'jane-doe-ex', 'linkedin.com/in/jane-doe-ex',
+   'The happy path. Both agree, modulo the prefix.'],
 
   ['https://www.linkedin.com/in/jane-doe-ex (personal)',
-   'jane-doe-ex', 'jane-doe-ex', 'linkedin.com/in/jane-doe-ex (personal)',
+   'jane-doe-ex', 'linkedin.com/in/jane-doe-ex (personal)',
    'WRONG: canonicalLinkedinUrl swallows the trailing annotation because its ' +
    'capture excludes / ? # but not whitespace. The same human then keys ' +
    'differently depending on whether someone typed a note after the URL, which ' +
    'is precisely the duplicate this project exists to remove.'],
 
   ['https://www.linkedin.com/company/acme-ex',
-   '', '', 'www.linkedin.com/company/acme-ex',
+   '', 'www.linkedin.com/company/acme-ex',
    'WRONG: a company page is not a person, but canonicalLinkedinUrl still ' +
    'returns something truthy. Two contacts who both list their employer page ' +
    'would merge.'],
 
   ['https://www.linkedin.com/in/jos%C3%A9-ex',
-   // Lap 2a changed slugOf from 'jos%c3%a9-ex' to 'josé-ex'.
-   'josé-ex', 'josé-ex', 'linkedin.com/in/jos%c3%a9-ex',
-   'WRONG: only profileHandle decodes, so the same profile keys three different ' +
-   'ways depending on which parser a code path happens to call.'],
+   // Lap 2a changed the shared key from 'jos%c3%a9-ex' to 'josé-ex'.
+   'josé-ex', 'linkedin.com/in/jos%c3%a9-ex',
+   'WRONG: canonicalLinkedinUrl does not decode, so the same profile keys ' +
+   'differently depending on which parser a code path happens to call.'],
 
   ['https://www.linkedin.com/in/josé-ex',
-   // Lap 2a changed profileHandle from 'jos' to 'josé-ex'.
-   'josé-ex', 'josé-ex', 'linkedin.com/in/josé-ex',
-   'WRONG: profileHandle truncates at the first non-ASCII character because its ' +
-   'charset is [A-Za-z0-9-_%.]. Combined with the row above, the encoded and ' +
-   'literal spellings of one profile never agree under any single parser.'],
+   // Lap 2a changed the shared key from 'jos' to 'josé-ex'.
+   'josé-ex', 'linkedin.com/in/josé-ex',
+   'The literal spelling is preserved by both parsers.'],
 ];
-for (const [input, wantSlug, wantHandle, wantCanonical] of URL_CASES) {
-  check(slugOf(input) === wantSlug, `slugOf(${JSON.stringify(input)}) is ${JSON.stringify(wantSlug)}`);
-  check(profileHandle(input) === wantHandle, `profileHandle(${JSON.stringify(input)}) is ${JSON.stringify(wantHandle)}`);
+for (const [input, wantKey, wantCanonical] of URL_CASES) {
+  check(linkedinKey(input) === wantKey, `linkedinKey(${JSON.stringify(input)}) is ${JSON.stringify(wantKey)}`);
   check(canonicalLinkedinUrl(input) === wantCanonical, `canonicalLinkedinUrl(${JSON.stringify(input)}) is ${JSON.stringify(wantCanonical)}`);
 }
 

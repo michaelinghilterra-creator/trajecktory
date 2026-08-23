@@ -18,10 +18,6 @@ import { parseTargetTalentMd } from './target-talent.mjs';
 import { loadConnections } from './linkedin-referrals.mjs';
 import { linkedinKey } from './contact-identity.mjs';
 
-// The /in/<slug> identity of a LinkedIn URL, lowercased. '' when there is none.
-// This now delegates and will be removed in the next change.
-export const slugOf = (u) => linkedinKey(u);
-
 // Name/company normalizer: lowercase, alphanumerics only. Matches routes/referrals
 // resolveReferralLink so twin-matching and acceptance-matching agree.
 export const normName = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -57,10 +53,10 @@ export function detectAcceptances({ connections, taRows } = {}) {
   if (!pending.length) return { flipped: [] };
   const conns = connections ?? (loadConnections().connections || []);
   const bySlug = new Map();
-  for (const c of conns) { const s = slugOf(c.url); if (s && !bySlug.has(s)) bySlug.set(s, c); }
+  for (const c of conns) { const s = linkedinKey(c.url); if (s && !bySlug.has(s)) bySlug.set(s, c); }
   const flipped = [];
   for (const t of pending) {
-    const s = slugOf(t.linkedin);
+    const s = linkedinKey(t.linkedin);
     if (!s) continue;
     const c = bySlug.get(s);
     if (!c) continue;
@@ -82,13 +78,13 @@ export function computePendingAcceptances({ taRows } = {}) {
   const bySlug = new Set();
   const byNameCo = new Map();
   for (const c of connections) {
-    const s = slugOf(c.url); if (s) bySlug.add(s);
+    const s = linkedinKey(c.url); if (s) bySlug.add(s);
     const key = `${normName(`${c.first} ${c.last}`)}|${normName(c.company)}`;
     if (!byNameCo.has(key)) byNameCo.set(key, c);
   }
   const out = [];
   for (const t of pending) {
-    const s = slugOf(t.linkedin);
+    const s = linkedinKey(t.linkedin);
     if (s && bySlug.has(s)) continue;                 // slug hit → auto-flipped, not a confirm case
     const nn = normName(`${t.first} ${t.last}`);
     if (nn.length < 4) continue;
