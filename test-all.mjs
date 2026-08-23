@@ -538,6 +538,7 @@ for (const suite of [
   'tests/weekly-run.test.mjs',
   'tests/docx-bullets.test.mjs',
   'tests/posts-composer.test.mjs',
+  'tests/x-channel-standdown.test.mjs',
   'tests/referrals.test.mjs',
   'tests/referral-conversion.test.mjs',
   'tests/contacts-characterization.test.mjs',

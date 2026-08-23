@@ -6,7 +6,7 @@
 
 const LANE_META = {
   professional: { label: "Professional", channel: "linkedin", channelLabel: "LinkedIn", note: "earns screens" },
-  trajecktory:  { label: "trajecktory",  channel: "x",        channelLabel: "X",        note: "build in public" },
+  trajecktory:  { label: "trajecktory",  channel: "linkedin", channelLabel: "LinkedIn", note: "build in public" },
 };
 const channelFor = (lane) => (LANE_META[lane] || LANE_META.professional).channel;
 
