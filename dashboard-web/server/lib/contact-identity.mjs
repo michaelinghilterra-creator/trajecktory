@@ -1,4 +1,6 @@
 // contact-identity.mjs: the one place that decides whether two rows are the same
+import { normalizeCompany } from '../../../lib/identity.mjs';
+
 // PERSON, exactly as lib/identity.mjs is the one place that decides whether two
 // rows are the same POSTING. Guarded by tests/identity-single-source.test.mjs.
 //
@@ -75,4 +77,89 @@ export function contactRef(source, id) {
   const n = Number(id);
   if (!Number.isInteger(n)) return '';
   return `${source}:${n}`;
+}
+
+const SOURCE_ORDER = { ta: 0, referral: 1, influencer: 2 };
+const rowName = (source, row) => source === 'ta'
+  ? [row.first, row.last].filter(Boolean).join(' ').trim()
+  : String(row.name || '').trim();
+const rowCompany = (source, row) => String(source === 'referral' ? row.where : (row.company || '')).trim();
+
+export function resolvePeople({ ta = [], referrals = [], influencers = [], pins = {} } = {}) {
+  const entries = [
+    ...ta.map(row => ({ source: 'ta', row, ref: contactRef('ta', row.id) })),
+    ...referrals.map(row => ({ source: 'referral', row, ref: contactRef('referral', row.id) })),
+    ...influencers.map(row => ({ source: 'influencer', row, ref: contactRef('influencer', row.id) })),
+  ].filter(entry => entry.ref).sort((a, b) => a.ref.localeCompare(b.ref));
+  const byRef = new Map(entries.map(entry => [entry.ref, entry]));
+  const alone = new Set(Object.entries(pins || {}).filter(([, pin]) => pin?.alone === true).map(([ref]) => ref));
+  const claimed = new Set();
+  const groups = [];
+  const addGroup = (members, matchedBy) => {
+    const unique = [...new Map(members.map(entry => [entry.ref, entry])).values()].sort((a, b) => a.ref.localeCompare(b.ref));
+    if (!unique.length) return;
+    unique.forEach(entry => claimed.add(entry.ref));
+    groups.push({ entries: unique, matchedBy });
+  };
+
+  for (const ref of [...alone].sort()) {
+    const entry = byRef.get(ref);
+    if (entry) addGroup([entry], 'pin');
+  }
+
+  const adjacency = new Map();
+  for (const [ref, pin] of Object.entries(pins || {})) {
+    const other = pin?.with;
+    if (!byRef.has(ref) || !byRef.has(other) || alone.has(ref) || alone.has(other)) continue;
+    if (!adjacency.has(ref)) adjacency.set(ref, new Set());
+    if (!adjacency.has(other)) adjacency.set(other, new Set());
+    adjacency.get(ref).add(other);
+    adjacency.get(other).add(ref);
+  }
+  for (const ref of [...adjacency.keys()].sort()) {
+    if (claimed.has(ref)) continue;
+    const stack = [ref];
+    const component = [];
+    while (stack.length) {
+      const current = stack.pop();
+      if (claimed.has(current)) continue;
+      claimed.add(current);
+      component.push(byRef.get(current));
+      for (const next of adjacency.get(current) || []) if (!claimed.has(next)) stack.push(next);
+    }
+    addGroup(component, 'pin');
+  }
+
+  const taById = new Map(ta.map(row => [Number(row.id), byRef.get(contactRef('ta', row.id))]));
+  for (const entry of entries.filter(item => item.source === 'referral')) {
+    if (claimed.has(entry.ref)) continue;
+    const match = String(entry.row.notes || '').match(/from\s+TA\s+Outreach\s+#(\d+)\b/i);
+    const target = match ? taById.get(Number(match[1])) : null;
+    if (target && !claimed.has(target.ref)) addGroup([entry, target], 'backref');
+  }
+
+  const keyed = new Map();
+  for (const entry of entries) {
+    if (claimed.has(entry.ref)) continue;
+    const key = linkedinKey(entry.row.linkedin || entry.row.linkedinUrl);
+    if (!key) continue;
+    if (!keyed.has(key)) keyed.set(key, []);
+    keyed.get(key).push(entry);
+  }
+  for (const members of keyed.values()) if (members.length > 1) addGroup(members, 'linkedinKey');
+  for (const entry of entries) if (!claimed.has(entry.ref)) addGroup([entry], 'single');
+
+  return groups.map(group => {
+    const sorted = [...group.entries].sort((a, b) => SOURCE_ORDER[a.source] - SOURCE_ORDER[b.source] || a.ref.localeCompare(b.ref));
+    const companyEntry = sorted.find(entry => normalizeCompany(rowCompany(entry.source, entry.row)));
+    return {
+      id: group.entries.map(entry => entry.ref).sort()[0],
+      refs: group.entries.map(entry => entry.ref).sort(),
+      matchedBy: group.matchedBy,
+      linkedinKey: sorted.map(entry => linkedinKey(entry.row.linkedin || entry.row.linkedinUrl)).find(Boolean) || '',
+      name: sorted.map(entry => rowName(entry.source, entry.row)).find(Boolean) || '',
+      company: companyEntry ? rowCompany(companyEntry.source, companyEntry.row) : '',
+      members: Object.fromEntries(sorted.map(entry => [entry.source, entry.row])),
+    };
+  }).sort((a, b) => a.id.localeCompare(b.id));
 }
