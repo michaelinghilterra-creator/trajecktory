@@ -17,6 +17,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 // SANDBOX FIRST. getAccessToken persists a refreshed token through writeTokens()
 // unless the caller passes its own `save`, and one health-check case here does not.
@@ -29,7 +30,7 @@ import path from 'path';
 // config.mjs resolves DATA_DIR at import time, so the env var MUST be set before
 // google.mjs loads. Static imports are hoisted above assignments, which is why the
 // module is imported dynamically below. Same pattern as google-sync.test.mjs.
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-google-'));
+const tmp = makeSandbox("google");
 process.env.TJK_DATA_DIR = tmp;
 
 const {

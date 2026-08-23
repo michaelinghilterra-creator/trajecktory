@@ -2,8 +2,9 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-person-context-'));
+const sandbox = makeSandbox("person-context");
 process.env.TJK_DATA_DIR = sandbox;
 
 fs.writeFileSync(path.join(sandbox, 'target-talent.md'),

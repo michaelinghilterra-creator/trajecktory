@@ -15,6 +15,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 import {
   deriveScore, loadScoringWeights, DEFAULT_WEIGHTS, DEFAULT_RED_FLAG_PENALTY, SCORE_DIMENSIONS, dimensionLabel,
   levelRank, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL,
@@ -132,7 +133,7 @@ check(Object.keys(DEFAULT_WEIGHTS).length === SCORE_DIMENSIONS.length, 'a defaul
 check(near(Object.values(DEFAULT_WEIGHTS).reduce((a, b) => a + b, 0), 0.85), 'the scored default weights sum to 0.85 (comp is 0), renormalized at derive time');
 check(dimensionLabel('fit') === 'Fit / CV Match' && dimensionLabel('nope') === 'nope', 'dimensionLabel maps known keys and passes through unknown');
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-score-'));
+const tmp = makeSandbox("score");
 const pf = path.join(tmp, 'profile.yml');
 fs.writeFileSync(pf, 'scoring:\n  weights:\n    fit: 0.5\n    northStar: 0.2\n    level: 0.1\n    comp: 0.1\n    location: 0.1\n  redFlagPenalty: 2.5\n');
 const loaded = loadScoringWeights(pf);
@@ -186,7 +187,7 @@ check(applyLevelFloor(dimsSM, 'Senior Manager', 'Director').floored === false, '
 check(applyLevelFloor(dimsSM, 'Director', 'Director').floored === true, 'at minimum_level Director, a Director title still floors');
 
 // loadScoringWeights surfaces minimum_level (default + override).
-const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-lvl-'));
+const tmp2 = makeSandbox("lvl");
 const pf2 = path.join(tmp2, 'profile.yml');
 check(loadScoringWeights(path.join(tmp2, 'none.yml')).minimumLevel === 'Manager', 'loadScoringWeights defaults minimumLevel to Manager');
 fs.writeFileSync(pf2, 'scoring:\n  minimum_level: "Director"\n');

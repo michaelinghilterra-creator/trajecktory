@@ -13,8 +13,9 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-liaccept-'));
+const sandbox = makeSandbox("liaccept");
 process.env.TJK_DATA_DIR = sandbox;
 
 const { detectAcceptances, computePendingAcceptances } = await import('../dashboard-web/server/lib/linkedin-acceptance.mjs');

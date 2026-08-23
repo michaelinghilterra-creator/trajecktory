@@ -18,6 +18,7 @@
 import { mkdtempSync, writeFileSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 import {
   parsePortalAdditions, sanitizeCompanyName, verifyBoardLive, mergePortalAdditions,
   START_MARKER, END_MARKER,
@@ -105,7 +106,7 @@ tracked_companies:
     enabled: true
 `;
 function tmpPortals() {
-  const dir = mkdtempSync(join(tmpdir(), 'portals-'));
+  const dir = makeSandbox("portals");
   const p = join(dir, 'portals.yml');
   writeFileSync(p, PORTALS, 'utf8');
   return p;

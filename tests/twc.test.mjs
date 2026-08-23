@@ -22,10 +22,11 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 // Sandbox before the module loads: config.mjs resolves DATA_DIR at import time, so
 // reading the real tracker/sidecars would make assertions depend on live data.
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-twc-'));
+const tmp = makeSandbox("twc");
 process.env.TJK_DATA_DIR = tmp;
 
 fs.writeFileSync(path.join(tmp, 'applications.md'), [

@@ -30,6 +30,7 @@ import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import AdmZip from 'adm-zip';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GATE = join(root, 'verify-no-pii.mjs');
@@ -98,7 +99,7 @@ function makeImageOnlyPdf() {
 
 // Run the gate over a throwaway payload dir. Returns { code, out }.
 function scan(files) {
-  const dir = mkdtempSync(join(tmpdir(), 'tjk-pii-'));
+  const dir = makeSandbox("pii");
   try {
     for (const [name, body] of Object.entries(files)) {
       const p = join(dir, name);

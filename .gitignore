@@ -122,3 +122,10 @@ audit/
 # Rewritten every lap and meaningless once the lap lands, so it is scratch, not
 # history. Keeping it tracked would put a churning file in every diff.
 HANDOFF.md
+
+# Test sandboxes that must sit inside the repo. Four suites copy a script into
+# their sandbox and run it, and those copies use bare imports that Node resolves
+# by walking up for node_modules, which the system temp dir cannot provide. They
+# used to mkdtemp straight into the repo root, so a leftover was an untracked
+# directory one `git add -A` away from being committed. Contained here instead.
+.test-sandboxes/

@@ -19,8 +19,9 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-sync-'));
+const tmp = makeSandbox("sync");
 process.env.TJK_DATA_DIR = tmp;
 const syncPath = path.join(tmp, 'google-sync.json');
 
