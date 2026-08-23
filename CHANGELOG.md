@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.33.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.33.0...v2.33.1) (2026-08-23)
+
+
+### Bug Fixes
+
+* escape the env-key name in writeEnvKey's line matcher (regex injection) ([#221](https://github.com/michaelinghilterra-creator/trajecktory/issues/221)) ([b91b386](https://github.com/michaelinghilterra-creator/trajecktory/commit/b91b386a8ff5d6c2dc7ab6b29c61ed17a9bf8a4a))
+
 ## [2.33.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.32.0...v2.33.0) (2026-08-23)
 
 
