@@ -327,7 +327,7 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
           return [
             cell('verifiedTouches', 'Verified touches', floors.verifiedTouches ?? 13),
             cell('linkedinConnects', 'LinkedIn connects', floors.linkedinConnects ?? 50),
-            cell('influencerEngagements', 'Influencer engagements', floors.influencerEngagements ?? 3),
+            cell('influencerEngagements', 'Influencer engagement (brand)', null),
             cell('cadencePct', 'Cadence adherence', floors.cadencePct ?? 70, v => `${v}%`),
             cell('screensBooked', 'Screens booked', null),
           ];

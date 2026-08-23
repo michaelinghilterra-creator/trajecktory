@@ -46,7 +46,6 @@ function ReviewIndicator({ label, m }) {
 const WOW_FLOORS = [
   { key: 'verifiedTouches',  label: 'Verified touches',  unit: '' },
   { key: 'linkedinConnects', label: 'LinkedIn connects', unit: '' },
-  { key: 'influencerEngagements', label: 'Influencer engagements', unit: '' },
   { key: 'cadencePct',       label: 'Cadence',           unit: '%' },
 ];
 const WOW_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

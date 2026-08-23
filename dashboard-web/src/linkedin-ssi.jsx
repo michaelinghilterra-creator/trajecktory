@@ -236,6 +236,9 @@ function LinkedInSSITab({ toast }) {
             <div style={{ fontSize: 11, color: "var(--text-mute)", marginTop: 3 }}>
               Tracks your LinkedIn Social Selling Index (SSI). Independent tool, not affiliated with or endorsed by LinkedIn.
             </div>
+            <div style={{ fontSize: 11, color: "var(--text-mute)", marginTop: 3 }}>
+              This is a distribution list for the fractional RevOps pivot, not a job search channel.
+            </div>
           </div>
         </div>
 
@@ -262,7 +265,7 @@ function LinkedInSSITab({ toast }) {
               <div className="kpi">
                 <span className="k">This Week</span>
                 <span className="v">{engagementRhythm.count}</span>
-                <span className="sub">of 3 engagements</span>
+                <span className="sub">engagements logged</span>
               </div>
             </div>
 
