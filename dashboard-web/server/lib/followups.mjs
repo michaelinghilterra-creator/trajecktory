@@ -551,14 +551,15 @@ function _bothBooks({ taRows, referralRows, influencers } = {}) {
 
 const QUEUE_POLICY_BY_STORE = {
   ta: { gateOnLiveApplication: true, reason: row => !String(row.status || '').trim() || row.status === 'Not Contacted' ? 'Reach out' : 'Follow up' },
-  referral: { gateOnLiveApplication: false, reason: row => ['Not Asked', 'Catching Up'].includes(row.status) ? 'Reach out' : ['Asked', 'Responded'].includes(row.status) ? 'Follow up' : '' },
+  // This uses the strict application-based gate. The looser Stage 1 definition
+  // on the Referrals page deliberately differs and must not be unified with it.
+  referral: { gateOnLiveApplication: true, reason: row => ['Not Asked', 'Catching Up'].includes(row.status) ? 'Reach out' : ['Asked', 'Responded'].includes(row.status) ? 'Follow up' : '' },
   influencer: { gateOnLiveApplication: false, reason: row => !row.connected ? ((!row.engaged && !row.following) ? '' : 'Reach out') : 'Follow up' },
 };
 
 function _passesCompanyGate(source, company, eligible) {
-  // The live application gate protects cold TA outreach from becoming noise.
-  // Referrals and influencers skip it because warm relationships remain useful
-  // even when the company has no current requisition.
+  // The live application gate protects TA and referral outreach from becoming
+  // noise. Influencers skip it because those relationships are not employer-led.
   return !QUEUE_POLICY_BY_STORE[source].gateOnLiveApplication || eligible.has(normalizeCompany(company));
 }
 
@@ -860,6 +861,7 @@ function _followupRank(r) {
 }
 function computeFollowupQueue(opts = {}) {
   const books = _bothBooks(opts);
+  const eligible = outreachEligibleCompanies(opts.apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const rows = [
     ...computeConnectQueue(opts).map(r => ({ ...r, channel: 'linkedin' })),
     ...computeEmailQueue(opts).map(r => ({ ...r, channel: 'email' })),
@@ -874,6 +876,7 @@ function computeFollowupQueue(opts = {}) {
     if (!reason || (reason === 'Follow up' && !staleEnough(row.lastTouch))) continue;
     const parts = String(row.name || '').trim().split(/\s+/);
     const shaped = { ...row, first: parts[0] || '', last: parts.slice(1).join(' '), title: row.target || '', company: row.where || '' };
+    if (!_passesCompanyGate('referral', shaped.company, eligible)) continue;
     const channel = _hasLinkedIn(shaped) && isSendable(shaped) ? 'both' : isSendable(shaped) ? 'email' : _hasLinkedIn(shaped) ? 'linkedin' : 'none';
     if (channel === 'none') continue;
     rows.push({ ..._queueRow(shaped, 'referral'), channel, queueReason: reason, notContacted: reason === 'Reach out' });

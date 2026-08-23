@@ -12,6 +12,18 @@ const { router } = await import('../dashboard-web/server/routes/followups.mjs');
 const { appendReferralRows } = await import('../dashboard-web/server/lib/referrals.mjs');
 const { readSnooze, writeSnooze, readMute, isMuted } = await import('../dashboard-web/server/lib/sidecars.mjs');
 
+// A referral only reaches the queue when there is a LIVE APPLICATION at its
+// employer, so the fixture needs one or nothing is ever queued and every
+// assertion below passes vacuously. Rows are written with the canonical
+// tracker writers, never hand-rolled.
+const { TRACKER_HEADER, TRACKER_SEPARATOR, formatTrackerLine } = await import('../lib/tracker.mjs');
+fs.writeFileSync(path.join(sandbox, 'applications.md'),
+  ['# Applications Tracker', '', TRACKER_HEADER, TRACKER_SEPARATOR,
+   formatTrackerLine({
+     num: 9001, date: '2026-08-01', company: 'Example Company', role: 'Staff Engineer',
+     score: '4.0/5', status: 'Applied', pdf: '', resume: '', report: '', notes: '', url: '',
+   }), ''].join('\n'), 'utf8');
+
 for (let i = 1; i <= 7; i++) {
   appendReferralRows([{
     name: `Referral Person ${i}`,

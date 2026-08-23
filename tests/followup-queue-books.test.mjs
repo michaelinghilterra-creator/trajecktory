@@ -24,14 +24,19 @@ console.log('followup-queue-books.test.mjs');
 
 const notAsked = referral(1, 'Warm Person', 'Not Asked');
 let queue = computeFollowupQueue({ taRows: [], referralRows: [notAsked], influencers: [], apps: [], pins: {} });
-check(queue.some(row => row.source === 'referral' && row.id === 1 && row.queueReason === 'Reach out'), 'Not Asked referral appears as Reach out');
+// This used to assert that a referral without a live application appeared. The
+// referral book now requires the same strict application trigger as target talent.
+check(!queue.some(row => row.source === 'referral' && row.id === 1), 'referral without a live application does not appear');
+
+queue = computeFollowupQueue({ taRows: [], referralRows: [notAsked], influencers: [], apps: [{ company: 'No Requisition Inc', status: 'Applied' }], pins: {} });
+check(queue.some(row => row.source === 'referral' && row.id === 1 && row.queueReason === 'Reach out'), 'referral with a live application appears as Reach out');
 
 queue = computeFollowupQueue({ taRows: [], referralRows: [referral(2, 'Finished Intro', 'Intro Made')], influencers: [], apps: [], pins: {} });
 check(!queue.some(row => row.source === 'referral' && row.id === 2), 'Intro Made referral never appears');
-check(computeFollowupQueue({ taRows: [], referralRows: [notAsked], influencers: [], apps: [], pins: {} }).length === 1, 'referral without a live application appears');
 
 const coldTa = ta(3, 'Cold', 'Gatekeeper', 'No Requisition Inc');
 check(computeFollowupQueue({ taRows: [coldTa], referralRows: [], influencers: [], apps: [], pins: {} }).length === 0, 'TA contact without a live application does not appear');
+check(computeFollowupQueue({ taRows: [coldTa], referralRows: [], influencers: [], apps: [{ company: 'No Requisition Inc', status: 'Applied' }], pins: {} }).some(row => row.source === 'ta' && row.id === 3), 'TA contact with a live application still appears');
 
 const influencer = { id: 4, name: 'Visible Voice', linkedinUrl: 'https://linkedin.com/in/visible-voice', following: true, connected: false, engaged: false };
 const untouched = { id: 5, name: 'Untouched Voice', linkedinUrl: 'https://linkedin.com/in/untouched-voice', following: false, connected: false, engaged: false };
