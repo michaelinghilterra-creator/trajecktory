@@ -72,6 +72,7 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
   { "key": "level",     "dim": "Level Match",          "val": <0-5>, "max": 5, "evidence": "..." },
   { "key": "comp",      "dim": "Comp",                 "val": <0-5>, "max": 5, "evidence": "..." },
   { "key": "location",  "dim": "Location / Logistics", "val": <0-5>, "max": 5, "evidence": "..." },
+  { "key": "buildDepth", "dim": "Build Depth",          "val": <0-5>, "max": 5, "evidence": "...", "note": "recorded, not scored" },
   { "key": "redFlags",  "dim": "Red Flags",            "val": <0-5>, "max": 5, "evidence": "..." }
 ]
 ```
@@ -79,6 +80,7 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
 - Each dimension maps to a block you already reason through: **fit** ← Block B (CV match),
   **northStar** ← archetype / target fit (Step 0 + profile), **level** ← Block C,
   **comp** ← Block D, **location** ← remote/logistics vs the user's stated policy,
+  **buildDepth** ← hands-on building demanded by the JD versus evidence in `cv.md`,
   **redFlags** ← Block G + any hard gaps.
 - **`level` has a floor: a title at or above `scoring.minimum_level` (config/profile.yml,
   default "Manager") is a FULL level match — rate it 5, never a "downlevel," and do not let
@@ -94,6 +96,21 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
   drawer says so. Pay is information here, not a score input: an aspiration is a number the
   user can miss and still want the job, so it must not lower a score that decides whether
   they apply at all. The hard floor is handled by the ceiling rule below.
+- **`buildDepth` is rated but NOT scored.** Add `"note": "recorded, not scored"` to
+  the entry. Rate the hands-on building the req demands against what the candidate can
+  credibly claim from `cv.md`: **5** no hands-on build demand, with strategy, operations,
+  leadership, vendor management, "partner with engineering," or "own the roadmap" scope;
+  **4** tool fluency only, configuring, querying, or operating systems the CV already names,
+  with no original construction; **3** light building against a defined pattern, such as
+  dashboards, automations, workflow assembly, SQL, or low-code, adjacent to the CV and
+  learnable in the role; **2** sustained building is a named responsibility on a stack the
+  CV does not evidence, learnable but expected on day one; **1** building is the majority
+  of the mandate and requires engineering craft the CV cannot support, such as production
+  code, model training or serving, data platforms, or infrastructure; **0** a builder seat
+  wearing a leadership title, with individual-contributor engineering scope, nominal
+  leadership, and no adjacent experience that closes the gap.
+- **Do not lower `fit` to express build depth.** `fit` is about requirements the candidate
+  does meet. Distorting it hides which half of the match actually failed.
 - **Hard blockers → `scoreCeiling`, not a faked rating.** When a blocker must keep the
   score low no matter how well the rest fits (a location the user will not work, a visa
   they cannot get, a hard requirement they plainly lack), set `scoreCeiling` (e.g. `1.5`).
@@ -109,6 +126,12 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
     evidence the job is bigger than its title (a wider multi-level band, heavy variable
     comp, or a genuinely more senior role), not a bonus. If the role really sits two rungs
     up, that is a ceiling, the same as any requirement they plainly lack.
+  - **Build depth trip.** If `buildDepth` is **0 or 1**, set `scoreCeiling` to **2.0**.
+    This is not a version of the target role at all, and 2.0 sits below the auto-discard
+    threshold so the role leaves the queue. If `buildDepth` is **2**, set `scoreCeiling`
+    to **3.0**. This is a real role with a real build lean, and 3.0 keeps it visible below
+    the apply target so a human can still override it deliberately. Ratings 3, 4, or 5
+    add no ceiling from this dimension.
 - Give **`evidence` for every rating** (one phrase). The drawer shows it; it is what makes
   a rating auditable.
 - **Do NOT write a headline `score` yourself.** Leave a placeholder; the post-eval step
