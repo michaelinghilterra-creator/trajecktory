@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.36.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.35.0...v2.36.0) (2026-08-23)
+
+
+### Features
+
+* add referral conversion KPI and fix free-DM detection for referrals ([#228](https://github.com/michaelinghilterra-creator/trajecktory/issues/228)) ([8d918d9](https://github.com/michaelinghilterra-creator/trajecktory/commit/8d918d9d7275dc3c6ece695e0774307eceace41b))
+
 ## [2.35.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.34.0...v2.35.0) (2026-08-23)
 
 
