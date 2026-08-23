@@ -228,11 +228,26 @@ dimension 0–5 WITH its evidence in `globalScore[]` as **keyed** entries:
   { "key": "level",     "dim": "Level Match",          "val": <0-5>, "max": 5, "evidence": "..." },
   { "key": "comp",      "dim": "Comp",                 "val": <0-5>, "max": 5, "evidence": "..." },
   { "key": "location",  "dim": "Location / Logistics", "val": <0-5>, "max": 5, "evidence": "..." },
+  { "key": "buildDepth", "dim": "Build Depth",          "val": <0-5>, "max": 5, "evidence": "...", "note": "recorded, not scored" },
   { "key": "redFlags",  "dim": "Red Flags",            "val": <0-5>, "max": 5, "evidence": "..." }
 ]
 ```
 
 - **`redFlags` is cleanliness on 0–5 (5 = clean, 0 = severe), NOT a negative number.**
+- **`buildDepth` is rated but NOT scored.** Add `"note": "recorded, not scored"`.
+  Rate hands-on building demanded by the req against credible evidence in `cv.md`: **5** no
+  hands-on build demand, only strategy, operations, leadership, vendor management, "partner
+  with engineering," or "own the roadmap"; **4** tool fluency only on systems the CV names,
+  with no original construction; **3** light building against a defined pattern, including
+  dashboards, automations, workflow assembly, SQL, or low-code, adjacent to the CV and
+  learnable in the role; **2** sustained building is named on a stack the CV does not evidence,
+  learnable but expected on day one; **1** building is the majority of the mandate and names
+  unsupported engineering craft such as production code, model training or serving, data
+  platforms, or infrastructure; **0** a builder seat wearing a leadership title, with
+  individual-contributor engineering scope, nominal leadership, and no adjacent experience
+  that closes the gap.
+- **Do not lower `fit` to express build depth.** `fit` is about requirements the candidate
+  does meet. Distorting it hides which half of the match actually failed.
 - Give `evidence` (one phrase) for every rating.
 - Do NOT author a headline `score`; leave the placeholder. `compute-scores.mjs` computes it.
 
@@ -248,6 +263,8 @@ score" rule. Set the field, do not fudge the dimension ratings.
 | Visa sponsorship explicitly NOT offered AND candidate would need it (non-US JDs) | **1.5** | Hard blocker |
 | Role requires expertise candidate verifiably lacks (e.g., Xactly admin for a Sales Comp role, FedRAMP for federal sales, specific industry certifications) AND has no adjacent experience | **2.0** | Structural skill gap |
 | Title regression to a **sub-Manager individual-contributor** title (Analyst, Coordinator, Specialist, Representative, "individual contributor") when candidate is Director+ | **2.0** | Career step backward. **Manager and above (Manager, Senior Manager, Director, Senior Director, Head, VP, C-level) is IN SCOPE and a FULL level match — NEVER apply this ceiling to those.** Search scope is open from Manager up; `applyLevelFloor` in `score.mjs` floors the `level` dim to 5 for any Manager+ title, so capping the headline here would contradict it. |
+| `buildDepth` rated **0 or 1** | **2.0** | This is not a version of the target role at all. A 2.0 ceiling sits below the auto-discard threshold so the role leaves the queue. |
+| `buildDepth` rated **2** | **3.0** | This is a real role with a real build lean. A 3.0 ceiling keeps it visible below the apply target so a human can still override it deliberately. Ratings 3, 4, or 5 add no ceiling from this dimension. |
 
 **Reasoning:** Auto-discard fires below 3.0. A 3.2 on a Barcelona-required role is
 misleading. Setting `scoreCeiling: 1.5` caps the derived headline so the number matches

@@ -129,6 +129,10 @@ scoring:
     # that are a poor fit to rise with it.
     comp: 0
     location: 0.10    # location, remote policy, and logistics fit
+    # buildDepth stays 0 so a report carrying this newer dimension and an older
+    # report without it are still scored by the same headline formula. It is a
+    # binary blocker, so it expresses itself through scoreCeiling instead.
+    buildDepth: 0
   # With comp at 0 the four remaining weights renormalize to fit 0.41,
   # northStar 0.29, level 0.18, location 0.12.
   # Most points subtracted when red flags are severe. The model rates red-flag
