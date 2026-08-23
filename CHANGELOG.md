@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.34.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.33.1...v2.34.0) (2026-08-23)
+
+
+### Features
+
+* unify contacts into one person record with outreach guardrails ([#223](https://github.com/michaelinghilterra-creator/trajecktory/issues/223)) ([71422ff](https://github.com/michaelinghilterra-creator/trajecktory/commit/71422ffaee2d27bc5e83e2f2a99a107c37d9dfc3))
+
 ## [2.33.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.33.0...v2.33.1) (2026-08-23)
 
 
