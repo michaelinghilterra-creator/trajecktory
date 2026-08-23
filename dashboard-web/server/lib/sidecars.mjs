@@ -30,7 +30,7 @@ function snoozeDateIn(days) { const d = new Date(); d.setDate(d.getDate() + days
 // has no reachable contact (e.g. a company you checked and confirmed has none).
 // It is a SEPARATE bucket from 'app' on purpose: muting the find-a-contact nudge
 // must not also suppress that application's own stale follow-up.
-const _SNOOZE_BUCKETS = ['app', 'ta', 'contactless'];
+const _SNOOZE_BUCKETS = ['app', 'ta', 'contactless', 'referral', 'influencer'];
 
 function readSnooze() {
   try {
@@ -66,26 +66,34 @@ const SNOOZE_KINDS = new Set(_SNOOZE_BUCKETS);
 // ─── Follow-up mute store ─────────────────────────────────────────────────────
 // "Done for now / Awaiting reply": indefinitely removes an application from the
 // WARM follow-up queue WITHOUT changing its status or logging a touch. Unlike
-// snooze (time-based, expires, app+ta), mute is app-only and has no expiry — it
-// clears only when the user un-mutes (or the app leaves the tracked statuses).
+// snooze (time-based and expiring), mute is source-keyed and has no expiry. It
+// clears only when the user un-mutes (or the item leaves its tracked status).
 // This is the honest alternative to closing an opportunity early just to silence
 // an alert: the app stays Applied and accurate in analytics, it just stops
-// nagging. Shape: { "<appNum>": true }.
+// nagging. Shape: { "<source>": { "<id>": true } }. Legacy flat maps are
+// accepted as the app bucket without being rewritten on read.
 function readMute() {
-  try { return JSON.parse(fs.readFileSync(MUTE_PATH, 'utf8')) || {}; }
-  catch { return {}; }
+  let raw;
+  try { raw = JSON.parse(fs.readFileSync(MUTE_PATH, 'utf8')) || {}; }
+  catch { raw = {}; }
+  const keyed = Object.values(raw).some(v => v && typeof v === 'object' && !Array.isArray(v));
+  const out = keyed ? raw : { app: raw };
+  if (!out.app || typeof out.app !== 'object' || Array.isArray(out.app)) out.app = {};
+  return out;
 }
 function writeMute(map) {
   fs.writeFileSync(MUTE_PATH, JSON.stringify(map || {}, null, 2) + '\n');
 }
-function setMute(appNum, on) {
+function setMute(id, on, source = 'app') {
   const map = readMute();
-  const key = String(appNum);
-  if (on) map[key] = true; else delete map[key];
+  const bucket = String(source || 'app');
+  if (!map[bucket] || typeof map[bucket] !== 'object' || Array.isArray(map[bucket])) map[bucket] = {};
+  const key = String(id);
+  if (on) map[bucket][key] = true; else delete map[bucket][key];
   writeMute(map);
-  return !!map[key];
+  return !!map[bucket][key];
 }
-function isMuted(appNum) { return !!readMute()[String(appNum)]; }
+function isMuted(id, source = 'app') { return !!readMute()[String(source || 'app')]?.[String(id)]; }
 
 // ─── Apply-date store ─────────────────────────────────────────────────────────
 // The applications.md Date column is the EVALUATION/scrape date (when the row

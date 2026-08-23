@@ -6,7 +6,7 @@ import { resolveReportPath } from '../lib/safe-path.mjs';
 import { parseApplicationsMd, patchRowInMd } from '../lib/applications.mjs';
 import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
-import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute } from '../lib/sidecars.mjs';
+import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute, isMuted, readMute } from '../lib/sidecars.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
@@ -16,6 +16,7 @@ import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleCont
 // more than this at one company in a day reads as blasting; the overflow is HELD
 // (flagged, not dropped) and rotates into view on a later day.
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
+import { parseReferralsMd } from '../lib/referrals.mjs';
 import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
 import { canContact } from '../lib/outreach-policy.mjs';
@@ -109,7 +110,14 @@ router.get('/api/followups/withheld', (req, res) => {
 // remain for now (compatibility) but the UI no longer flips between them.
 router.get('/api/followups/queue', (req, res) => {
   try {
-    res.json({ queue: computeFollowupQueue() });
+    const snooze = readSnooze();
+    if (pruneSnooze(snooze)) writeSnooze(snooze);
+    const today = snoozeToday();
+    const queue = computeFollowupQueue().filter(it => {
+      const until = snooze[it.source]?.[String(it.id)];
+      return !(until && until > today) && !isMuted(it.id, it.source);
+    });
+    res.json({ queue });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -191,6 +199,7 @@ router.get('/api/followups/stale', (req, res) => {
     const contactFollowups = [];
     const snoozedContactFollowups = [];
     for (const it of computeContactFollowups({ staleApps: rawStaleApps })) {
+      if (isMuted(it.id, it.source)) continue;
       const until = snoozedUntil(it);
       if (until && until > today) snoozedContactFollowups.push({ ...it, snoozeUntil: until });
       else contactFollowups.push(it);
@@ -286,7 +295,7 @@ router.get('/api/followups/stale', (req, res) => {
 });
 
 // POST /api/followups/snooze — defer a stale alert.
-//   body: { source: 'app' | 'ta', id, days? = 14 }
+//   body: { source: 'app' | 'ta' | 'contactless' | 'referral' | 'influencer', id, days? = 14 }
 router.post('/api/followups/snooze', (req, res) => {
   try {
     const { source, id, days } = req.body || {};
@@ -304,7 +313,7 @@ router.post('/api/followups/snooze', (req, res) => {
 });
 
 // POST /api/followups/unsnooze — bring an alert back early.
-//   body: { source: 'app' | 'ta', id }
+//   body: { source: 'app' | 'ta' | 'contactless' | 'referral' | 'influencer', id }
 router.post('/api/followups/unsnooze', (req, res) => {
   try {
     const { source, id } = req.body || {};
@@ -319,25 +328,62 @@ router.post('/api/followups/unsnooze', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /api/followups/mute — "Done for now / Awaiting reply". Indefinitely
-// removes an Applied app from the warm queue without changing its status or
-// logging a touch. body: { id }
-router.post('/api/followups/mute', (req, res) => {
+// GET /api/followups/muted: who is currently hidden by "Done for now", so the UI
+// can offer them back.
+//
+// The mute lives on the server, in data/followup-mute.json. The restore list has
+// to come from there too. Keeping it in the browser instead means clearing site
+// data leaves contacts muted with no surface that knows about them, which is the
+// indefinite-hide-with-no-undo trap the control was added to avoid.
+//
+// Names are resolved from each book so the list reads as people rather than ids.
+router.get('/api/followups/muted', (req, res) => {
   try {
-    const { id } = req.body || {};
-    if (id == null || `${id}`.trim() === '') return res.status(400).json({ error: 'id required' });
-    setMute(id, true);
-    res.json({ ok: true, id: String(id), muted: true });
+    // ?sources=referral,ta narrows the answer to the books the caller renders. The
+    // contacts queue must not offer to restore muted APPLICATIONS: same store,
+    // different surface, and someone else's rows are not a restore list.
+    const want = String(req.query.sources || '').split(',').map(v => v.trim()).filter(Boolean);
+    const map = readMute() || {};
+    const out = [];
+    const books = {
+      ta: () => { try { return parseTargetTalentMd().map(r => ({ id: r.id, name: `${r.first || ''} ${r.last || ''}`.trim(), company: r.company || '' })); } catch { return []; } },
+      referral: () => { try { return parseReferralsMd().map(r => ({ id: r.id, name: r.name || '', company: r.where || '' })); } catch { return []; } },
+    };
+    for (const [source, ids] of Object.entries(map)) {
+      if (want.length && !want.includes(source)) continue;
+      if (!ids || typeof ids !== 'object') continue;
+      const rows = books[source] ? books[source]() : [];
+      for (const id of Object.keys(ids)) {
+        if (!ids[id]) continue;
+        const hit = rows.find(r => String(r.id) === String(id));
+        out.push({ source, id, name: hit?.name || '', company: hit?.company || '' });
+      }
+    }
+    res.json({ muted: out });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /api/followups/unmute — bring a muted app back into the queue. body: { id }
+// POST /api/followups/mute — "Done for now / Awaiting reply". Indefinitely
+// removes an Applied app from the warm queue without changing its status or
+// logging a touch. body: { source? = 'app', id }
+router.post('/api/followups/mute', (req, res) => {
+  try {
+    const { source = 'app', id } = req.body || {};
+    if (!SNOOZE_KINDS.has(source)) return res.status(400).json({ error: `source must be one of: ${[...SNOOZE_KINDS].join(', ')}` });
+    if (id == null || `${id}`.trim() === '') return res.status(400).json({ error: 'id required' });
+    setMute(id, true, source);
+    res.json({ ok: true, source, id: String(id), muted: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/followups/unmute: bring a muted item back into the queue. body: { source? = 'app', id }
 router.post('/api/followups/unmute', (req, res) => {
   try {
-    const { id } = req.body || {};
+    const { source = 'app', id } = req.body || {};
+    if (!SNOOZE_KINDS.has(source)) return res.status(400).json({ error: `source must be one of: ${[...SNOOZE_KINDS].join(', ')}` });
     if (id == null || `${id}`.trim() === '') return res.status(400).json({ error: 'id required' });
-    setMute(id, false);
-    res.json({ ok: true, id: String(id), muted: false });
+    setMute(id, false, source);
+    res.json({ ok: true, source, id: String(id), muted: false });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

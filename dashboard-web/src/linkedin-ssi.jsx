@@ -145,6 +145,7 @@ function LinkedInSSITab({ toast }) {
   const [loading, setLoading] = useState(true);
   const [activeView, setActiveView] = useState("dashboard");
   const [selectedInfluencer, setSelectedInfluencer] = useState(null);
+  const engagementRhythm = useMemo(() => weeklyEngagementRhythm(engagementLog), [engagementLog]);
 
   useEffect(() => {
     Promise.all([
@@ -230,7 +231,7 @@ function LinkedInSSITab({ toast }) {
           <div>
             <h1>Visibility</h1>
             <div className="sub">
-              score {ssiData?.score ?? '-'} / 100 · target {ssiData?.target ?? 60} · {influencers.length} influencers tracked · {(() => { const d = new Date(); d.setDate(d.getDate() - 6); const cutoff = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; return engagementLog.filter(a => String(a.date || '') >= cutoff).length; })()} touchpoints this week
+              score {ssiData?.score ?? '-'} / 100 · target {ssiData?.target ?? 60} · {influencers.length} influencers tracked · {engagementRhythm.count} engagements this week
             </div>
             <div style={{ fontSize: 11, color: "var(--text-mute)", marginTop: 3 }}>
               Tracks your LinkedIn Social Selling Index (SSI). Independent tool, not affiliated with or endorsed by LinkedIn.
@@ -260,8 +261,8 @@ function LinkedInSSITab({ toast }) {
               </div>
               <div className="kpi">
                 <span className="k">This Week</span>
-                <span className="v">{engagementLog.filter(a => new Date(a.date) >= new Date(Date.now() - 7*24*60*60*1000)).length}</span>
-                <span className="sub">touchpoints logged</span>
+                <span className="v">{engagementRhythm.count}</span>
+                <span className="sub">of 3 engagements</span>
               </div>
             </div>
 
@@ -440,7 +441,7 @@ function LinkedInSSITab({ toast }) {
 
         {/* INFLUENCERS */}
         {activeView === "influencers" && (
-          <InfluencersView influencers={influencers} setInfluencers={setInfluencers} onOpen={setSelectedInfluencer} />
+          <InfluencersView influencers={influencers} setInfluencers={setInfluencers} onOpen={setSelectedInfluencer} engagementLog={engagementLog} />
         )}
 
         {/* ACTIVITY */}
@@ -494,7 +495,20 @@ const PRIORITY_OF = (p) => tierMeta(p.tier).rank * 4 + STAGE_OF(p);
 const initialsOf = (name) =>
   (name?.split(" ").filter(Boolean).map((w, i, a) => (i === 0 || i === a.length - 1 ? w[0] : "")).join("") || "??").toUpperCase();
 
-function InfluencersView({ influencers, setInfluencers, onOpen }) {
+function weeklyEngagementRhythm(log, now = new Date()) {
+  const day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dow = day.getDay() === 0 ? 7 : day.getDay();
+  const monday = new Date(day); monday.setDate(day.getDate() - (dow - 1));
+  const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const engagements = (log || []).filter(a => !/connection request/i.test(a.actionType || ""));
+  const count = engagements.filter(a => String(a.date || "").slice(0, 10) >= ymd(monday) && String(a.date || "").slice(0, 10) <= ymd(day)).length;
+  const latest = engagements.map(a => String(a.date || "").slice(0, 10)).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().pop();
+  const lastDate = latest ? new Date(`${latest}T12:00:00`) : null;
+  const daysSince = lastDate ? Math.max(0, Math.floor((day - lastDate) / 86400000)) : null;
+  return { count, daysSince };
+}
+
+function InfluencersView({ influencers, setInfluencers, onOpen, engagementLog = [] }) {
   const [filter, setFilter] = useState("all");
   // Adding people used to be impossible from the UI: there was no create route and
   // no form, so the only way to populate this tab was to hand-author
@@ -503,6 +517,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
   const [draft, setDraft] = useState({ name: "", role: "", tier: "local", track: "", location: "", linkedin: "", whyFollow: "" });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const engagementRhythm = useMemo(() => weeklyEngagementRhythm(engagementLog), [engagementLog]);
 
   const submitNew = async () => {
     if (!draft.name.trim() || busy) return;
@@ -609,7 +624,7 @@ function InfluencersView({ influencers, setInfluencers, onOpen }) {
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
             {msg && <span className="mono" style={{ fontSize: 10.5, color: "var(--text-mute)" }}>{msg}</span>}
             <span className="card-meta mono">
-              {shown.length} of {influencers.length} · {influencers.filter(i => i.following).length} followed
+              {shown.length} of {influencers.length} · {influencers.filter(i => i.following).length} followed · <span style={{ color: engagementRhythm.count >= 3 ? "var(--green)" : "var(--orange)" }}>{engagementRhythm.count} of 3 this week</span>{engagementRhythm.daysSince > 7 ? ` · last engagement ${engagementRhythm.daysSince} days ago` : ""}
             </span>
             <a className="btn" href="/api/linkedin-ssi/influencers/template" title="Download the CSV template (name, role, track, tier, location, linkedin, ...)">Template</a>
             <label className="btn" style={{ cursor: busy ? "default" : "pointer" }} title="Bulk-import influencers from a CSV file">
@@ -1842,7 +1857,7 @@ window.InfluencersView = function NetworkInfluencersView() {
     fetch('/api/linkedin-ssi/engagement-log').then(r => r.json()).then(d => setEngagementLog(Array.isArray(d) ? d : [])).catch(() => setEngagementLog([]));
   }, []);
   return <>
-    <InfluencersView influencers={influencers} setInfluencers={setInfluencers} onOpen={setSelected} />
+    <InfluencersView influencers={influencers} setInfluencers={setInfluencers} onOpen={setSelected} engagementLog={engagementLog} />
     <InfluencerDrawer influencer={selected} influencers={influencers} engagementLog={engagementLog} setEngagementLog={setEngagementLog}
       onClose={() => setSelected(null)} onUpdate={updated => { setInfluencers(updated); setSelected(updated.find(x => x.id === selected?.id) || null); }} />
   </>;
