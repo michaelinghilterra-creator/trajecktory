@@ -465,6 +465,7 @@ for (const suite of [
   'tests/update-commit-identity.test.mjs',
   'tests/funnel-entry.test.mjs',
   'tests/activity.test.mjs',
+  'tests/response-progress.test.mjs',
   'tests/no-real-postings.test.mjs',
   'tests/outcome.test.mjs',
   'tests/tracker.test.mjs',

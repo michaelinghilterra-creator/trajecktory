@@ -4,8 +4,8 @@ import { APPS_MD, ROOT_DIR, STATUS_EVENTS_PATH } from '../config.mjs';
 import { resolveReportPath } from './safe-path.mjs';
 import { parseTrackerLine, formatTrackerLine, hasStrayPipe } from '../../../lib/tracker.mjs';
 import { hasV1Frontmatter, parseV1, v1Header } from '../v1-loader.mjs';
-import { logStatusEvent, parseStatusEvents } from './sidecars.mjs';
-import { FUNNEL_ORDER, makeFurthestIdx, isInbound, isOutbound } from './statuses.mjs';
+import { logStatusEvent, parseStatusEvents, readApplyDates } from './sidecars.mjs';
+import { FUNNEL_ORDER, makeApplyAnchor, makeFurthestIdx, isInbound, isOutbound } from './statuses.mjs';
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
@@ -397,19 +397,13 @@ function removeRowFromMd(id, hint = {}) {
   fs.writeFileSync(APPS_MD, newLines.join('\n'), 'utf8');
   return removed;
 }
-// Days from application to rejection, using the date each app was MARKED
-// Rejected in the dashboard (its Rejected status event). The apply baseline is
-// the logged Applied event date when present, else the app row's Date column.
+// Days from application to rejection, using the date each app was marked
+// Rejected in the dashboard. The shared anchor reconciles both application
+// sidecars before falling back to the tracker evaluation date.
 function rejectionTimingStats() {
   const events = parseStatusEvents();
-  const rowDateById = new Map(parseApplicationsMd().map(r => [String(r.id), r.date]));
-  // Earliest Applied event per app (the anchor for elapsed time).
-  const appliedByApp = new Map();
-  for (const e of events) {
-    if (e.status !== 'Applied') continue;
-    const prev = appliedByApp.get(e.app);
-    if (!prev || e.date < prev) appliedByApp.set(e.app, e.date);
-  }
+  const appsById = new Map(parseApplicationsMd().map(r => [String(r.id), r]));
+  const applyAnchor = makeApplyAnchor({ applyDates: readApplyDates(), events });
   const days = [];
   // A rejection dated before its own apply anchor is not measurable, but it is
   // also not nothing: it means one of the two dates is wrong. Counting the drops
@@ -429,7 +423,7 @@ function rejectionTimingStats() {
     if (!prev || e.date < prev) rejectedByApp.set(e.app, e.date);
   }
   for (const [app, date] of rejectedByApp) {
-    const base = appliedByApp.get(app) || rowDateById.get(app);
+    const base = applyAnchor(appsById.get(app)).date;
     if (!base) continue;
     const d = Math.round((Date.parse(date) - Date.parse(base)) / 86400000);
     if (Number.isFinite(d) && d >= 0) days.push(d);

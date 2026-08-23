@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { OUTPUT_DIR, ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd, patchRowInMd, removeRowFromMd, rejectionTimingStats } from '../lib/applications.mjs';
+import { readResponseProgressStats } from '../lib/response-timing.mjs';
 import { recordApplyDate } from '../lib/sidecars.mjs';
 import { pushObsidianNote } from '../lib/obsidian.mjs';
 import { ALL_STATUSES } from '../lib/statuses.mjs';
@@ -203,6 +204,15 @@ router.post('/api/applications/:id/requeue', (req, res) => {
 router.get('/api/insights/rejection-timing', (req, res) => {
   try {
     res.json(rejectionTimingStats());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/insights/response-progress: cohort silence and fast decisions.
+router.get('/api/insights/response-progress', (req, res) => {
+  try {
+    res.json(readResponseProgressStats());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
