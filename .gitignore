@@ -16,8 +16,15 @@ output/*
 !output/.gitkeep
 batch/logs/*
 !batch/logs/.gitkeep
-batch/batch-state.tsv
-batch/batch-input.tsv
+# Globbed, not exact names: the batch runner writes timestamped copies alongside
+# these (batch-state.backup-<stamp>.tsv), and an exact-name rule lets every one of
+# them through. Those copies hold real postings, companies and scores, so a single
+# `git add -A` would ship them from a tree that looks clean.
+batch/batch-state*.tsv
+batch/batch-input*.tsv
+# Raw JD text staged for a batch run. Root jds/ is already ignored below; this is
+# the same content in the batch working area, and the filenames alone name employers.
+batch/jds/
 batch/tracker-additions/**/*.tsv
 !batch/tracker-additions/.gitkeep
 batch/ws-tmp/
