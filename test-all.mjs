@@ -475,6 +475,7 @@ for (const suite of [
   'tests/agent-prompts.test.mjs',
   'tests/eval-retry.test.mjs',
   'tests/agent-admission.test.mjs',
+  'tests/stop-kill.test.mjs',
   'tests/scan-stall.test.mjs',
   'tests/agent-cost-rollup.test.mjs',
   'tests/portals.test.mjs',

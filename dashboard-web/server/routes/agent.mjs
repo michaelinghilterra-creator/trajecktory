@@ -271,7 +271,8 @@ function batchRetryable(jobId, res) {
 // wrote everything, then hiccuped). Returns the latest result.
 async function retryBatch(jobId, target, res) {
   const max = batchRetries();
-  for (let attempt = 1; !res.ok && attempt <= max && batchRetryable(jobId, res); attempt++) {
+  // !rollingStop: a batch killed by Stop failed on purpose — never retry it.
+  for (let attempt = 1; !res.ok && !rollingStop && attempt <= max && batchRetryable(jobId, res); attempt++) {
     reconcilePipelineQueue();                             // checkpoint what the failed attempt finished
     if (!(countPipelinePending() > 0)) break;             // nothing left → let the caller see it drained
     const j = agentJobs.get(jobId) || {};
@@ -545,6 +546,33 @@ function completedEvalId(block) {
   return null;
 }
 
+// The live `claude -p` child per running job, so Stop can actually TERMINATE the
+// in-flight eval instead of only refusing the next batch. Set at spawn, cleared
+// when the child settles. One entry per jobId (a rolling chain reuses its jobId,
+// so this always points at the current batch's child).
+const agentChildren = new Map();
+
+// Kill a spawned agent child. On Windows the child is the cmd shell and `claude`
+// runs as a GRANDCHILD, so a plain child.kill() leaves the real eval orphaned and
+// still billing (exactly the orphan we saw when the server died mid-eval). Kill
+// the whole tree forcefully. Best-effort: never throws into a caller.
+function killAgentChild(jobId) {
+  const child = agentChildren.get(jobId);
+  if (!child || child.pid == null) return false;
+  try {
+    if (process.platform === 'win32') {
+      // Windows: the child is the cmd shell and `claude` is a grandchild, so kill
+      // the whole tree (/T) forcefully (/F) or the real eval is orphaned.
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
+    } else {
+      // POSIX: spawned without a shell, so the child IS `claude` — a direct kill
+      // terminates it (no wrapper process to leave behind).
+      child.kill('SIGTERM');
+    }
+    return true;
+  } catch { return false; }
+}
+
 // Spawn `claude -p "/trajecktory <mode>"` and stream-parse progress into the
 // job record. Resolves { ok, result, error } when the child closes and sets the
 // job's final status itself.
@@ -697,6 +725,8 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     } catch (e) {
       return fail(claudeErrorMessage(e));
     }
+    // Track this child so a Stop can terminate it mid-batch (cleared on settle).
+    agentChildren.set(jobId, child);
     // `claude -p` has the prompt as an argument and needs no piped stdin. Close
     // the child's stdin so the CLI doesn't sit waiting on it ("no stdin data in
     // 3 seconds" warning the user saw on Agent Scan).
@@ -710,7 +740,7 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     // by their shared leading number). Its size drives the "X of N" meter.
     const doneEvalIds = new Set();
 
-    child.on('error', (e) => { if (!settled) { settled = true; fail(claudeErrorMessage(e)); } });
+    child.on('error', (e) => { if (!settled) { settled = true; agentChildren.delete(jobId); fail(claudeErrorMessage(e)); } });
 
     child.stdout && child.stdout.on('data', (chunk) => {
       buf += chunk.toString();
@@ -811,6 +841,7 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     child.on('close', (code) => {
       if (settled) return;
       settled = true;
+      agentChildren.delete(jobId);
       const job = agentJobs.get(jobId) || {};
       let closeErr = null;
       if (code && code !== 0 && !resultText) {
@@ -821,15 +852,20 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
       }
       const err = isError ? (resultText || 'Agent reported an error') : closeErr;
       const ok = !err;
+      // A pipeline batch that failed while Stop is active was killed on purpose, so
+      // present it as a clean stop rather than a scary error and drop its exit
+      // message. `resolve` below still passes ok:false so rollPipeline ends the
+      // chain (reason 'stopped'); this only affects what the user sees.
+      const stopKilled = mode === 'pipeline' && rollingStop && !ok;
       // A pressure blip only becomes a user-facing warning when the run actually
-      // stopped early (errored). On a clean finish it stays a silent diagnostic —
-      // the run completed, so "the run stopped early" would be a lie.
-      const warning = (!ok && job.sawPressure) ? PRESSURE_WARNING : job.warning;
+      // stopped early (errored). On a clean finish — or an intentional stop — it
+      // stays a silent diagnostic; "the run stopped early" would be a lie.
+      const warning = (!ok && !stopKilled && job.sawPressure) ? PRESSURE_WARNING : job.warning;
       agentJobs.set(jobId, {
         ...job,
-        status: ok ? 'done' : 'error',
-        summary: ok ? (resultText ? agentTail(resultText) : (job.activity || 'Agent finished')) : undefined,
-        error: ok ? undefined : err,
+        status: ok || stopKilled ? 'done' : 'error',
+        summary: ok ? (resultText ? agentTail(resultText) : (job.activity || 'Agent finished')) : (stopKilled ? 'Stopped.' : undefined),
+        error: ok || stopKilled ? undefined : err,
         warning,
         finishedAt: Date.now(),
       });
@@ -1240,7 +1276,18 @@ router.post('/api/agent/:mode', (req, res) => {
 // ends once the running batch closes. Idempotent: fine to call when nothing rolls.
 router.post('/api/agent/roll/stop', (req, res) => {
   rollingStop = true;
-  res.json({ ok: true, stopping: true });
+  // Hard-stop: terminate the in-flight eval child so Stop actually STOPS, instead
+  // of only refusing the next batch (the current batch could run for another
+  // minute or two). Killing the child fires its close handler → the batch settles
+  // as failed → retryBatch skips it (rollingStop) → rollPipeline ends the chain
+  // with reason 'stopped'. Scoped to pipeline runs (the rolling-Evaluate chain).
+  let killed = 0;
+  for (const [jobId, job] of agentJobs.entries()) {
+    if (job.mode === 'pipeline' && job.status === 'running') {
+      if (killAgentChild(jobId)) killed++;
+    }
+  }
+  res.json({ ok: true, stopping: true, killed });
 });
 
 // GET /api/agent/roll-config — the rolling cap and whether a chain is active now.
@@ -1322,5 +1369,5 @@ router.get('/api/agent/cost-history', (req, res) => {
   res.json(out.slice(0, 20));
 });
 
-export { agentJobs, batchRetries, batchRetryable, activeAgents, admitAgent };
+export { agentJobs, batchRetries, batchRetryable, activeAgents, admitAgent, agentChildren, killAgentChild };
 
