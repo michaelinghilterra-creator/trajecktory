@@ -53,5 +53,32 @@ queue = computeFollowupQueue({ taRows: [rankedTa], referralRows: [rankedReferral
 check(queue.findIndex(row => row.source === 'referral') < queue.findIndex(row => row.source === 'ta'), 'warm referral outranks cold TA at equal staleness');
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+// ── a connected contact is never treated as a first touch ────────────────────
+// Both halves of this reached the screen: a row badged "Just connected" also
+// carried "Not contacted", and its draft asked to connect with somebody already
+// connected. The cause is that both signals are derived from each book's own
+// status vocabulary, and a referral sits at "Not Asked" however much has actually
+// passed between you.
+console.log('\nconnected contacts are not first touches');
+{
+  // Mirrors what the client's isAlreadyInvited must conclude. Kept in step with
+  // dashboard-web/src/connect.jsx; if that logic moves, this should move with it.
+  const alreadyInvited = (c) =>
+    c.linkedinStatus === 'Connected' || !!c.freeDm ||
+    !!(c.companyOutreach && c.companyOutreach.selfLastTouch) ||
+    ['Sent', 'Replied', 'Meeting Scheduled'].includes(c.status);
+
+  const jennifer = { source: 'referral', id: 160, status: 'Not Asked', linkedinStatus: 'Connected', freeDm: true, companyOutreach: {} };
+  check(alreadyInvited(jennifer) === true,
+    'a connected referral counts as already invited, so it drafts a message not a connect note');
+
+  const stranger = { source: 'referral', id: 161, status: 'Not Asked', companyOutreach: {} };
+  check(alreadyInvited(stranger) === false,
+    'a referral you have never touched is still a genuine first touch');
+
+  const sentTa = { source: 'ta', id: 5, status: 'Sent', companyOutreach: {} };
+  check(alreadyInvited(sentTa) === true, 'the target-talent status path is unchanged');
+}
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -156,7 +156,42 @@ const CONTACTED_STATUSES = new Set(['Sent', 'Replied', 'Meeting Scheduled']);
 // is the reliable signal: selfLastTouch is derived from the correspondence-log index,
 // which can be empty even after status advanced to Sent — that gap is what wrongly
 // routed already-contacted contacts to the first-touch connect-note endpoint and 400'd.
+// The API base for a queue row, chosen by which BOOK the row came from.
+//
+// These three row components used to hardcode `/api/target-talent/${c.id}`. That
+// was correct while the queue held only target talent, and became data corruption
+// the moment referrals and influencers joined it: the books number rows
+// independently, so Mark sent on referral 160 wrote a Sent entry onto
+// target-talent 160, a different person, advancing their status, stamping their
+// last touch and marking their invite pending. The endpoint is book-scoped by its
+// own URL and cannot detect a caller aiming the wrong id at it, so the caller has
+// to be right.
+//
+// The row already carries `source`; it was being used for the React key and the
+// drop callback and then dropped when the URL was built.
+//
+// Influencers return null: they have no per-contact correspondence store, their
+// touches live in the engagement log, and writing them into either contact book
+// would be the same mistake in a new place. Callers must refuse instead.
+function contactBase(c) {
+  if (!c || c.id == null) return null;
+  if (c.source === 'referral') return `/api/referrals/${c.id}`;
+  if (c.source === 'influencer') return null;
+  return `/api/target-talent/${c.id}`;
+}
+
 function isAlreadyInvited(c) {
+  // Being CONNECTED is proof on its own: you cannot become a first-degree
+  // connection without an invite having gone out and been accepted. Without this,
+  // a row badged "Just connected" still routed to the first-touch endpoint and
+  // drafted "would love to connect" to somebody already connected.
+  //
+  // It matters because the other two signals are target-talent-shaped and a
+  // referral matches neither. CONTACTED_STATUSES holds TA vocabulary (Sent,
+  // Replied, Meeting Scheduled) while a referral sits at "Not Asked", and
+  // selfLastTouch comes from a touch index built only from TA correspondence and
+  // keyed ta:<id>, so a referral row has none. Both read as never-invited.
+  if (c.linkedinStatus === 'Connected' || c.freeDm) return true;
   return !!(c.companyOutreach && c.companyOutreach.selfLastTouch)
     || CONTACTED_STATUSES.has(c.status);
 }
@@ -203,7 +238,9 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
   const markSent = () => {
     if (sending || done) return;
     setSending(true);
-    const url = `/api/target-talent/${c.id}/correspondence`;
+    const cbase = contactBase(c);
+    if (!cbase) { setSending(false); toast && toast('Log this engagement from the Social tab: influencers have no correspondence store.', 'warn'); return; }
+    const url = `${cbase}/correspondence`;
     const kind = alreadyInvited ? 'LinkedIn message' : 'LinkedIn connection request';
     const body = (note?.response || '').trim() || `${kind} sent to ${c.name || 'this contact'}.`;
     window.tjkMutate(url, {
@@ -307,7 +344,10 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
           )}
           {!done && (
             <div className="dim" style={{ fontSize: 11, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              {c.queueReason === 'Just connected' && (referred
+              {/* Target talent only. The endpoint promotes a TA row by id, so on a
+                  referral row it would have promoted whoever holds that id in the TA
+                  book, and a referral is already in Referrals anyway. */}
+              {c.queueReason === 'Just connected' && c.source === 'ta' && (referred
                 ? <span style={{ color: 'var(--green)' }}>✓ Added to Referrals</span>
                 : <button className="btn ghost sm" style={{ fontSize: 11, padding: '2px 6px' }} onClick={addToReferral} disabled={sending}
                     title="Now a 1st-degree connection. Add them to your Referrals list; they'll share a timeline with this TA record.">+ Add to Referrals</button>)}
@@ -419,7 +459,7 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
   const [showArchive, setShowArchive] = useStateCq(false);
   const [draftBlock, setDraftBlock] = useStateCq(null);
   const done = !!sentAt;
-  const base = `/api/target-talent/${c.id}`;
+  const base = contactBase(c);
   const firstName = c.firstName || (c.name || '').split(/\s+/)[0] || 'there';
   // LinkedIn profile link, same normalization as the Connect queue, so you can
   // confirm the TA is still at the company before you spend a draft on them.
@@ -445,6 +485,8 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
 
   const gen = (override = false) => {
     setLoading(true);
+    // contactBase is null for influencers, who have no correspondence store.
+    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
     window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ override }) })
       .then(r => r.json())
       .then(res => {
@@ -484,6 +526,8 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
     if (sending || done) return;
     setSending(true);
     const sentBody = (body || '').trim() || `Emailed ${c.name || 'this contact'}${c.company ? ` at ${c.company}` : ''}.`;
+    // contactBase is null for influencers, who have no correspondence store.
+    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
     window.tjkMutate(`${base}/correspondence`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ direction: 'Sent', subject: subject || 'Outreach email', body: sentBody }),
@@ -630,7 +674,7 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
   const [emSending, setEmSending] = useStateCq(false);
   const [emDone, setEmDone] = useStateCq(!!c.emailDone);
 
-  const base = `/api/target-talent/${c.id}`;
+  const base = contactBase(c);
   const firstName = c.firstName || (c.name || '').split(/\s+/)[0] || 'there';
   const href = c.linkedin ? (/^https?:/.test(c.linkedin) ? c.linkedin : `https://${c.linkedin}`) : null;
 
@@ -654,6 +698,8 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
     if (liSending || liDone) return;
     setLiSending(true);
     const body = (note?.response || '').trim() || `LinkedIn connection request sent to ${c.name || 'this contact'}.`;
+    // contactBase is null for influencers, who have no correspondence store.
+    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
     window.tjkMutate(`${base}/correspondence`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ direction: 'Sent', subject: 'LinkedIn connection request', body }),
@@ -671,6 +717,8 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
   // ── Email actions ──
   const genEmail = (override = false) => {
     setEmLoading(true);
+    // contactBase is null for influencers, who have no correspondence store.
+    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
     window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ override }) })
       .then(r => r.json())
       .then(res => {
@@ -699,6 +747,8 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
     if (emSending || emDone) return;
     setEmSending(true);
     const sentBody = (emBody || '').trim() || `Emailed ${c.name || 'this contact'}${c.company ? ` at ${c.company}` : ''}.`;
+    // contactBase is null for influencers, who have no correspondence store.
+    if (!base) { toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
     window.tjkMutate(`${base}/correspondence`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ direction: 'Sent', subject: emSubject || 'Outreach email', body: sentBody }),

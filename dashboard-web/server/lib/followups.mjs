@@ -1140,6 +1140,14 @@ function computeContactFollowups(opts = {}) {
     if (!item.companyOutreach) {
       item.companyOutreach = _companyOutreachFor(`${item.source}:${item.id}`, touchIdx.get(normalizeCompany(item.company)), nowDay);
     }
+    // "Not contacted" cannot be true of somebody who accepted your invite: an
+    // invite went out, so the badge contradicted the "Just connected" one sitting
+    // beside it on the same row. It happened because notContacted is derived from
+    // each book's own status vocabulary, and a referral sits at "Not Asked" no
+    // matter what has actually passed between you.
+    if (item.queueReason === 'Just connected' || item.linkedinStatus === 'Connected' || item.freeDm) {
+      item.notContacted = false;
+    }
     // Cold-outreach cap: once a TA or referral contact hits the channel ceiling with no
     // reply, the queue rests them (the client hides capped rows behind Show anyway,
     // so nothing is lost and a manual draft still overrides). Influencer likes
