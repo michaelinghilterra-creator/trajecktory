@@ -46,6 +46,13 @@ function stageFromHeader(text) {
 const OBJECTION_QUESTION =
   'Before we wrap, is there anything in my background that gives you pause, or that the hiring manager would want addressed?';
 
+// These questions work as a pair. The first asks the interviewer to find a flaw,
+// which a non-decision-maker often genuinely cannot do. The second asks them to
+// predict an outcome, which people answer more honestly even when they are outside
+// the decision. The pair prevents a soft "nothing" from reading as reassurance.
+const REASON_QUESTION =
+  "If I don't move forward, what will the reason most likely be?";
+
 // Does this note text look like a saved debrief for `stage`?
 function isDebriefFor(text, stage) {
   const s = stageFromHeader(text);
@@ -64,6 +71,12 @@ function debriefTemplate(stage, { company = '', role = '', date = '' } = {}) {
     '',
     `**The objection (most important).** Their answer to: "${OBJECTION_QUESTION}" Write it as close to verbatim as you can. If nothing was raised, say so plainly.`,
     '',
+    `**The likely reason (most important).** Their answer to: "${REASON_QUESTION}" Write it as close to verbatim as you can.`,
+    '',
+    '**Answered by.** Who gave those answers, and whether they are the decision maker for this role. "The recruiter, not the hiring manager" is a complete and valuable answer.',
+    '',
+    '**Hiring manager.** Their name, how long they have been in the seat, and what they optimize for. If the interviewer did not know, write that down.',
+    '',
     '**What landed.** The stories or points that clearly connected.',
     '',
     '**What I would change.** Anything that fell flat, ran long, or that I fumbled.',
@@ -77,7 +90,7 @@ function debriefTemplate(stage, { company = '', role = '', date = '' } = {}) {
 // Assemble a debrief note from structured fields (any subset). Always carries the
 // detection header. A freeform `body` is appended verbatim after the fields.
 function formatDebriefNote(stage, fields = {}, { date = '', company = '', role = '' } = {}) {
-  const { outcome, objection, landed, change, intel, next, body } = fields;
+  const { outcome, objection, reason, answeredBy, hm, landed, change, intel, next, body } = fields;
   const ctx = [company, role].filter(Boolean).join(' | ');
   const out = [`### Debrief: ${stage} (${date || new Date().toISOString().slice(0, 10)})`];
   if (ctx) out.push(`_${ctx}_`);
@@ -86,6 +99,9 @@ function formatDebriefNote(stage, fields = {}, { date = '', company = '', role =
   };
   field('Outcome', outcome);
   field('Objection', objection);
+  field('Likely reason', reason);
+  field('Answered by', answeredBy);
+  field('Hiring manager', hm);
   field('What landed', landed);
   field('What I would change', change);
   field('Intel captured', intel);
@@ -124,6 +140,6 @@ function pendingDebriefs({ apps = [], notes = {} } = {}) {
 }
 
 export {
-  DEBRIEF_HEADER_RE, OBJECTION_QUESTION,
+  DEBRIEF_HEADER_RE, OBJECTION_QUESTION, REASON_QUESTION,
   isDebriefFor, debriefTemplate, formatDebriefNote, pendingDebriefs,
 };

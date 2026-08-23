@@ -11,7 +11,7 @@
  */
 
 import {
-  OBJECTION_QUESTION, isDebriefFor, debriefTemplate, formatDebriefNote, pendingDebriefs,
+  OBJECTION_QUESTION, REASON_QUESTION, isDebriefFor, debriefTemplate, formatDebriefNote, pendingDebriefs,
 } from '../dashboard-web/server/lib/debrief.mjs';
 
 let passed = 0, failed = 0;
@@ -82,10 +82,13 @@ check(pendingDebriefs({}).length === 0, 'empty input is safe');
 
 // ── formatDebriefNote ────────────────────────────────────────────────────────
 const note = formatDebriefNote('Phone Screen',
-  { outcome: 'rejected', objection: 'Wanted more years in a pure RevOps title', landed: 'KPI baseline story', next: 'None, closed out' },
+  { outcome: 'rejected', objection: 'Wanted more years in a pure RevOps title', reason: 'The final candidate has deeper tooling experience', answeredBy: 'The recruiter, not the hiring manager', hm: 'Avery Chen, 3 months in seat, optimizes for hands-on delivery', landed: 'KPI baseline story', next: 'None, closed out' },
   { date: '2026-07-23', company: 'Northwind Robotics', role: 'Director RevOps' });
 check(/^### Debrief: Phone Screen \(2026-07-23\)/.test(note), 'formatted note starts with the detection header');
 check(note.includes('**Objection:** Wanted more years'), 'objection field rendered');
+check(note.includes('**Likely reason:** The final candidate has deeper tooling experience'), 'reason field rendered');
+check(note.includes('**Answered by:** The recruiter, not the hiring manager'), 'answeredBy field rendered');
+check(note.includes('**Hiring manager:** Avery Chen, 3 months in seat'), 'hm field rendered');
 check(note.includes('_Northwind Robotics | Director RevOps_'), 'company/role context line rendered');
 check(!note.includes('**What I would change:**'), 'empty fields are omitted');
 check(isDebriefFor(note, 'Phone Screen'), 'formatted note is detectable as its own stage');
@@ -93,10 +96,14 @@ check(noEmDash(note), 'formatted note has no em dashes');
 
 const freeform = formatDebriefNote('1st Interview', { body: 'Freeform recap goes here.' }, { date: '2026-07-23' });
 check(freeform.includes('Freeform recap goes here.'), 'freeform body is appended');
+check(!freeform.includes('**Likely reason:**'), 'absent reason field is omitted');
+check(!freeform.includes('**Answered by:**'), 'absent answeredBy field is omitted');
+check(!freeform.includes('**Hiring manager:**'), 'absent hm field is omitted');
 
 // ── debriefTemplate ──────────────────────────────────────────────────────────
 const tpl = debriefTemplate('Phone Screen', { company: 'Northwind Robotics', role: 'Director RevOps', date: '2026-07-23' });
 check(tpl.includes(OBJECTION_QUESTION), 'template leads with the exact objection question');
+check(tpl.includes(REASON_QUESTION), 'template includes the exact likely-reason question');
 check(/^### Debrief: Phone Screen \(2026-07-23\)/.test(tpl), 'template header carries stage + date');
 check(tpl.includes('most important'), 'template flags the objection as the most important field');
 check(noEmDash(tpl), 'template has no em dashes');
@@ -104,6 +111,18 @@ const tplNoDate = debriefTemplate('1st Interview', {});
 check(tplNoDate.includes('YYYY-MM-DD'), 'template shows a date placeholder when none is given');
 
 check(typeof OBJECTION_QUESTION === 'string' && OBJECTION_QUESTION.length > 20, 'objection question constant is present');
+check(typeof REASON_QUESTION === 'string' && REASON_QUESTION.length > 20, 'reason question constant is exported');
+check(REASON_QUESTION !== OBJECTION_QUESTION, 'reason and objection questions are distinct');
+
+for (const path of [
+  'templates/interview-cheatsheet-screen.md',
+  'templates/interview-cheatsheet-hm-round.md',
+  'templates/interview-cheatsheet-final-loop.md',
+  'modes/cheat-sheet.md',
+]) {
+  const text = await import('node:fs').then(fs => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'));
+  check(text.includes(OBJECTION_QUESTION) && text.includes(REASON_QUESTION), `${path} carries both closing questions verbatim`);
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
