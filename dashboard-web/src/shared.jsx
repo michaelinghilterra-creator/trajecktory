@@ -407,6 +407,10 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // while the confirm is open; null when closed. The one paid, walk-away step
   // (batch Evaluate) gets an "evaluate N for ~$X" confirm before it spends.
   const [spendGate, setSpendGate] = useState(null);
+  // Advanced steps (Triage, Agent Scan, Expand Coverage, and the manual
+  // housekeeping) collapse under a disclosure (Slice 7.5). The default flow is
+  // just Scan → Liveness Gate → Evaluate; triage is optional, not the front door.
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const pollersRef = useRef({});
 
   // Agent Scan and Evaluate Pipeline spawn the bundled Claude CLI, which needs a
@@ -548,22 +552,24 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
       .catch(e => { setPasteBusy(false); setPasteMsg(e.message); });
   }
 
-  // Everyday flow: API Scan (free, fast) → Triage (Haiku ranks the queue) →
-  // housekeeping. The expensive/optional/redundant steps move to Advanced below.
+  // Default flow (Slice 7.5): Scan → Liveness Gate → Evaluate, identical on both
+  // rails (only who-pays differs). Evaluate rolls through the queue in batches, so
+  // it IS the filter — triage is no longer the front door. Triage, Agent Scan,
+  // Expand Coverage, and the manual housekeeping steps live under Advanced.
   const STEPS = [
-    { id: 'api-scan',  label: '1. API Scan',         hint: 'Greenhouse/Ashby/Lever',    type: 'auto'   },
-    { id: 'triage',    label: '2. Triage',           hint: 'Haiku ranks the queue',     type: 'agent', mode: 'triage',
-      command: '/trajecktory triage' },
-    { id: 'merge',     label: '3. Merge Tracker',    hint: 'TSVs → applications.md',     type: 'auto'   },
-    { id: 'verify',    label: '4. Verify Actionable',hint: 'Safety-net dead links',     type: 'auto'   },
-    { id: 'health',    label: '5. Health Check',     hint: 'Report parser drift',       type: 'auto'   },
+    { id: 'api-scan',  label: 'API Scan',            hint: 'Greenhouse/Ashby/Lever',    type: 'auto'   },
+    { id: 'gate',      label: 'Liveness Gate',       hint: 'Drop dead URLs first',      type: 'auto'   },
+    { id: 'cli-eval',  label: 'Evaluate',            hint: 'Full reports, rolling',      type: 'agent', mode: 'pipeline',
+      command: '/trajecktory pipeline' },
     // ── Advanced (collapsed by default) ─────────────────────────────────────────
-    { id: 'discover',  label: 'Expand Coverage',     hint: 'Register companies (keys)',  type: 'auto',  section: 'advanced' },
-    { id: 'cli-scan',  label: 'Agent Scan',          hint: 'Widen via Claude search',    type: 'agent', mode: 'scan',
+    { id: 'cli-scan',  label: 'Agent Scan',          hint: 'Widen via Claude search',   type: 'agent', mode: 'scan',
       command: '/trajecktory scan', section: 'advanced' },
-    { id: 'gate',      label: 'Liveness Gate',       hint: 'Drop dead URLs',             type: 'auto',  section: 'advanced' },
-    { id: 'cli-eval',  label: 'Evaluate (Batch)',    hint: 'Sonnet full reports, top N', type: 'agent', mode: 'pipeline',
-      command: '/trajecktory pipeline', section: 'advanced' },
+    { id: 'triage',    label: 'Triage',              hint: 'Haiku pre-filter (optional)', type: 'agent', mode: 'triage',
+      command: '/trajecktory triage', section: 'advanced' },
+    { id: 'discover',  label: 'Expand Coverage',     hint: 'Register companies (keys)',  type: 'auto',  section: 'advanced' },
+    { id: 'merge',     label: 'Merge Tracker',       hint: 'TSVs → applications.md',     type: 'auto',  section: 'advanced' },
+    { id: 'verify',    label: 'Verify Actionable',   hint: 'Safety-net dead links',      type: 'auto',  section: 'advanced' },
+    { id: 'health',    label: 'Health Check',        hint: 'Report parser drift',        type: 'auto',  section: 'advanced' },
   ];
 
   // Poll an agent job to completion, resilient to the server vanishing mid-run.
@@ -793,17 +799,21 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // Cards the user hasn't dismissed (and that haven't auto-cleared post-deep-dive).
   const visibleTriage = triageCards.filter(c => !dismissed.has(c.url));
 
-  // Two layouts: keyless users get the lean plan steps; key users get the full
-  // pipeline. Merge/Verify/Health are NOT listed for key users: a finished
-  // Evaluate batch auto-runs that housekeeping (runPostEvalChain), so showing
-  // them as separate manual steps was redundant. They still run — just not by hand.
-  const BASE_ORDER  = ['api-scan', 'triage', 'merge', 'verify', 'health'];
-  // API-key users skip Triage (a cheap Haiku pre-filter): their evals are cheap and
-  // the batch already takes best-fit-first, so they go straight scan -> evaluate,
-  // and the post-eval housekeeping runs automatically.
-  const POWER_ORDER = ['api-scan', 'cli-scan', 'gate', 'cli-eval', 'discover'];
+  // ONE flow, both rails (Slice 7.5): Scan → Liveness Gate → Evaluate. Only who
+  // pays and the batch size differ (handled server-side by the billing rail), so
+  // the visible steps no longer branch on hasKey. A finished Evaluate auto-runs
+  // Merge → Health (runPostEvalChain), so those are not manual default steps.
+  const DEFAULT_ORDER  = ['api-scan', 'gate', 'cli-eval'];
+  // Triage (now an optional pre-filter, not the front door), the Claude-search
+  // Agent Scan, coverage expansion, and the manual housekeeping live behind an
+  // Advanced disclosure. Nothing is removed — just demoted from the default path.
+  const ADVANCED_ORDER = ['cli-scan', 'triage', 'discover', 'merge', 'verify', 'health'];
   const stepById = Object.fromEntries(STEPS.map(s => [s.id, s]));
-  const visibleSteps = (hasKey ? POWER_ORDER : BASE_ORDER).map(id => stepById[id]).filter(Boolean);
+  const defaultSteps  = DEFAULT_ORDER.map(id => stepById[id]).filter(Boolean);
+  const advancedSteps = ADVANCED_ORDER.map(id => stepById[id]).filter(Boolean);
+  // Auto-reveal Advanced if one of its steps has a job (running/just-finished), so
+  // a triage or Agent Scan run is never hidden behind a collapsed section.
+  const advancedOpen = showAdvanced || advancedSteps.some(s => jobs[s.id]);
 
   // Re-attach on mount: after a reload (or a server restart) the sidebar starts
   // blank, so ask the server for any running/interrupted agent job and either
@@ -883,11 +893,11 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         )}
       </div>
 
-      <div className="workflow-steps">
-        {visibleSteps.map((step, idx) => {
-          // Number by position so both layouts read 1..N (the labels carry a baked-in
-          // number for the base flow that would otherwise skip in the promoted order).
-          const stepLabel = `${idx + 1}. ${step.label.replace(/^\d+\.\s*/, '')}`;
+      {(() => {
+        // One card renderer for both the default and Advanced lists (Slice 7.5).
+        // stepLabel is passed in — default steps are numbered by position, Advanced
+        // steps render bare — so the card body itself stays layout-agnostic.
+        const renderStep = (step, stepLabel) => {
           const job = jobs[step.id];
           const g = statusGlyph(job?.status);
           const isRunning = job?.status === 'running';
@@ -1039,8 +1049,25 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
             </div>
           );
           return card;
-        })}
-      </div>
+        };
+        return (
+          <>
+            <div className="workflow-steps">
+              {defaultSteps.map((step, idx) => renderStep(step, `${idx + 1}. ${step.label.replace(/^\d+\.\s*/, '')}`))}
+            </div>
+            <button type="button" onClick={() => setShowAdvanced(v => !v)}
+              title="Optional steps: Triage, Agent Scan, Expand Coverage, and manual housekeeping"
+              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderTop: '1px solid var(--border)', color: 'var(--text-mute)', fontSize: 11, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 9 }}>{advancedOpen ? '▾' : '▸'}</span> Advanced
+            </button>
+            {advancedOpen && (
+              <div className="workflow-steps">
+                {advancedSteps.map(step => renderStep(step, step.label.replace(/^\d+\.\s*/, '')))}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* The triage PRE-FILTER card list used to render here. It was removed: the
           same ranked postings already appear as rows in Pipeline → Active/All
