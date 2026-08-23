@@ -56,7 +56,7 @@ const twinReferral = referral(7, 'Same Person', 'Not Asked', { linkedin: 'https:
 queue = computeFollowupQueue({ taRows: [twinTa], referralRows: [twinReferral], influencers: [], apps: [{ company: 'Live Co', status: 'Applied' }], pins: {} });
 check(queue.filter(row => row.name === 'Same Person').length === 1, 'person merged across referral and TA appears once');
 
-const twinInfluencer = { id: 70, name: 'Same Person', linkedinUrl: 'https://linkedin.com/in/same-person', following: true };
+const twinInfluencer = { id: 7070, name: 'Same Person', linkedinUrl: 'https://linkedin.com/in/same-person', following: true };
 queue = computeFollowupQueue({ taRows: [], referralRows: [twinReferral], influencers: [twinInfluencer], apps: [{ company: 'Live Co', status: 'Applied' }], pins: {} });
 check(queue.filter(row => row.name === 'Same Person').length === 1 && queue[0]?.source === 'referral', 'referral and influencer resolve to one person while only the referral becomes a queue row');
 

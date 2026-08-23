@@ -30,9 +30,9 @@ vm.createContext(context);
 vm.runInContext(`${functionSource('contactBase')}\n${functionSource('isAlreadyInvited')}\n${functionSource('followupChannels')}\nthis.result = { contactBase, isAlreadyInvited, followupChannels };`, context);
 const { contactBase, isAlreadyInvited, followupChannels } = context.result;
 
-check(contactBase({ source: 'ta', id: 12 }) === '/api/target-talent/12', 'target talent mutations use the target talent book');
-check(contactBase({ source: 'referral', id: 12 }) === '/api/referrals/12', 'referral mutations use the referrals book');
-check(contactBase({ source: 'influencer', id: 12 }) === null, 'influencers have no correspondence mutation base');
+check(contactBase({ source: 'ta', id: 7012 }) === '/api/target-talent/7012', 'target talent mutations use the target talent book');
+check(contactBase({ source: 'referral', id: 7012 }) === '/api/referrals/7012', 'referral mutations use the referrals book');
+check(contactBase({ source: 'influencer', id: 7012 }) === null, 'influencers have no correspondence mutation base');
 check(contactBase(null) === null, 'missing contacts have no mutation base');
 
 check(isAlreadyInvited({ linkedinStatus: 'Connected' }), 'connected contacts count as already invited');
