@@ -10,7 +10,9 @@ import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine, readTTCorrespondence } from '../lib/target-talent.mjs';
 import { getLinkedInStatus } from '../lib/tt-linkedin.mjs';
 import { summarizeThread } from '../lib/correspondence-context.mjs';
-import { getIdentity } from '../lib/profile.mjs';
+import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
+import { getPersonContext } from '../lib/person-context.mjs';
+import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
 import { getInmailBudget, decrementInmail, setInmailRemaining } from '../lib/inmail-budget.mjs';
 
@@ -288,6 +290,12 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     if (!name) {
       return res.status(400).json({ error: 'Provide a recipient: source+id from the connect queue, or a name.' });
     }
+    if (resolved?.id != null) {
+      const context = getPersonContext(src, resolved.id);
+      const decision = canContact({ timeline: context?.timeline || [], channel: 'linkedin', company: recipientCompany, policy: getOutreachPolicy() });
+      if (!decision.allowed && !body.override) return res.json({ blocked: true, blocks: decision.blocks, nextEligible: decision.nextEligible });
+      if (!decision.allowed) logOutreachOverride({ contactRef: `${src}:${resolved.id}`, channel: 'linkedin', blocks: decision.blocks });
+    }
 
     let cvMd = '';
     try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
@@ -354,6 +362,16 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
     // Prior 1:1 history with THIS contact, so the message names the earlier connect
     // (and when) and never repeats it. Cap the tail so the prompt stays bounded.
     const corr = (readTTCorrespondence(Number(id)) || []);
+    const context = getPersonContext('ta', id);
+    const decision = canContact({
+      timeline: context?.timeline || [],
+      channel: 'linkedin',
+      company,
+      inmail: { exhausted: getInmailBudget().remaining === 0, alreadyInvited: true, freeDm: connected },
+      policy: getOutreachPolicy(),
+    });
+    if (!decision.allowed && !body.override) return res.json({ blocked: true, blocks: decision.blocks, nextEligible: decision.nextEligible });
+    if (!decision.allowed) logOutreachOverride({ contactRef: `ta:${id}`, channel: 'linkedin', blocks: decision.blocks });
     const sent = corr.filter(m => m.direction === 'Sent');
     const firstTouchDate = (sent[0]?.timestamp || row.lastTouch || '').slice(0, 10);
     // Full-thread state: whether a substantive message already went out recently

@@ -8,7 +8,8 @@ import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readPro
 import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
-import { getIdentity } from '../lib/profile.mjs';
+import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
+import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
@@ -333,6 +334,10 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
     const link = resolveReferralLink(ref, parseTargetTalentMd());
     const prior = link && link.source === 'ta' ? readTTCorrespondence(link.contact.id)
       : readReferralCorrespondence(id);
+    const context = getPersonContext('referral', id);
+    const decision = canContact({ timeline: context?.timeline || [], channel: 'email', company: ref.where, policy: getOutreachPolicy() });
+    if (!decision.allowed && !req.body?.override) return res.json({ blocked: true, blocks: decision.blocks, nextEligible: decision.nextEligible });
+    if (!decision.allowed) logOutreachOverride({ contactRef: `referral:${id}`, channel: 'email', blocks: decision.blocks });
 
     const cvMd            = readProjectFile(ROOT_DIR, 'cv.md');
     const profileMd       = readProjectFile(ROOT_DIR, 'modes/_profile.md');

@@ -10,14 +10,15 @@ import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, isInmailBlocked, assignPerCompanyDailyHeld, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 
 // Different contacts per COMPANY the queue surfaces as actionable per day. Reaching
 // more than this at one company in a day reads as blasting; the overflow is HELD
 // (flagged, not dropped) and rotates into view on a later day.
-const PER_COMPANY_PER_DAY = 3;
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
-import { getIdentity } from '../lib/profile.mjs';
+import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
+import { getPersonContext } from '../lib/person-context.mjs';
+import { canContact } from '../lib/outreach-policy.mjs';
 import { getInmailBudget } from '../lib/inmail-budget.mjs';
 import { parseSentInvites, matchSentInvites } from '../lib/sent-invites-reconcile.mjs';
 import { markInvitePending } from '../lib/tt-linkedin.mjs';
@@ -206,14 +207,36 @@ router.get('/api/followups/stale', (req, res) => {
     //     list so the best contacts fill each company's slots.
     // Order matters: inmailBlocked first (a blocked row does not spend a daily slot).
     const inmailOut = getInmailBudget().remaining === 0;
-    for (const c of contactFollowups) c.inmailBlocked = isInmailBlocked(c, { inmailOut });
-    assignPerCompanyDailyHeld(contactFollowups, { perCompany: PER_COMPANY_PER_DAY });
+    const outreachPolicy = getOutreachPolicy();
+    const companySlots = new Map();
+    for (const c of contactFollowups) {
+      const companyKey = String(c.company || '').trim().toLowerCase();
+      const seeded = c.companyOutreach?.companyContactsSentToday || 0;
+      const used = companySlots.has(companyKey) ? companySlots.get(companyKey) : seeded;
+      const context = getPersonContext(c.source, c.id);
+      const alreadyInvited = !!c.companyOutreach?.selfLastTouch || new Set(['Sent', 'Replied', 'Meeting Scheduled']).has(c.status);
+      const decision = canContact({
+        timeline: context?.timeline || [],
+        channel: c.channel,
+        company: c.company,
+        companyTouches: { count: used, selfSentToday: !!c.companyOutreach?.selfSentToday },
+        inmail: { exhausted: inmailOut, alreadyInvited, freeDm: !!c.freeDm },
+        policy: outreachPolicy,
+        now: new Date(),
+      });
+      c.blocks = decision.blocks;
+      c.nextEligible = decision.nextEligible;
+      c.inmailBlocked = decision.blocks.some(b => b.rule === 'inmailBudget');
+      c.heldDaily = decision.blocks.some(b => b.rule === 'perCompanyPerDay');
+      c.capped = decision.blocks.some(b => b.rule === 'coldOutreachCap');
+      if (decision.allowed) companySlots.set(companyKey, used + 1);
+    }
 
     // Actionable now: the subset the queue actually surfaces — not held by the
     // per-company daily cap, not out-of-InMail-blocked, not resting at the cold-outreach
     // cap. This is what the nav badge and the Follow-ups subtab count, so an "alert"
     // means something you can send right now, not the whole backlog.
-    const actionableCount = contactFollowups.filter(c => !c.heldDaily && !c.inmailBlocked && !c.capped).length;
+    const actionableCount = contactFollowups.filter(c => c.blocks.length === 0).length;
     const withheldDailyCount = contactFollowups.filter(c => c.heldDaily).length;
     const inmailBlockedCount = contactFollowups.filter(c => c.inmailBlocked).length;
 
@@ -251,7 +274,7 @@ router.get('/api/followups/stale', (req, res) => {
       // removed, so the client can reveal them via "Show" and nothing is silently lost.
       withheldDailyCount,
       inmailBlockedCount,
-      perCompanyPerDay: PER_COMPANY_PER_DAY,
+      perCompanyPerDay: outreachPolicy.perCompanyPerDay,
       contactFollowups,
       snoozedContactFollowups,
       // Deprecated alias: legacy readers expect `items` to be the badge list.

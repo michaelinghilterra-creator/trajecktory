@@ -15,7 +15,8 @@ import { isHighValueContact } from '../lib/followups.mjs';
 import { appendReferralRows, parseReferralsMd } from '../lib/referrals.mjs';
 import { linkedinKey } from '../lib/contact-identity.mjs';
 import { summarizeThread } from '../lib/correspondence-context.mjs';
-import { getIdentity } from '../lib/profile.mjs';
+import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
+import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
 
@@ -269,6 +270,10 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
     const profileMd      = readProjectFile(projectRoot, 'modes/_profile.md');
     const articleDigestMd = readProjectFile(projectRoot, 'article-digest.md');
     const prior = readTTCorrespondence(id);
+    const context = getPersonContext('ta', id);
+    const decision = canContact({ timeline: context?.timeline || [], channel: 'email', company: r.company, policy: getOutreachPolicy() });
+    if (!decision.allowed && !req.body?.override) return res.json({ blocked: true, blocks: decision.blocks, nextEligible: decision.nextEligible });
+    if (!decision.allowed) logOutreachOverride({ contactRef: `ta:${id}`, channel: 'email', blocks: decision.blocks });
     const isFirstTouch = prior.length === 0;
     const messageType = req.body?.messageType || (isFirstTouch ? 'first-touch' : 'follow-up');
     // Full-thread state so a follow-up nudges rather than re-pitching a message
