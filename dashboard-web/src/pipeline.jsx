@@ -628,6 +628,116 @@ function CompPositioningCard(props) {
   );
 }
 
+function ResponseProgressCard({ progress, rejTiming }) {
+  const windows = [14, 30];
+  const composition = progress?.fastDecision?.composition || {};
+  const cohorts = progress?.cohorts || [];
+  const rateText = (value) => value == null ? 'Not enough data' : value + '%';
+  const barColor = (value) => value == null ? 'var(--border)'
+    : value >= 70 ? 'var(--red)'
+    : value >= 50 ? 'var(--yellow)'
+    : 'var(--green)';
+  const undated = Math.max(
+    progress?.silence?.['14']?.undated || 0,
+    progress?.silence?.['30']?.undated || 0,
+    progress?.fastDecision?.undated || 0,
+  );
+  const estimatedAnchors = progress?.anchorSources?.rowDate || 0;
+
+  return (
+    <div className="card padded-lg">
+      <div className="card-head">
+        <span className="card-title"><span className="dot" />Response Progress</span>
+        <span className="card-meta mono">measured from the application date</span>
+      </div>
+      {!progress ? (
+        <div className="empty" style={{ padding: '16px 4px', color: 'var(--text-mute)', fontSize: 12 }}>
+          Loading response cohorts.
+        </div>
+      ) : (
+        <div>
+          <div className="grid cols-2" style={{ gap: 12, marginBottom: 16 }}>
+            {windows.map(days => {
+              const metric = progress.silence?.[String(days)];
+              const value = metric?.pct;
+              return (
+                <div key={days} style={{ padding: 12, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-mute)' }}>Silent after {days} days</span>
+                    <span className="mono" style={{ color: value == null ? 'var(--text-mute)' : barColor(value), fontWeight: 700 }}>
+                      {rateText(value)}
+                    </span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 8, overflow: 'hidden', background: 'var(--panel)', border: '1px solid var(--border)' }}>
+                    <div style={{ width: value == null ? 0 : value + '%', height: '100%', background: barColor(value) }} />
+                  </div>
+                  <div className="mono" style={{ marginTop: 7, color: 'var(--text-mute)', fontSize: 10.5 }}>
+                    {metric?.eligible || 0} mature applications{metric?.undated ? `, ${metric.undated} undated` : ''}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(220px, 1fr)', gap: 16 }}>
+            <div>
+              <div className="card-meta mono" style={{ marginBottom: 7 }}>decision within {progress.fastDays} days by apply week</div>
+              <table className="atbl">
+                <thead><tr><th>Week of</th><th>Sent</th><th>Fast decision</th><th>Undated</th></tr></thead>
+                <tbody>
+                  {cohorts.length === 0 && (
+                    <tr><td colSpan="4" className="mut">No dated application cohorts yet.</td></tr>
+                  )}
+                  {cohorts.slice(-8).reverse().map(cohort => (
+                    <tr key={cohort.week}>
+                      <td className="mono">{cohort.week}</td>
+                      <td>{cohort.sent}</td>
+                      <td>{rateText(cohort.decidedFastPct)}</td>
+                      <td className="mut">{cohort.undated || 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <div className="card-meta mono" style={{ marginBottom: 7 }}>fast decision composition</div>
+              {[
+                ['Employer no', composition.employerNo || 0, 'var(--red)'],
+                ['Advanced', composition.advance || 0, 'var(--green)'],
+                ['You withdrew', composition.candidateSide || 0, 'var(--yellow)'],
+              ].map(([label, count, color]) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+                  <span style={{ color: 'var(--text-mute)' }}>{label}</span>
+                  <b className="mono" style={{ color }}>{count}</b>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Insight kind={undated ? 'warn' : null}>
+            Undated means the tracker shows a decision but no dated decision event exists. Those rows are shown here and excluded from rates so older history does not look like silence.
+          </Insight>
+          {/* A quarter of these rows predate both apply-date sidecars, so their
+              anchor is the EVALUATION date, which on self-sourced rows routinely
+              runs a few days early. That makes them look older than they are and
+              nudges the silence rate up. Say so: an estimate presented as a
+              measurement is the failure this whole card replaced. */}
+          {estimatedAnchors > 0 && (
+            <Insight>
+              {estimatedAnchors} of {progress.population?.n || 0} have no recorded apply date, so they are dated from their evaluation instead. That runs early on self-sourced rows, which makes them look slightly older and nudges the silence rate up.
+            </Insight>
+          )}
+          <div className="mono" style={{ marginTop: 10, color: 'var(--text-mute)', fontSize: 10.5 }}>
+            Historical rejection timing: {rejTiming && rejTiming.n > 0
+              ? `average ${rejTiming.avgDays}d, median ${rejTiming.medianDays}d, n=${rejTiming.n}${rejTiming.excluded ? `, ${rejTiming.excluded} date conflicts excluded` : ''}`
+              : 'fills as dated rejections are recorded'}.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => false }) {
   // Neutral placeholder fallbacks — real comp targets come from compTweaks
   // (Tweaks panel) and the gitignored config/profile.yml. Never hardcode a
@@ -656,6 +766,16 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
     fetch('/api/insights/rejection-timing')
       .then(r => r.json())
       .then(d => { if (alive) setRejTiming(d); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const [responseProgress, setResponseProgress] = useStateP(null);
+  useEffectP(() => {
+    let alive = true;
+    fetch('/api/insights/response-progress')
+      .then(r => r.json())
+      .then(d => { if (alive && !d.error) setResponseProgress(d); })
       .catch(() => {});
     return () => { alive = false; };
   }, []);
@@ -733,14 +853,19 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
         <Kpi k="Response Rate" v={respRate + '%'} sub={`${respAll} of ${appliedAll} applied · all time`} icon={PI.msg} />
         <Kpi k="Interview Rate" v={intvRate + '%'} sub={`${intvAll} reached a screen · all time`} icon={PI.briefcase} />
         <Kpi
-          k="Avg Days to Rejection"
-          v={rejTiming && rejTiming.n > 0 ? rejTiming.avgDays + 'd' : '-'}
-          sub={rejTiming && rejTiming.n > 0
-            ? `median ${rejTiming.medianDays}d · n=${rejTiming.n}${rejTiming.excluded ? ` · ${rejTiming.excluded} excluded (date conflict)` : ''}`
-            : 'fills as you mark rejections'}
+          k="Silence Rate (14d)"
+          v={responseProgress?.silence?.['14']?.pct == null ? '-' : responseProgress.silence['14'].pct + '%'}
+          sub={responseProgress
+            ? `${responseProgress.silence?.['30']?.pct == null ? '30d not mature' : `30d ${responseProgress.silence['30'].pct}%`} · n=${responseProgress.silence?.['14']?.eligible || 0}${responseProgress.silence?.['14']?.undated ? ` · ${responseProgress.silence['14'].undated} undated` : ''}`
+            : 'loading response cohorts'}
           icon={PI.clock}
+          color={responseProgress?.silence?.['14']?.pct >= 70 ? 'var(--red)' : 'var(--text)'}
         />
         <Kpi k="On / Above Target" v={inOrAbovePct + '%'} sub={`avg posted comp $${avgComp}K`} color={inOrAbovePct < 40 ? 'var(--red)' : 'var(--text)'} icon={PI.trend} />
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <ResponseProgressCard progress={responseProgress} rejTiming={rejTiming} />
       </div>
 
       <div style={{ marginBottom: 14 }}>

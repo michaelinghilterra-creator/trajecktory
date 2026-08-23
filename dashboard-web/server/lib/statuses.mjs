@@ -44,6 +44,14 @@ export const FUNNEL_ORDER = _states
 export const ACTIVE_STATUSES = FUNNEL_ORDER.slice();
 export const CLOSED_STATUSES = ALL_STATUSES.filter(s => !FUNNEL_ORDER.includes(s));
 
+// Response outcomes are centralized beside the canonical status ladder. Timing
+// consumers import these sets instead of maintaining another status vocabulary.
+export const RESPONSE_DECISION_BUCKETS = Object.freeze({
+  advance: new Set(FUNNEL_ORDER.slice(FUNNEL_ORDER.indexOf('Responded'))),
+  employerNo: new Set(ALL_STATUSES.filter(s => s === 'Rejected')),
+  candidateSide: new Set(ALL_STATUSES.filter(s => ['Not a Fit', 'SKIP', 'Discarded'].includes(s))),
+});
+
 // ── Outreach eligibility (the ONE rule for who is worth contacting) ────────────
 // A company is worth spending a TA contact on — sourcing new contacts, keeping
 // existing ones, surfacing them in the connect/email follow-up queues — only when
@@ -182,6 +190,47 @@ export function makeFurthestIdx(events) {
     return idx;
   };
   return { furthestIdx, idxOf, eventsByApp };
+}
+
+const validYmd = (value) => {
+  const ymd = typeof value === 'string' ? value : value?.date;
+  if (typeof ymd !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+  const parsed = new Date(`${ymd}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === ymd ? ymd : null;
+};
+
+// Resolve when an application was sent without trusting the tracker Date unless
+// both application sidecars are absent. The two sidecars record the same fact,
+// so disagreement resolves to the earliest date rather than source priority.
+export function makeApplyAnchor({ applyDates = {}, events = [] } = {}) {
+  const earliestApplied = new Map();
+  const { furthestIdx } = makeFurthestIdx(events);
+  const appliedIdx = FUNNEL_ORDER.indexOf('Applied');
+  for (const event of events) {
+    if (event.status !== 'Applied') continue;
+    const date = validYmd(event.date);
+    if (!date) continue;
+    const key = String(event.app);
+    const previous = earliestApplied.get(key);
+    if (!previous || date < previous) earliestApplied.set(key, date);
+  }
+
+  return (app) => {
+    const key = String(app?.id ?? '');
+    const eventDate = earliestApplied.get(key) || null;
+    const applyDate = validYmd(applyDates[key]);
+    if (eventDate && applyDate) {
+      return { date: eventDate < applyDate ? eventDate : applyDate, source: 'both' };
+    }
+    if (eventDate) return { date: eventDate, source: 'event' };
+    if (applyDate) return { date: applyDate, source: 'apply-date' };
+    const stampedIdx = FUNNEL_ORDER.indexOf(app?.reached);
+    if (Math.max(furthestIdx(app || {}), stampedIdx) < appliedIdx) {
+      return { date: null, source: null };
+    }
+    const rowDate = validYmd(app?.date);
+    return rowDate ? { date: rowDate, source: 'row-date' } : { date: null, source: null };
+  };
 }
 
 // Did this app reach `stage`? Prefers the server-stamped `reached` rung; falls
