@@ -17,6 +17,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -26,7 +27,7 @@ function check(cond, msg) {
 
 console.log('sidecars.test.mjs');
 
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-sidecars-'));
+const sandbox = makeSandbox("sidecars");
 process.env.TJK_DATA_DIR = sandbox;
 
 // Imported AFTER the env var is set: config.mjs resolves its paths at module

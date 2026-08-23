@@ -8,8 +8,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-referrals-'));
+const tmp = makeSandbox("referrals");
 process.env.TJK_DATA_DIR = tmp;
 
 // Import AFTER setting the env so config.mjs resolves REFERRALS_MD into the temp dir.

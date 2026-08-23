@@ -15,6 +15,7 @@ import { mkdtempSync, writeFileSync, readFileSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { canonicalUrl } from '../lib/identity.mjs';
+import { makeSandbox } from './helpers/sandbox.mjs';
 import {
   parsePipelineRow, readPipelineRows, markDone, handledOpenRows, reconcileHandled, sourceUrlOf, pipelineInbox,
 } from '../lib/pipeline.mjs';
@@ -24,7 +25,7 @@ function check(cond, msg) {
   if (cond) { console.log(`  ✅ ${msg}`); passed++; }
   else { console.log(`  ❌ ${msg}`); failed++; }
 }
-const dir = mkdtempSync(join(tmpdir(), 'pipeline-test-'));
+const dir = makeSandbox("pipeline-test");
 function fixture(name, content) { const p = join(dir, name); writeFileSync(p, content, 'utf8'); return p; }
 
 console.log('pipeline.test.mjs');
@@ -132,7 +133,7 @@ check(parsePipelineRow('# a heading') === null, 'non-row returns null');
 // done from the STAGED tracker TSV (evaluated, pre-Merge) and needs-manual-jd.tsv
 // (deferred). This is what replaced the removed, race-prone LLM self-mark.
 {
-  const ws = mkdtempSync(join(tmpdir(), 'pipeline-eval-'));
+  const ws = makeSandbox("pipeline-eval");
   mkdirSync(join(ws, 'reports'), { recursive: true });
   mkdirSync(join(ws, 'batch/tracker-additions/merged'), { recursive: true });
   mkdirSync(join(ws, 'data'), { recursive: true });

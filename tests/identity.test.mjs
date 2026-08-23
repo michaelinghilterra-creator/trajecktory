@@ -18,6 +18,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 import {
   canonicalUrl, normalizeCompany, sameRole, roleSignature,
   urlFromReport, buildDecidedIndex, findDecided,
@@ -154,7 +155,7 @@ check(roleSignature('Senior Director, Platform Engineering').core.has('platform'
 // ── urlFromReport + the decided index ─────────────────────────────────────────
 console.log('\n3. resolving rows to URLs');
 
-const sb = mkdtempSync(join(tmpdir(), 'identity-test-'));
+const sb = makeSandbox("identity-test");
 mkdirSync(join(sb, 'reports'), { recursive: true });
 mkdirSync(join(sb, 'data'), { recursive: true });
 

@@ -8,8 +8,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-posts-'));
+const tmp = makeSandbox("posts");
 process.env.TJK_DATA_DIR = tmp;
 
 // Import AFTER setting the env, so config.mjs resolves POSTS_PATH into the temp dir.

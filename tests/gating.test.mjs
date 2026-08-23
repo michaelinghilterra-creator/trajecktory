@@ -23,12 +23,13 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 // SANDBOX FIRST, same reasoning as google.test.mjs: config.mjs resolves DATA_DIR at
 // import time, so redirecting it has to happen before the module loads, which is why
 // the imports below are dynamic. Nothing here writes tokens, but a suite that reads
 // the real data/ is one edit away from writing to it.
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-gating-'));
+const tmp = makeSandbox("gating");
 process.env.TJK_DATA_DIR = tmp;
 
 const { clientConfigured, googleStatus, checkHealth } = await import('../dashboard-web/server/lib/google.mjs');

@@ -25,13 +25,14 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 process.env.TJK_FAKE_LLM = '1';
 // The stub echoes nothing back, so assertions read the PROMPT the handler built
 // rather than the model output: what matters is who the handler thinks it is
 // writing to.
 process.env.TJK_FAKE_LLM_TEXT = 'Stub note.';
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-recipient-'));
+const sandbox = makeSandbox("recipient");
 process.env.TJK_DATA_DIR = sandbox;
 const profile = path.join(sandbox, 'profile.yml');
 process.env.TJK_PROFILE_YML = profile;

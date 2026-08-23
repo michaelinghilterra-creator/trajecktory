@@ -25,6 +25,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, rmSy
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
+import { trackSandbox } from './helpers/sandbox.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -36,7 +37,7 @@ function check(cond, msg) {
 }
 
 // ── Sandbox ──────────────────────────────────────────────────────────────────
-const sandbox = mkdtempSync(join(ROOT, 'backfill-test-'));
+const sandbox = trackSandbox(mkdtempSync(join(ROOT, "backfill-test-")));
 mkdirSync(join(sandbox, 'data'), { recursive: true });
 mkdirSync(join(sandbox, 'reports'), { recursive: true });
 mkdirSync(join(sandbox, 'batch/tracker-additions'), { recursive: true });

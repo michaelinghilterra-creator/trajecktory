@@ -18,6 +18,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 // Sandbox the data dir BEFORE importing followups.mjs. computeBothQueue's
 // _channelsDone() reads a contact's REAL correspondence by id
@@ -29,7 +30,7 @@ import path from 'path';
 // TJK_DATA_DIR at an empty temp dir so every read is
 // hermetic (the pattern metrics.test.mjs already uses). The import is dynamic
 // because ESM hoists static imports above this assignment.
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-bothqueue-'));
+const sandbox = makeSandbox("bothqueue");
 process.env.TJK_DATA_DIR = sandbox;
 
 const { computeConnectQueue, computeEmailQueue, computeBothQueue } =

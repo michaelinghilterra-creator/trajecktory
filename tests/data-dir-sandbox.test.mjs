@@ -106,5 +106,39 @@ console.log('\n3. The guard can actually see a violation');
     'does not fire on templates, VERSION, imports, DATA_DIR paths, or cwd', falsePositives);
 }
 
+console.log('\n4. Test sandboxes clean themselves up');
+{
+  // Every suite that touches the filesystem makes a temp dir per run. Eleven never
+  // removed theirs at all, and the rest called rmSync on the last line, which a
+  // failing assertion or an early process.exit() skips entirely. A failing run is
+  // when sandboxes are created most, so the cleanup was absent exactly when it
+  // mattered. Roughly 2,100 orphaned directories had accumulated before anyone
+  // looked, and three suites build theirs INSIDE the repo, where the leftovers are
+  // untracked directories in the working tree rather than litter in temp.
+  //
+  // tests/helpers/sandbox.mjs registers removal on process exit instead, covering
+  // the normal path, process.exit() and an uncaught throw. This guard keeps new
+  // suites on it, because the old pattern reviews as perfectly correct.
+  const testFiles = readdirSync(join(ROOT, 'tests')).filter((f) => f.endsWith('.test.mjs'));
+  const raw = [];
+  const mangled = [];
+  for (const f of testFiles) {
+    // This file names the forbidden shapes in order to detect them, the same
+    // reason section 1 skips its own owner.
+    if (f === 'data-dir-sandbox.test.mjs') continue;
+    const text = readFileSync(join(ROOT, 'tests', f), 'utf-8');
+    if (/mkdtempSync/.test(text) && !/makeSandbox|trackSandbox/.test(text)) {
+      raw.push(`tests/${f} calls mkdtempSync without the self-cleaning helper`);
+    }
+    // A bulk edit once rewrote `fs.mkdtempSync(...)` into `fs.makeSandbox(...)`,
+    // which is not a function and surfaces only when that one suite runs.
+    if (/[A-Za-z_$][\w$]*\.(?:makeSandbox|trackSandbox)\s*\(/.test(text)) {
+      mangled.push(`tests/${f} calls the helper as a property of something`);
+    }
+  }
+  check(raw.length === 0, 'every suite making a sandbox uses tests/helpers/sandbox.mjs', raw);
+  check(mangled.length === 0, 'the helper is called bare, never off an object', mangled);
+}
+
 console.log(`\n${failed === 0 ? '🟢' : '🔴'} data-dir-sandbox: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

@@ -14,11 +14,12 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 process.env.TJK_FAKE_LLM = '1';
 // Most draft handlers JSON.parse the model output, so the stub is a JSON object.
 process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({ subject: 'Stub subject', body: 'Stub body for the smoke test.' });
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-drafts-'));
+const sandbox = makeSandbox("drafts");
 process.env.TJK_DATA_DIR = sandbox;
 
 // Minimal target-talent.md so parseTargetTalentMd finds a contact (appendTTRows does

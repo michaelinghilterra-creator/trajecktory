@@ -22,6 +22,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
 import { parseTrackerLine } from '../lib/tracker.mjs';
+import { trackSandbox } from './helpers/sandbox.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -45,7 +46,7 @@ const HEADER = [
 // paths relative to their own location, so a copy inside the sandbox only ever
 // touches sandbox files.
 function runScript(script, rows, args = []) {
-  const sb = mkdtempSync(join(ROOT, 'tracker-writers-test-'));
+  const sb = trackSandbox(mkdtempSync(join(ROOT, "tracker-writers-test-")));
   mkdirSync(join(sb, 'data'), { recursive: true });
   mkdirSync(join(sb, 'lib'), { recursive: true });
   copyFileSync(join(ROOT, script), join(sb, script));

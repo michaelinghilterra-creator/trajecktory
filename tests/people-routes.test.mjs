@@ -2,8 +2,9 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
-const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'tjk-people-'));
+const sandbox = makeSandbox("people");
 process.env.TJK_DATA_DIR = sandbox;
 fs.writeFileSync(path.join(sandbox, 'target-talent.md'), '# Target Talent\n\n| # | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n| 1 | Acme | Smith | Jane |  | Recruiter |  |  |  |  |  | linkedin.com/in/jane-smith | Sent |  |  |  |\n', 'utf8');
 fs.writeFileSync(path.join(sandbox, 'referrals.md'), '# Referral tracker\n\n| # | Name | How | Where | Target | Status | Last Touch | Notes | LinkedIn | Email |\n|---|---|---|---|---|---|---|---|---|---|\n| 1 | Jane Smith | Friend | Acme |  | Not Asked |  |  | linkedin.com/in/jane-other |  |\n', 'utf8');

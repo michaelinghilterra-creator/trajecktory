@@ -17,6 +17,7 @@ import { buildTriageIndex, buildTrackedIdIndex, alreadyHandledByTriage, reconcil
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -121,7 +122,7 @@ check(!trackedIds.has('9999'), 'does not invent an id that is not present');
 // post-run reconcile (reconcileHandled ignored triage-results.tsv), which let
 // triage-scored rows re-surface every run. ─────────────────────────────────
 {
-  const dir = mkdtempSync(join(tmpdir(), 'tt-reconcile-'));
+  const dir = makeSandbox("tt-reconcile");
   try {
     const pipelinePath = join(dir, 'pipeline.md');
     const triagePath = join(dir, 'triage-results.tsv');
