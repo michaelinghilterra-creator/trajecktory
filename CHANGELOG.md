@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.35.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.34.0...v2.35.0) (2026-08-23)
+
+
+### Features
+
+* make the follow-up queue a worklist again ([#226](https://github.com/michaelinghilterra-creator/trajecktory/issues/226)) ([f31ec1d](https://github.com/michaelinghilterra-creator/trajecktory/commit/f31ec1da57c39fba6c30453246855c14b3d7073a))
+
 ## [2.34.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.33.1...v2.34.0) (2026-08-23)
 
 
