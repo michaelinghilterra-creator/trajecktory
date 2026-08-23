@@ -119,6 +119,12 @@ export const SECTIONS = [
 export const BATCH = [
   { key: 'batch_plan', envKey: 'TJK_EVAL_BATCH',     label: 'Batch size (plan)', default: 5,  min: 1, max: 15 },
   { key: 'batch_key',  envKey: 'TJK_EVAL_BATCH_KEY', label: 'Batch size (key)',  default: 10, min: 1, max: 15 },
+  // Rolling cap: the MOST roles one Evaluate click scores in total before it stops
+  // on its own (it keeps rolling batch after batch until the queue drains OR this
+  // cap is hit). Distinct from batch size, which is how many PER batch. Read by
+  // rollMax() in routes/agent.mjs via currentBatch('roll_max'), so this is the one
+  // source of truth for its default/range. Set to 1 to effectively disable rolling.
+  { key: 'roll_max',   envKey: 'TJK_EVAL_ROLL_MAX',  label: 'Rolling cap (evals per run)', default: 60, min: 1, max: 200 },
 ];
 
 const sectionByKey = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));

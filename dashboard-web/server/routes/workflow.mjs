@@ -14,7 +14,12 @@ export const router = express.Router();
 router.get('/api/pipeline/pending', (_req, res) => {
   try {
     const text = readFileSync(join(ROOT_DIR, 'data/pipeline.md'), 'utf8');
-    const pending = (text.match(/^\s*-\s*\[ \]\s+https?:\/\//gm) || []).length;
+    // Count unchecked rows the eval can actually read: an http(s) posting OR a
+    // local:jds/ snapshot (resolve-jds writes these for SPA postings so they ARE
+    // evaluable). Counting http-only undercounted a queue of snapshotted roles as
+    // 0, which read as "nothing to evaluate" — and blocks the pre-eval spend gate.
+    // Keep this in sync with countPipelinePending() in routes/agent.mjs.
+    const pending = (text.match(/^\s*-\s*\[ \]\s+(?:https?:\/\/|local:)/gm) || []).length;
     res.json({ pending });
   } catch {
     res.json({ pending: 0 });

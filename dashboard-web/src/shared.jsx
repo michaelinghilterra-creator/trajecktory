@@ -403,6 +403,14 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [pendingCount, setPendingCount] = useState(null);   // URLs waiting to evaluate
   const [needsManual, setNeedsManual] = useState([]);       // URLs the eval couldn't read → paste
   const [evalSummary, setEvalSummary] = useState('');       // plain "what the last batch did" line
+  // Pre-eval spend gate (Slice 7.3). Holds { step, n, cost, hasKey, batch, pending }
+  // while the confirm is open; null when closed. The one paid, walk-away step
+  // (batch Evaluate) gets an "evaluate N for ~$X" confirm before it spends.
+  const [spendGate, setSpendGate] = useState(null);
+  // Advanced steps (Triage, Agent Scan, Expand Coverage, and the manual
+  // housekeeping) collapse under a disclosure (Slice 7.5). The default flow is
+  // just Scan → Liveness Gate → Evaluate; triage is optional, not the front door.
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const pollersRef = useRef({});
 
   // Agent Scan and Evaluate Pipeline spawn the bundled Claude CLI, which needs a
@@ -544,22 +552,26 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
       .catch(e => { setPasteBusy(false); setPasteMsg(e.message); });
   }
 
-  // Everyday flow: API Scan (free, fast) → Triage (Haiku ranks the queue) →
-  // housekeeping. The expensive/optional/redundant steps move to Advanced below.
+  // Default flow (Slice 7.5): the three daily scans (Expand Coverage → API Scan →
+  // Agent Scan) → Liveness Gate → Evaluate, identical on both rails (only who-pays
+  // differs). Evaluate rolls through the queue in batches, so it IS the filter —
+  // triage is no longer the front door and, with the manual housekeeping, lives
+  // under Advanced. The `section` field is metadata only; DEFAULT_ORDER /
+  // ADVANCED_ORDER below decide what shows where.
   const STEPS = [
-    { id: 'api-scan',  label: '1. API Scan',         hint: 'Greenhouse/Ashby/Lever',    type: 'auto'   },
-    { id: 'triage',    label: '2. Triage',           hint: 'Haiku ranks the queue',     type: 'agent', mode: 'triage',
-      command: '/trajecktory triage' },
-    { id: 'merge',     label: '3. Merge Tracker',    hint: 'TSVs → applications.md',     type: 'auto'   },
-    { id: 'verify',    label: '4. Verify Actionable',hint: 'Safety-net dead links',     type: 'auto'   },
-    { id: 'health',    label: '5. Health Check',     hint: 'Report parser drift',       type: 'auto'   },
+    { id: 'discover',  label: 'Expand Coverage',     hint: 'Register new companies',    type: 'auto'   },
+    { id: 'api-scan',  label: 'API Scan',            hint: 'Greenhouse/Ashby/Lever',    type: 'auto'   },
+    { id: 'cli-scan',  label: 'Agent Scan',          hint: 'Widen via Claude search',   type: 'agent', mode: 'scan',
+      command: '/trajecktory scan' },
+    { id: 'gate',      label: 'Liveness Gate',       hint: 'Drop dead URLs first',      type: 'auto'   },
+    { id: 'cli-eval',  label: 'Evaluate',            hint: 'Full reports, rolling',      type: 'agent', mode: 'pipeline',
+      command: '/trajecktory pipeline' },
     // ── Advanced (collapsed by default) ─────────────────────────────────────────
-    { id: 'discover',  label: 'Expand Coverage',     hint: 'Register companies (keys)',  type: 'auto',  section: 'advanced' },
-    { id: 'cli-scan',  label: 'Agent Scan',          hint: 'Widen via Claude search',    type: 'agent', mode: 'scan',
-      command: '/trajecktory scan', section: 'advanced' },
-    { id: 'gate',      label: 'Liveness Gate',       hint: 'Drop dead URLs',             type: 'auto',  section: 'advanced' },
-    { id: 'cli-eval',  label: 'Evaluate (Batch)',    hint: 'Sonnet full reports, top N', type: 'agent', mode: 'pipeline',
-      command: '/trajecktory pipeline', section: 'advanced' },
+    { id: 'triage',    label: 'Triage',              hint: 'Haiku pre-filter (optional)', type: 'agent', mode: 'triage',
+      command: '/trajecktory triage', section: 'advanced' },
+    { id: 'merge',     label: 'Merge Tracker',       hint: 'TSVs → applications.md',     type: 'auto',  section: 'advanced' },
+    { id: 'verify',    label: 'Verify Actionable',   hint: 'Safety-net dead links',      type: 'auto',  section: 'advanced' },
+    { id: 'health',    label: 'Health Check',        hint: 'Report parser drift',        type: 'auto',  section: 'advanced' },
   ];
 
   // Poll an agent job to completion, resilient to the server vanishing mid-run.
@@ -656,8 +668,60 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     await runAutoStepAsync('health');
   }
 
-  function runStep(step) {
+  // Open the pre-eval spend gate for the batch Evaluate step. Evaluate rolls
+  // through the queue in batches (7.1), so N is the queue capped by the rolling
+  // session cap (TJK_EVAL_ROLL_MAX) — the real walk-away amount, which is exactly
+  // what the guardrail should price. Per-eval cost comes from /api/setup/models
+  // (batch cost ÷ batch size); the queue depth and cap from /api/pipeline/pending
+  // and /api/agent/roll-config. If a fetch fails we still open the gate (cost
+  // unknown) rather than spending silently — no paid run starts without a look.
+  function openSpendGate(step) {
+    Promise.all([
+      fetch('/api/setup/models').then(r => r.json()),
+      fetch('/api/agent/roll-config').then(r => r.json()).catch(() => ({})),
+      // Fetch the queue depth FRESH here rather than trust the pendingCount state,
+      // which can lag a scan/reconcile and would make the gate say "nothing queued"
+      // when there is real work. Falls back to the state if the fetch fails.
+      fetch('/api/pipeline/pending').then(r => r.json()).then(d => d.pending).catch(() => null),
+    ])
+      .then(([m, roll, freshPending]) => {
+        const evalS = (m.sections || []).find(s => s.key === 'eval') || {};
+        // Cost math divides the batch estimate by the batch it was priced at
+        // (models units); the copy shows the real runtime batch (roll.batch,
+        // which honors the test cap). They match in normal operation.
+        const modelUnits = evalS.unitsPerRun || roll.batch || 5;
+        const displayBatch = roll.batch || evalS.unitsPerRun || 5;
+        const cap = roll.rollMax || displayBatch;
+        const pend = freshPending != null ? freshPending : (pendingCount != null ? pendingCount : cap);
+        const n = Math.max(0, Math.min(pend, cap));
+        const perEval = (evalS.costs && evalS.current && modelUnits) ? (evalS.costs[evalS.current] / modelUnits) : null;
+        const cost = perEval != null ? perEval * n : null;
+        setSpendGate({ step, n, cost, hasKey: !!m.hasKey, batch: displayBatch, cap, pending: pend });
+      })
+      .catch(() => {
+        const pend = pendingCount != null ? pendingCount : null;
+        setSpendGate({ step, n: pend, cost: null, hasKey, batch: null, cap: null, pending: pend });
+      });
+  }
+
+  // Stop the rolling Evaluate chain (7.1). Clears the server's rolling flag so no
+  // further batch starts; the batch in flight finishes on its own. Optimistically
+  // flag the job so the button flips to "Stopping…" without waiting for a poll.
+  function stopRolling() {
+    setJobs(j => ({ ...j, ['cli-eval']: { ...(j['cli-eval'] || {}), rollStopping: true } }));
+    window.tjkMutate('/api/agent/roll/stop', { method: 'POST' }).catch(() => {});
+  }
+
+  function runStep(step, opts = {}) {
     if (step.type === 'agent') {
+      // Pre-eval spend gate (7.3): the batch Evaluate step is the one paid,
+      // walk-away action, so confirm "N for ~$X" before it spends — unless the
+      // user opted out for this session. Deep Dive / paste carry their own single
+      // cost and are gated elsewhere; other agent steps (scan/triage) are free.
+      if (step.mode === 'pipeline' && !opts.bypassGate && sessionStorage.getItem('trj.skipSpendGate') !== '1') {
+        openSpendGate(step);
+        return;
+      }
       // Drives the user's local Claude Code in the background via /api/agent.
       setJobs(j => ({ ...j, [step.id]: { status: 'running', activity: 'Starting agent…' } }));
       // The batch Evaluate step routes through the API key (power) when one is set,
@@ -725,11 +789,15 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     return { ch: '○', color: 'var(--text-mute)' };
   }
 
-  // Agent steps share data/pipeline.md + the Claude quota — only one at a time.
+  // The step buttons stay single-flight per the (conservative) UI: while any agent
+  // step runs, the other step buttons are disabled.
   const anyAgentRunning = STEPS.some(s => s.type === 'agent' && jobs[s.id]?.status === 'running');
-  // Deep-dive + paste share the single-flight Claude agent, so disable them while
-  // any agent step or another deep eval is running.
-  const agentBusy2 = anyAgentRunning || pasteBusy || Object.values(deepJobs).some(d => d?.status === 'running');
+  // Slice 7.4: a pasted-JD deep-dive may run ALONGSIDE a rolling Evaluate (or a
+  // triage) — the server only makes `scan` exclusive and allows one deep at a
+  // time. So the paste box is gated on a running scan or another in-flight deep,
+  // NOT on the pipeline chain that used to lock everything out.
+  const scanRunning = jobs['cli-scan']?.status === 'running';
+  const deepBusy = scanRunning || pasteBusy || Object.values(deepJobs).some(d => d?.status === 'running');
   // Merge/Verify/Health consume Evaluate Pipeline's output. Keep them disabled
   // while Evaluate is still running so clicking ahead doesn't show "0 to review".
   const evalRunning = jobs['cli-eval']?.status === 'running';
@@ -737,17 +805,24 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // Cards the user hasn't dismissed (and that haven't auto-cleared post-deep-dive).
   const visibleTriage = triageCards.filter(c => !dismissed.has(c.url));
 
-  // Two layouts: keyless users get the lean plan steps; key users get the full
-  // pipeline. Merge/Verify/Health are NOT listed for key users: a finished
-  // Evaluate batch auto-runs that housekeeping (runPostEvalChain), so showing
-  // them as separate manual steps was redundant. They still run — just not by hand.
-  const BASE_ORDER  = ['api-scan', 'triage', 'merge', 'verify', 'health'];
-  // API-key users skip Triage (a cheap Haiku pre-filter): their evals are cheap and
-  // the batch already takes best-fit-first, so they go straight scan -> evaluate,
-  // and the post-eval housekeeping runs automatically.
-  const POWER_ORDER = ['api-scan', 'cli-scan', 'gate', 'cli-eval', 'discover'];
+  // ONE flow, both rails (Slice 7.5): the three daily scans in the order they are
+  // run — Expand Coverage (register new companies) → API Scan (free ATS sweep) →
+  // Agent Scan (widen via Claude search) — then Liveness Gate → Evaluate. The
+  // three scans complement each other and run every session, so all three are
+  // front-and-centre; only who-pays/batch-size differ by rail (handled server-
+  // side). A finished Evaluate auto-runs Merge → Health (runPostEvalChain), so
+  // those stay out of the default list.
+  const DEFAULT_ORDER  = ['discover', 'api-scan', 'cli-scan', 'gate', 'cli-eval'];
+  // Triage is now an optional pre-filter (not the front door), and Merge/Verify/
+  // Health are the manual housekeeping the auto-chain normally runs — all behind
+  // an Advanced disclosure. Nothing is removed, just demoted from the default path.
+  const ADVANCED_ORDER = ['triage', 'merge', 'verify', 'health'];
   const stepById = Object.fromEntries(STEPS.map(s => [s.id, s]));
-  const visibleSteps = (hasKey ? POWER_ORDER : BASE_ORDER).map(id => stepById[id]).filter(Boolean);
+  const defaultSteps  = DEFAULT_ORDER.map(id => stepById[id]).filter(Boolean);
+  const advancedSteps = ADVANCED_ORDER.map(id => stepById[id]).filter(Boolean);
+  // Auto-reveal Advanced if one of its steps has a job (running/just-finished), so
+  // a triage or Agent Scan run is never hidden behind a collapsed section.
+  const advancedOpen = showAdvanced || advancedSteps.some(s => jobs[s.id]);
 
   // Re-attach on mount: after a reload (or a server restart) the sidebar starts
   // blank, so ask the server for any running/interrupted agent job and either
@@ -827,11 +902,11 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         )}
       </div>
 
-      <div className="workflow-steps">
-        {visibleSteps.map((step, idx) => {
-          // Number by position so both layouts read 1..N (the labels carry a baked-in
-          // number for the base flow that would otherwise skip in the promoted order).
-          const stepLabel = `${idx + 1}. ${step.label.replace(/^\d+\.\s*/, '')}`;
+      {(() => {
+        // One card renderer for both the default and Advanced lists (Slice 7.5).
+        // stepLabel is passed in — default steps are numbered by position, Advanced
+        // steps render bare — so the card body itself stays layout-agnostic.
+        const renderStep = (step, stepLabel) => {
           const job = jobs[step.id];
           const g = statusGlyph(job?.status);
           const isRunning = job?.status === 'running';
@@ -882,13 +957,56 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               {isAgent && isRunning && (() => {
                 const elapsedMs = job.startedAt ? Date.now() - job.startedAt : 0;
                 const fmt = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`; };
+                // ── Batch-aware Evaluate meter (7.2) ──
+                // The Evaluate step rolls through the queue in batches, so a
+                // per-batch "0 of 1" that resets each batch is confusing (it read
+                // as "1 total" when the queue held more). Show the WHOLE chain:
+                // evaluated-so-far across every batch, how many are still queued,
+                // batch number, running cost, and elapsed. The bar tracks progress
+                // through the known work (done / (done + queued)); if a scan adds
+                // roles mid-run the queue honestly grows rather than a bar lying.
+                if (step.id === 'cli-eval') {
+                  // rollTotal counts completed batches; add the current batch's
+                  // live count while running. (On the first batch rollTotal is
+                  // unset, so this is just the current count.)
+                  const chainDone = (job.rollTotal || 0) + (job.evaluationsDone || 0);
+                  // Remaining: the server's post-reconcile pending when present,
+                  // else the loaded count minus what the live batch has done.
+                  const remaining = (typeof job.rollPending === 'number')
+                    ? job.rollPending
+                    : (pendingCount != null ? Math.max(0, pendingCount - (job.evaluationsDone || 0)) : null);
+                  const known = remaining != null ? chainDone + remaining : null;
+                  const pct = (known && known > 0) ? Math.min(100, Math.round((chainDone / known) * 100)) : null;
+                  const costStr = (job.billedTo === 'api' && job.rollCost > 0)
+                    ? ` · ~$${job.rollCost < 0.01 ? '0.01' : job.rollCost.toFixed(2)}` : '';
+                  const stopping = job.rollStopping || job.rollStopped;
+                  return (
+                    <div className="workflow-summary" title={job.output || ''}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ flex: 1 }}>
+                          {chainDone} evaluated{remaining != null ? ` · ${remaining} queued` : ''} · batch {job.rollBatches || 1} · {fmt(elapsedMs)}{costStr}
+                        </span>
+                        <button disabled={stopping} onClick={stopRolling}
+                          title="Stop after the current batch finishes"
+                          style={{ background: 'none', border: '1px solid var(--orange, #ff8c42)', color: 'var(--orange, #ff8c42)', borderRadius: 4, padding: '1px 8px', fontSize: 10.5, cursor: stopping ? 'default' : 'pointer', opacity: stopping ? 0.6 : 1, flexShrink: 0 }}>
+                          {stopping ? 'Stopping…' : 'Stop'}
+                        </button>
+                      </div>
+                      {pct != null && (
+                        <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', transition: 'width .3s' }} />
+                        </div>
+                      )}
+                      <div style={{ marginTop: 3, color: 'var(--text-mute)', fontSize: 10.5 }}>
+                        {(job.activity || 'Working…')}{job.rollCap ? ` · cap ${job.rollCap}` : ''}
+                      </div>
+                    </div>
+                  );
+                }
+                // Deep eval: a single posting → fraction + bar + rough ETA.
                 const total = job.progressTotal;
-                // Clamp: the batch cap is a soft prompt instruction the agent can
-                // overshoot, so guard the rendered "X of N" (and bar width) from
-                // showing e.g. "11 of 10".
                 const rawDone = job.evaluationsDone || 0;
                 const done = total > 0 ? Math.min(rawDone, total) : rawDone;
-                // Evaluate has a known batch size → fraction + bar + rough ETA.
                 if (total > 0) {
                   const eta = (done > 0 && done < total) ? ` · ~${fmt((elapsedMs / done) * (total - done))} left` : '';
                   return (
@@ -907,6 +1025,22 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                   </div>
                 );
               })()}
+              {/* Terminal chain summary (7.2): once the chain ends, name why it
+                  stopped so a finished run is legible instead of a frozen bar. */}
+              {!isRunning && step.id === 'cli-eval' && job?.rollEndReason && typeof job.rollTotal === 'number' && (
+                <div className="workflow-summary" style={{ color: 'var(--text-mute)' }}>
+                  {job.rollTotal} evaluated across {job.rollBatches || 1} batch{(job.rollBatches || 1) === 1 ? '' : 'es'}
+                  {(job.billedTo === 'api' && job.rollCost > 0) ? ` · ~$${job.rollCost.toFixed(2)}` : ''}
+                  {' · '}
+                  {job.rollEndReason === 'drained' ? 'queue cleared'
+                    : job.rollEndReason === 'capped' ? `hit the session cap (${job.rollCap})`
+                    : job.rollEndReason === 'stopped' ? 'stopped by you'
+                    : job.rollEndReason === 'stall' ? 'stopped early — a batch evaluated nothing new'
+                    : job.rollEndReason === 'error' ? 'stopped on an error'
+                    : job.rollEndReason}
+                  {typeof job.rollPending === 'number' && job.rollPending > 0 ? ` · ${job.rollPending} still queued` : ''}
+                </div>
+              )}
               {job?.summary && !(isAgent && isRunning) && (
                 <div className="workflow-summary" title={job.output || ''}>{job.summary}</div>
               )}
@@ -924,8 +1058,25 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
             </div>
           );
           return card;
-        })}
-      </div>
+        };
+        return (
+          <>
+            <div className="workflow-steps">
+              {defaultSteps.map((step, idx) => renderStep(step, `${idx + 1}. ${step.label.replace(/^\d+\.\s*/, '')}`))}
+            </div>
+            <button type="button" onClick={() => setShowAdvanced(v => !v)}
+              title="Optional steps: Triage, Agent Scan, Expand Coverage, and manual housekeeping"
+              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderTop: '1px solid var(--border)', color: 'var(--text-mute)', fontSize: 11, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 9 }}>{advancedOpen ? '▾' : '▸'}</span> Advanced
+            </button>
+            {advancedOpen && (
+              <div className="workflow-steps">
+                {advancedSteps.map(step => renderStep(step, step.label.replace(/^\d+\.\s*/, '')))}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {/* The triage PRE-FILTER card list used to render here. It was removed: the
           same ranked postings already appear as rows in Pipeline → Active/All
@@ -969,12 +1120,66 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 6 }}>PASTE A JD</div>
         <textarea value={pasteVal} onChange={e => setPasteVal(e.target.value)} aria-label="Paste a job URL or JD text" placeholder="Paste a job URL or the full JD text…"
           style={{ width: '100%', height: 52, fontSize: 11, color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 6, padding: 6, background: 'var(--panel-2)', fontFamily: 'var(--mono)', resize: 'vertical', boxSizing: 'border-box' }} />
-        <button onClick={submitPaste} disabled={pasteBusy || agentBusy2 || !pasteVal.trim()}
-          style={{ width: '100%', marginTop: 6, background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 'not-allowed' : 'pointer', opacity: (pasteBusy || agentBusy2 || !pasteVal.trim()) ? 0.5 : 1 }}>
+        <button onClick={submitPaste} disabled={deepBusy || !pasteVal.trim()}
+          style={{ width: '100%', marginTop: 6, background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: (deepBusy || !pasteVal.trim()) ? 'not-allowed' : 'pointer', opacity: (deepBusy || !pasteVal.trim()) ? 0.5 : 1 }}>
           {pasteBusy ? 'Evaluating…' : 'Evaluate (Sonnet) ⧉'}
         </button>
         <div style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.4 }}>{pasteMsg || 'Self-sourced → full deep eval, skips triage.'}</div>
       </div>
+
+      {/* Pre-eval spend gate (7.3). The one paid, walk-away step confirms before it
+          spends. Cost is shown only on the API-key rail (real per-token charge); on
+          the plan rail it says plainly there is no charge. "Don't ask again" sets a
+          sessionStorage flag so a heavy day isn't nagged every batch. */}
+      {spendGate && (
+        <div role="dialog" aria-modal="true" aria-label="Confirm evaluation spend"
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+          onClick={() => setSpendGate(null)}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 'var(--r-card)', padding: 18, width: 340, maxWidth: '90vw', fontSize: 13, lineHeight: 1.5 }}>
+            <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Evaluate now?</div>
+            {spendGate.n === 0 ? (
+              <div style={{ color: 'var(--text-dim)' }}>Nothing is queued to evaluate right now. Scan or paste a JD first.</div>
+            ) : spendGate.hasKey ? (
+              <div style={{ color: 'var(--text-dim)' }}>
+                Up to <b style={{ color: 'var(--text)' }}>{spendGate.n}</b> role{spendGate.n === 1 ? '' : 's'} will be evaluated
+                {spendGate.cost != null ? <>, about <b style={{ color: 'var(--text)' }}>${spendGate.cost < 0.01 ? '0.01' : spendGate.cost.toFixed(2)}</b></> : null} on your API key.
+                <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--text-mute)' }}>
+                  {spendGate.batch ? <>Runs in batches of {spendGate.batch}, rolling through the queue until it drains or you press Stop. </> : null}
+                  This is a local estimate from token counts, not your invoice. Set your real ceiling in your Anthropic console.
+                </div>
+              </div>
+            ) : (
+              <div style={{ color: 'var(--text-dim)' }}>
+                Up to <b style={{ color: 'var(--text)' }}>{spendGate.n}</b> role{spendGate.n === 1 ? '' : 's'} will be evaluated on your Claude plan.
+                <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--text-mute)' }}>
+                  {spendGate.batch ? <>Runs in batches of {spendGate.batch}, rolling through the queue until it drains or you press Stop. </> : null}
+                  No API charge — this runs on your subscription.
+                </div>
+              </div>
+            )}
+            {spendGate.n !== 0 && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 11.5, color: 'var(--text-mute)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!spendGate.dontAsk}
+                  onChange={e => setSpendGate(s => ({ ...s, dontAsk: e.target.checked }))} />
+                Don't ask again this session
+              </label>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button className="btn ghost sm" onClick={() => setSpendGate(null)}>Cancel</button>
+              {spendGate.n !== 0 && (
+                <button className="btn sm" style={{ background: 'var(--accent)', color: '#0a0a0c', border: '1px solid var(--accent)' }}
+                  onClick={() => {
+                    if (spendGate.dontAsk) { try { sessionStorage.setItem('trj.skipSpendGate', '1'); } catch {} }
+                    const step = spendGate.step;
+                    setSpendGate(null);
+                    runStep(step, { bypassGate: true });
+                  }}>Evaluate</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

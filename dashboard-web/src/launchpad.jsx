@@ -626,9 +626,11 @@ function ModelsCostPanel() {
         </div>
       )}
 
-      {/* Batch-size knobs */}
+      {/* Evaluate has TWO distinct throughput knobs that get confused — batch size
+          (how many per pass) and the rolling cap (how many total per click). Label
+          and explain each separately, with a worked example. */}
       <div style={{ display: 'flex', gap: 16, marginTop: 4, marginBottom: 6 }}>
-        {state.batch.map(b => (
+        {state.batch.filter(b => b.key !== 'roll_max').map(b => (
           <div key={b.key} className="field" style={{ flex: 1 }}>
             <label>{b.label}</label>
             <input className="inp" type="number" min={b.min} max={b.max} value={b.current} disabled={busy}
@@ -636,8 +638,24 @@ function ModelsCostPanel() {
           </div>
         ))}
       </div>
+      <div style={{ fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5, marginBottom: 12 }}>
+        <b style={{ color: 'var(--text-dim)' }}>Batch size</b> — how many roles Evaluate scores in one pass before it pauses to update the queue. Bigger clears the backlog faster but spends more before you can Stop. (The key path stays higher; it has more headroom than the plan.)
+      </div>
+
+      {/* Rolling cap — its own field so it never reads as a third "batch size". */}
+      {state.batch.filter(b => b.key === 'roll_max').map(b => (
+        <div key={b.key} className="field" style={{ marginBottom: 6, maxWidth: 240 }}>
+          <label>{b.label}</label>
+          <input className="inp" type="number" min={b.min} max={b.max} value={b.current} disabled={busy}
+            onChange={e => save(b.key, e.target.value)} />
+        </div>
+      ))}
       <div style={{ fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5, marginBottom: 14 }}>
-        Batch size is the Evaluate throughput/cost trade: fewer per run costs less but clears the backlog slower. The API-key path stays higher so it does more than the plan alone.
+        <b style={{ color: 'var(--text-dim)' }}>Rolling cap</b> — the most roles ONE Evaluate click scores in total. Evaluate keeps rolling batch after batch until the queue empties or it reaches this cap, then stops — so a walk-away run can never run further than you set.
+        <div style={{ marginTop: 5, paddingLeft: 10, borderLeft: '2px solid var(--border)' }}>
+          <b style={{ color: 'var(--text-dim)' }}>Example</b> — batch size 5, rolling cap 20, 50 roles queued: Evaluate scores 5 at a time, rolls through 4 batches, and stops at 20. Click Evaluate again for the next 20.<br />
+          If only 12 are queued, it scores all 12 and stops (the queue emptied first). The spend confirm always shows the real total before it starts.
+        </div>
       </div>
 
       {/* Per-day totals — cost + machine time rolled up by day, the numbers the

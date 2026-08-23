@@ -11,7 +11,7 @@ import { parsePortalAdditions, mergePortalAdditions, START_MARKER as PORTAL_STAR
 import { scanDiscoveryStalled } from '../../../lib/scan-stall.mjs';
 import { logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
-import { resolveModelId } from '../lib/pricing.mjs';
+import { resolveModelId, currentBatch } from '../lib/pricing.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
 import { record as recordActivation } from '../lib/activation.mjs';
 import { issueJd } from '../../../next-jd.mjs';
@@ -28,6 +28,36 @@ export const router = express.Router();
 // the Playwright liveness gate as a node step in THIS process first.
 
 const agentJobs = new Map();
+
+// ── Admission control (Slice 7.4) ─────────────────────────────────────────────
+// The old lock was global single-flight: ANY running agent blocked every other,
+// so a long rolling Evaluate locked the user out for its whole duration. Its real
+// job is narrower — keep two operations from writing data/pipeline.md at once.
+//
+// Parent-side reconciles (reconcilePipelineQueue / markDone) are SYNCHRONOUS, so
+// the event loop serializes them: two agent runs can never interleave a
+// pipeline.md write, no matter how their spawns overlap. The ONE writer that CAN
+// race a parent write is `scan` (scan.mjs appends from a CHILD process). So the
+// safe rule is: `scan` is fully exclusive; the other modes are single-flight per
+// mode but may overlap each other — a deep-dive or triage can run alongside a
+// rolling Evaluate. `activeAgents` tracks in-flight modes; it is deliberately
+// separate from job.status, which blips to 'done' between rolling batches and
+// would otherwise read as "nothing running" mid-chain.
+const activeAgents = new Set();
+function admitAgent(mode) {
+  if (activeAgents.has('scan')) {
+    return 'A scan is running (it updates the job queue). Wait for it to finish.';
+  }
+  if (mode === 'scan' && activeAgents.size) {
+    return 'Another run is in progress; a scan needs exclusive access to the queue. Wait for it to finish.';
+  }
+  if (activeAgents.has(mode)) {
+    return mode === 'pipeline'
+      ? 'An evaluation run is already going. Wait for it, or press Stop first.'
+      : `A ${mode} run is already in progress. Wait for it to finish.`;
+  }
+  return null;   // may start (possibly alongside a pipeline chain)
+}
 
 // ── Restart resilience ────────────────────────────────────────────────────────
 // agentJobs lives only in memory, and each run's `claude -p` worker is a child of
@@ -138,7 +168,11 @@ function evalBatchSize(power) {
 function countPipelinePending() {
   try {
     const txt = fs.readFileSync(path.join(ROOT_DIR, 'data/pipeline.md'), 'utf8');
-    const m = txt.match(/^\s*-\s*\[ \]/gm);
+    // Only rows the eval can actually read: an http(s) posting or a local:jds/
+    // snapshot. A bare "- [ ]" with garbage (a broken $file url) is not evaluable
+    // and must not inflate the meter denominator or keep a rolling chain alive.
+    // Keep in sync with /api/pipeline/pending in routes/workflow.mjs.
+    const m = txt.match(/^\s*-\s*\[ \]\s+(?:https?:\/\/|local:)/gm);
     return m ? m.length : 0;
   } catch { return null; }
 }
@@ -153,6 +187,151 @@ function pipelineEvalTotal(power) {
   const cap = evalBatchSize(power);
   const pending = countPipelinePending();
   return pending === null ? cap : Math.min(cap, pending);
+}
+
+// ── Rolling Evaluate (Slice 7.1) ──────────────────────────────────────────────
+// One click, then walk away: after a clean pipeline batch that still leaves
+// pending work, the SAME job auto-continues into the next batch until the queue
+// drains, a session cap is reached, or Stop is pressed. The chain is sequential
+// (one batch at a time), so it lives inside the existing single-flight lock and
+// needs no lock rework — the job simply stays 'running' across every batch.
+// TJK_EVAL_ROLL_MAX bounds total evaluations per chain (the hard cap that keeps a
+// bug from over-running); set it to 1 to effectively disable rolling (one batch).
+function rollMax() {
+  // Single source of truth: the 'roll_max' knob in pricing.mjs (default 60, range
+  // clamped there), which the Setup → Models & cost slider writes to TJK_EVAL_ROLL_MAX.
+  return currentBatch('roll_max');
+}
+// Stop control: the roll/stop endpoint sets this; rollPipeline checks it before
+// starting each next batch (it cannot interrupt a batch already in flight). Reset
+// at the start of every new pipeline chain.
+let rollingStop = false;
+
+// Self-heal the pending queue after a batch: check off any pipeline row already
+// evaluated, dismissed, staged, deferred to needs-manual, or triage-scored, so
+// the next batch sees real remaining work instead of re-evaluating the same
+// top-of-queue rows. Both passes are best-effort and idempotent; a reconcile
+// failure never breaks a run. Called between rolling batches AND once in the
+// post-run block, so it is the single reconcile implementation for this route.
+function reconcilePipelineQueue() {
+  try {
+    reconcileHandled(path.join(DATA_DIR, 'pipeline.md'), {
+      appsPath: APPS_MD,
+      dismissedPath: path.join(DATA_DIR, 'triage-dismissed.tsv'),
+      additionsDir: path.join(ROOT_DIR, 'batch/tracker-additions'),
+      needsManualPath: path.join(DATA_DIR, 'needs-manual-jd.tsv'),
+      rootDir: ROOT_DIR,
+      apply: true,
+    });
+  } catch { /* never break a run on reconcile */ }
+  try {
+    reconcileTriageResults(path.join(DATA_DIR, 'pipeline.md'), {
+      triageResultsPath: path.join(DATA_DIR, 'triage-results.tsv'),
+      appsPath: APPS_MD,
+      apply: true,
+    });
+  } catch { /* never break a run on reconcile */ }
+}
+
+function clampedDone(jobId) {
+  return (agentJobs.get(jobId) || {}).evaluationsDone || 0;
+}
+function batchCost(jobId) {
+  const c = (agentJobs.get(jobId) || {}).cost;
+  return Number.isFinite(c) ? c : 0;
+}
+
+// ── Bounded per-batch retry (Slice 7.6) ───────────────────────────────────────
+// How many times a single transiently-failed batch may be retried before the
+// chain gives up. Default 1; TJK_EVAL_BATCH_RETRIES overrides. 0 disables.
+function batchRetries() {
+  const n = parseInt(process.env.TJK_EVAL_BATCH_RETRIES, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 1;
+}
+// A failed batch is worth retrying only if the failure looks transient (a CLI
+// rate-limit/overload blip, a dropped process). A deterministic failure — an
+// untrusted workspace, a missing CLI, a hard billing/credit error — will fail
+// identically on retry and must NOT be retried (it would burn quota re-hitting a
+// wall). Fail toward NOT retrying when the error clearly names one of those.
+function batchRetryable(jobId, res) {
+  if (res && res.ok) return false;
+  const job = agentJobs.get(jobId) || {};
+  if (job.needsTrust) return false;                                   // trust is deterministic
+  const e = String((res && res.error) || '').toLowerCase();
+  if (/not found|not recognized|command not found|on your path/.test(e)) return false;  // CLI missing
+  if (/credit|billing|payment|insufficient|quota exceeded|invalid api key|authentication/.test(e)) return false; // hard account error
+  // A reached usage/spend cap is a wall until it resets — retrying just re-hits it.
+  if (/usage limit|reached your|regain access/.test(e)) return false;
+  return true;                                                        // otherwise treat as transient
+}
+// Retry ONE batch after a transient failure. Reconciles BEFORE each retry so the
+// retry resumes from what the failed attempt already finished (checkpoint) rather
+// than re-evaluating and duplicating it — the durable `- [ ]` state is the
+// checkpoint. Stops early if reconcile shows the queue already drained (the batch
+// wrote everything, then hiccuped). Returns the latest result.
+async function retryBatch(jobId, target, res) {
+  const max = batchRetries();
+  // !rollingStop: a batch killed by Stop failed on purpose — never retry it.
+  for (let attempt = 1; !res.ok && !rollingStop && attempt <= max && batchRetryable(jobId, res); attempt++) {
+    reconcilePipelineQueue();                             // checkpoint what the failed attempt finished
+    if (!(countPipelinePending() > 0)) break;             // nothing left → let the caller see it drained
+    const j = agentJobs.get(jobId) || {};
+    agentJobs.set(jobId, { ...j, status: 'running', activity: `Batch failed — retrying (${attempt}/${max})…`, error: undefined, rollRetries: (j.rollRetries || 0) + 1 });
+    res = await runClaudeAgent(jobId, 'pipeline', target);
+  }
+  return res;
+}
+
+// Continue a pipeline run into further batches within the same job. `firstRes` is
+// the result of the first (already-run) batch; returns the LAST batch's result so
+// the caller's post-run block reports on the whole chain. Terminates on: a batch
+// error, Stop, an empty/unreadable queue, the session cap, or the queue failing
+// to shrink between batches (a stall guard so unreadable rows cannot loop forever).
+// Threads whole-chain telemetry onto the job (7.2): rollTotal (evals across all
+// batches), rollCost (summed CLI cost), rollPending (rows still queued after the
+// last reconcile), and rollEndReason so the meter shows chain progress and names
+// why the chain stopped rather than resetting per batch or freezing on a bar.
+async function rollPipeline(jobId, target, firstRes) {
+  const cap = rollMax();
+  // 7.6: give even the first batch a bounded retry on a transient failure, so a
+  // one-off CLI blip doesn't lose the whole run before the chain starts.
+  let res = await retryBatch(jobId, target, firstRes);
+  let rollTotal = clampedDone(jobId);
+  let rollCost = batchCost(jobId);
+  let batches = 1;
+  const mark = (patch) => { const j = agentJobs.get(jobId) || {}; agentJobs.set(jobId, { ...j, ...patch }); };
+  mark({ rolling: true, rollCap: cap, rollBatches: batches, rollTotal, rollCost });
+
+  let lastPending = null;
+  let endReason = 'drained';
+  while (true) {
+    if (rollingStop) { endReason = 'stopped'; mark({ rollStopped: true }); break; }
+    // Reconcile FIRST, then judge. If the queue drained we are done even if the
+    // batch's exit was an error (it wrote everything, then hiccuped) — checkpoint
+    // over exit code. Only a failure that ALSO left work behind stops the chain.
+    reconcilePipelineQueue();
+    const pending = countPipelinePending();
+    mark({ rollPending: pending == null ? undefined : pending });
+    if (pending === null || pending <= 0) { endReason = 'drained'; break; }
+    if (!res.ok) { endReason = 'error'; break; }         // failed AND work remains → stop (retries already spent)
+    if (rollTotal >= cap) { endReason = 'capped'; mark({ rollCapped: true }); break; }
+    if (lastPending !== null && pending >= lastPending) { endReason = 'stall'; break; }  // last batch advanced nothing
+    lastPending = pending;
+
+    // Next batch, same job. Set status back to 'running' (the batch that just
+    // closed flipped it to 'done') and reset the per-batch meter. This runs with
+    // NO await before the next spawn, so the single-flight window never opens.
+    batches += 1;
+    const power = effectivePower(target, 'pipeline');
+    mark({ status: 'running', rollBatches: batches, progressTotal: pipelineEvalTotal(power), evaluationsDone: 0, activity: `Rolling batch ${batches}…`, error: undefined, summary: undefined });
+    res = await runClaudeAgent(jobId, 'pipeline', target);
+    res = await retryBatch(jobId, target, res);          // 7.6: bounded retry on a transient batch failure
+    rollTotal += clampedDone(jobId);
+    rollCost += batchCost(jobId);
+    mark({ rollTotal, rollCost });
+  }
+  mark({ rolling: false, rollEndReason: endReason });
+  return res;
 }
 
 // Reserve report numbers SERVER-SIDE and hand them to the eval agent in the
@@ -367,6 +546,33 @@ function completedEvalId(block) {
   return null;
 }
 
+// The live `claude -p` child per running job, so Stop can actually TERMINATE the
+// in-flight eval instead of only refusing the next batch. Set at spawn, cleared
+// when the child settles. One entry per jobId (a rolling chain reuses its jobId,
+// so this always points at the current batch's child).
+const agentChildren = new Map();
+
+// Kill a spawned agent child. On Windows the child is the cmd shell and `claude`
+// runs as a GRANDCHILD, so a plain child.kill() leaves the real eval orphaned and
+// still billing (exactly the orphan we saw when the server died mid-eval). Kill
+// the whole tree forcefully. Best-effort: never throws into a caller.
+function killAgentChild(jobId) {
+  const child = agentChildren.get(jobId);
+  if (!child || child.pid == null) return false;
+  try {
+    if (process.platform === 'win32') {
+      // Windows: the child is the cmd shell and `claude` is a grandchild, so kill
+      // the whole tree (/T) forcefully (/F) or the real eval is orphaned.
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
+    } else {
+      // POSIX: spawned without a shell, so the child IS `claude` — a direct kill
+      // terminates it (no wrapper process to leave behind).
+      child.kill('SIGTERM');
+    }
+    return true;
+  } catch { return false; }
+}
+
 // Spawn `claude -p "/trajecktory <mode>"` and stream-parse progress into the
 // job record. Resolves { ok, result, error } when the child closes and sets the
 // job's final status itself.
@@ -519,6 +725,8 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     } catch (e) {
       return fail(claudeErrorMessage(e));
     }
+    // Track this child so a Stop can terminate it mid-batch (cleared on settle).
+    agentChildren.set(jobId, child);
     // `claude -p` has the prompt as an argument and needs no piped stdin. Close
     // the child's stdin so the CLI doesn't sit waiting on it ("no stdin data in
     // 3 seconds" warning the user saw on Agent Scan).
@@ -532,7 +740,7 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     // by their shared leading number). Its size drives the "X of N" meter.
     const doneEvalIds = new Set();
 
-    child.on('error', (e) => { if (!settled) { settled = true; fail(claudeErrorMessage(e)); } });
+    child.on('error', (e) => { if (!settled) { settled = true; agentChildren.delete(jobId); fail(claudeErrorMessage(e)); } });
 
     child.stdout && child.stdout.on('data', (chunk) => {
       buf += chunk.toString();
@@ -633,6 +841,7 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     child.on('close', (code) => {
       if (settled) return;
       settled = true;
+      agentChildren.delete(jobId);
       const job = agentJobs.get(jobId) || {};
       let closeErr = null;
       if (code && code !== 0 && !resultText) {
@@ -643,15 +852,20 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
       }
       const err = isError ? (resultText || 'Agent reported an error') : closeErr;
       const ok = !err;
+      // A pipeline batch that failed while Stop is active was killed on purpose, so
+      // present it as a clean stop rather than a scary error and drop its exit
+      // message. `resolve` below still passes ok:false so rollPipeline ends the
+      // chain (reason 'stopped'); this only affects what the user sees.
+      const stopKilled = mode === 'pipeline' && rollingStop && !ok;
       // A pressure blip only becomes a user-facing warning when the run actually
-      // stopped early (errored). On a clean finish it stays a silent diagnostic —
-      // the run completed, so "the run stopped early" would be a lie.
-      const warning = (!ok && job.sawPressure) ? PRESSURE_WARNING : job.warning;
+      // stopped early (errored). On a clean finish — or an intentional stop — it
+      // stays a silent diagnostic; "the run stopped early" would be a lie.
+      const warning = (!ok && !stopKilled && job.sawPressure) ? PRESSURE_WARNING : job.warning;
       agentJobs.set(jobId, {
         ...job,
-        status: ok ? 'done' : 'error',
-        summary: ok ? (resultText ? agentTail(resultText) : (job.activity || 'Agent finished')) : undefined,
-        error: ok ? undefined : err,
+        status: ok || stopKilled ? 'done' : 'error',
+        summary: ok ? (resultText ? agentTail(resultText) : (job.activity || 'Agent finished')) : (stopKilled ? 'Stopped.' : undefined),
+        error: ok || stopKilled ? undefined : err,
         warning,
         finishedAt: Date.now(),
       });
@@ -744,7 +958,13 @@ async function runAgent(jobId, mode, target) {
     progressTotal: mode === 'pipeline' ? pipelineEvalTotal(effectivePower(target, mode)) : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
   persistJobs();   // capture the running record immediately so a restart can mark it interrupted
   const before = probeArtifacts(mode);
-  const res = await runClaudeAgent(jobId, mode, target);
+  // Rolling Evaluate (7.1): reset the Stop flag for this new chain, run the first
+  // batch, then auto-continue in the same job until the queue drains / the cap is
+  // hit / Stop. res becomes the LAST batch's result so the post-run block reports
+  // on the whole chain. Non-pipeline modes run exactly one batch as before.
+  if (mode === 'pipeline') rollingStop = false;
+  let res = await runClaudeAgent(jobId, mode, target);
+  if (mode === 'pipeline') res = await rollPipeline(jobId, target, res);
 
   // TRIAGE: the agent never touches triage-results.tsv itself (see
   // lib/triage-results.mjs's file header for why). It emits its scores as a
@@ -842,35 +1062,12 @@ async function runAgent(jobId, mode, target) {
       : grew;
 
   // SELF-HEALING (the permanent fix for the recurring "queue clogged" bug): after
-  // EVERY run, check off any pipeline row that is already evaluated or dismissed.
-  // This does not depend on any single writer (the LLM's in-prompt check-off,
-  // merge-tracker, the dismiss route) having worked — whichever one misfired, the
-  // queue self-corrects here, so handled rows can no longer pile up between manual
-  // catches. Best-effort and idempotent; a reconcile failure never fails the run.
-  try {
-    reconcileHandled(path.join(DATA_DIR, 'pipeline.md'), {
-      appsPath: APPS_MD,
-      dismissedPath: path.join(DATA_DIR, 'triage-dismissed.tsv'),
-      additionsDir: path.join(ROOT_DIR, 'batch/tracker-additions'),
-      needsManualPath: path.join(DATA_DIR, 'needs-manual-jd.tsv'),
-      rootDir: ROOT_DIR,
-      apply: true,
-    });
-  } catch { /* never break a run on reconcile */ }
-
-  // reconcileHandled (above) covers applications.md / dismissed / staged, but NOT
-  // triage-results.tsv. A row that's been triage-SCORED but not yet fully
-  // evaluated would otherwise stay "- [ ]" and re-surface (and get re-verified as
-  // a duplicate) on every subsequent triage run — the exact clog that caused the
-  // repeated "wrote nothing, all already in triage-results.tsv" incidents. This
-  // second pass checks those off too. Best-effort and idempotent.
-  try {
-    reconcileTriageResults(path.join(DATA_DIR, 'pipeline.md'), {
-      triageResultsPath: path.join(DATA_DIR, 'triage-results.tsv'),
-      appsPath: APPS_MD,
-      apply: true,
-    });
-  } catch { /* never break a run on reconcile */ }
+  // EVERY run, check off any pipeline row that is already evaluated, dismissed,
+  // staged, deferred, or triage-scored. This does not depend on any single writer
+  // (the LLM's in-prompt check-off, merge-tracker, the dismiss route) having
+  // worked — whichever one misfired, the queue self-corrects here. Same helper the
+  // rolling chain calls between batches, so there is one reconcile implementation.
+  reconcilePipelineQueue();
 
   // Tier-B text hygiene: evaluation reports and interview prep are authored by the
   // `claude` agent SUBPROCESS, so that text never passed through the server's
@@ -897,7 +1094,9 @@ async function runAgent(jobId, mode, target) {
   if (mode === 'scan' || mode === 'pipeline' || mode === 'deep') {
     const job = agentJobs.get(jobId) || {};
     recordActivation(mode === 'scan' ? 'scan_finished' : 'evaluate_finished', {
-      count: job.evaluationsDone,
+      // For a rolling chain the meaningful count is the whole-chain total, not the
+      // last batch's per-batch count.
+      count: job.rollTotal != null ? job.rollTotal : job.evaluationsDone,
       detail: !res.ok ? 'error' : (wroteSomething ? 'ok' : 'empty'),
     });
   }
@@ -998,12 +1197,12 @@ router.post('/api/agent/:mode', (req, res) => {
   if (!['scan', 'pipeline', 'triage', 'deep'].includes(mode)) {
     return res.status(400).json({ error: `Unknown agent mode: ${mode}` });
   }
-  // Single-flight: agent runs share data/pipeline.md and the Pro quota
-  for (const job of agentJobs.values()) {
-    if (job.status === 'running') {
-      return res.status(409).json({ error: 'An agent step is already running. Wait for it to finish.' });
-    }
-  }
+  // Admission control (see admitAgent): scan is exclusive; other modes are
+  // single-flight per mode but may overlap (e.g. a deep-dive during a rolling
+  // Evaluate). Kept BEFORE the deep-target parsing so a rejected run writes no
+  // jds/ file and reserves nothing.
+  const conflict = admitAgent(mode);
+  if (conflict) return res.status(409).json({ error: conflict });
   // Deep eval needs a target: a posting URL, or pasted JD text (persisted to
   // jds/ so the eval reads it as a local: path and the prompt stays one line).
   let target;
@@ -1057,11 +1256,49 @@ router.post('/api/agent/:mode', (req, res) => {
     target = { ...(target || {}), power, model: model || undefined };
   }
   const jobId = `agent-${mode}-${Date.now()}`;
+  // Mark the mode in-flight for admission control, and clear it when the WHOLE
+  // run settles (a rolling chain keeps 'pipeline' held across all its batches, so
+  // a second chain is refused for the whole duration even though job.status blips
+  // to 'done' between batches). Cleared in .finally so an error still releases it.
+  activeAgents.add(mode);
   const start = runAgent(jobId, mode, target);
-  Promise.resolve(start).catch((e) => {
-    agentJobs.set(jobId, { mode, status: 'error', error: (e && e.message) || 'Agent run failed', finishedAt: Date.now() });
-  });
+  Promise.resolve(start)
+    .catch((e) => {
+      agentJobs.set(jobId, { mode, status: 'error', error: (e && e.message) || 'Agent run failed', finishedAt: Date.now() });
+    })
+    .finally(() => { activeAgents.delete(mode); });
   res.json({ jobId });
+});
+
+// POST /api/agent/roll/stop — stop the rolling Evaluate chain after the current
+// batch. It cannot interrupt a batch already in flight (there is no safe way to
+// kill `claude -p` mid-eval here), so it clears the rolling flag and the chain
+// ends once the running batch closes. Idempotent: fine to call when nothing rolls.
+router.post('/api/agent/roll/stop', (req, res) => {
+  rollingStop = true;
+  // Hard-stop: terminate the in-flight eval child so Stop actually STOPS, instead
+  // of only refusing the next batch (the current batch could run for another
+  // minute or two). Killing the child fires its close handler → the batch settles
+  // as failed → retryBatch skips it (rollingStop) → rollPipeline ends the chain
+  // with reason 'stopped'. Scoped to pipeline runs (the rolling-Evaluate chain).
+  let killed = 0;
+  for (const [jobId, job] of agentJobs.entries()) {
+    if (job.mode === 'pipeline' && job.status === 'running') {
+      if (killAgentChild(jobId)) killed++;
+    }
+  }
+  res.json({ ok: true, stopping: true, killed });
+});
+
+// GET /api/agent/roll-config — the rolling cap and whether a chain is active now.
+// The spend gate reads rollMax to price the whole walk-away run (up to the cap),
+// not just one batch; the UI reads `active` to show a Stop control.
+router.get('/api/agent/roll-config', (req, res) => {
+  let active = false;
+  for (const job of agentJobs.values()) {
+    if (job.mode === 'pipeline' && job.status === 'running' && job.rolling) { active = true; break; }
+  }
+  res.json({ rollMax: rollMax(), batch: evalBatchSize(apiKeyActive()), active });
 });
 
 // GET /api/agent/status/:jobId — poll a headless agent job
@@ -1085,6 +1322,9 @@ router.get('/api/agent/active', (req, res) => {
       error: job.error, summary: job.summary, activity: job.activity,
       toolCount: job.toolCount, startedAt: job.startedAt,
       billedTo: job.billedTo, batch: job.batch,
+      rolling: job.rolling, rollTotal: job.rollTotal, rollBatches: job.rollBatches, rollCap: job.rollCap,
+      rollCost: job.rollCost, rollPending: job.rollPending, rollEndReason: job.rollEndReason, cost: job.cost,
+      rollRetries: job.rollRetries,
     });
   }
   out.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
@@ -1129,5 +1369,5 @@ router.get('/api/agent/cost-history', (req, res) => {
   res.json(out.slice(0, 20));
 });
 
-export { agentJobs };
+export { agentJobs, batchRetries, batchRetryable, activeAgents, admitAgent, agentChildren, killAgentChild };
 

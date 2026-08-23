@@ -2,11 +2,13 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { OUTPUT_DIR, ROOT_DIR } from '../config.mjs';
-import { parseApplicationsMd, patchRowInMd, rejectionTimingStats } from '../lib/applications.mjs';
+import { parseApplicationsMd, patchRowInMd, removeRowFromMd, rejectionTimingStats } from '../lib/applications.mjs';
 import { recordApplyDate } from '../lib/sidecars.mjs';
 import { pushObsidianNote } from '../lib/obsidian.mjs';
 import { ALL_STATUSES } from '../lib/statuses.mjs';
 import { mdToHtml, escapeHtml } from '../lib/html.mjs';
+import { isRequeueableDiscard } from '../../../lib/discard.mjs';
+import { canonicalUrl } from '../../../lib/identity.mjs';
 
 export const router = express.Router();
 
@@ -140,6 +142,57 @@ router.patch('/api/applications/:id', (req, res) => {
     }
 
     res.json(updated || { id, ...updates });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/applications/:id/requeue — put a near-threshold Discarded role back
+// in the eval queue (Slice 7.5). A noisy 2.9 just under the 3.0 auto-discard cut
+// should stay eligible for a re-run rather than hardening as a permanent reject.
+//
+// Mechanism: DELETE the tracker row (so it leaves the decided-index — otherwise
+// reconcileHandled would instantly re-check-off its pipeline row and merge-tracker
+// would dedup the fresh eval against the stale reject) and append its URL back to
+// data/pipeline.md as an unchecked "- [ ]" row. The next Evaluate re-runs it from
+// scratch. Only near-threshold Discards qualify; a decisive low score is refused.
+router.post('/api/applications/:id/requeue', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+    const company = typeof req.body?.company === 'string' ? req.body.company : undefined;
+
+    const rows = parseApplicationsMd();
+    const row = (company && rows.find(r => r.id === id && r.company === company)) || rows.find(r => r.id === id);
+    if (!row) return res.status(404).json({ error: `Row ${id} not found` });
+    if (!isRequeueableDiscard({ status: row.status, score: row.score })) {
+      return res.status(400).json({ error: 'Only a near-threshold Discarded role (score 2.5–2.9) can be re-queued.' });
+    }
+    if (!row.url) {
+      return res.status(400).json({ error: 'This role has no posting URL to re-evaluate.' });
+    }
+
+    // Remove from the tracker (un-decide it), then queue it. Order matters: if the
+    // append somehow fails we have still un-decided the row, which a later scan can
+    // re-add — the reverse (queued but still decided) would be silently suppressed.
+    const removed = removeRowFromMd(id, { company: row.company });
+    if (!removed) return res.status(404).json({ error: `Row ${id} not found` });
+
+    // Append an unchecked pipeline row unless the same posting is already queued.
+    const pipelinePath = path.join(ROOT_DIR, 'data/pipeline.md');
+    let text = '';
+    try { text = fs.readFileSync(pipelinePath, 'utf8'); } catch { text = ''; }
+    const canon = canonicalUrl(row.url);
+    const already = text.split('\n').some(line => {
+      const m = line.match(/^\s*-\s*\[ \]\s+(\S+)/);
+      return m && (m[1] === row.url || (canon && canonicalUrl(m[1]) === canon));
+    });
+    if (!already) {
+      const line = `- [ ] ${row.url} | ${row.company} | ${row.role}`;
+      const sep = text && !text.endsWith('\n') ? '\n' : '';
+      fs.writeFileSync(pipelinePath, `${text}${sep}${line}\n`, 'utf8');
+    }
+    res.json({ ok: true, requeued: true, url: row.url, alreadyQueued: already });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
