@@ -11,7 +11,7 @@ import { parsePortalAdditions, mergePortalAdditions, START_MARKER as PORTAL_STAR
 import { scanDiscoveryStalled } from '../../../lib/scan-stall.mjs';
 import { logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
-import { resolveModelId } from '../lib/pricing.mjs';
+import { resolveModelId, currentBatch } from '../lib/pricing.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
 import { record as recordActivation } from '../lib/activation.mjs';
 import { issueJd } from '../../../next-jd.mjs';
@@ -198,8 +198,9 @@ function pipelineEvalTotal(power) {
 // TJK_EVAL_ROLL_MAX bounds total evaluations per chain (the hard cap that keeps a
 // bug from over-running); set it to 1 to effectively disable rolling (one batch).
 function rollMax() {
-  const n = parseInt(process.env.TJK_EVAL_ROLL_MAX, 10);
-  return Number.isFinite(n) && n > 0 ? n : 60;
+  // Single source of truth: the 'roll_max' knob in pricing.mjs (default 60, range
+  // clamped there), which the Setup → Models & cost slider writes to TJK_EVAL_ROLL_MAX.
+  return currentBatch('roll_max');
 }
 // Stop control: the roll/stop endpoint sets this; rollPipeline checks it before
 // starting each next batch (it cannot interrupt a batch already in flight). Reset
