@@ -16,11 +16,14 @@
 
 ---
 
-> **Standing closing move, every round, non-negotiable.** With each interviewer, before you wrap,
-> ask some version of: "Before we finish, is there anything in my background that gives you pause,
-> or that you think the panel would want me to address?" People answer this honestly in conversation
-> far more often than they answer a post-rejection email. Whatever they say, log it as an objection.
-> This fires with every interviewer, on every round.
+> **Standing closing move, every round, non-negotiable.** Ask both, in this order, every round:
+> "Before we wrap, is there anything in my background that gives you pause, or that the hiring manager would want addressed?"
+> "If I don't move forward, what will the reason most likely be?"
+> The second asks for a prediction rather than a flaw, so even someone outside the decision often gives a different and more useful answer.
+> People answer both far more honestly in conversation than they ever answer a post-rejection email, and six conversations becomes six real data points on why rounds end.
+> Whatever they say is the objection to fix. Write both answers down the moment the call ends, along with who said them and whether that person decides. A soft "nothing gives me pause" from someone who is not the decision maker is missing data, not reassurance.
+>
+> **Standing rule, every round, non-negotiable.** Never volunteer the boundary of your capability. Answer what is asked. If a gap is raised, address it directly and reframe to the altitude you do operate at. Do not pre-empt it, and do not offer it as proof of self-awareness. A prepared concession does not read as honesty to a hiring manager who is still forming the profile; it reads as the specification for the person they should hire instead.
 
 ## §0 — 30-Second Pre-Panel Strip
 
@@ -197,10 +200,13 @@ The loop is evaluating:
 **For the panel coordinator / repeat HM contact:**
 - What's the timeline to a decision? And to a start date?
 - What would a strong offer signal look like coming out of this?
+- What is the hiring manager's name, how long have they been in the seat, and what do they optimize for?
+- A new hiring manager is still writing the profile. That is an opportunity to shape it and a risk of being measured against a profile that does not exist yet.
 
 **Direct read on fit (ask the coordinator or your repeat HM contact):**
-- "Is there anything from today's panels that gives the team pause, or that you'd want me to clarify before a decision?"
-- This surfaces the objection while you can still address it. Capture it in the debrief (§10) the same day.
+- "Before we wrap, is there anything in my background that gives you pause, or that the hiring manager would want addressed?"
+- "If I don't move forward, what will the reason most likely be?"
+- Ask both, in that order. The second asks for a prediction rather than a flaw, so it often gets a different answer.
 
 ---
 
@@ -231,7 +237,8 @@ The loop is evaluating:
 
 **Day after:**
 - [ ] Log full debrief in `data/applications.md` notes column for #{NNN}
-- [ ] Capture the debrief in the dashboard (it prompts on any interview-stage change): the objection you heard, what landed per panel, what you would change, and any question you were not prepared for. Saves to `data/app-notes.json` for #{NNN}.
+- [ ] Capture the debrief in the dashboard (it prompts on any interview-stage change): both closing answers, who answered and whether they decide, what landed per panel, what you would change, and any question you were not prepared for. Saves to `data/app-notes.json` for #{NNN}.
+- [ ] Record the hiring manager's name, how long they have been in the seat, and what they optimize for. If the coordinator did not know, record that too.
 - [ ] Update story-bank.md with any NEW stories you ended up telling, or refinements to existing ones
 - [ ] If references requested: brief each reference verbally before they're called — name the role, the company, the 1–2 angles to reinforce
 - [ ] Comp prep: write down your verbal-offer response + counteroffer framework BEFORE you're on a call where they share a number
