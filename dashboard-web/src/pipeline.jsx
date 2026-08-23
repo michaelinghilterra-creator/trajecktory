@@ -1162,6 +1162,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   // status event before this field existed recorded the day of the click, so the
   // timing analytics measured data entry rather than the job search.
   const [eventDate, setEventDate] = useStateP(localToday);
+  const [splitAssignment, setSplitAssignment] = useStateP(null);
 
   useEffectP(() => {
     setTab('overview'); setStarOpen(0); setCustomWhich('cv');
@@ -1170,7 +1171,16 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     setTodoDraft(''); setTodoDue(''); setTodoAdded(false);
     setContacts([]); setSelContact(null); setFindOpen(false);
     setEventDate(localToday());
+    setSplitAssignment(null);
   }, [app && app.id]);
+
+  useEffectP(() => {
+    if (!app) return;
+    fetch('/api/split-test')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setSplitAssignment(d && d.assignments ? d.assignments[String(app.id)] || null : null))
+      .catch(() => setSplitAssignment(null));
+  }, [app && app.id, app && app.status]);
 
   // Load this company's TA contacts when the drawer opens / switches roles.
   const loadContacts = () => {
@@ -1379,6 +1389,13 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
             <div className="row" style={{ gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
               <span className="mono dim" style={{ fontSize: 11 }}>#{String(app.id).padStart(3, '0')}</span>
               <window.StatusPill status={app.status} />
+              {splitAssignment && (
+                <span className="status-badge" style={{ color: m.color, borderColor: m.color, fontSize: 9.5, padding: '2px 8px' }}>
+                  {splitAssignment.arm === 'A'
+                    ? 'Split test, Arm A: work the full outreach sequence'
+                    : 'Split test, Arm B: no follow-up touches, deliberately'}
+                </span>
+              )}
               {app.legitimacy && <span className="legit-pill mono">✓ {app.legitimacy}</span>}
               {stale && <span className="legit-pill mono" style={{ color: 'var(--red)', borderColor: 'rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.12)' }}>stale · {sit}d</span>}
             </div>

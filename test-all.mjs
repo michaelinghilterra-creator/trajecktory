@@ -534,6 +534,8 @@ for (const suite of [
   'tests/security-review.test.mjs',
   'tests/v1-loader.test.mjs',
   'tests/weekly-review.test.mjs',
+  'tests/split-test.test.mjs',
+  'tests/source-mix.test.mjs',
   'tests/influencer-floor.test.mjs',
   'tests/engagement-log.test.mjs',
   'tests/weekly-run.test.mjs',
