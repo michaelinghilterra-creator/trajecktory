@@ -535,6 +535,7 @@ for (const suite of [
   'tests/docx-bullets.test.mjs',
   'tests/posts-composer.test.mjs',
   'tests/referrals.test.mjs',
+  'tests/referral-conversion.test.mjs',
   'tests/contacts-characterization.test.mjs',
   'tests/contact-identity.test.mjs',
   'tests/contact-resolution.test.mjs',

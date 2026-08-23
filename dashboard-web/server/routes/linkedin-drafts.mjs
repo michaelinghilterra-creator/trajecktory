@@ -402,20 +402,28 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
     const recipientFirst = recipient.firstName || name.split(/\s+/)[0] || 'there';
     const recipientRole = recipient.role || '';
     const company = recipient.company || '';
-    // The invite ACCEPTED case (LinkedIn axis 'Connected') is a different message
-    // than a still-pending one: it is a free DM to a new 1st-degree connection, and
-    // it must NOT claim the invite is unanswered or ask if it arrived.
-    // The LinkedIn connection axis is a target-talent sidecar keyed by TA id, so it
-    // is only meaningful for that book. Reading it for a referral would report some
-    // unrelated contact's connection state.
-    const connected = source === 'ta' && getLinkedInStatus(Number(id)) === 'Connected';
-
     // Prior 1:1 history with THIS PERSON, merged across whichever books they are
     // filed in, rather than one book's correspondence file. A referral has no entry
     // in the target-talent log at all, so reading that directly returned either
     // nothing or, worse, the thread belonging to whoever shares their id.
     const context = getPersonContext(source, id);
     const corr = context?.timeline || [];
+
+    // Has this person accepted the invite? That changes the message (a free DM to a
+    // new first-degree connection, which must not ask whether the invite arrived)
+    // and it lifts the InMail block, because a DM to a connection costs no credit.
+    //
+    // Read it from the PERSON, not the book. The LinkedIn connection axis is a
+    // target-talent sidecar keyed by TA id, so it cannot be looked up with a
+    // referral id. The previous guard was right about that and drew the wrong
+    // conclusion from it: `source === 'ta' && ...` made a referral permanently
+    // not-connected, so an accepted referral with no credits left was told "no
+    // InMail credits remain" on a card that said, two lines above, that the message
+    // was a free DM. The acceptance is already in the merged timeline as an
+    // invite-accepted event, resolved per person, so a referral with a target-talent
+    // twin is correctly connected and one without a twin correctly is not.
+    const connected = corr.some(e => e.kind === 'invite-accepted')
+      || (source === 'ta' && getLinkedInStatus(Number(id)) === 'Connected');
     const decision = canContact({
       timeline: corr,
       channel: 'linkedin',

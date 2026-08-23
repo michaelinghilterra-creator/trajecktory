@@ -577,6 +577,7 @@ select option, .inp option, .sel option { background: var(--panel); color: var(-
 .grid.cols-2 { grid-template-columns: 1fr 1fr; }
 .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
 .grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+.grid.cols-5 { grid-template-columns: repeat(5, 1fr); }
 .grid.overview { grid-template-columns: 1fr 1.1fr; }
 .grid.overview-2 { grid-template-columns: 1fr 1.2fr; }
 
@@ -1031,6 +1032,7 @@ select option, .inp option, .sel option { background: var(--panel); color: var(-
 /* Responsive */
 @media (max-width: 1100px) {
   .grid.cols-4 { grid-template-columns: repeat(2,1fr); }
+  .grid.cols-5 { grid-template-columns: repeat(2,1fr); }
   .grid.cols-3 { grid-template-columns: 1fr 1fr; }
   .grid.cols-2 { grid-template-columns: 1fr; }
   .grid.overview, .grid.overview-2 { grid-template-columns: 1fr; }
