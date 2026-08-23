@@ -28,11 +28,11 @@ assert.equal(p.lane, 'professional');
 assert.equal(p.channel, 'linkedin');
 ok('create: professional lane -> linkedin channel, status draft, source user');
 
-// trajecktory lane maps to x; claude source is preserved
+// trajecktory lane maps to linkedin; claude source is preserved
 const p2 = createPost({ text: 'Build log', source: 'claude', lane: 'trajecktory' });
-assert.equal(p2.channel, 'x');
+assert.equal(p2.channel, 'linkedin');
 assert.equal(p2.source, 'claude');
-ok('create: trajecktory lane -> x channel, source claude');
+ok('create: trajecktory lane -> linkedin channel, source claude');
 
 // empty text is refused
 assert.throws(() => createPost({ text: '   ' }), /required/);
