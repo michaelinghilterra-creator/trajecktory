@@ -136,12 +136,11 @@ function ReplyRow({ reply, toast }) {
     const noApp = action === 'dismiss' || action === 'not-related';
     if (!noApp && !appId) { toast && toast('Pick which application this reply belongs to.', 'error'); return; }
     setBusy(true);
-    const note = `${reply.from}: ${reply.subject || '(no subject)'} [${sentiment}]`;
     const body = action === 'dismiss' ? {}
       : action === 'not-related' ? { from: reply.from }   // sender, so future emails from them are suppressed too
-      // contact + email details let the server log this received reply onto the
-      // contact's correspondence card, not just as a note on the application.
-      : { appId, note, company, contact: reply.contact, subject: reply.subject, snippet: reply.snippet, date: reply.date };
+      // Sentiment is the user's override. The identifying fields are fallbacks if
+      // the server cannot re-fetch the full message from Gmail by its message id.
+      : { appId, company, contact: reply.contact, sentiment, from: reply.from, subject: reply.subject, snippet: reply.snippet, bodyPreview: reply.bodyPreview, date: reply.date };
     fetch(`/api/google/replies/${encodeURIComponent(reply.msgId)}/${action}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
