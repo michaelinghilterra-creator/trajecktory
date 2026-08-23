@@ -784,10 +784,15 @@ function computeEmailQueue({ taRows, apps } = {}) {
 // the status is Sent but the other channel is still owed, so inclusion is decided by
 // the per-channel done flags, not the coarse status.
 const BOTH_QUEUE_EXCLUDE_STATUS = new Set(['Archived', 'Replied', 'Meeting Scheduled', 'Connected']);
+// Reads the book the source names. It used to accept a source and then read
+// target-talent regardless, which was harmless only because its one caller is
+// target-talent-only. That is the same shape as the defects that reached the
+// screen elsewhere, and it would have started returning another person's channel
+// state the moment a second book reached this queue.
 function _channelsDone(source, id) {
   let linkedinDone = false, emailDone = false;
   try {
-    const corr = readTTCorrespondence(id);
+    const corr = source === 'referral' ? readReferralCorrespondence(id) : readTTCorrespondence(id);
     for (const m of (corr || [])) {
       if (m.direction !== 'Sent') continue;
       if (isLinkedInEntry(m)) linkedinDone = true;

@@ -564,7 +564,10 @@ const CONTACT_CFG_TA = {
   org: (d) => d.company,
   avatarName: (d) => `${d.first || ""} ${d.last || ""}`,
   statusColor: (s) => (TT_STATUS_MAP[s] || {}).color || "var(--text-mute)",
-  linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ name: `${d.first || ""} ${d.last || ""}`.trim(), role: d.title, company: d.company, firstName: d.first, tone }) },
+  // source and id must ride along: the server only runs the outreach guardrail
+  // and reads prior messages when it can resolve the contact. Name and company
+  // alone left it guessing and skipped the gate entirely.
+  linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ source: "ta", id: d.id, name: `${d.first || ""} ${d.last || ""}`.trim(), role: d.title, company: d.company, firstName: d.first, tone }) },
 };
 
 const CONTACT_CFG_REFERRAL = {
@@ -596,7 +599,10 @@ const CONTACT_CFG_REFERRAL = {
   org: (d) => d.where,
   avatarName: (d) => d.name || `${d.first || ""} ${d.last || ""}`,
   statusColor: (s) => (window.REF_STATUS_COLORS || {})[s] || "var(--text)",
-  linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ name: d.name, role: d.how, company: d.where, reason: d.target || d.how, firstName: d.first, tone }) },
+  // source and id must ride along: the server only runs the outreach guardrail
+  // and reads prior messages when it can resolve the contact. Name and company
+  // alone left it guessing and skipped the gate entirely.
+  linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ source: "referral", id: d.id, name: d.name, role: d.how, company: d.where, reason: d.target || d.how, firstName: d.first, tone }) },
   // Referral-only row actions the TA card has no concept of.
   extraActions: ({ data, reload, onClose }) => (
     React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
