@@ -445,8 +445,8 @@ function computeStaleContacts({ apps } = {}) {
 // ago, no advancement to Responded / an interview round (implied by status === 'Applied').
 // These are candidates for the one-click "archive to No Response" bulk action so
 // the user clears the backlog honestly instead of closing things prematurely.
-// Anchor priority mirrors rejectionTimingStats: the recorded apply date, else the
-// earliest logged Applied event, else the tracker Date column. That last one is
+// Anchor priority here is the recorded apply date, else the earliest logged
+// Applied event, else the tracker Date column. That last one is
 // the EVALUATION date (see the apply-date store comment in sidecars.mjs), which
 // on self-sourced rows routinely predates the real application by days — so
 // anchoring on it declares rows ghosted before they have actually been silent
@@ -454,6 +454,8 @@ function computeStaleContacts({ apps } = {}) {
 // candidate now carries `anchorSource` so the UI can disclose which are estimates
 // instead of presenting all of them as measured. This list gates a bulk
 // destructive write, so an over-count here costs real applications.
+// makeApplyAnchor in statuses.mjs now provides the shared read-only rule. Moving
+// this destructive archive gate to it is deliberately a separate change.
 function computeGhostedCandidates() {
   const apps = parseApplicationsMd();
   const applyDates = readApplyDates();
