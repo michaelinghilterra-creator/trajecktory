@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.33.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.32.0...v2.33.0) (2026-08-23)
+
+
+### Features
+
+* one-click rolling Evaluate with spend gate, live meter, retry, and non-blocking concurrency ([#219](https://github.com/michaelinghilterra-creator/trajecktory/issues/219)) ([c25e0c3](https://github.com/michaelinghilterra-creator/trajecktory/commit/c25e0c3b66718cb2592caea483605bdb718d5606))
+
 ## [2.32.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.31.1...v2.32.0) (2026-08-22)
 
 
