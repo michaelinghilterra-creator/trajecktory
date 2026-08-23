@@ -1205,6 +1205,12 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     primary = [{ id: next, label: next === 'Responded' ? 'Mark Responded' : `Move to ${next}`, cls: 'primary', check: true }];
   } else if (['SKIP', 'Rejected', 'Closed', 'Discarded', 'Not a Fit', 'No Response'].includes(st)) {
     primary = [{ id: 'reopen', label: 'Reopen → Evaluated', cls: 'primary', check: true }];
+    // Re-queue a near-threshold auto-discard (a noisy 2.9, just under the 3.0 cut)
+    // for a fresh evaluation instead of hardening it as a permanent reject (7.5).
+    // Reopen just flips the status; Re-evaluate puts it back in the eval queue.
+    if (st === 'Discarded' && typeof app.score === 'number' && app.score >= 2.5 && app.score < 3.0) {
+      primary.push({ id: 'requeue', label: 'Re-evaluate', cls: 'ghost' });
+    }
   }
   // Cover letter is an on-demand, decoupled action available while deciding
   // (Evaluated) and right after applying (Applied). It never changes status.
@@ -2250,6 +2256,24 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   };
 
   const onAction = (a, actionId, eventDate) => {
+    // Re-queue is not a status change (it deletes the row and re-queues the URL),
+    // so it takes its own path rather than the status MAP below.
+    if (actionId === 'requeue') {
+      window.tjkMutate(`/api/applications/${a.id}/requeue`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company: a.company }),
+      }).then(async res => {
+        if (res && !res.ok) {
+          const msg = await res.json().then(j => j.error).catch(() => `HTTP ${res.status}`);
+          if (window.tjkToast) window.tjkToast(`Re-queue failed for ${a.company}: ${msg}`, 'error');
+          return;
+        }
+        if (window.tjkToast) window.tjkToast(`${a.company} re-queued. Run Evaluate to re-score it.`, 'success');
+        setDrawerApp(null);
+        if (onDataChanged) onDataChanged();
+      }).catch(() => { if (window.tjkToast) window.tjkToast('Re-queue failed.', 'error'); });
+      return;
+    }
     const MAP = {
       apply_manual: 'Applied', apply_claude: 'Applied', already_applied: 'Applied',
       responded: 'Responded', offer: 'Offer', accept: 'Offer',
