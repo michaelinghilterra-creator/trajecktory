@@ -8,7 +8,7 @@
  * Run: node tests/scan-core.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { normalizeUrl, buildTitleFilter, buildLocationFilter, normalizeForMatch, scoreOffer, expandTitleMatrix } from '../lib/scan-core.mjs';
+import { normalizeUrl, buildTitleFilter, buildLocationFilter, normalizeForMatch, scoreOffer, expandTitleMatrix, findLooseRun, matchesRankedProximity } from '../lib/scan-core.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -351,6 +351,59 @@ check(noRegion('Denver, CO') === true,      'no region configured: out-of-region
 check(noRegion('Columbus, OH') === true,    'no region configured: any real city passes to eval');
 check(noRegion('Plano, TX') === true,       'no region configured: metro_allow still passes');
 check(noRegion('New York, NY') === false,   'no region configured: hard_no still blocks (needs no origin)');
+
+// ── proximity matching (added 2026-08-23) ────────────────────────────────────
+// Strict literal adjacency required the seniority word to touch the function
+// phrase, so real 3.3+ roles were dropped whenever a qualifier sat between them.
+// Audit found 19 of 93 strong self-sourced roles rejected by the filter.
+const prox = buildTitleFilter({
+  matrix: {
+    seniority: ['manager', 'sr manager', 'director', 'sr director', 'senior director', 'vp'],
+    modifiers: ['global'],
+    functions_bare: ['revenue operations'],
+    functions_ranked: ['analytics', 'revenue strategy', 'sales strategy', 'strategy operations', 'pipeline strategy'],
+  },
+  negative: ['Representative', 'Intern'],
+});
+// Fixture titles are invented. A real posting title is traceable back to an
+// employer, and this file is tracked in a public repo.
+check(prox('Revenue Strategy & Forecasting, Sr. Manager') === true,
+  'proximity: seniority separated from the function by one word still matches');
+check(prox('Senior Director, Sales Platform Strategy & Modernization') === true,
+  'proximity: a qualifier inside the function phrase ("Sales Platform Strategy") still matches');
+check(prox('Sr. Director, Enablement, Strategy & Channel Operations') === true,
+  'proximity: interleaved function words ("Strategy & Channel Operations") still match');
+check(prox('Sr. Director, Pipeline Strategy & Field Analytics') === true,
+  'proximity: a two-function title the scanner silently dropped now matches');
+check(prox('Director of Analytics') === true,
+  'proximity: plain adjacent titles keep matching (no regression)');
+check(prox('Analytics Director') === true,
+  'proximity: trailing-seniority order keeps matching');
+check(prox('Analytics Representative') === false,
+  'proximity: negatives still win over a proximity match');
+check(prox('Director of Engineering, Infrastructure') === false,
+  'proximity: no ranked function present means no match');
+
+// The window is bounded: a seniority word and a function at opposite ends of a
+// long unrelated title must NOT pair up.
+check(prox('Director of Facilities, Janitorial Services and Grounds Analytics') === false,
+  'proximity: far-apart seniority and function do not pair (window is bounded)');
+
+// findLooseRun / matchesRankedProximity are exported for direct coverage.
+check(JSON.stringify(findLooseRun(['a', 'b', 'c'], ['a', 'c'], 1)) === '[0,2]',
+  'findLooseRun: spans one filler token');
+check(findLooseRun(['a', 'b', 'c', 'd'], ['a', 'd'], 1) === null,
+  'findLooseRun: refuses a gap larger than maxGap');
+check(findLooseRun(['a', 'b'], ['a', 'b'], 0)[1] === 1,
+  'findLooseRun: exact adjacency with maxGap 0');
+check(findLooseRun(['x'], [], 1) === null, 'findLooseRun: empty phrase returns null');
+const proxMatrix = expandTitleMatrix({ seniority: ['director'], functions_ranked: ['analytics'] });
+check(matchesRankedProximity(['director', 'of', 'analytics'], proxMatrix) === true,
+  'matchesRankedProximity: matches across a filler token');
+check(matchesRankedProximity(['analytics'], proxMatrix) === false,
+  'matchesRankedProximity: a ranked function alone never matches');
+check(matchesRankedProximity(['director'], proxMatrix) === false,
+  'matchesRankedProximity: a seniority word alone never matches');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
