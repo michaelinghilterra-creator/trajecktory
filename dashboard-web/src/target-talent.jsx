@@ -726,6 +726,15 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ website: website.trim() }) })
       .then(() => { setEditingWeb(false); load(); onUpdate?.(); });
   };
+  const unmergePerson = () => {
+    window.tjkMutate('/api/people/unmerge', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: `${cfg.kind}:${id}` }),
+    }).then(r => r.json()).then(res => {
+      if (res.error) { window.tjkToast && window.tjkToast(res.error, 'error'); return; }
+      load(); onUpdate?.();
+    }).catch(() => window.tjkToast && window.tjkToast('Could not separate contact', 'error'));
+  };
   // Whole-contact edit mode: seed the draft from current values, then PATCH the
   // identity fields on save. Editing the email drops any verification tag server-side
   // (a changed address is unverified until re-checked). Fields come from the adapter.
@@ -923,7 +932,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
             const label = store === "referral" ? "Referrals" : store === "ta" ? "TA Outreach" : "Influencers";
             return <span className="chip" key={ref}>{label} #{rowId}</span>;
           })}</div>
-          {data.person.refs.length > 1 && <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>{data.person.matchedBy === "linkedinKey" ? "Matched on their LinkedIn profile." : data.person.matchedBy === "backref" ? "Linked when you promoted them from TA Outreach." : data.person.matchedBy === "pin" ? "You merged these by hand." : ""}</div>}
+          {data.person.refs.length > 1 && <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+            {data.person.matchedBy === "linkedinKey" ? "Matched on their LinkedIn profile." : data.person.matchedBy === "backref" ? "Linked when you promoted them from TA Outreach." : data.person.matchedBy === "pin" ? "You merged these by hand." : ""}
+            <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={unmergePerson}>Not the same person</button>
+          </div>}
         </div>}
         {/* Status */}
         <div className="ds-section">

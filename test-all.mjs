@@ -533,6 +533,8 @@ for (const suite of [
   'tests/contacts-characterization.test.mjs',
   'tests/contact-identity.test.mjs',
   'tests/contact-resolution.test.mjs',
+  'tests/contact-merge-suggest.test.mjs',
+  'tests/people-routes.test.mjs',
   'tests/contact-timeline.test.mjs',
   'tests/person-context.test.mjs',
   'tests/data-dir-sandbox.test.mjs',

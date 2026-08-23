@@ -185,5 +185,12 @@ console.log('\n5. Contact identity is defined in exactly one place');
     `no file outside ${owner} defines a contact identity function`, offenders);
 }
 
+console.log('\n6. Contact merge suggestions stay advisory');
+{
+  const source = readFileSync(join(ROOT, 'dashboard-web/server/lib/contact-identity.mjs'), 'utf8');
+  check(!source.includes('contact-merge-suggest'),
+    'contact-identity.mjs does not reference contact-merge-suggest');
+}
+
 console.log(`\n${failed === 0 ? '🟢' : '🔴'} identity-single-source: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

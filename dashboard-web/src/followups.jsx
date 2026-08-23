@@ -333,6 +333,16 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   // which then surfaces them in the queue as "Just connected".
   const [pendingAccept, setPendingAccept] = useStateF([]);
   useEffectF(() => { fetch('/api/referrals/pending-acceptances').then(r => r.json()).then(d => setPendingAccept(d && d.pending ? d.pending : [])).catch(() => {}); }, []);
+  const [mergeSuggestions, setMergeSuggestions] = useStateF([]);
+  const loadMergeSuggestions = () => fetch('/api/people/suggestions').then(r => r.json()).then(d => setMergeSuggestions(d && d.suggestions ? d.suggestions : [])).catch(() => {});
+  useEffectF(() => { loadMergeSuggestions(); }, []);
+  const decideMergeSuggestion = (suggestion, same) => {
+    const url = same ? '/api/people/merge' : '/api/people/suggestions/reject';
+    window.tjkMutate(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ a: suggestion.a, b: suggestion.b }) })
+      .then(r => r.json())
+      .then(res => { if (res.error) { toast && toast(res.error, 'error'); return; } loadMergeSuggestions(); load(); })
+      .catch(e => toast && toast(e.message, 'error'));
+  };
   const confirmAccepted = (id) => {
     window.tjkMutate(`/api/target-talent/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ linkedinStatus: 'Connected' }) })
       .then(r => r.json())
@@ -602,6 +612,31 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
                   <div className="row" style={{ gap: 6, flex: 'none' }}>
                     <button className="btn accent sm" onClick={() => confirmAccepted(p.id)}>Confirm connected</button>
                     <button className="btn ghost sm" onClick={() => dismissPending(p.id)}>Not yet</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(view === 'queue' || view === 'merged') && mergeSuggestions.length > 0 && (
+        <div className="card padded-lg" style={{ borderColor: 'color-mix(in srgb, var(--green) 40%, transparent)' }}>
+          <div className="card-head" style={{ marginBottom: 8 }}>
+            <span className="card-title">Possible duplicate contacts</span>
+            <span className="card-meta mono">review before combining their history</span>
+          </div>
+          <div className="col" style={{ gap: 6 }}>
+            {mergeSuggestions.map(s => (
+              <div key={`${s.a}-${s.b}`} className="action-card">
+                <div className="action-card-row">
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div><span className="action-card-co">{s.left.name}</span><span className="dim"> · {s.left.store} · {s.left.company || 'unknown company'}</span></div>
+                    <div><span className="action-card-co">{s.right.name}</span><span className="dim"> · {s.right.store} · {s.right.company || 'unknown company'}</span></div>
+                  </div>
+                  <div className="row" style={{ gap: 6, flex: 'none' }}>
+                    <button className="btn accent sm" onClick={() => decideMergeSuggestion(s, true)}>Same person</button>
+                    <button className="btn ghost sm" onClick={() => decideMergeSuggestion(s, false)}>Not the same</button>
                   </div>
                 </div>
               </div>
