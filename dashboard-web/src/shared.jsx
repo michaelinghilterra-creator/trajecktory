@@ -218,6 +218,7 @@ window.ScoreExplainer = function ScoreExplainer({ open, onClose, scoreSource }) 
           insisting it was weighed. */}
       <Dim name="Pay.">Rated against the band you set, not the market. Shown but not counted: missing a target you could still live with should not lower a number that decides whether you apply. Pay below your hard floor caps the score instead.</Dim>
       <Dim name="Location.">Whether the location, remote policy, and logistics work for you.</Dim>
+      <Dim name="Build depth.">How much hands-on building the role demands against what your resume can credibly support. Shown but not counted: a builder mismatch caps the score instead.</Dim>
       <Dim name="Red flags.">Anything that counts against the role. This is the only one that subtracts.</Dim>
 
       <p style={{ margin: '10px 0 6px', color: 'var(--text)' }}>What the number means</p>
@@ -227,7 +228,7 @@ window.ScoreExplainer = function ScoreExplainer({ open, onClose, scoreSource }) 
       <Band range="Below 3.5" meaning="Recommend against applying." />
 
       <p style={{ margin: '10px 0 0', color: 'var(--text-dim)' }}>
-        Some things cap the score no matter how good the rest looks. A role that needs you on site somewhere you said you will not work, or that needs visa sponsorship you cannot get, stays low even when everything else fits.
+        Some things cap the score no matter how good the rest looks. A role that needs deeper hands-on building than your resume supports, needs you on site somewhere you said you will not work, or needs visa sponsorship you cannot get, stays low even when everything else fits.
       </p>
       <p style={{ margin: '8px 0 0', color: 'var(--text-dim)' }}>
         Most jobs are not a 4. Roughly one in five is. If everything scored well the score would not be telling you anything.
