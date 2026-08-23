@@ -205,29 +205,40 @@ function reconcilePipelineQueue() {
 function clampedDone(jobId) {
   return (agentJobs.get(jobId) || {}).evaluationsDone || 0;
 }
+function batchCost(jobId) {
+  const c = (agentJobs.get(jobId) || {}).cost;
+  return Number.isFinite(c) ? c : 0;
+}
 
 // Continue a pipeline run into further batches within the same job. `firstRes` is
 // the result of the first (already-run) batch; returns the LAST batch's result so
 // the caller's post-run block reports on the whole chain. Terminates on: a batch
 // error, Stop, an empty/unreadable queue, the session cap, or the queue failing
 // to shrink between batches (a stall guard so unreadable rows cannot loop forever).
+// Threads whole-chain telemetry onto the job (7.2): rollTotal (evals across all
+// batches), rollCost (summed CLI cost), rollPending (rows still queued after the
+// last reconcile), and rollEndReason so the meter shows chain progress and names
+// why the chain stopped rather than resetting per batch or freezing on a bar.
 async function rollPipeline(jobId, target, firstRes) {
   const cap = rollMax();
   let res = firstRes;
   let rollTotal = clampedDone(jobId);
+  let rollCost = batchCost(jobId);
   let batches = 1;
   const mark = (patch) => { const j = agentJobs.get(jobId) || {}; agentJobs.set(jobId, { ...j, ...patch }); };
-  mark({ rolling: true, rollCap: cap, rollBatches: batches, rollTotal });
+  mark({ rolling: true, rollCap: cap, rollBatches: batches, rollTotal, rollCost });
 
   let lastPending = null;
+  let endReason = 'drained';
   while (true) {
-    if (!res.ok) break;                                  // a failed batch stops the chain
-    if (rollingStop) { mark({ rollStopped: true }); break; }
+    if (!res.ok) { endReason = 'error'; break; }         // a failed batch stops the chain
+    if (rollingStop) { endReason = 'stopped'; mark({ rollStopped: true }); break; }
     reconcilePipelineQueue();                            // advance the queue past what this batch handled
     const pending = countPipelinePending();
-    if (pending === null || pending <= 0) break;         // drained (or pipeline unreadable)
-    if (rollTotal >= cap) { mark({ rollCapped: true }); break; }
-    if (lastPending !== null && pending >= lastPending) break;  // stall: last batch advanced nothing
+    mark({ rollPending: pending == null ? undefined : pending });
+    if (pending === null || pending <= 0) { endReason = 'drained'; break; }
+    if (rollTotal >= cap) { endReason = 'capped'; mark({ rollCapped: true }); break; }
+    if (lastPending !== null && pending >= lastPending) { endReason = 'stall'; break; }  // last batch advanced nothing
     lastPending = pending;
 
     // Next batch, same job. Set status back to 'running' (the batch that just
@@ -238,9 +249,10 @@ async function rollPipeline(jobId, target, firstRes) {
     mark({ status: 'running', rollBatches: batches, progressTotal: pipelineEvalTotal(power), evaluationsDone: 0, activity: `Rolling batch ${batches}…`, error: undefined, summary: undefined });
     res = await runClaudeAgent(jobId, 'pipeline', target);
     rollTotal += clampedDone(jobId);
-    mark({ rollTotal });
+    rollCost += batchCost(jobId);
+    mark({ rollTotal, rollCost });
   }
-  mark({ rolling: false });
+  mark({ rolling: false, rollEndReason: endReason });
   return res;
 }
 
@@ -1180,6 +1192,7 @@ router.get('/api/agent/active', (req, res) => {
       toolCount: job.toolCount, startedAt: job.startedAt,
       billedTo: job.billedTo, batch: job.batch,
       rolling: job.rolling, rollTotal: job.rollTotal, rollBatches: job.rollBatches, rollCap: job.rollCap,
+      rollCost: job.rollCost, rollPending: job.rollPending, rollEndReason: job.rollEndReason, cost: job.cost,
     });
   }
   out.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));

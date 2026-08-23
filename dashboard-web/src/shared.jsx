@@ -938,13 +938,56 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               {isAgent && isRunning && (() => {
                 const elapsedMs = job.startedAt ? Date.now() - job.startedAt : 0;
                 const fmt = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`; };
+                // ── Batch-aware Evaluate meter (7.2) ──
+                // The Evaluate step rolls through the queue in batches, so a
+                // per-batch "0 of 1" that resets each batch is confusing (it read
+                // as "1 total" when the queue held more). Show the WHOLE chain:
+                // evaluated-so-far across every batch, how many are still queued,
+                // batch number, running cost, and elapsed. The bar tracks progress
+                // through the known work (done / (done + queued)); if a scan adds
+                // roles mid-run the queue honestly grows rather than a bar lying.
+                if (step.id === 'cli-eval') {
+                  // rollTotal counts completed batches; add the current batch's
+                  // live count while running. (On the first batch rollTotal is
+                  // unset, so this is just the current count.)
+                  const chainDone = (job.rollTotal || 0) + (job.evaluationsDone || 0);
+                  // Remaining: the server's post-reconcile pending when present,
+                  // else the loaded count minus what the live batch has done.
+                  const remaining = (typeof job.rollPending === 'number')
+                    ? job.rollPending
+                    : (pendingCount != null ? Math.max(0, pendingCount - (job.evaluationsDone || 0)) : null);
+                  const known = remaining != null ? chainDone + remaining : null;
+                  const pct = (known && known > 0) ? Math.min(100, Math.round((chainDone / known) * 100)) : null;
+                  const costStr = (job.billedTo === 'api' && job.rollCost > 0)
+                    ? ` · ~$${job.rollCost < 0.01 ? '0.01' : job.rollCost.toFixed(2)}` : '';
+                  const stopping = job.rollStopping || job.rollStopped;
+                  return (
+                    <div className="workflow-summary" title={job.output || ''}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ flex: 1 }}>
+                          {chainDone} evaluated{remaining != null ? ` · ${remaining} queued` : ''} · batch {job.rollBatches || 1} · {fmt(elapsedMs)}{costStr}
+                        </span>
+                        <button disabled={stopping} onClick={stopRolling}
+                          title="Stop after the current batch finishes"
+                          style={{ background: 'none', border: '1px solid var(--orange, #ff8c42)', color: 'var(--orange, #ff8c42)', borderRadius: 4, padding: '1px 8px', fontSize: 10.5, cursor: stopping ? 'default' : 'pointer', opacity: stopping ? 0.6 : 1, flexShrink: 0 }}>
+                          {stopping ? 'Stopping…' : 'Stop'}
+                        </button>
+                      </div>
+                      {pct != null && (
+                        <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, marginTop: 4, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', transition: 'width .3s' }} />
+                        </div>
+                      )}
+                      <div style={{ marginTop: 3, color: 'var(--text-mute)', fontSize: 10.5 }}>
+                        {(job.activity || 'Working…')}{job.rollCap ? ` · cap ${job.rollCap}` : ''}
+                      </div>
+                    </div>
+                  );
+                }
+                // Deep eval: a single posting → fraction + bar + rough ETA.
                 const total = job.progressTotal;
-                // Clamp: the batch cap is a soft prompt instruction the agent can
-                // overshoot, so guard the rendered "X of N" (and bar width) from
-                // showing e.g. "11 of 10".
                 const rawDone = job.evaluationsDone || 0;
                 const done = total > 0 ? Math.min(rawDone, total) : rawDone;
-                // Evaluate has a known batch size → fraction + bar + rough ETA.
                 if (total > 0) {
                   const eta = (done > 0 && done < total) ? ` · ~${fmt((elapsedMs / done) * (total - done))} left` : '';
                   return (
@@ -963,21 +1006,20 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                   </div>
                 );
               })()}
-              {/* Rolling Evaluate (7.1): while a pipeline chain is auto-continuing,
-                  show a whole-chain tally and a Stop control. The batch-aware meter
-                  (done/remaining/stalled) is enriched in 7.2. */}
-              {isAgent && isRunning && step.id === 'cli-eval' && job?.rolling && (
-                <div className="workflow-summary" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ flex: 1, color: 'var(--text-mute)' }}>
-                    Rolling · batch {job.rollBatches || 1}{typeof job.rollTotal === 'number' ? ` · ${job.rollTotal} evaluated` : ''}{job.rollCap ? ` (cap ${job.rollCap})` : ''}
-                  </span>
-                  <button
-                    disabled={job.rollStopping || job.rollStopped}
-                    onClick={stopRolling}
-                    title="Stop after the current batch finishes"
-                    style={{ background: 'none', border: '1px solid var(--orange, #ff8c42)', color: 'var(--orange, #ff8c42)', borderRadius: 4, padding: '1px 8px', fontSize: 10.5, cursor: (job.rollStopping || job.rollStopped) ? 'default' : 'pointer', opacity: (job.rollStopping || job.rollStopped) ? 0.6 : 1, flexShrink: 0 }}>
-                    {(job.rollStopping || job.rollStopped) ? 'Stopping…' : 'Stop'}
-                  </button>
+              {/* Terminal chain summary (7.2): once the chain ends, name why it
+                  stopped so a finished run is legible instead of a frozen bar. */}
+              {!isRunning && step.id === 'cli-eval' && job?.rollEndReason && typeof job.rollTotal === 'number' && (
+                <div className="workflow-summary" style={{ color: 'var(--text-mute)' }}>
+                  {job.rollTotal} evaluated across {job.rollBatches || 1} batch{(job.rollBatches || 1) === 1 ? '' : 'es'}
+                  {(job.billedTo === 'api' && job.rollCost > 0) ? ` · ~$${job.rollCost.toFixed(2)}` : ''}
+                  {' · '}
+                  {job.rollEndReason === 'drained' ? 'queue cleared'
+                    : job.rollEndReason === 'capped' ? `hit the session cap (${job.rollCap})`
+                    : job.rollEndReason === 'stopped' ? 'stopped by you'
+                    : job.rollEndReason === 'stall' ? 'stopped early — a batch evaluated nothing new'
+                    : job.rollEndReason === 'error' ? 'stopped on an error'
+                    : job.rollEndReason}
+                  {typeof job.rollPending === 'number' && job.rollPending > 0 ? ` · ${job.rollPending} still queued` : ''}
                 </div>
               )}
               {job?.summary && !(isAgent && isRunning) && (
