@@ -1833,4 +1833,18 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
   );
 }
 
+window.InfluencersView = function NetworkInfluencersView() {
+  const [influencers, setInfluencers] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [engagementLog, setEngagementLog] = useState([]);
+  useEffect(() => {
+    fetch('/api/linkedin-ssi/influencers').then(r => r.json()).then(d => setInfluencers(Array.isArray(d) ? d : [])).catch(() => setInfluencers([]));
+    fetch('/api/linkedin-ssi/engagement-log').then(r => r.json()).then(d => setEngagementLog(Array.isArray(d) ? d : [])).catch(() => setEngagementLog([]));
+  }, []);
+  return <>
+    <InfluencersView influencers={influencers} setInfluencers={setInfluencers} onOpen={setSelected} />
+    <InfluencerDrawer influencer={selected} influencers={influencers} engagementLog={engagementLog} setEngagementLog={setEngagementLog}
+      onClose={() => setSelected(null)} onUpdate={updated => { setInfluencers(updated); setSelected(updated.find(x => x.id === selected?.id) || null); }} />
+  </>;
+};
 window.LinkedInSSITab = LinkedInSSITab;

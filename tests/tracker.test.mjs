@@ -9,6 +9,7 @@
 
 import {
   parseTrackerLine, parseTracker, TRACKER_COLUMNS, formatTrackerLine, sanitizeTrackerCell,
+  hasStrayPipe,
 } from '../lib/tracker.mjs';
 
 let passed = 0, failed = 0;
@@ -160,6 +161,36 @@ check(parseTrackerLine(formatTrackerLine({ ...roundTrip, notes: undefined })).no
 
 check(sanitizeTrackerCell('a | b') === 'a / b', 'sanitizeTrackerCell swaps the delimiter');
 check(sanitizeTrackerCell(null) === '', 'sanitizeTrackerCell handles null');
+
+// hasStrayPipe: telling "no URL on this row" apart from "a pipe shifted the row".
+// Both leave `url` null, and conflating them made the dashboard parser warn that
+// notes may be truncated on 62 rows of a real tracker where nothing was lost.
+// 58 of those carried the em dash formatTrackerLine itself writes for an empty
+// url cell, so the canonical writer was producing rows the reader called broken.
+console.log('\nhasStrayPipe');
+const strayBase = '| 9001 | 2020-01-01 | Acme | Lead | 4.0/5 | Applied | ✅ | — | [9001](reports/9001-a.md) | notes ';
+const stray = (urlCell) => hasStrayPipe(parseTrackerLine(strayBase + '| ' + urlCell + ' |'));
+check(stray('—') === false, 'the em dash placeholder is not a stray pipe');
+check(stray('') === false, 'an empty url cell is not a stray pipe');
+check(stray('-') === false, 'a hyphen placeholder is not a stray pipe');
+check(stray('n/a') === false, 'n/a is not a stray pipe');
+check(stray('https://jobs.example.com/x') === false, 'a real url is not a stray pipe');
+// A local: value is a self-sourced JD on disk, canonicalized on purpose in
+// lib/identity.mjs, so it is a legitimate url-cell value and not corruption.
+check(stray('local:' + String.fromCharCode(67, 58, 92) + 'jd.md') === false,
+  'a local: file reference is not a stray pipe');
+// And the guard must still catch the real thing, or it is just silence.
+check(stray('b') === true, 'unexpected text in the url slot IS a stray pipe');
+check(hasStrayPipe(parseTrackerLine(strayBase + '| a | b |')) === true, '12 cells IS a stray pipe');
+check(hasStrayPipe(parseTrackerLine(
+  '| 9002 | 2020-01-01 | Acme | Lead | 4.0/5 | Applied | ✅ | — | [9002](reports/9002-a.md) | notes |')) === false,
+  'a legacy 10-column row is not a stray pipe');
+check(hasStrayPipe(null) === false, 'a null row is not a stray pipe');
+// Round trip: what formatTrackerLine writes must never read back as corruption.
+check(hasStrayPipe(parseTrackerLine(formatTrackerLine({
+  num: 1, date: '2020-01-01', company: 'Acme', role: 'Lead', score: '4.0/5',
+  status: 'Applied', pdf: '✅', resume: '', report: 'r.md', notes: 'n', url: '',
+}))) === false, 'a row written by formatTrackerLine never reads back as a stray pipe');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

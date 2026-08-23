@@ -17,9 +17,10 @@
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
-import { ROOT_DIR } from '../config.mjs';
+import { ROOT_DIR, DATA_DIR } from '../config.mjs';
 
-const CACHE = path.resolve(ROOT_DIR, 'data', 'release-notes-cache.json');
+// DATA_DIR, never ROOT_DIR + 'data'. See tests/data-dir-sandbox.test.mjs.
+const CACHE = path.resolve(DATA_DIR, 'release-notes-cache.json');
 const TTL_MS = 6 * 60 * 60 * 1000;
 const FALLBACK_SLUG = 'michaelinghilterra-creator/trajecktory';
 

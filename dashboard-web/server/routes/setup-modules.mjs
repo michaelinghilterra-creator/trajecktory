@@ -8,7 +8,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { ROOT_DIR } from '../config.mjs';
+import { ROOT_DIR, DATA_DIR } from '../config.mjs';
 import { cleanNote, fetchReleases, parseReleaseBody } from '../lib/release-notes.mjs';
 import { generateText } from '../lib/anthropic.mjs';
 import { cleanProse } from '../lib/text-hygiene.mjs';
@@ -18,7 +18,8 @@ import { buildActivities, weeklyCounts, employersInActivities, toTwcCsv, enrichE
 
 export const router = express.Router();
 
-const PITCH_FILE = path.resolve(ROOT_DIR, 'data', 'elevator-pitch.json');
+// DATA_DIR, never ROOT_DIR + 'data'. See tests/data-dir-sandbox.test.mjs.
+const PITCH_FILE = path.resolve(DATA_DIR, 'elevator-pitch.json');
 const CHANGELOG_MD = path.resolve(ROOT_DIR, 'CHANGELOG.md');
 const VERSION_FILE = path.resolve(ROOT_DIR, 'VERSION');
 // Dashboard changelog view starts here; older upstream releases are hidden.

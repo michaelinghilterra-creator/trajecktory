@@ -89,6 +89,25 @@ outputs:
   resume_dir: "output"
   interview_prep_dir: "interview-prep"
 
+outreach:
+  # Guardrails on how often one person can be contacted. Delete this whole block
+  # to turn every rule off and get the behavior from before they existed.
+  enabled: true
+  # Days that must pass before the same person can be touched again on the SAME
+  # channel. A both-channel contact is only blocked when every channel is inside
+  # the window, because one clear channel is still actionable.
+  minDaysBetweenTouches: 3
+  maxTouchesPer30d: 6
+  # Hold while a substantive message is still unanswered. Kept equal to
+  # minDaysBetweenTouches on purpose: a longer value here silently becomes the
+  # real floor, whatever minDaysBetweenTouches says.
+  awaitingReplyHold: 3
+  # Cumulative cold touches per channel, lifted the moment they actually reply.
+  coldOutreachCap:
+    linkedin: 3
+    email: 3
+  perCompanyPerDay: 3
+
 scoring:
   # The evaluation headline (0-5) is DERIVED by code, never written by the model.
   # The model rates each dimension below 0-5 with its evidence; lib/score.mjs

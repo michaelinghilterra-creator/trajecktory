@@ -13,10 +13,12 @@ import { isLinkedInInvite } from '../lib/channels.mjs';
 import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES } from '../lib/tt-linkedin.mjs';
 import { isHighValueContact } from '../lib/followups.mjs';
 import { appendReferralRows, parseReferralsMd } from '../lib/referrals.mjs';
-import { slugOf } from '../lib/linkedin-acceptance.mjs';
+import { linkedinKey } from '../lib/contact-identity.mjs';
 import { summarizeThread } from '../lib/correspondence-context.mjs';
-import { getIdentity } from '../lib/profile.mjs';
+import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
+import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
+import { getPersonContext } from '../lib/person-context.mjs';
 
 export const router = express.Router();
 
@@ -60,11 +62,17 @@ router.get('/api/target-talent/:id', (req, res) => {
     const r = rows.find(x => x.id === id);
     if (!r) return res.status(404).json({ error: 'Contact not found' });
     const { raw, ...contact } = r;
+    const context = getPersonContext('ta', id, { ta: rows });
     res.json({
       ...contact,
       isHighValue: isHighValueContact(contact),
       correspondence: readTTCorrespondence(id),
       relatedApps: findRelatedApps(r.company),
+      ...(context ? {
+        person: context.person,
+        timeline: context.displayTimeline,
+        personLastTouch: context.lastTouch,
+      } : {}),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -111,10 +119,10 @@ router.post('/api/target-talent/:id/to-referral', (req, res) => {
     const id = parseInt(req.params.id, 10);
     const contact = parseTargetTalentMd().find(c => c.id === id);
     if (!contact) return res.status(404).json({ error: 'Contact not found' });
-    const mySlug = slugOf(contact.linkedin);
+    const mySlug = linkedinKey(contact.linkedin);
     const already = parseReferralsMd().find(r =>
       new RegExp(`TA Outreach #${id}\\b`, 'i').test(r.notes || '') ||
-      (mySlug && slugOf(r.linkedin) === mySlug));
+      (mySlug && linkedinKey(r.linkedin) === mySlug));
     if (already) return res.json({ ok: true, alreadyReferral: true });
     const written = appendReferralRows([{
       name: `${contact.first || ''} ${contact.last || ''}`.trim(),
@@ -262,6 +270,10 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
     const profileMd      = readProjectFile(projectRoot, 'modes/_profile.md');
     const articleDigestMd = readProjectFile(projectRoot, 'article-digest.md');
     const prior = readTTCorrespondence(id);
+    const context = getPersonContext('ta', id);
+    const decision = canContact({ timeline: context?.timeline || [], channel: 'email', company: r.company, policy: getOutreachPolicy() });
+    if (!decision.allowed && !req.body?.override) return res.json({ blocked: true, blocks: decision.blocks, nextEligible: decision.nextEligible });
+    if (!decision.allowed) logOutreachOverride({ contactRef: `ta:${id}`, channel: 'email', blocks: decision.blocks });
     const isFirstTouch = prior.length === 0;
     const messageType = req.body?.messageType || (isFirstTouch ? 'first-touch' : 'follow-up');
     // Full-thread state so a follow-up nudges rather than re-pitching a message

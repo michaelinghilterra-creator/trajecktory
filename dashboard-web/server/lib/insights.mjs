@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { ROOT_DIR } from '../config.mjs';
+import { ROOT_DIR, DATA_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { computeStaleApps, computeStaleTA } from './followups.mjs';
 import { parseTargetTalentMd } from './target-talent.mjs';
@@ -8,7 +8,8 @@ import { parseStatusEvents } from './sidecars.mjs';
 import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, isInterviewStage, makeFurthestIdx, enteredFunnel } from './statuses.mjs';
 import { rateStat, MIN_SAMPLE } from './rate-confidence.mjs';
 
-const INSIGHTS_DIR = path.resolve(ROOT_DIR, 'data', 'insights');
+// DATA_DIR, never ROOT_DIR + 'data'. See tests/data-dir-sandbox.test.mjs.
+const INSIGHTS_DIR = path.resolve(DATA_DIR, 'insights');
 const INSIGHTS_LATEST = path.join(INSIGHTS_DIR, 'latest.json');
 const INSIGHTS_HISTORY_MAX = 5;
 const PROFILE_PATH = path.resolve(ROOT_DIR, 'modes', '_profile.md');

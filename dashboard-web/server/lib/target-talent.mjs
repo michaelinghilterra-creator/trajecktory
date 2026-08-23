@@ -5,6 +5,7 @@ import { parseApplicationsMd } from './applications.mjs';
 import { TALENT_STATUS_LABELS, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { parseVerifyTag } from '../../../lib/email-verify.mjs';
 import { readLinkedInMap } from './tt-linkedin.mjs';
+import { parseCorrespondence, formatCorrespondence } from './correspondence-format.mjs';
 
 // Derived from templates/states.yml (talent_states) rather than hardcoded here.
 // The previous local array is the exact drift the recruiter side already fixed:
@@ -72,34 +73,12 @@ function parseTargetTalentMd() {
 function readTTCorrespondence(id) {
   const f = path.join(TT_CORR_DIR, `${id}.md`);
   if (!fs.existsSync(f)) return [];
-  const text = fs.readFileSync(f, 'utf8');
-  const messages = [];
-  // Optional channel token (Email|LinkedIn) between direction and subject; absent
-  // on legacy rows, which read back as Email. Case-insensitive + normalized so a
-  // token written as 'LINKEDIN' still parses as a LinkedIn touch rather than
-  // silently defaulting to Email. See referrals.mjs for the rationale.
-  const re = /^## (\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?) \| (Sent|Received|Draft) \| (?:(Email|Linked ?In) \| )?(.+?)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gim;
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    const chRaw = (m[3] || '').trim();
-    messages.push({
-      timestamp: m[1],
-      direction: m[2],
-      channel:   /^linked ?in$/i.test(chRaw) ? 'LinkedIn' : 'Email',
-      subject:   m[4].trim(),
-      body:      m[5].trim(),
-    });
-  }
-  return messages;
+  return parseCorrespondence(fs.readFileSync(f, 'utf8'));
 }
 
 function writeTTCorrespondence(id, messages) {
   fs.mkdirSync(TT_CORR_DIR, { recursive: true });
-  const out = messages.map(m => {
-    const ch = m.channel && m.channel !== 'Email' ? `${m.channel} | ` : '';
-    return `## ${m.timestamp} | ${m.direction} | ${ch}${m.subject}\n\n${m.body}\n`;
-  }).join('\n');
-  fs.writeFileSync(path.join(TT_CORR_DIR, `${id}.md`), out);
+  fs.writeFileSync(path.join(TT_CORR_DIR, `${id}.md`), formatCorrespondence(messages));
 }
 
 function updateTTLine(id, updates) {

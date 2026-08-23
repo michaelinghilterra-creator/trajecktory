@@ -117,3 +117,8 @@ templates/cv-bullet-groups.json
 
 # UI/UX audit working dir — contains PII screenshots, never commit
 audit/
+
+# Per-lap spec handed to the coding agent (see AGENTS.md, the Claude/Codex loop).
+# Rewritten every lap and meaningless once the lap lands, so it is scratch, not
+# history. Keeping it tracked would put a churning file in every diff.
+HANDOFF.md

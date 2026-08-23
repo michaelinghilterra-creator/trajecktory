@@ -481,6 +481,13 @@ function PipelineTrack({ contact, onChange }) {
 }
 
 function MsgNode({ m }) {
+  const kindLabels = { "invite-sent": "Invite sent", "invite-accepted": "Invite accepted", "dm-sent": "DM sent", "email-sent": "Email sent", "reply-received": "Reply received", engagement: "Engagement" };
+  if (m.kind === "invite-accepted") return (
+    <div className="msg" style={{ color: "var(--green)" }}>
+      <div className="msg-node" style={{ borderColor: "var(--green)", color: "var(--green)" }}><TIcon d={TI.check} size={11} /></div>
+      <div className="msg-head"><span className="msg-dir in">Invite accepted</span><span className="msg-subj">TA Outreach</span><span className="msg-date">{m.at || m.timestamp}</span></div>
+    </div>
+  );
   const dir = m.direction === "Received" ? "in" : m.direction === "Draft" ? "draft" : "out";
   const icon = dir === "in" ? TI.inbound : dir === "draft" ? TI.pen : TI.outbound;
   const color = dir === "in" ? "var(--cyan)" : dir === "draft" ? "var(--accent)" : "var(--blue)";
@@ -489,9 +496,10 @@ function MsgNode({ m }) {
     <div className="msg">
       <div className="msg-node" style={{ borderColor: color, color }}><TIcon d={icon} size={11} /></div>
       <div className="msg-head">
-        <span className={"msg-dir " + dir}>{label}</span>
+        <span className={"msg-dir " + dir}>{m.kind ? kindLabels[m.kind] || m.kind : label}</span>
+        {m.store && <span className="chip">{m.store === "ta" ? "TA Outreach" : m.store === "referral" ? "Referrals" : "Influencers"}</span>}
         <span className="msg-subj">{m.subject}</span>
-        <span className="msg-date">{m.timestamp || "not sent"}</span>
+        <span className="msg-date">{m.at || m.timestamp || "not sent"}</span>
       </div>
       <div className={"msg-body" + (dir === "draft" ? " draftbox" : "")}>{m.body}</div>
     </div>
@@ -556,7 +564,10 @@ const CONTACT_CFG_TA = {
   org: (d) => d.company,
   avatarName: (d) => `${d.first || ""} ${d.last || ""}`,
   statusColor: (s) => (TT_STATUS_MAP[s] || {}).color || "var(--text-mute)",
-  linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ name: `${d.first || ""} ${d.last || ""}`.trim(), role: d.title, company: d.company, firstName: d.first, tone }) },
+  // source and id must ride along: the server only runs the outreach guardrail
+  // and reads prior messages when it can resolve the contact. Name and company
+  // alone left it guessing and skipped the gate entirely.
+  linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ source: "ta", id: d.id, name: `${d.first || ""} ${d.last || ""}`.trim(), role: d.title, company: d.company, firstName: d.first, tone }) },
 };
 
 const CONTACT_CFG_REFERRAL = {
@@ -570,7 +581,8 @@ const CONTACT_CFG_REFERRAL = {
       id: r.id, status: r.status, notes: r.notes || "", email: r.email || "", linkedin: r.linkedin || "",
       lastTouch: r.lastTouch || "", salute: "", first: parts[0] || "", last: parts.slice(1).join(" "),
       name: r.name || "", title: r.how || "", company: r.where || "", how: r.how || "", where: r.where || "", target: r.target || "",
-      relatedApps: (d && d.relatedApps) || [], correspondence: (d && d.correspondence) || [], link: (d && d.link) || null,
+      relatedApps: (d && d.relatedApps) || [], correspondence: (d && d.correspondence) || [], timeline: (d && d.timeline) || null,
+      person: (d && d.person) || null, link: (d && d.link) || null,
     };
   },
   editFields: REF_EDIT_FIELDS,
@@ -587,7 +599,10 @@ const CONTACT_CFG_REFERRAL = {
   org: (d) => d.where,
   avatarName: (d) => d.name || `${d.first || ""} ${d.last || ""}`,
   statusColor: (s) => (window.REF_STATUS_COLORS || {})[s] || "var(--text)",
-  linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ name: d.name, role: d.how, company: d.where, reason: d.target || d.how, firstName: d.first, tone }) },
+  // source and id must ride along: the server only runs the outreach guardrail
+  // and reads prior messages when it can resolve the contact. Name and company
+  // alone left it guessing and skipped the gate entirely.
+  linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ source: "referral", id: d.id, name: d.name, role: d.how, company: d.where, reason: d.target || d.how, firstName: d.first, tone }) },
   // Referral-only row actions the TA card has no concept of.
   extraActions: ({ data, reload, onClose }) => (
     React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
@@ -632,6 +647,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
   const [composing, setComposing] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [draftResult, setDraftResult] = useState(null);
+  const [draftBlock, setDraftBlock] = useState(null);
   // Which surface the draft is for. Email drafts assemble a greeting + signature;
   // LinkedIn notes are short and stand alone (no signature, no "Hi Name,").
   const [outChannel, setOutChannel] = useState("Email");
@@ -680,6 +696,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         setLoading(false);
         setComposing(false);
         setDraftResult(null);
+        setDraftBlock(null);
       })
       .catch(() => setLoading(false));
   }, [id, cfg]);
@@ -715,6 +732,15 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ website: website.trim() }) })
       .then(() => { setEditingWeb(false); load(); onUpdate?.(); });
   };
+  const unmergePerson = () => {
+    window.tjkMutate('/api/people/unmerge', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: `${cfg.kind}:${id}` }),
+    }).then(r => r.json()).then(res => {
+      if (res.error) { window.tjkToast && window.tjkToast(res.error, 'error'); return; }
+      load(); onUpdate?.();
+    }).catch(() => window.tjkToast && window.tjkToast('Could not separate contact', 'error'));
+  };
   // Whole-contact edit mode: seed the draft from current values, then PATCH the
   // identity fields on save. Editing the email drops any verification tag server-side
   // (a changed address is unverified until re-checked). Fields come from the adapter.
@@ -733,7 +759,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       .then(() => { setEditing(false); load(); onUpdate?.(); });
   };
-  const generateDraft = () => {
+  const generateDraft = (override = false) => {
     setDrafting(true); setDraftResult(null);
     // LinkedIn: generate a short connection-style note via the shared connect-note
     // route (a different motion from email), and mark the result so the compose
@@ -741,10 +767,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     if (outChannel === "LinkedIn" && cfg.linkedIn) {
       window.tjkMutate("/api/linkedin-drafts/connect-note", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cfg.linkedIn.payload(data, liTone)),
+        body: JSON.stringify({ source: cfg.kind, id, ...cfg.linkedIn.payload(data, liTone), override }),
       })
         .then(r => r.json())
-        .then(d => { setDrafting(false); if (d && d.response) setDraftResult({ body: d.response, subject: "", linkedin: true }); else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+        .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.response) { setDraftResult({ body: d.response, subject: "", linkedin: true }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
         .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
       return;
     }
@@ -755,10 +781,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     window.tjkMutate(`${cfg.base(id)}/draft`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(draftBody),
+      body: JSON.stringify({ ...draftBody, override }),
     })
       .then(r => r.json())
-      .then(d => { setDrafting(false); if (d.draft) setDraftResult(d.draft); })
+      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { setDraftResult(d.draft); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
       .catch(() => setDrafting(false));
   };
   const saveCorrAndClose = msg => {
@@ -781,7 +807,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     return <div style={{ padding: embedded ? "16px 2px" : 24, color: "var(--text-mute)" }}>Loading…</div>;
   }
 
-  const corr = data.correspondence || [];
+  const corr = data.timeline || data.correspondence || [];
   const headStyle = embedded ? { paddingBottom: 12, borderBottom: "1px solid var(--border)" } : undefined;
   const bodyStyle = embedded
     ? { display: "flex", flexDirection: "column", gap: 20, paddingTop: 14 }
@@ -905,6 +931,28 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           </div>
           )}
         </div>
+        {data.person?.refs?.length > 0 && <div className="ds-section">
+          <div className="ds-label">Filed in</div>
+          <div className="chips">{data.person.refs.map(ref => {
+            const [store, rowId] = ref.split(":");
+            const label = store === "referral" ? "Referrals" : store === "ta" ? "TA Outreach" : "Influencers";
+            // Same colors as the queue's book chips, from the one shared map, so a
+            // green chip means Referral everywhere it appears. Resolved at render
+            // time and tolerant of absence: connect.js loads first today, and a
+            // plain chip is a fine fallback if that ever changes.
+            const cvar = (window.BOOK_META || {})[store]?.cvar;
+            const tint = cvar ? {
+              background: `color-mix(in srgb, ${cvar} 15%, transparent)`,
+              color: cvar,
+              borderColor: `color-mix(in srgb, ${cvar} 40%, transparent)`,
+            } : undefined;
+            return <span className="chip" key={ref} style={tint}>{label} #{rowId}</span>;
+          })}</div>
+          {data.person.refs.length > 1 && <div className="dim" style={{ fontSize: 11, marginTop: 6 }}>
+            {data.person.matchedBy === "linkedinKey" ? "Matched on their LinkedIn profile." : data.person.matchedBy === "backref" ? "Linked when you promoted them from TA Outreach." : data.person.matchedBy === "pin" ? "You merged these by hand." : ""}
+            <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={unmergePerson}>Not the same person</button>
+          </div>}
+        </div>}
         {/* Status */}
         <div className="ds-section">
           <div className="ds-label"><TIcon d={TI.trend} size={12} /> {cfg.features.pipelineTrack ? "Pipeline stage" : "Status"}</div>
@@ -960,6 +1008,11 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           <div className="ds-label"><TIcon d={TI.pen} size={12} /> Notes{notes !== (data.notes || "") && <button className="btn primary sm" style={{ marginLeft: "auto" }} onClick={saveNotes}>Save</button>}</div>
           <textarea className="notes-ta" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add a note…" />
         </div>
+        {draftBlock && <div className="card" style={{ borderColor: "var(--yellow)", padding: 12 }}>
+          {(draftBlock.blocks || []).map((block, i) => <div key={`${block.rule || "block"}:${i}`}>{block.reason}</div>)}
+          <div className="dim" style={{ marginTop: 6 }}>{draftBlock.nextEligible ? `You can reach out again on ${draftBlock.nextEligible}` : "Blocked until they reply"}</div>
+          {draftBlock.overridden && <div style={{ color: "var(--yellow)", marginTop: 6 }}>Guardrail overridden for this draft.</div>}
+        </div>}
         {/* Outreach */}
         <div className="ds-section">
           <div className="ds-label">
@@ -1010,7 +1063,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           )}
           {!composing && !draftResult && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button className="btn primary sm" onClick={() => { setComposing(true); generateDraft(); }}><TIcon d={TI.spark} size={12} /> Draft {outChannel === "LinkedIn" ? "LinkedIn note" : "email"}</button>
+              <button className={draftBlock ? "btn ghost sm" : "btn primary sm"} onClick={() => { setComposing(true); generateDraft(!!draftBlock); }}><TIcon d={TI.spark} size={12} /> {draftBlock ? "Draft anyway" : `Draft ${outChannel === "LinkedIn" ? "LinkedIn note" : "email"}`}</button>
               <button className="btn sm" onClick={() => setLogModal({ direction: "Sent", channel: outChannel, subject: "", body: "" })}><TIcon d={TI.outbound} size={12} /> Log sent</button>
               <button className="btn sm" onClick={() => setLogModal({ direction: "Received", channel: outChannel, subject: "", body: "" })}><TIcon d={TI.inbound} size={12} /> Log reply</button>
             </div>
@@ -1038,7 +1091,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
                 <button className="btn primary sm" onClick={() => setLogModal({ direction: "Sent", channel: draftResult.linkedin ? "LinkedIn" : "Email", subject: draftResult.linkedin ? "LinkedIn note" : draftResult.subject, body: draftEmail })}><TIcon d={TI.check} size={12} /> I sent this</button>
                 <button className="btn sm" onClick={() => saveCorrAndClose({ direction: "Draft", channel: draftResult.linkedin ? "LinkedIn" : "Email", subject: draftResult.linkedin ? "LinkedIn note" : draftResult.subject, body: draftEmail })}><TIcon d={TI.pen} size={12} /> Save as draft</button>
                 {!draftResult.linkedin && <window.GmailDraftBtn to={data.email} subject={draftResult.subject} body={draftEmail} />}
-                <button className="btn sm" onClick={generateDraft}><TIcon d={TI.refresh} size={12} /> Regen</button>
+                <button className="btn sm" onClick={() => generateDraft(false)}><TIcon d={TI.refresh} size={12} /> Regen</button>
               </div>
             </div>
           )}
@@ -1051,7 +1104,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         )}
         {/* Correspondence */}
         <div className="ds-section">
-          <div className="ds-label"><TIcon d={TI.mail} size={12} /> Correspondence<span className="r">{corr.length} message{corr.length !== 1 ? "s" : ""}</span></div>
+          <div className="ds-label"><TIcon d={TI.mail} size={12} /> Correspondence<span className="r">{corr.length} event{corr.length !== 1 ? "s" : ""}</span></div>
           {corr.length === 0
             ? <div className="empty" style={{ padding: "8px 2px" }}>No messages yet. Draft one to get started.</div>
             : <div className="thread">{corr.slice().reverse().map((m, i) => <MsgNode key={i} m={m} />)}</div>}

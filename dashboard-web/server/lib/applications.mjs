@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { APPS_MD, ROOT_DIR, STATUS_EVENTS_PATH } from '../config.mjs';
 import { resolveReportPath } from './safe-path.mjs';
-import { parseTrackerLine, formatTrackerLine } from '../../../lib/tracker.mjs';
+import { parseTrackerLine, formatTrackerLine, hasStrayPipe } from '../../../lib/tracker.mjs';
 import { hasV1Frontmatter, parseV1, v1Header } from '../v1-loader.mjs';
 import { logStatusEvent, parseStatusEvents } from './sidecars.mjs';
 import { FUNNEL_ORDER, makeFurthestIdx, isInbound, isOutbound } from './statuses.mjs';
@@ -265,10 +265,8 @@ function parseApplicationsMd() {
     // 11 cells is the current schema (the last one is the posting URL). An 11th
     // cell that is NOT URL-shaped is still a stray pipe, which parseTrackerLine
     // reports by leaving `url` null while cellCount stays 11.
-    if (base.cellCount === 11 && !base.url) {
-      console.warn(`[parse] applications.md row #${base.num}: 11 columns but the last is not a URL — extra pipe in a field? Notes may be truncated`);
-    } else if (base.cellCount > 11) {
-      console.warn(`[parse] applications.md row #${base.num}: ${base.cellCount} columns, expected 11 — extra pipe in a field? Notes may be truncated`);
+    if (hasStrayPipe(base)) {
+      console.warn(`[parse] applications.md row #${base.num}: unexpected value in the URL column — extra pipe in a field? Notes may be truncated`);
     }
 
     const num = base.num;

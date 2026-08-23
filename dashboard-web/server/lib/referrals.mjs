@@ -3,6 +3,7 @@ import path from 'path';
 import { REFERRALS_MD, REFERRAL_CORR_DIR } from '../config.mjs';
 import { REFERRAL_STATUS_LABELS } from './statuses.mjs';
 import { parseVerifyTag, setVerifyTag } from '../../../lib/email-verify.mjs';
+import { parseCorrespondence, formatCorrespondence } from './correspondence-format.mjs';
 
 // ── Referral tracker ──────────────────────────────────────────────────────────
 // Backs the "Referrals" page. A referral is a person in the user's OWN network
@@ -156,27 +157,12 @@ function deleteReferralLine(id) {
 function readReferralCorrespondence(id) {
   const f = path.join(REFERRAL_CORR_DIR, `${id}.md`);
   if (!fs.existsSync(f)) return [];
-  const text = fs.readFileSync(f, 'utf8');
-  const messages = [];
-  // Optional channel token (Email|LinkedIn) sits between direction and subject.
-  // Absent on legacy rows, which read back as Email — the header stays valid and
-  // no cell shifts. A subject like "LinkedIn connection request" is safe: the
-  // optional group requires "LinkedIn | " (trailing pipe), which a subject lacks.
-  const re = /^## (\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?) \| (Sent|Received|Draft) \| (?:(Email|LinkedIn) \| )?(.+?)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm;
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    messages.push({ timestamp: m[1], direction: m[2], channel: m[3] || 'Email', subject: m[4].trim(), body: m[5].trim() });
-  }
-  return messages;
+  return parseCorrespondence(fs.readFileSync(f, 'utf8'));
 }
 
 function writeReferralCorrespondence(id, messages) {
   fs.mkdirSync(REFERRAL_CORR_DIR, { recursive: true });
-  const out = messages.map(m => {
-    const ch = m.channel && m.channel !== 'Email' ? `${m.channel} | ` : '';
-    return `## ${m.timestamp} | ${m.direction} | ${ch}${m.subject}\n\n${m.body}\n`;
-  }).join('\n');
-  fs.writeFileSync(path.join(REFERRAL_CORR_DIR, `${id}.md`), out);
+  fs.writeFileSync(path.join(REFERRAL_CORR_DIR, `${id}.md`), formatCorrespondence(messages));
 }
 
 export { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence };

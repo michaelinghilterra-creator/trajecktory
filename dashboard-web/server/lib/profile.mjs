@@ -10,7 +10,9 @@ import fs from 'fs';
 import path from 'path';
 import { ROOT_DIR } from '../config.mjs';
 
-const PROFILE_YML = path.resolve(ROOT_DIR, 'config', 'profile.yml');
+const PROFILE_YML = process.env.TJK_PROFILE_YML
+  ? path.resolve(process.env.TJK_PROFILE_YML)
+  : path.resolve(ROOT_DIR, 'config', 'profile.yml');
 
 // Read a scalar: top-level `key:` (section null) or one level of nesting
 // (`section:` then an indented `key:`). Strips quotes and trailing inline ` #`.
@@ -95,6 +97,72 @@ function getCertEntries(text) {
 }
 
 let _cache = null; // { mtimeMs, identity }
+let _outreachCache = null; // { mtimeMs, policy }
+
+// Defaults for the outreach guardrails. These apply only once the user adds an
+// `outreach:` block; with no block, parseOutreachPolicy below neutralizes the new
+// rules so behavior is exactly what it was before they existed.
+//
+// awaitingReplyHold deliberately matches minDaysBetweenTouches. It is a separate
+// rule (do not re-pitch someone mid-thread) but if its default were longer, it
+// would quietly become the real floor: the owner chose 3 days, and a 10 day hold
+// on any unanswered message would have meant 10 whatever they set. One knob, one
+// behavior. Raise this on its own if you want the hold to outlast the gap.
+export const OUTREACH_DEFAULTS = Object.freeze({
+  enabled: true,
+  minDaysBetweenTouches: 3,
+  maxTouchesPer30d: 6,
+  awaitingReplyHold: 3,
+  coldOutreachCap: Object.freeze({ linkedin: 3, email: 3 }),
+  perCompanyPerDay: 3,
+});
+
+function safeOutreachNumber(raw, fallback) {
+  if (raw === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+function getNestedScalar(text, section, subsection, key) {
+  const match = String(text || '').match(new RegExp(`^${section}:\\s*$[\\s\\S]*?^\\s+${subsection}:\\s*$[\\s\\S]*?^\\s+${key}:\\s*(.*)$`, 'm'));
+  if (!match) return '';
+  return match[1].trim().replace(/^['"]|['"]$/g, '').split(' #')[0].trim();
+}
+
+export function parseOutreachPolicy(text) {
+  const hasBlock = /^outreach:\s*$/m.test(String(text || ''));
+  if (!hasBlock) return {
+    ...OUTREACH_DEFAULTS,
+    enabled: true,
+    minDaysBetweenTouches: 0,
+    maxTouchesPer30d: Number.POSITIVE_INFINITY,
+    awaitingReplyHold: 0,
+    coldOutreachCap: { ...OUTREACH_DEFAULTS.coldOutreachCap },
+  };
+  const enabledRaw = getScalar(text, 'outreach', 'enabled').toLowerCase();
+  return {
+    enabled: enabledRaw === '' ? true : enabledRaw !== 'false',
+    minDaysBetweenTouches: safeOutreachNumber(getScalar(text, 'outreach', 'minDaysBetweenTouches'), OUTREACH_DEFAULTS.minDaysBetweenTouches),
+    maxTouchesPer30d: safeOutreachNumber(getScalar(text, 'outreach', 'maxTouchesPer30d'), OUTREACH_DEFAULTS.maxTouchesPer30d),
+    awaitingReplyHold: safeOutreachNumber(getScalar(text, 'outreach', 'awaitingReplyHold'), OUTREACH_DEFAULTS.awaitingReplyHold),
+    coldOutreachCap: {
+      linkedin: safeOutreachNumber(getNestedScalar(text, 'outreach', 'coldOutreachCap', 'linkedin'), OUTREACH_DEFAULTS.coldOutreachCap.linkedin),
+      email: safeOutreachNumber(getNestedScalar(text, 'outreach', 'coldOutreachCap', 'email'), OUTREACH_DEFAULTS.coldOutreachCap.email),
+    },
+    perCompanyPerDay: safeOutreachNumber(getScalar(text, 'outreach', 'perCompanyPerDay'), OUTREACH_DEFAULTS.perCompanyPerDay),
+  };
+}
+
+export function getOutreachPolicy() {
+  let mtimeMs = 0;
+  try { mtimeMs = fs.statSync(PROFILE_YML).mtimeMs; } catch { /* missing profile */ }
+  if (_outreachCache && _outreachCache.mtimeMs === mtimeMs) return _outreachCache.policy;
+  let text = '';
+  try { text = fs.readFileSync(PROFILE_YML, 'utf8'); } catch { /* fresh user */ }
+  const policy = parseOutreachPolicy(text);
+  _outreachCache = { mtimeMs, policy };
+  return policy;
+}
 
 // Returns the user's identity, cached and invalidated by profile.yml mtime.
 // All fields default to '' when profile.yml is absent (fresh, pre-onboarding
