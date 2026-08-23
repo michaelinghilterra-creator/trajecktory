@@ -501,6 +501,7 @@ for (const suite of [
   'tests/followup-queue.test.mjs',
   'tests/followup-queue-books.test.mjs',
   'tests/followups-cap.test.mjs',
+  'tests/followups-snooze.test.mjs',
   'tests/outreach-policy.test.mjs',
   'tests/sent-invites-reconcile.test.mjs',
   'tests/invite-status-reconcile.test.mjs',

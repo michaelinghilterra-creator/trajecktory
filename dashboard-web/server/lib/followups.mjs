@@ -215,7 +215,9 @@ function computeStaleApps() {
     // it stays a cold "application out" that sits in a calm ledger rather than
     // nagging. A muted app is always cold ("done for now").
     const channel = channelFor(a.company, taRows);
-    const isMutedApp = !!muted[String(a.id)];
+    // muted is source-keyed: { app: { id: true }, referral: {...} }. Read the
+    // bucket explicitly rather than relying on a top-level alias.
+    const isMutedApp = !!muted.app?.[String(a.id)];
     let klass;
     if (isMutedApp) klass = 'cold';
     else if (a.status === 'Responded' || isInterviewStage(a.status)) klass = 'warm';

@@ -205,7 +205,7 @@ function DraftBlockBanner({ block }) {
   </div>;
 }
 
-function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent }) {
+function ConnectRow({ c, toast, onDone, onSnooze, onMute, inmailRemaining, onInmailSent }) {
   const [note, setNote] = useStateCq(null);
   const [loading, setLoading] = useStateCq(false);
   const [sending, setSending] = useStateCq(false);
@@ -366,6 +366,7 @@ function ConnectRow({ c, toast, onDone, onSnooze, inmailRemaining, onInmailSent 
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}
           {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={sending}>💤 14d</button> : null}
+          {onMute && !done ? <button className="btn ghost sm" title="Done for now. Removes them from the queue indefinitely without changing their status or logging a touch. Bring them back from the contact book." onClick={() => onMute(c)} disabled={sending}>Done for now</button> : null}
           <button className={draftBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => draft(!!draftBlock)} disabled={loading}>
             {loading ? 'Drafting…' : draftBlock ? 'Draft anyway' : (note ? (alreadyInvited ? 'Redraft message' : 'Redraft') : (alreadyInvited ? 'Draft message' : 'Draft note'))}
           </button>
@@ -446,7 +447,7 @@ window.ConnectTab = function ConnectTab({ toast }) {
 // email, copy it, send it from your own client, then Mark sent — which logs a
 // "Sent" correspondence (a VERIFIED TOUCH, since the subject is not a LinkedIn
 // invite) and drops the row. This is the list that moves the 13/week touch floor.
-function EmailRow({ c, toast, onDone, onSnooze }) {
+function EmailRow({ c, toast, onDone, onSnooze, onMute }) {
   // draft is the EDITABLE email: { subject, body }. The /draft endpoint returns an
   // OBJECT { subject, body } (not a string like the LinkedIn note), and its body
   // has no greeting by design — the UI prepends "Hi <first>,". Once generated the
@@ -573,6 +574,7 @@ function EmailRow({ c, toast, onDone, onSnooze }) {
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer" title="Open the LinkedIn profile to confirm they're still at the company before emailing.">Open ↗</a> : null}
           {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={sending}>💤 14d</button> : null}
+          {onMute && !done ? <button className="btn ghost sm" title="Done for now. Removes them from the queue indefinitely without changing their status or logging a touch. Bring them back from the contact book." onClick={() => onMute(c)} disabled={sending}>Done for now</button> : null}
           <button className={draftBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => gen(!!draftBlock)} disabled={loading}>
             {loading ? 'Drafting…' : draftBlock ? 'Draft anyway' : (draft ? 'Redraft' : 'Draft email')}
           </button>
@@ -660,7 +662,7 @@ window.EmailQueueTab = function EmailQueueTab({ toast }) {
 // done state (c.linkedinDone / c.emailDone) and two independent draft+send blocks.
 // Nothing is sent from here: every note/email is copied or drafted to Gmail and
 // sent by hand, then logged with Mark sent.
-function BothRow({ c, toast, onChannelDone, onSnooze }) {
+function BothRow({ c, toast, onChannelDone, onSnooze, onMute }) {
   // LinkedIn side
   const [note, setNote] = useStateCq(null);
   const [liLoading, setLiLoading] = useStateCq(false);
@@ -794,6 +796,7 @@ function BothRow({ c, toast, onChannelDone, onSnooze }) {
           <span style={chipStyle(liDone)}>LinkedIn {liDone ? '✓ sent' : 'not sent'}</span>
           {c.email ? <span style={chipStyle(emDone)}>Email {emDone ? '✓ sent' : 'not sent'}</span> : null}
           {onSnooze ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)}>💤 14d</button> : null}
+          {onMute ? <button className="btn ghost sm" title="Done for now. Removes them from the queue indefinitely without changing their status or logging a touch. Bring them back from the contact book." onClick={() => onMute(c)}>Done for now</button> : null}
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}
         </div>
       </div>
@@ -1107,8 +1110,23 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
     window.tjkMutate('/api/followups/snooze', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: c.source, id: c.id, days: 14 }),
-    }).then(() => {
+    }).then(async r => {
+      const res = await r.json().catch(() => ({}));
+      if (!r.ok || res.error) throw new Error(res.error || `Snooze failed (${r.status})`);
       toast && toast(`Snoozed 14 days — ${c.name || 'contact'}`, 'success');
+      setQueue(q => (q || []).filter(x => !(x.source === c.source && String(x.id) === String(c.id))));
+      load();
+    }).catch(e => toast && toast(e.message, 'error'));
+  };
+
+  const muteContact = (c) => {
+    window.tjkMutate('/api/followups/mute', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: c.source, id: c.id }),
+    }).then(async r => {
+      const res = await r.json().catch(() => ({}));
+      if (!r.ok || res.error) throw new Error(res.error || `Mute failed (${r.status})`);
+      toast && toast(`Done for now — ${c.name || 'contact'}`, 'success');
       setQueue(q => (q || []).filter(x => !(x.source === c.source && String(x.id) === String(c.id))));
       load();
     }).catch(e => toast && toast(e.message, 'error'));
@@ -1301,9 +1319,9 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
                 : `No ${channel} contacts in the queue right now.`}
           </div>
         : rows.map(c =>
-            c.channel === 'linkedin' ? <ConnectRow key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onSnooze={snoozeContact} inmailRemaining={inmail ? inmail.remaining : undefined} onInmailSent={spendInmail} />
-          : c.channel === 'email'   ? <EmailRow   key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onSnooze={snoozeContact} />
-          :                           <BothRow    key={`${c.source}:${c.id}`} c={c} toast={toast} onChannelDone={onChannelDone} onSnooze={snoozeContact} />
+            c.channel === 'linkedin' ? <ConnectRow key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onSnooze={snoozeContact} onMute={muteContact} inmailRemaining={inmail ? inmail.remaining : undefined} onInmailSent={spendInmail} />
+          : c.channel === 'email'   ? <EmailRow   key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onSnooze={snoozeContact} onMute={muteContact} />
+          :                           <BothRow    key={`${c.source}:${c.id}`} c={c} toast={toast} onChannelDone={onChannelDone} onSnooze={snoozeContact} onMute={muteContact} />
         )}
     </div>
   );
