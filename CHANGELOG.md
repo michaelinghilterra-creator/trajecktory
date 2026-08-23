@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.36.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.36.0...v2.36.1) (2026-08-23)
+
+
+### Bug Fixes
+
+* match ranked titles when a qualifier sits between the words ([#230](https://github.com/michaelinghilterra-creator/trajecktory/issues/230)) ([f72f400](https://github.com/michaelinghilterra-creator/trajecktory/commit/f72f400ea0f3b59fc3f76352038e9049d58d97de))
+
 ## [2.36.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.35.0...v2.36.0) (2026-08-23)
 
 
