@@ -41,17 +41,24 @@ check(computeFollowupQueue({ taRows: [coldTa], referralRows: [], influencers: []
 const influencer = { id: 4, name: 'Visible Voice', linkedinUrl: 'https://linkedin.com/in/visible-voice', following: true, connected: false, engaged: false };
 const untouched = { id: 5, name: 'Untouched Voice', linkedinUrl: 'https://linkedin.com/in/untouched-voice', following: false, connected: false, engaged: false };
 queue = computeFollowupQueue({ taRows: [], referralRows: [], influencers: [influencer, untouched], apps: [], pins: {} });
-check(queue.some(row => row.id === 4) && !queue.some(row => row.id === 5), 'eligible unconnected influencer appears and untouched influencer does not');
+// Influencers now stay in the Network contact book and its weekly rhythm instead
+// of expanding the entire book into follow-up work rows.
+check(!queue.some(row => row.source === 'influencer'), 'no influencer appears in the follow-up queue');
 
 const engaged = { id: 6, name: 'Engaged Voice', linkedinUrl: 'https://linkedin.com/in/engaged-voice', following: true, connected: true, engaged: true, lastEngagement: old };
 queue = computeContactFollowups({ taRows: [], referralRows: [], influencers: [engaged], apps: [], pins: {}, timelineOpts: { engagementLog: [{ influencerId: 6, date: old, actionType: 'Comment' }] } });
-const engagedRow = queue.find(row => row.source === 'influencer' && row.id === 6);
-check(engagedRow?.capState?.linkedin?.sent === 0 && engagedRow?.capped === false, 'engagement does not consume the DM cap');
+// Influencer engagement is managed by its weekly Social rhythm now, so even a
+// stale engaged influencer does not return through the broader follow-up merger.
+check(!queue.some(row => row.source === 'influencer'), 'contact follow-ups also exclude influencer rows');
 
 const twinTa = ta(7, 'Same', 'Person', 'Live Co', { linkedin: 'https://linkedin.com/in/same-person' });
 const twinReferral = referral(7, 'Same Person', 'Not Asked', { linkedin: 'https://linkedin.com/in/same-person', where: 'Live Co' });
 queue = computeFollowupQueue({ taRows: [twinTa], referralRows: [twinReferral], influencers: [], apps: [{ company: 'Live Co', status: 'Applied' }], pins: {} });
 check(queue.filter(row => row.name === 'Same Person').length === 1, 'person merged across referral and TA appears once');
+
+const twinInfluencer = { id: 70, name: 'Same Person', linkedinUrl: 'https://linkedin.com/in/same-person', following: true };
+queue = computeFollowupQueue({ taRows: [], referralRows: [twinReferral], influencers: [twinInfluencer], apps: [{ company: 'Live Co', status: 'Applied' }], pins: {} });
+check(queue.filter(row => row.name === 'Same Person').length === 1 && queue[0]?.source === 'referral', 'referral and influencer resolve to one person while only the referral becomes a queue row');
 
 const rankedTa = ta(8, 'Ranked', 'Cold', 'Live Co');
 const rankedReferral = referral(8, 'Ranked Warm', 'Not Asked', { where: 'Live Co' });

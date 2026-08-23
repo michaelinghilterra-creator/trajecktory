@@ -554,12 +554,11 @@ const QUEUE_POLICY_BY_STORE = {
   // This uses the strict application-based gate. The looser Stage 1 definition
   // on the Referrals page deliberately differs and must not be unified with it.
   referral: { gateOnLiveApplication: true, reason: row => ['Not Asked', 'Catching Up'].includes(row.status) ? 'Reach out' : ['Asked', 'Responded'].includes(row.status) ? 'Follow up' : '' },
-  influencer: { gateOnLiveApplication: false, reason: row => !row.connected ? ((!row.engaged && !row.following) ? '' : 'Reach out') : 'Follow up' },
 };
 
 function _passesCompanyGate(source, company, eligible) {
   // The live application gate protects TA and referral outreach from becoming
-  // noise. Influencers skip it because those relationships are not employer-led.
+  // noise.
   return !QUEUE_POLICY_BY_STORE[source].gateOnLiveApplication || eligible.has(normalizeCompany(company));
 }
 
@@ -844,8 +843,8 @@ const _FUQ_STATUS_WEIGHT = {
   'Sent': 5, 'Drafted': 3,
 };
 // Store weights keep book size from deciding priority. A warm referral gets a
-// clear edge over cold TA at equal staleness; influencers sit between them.
-const _FUQ_STORE_WEIGHT = { ta: 0, influencer: 20, referral: 40 };
+// clear edge over cold TA at equal staleness.
+const _FUQ_STORE_WEIGHT = { ta: 0, referral: 40 };
 function _followupRank(r) {
   let score = _FUQ_STORE_WEIGHT[r.source] || 0;
   if (r.isPrincipal) score += 50;
@@ -880,14 +879,6 @@ function computeFollowupQueue(opts = {}) {
     const channel = _hasLinkedIn(shaped) && isSendable(shaped) ? 'both' : isSendable(shaped) ? 'email' : _hasLinkedIn(shaped) ? 'linkedin' : 'none';
     if (channel === 'none') continue;
     rows.push({ ..._queueRow(shaped, 'referral'), channel, queueReason: reason, notContacted: reason === 'Reach out' });
-  }
-  for (const row of books.influencers) {
-    const reason = QUEUE_POLICY_BY_STORE.influencer.reason(row);
-    if (!reason || (reason === 'Follow up' && !staleEnough(row.lastEngagement))) continue;
-    const parts = String(row.name || '').trim().split(/\s+/);
-    const shaped = { ...row, first: parts[0] || '', last: parts.slice(1).join(' '), title: row.role || '', company: row.company || '', linkedin: row.linkedinUrl || row.linkedin || '', status: row.connected ? 'Connected' : 'Not Connected' };
-    if (!_hasLinkedIn(shaped)) continue;
-    rows.push({ ..._queueRow(shaped, 'influencer'), channel: 'linkedin', queueReason: reason, notContacted: reason === 'Reach out' });
   }
   for (const r of rows) r.rank = _followupRank(r);
   const people = resolvePeople({ ta: books.ta, referrals: books.referrals, influencers: books.influencers, pins: opts.pins ?? readPins() });

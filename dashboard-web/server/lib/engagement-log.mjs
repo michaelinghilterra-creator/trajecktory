@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { LINKEDIN_SSI_DIR } from '../config.mjs';
+import { weekBounds } from './weekly-metrics.mjs';
+
+const engagementLogPath = () => path.join(LINKEDIN_SSI_DIR, 'engagement-log.md');
 
 // The influencer engagement log (data/linkedin-ssi/engagement-log.md) is a
 // markdown table the LinkedIn SSI tab appends to when you log a comment or a
@@ -13,7 +16,7 @@ import { LINKEDIN_SSI_DIR } from '../config.mjs';
 // 9-column rows (trailing "Logged At" ISO timestamp).
 export function readEngagementLog() {
   try {
-    const logPath = path.join(LINKEDIN_SSI_DIR, 'engagement-log.md');
+    const logPath = engagementLogPath();
     if (!fs.existsSync(logPath)) return [];
     const content = fs.readFileSync(logPath, 'utf8');
     const entries = [];
@@ -54,4 +57,18 @@ export function influencerConnects() {
   return readEngagementLog()
     .filter(e => /connection request/i.test(e.actionType || ''))
     .map(e => ({ date: (e.date || '').slice(0, 10), name: e.influencer || '', source: 'influencer' }));
+}
+
+// Weekly relationship-building actions. Connection requests are excluded because
+// influencerConnects() already books them into the separate connects metric.
+export function engagementsInWeek(now = new Date()) {
+  const { weekStart, weekEnd } = weekBounds(now);
+  return readEngagementLog().filter(e => {
+    const date = String(e.date || '').slice(0, 10);
+    return date >= weekStart && date <= weekEnd && !/connection request/i.test(e.actionType || '');
+  }).length;
+}
+
+export function engagementLogExists() {
+  try { return fs.existsSync(engagementLogPath()); } catch { return false; }
 }

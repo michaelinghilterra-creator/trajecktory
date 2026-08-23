@@ -529,6 +529,7 @@ for (const suite of [
   'tests/security-review.test.mjs',
   'tests/v1-loader.test.mjs',
   'tests/weekly-review.test.mjs',
+  'tests/engagement-log.test.mjs',
   'tests/weekly-run.test.mjs',
   'tests/docx-bullets.test.mjs',
   'tests/posts-composer.test.mjs',
