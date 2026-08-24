@@ -60,13 +60,29 @@ const filePath =
   (payload.tool_response && payload.tool_response.filePath) || '';
 if (typeof filePath !== 'string' || !filePath) quiet();
 
-// Resolve against the repo root so a relative path from any cwd lands correctly,
-// then require the result to sit UNDER reports/ — a path that escapes with ../ is
-// some other file and none of this hook's business.
-const abs = path.resolve(ROOT, filePath);
-const rel = path.relative(path.join(ROOT, 'reports'), abs).split(path.sep).join('/');
-if (rel.startsWith('..') || path.isAbsolute(rel)) quiet();
-if (!/\.md$/i.test(rel)) quiet();
+// The hook can be registered from more than one project root — this repo, or a
+// workspace one level up that holds it — so a RELATIVE file_path means different
+// things depending on which session fired. Absolute paths (what the Write and Edit
+// tools actually pass) need no base at all; for the relative case, try the cwd
+// first and this repo second, and take whichever lands inside reports/.
+// Containment is checked on the resolved path, so a `../` escape is rejected here
+// rather than reaching readFileSync.
+const REPORTS = path.join(ROOT, 'reports');
+function reportRelPath(p) {
+  const bases = path.isAbsolute(p) ? [null] : [process.cwd(), ROOT];
+  for (const base of bases) {
+    const abs = base === null ? path.normalize(p) : path.resolve(base, p);
+    const rel = path.relative(REPORTS, abs).split(path.sep).join('/');
+    if (rel.startsWith('..') || path.isAbsolute(rel) || !rel) continue;
+    if (!/\.md$/i.test(rel)) continue;
+    return { abs, rel };
+  }
+  return null;
+}
+
+const target = reportRelPath(filePath);
+if (!target) quiet();
+const { abs, rel } = target;
 
 // PostToolUse runs AFTER the write, so the bytes that actually landed are on disk.
 // That covers Edit too, whose tool_input carries only a diff.
