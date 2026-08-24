@@ -512,6 +512,7 @@ for (const suite of [
   'tests/connect-queue.test.mjs',
   'tests/followup-queue.test.mjs',
   'tests/influence-tier.test.mjs',
+  'tests/connect-note-shape.test.mjs',
   'tests/tier-derivation.test.mjs',
   'tests/provenance-stale.test.mjs',
   'tests/title-to-tier.test.mjs',
