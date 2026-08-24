@@ -47,7 +47,7 @@ const cases = [
   ['Managing Director, Executive Search', 'revops', 'agency'],
   ['Staffing Partner', 'revops', 'agency'],
 
-  ['Revenue Operations Analyst', 'revops', null],
+  ['Revenue Ops Analyst', 'revops', null],
   ['Sales Operations Associate', 'revops', null],
   ['Business Intelligence Specialist', 'revops', null],
   ['Sales Development Representative', 'revops', null],

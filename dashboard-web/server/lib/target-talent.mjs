@@ -4,7 +4,7 @@ import { TARGET_TALENT_MD, TT_CORR_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { TALENT_STATUS_LABELS, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { parseVerifyTag } from '../../../lib/email-verify.mjs';
-import { parseInfluenceTier, setInfluenceTier } from '../../../lib/influence-tier.mjs';
+import { resolveInfluenceTier, setInfluenceTier } from '../../../lib/influence-tier.mjs';
 import { readLinkedInMap } from './tt-linkedin.mjs';
 import { parseCorrespondence, formatCorrespondence } from './correspondence-format.mjs';
 
@@ -39,7 +39,10 @@ function parseTargetTalentMd() {
     // before; `verified` is purely additive. The send gate (isSendable) reads
     // `verified.state`, so a message can never go to an unverified/dead address.
     const verified = parseVerifyTag(parts[11]);
-    const influenceTier = parseInfluenceTier(parts[15]);
+    const { tier: influenceTier, source: influenceTierSource } = resolveInfluenceTier({
+      notes: parts[15],
+      title: parts[6],
+    });
     rows.push({
       id,
       company:   parts[2],
@@ -62,11 +65,12 @@ function parseTargetTalentMd() {
       // a [tier:x] tag in the notes so every consumer shares one answer instead
       // of grepping the cell themselves. See lib/influence-tier.mjs.
       influenceTier,
+      influenceTierSource,
       // The hiring principal, i.e. the VP/Director/Head of the target function the
       // user would report to, NOT the TA gatekeeper. Now derived from the tier
-      // rather than re-matching [principal], so the two can never disagree. A
-      // legacy [principal] row still parses to 'hm', which keeps this true for
-      // exactly the rows it was true for before.
+      // rather than re-matching [principal], so the two can never disagree. An
+      // untagged hiring-manager title now counts as a principal too, but that is
+      // inferred from the title rather than confirmed by an explicit tag.
       isPrincipal: influenceTier === 'hm',
       verified,  // { state, source, date, score, address, hadTag }
       // LinkedIn connection axis, separate from `status` (the outreach pipeline).
@@ -283,4 +287,3 @@ function setNewBaselineId(id) {
 // GET /api/target-talent — list all
 
 export { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, appendTTRows, matchByCompany, findRelatedApps, crossLogAppNums, TT_STATUSES, maxTTId, getNewBaselineId, setNewBaselineId };
-

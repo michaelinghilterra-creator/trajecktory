@@ -504,6 +504,7 @@ for (const suite of [
   'tests/connect-queue.test.mjs',
   'tests/followup-queue.test.mjs',
   'tests/influence-tier.test.mjs',
+  'tests/tier-derivation.test.mjs',
   'tests/title-to-tier.test.mjs',
   'tests/influence-predicate.test.mjs',
   'tests/unthreaded-apps.test.mjs',
