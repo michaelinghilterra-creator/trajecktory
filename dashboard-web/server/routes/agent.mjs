@@ -15,6 +15,7 @@ import { resolveModelId, currentBatch } from '../lib/pricing.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
 import { record as recordActivation } from '../lib/activation.mjs';
 import { issueJd } from '../../../next-jd.mjs';
+import { validateReportMarkdown } from '../v1-loader.mjs';
 
 export const router = express.Router();
 
@@ -556,6 +557,38 @@ function completedEvalId(block) {
   return null;
 }
 
+// The repo-relative path of a report this tool call writes, or null. Shared by
+// the write-time syntax gate below and the close-time re-check.
+function reportPathOf(block) {
+  if (!block || (block.name !== 'Write' && block.name !== 'Edit')) return null;
+  const fp = String((block.input && block.input.file_path) || '').replace(/\\/g, '/');
+  const m = fp.match(/(?:^|\/)(reports\/\d+-[^/]*\.md)$/i);
+  return m ? m[1] : null;
+}
+
+// ── Write-time report syntax gate ─────────────────────────────────────────────
+// A report's JSON frontmatter is one blob emitted by a model and nothing used to
+// parse it between the model and the disk. Report 1869 closed the `leadStory`
+// OBJECT with `],` instead of `},`; that single character made the frontmatter
+// unparseable, and since every reader parses all reports in one pass, the one bad
+// file took down the whole read. It went unnoticed until the next health check.
+//
+// A Write tool call carries the ENTIRE file content in its input, so the check
+// happens on the exact bytes being written, before anything reads them back — no
+// filesystem round-trip and no race with the tool actually running. Returns an
+// error string, or null when the call is fine or is not a report write.
+function reportWriteIssue(block) {
+  if (!block || block.name !== 'Write') return null;
+  const rel = reportPathOf(block);
+  if (!rel) return null;
+  const content = block.input && block.input.content;
+  // Some CLI versions elide very large tool inputs from the stream. Nothing to
+  // check in flight — the close-time pass reads it off disk instead.
+  if (typeof content !== 'string') return null;
+  const v = validateReportMarkdown(content, rel);
+  return v.ok ? null : v.error;
+}
+
 // The live `claude -p` child per running job, so Stop can actually TERMINATE the
 // in-flight eval instead of only refusing the next batch. Set at spawn, cleared
 // when the child settles. One entry per jobId (a rolling chain reuses its jobId,
@@ -749,6 +782,11 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     // Unique ids of evaluations completed this run (report or TSV write, deduped
     // by their shared leading number). Its size drives the "X of N" meter.
     const doneEvalIds = new Set();
+    // Report syntax problems seen this run, and every report path the agent
+    // touched (so the close handler can re-read the ones it EDITED — an Edit call
+    // carries only a diff, so it cannot be checked in flight the way a Write can).
+    const reportIssues = new Map();   // repo-relative path → message
+    const touchedReports = new Set();
 
     child.on('error', (e) => { if (!settled) { settled = true; agentChildren.delete(jobId); fail(claudeErrorMessage(e)); } });
 
@@ -810,6 +848,13 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
             // TSV (the old behavior) left the meter at 0 until the very end.
             const evalId = completedEvalId(block);
             if (evalId) doneEvalIds.add(evalId);
+            // Syntax-check the report the moment it is written, so a malformed
+            // one is attributed to the run that produced it instead of surfacing
+            // days later in a health check.
+            const rel = reportPathOf(block);
+            if (rel) touchedReports.add(rel);
+            const issue = reportWriteIssue(block);
+            if (issue) reportIssues.set(rel, issue);
           }
         }
         // Clamp to the batch denominator for capped modes (pipeline/deep): the
@@ -870,13 +915,36 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
       // A pressure blip only becomes a user-facing warning when the run actually
       // stopped early (errored). On a clean finish — or an intentional stop — it
       // stays a silent diagnostic; "the run stopped early" would be a lie.
-      const warning = (!ok && !stopKilled && job.sawPressure) ? PRESSURE_WARNING : job.warning;
+      const pressureWarning = (!ok && !stopKilled && job.sawPressure) ? PRESSURE_WARNING : job.warning;
+      // Close-time re-check of the report syntax gate. An Edit tool call carries
+      // only a diff, so a report the agent EDITED could not be checked in flight
+      // the way a Write can; and a Write flagged mid-run may have been repaired by
+      // a later Edit. Re-read what actually landed on disk and let that decide.
+      for (const rel of touchedReports) {
+        try {
+          const v = validateReportMarkdown(fs.readFileSync(path.join(ROOT_DIR, rel), 'utf8'), rel);
+          if (v.ok) reportIssues.delete(rel); else reportIssues.set(rel, v.error);
+        } catch (e) {
+          // Written then renamed or removed is not a syntax failure — only a real
+          // read error is worth surfacing.
+          if (e.code !== 'ENOENT') reportIssues.set(rel, `${rel}: could not be read back (${e.code || e.message})`);
+        }
+      }
+      // A run can finish "successfully" and still leave an unreadable report
+      // behind, so this warns on ok runs too. Without it the file sits on disk
+      // until a health check parses every report at once and the whole read dies.
+      const n = reportIssues.size;
+      const reportWarning = n
+        ? `${n} report${n > 1 ? 's' : ''} written this run cannot be parsed and ${n > 1 ? 'are' : 'is'} unreadable by the dashboard: ${[...reportIssues.values()].join(' | ')}`
+        : null;
+      const warning = [reportWarning, pressureWarning].filter(Boolean).join(' ') || undefined;
       agentJobs.set(jobId, {
         ...job,
         status: ok || stopKilled ? 'done' : 'error',
         summary: ok ? (resultText ? agentTail(resultText) : (job.activity || 'Agent finished')) : (stopKilled ? 'Stopped.' : undefined),
         error: ok || stopKilled ? undefined : err,
         warning,
+        reportIssues: n ? [...reportIssues.entries()].map(([file, message]) => ({ file, message })) : undefined,
         finishedAt: Date.now(),
       });
       persistJobs();
@@ -893,6 +961,7 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
         model: job.evalModel || null,
         billedTo: job.billedTo || null,
         warning: warning || null,
+        reportIssues: n ? [...reportIssues.keys()] : null,
         sawPressure: job.sawPressure || false,
         toolCount: job.toolCount || 0,
         tools: (job.toolCalls || []).slice(-50),
