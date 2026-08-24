@@ -225,18 +225,24 @@ router.get('/api/followups/stale', (req, res) => {
       const used = companySlots.has(companyKey) ? companySlots.get(companyKey) : seeded;
       const context = getPersonContext(c.source, c.id);
       const alreadyInvited = !!c.companyOutreach?.selfLastTouch || new Set(['Sent', 'Replied', 'Meeting Scheduled']).has(c.status);
+      const canInfluence = canInfluenceHire(c);
       const decision = canContact({
         timeline: context?.timeline || [],
         channel: c.channel,
         source: c.source,        // decides whether the per-company cap applies
         company: c.company,
-        companyTouches: { count: used, selfSentToday: !!c.companyOutreach?.selfSentToday },
+        companyTouches: {
+          count: used,
+          selfSentToday: !!c.companyOutreach?.selfSentToday,
+          influentialSentToday: !!c.companyOutreach?.influentialSentToday,
+        },
+        canInfluence,
         inmail: {
           exhausted: inmailOut,
           alreadyInvited,
           freeDm: !!c.freeDm,
           remaining: inmailBudget.remaining,
-          canInfluence: canInfluenceHire(c),
+          canInfluence,
         },
         policy: outreachPolicy,
         now: new Date(),
@@ -246,6 +252,7 @@ router.get('/api/followups/stale', (req, res) => {
       c.inmailBlocked = decision.blocks.some(b => b.rule === 'inmailBudget');
       c.inmailReserved = decision.blocks.some(b => b.rule === 'inmailReserve');
       c.heldDaily = decision.blocks.some(b => b.rule === 'perCompanyPerDay');
+      c.heldStakeholderGap = decision.blocks.some(b => b.rule === 'sameDayStakeholderGap');
       c.capped = decision.blocks.some(b => b.rule === 'coldOutreachCap');
       if (decision.allowed) companySlots.set(companyKey, used + 1);
     }

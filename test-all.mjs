@@ -513,6 +513,7 @@ for (const suite of [
   'tests/influence-predicate.test.mjs',
   'tests/unthreaded-apps.test.mjs',
   'tests/influence-ranking.test.mjs',
+  'tests/stakeholder-gap.test.mjs',
   'tests/followup-queue-books.test.mjs',
   'tests/followups-cap.test.mjs',
   'tests/followups-snooze.test.mjs',

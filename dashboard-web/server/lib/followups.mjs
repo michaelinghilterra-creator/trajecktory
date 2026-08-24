@@ -590,7 +590,7 @@ function _localToday() {
 // so this one pass covers both channels. Each company's list is sorted newest-first.
 function buildCompanyTouchIndex({ ta }) {
   const idx = new Map();
-  const add = (companyRaw, key, name, msgs) => {
+  const add = (companyRaw, key, name, tier, msgs) => {
     const co = normalizeCompany(companyRaw);
     if (!co) return;
     for (const m of (msgs || [])) {
@@ -601,10 +601,10 @@ function buildCompanyTouchIndex({ ta }) {
       const date = (m.timestamp || '').slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
       if (!idx.has(co)) idx.set(co, []);
-      idx.get(co).push({ key, name, date, direction: m.direction, channel: isLinkedInEntry(m) ? 'linkedin' : 'email' });
+      idx.get(co).push({ key, name, date, direction: m.direction, channel: isLinkedInEntry(m) ? 'linkedin' : 'email', tier });
     }
   };
-  for (const r of (ta || [])) { try { add(r.company, `ta:${r.id}`, `${r.first || ''} ${r.last || ''}`.trim(), readTTCorrespondence(r.id)); } catch { /* skip unreadable */ } }
+  for (const r of (ta || [])) { try { add(r.company, `ta:${r.id}`, `${r.first || ''} ${r.last || ''}`.trim(), r.influenceTier || DEFAULT_TIER, readTTCorrespondence(r.id)); } catch { /* skip unreadable */ } }
   for (const arr of idx.values()) arr.sort((a, b) => b.date.localeCompare(a.date));
   return idx;
 }
@@ -639,7 +639,13 @@ function _companyOutreachFor(selfKey, companyTouches, today = null) {
     for (const x of companyTouches) if (x.direction === 'Sent' && x.date === today) keys.add(x.key);
     companyContactsSentToday = keys.size;
   }
-  return { lastTouch, touchedToday, selfLastTouch, companyLastComms, selfSentToday, companyContactsSentToday };
+  // Signals that a different decision-maker was reached today, so policy can
+  // defer a second landing on a gatekeeper without blocking this person's own
+  // thread. Influence stays defined by the shared rank table, not by a tier list.
+  const influentialSentToday = !!(today && Array.isArray(companyTouches) && companyTouches.some(x =>
+    x.key !== selfKey && x.direction === 'Sent' && x.date === today &&
+    INFLUENCE_RANK[x.tier] >= INFLUENCE_RANK.peer));
+  return { lastTouch, touchedToday, selfLastTouch, companyLastComms, selfSentToday, companyContactsSentToday, influentialSentToday };
 }
 
 // Statuses that mean "you already sent this contact a 1:1 LinkedIn message/invite",
@@ -1295,6 +1301,7 @@ export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
   computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
   computeFollowupQueue, _followupRank,
+  _companyOutreachFor,
   influenceRank, canInfluenceHire, isHighValueContact, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts,
   computeJustConnectedQueue,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
