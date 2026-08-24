@@ -444,7 +444,17 @@ function dashboardConstraints(mode, opts) {
   if (mode === 'deep') {
     const tgt = (opts && opts.url) || '';
     const [num] = reserveReportNumbers(1);
-    return ' ' + common + ` Report number is PRE-RESERVED for this run: ${num}. Use it as the report filename number ({num}-{slug}-{date}.md) and the matching tracker id. Do NOT run node next-jd.mjs; numbering is handled for you here.` + ` Deep evaluation of ONE posting only: ${tgt}. Read its job description with WebFetch first and WebSearch as a fallback (for a local:jds/ path, read that file directly, resolving it relative to the repo root (your current working directory) so local:jds/foo.md means the file jds/foo.md, NOT data/jds/foo.md; that snapshot begins with a "**Source URL:**" line — use that real posting URL as the URL in the report frontmatter and the tracker row, never the local: path). Produce the FULL A-G evaluation as a report in reports/ using the trajecktory-report/v1 format (JSON frontmatter then narrative) and populate every section: summary, cvMatch, gaps, levelMatch, comp, customizationCV, customizationLI, starStories with a leadStory, and a legitimacy object with a tier and signals (Playwright is unavailable here, so assess legitimacy from the fetched page and set verification to unconfirmed). Record the evaluation as a single nine-column TSV in batch/tracker-additions/. This posting was entered directly by the user (the dashboard paste box), not found by a scan, so set the tracker note to include [self-sourced]. Evaluate ONLY this one posting — do not scan for or evaluate any other URL. If it cannot be read, say so and stop.` + snapshotJd;
+    // isPasteOrigin is false for a "Deep dive" run against an existing
+    // local:jds/ snapshot (resolve-jds.mjs wrote it off a scanner hit; the user
+    // never pasted anything, they just asked for a deeper eval on a triage
+    // card), true for a genuine paste-box submission (raw URL or pasted JD
+    // text). The prompt used to assert paste-box origin unconditionally, which
+    // mistagged every scanner-originated Deep dive as [self-sourced] — see the
+    // isPasteOrigin comment where target is built, above.
+    const sourceLine = opts && opts.isPasteOrigin
+      ? ' This posting was entered directly by the user (the dashboard paste box), not found by a scan, so set the tracker note to include [self-sourced].'
+      : ' This posting came from the scanner (a triage card, not a user paste) — do NOT write [self-sourced] in the tracker note.';
+    return ' ' + common + ` Report number is PRE-RESERVED for this run: ${num}. Use it as the report filename number ({num}-{slug}-{date}.md) and the matching tracker id. Do NOT run node next-jd.mjs; numbering is handled for you here.` + ` Deep evaluation of ONE posting only: ${tgt}. Read its job description with WebFetch first and WebSearch as a fallback (for a local:jds/ path, read that file directly, resolving it relative to the repo root (your current working directory) so local:jds/foo.md means the file jds/foo.md, NOT data/jds/foo.md; that snapshot begins with a "**Source URL:**" line — use that real posting URL as the URL in the report frontmatter and the tracker row, never the local: path). Produce the FULL A-G evaluation as a report in reports/ using the trajecktory-report/v1 format (JSON frontmatter then narrative) and populate every section: summary, cvMatch, gaps, levelMatch, comp, customizationCV, customizationLI, starStories with a leadStory, and a legitimacy object with a tier and signals (Playwright is unavailable here, so assess legitimacy from the fetched page and set verification to unconfirmed). Record the evaluation as a single nine-column TSV in batch/tracker-additions/.` + sourceLine + ` Evaluate ONLY this one posting — do not scan for or evaluate any other URL. If it cannot be read, say so and stop.` + snapshotJd;
   }
   return '';
 }
@@ -1231,7 +1241,16 @@ router.post('/api/agent/:mode', (req, res) => {
       if (/[\x00-\x1f]/.test(url) || (!isHttp && !isLocalJd)) {
         return res.status(400).json({ error: 'Provide a valid http(s) URL or a local:jds/ path.' });
       }
-      target = { url };
+      // isLocalJd means this "Deep dive" is targeting a snapshot that ALREADY
+      // existed before this request — written by resolve-jds.mjs off a scanner
+      // hit and surfaced on a triage card, never by the user. Only a raw http(s)
+      // URL typed into the paste box is a genuine user-initiated origin here; a
+      // local: target is scanner-origin no matter how deep an eval you run on it.
+      // Getting this wrong is what mistagged a scanner-found role pair and, per
+      // verify-pipeline.mjs, a long tail of older rows self-sourced:
+      // the prompt below used to assert paste-box origin unconditionally for
+      // BOTH cases.
+      target = { url, isPasteOrigin: isHttp };
     } else {
       try {
         const company = String(req.body?.company || '').trim();
@@ -1241,7 +1260,8 @@ router.post('/api/agent/:mode', (req, res) => {
         const abs = path.join(ROOT_DIR, rel);
         fs.mkdirSync(path.dirname(abs), { recursive: true });
         fs.writeFileSync(abs, `# ${title || 'Pasted role'}${company ? ' — ' + company : ''}\n\n${jd}\n`, 'utf8');
-        target = { url: `local:${rel}` };
+        // Pasted JD text: always a genuine user origin.
+        target = { url: `local:${rel}`, isPasteOrigin: true };
       } catch (e) {
         return res.status(500).json({ error: 'Could not save the pasted JD: ' + e.message });
       }

@@ -123,6 +123,19 @@ check(deep.length > 0, 'deep-mode prompt branch exists');
 check(/local:jds/.test(deep) && /data\/jds/.test(deep),
   'deep prompt disambiguates the local:jds base path from data/jds');
 
+// Source origin must be CONDITIONAL, never asserted outright. A "Deep dive" on a
+// triage card targets a local:jds snapshot that resolve-jds.mjs wrote off a
+// scanner hit — the user pasted nothing — so a prompt that always claims paste-box
+// origin mistags those rows [self-sourced], which wrongly exempts them from the
+// low-score auto-discard and corrupts the source mix. Only a raw http(s) URL or
+// pasted JD text is a real user origin, which is what opts.isPasteOrigin encodes.
+check(/isPasteOrigin/.test(deep),
+  'deep prompt branches its source line on opts.isPasteOrigin');
+check(/do NOT write \[self-sourced\]/.test(deep),
+  'deep prompt has a scanner-origin branch that suppresses the [self-sourced] tag');
+check(!/tracker-additions\/\.\s*This posting was entered directly by the user/.test(deep),
+  'deep prompt does not assert paste-box origin unconditionally');
+
 // The enforced half. If these move, the prompt sentences above stop being
 // belt-and-braces and become the only defense again.
 const gate = readFileSync(join(ROOT, 'gate-pipeline.mjs'), 'utf8');
