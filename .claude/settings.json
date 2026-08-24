@@ -6,5 +6,20 @@
       "Write",
       "Edit"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node scripts/hook-report-frontmatter.mjs",
+            "timeout": 15,
+            "statusMessage": "Checking report frontmatter"
+          }
+        ]
+      }
+    ]
   }
 }
