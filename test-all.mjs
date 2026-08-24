@@ -502,6 +502,7 @@ for (const suite of [
   'tests/hunter-budget.test.mjs',
   'tests/hunter-domain.test.mjs',
   'tests/hunter-discovery-route.test.mjs',
+  'tests/discover-job.test.mjs',
   'tests/stakeholder-additions.test.mjs',
   'tests/bulk-add-gate.test.mjs',
   'tests/scan-summary.test.mjs',
