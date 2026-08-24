@@ -492,6 +492,7 @@ for (const suite of [
   'tests/workspace-trust.test.mjs',
   'tests/onboarding-copy.test.mjs',
   'tests/verify-no-pii.test.mjs',
+  'tests/pii-blindspots.test.mjs',
   'tests/interview-sessions.test.mjs',
   'tests/activation.test.mjs',
   'tests/email-verify.test.mjs',
