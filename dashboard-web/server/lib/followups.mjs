@@ -14,6 +14,7 @@ import { parseReferralsMd, readReferralCorrespondence } from './referrals.mjs';
 import { resolvePeople } from './contact-identity.mjs';
 import { readPins } from './contact-links.mjs';
 import { buildTimeline } from './contact-timeline.mjs';
+import { INFLUENCE_RANK, DEFAULT_TIER } from '../../../lib/influence-tier.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
 // quickly each stage cools: warm Responded threads cool fastest, post-
@@ -709,6 +710,7 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
     companyOutreach,
     // Hiring-principal flag (TA contacts only; recruiters are never principals).
     isPrincipal: source === 'ta' ? (row.isPrincipal ?? false) : false,
+    influenceTier: row.influenceTier || DEFAULT_TIER,
     // Channel bucket: 1 = LinkedIn only, 2 = email only, 3 = both, 0 = neither.
     channelBucket: contactChannelBucket(row).bucket,
   };
@@ -904,13 +906,43 @@ function computeFollowupQueue(opts = {}) {
   return result;
 }
 
-// "High value" = reachable BOTH ways (a verified/sendable email AND a LinkedIn
-// handle). It was once its own Network directory page; now it is a per-contact
-// SIGNAL (a star + filter) on the TA and Recruiter tables, computed by this one
-// predicate so every surface agrees on what "high value" means. Same dual-channel
-// criteria the both-queue uses (contactChannelBucket bucket 3).
+// ─── The influence axis ──────────────────────────────────────────────────────
+// One of the two axes that decide who to work next. This one, and ONLY this one,
+// sets priority: how much can this person move the hiring decision? The other
+// axis is reachability (contactChannelBucket, above), which picks the channel and
+// nothing else. They must stay separate. Collapsing them is what produced the
+// bug fixed here: a CRO reachable only on LinkedIn ranked below a TA coordinator
+// with a verified address, so the queue worked whoever was easiest to email.
+//
+// Falls back to the ta rank rather than throwing, because a contact row can reach
+// this function from anywhere: a legacy row with no tag, a queue row, a shape from
+// a book that has no tier concept yet. A missing tier means "we have not
+// classified this person", and the safe reading of that is the default gatekeeper
+// tier, not an accidental promotion.
+function influenceRank(row) {
+  const tier = row?.influenceTier;
+  return typeof tier === 'string' && Object.hasOwn(INFLUENCE_RANK, tier)
+    ? INFLUENCE_RANK[tier]
+    : INFLUENCE_RANK[DEFAULT_TIER];
+}
+
+// Can this person actually move the hire? True for a hiring manager, a skip-level
+// exec and a functional peer, all of whom sit inside or next to the decision.
+// False for internal TA and for an agency recruiter: both are routes to the
+// decision, not part of it, and outreach to them is about process rather than fit.
+function canInfluenceHire(row) {
+  return influenceRank(row) >= INFLUENCE_RANK.peer;
+}
+
+// "High value" now means influence over the hire, not ease of contact. It was
+// once its own Network directory page; today it is a per-contact SIGNAL (a star
+// plus filter) on the contact tables, computed by this one predicate so every
+// surface agrees. The old definition was `hasEmail && hasLinkedIn`, which ranked
+// convenience and is exactly the confusion the two axes exist to end. Kept as an
+// alias so the existing call sites read naturally at the surface while there is
+// only ONE implementation underneath.
 function isHighValueContact(row) {
-  return contactChannelBucket(row).bucket === 3;
+  return canInfluenceHire(row);
 }
 
 // Applied roles in OUTREACH_ELIGIBLE_STATUSES that have ZERO contacts (no TA or
@@ -1211,7 +1243,7 @@ export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
   computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
   computeFollowupQueue, _followupRank,
-  isHighValueContact, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts,
+  influenceRank, canInfluenceHire, isHighValueContact, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts,
   computeJustConnectedQueue,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };
