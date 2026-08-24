@@ -16,6 +16,7 @@
  * stays unit-testable; pass `now` to make the day math deterministic.
  */
 import { isLinkedInInvite, isLinkedInEntry } from './channels.mjs';
+import { classifyInbound } from '../../../lib/inbound-classify.mjs';
 
 // Cold-outreach ceilings per channel. The LinkedIn count INCLUDES the connection
 // request, so 3 = connect + two follow-ups. A real reply lifts the cap entirely.
@@ -23,22 +24,16 @@ export const COLD_OUTREACH_CAPS = { linkedin: 3, email: 3 };
 
 const DAY_MS = 86400000;
 
-// A bare "Accepted LinkedIn connection request" is logged as a Received entry but
-// it is NOT a conversation — it must not lift the cold-outreach cap.
-function isAcceptanceNotice(m) {
-  return /^accepted linkedin connection request/i.test(String(m?.subject || '').trim())
-      || /^accepted linkedin connection request/i.test(String(m?.body || '').trim());
-}
-
 // Per-channel cold-outreach cap state for a contact. Counts OUTBOUND touches per
 // channel (LinkedIn includes the connect request; email is everything else). A
-// real inbound reply — anything Received that is not the acceptance notice —
-// means a live conversation, which lifts BOTH caps (capped is then always false).
+// real inbound reply means a live conversation, which lifts BOTH caps. An invite
+// acceptance, automatic reply, or departure notice is not a conversation and
+// therefore must leave the cold-outreach guardrails in place.
 export function outreachCapState(messages, opts = {}) {
   const msgs = Array.isArray(messages) ? messages : [];
   const caps = { ...COLD_OUTREACH_CAPS, ...(opts.caps || {}) };
   const sent = msgs.filter(m => m.direction === 'Sent');
-  const hasReply = msgs.some(m => m.direction === 'Received' && !isAcceptanceNotice(m));
+  const hasReply = msgs.some(m => m.direction === 'Received' && classifyInbound(m) === 'human');
   const liSent = sent.filter(m => isLinkedInEntry(m)).length;
   const emSent = sent.filter(m => !isLinkedInEntry(m)).length;
   const mk = (n, cap) => ({ sent: n, cap, capped: !hasReply && n >= cap });

@@ -48,11 +48,25 @@ function bareHostname(website) {
 // lib/tt-reconcile-core.mjs (reconcilePreview), shared with the reconcile-ta.mjs
 // CLI so the two can never drift. normCompany is imported from there too.
 
+const MAX_DISCOVER_COMPANIES = 15;
+const DISCOVER_CONCURRENCY = 3;
+const DISCOVER_COMPANY_TIMEOUT_MS = 90_000;
+const DISCOVER_REQUEST_OVERHEAD_MS = 30_000;
+// These are the only routes here that hold a request open for minutes, so their
+// timeout is an explicit route decision instead of weakening the server default.
+// 15 companies / concurrency 3 = 5 rounds; 5 * 90 seconds = 450 seconds, plus
+// 30 seconds for request and response overhead. The proper long-term shape is
+// the agent route pattern: return a jobId immediately and let the client poll.
+const DISCOVER_REQUEST_TIMEOUT_MS =
+  Math.ceil(MAX_DISCOVER_COMPANIES / DISCOVER_CONCURRENCY) * DISCOVER_COMPANY_TIMEOUT_MS
+  + DISCOVER_REQUEST_OVERHEAD_MS;
+
 // GET /api/tt-reconcile/preview
 // Returns:
 //   {
 //     toArchive: [{ id, first, last, company, title, reason, relatedApps:[{id,status,role}] }],
-//     companiesNeedingContacts: [{ company, exampleRole, appCount, mostRecentApp }]
+//     companiesNeedingContacts: [{ company, exampleRole, appCount, mostRecentApp }],
+//     companiesNeedingPrincipal: [{ company, exampleRole, appCount, mostRecentApp }]
 //   }
 router.get('/api/tt-reconcile/preview', (req, res) => {
   try {
@@ -177,13 +191,14 @@ router.post('/api/tt-reconcile/find-emails', async (req, res) => {
 //   { results: [{ company, suggestions: [{ first, last, title, city, state,
 //                                          linkedin, confidence, notes }] }] }
 router.post('/api/tt-reconcile/discover', async (req, res) => {
+  req.setTimeout(DISCOVER_REQUEST_TIMEOUT_MS);
   try {
     const { companies } = req.body || {};
     if (!Array.isArray(companies) || companies.length === 0) {
       return res.status(400).json({ error: 'companies[] required' });
     }
-    if (companies.length > 15) {
-      return res.status(400).json({ error: 'Max 15 companies per call (rate-limit protection).' });
+    if (companies.length > MAX_DISCOVER_COMPANIES) {
+      return res.status(400).json({ error: `Max ${MAX_DISCOVER_COMPANIES} companies per call (rate-limit protection).` });
     }
 
     // Process all companies in parallel — sequential was ~5-15s × N which
@@ -243,7 +258,7 @@ If the search returns no reliable matches, return an empty array []. Never fabri
           }],
         });
         const timeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`discover timeout after 90s for ${companyName}`)), 90000)
+          setTimeout(() => reject(new Error(`discover timeout after 90s for ${companyName}`)), DISCOVER_COMPANY_TIMEOUT_MS)
         );
         const fullText = await Promise.race([apiCall, timeout]);
         console.log(`[discover] done:  ${companyName}`);
@@ -262,10 +277,9 @@ If the search returns no reliable matches, return an empty array []. Never fabri
     // 30K ITPM for claude-sonnet-4-6 — running 15 in parallel blows past
     // that and the SDK silently waits for backpressure to clear instead of
     // returning a 429, so every call appears to hang until our 90s timeout.
-    const CONCURRENCY = 3;
     const results = [];
-    for (let i = 0; i < companies.length; i += CONCURRENCY) {
-      const slice = companies.slice(i, i + CONCURRENCY);
+    for (let i = 0; i < companies.length; i += DISCOVER_CONCURRENCY) {
+      const slice = companies.slice(i, i + DISCOVER_CONCURRENCY);
       const chunkResults = await Promise.all(slice.map(discoverOne));
       for (const r of chunkResults) if (r) results.push(r);
     }
@@ -286,13 +300,14 @@ If the search returns no reliable matches, return an empty array []. Never fabri
 // Response: { results: [{ company, suggestions: [{first,last,title,city,state,
 //                          linkedin,confidence,notes}] }] }
 router.post('/api/tt-reconcile/discover-principal', async (req, res) => {
+  req.setTimeout(DISCOVER_REQUEST_TIMEOUT_MS);
   try {
     const { companies } = req.body || {};
     if (!Array.isArray(companies) || companies.length === 0) {
       return res.status(400).json({ error: 'companies[] required' });
     }
-    if (companies.length > 15) {
-      return res.status(400).json({ error: 'Max 15 companies per call.' });
+    if (companies.length > MAX_DISCOVER_COMPANIES) {
+      return res.status(400).json({ error: `Max ${MAX_DISCOVER_COMPANIES} companies per call.` });
     }
 
     const discoverPrincipal = async (c) => {
@@ -338,7 +353,7 @@ If the search returns no reliable matches, return []. Never fabricate names or t
           }],
         });
         const timeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`discover-principal timeout after 90s for ${companyName}`)), 90000)
+          setTimeout(() => reject(new Error(`discover-principal timeout after 90s for ${companyName}`)), DISCOVER_COMPANY_TIMEOUT_MS)
         );
         const fullText = await Promise.race([apiCall, timeout]);
         console.log(`[discover-principal] done:  ${companyName}`);
@@ -367,10 +382,9 @@ If the search returns no reliable matches, return []. Never fabricate names or t
       }
     };
 
-    const CONCURRENCY = 3;
     const results = [];
-    for (let i = 0; i < companies.length; i += CONCURRENCY) {
-      const slice = companies.slice(i, i + CONCURRENCY);
+    for (let i = 0; i < companies.length; i += DISCOVER_CONCURRENCY) {
+      const slice = companies.slice(i, i + DISCOVER_CONCURRENCY);
       const chunkResults = await Promise.all(slice.map(discoverPrincipal));
       for (const r of chunkResults) if (r) results.push(r);
     }

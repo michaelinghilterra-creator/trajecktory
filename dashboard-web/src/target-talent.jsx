@@ -3,6 +3,17 @@
 // Adapted from Claude Design handoff to work with live API endpoints.
 
 const { useState, useEffect, useMemo, useCallback } = React;
+// This source is emitted as a standalone browser script, so load the small ESM
+// helper separately while keeping its pure function directly testable in Node.
+//
+// The fallback is not defensive habit. This helper exists to explain a NETWORK
+// failure, and it is itself fetched over the network, so the one moment it is
+// needed is the moment it is likeliest to be missing. Without a fallback the
+// await would reject inside the catch block that was handling the original
+// error, and the user would see nothing at all rather than something imperfect.
+const discoverErrorCopy = import("/discover-error-message.mjs").catch(() => ({
+  discoverErrorMessage: (err) => String(err?.message || "Contact discovery failed."),
+}));
 
 // ── Status pipeline ──────────────────────────────────────────────────────────
 const TT_STATUS = [
@@ -32,6 +43,12 @@ const INFLUENCE_TIER_SHORT_LABELS = Object.freeze({
   ta: "TA",
   agency: "Agency",
 });
+// Keep this identical to canInfluenceHire in server/lib/followups.mjs. Talent
+// uses the complement so every current and future value always has one view.
+const DECISION_MAKER_TIERS = Object.freeze(new Set(["hm", "exec", "peer"]));
+// Alphabetical labels would put Functional peer before Hiring manager, which
+// reverses the purpose of this column.
+const DECISION_MAKER_SORT = Object.freeze({ hm: 0, exec: 1, peer: 2 });
 
 function InfluenceTierBadge({ tier, source }) {
   const confirmed = source === "tag";
@@ -193,7 +210,7 @@ function CreditBalances() {
   );
 }
 
-function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImported }) {
+function ContactsTableView({ contacts, audience, otherCount, onOpen, selId, onReconcile, onFindDecisionMakers, search, onImported }) {
   const [showArchived, setShowArchived] = useState(false);
   const [statusFilter, setStatusFilter] = useState(null);
   const [companyFilter, setCompanyFilter] = useState("");
@@ -234,6 +251,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
       case "status":   return (TT_STATUS_MAP[c.status] || { stage: -2 }).stage;
       case "linkedin": return TT_LINKEDIN_RANK[c.linkedinStatus] ?? 0;
       case "last":     return c.lastTouch || "";
+      case "influence": return DECISION_MAKER_SORT[c.influenceTier] ?? Number.MAX_SAFE_INTEGER;
       default:         return "";
     }
   };
@@ -280,18 +298,31 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
   const cols = [
     { k: "name",     label: "Contact",    w: 210 },
     { k: "title",    label: "Title",      w: 220 },
+    ...(audience === "decision-makers" ? [{ k: "influence", label: "Role in hire", w: 140 }] : []),
     { k: "company",  label: "Company",    w: 180 },
     { k: "location", label: "Location",   w: 140 },
     { k: "status",   label: "Status",     w: 150 },
     { k: "linkedin", label: "LinkedIn",   w: 130 },
     { k: "last",     label: "Last touch", w: 110 },
   ];
+  const decisionMakers = audience === "decision-makers";
+  const heading = decisionMakers ? "Decision Makers" : "TA Outreach";
+  const description = decisionMakers
+    ? "They can say yes to the hire."
+    : "They move you through the process, somebody else decides.";
+  const splitCopy = audience === "decision-makers"
+    ? `${active.length} contacts here. ${otherCount} talent contacts are on the TA Outreach tab.`
+    : audience === "talent"
+      ? `${active.length} contacts here. ${otherCount} decision makers are on the Decision Makers tab.`
+      : null;
 
   return (
     <div className="fade-up">
       <div className="ta-head">
         <div>
-          <h1>TA Outreach</h1>
+          <h1>{heading}</h1>
+          {audience && <div className="sub">{description}</div>}
+          {splitCopy && <div className="sub">{splitCopy}</div>}
           <div className="sub">{active.length} active contacts &middot; {companies.length} companies &middot; {archivedCount} archived</div>
           <CreditBalances />
         </div>
@@ -313,6 +344,10 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
             {importing ? "Importing…" : "Import CSV"}
             <input type="file" accept=".csv,text/csv" style={{ display: "none" }} disabled={importing} onChange={handleImport} />
           </label>
+          {decisionMakers && <button className="btn" onClick={onFindDecisionMakers}
+            title="Search every live application that has contacts but nobody who can decide, and propose people to add.">
+            <TIcon d={TI.users} size={14} /> Find decision-makers
+          </button>}
           <button className="btn primary" onClick={onReconcile}><TIcon d={TI.refresh} size={14} /> Reconcile</button>
         </div>
       </div>
@@ -377,6 +412,13 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
                     <td title={c.title || "No job title recorded for this contact"}>
                       <span style={{ fontSize: 12, color: "var(--text-dim)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} aria-label={c.title || "No job title recorded"}>{c.title || "-"}</span>
                     </td>
+                    {decisionMakers && (
+                      <td>
+                        <span style={{ fontSize: 12, color: "var(--text-dim)", opacity: c.influenceTierSource === "tag" ? 1 : 0.5 }}>
+                          {INFLUENCE_TIER_LABELS[c.influenceTier] || c.influenceTier || "-"}
+                        </span>
+                      </td>
+                    )}
                     <td title={c.company || ""}>
                       <span style={{ fontWeight: 600, fontSize: 12, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.company}</span>
                     </td>
@@ -1452,13 +1494,14 @@ window.FindContactsPanel = FindContactsPanel;
 
 const STEPS = ["Preview", "Discover", "Apply"];
 
-function ReconcileModal({ onClose, onApplied }) {
+function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState({ toArchive: [], companiesNeedingContacts: [] });
   const [archSel, setArchSel] = useState(new Set());
   const [gapSel, setGapSel] = useState(new Set());
+  const [principalGapSel, setPrincipalGapSel] = useState(new Set());
   const [discoveries, setDiscoveries] = useState([]);
   const [discSel, setDiscSel] = useState(new Set());
   const [outcome, setOutcome] = useState(null);
@@ -1470,54 +1513,77 @@ function ReconcileModal({ onClose, onApplied }) {
       .then(d => {
         if (d.error) { setError(d.error); setLoading(false); return; }
         setPreview(d);
-        setArchSel(new Set((d.toArchive || []).map(x => x.id)));
-        setGapSel(new Set((d.companiesNeedingContacts || []).map(c => c.company)));
+        // A focused principal search still uses the full wizard. Clearing the
+        // other selections prevents its bulk action from making unrelated edits.
+        setArchSel(initialMode === "principal" ? new Set() : new Set((d.toArchive || []).map(x => x.id)));
+        setGapSel(initialMode === "principal" ? new Set() : new Set((d.companiesNeedingContacts || []).map(c => c.company)));
+        setPrincipalGapSel(new Set((d.companiesNeedingPrincipal || []).map(c => c.company)));
         setLoading(false);
       })
       .catch(e => { setError(e.message); setLoading(false); });
-  }, []);
+  }, [initialMode]);
 
   const toggleSet = (setter, key) => setter(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
   const runDiscover = async () => {
     setStep(1); setScanning(true); setError(null);
-    const companies = preview.companiesNeedingContacts
+    const talentCompanies = preview.companiesNeedingContacts
       .filter(c => gapSel.has(c.company))
       .map(c => ({ company: c.company, exampleRole: c.exampleRole }));
-    if (companies.length === 0) { setScanning(false); setDiscoveries([]); return; }
-    // Server caps each call at 15 companies. Batch sequentially so very large
-    // pipelines still complete without tripping the rate-limit guard, and
-    // surface partial-failure errors instead of silently returning 0 contacts.
-    const BATCH = 15;
+    const principalCompanies = (preview.companiesNeedingPrincipal || [])
+      .filter(c => principalGapSel.has(c.company))
+      .map(c => ({ company: c.company, exampleRole: c.exampleRole }));
+    if (talentCompanies.length === 0 && principalCompanies.length === 0) {
+      setScanning(false); setDiscoveries([]); setDiscSel(new Set()); return;
+    }
+    // 6 companies / server concurrency 3 * 90 seconds per company = 180 seconds
+    // worst case per request, which must stay under the route timeout. Six also
+    // respects the server's rate-limit guard of at most 15 companies per call.
+    const BATCH = 6;
     const all = [];
     const errs = [];
+    const searches = [
+      { companies: talentCompanies, endpoint: "/api/tt-reconcile/discover", search: "talent", source: "agent" },
+      { companies: principalCompanies, endpoint: "/api/tt-reconcile/discover-principal", search: "principal", source: "agent" },
+    ];
     try {
-      for (let i = 0; i < companies.length; i += BATCH) {
-        const slice = companies.slice(i, i + BATCH);
-        const res = await window.tjkMutate("/api/tt-reconcile/discover", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companies: slice }),
-        });
-        const d = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        if (!res.ok || d.error) {
-          errs.push(`batch ${Math.floor(i / BATCH) + 1}: ${d.error || `HTTP ${res.status}`}`);
-          continue;
+      for (const search of searches) {
+        for (let i = 0; i < search.companies.length; i += BATCH) {
+          const slice = search.companies.slice(i, i + BATCH);
+          const res = await window.tjkMutate(search.endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ companies: slice }),
+          });
+          const d = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+          if (!res.ok || d.error) {
+            errs.push(`${search.search} batch ${Math.floor(i / BATCH) + 1}: ${d.error || `HTTP ${res.status}`}`);
+            continue;
+          }
+          for (const r of (d.results || [])) {
+            all.push({
+              ...r,
+              suggestions: (r.suggestions || []).map(s => ({
+                ...s,
+                reconcileSearch: search.search,
+                reconcileSource: search.source,
+              })),
+            });
+          }
         }
-        for (const r of (d.results || [])) all.push(r);
       }
       setDiscoveries(all);
       const pre = new Set();
       for (const r of all) {
         for (const s of (r.suggestions || [])) {
           const conf = (s.confidence || "low").toLowerCase();
-          if (conf === "high" || conf === "medium") pre.add(`${r.company}::${s.first || ""} ${s.last || ""}`);
+          if (conf === "high" || conf === "medium") pre.add(`${s.reconcileSearch}::${r.company}::${s.first || ""} ${s.last || ""}`);
         }
       }
       setDiscSel(pre);
       if (errs.length) setError(`Discover finished with ${errs.length} partial error(s): ${errs.join("; ")}`);
     } catch (e) {
-      setError(e.message);
+      setError((await discoverErrorCopy).discoverErrorMessage(e));
     } finally {
       setScanning(false);
     }
@@ -1526,7 +1592,7 @@ function ReconcileModal({ onClose, onApplied }) {
   const apply = async () => {
     setStep(2); setLoading(true);
     try {
-      let archived = 0, added = 0, emailsFound = 0, verifierKeys = true;
+      let archived = 0, added = 0, emailsFound = 0, verifierKeys = true, rejected = [];
       if (archSel.size > 0) {
         const r = await window.tjkMutate("/api/tt-reconcile/archive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(archSel) }) });
         const d = await r.json();
@@ -1535,19 +1601,21 @@ function ReconcileModal({ onClose, onApplied }) {
       const toAdd = [];
       for (const r of discoveries) {
         for (const s of (r.suggestions || [])) {
-          const key = `${r.company}::${s.first || ""} ${s.last || ""}`;
+          const key = `${s.reconcileSearch}::${r.company}::${s.first || ""} ${s.last || ""}`;
           if (!discSel.has(key)) continue;
-          toAdd.push({ company: r.company, first: s.first || "", last: s.last || "", title: s.title || "", city: s.city || "", state: s.state || "", linkedin: s.linkedin || "", notes: [s.notes, `Auto-added via Reconcile (confidence: ${s.confidence || "unknown"})`].filter(Boolean).join(" · ") });
+          toAdd.push({ company: r.company, first: s.first || "", last: s.last || "", title: s.title || "", city: s.city || "", state: s.state || "", linkedin: s.linkedin || "", source: s.reconcileSource, notes: [s.notes, `Auto-added via Reconcile (confidence: ${s.confidence || "unknown"})`].filter(Boolean).join(" · ") });
         }
       }
       if (toAdd.length > 0) {
-        const r = await window.tjkMutate("/api/tt-reconcile/bulk-add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: toAdd }) });
+        // The validation gate protects only machine callers that declare their source.
+        const r = await window.tjkMutate("/api/tt-reconcile/bulk-add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: toAdd, source: "agent" }) });
         const d = await r.json();
         added = d.written || 0;
         emailsFound = d.emailsFound || 0;
         verifierKeys = d.verifierKeys !== false;
+        rejected = d.rejected || [];
       }
-      setOutcome({ archived, added, emailsFound, verifierKeys });
+      setOutcome({ archived, added, emailsFound, verifierKeys, rejected });
       setLoading(false);
       onApplied?.();
     } catch (e) { setError(e.message); setLoading(false); }
@@ -1591,17 +1659,32 @@ function ReconcileModal({ onClose, onApplied }) {
                       av={ttInitials((c.first || "") + " " + (c.last || ""))} name={`${c.first} ${c.last}`}
                       meta={`${c.title} · ${c.company}`} right={<StatusBadge status={c.status || "Dormant"} size="sm" />} />
                   ))}
-                <div className="rec-section-label" style={{ marginTop: 22 }}><TIcon d={TI.building} size={12} /> Companies needing contacts &middot; {gapSel.size} selected</div>
-                <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Companies in your pipeline with no TA contact yet.</div>
+                <div className="rec-section-label" style={{ marginTop: 22 }}><TIcon d={TI.building} size={12} /> Companies with nobody to talk to &middot; {gapSel.size} selected</div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Companies in your pipeline with no contact yet.</div>
                 {preview.companiesNeedingContacts.length === 0
                   ? <div className="empty" style={{ padding: "12px 0" }}>All companies covered.</div>
                   : preview.companiesNeedingContacts.map(c => (
                     <RecRow key={c.company} checked={gapSel.has(c.company)} onToggle={() => toggleSet(setGapSel, c.company)}
                       av={<TIcon d={TI.building} size={13} />} name={c.company}
                       meta={`${c.exampleRole} (${c.mostRecentApp?.status || "?"} · ${c.mostRecentApp?.date || "?"})`}
-                      reason={`${c.appCount} active app${c.appCount === 1 ? "" : "s"}, no TA contact`}
+                      reason={`${c.appCount} active app${c.appCount === 1 ? "" : "s"}, nobody to talk to`}
                       right={<span className="tag accent">{c.appCount} app{c.appCount !== 1 ? "s" : ""}</span>} />
                   ))}
+                {Array.isArray(preview.companiesNeedingPrincipal) && (
+                  <>
+                    <div className="rec-section-label" style={{ marginTop: 22 }}><TIcon d={TI.users} size={12} /> Companies where nobody can make the decision &middot; {principalGapSel.size} selected</div>
+                    <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>These companies have contacts, but nobody who can influence the hire.</div>
+                    {preview.companiesNeedingPrincipal.length === 0
+                      ? <div className="empty" style={{ padding: "12px 0" }}>Every company has a decision-maker.</div>
+                      : preview.companiesNeedingPrincipal.map(c => (
+                        <RecRow key={c.company} checked={principalGapSel.has(c.company)} onToggle={() => toggleSet(setPrincipalGapSel, c.company)}
+                          av={<TIcon d={TI.users} size={13} />} name={c.company}
+                          meta={`${c.exampleRole} (${c.mostRecentApp?.status || "?"} · ${c.mostRecentApp?.date || "?"})`}
+                          reason={`${c.appCount} active app${c.appCount === 1 ? "" : "s"}, nobody can make the decision`}
+                          right={<span className="tag accent">{c.appCount} app{c.appCount !== 1 ? "s" : ""}</span>} />
+                      ))}
+                  </>
+                )}
               </>}
             </div>
           )}
@@ -1610,21 +1693,21 @@ function ReconcileModal({ onClose, onApplied }) {
               {scanning ? (
                 <div className="scan">
                   <div className="scan-ring" />
-                  <div className="scan-log">Searching for TA contacts at {gapSel.size} companies…</div>
+                  <div className="scan-log">Searching {gapSel.size} companies for contacts and {principalGapSel.size} for decision-makers…</div>
                 </div>
               ) : (
                 <>
                   <div className="rec-section-label"><TIcon d={TI.users} size={12} /> Discovered contacts &middot; {discSel.size} selected</div>
                   <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Found {discoveries.reduce((n, r) => n + (r.suggestions || []).length, 0)} contacts.</div>
                   {discoveries.map(r => (r.suggestions || []).map((s, i) => {
-                    const key = `${r.company}::${s.first || ""} ${s.last || ""}`;
+                    const key = `${s.reconcileSearch}::${r.company}::${s.first || ""} ${s.last || ""}`;
                     const conf = s.confidence || "Medium";
                     return (
                       <RecRow key={key} checked={discSel.has(key)} onToggle={() => toggleSet(setDiscSel, key)}
                         av={ttInitials((s.first || "?") + " " + (s.last || "?"))} name={`${s.first} ${s.last}`}
                         meta={`${s.title} · ${r.company}`}
                         reason={s.linkedin ? <a className="link" href={window.safeHref(s.linkedin)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: "var(--accent)", fontSize: 11 }}>LinkedIn ↗</a> : null}
-                        right={<span className={"conf " + conf}>{conf}</span>} />
+                        right={<div style={{ display: "flex", gap: 6, alignItems: "center" }}><span className="tag accent">{s.reconcileSearch === "principal" ? "Decision-maker search" : "Talent search"}</span><span className={"conf " + conf}>{conf}</span></div>} />
                     );
                   }))}
                 </>
@@ -1652,6 +1735,11 @@ function ReconcileModal({ onClose, onApplied }) {
                     dashboard-web/.env to auto-find and verify addresses for new contacts.
                   </div>
                 )}
+                {outcome && outcome.rejected.map((person, i) => (
+                  <div key={`${person.name || "contact"}-${i}`} style={{ color: "var(--red)", fontSize: 11, marginTop: 6 }}>
+                    {person.name || "Unnamed contact"}: {person.reasons?.[0] || "validation failed"}
+                  </div>
+                ))}
                 {outcome && (outcome.archived > 0 || outcome.added > 0) && (
                   <div style={{ fontSize: 11, color: "var(--text-mute)", maxWidth: 440, margin: "16px auto 0", lineHeight: 1.65 }}>
                     These changes are saved. New contacts got a <b>verified</b> email wherever one could be
@@ -1666,7 +1754,7 @@ function ReconcileModal({ onClose, onApplied }) {
         </div>
         <div className="modal-foot">
           {step > 0 && step < 2 && <button className="btn" onClick={() => setStep(s => s - 1)}><TIcon d={TI.undo} size={13} /> Back</button>}
-          {step === 0 && !loading && <span className="mono" style={{ fontSize: 11, color: "var(--text-mute)" }}>{archSel.size} to archive &middot; {gapSel.size} to search</span>}
+          {step === 0 && !loading && <span className="mono" style={{ fontSize: 11, color: "var(--text-mute)" }}>{archSel.size} to archive &middot; {gapSel.size} contact searches &middot; {principalGapSel.size} decision-maker searches</span>}
           <div className="right" style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
             {step === 0 && !loading && <button className="btn primary" onClick={runDiscover}>Discover contacts <TIcon d={TI.arrowR} size={13} /></button>}
             {step === 1 && !scanning && <button className="btn primary" onClick={apply}>Apply changes <TIcon d={TI.arrowR} size={13} /></button>}
@@ -1687,11 +1775,11 @@ function ReconcileModal({ onClose, onApplied }) {
 // ── Root component ───────────────────────────────────────────────────────────
 // TA Outreach is a single view (the Contacts table). The old Overview subtab was
 // removed, so the tab opens straight to the contacts list — no subtab bar.
-window.TargetTalentTab = function TargetTalentTab({ initialOpenId, onInitialOpenConsumed, search } = {}) {
+window.TargetTalentTab = function TargetTalentTab({ audience, initialOpenId, onInitialOpenConsumed, search } = {}) {
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [drawerId, setDrawerId] = useState(null);
-  const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [reconcileMode, setReconcileMode] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1702,6 +1790,29 @@ window.TargetTalentTab = function TargetTalentTab({ initialOpenId, onInitialOpen
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // Count on the SAME basis the table shows, which is active contacts only.
+  // Counting the whole book here put "25 contacts here" directly above a table
+  // rendering 2, and beside a stats line correctly reporting 2 active and 23
+  // archived. Three numbers for one question is how a working screen reads as
+  // broken, so the split line and the rows it describes share one filter.
+  const decisionMakerCount = useMemo(
+    () => contacts.filter(c => c.status !== "Archived" && DECISION_MAKER_TIERS.has(c.influenceTier)).length,
+    [contacts]
+  );
+  const activeCount = useMemo(() => contacts.filter(c => c.status !== "Archived").length, [contacts]);
+  const viewContacts = useMemo(() => {
+    if (audience === "decision-makers") {
+      return contacts.filter(c => DECISION_MAKER_TIERS.has(c.influenceTier));
+    }
+    if (audience === "talent") {
+      return contacts.filter(c => !DECISION_MAKER_TIERS.has(c.influenceTier));
+    }
+    return contacts;
+  }, [contacts, audience]);
+  const otherCount = audience === "decision-makers"
+    ? activeCount - decisionMakerCount
+    : audience === "talent" ? decisionMakerCount : 0;
+
   // Honor `initialOpenId` from a cross-tab hand-off (e.g. a Follow-Ups TA row
   // click). Open the drawer once, then notify the parent so the prop clears.
   useEffect(() => {
@@ -1711,14 +1822,16 @@ window.TargetTalentTab = function TargetTalentTab({ initialOpenId, onInitialOpen
     }
   }, [initialOpenId, onInitialOpenConsumed]);
 
-  if (loading && contacts.length === 0) return <div style={{ padding: 20, color: "var(--text-dim)" }}>Loading TA Outreach data…</div>;
+  if (loading && contacts.length === 0) return <div style={{ padding: 20, color: "var(--text-dim)" }}>Loading {audience === "decision-makers" ? "Decision Makers" : "TA Outreach"} data…</div>;
 
   return (
     <div style={{ flex: 1, maxWidth: "none", marginLeft: 0, marginRight: 0 }}>
-      <ContactsTableView contacts={contacts} onOpen={setDrawerId} selId={drawerId} onReconcile={() => setReconcileOpen(true)} search={search} onImported={load} />
+      <ContactsTableView contacts={viewContacts} audience={audience} otherCount={otherCount}
+        onOpen={setDrawerId} selId={drawerId} onReconcile={() => setReconcileMode("all")}
+        onFindDecisionMakers={() => setReconcileMode("principal")} search={search} onImported={load} />
 
       {drawerId != null && <TTDrawer id={drawerId} onClose={() => setDrawerId(null)} onUpdate={load} />}
-      {reconcileOpen && <ReconcileModal onClose={() => setReconcileOpen(false)} onApplied={load} />}
+      {reconcileMode && <ReconcileModal initialMode={reconcileMode} onClose={() => setReconcileMode(null)} onApplied={load} />}
     </div>
   );
 };

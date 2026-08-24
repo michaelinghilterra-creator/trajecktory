@@ -20,6 +20,7 @@ import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
 import { INFLUENCE_TIERS } from '../../../lib/influence-tier.mjs';
+import { classifyInbound } from '../../../lib/inbound-classify.mjs';
 
 export const router = express.Router();
 
@@ -166,8 +167,10 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
 
     const messages = readTTCorrespondence(id);
     const ts = timestamp || new Date().toISOString().replace('T', ' ').slice(0, 16);
-    messages.push({ timestamp: ts, direction, channel, subject: subject.trim(), body: body.trim() });
+    const message = { timestamp: ts, direction, channel, subject: subject.trim(), body: body.trim() };
+    messages.push(message);
     writeTTCorrespondence(id, messages);
+    const isHumanReply = direction === 'Received' && classifyInbound(message) === 'human';
 
     // Auto-advance status — never regress. A Sent follow-up after a Reply
     // came in must not knock status back from Replied → Sent.
@@ -177,16 +180,17 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     let newStatus = r.status;
     if (direction === 'Draft' && curStage < 1) newStatus = 'Drafted';
     else if (direction === 'Sent' && curStage < 2) newStatus = 'Sent';
-    else if (direction === 'Received' && curStage < 3) newStatus = 'Replied';
+    // Automatic responses are recorded but cannot advance the funnel because no
+    // person has replied. Departures and invite acceptances follow the same rule.
+    else if (isHumanReply && curStage < 3) newStatus = 'Replied';
     if (newStatus !== r.status || direction !== 'Draft') {
       updateTTLine(id, { status: newStatus, lastTouch: today });
     }
 
-    // Reply-anywhere-pauses-all: when a reply comes in on any channel, auto-pause
-    // any active outreach sequence for this contact. Best-effort — if there is no
-    // active sequence the call is a no-op (throws internally, caught silently).
-    if (direction === 'Received') {
-      try { pauseSequence('ta', id, today); } catch { /* no active sequence — safe to ignore */ }
+    // Only a human reply pauses outreach because it means a person is in the
+    // conversation. Automatic responses stay logged without stopping the sequence.
+    if (isHumanReply) {
+      try { pauseSequence('ta', id, today); } catch { /* no active sequence, safe to ignore */ }
     }
 
     // A LinkedIn connection request is a connect, NOT an email touch. Tally it in
