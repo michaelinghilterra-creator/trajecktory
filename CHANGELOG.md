@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.38.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.38.0...v2.38.1) (2026-08-24)
+
+
+### Bug Fixes
+
+* reject a crafted message id before it can steer a Gmail request ([#250](https://github.com/michaelinghilterra-creator/trajecktory/issues/250)) ([f203dd3](https://github.com/michaelinghilterra-creator/trajecktory/commit/f203dd3af693e2b59d53726f9f32b69e2fc486a2))
+
 ## [2.38.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.37.1...v2.38.0) (2026-08-24)
 
 
