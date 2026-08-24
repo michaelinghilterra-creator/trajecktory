@@ -23,6 +23,80 @@
 import fs from 'fs';
 import path from 'path';
 import { ROOT_DIR, DATA_DIR } from '../config.mjs';
+import { INFLUENCE_RANK } from '../../../lib/influence-tier.mjs';
+import { normalizeForMatch } from '../../../lib/scan-core.mjs';
+
+const SUGGESTED_SEQUENCE_IDS = Object.freeze({
+  principal: 'cold-intro-principal',
+  ta: 'cold-intro-ta',
+  cfo: 'cold-intro-cfo',
+  cro: 'cold-intro-cro',
+  sales: 'cold-intro-vp-sales',
+  demandgen: 'cold-intro-demandgen',
+  linkedinPrincipal: 'linkedin-connect-principal',
+  linkedinTa: 'linkedin-connect-ta',
+});
+
+const STAKEHOLDER_TITLE_RUNS = Object.freeze({
+  finance: Object.freeze(['chief financial officer', 'cfo', 'finance'].map(normalizeForMatch)),
+  chiefRevenue: Object.freeze(['chief revenue officer', 'cro'].map(normalizeForMatch)),
+  salesLeadership: Object.freeze([
+    'vp sales', 'head sales', 'director sales', 'sales director', 'chief sales officer',
+  ].map(normalizeForMatch)),
+  demandgen: Object.freeze([
+    'demand generation', 'demand gen', 'marketing',
+  ].map(normalizeForMatch)),
+});
+
+function titleContainsWholeRun(title, phrases) {
+  const normalized = normalizeForMatch(title);
+  if (!normalized) return false;
+  const paddedTitle = ` ${normalized} `;
+  return phrases.some(phrase => paddedTitle.includes(` ${phrase} `));
+}
+
+/**
+ * Suggests an outreach sequence from two separate facts about a contact.
+ *
+ * WHY: the tier decides how much someone can move the hire, while the title
+ * decides which problem the opener should lead with. Treating those as one
+ * question produces generic outreach to stakeholders who own different parts
+ * of the revenue engine. LinkedIn remains tier-only because a connection note
+ * is a handshake rather than the pitch itself.
+ */
+export function suggestSequenceId(contact, { channel = 'email' } = {}) {
+  const tier = contact?.tier || contact?.influenceTier;
+  if (!Object.hasOwn(INFLUENCE_RANK, tier)) return null;
+
+  if (channel === 'linkedin') {
+    const canInfluenceHire = INFLUENCE_RANK[tier] >= INFLUENCE_RANK.peer;
+    return canInfluenceHire
+      ? SUGGESTED_SEQUENCE_IDS.linkedinPrincipal
+      : SUGGESTED_SEQUENCE_IDS.linkedinTa;
+  }
+
+  if (tier === 'ta' || tier === 'agency') return SUGGESTED_SEQUENCE_IDS.ta;
+
+  const title = contact?.title;
+  if (tier === 'exec' && titleContainsWholeRun(title, STAKEHOLDER_TITLE_RUNS.finance)) {
+    return SUGGESTED_SEQUENCE_IDS.cfo;
+  }
+  if ((tier === 'exec' || tier === 'hm')
+    && titleContainsWholeRun(title, STAKEHOLDER_TITLE_RUNS.chiefRevenue)) {
+    return SUGGESTED_SEQUENCE_IDS.cro;
+  }
+  if ((tier === 'hm' || tier === 'peer')
+    && titleContainsWholeRun(title, STAKEHOLDER_TITLE_RUNS.salesLeadership)) {
+    return SUGGESTED_SEQUENCE_IDS.sales;
+  }
+  if (tier === 'peer' && titleContainsWholeRun(title, STAKEHOLDER_TITLE_RUNS.demandgen)) {
+    return SUGGESTED_SEQUENCE_IDS.demandgen;
+  }
+  if (tier === 'hm' || tier === 'exec' || tier === 'peer') {
+    return SUGGESTED_SEQUENCE_IDS.principal;
+  }
+  return null;
+}
 
 // DATA_DIR, never ROOT_DIR + 'data'. See tests/data-dir-sandbox.test.mjs.
 const SEQUENCES_PATH = path.join(DATA_DIR, 'contact-sequences.json');

@@ -509,6 +509,7 @@ for (const suite of [
   'tests/influence-tier.test.mjs',
   'tests/tier-derivation.test.mjs',
   'tests/title-to-tier.test.mjs',
+  'tests/stakeholder-sequences.test.mjs',
   'tests/influence-predicate.test.mjs',
   'tests/unthreaded-apps.test.mjs',
   'tests/influence-ranking.test.mjs',
