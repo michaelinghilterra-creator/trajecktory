@@ -521,6 +521,8 @@ for (const suite of [
   'tests/influence-ui-copy.test.mjs',
   'tests/followup-queue-books.test.mjs',
   'tests/followups-cap.test.mjs',
+  'tests/inbound-classify.test.mjs',
+  'tests/auto-reply-caps.test.mjs',
   'tests/followups-snooze.test.mjs',
   'tests/followup-card.test.mjs',
   'tests/outreach-policy.test.mjs',
