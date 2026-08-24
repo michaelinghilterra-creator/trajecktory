@@ -1244,6 +1244,7 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
   const [sel, setSel] = useState(new Set());
   const [error, setError] = useState(null);
   const [addedCount, setAddedCount] = useState(0);
+  const [rejected, setRejected] = useState([]);
   // Which kind of contact to search for: 'ta' = Talent Acquisition / recruiter
   // gatekeeper (default), 'principal' = the hiring manager / skip-level you would
   // actually report to (VP/Director of the target function). Principal mode hits a
@@ -1253,7 +1254,7 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
   const keyOf = (s) => `${s.first || ""} ${s.last || ""}`.trim();
 
   const runDiscover = () => {
-    setPhase("scanning"); setError(null);
+    setPhase("scanning"); setError(null); setRejected([]);
     const endpoint = mode === "principal" ? "/api/tt-reconcile/discover-principal" : "/api/tt-reconcile/discover";
     window.tjkMutate(endpoint, {
       method: "POST",
@@ -1265,7 +1266,7 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
         if (!ok || d.error) { setError(d.error || "Discovery failed."); setPhase("idle"); return; }
         const sug = (d.results || []).flatMap(r => r.suggestions || []);
         setSuggestions(sug);
-        const pre = new Set(sug.filter(s => ["high", "medium"].includes((s.confidence || "low").toLowerCase())).map(keyOf));
+        const pre = new Set(sug.filter(s => s.validation?.ok !== false && ["high", "medium"].includes((s.confidence || "low").toLowerCase())).map(keyOf));
         setSel(pre);
         setPhase("review");
       })
@@ -1286,9 +1287,17 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
     }));
     if (contacts.length === 0) { onCancel?.(); return; }
     setPhase("adding");
-    window.tjkMutate("/api/tt-reconcile/bulk-add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts }) })
+    window.tjkMutate("/api/tt-reconcile/bulk-add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contacts,
+        // The plain TA path is also model-backed, but gating it is outside this change.
+        source: mode === "principal" ? "agent" : "manual",
+      }),
+    })
       .then(r => r.json())
-      .then(d => { setAddedCount(d.written || contacts.length); setPhase("done"); onAdded?.(); })
+      .then(d => { setAddedCount(d.written ?? contacts.length); setRejected(d.rejected || []); setPhase("done"); onAdded?.(); })
       .catch(e => { setError(e.message); setPhase("review"); });
   };
 
@@ -1331,12 +1340,13 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
           {suggestions.map((s, i) => {
             const k = keyOf(s);
             const conf = s.confidence || "Medium";
+            const invalid = s.validation?.ok === false;
             return (
               <RecRow key={k + i} checked={sel.has(k)} onToggle={() => toggle(k)}
                 av={ttInitials((s.first || "?") + " " + (s.last || "?"))} name={`${s.first} ${s.last}`}
-                meta={s.title}
-                reason={s.linkedin ? <a className="link" href={window.safeHref(s.linkedin)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: "var(--accent)", fontSize: 11 }}>LinkedIn ↗</a> : null}
-                right={<span className={"conf " + conf}>{conf}</span>} />
+                meta={invalid ? `${s.title || ""} · Unsupported: ${s.validation.reasons?.[0] || "validation failed"}` : s.title}
+                reason={s.linkedin ? <a className="link" href={window.safeHref(s.linkedin)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: invalid ? "var(--red)" : "var(--accent)", fontSize: 11 }}>LinkedIn ↗</a> : null}
+                right={<span className={"conf " + conf} style={invalid ? { color: "var(--red)" } : undefined}>{invalid ? "Unsupported" : conf}</span>} />
             );
           })}
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
@@ -1349,9 +1359,16 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
       {phase === "adding" && <div className="ai-loading"><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> Adding…</div>}
 
       {phase === "done" && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 12, color: "var(--green)" }}><TIcon d={TI.check} size={13} /> Added {addedCount} contact{addedCount === 1 ? "" : "s"}.</span>
-          {onCancel && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={onCancel}>Done</button>}
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 12, color: "var(--green)" }}><TIcon d={TI.check} size={13} /> Added {addedCount} contact{addedCount === 1 ? "" : "s"}.</span>
+            {onCancel && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={onCancel}>Done</button>}
+          </div>
+          {rejected.map((person, i) => (
+            <div key={`${person.name || "contact"}-${i}`} style={{ color: "var(--red)", fontSize: 11, marginTop: 6 }}>
+              {person.name || "Unnamed contact"}: {person.reasons?.[0] || "validation failed"}
+            </div>
+          ))}
         </div>
       )}
     </div>

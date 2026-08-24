@@ -500,6 +500,7 @@ for (const suite of [
   'tests/hunter-budget.test.mjs',
   'tests/hunter-domain.test.mjs',
   'tests/stakeholder-additions.test.mjs',
+  'tests/bulk-add-gate.test.mjs',
   'tests/scan-summary.test.mjs',
   'tests/tt-reconcile.test.mjs',
   'tests/tt-linkedin.test.mjs',

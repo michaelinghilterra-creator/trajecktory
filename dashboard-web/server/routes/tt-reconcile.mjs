@@ -9,8 +9,26 @@ import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
 import { findAndVerify, hunterSearchesLeft, millionVerifierCreditsLeft, planFindBudget, DEFAULT_FIND_LIMIT } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
+import { validateStakeholder } from '../../../lib/stakeholder-additions.mjs';
 
 export const router = express.Router();
+
+function localDate(date = new Date()) {
+  // Provenance follows the user's local calendar. UTC is already the next day
+  // during part of the US evening, which would stamp a contact with tomorrow.
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function bareHostname(website) {
+  const value = String(website || '').trim();
+  if (!value) return undefined;
+  try {
+    const url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+    return url.hostname.toLowerCase().replace(/^www\./, '') || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 // ── Talent Acquisition Reconcile Flow ────────────────────────────────────────
 // Three-step reconciliation triggered from the TA tab:
@@ -326,10 +344,20 @@ If the search returns no reliable matches, return []. Never fabricate names or t
         let suggestions = jsonMatch ? (() => { try { return JSON.parse(jsonMatch[0]); } catch { return []; } })() : [];
         // Guarantee the [principal] tag is in every suggestion's notes (the model
         // is instructed to include it, but stamp it defensively on parse too).
-        suggestions = suggestions.map(s => ({
-          ...s,
-          notes: /\[principal\]/i.test(s.notes || '') ? s.notes : `${s.notes || ''}${s.notes ? ' ' : ''}[principal]`.trim(),
-        }));
+        suggestions = suggestions.map(s => {
+          const suggestion = {
+            ...s,
+            source: 'agent',
+            notes: /\[principal\]/i.test(s.notes || '') ? s.notes : `${s.notes || ''}${s.notes ? ' ' : ''}[principal]`.trim(),
+          };
+          const validation = validateStakeholder({ ...suggestion, company: companyName }, {
+            today: localDate(),
+          });
+          suggestion.validation = validation.ok
+            ? { ok: true }
+            : { ok: false, reasons: validation.reasons };
+          return suggestion;
+        });
         return { company: companyName, exampleRole, suggestions };
       } catch (e) {
         console.log(`[discover-principal] ERROR: ${companyName} — ${e.message}`);
@@ -355,14 +383,43 @@ If the search returns no reliable matches, return []. Never fabricate names or t
 // Writes confirmed contacts to data/target-talent.md.
 router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
   try {
-    const { contacts } = req.body || {};
+    const { contacts, source } = req.body || {};
     if (!Array.isArray(contacts) || contacts.length === 0) {
       return res.status(400).json({ error: 'contacts[] required' });
     }
-    // Dedup by (normalized company + last + first) against existing rows
+    const requestSource = String(source || '').toLowerCase();
+    const gated = requestSource === 'agent' || requestSource === 'hunter';
+    // Existing callers without a source are hand-entry flows. Unknown values
+    // stay ungated so adding this opt-in machine guard cannot refuse their writes.
+    // Machine callers must opt in, and a future audit should confirm all do so.
     const existing = parseTargetTalentMd();
+    const rejected = [];
+    let candidates = contacts;
+    if (gated) {
+      const today = localDate();
+      candidates = [];
+      for (const contact of contacts) {
+        const existingAtCompany = existing.find(row =>
+          normCompany(row.company) === normCompany(contact?.company) && bareHostname(row.website));
+        const knownDomain = existingAtCompany ? bareHostname(existingAtCompany.website) : undefined;
+        const validation = validateStakeholder({
+          ...contact,
+          source: contact?.source || requestSource,
+        }, { today, knownDomain });
+        if (!validation.ok) {
+          rejected.push({
+            name: `${contact?.first || ''} ${contact?.last || ''}`.trim(),
+            company: String(contact?.company || ''),
+            reasons: validation.reasons,
+          });
+          continue;
+        }
+        candidates.push(validation.person);
+      }
+    }
+    // Dedup by (normalized company + last + first) against existing rows
     const existingKeys = new Set(existing.map(r => `${normCompany(r.company)}|${(r.last || '').toLowerCase()}|${(r.first || '').toLowerCase()}`));
-    const toWrite = contacts.filter(c => {
+    const toWrite = candidates.filter(c => {
       const k = `${normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`;
       return !existingKeys.has(k);
     });
@@ -397,7 +454,7 @@ router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
         } catch { /* leave without an address; the LinkedIn fallback covers it */ }
       }
     }
-    res.json({ ok: true, requested: contacts.length, written: written.length, skipped: contacts.length - written.length, emailsFound, budgetHit, verifierKeys: !!(hkey && mkey) });
+    res.json({ ok: true, requested: contacts.length, written: written.length, skipped: contacts.length - written.length, emailsFound, budgetHit, verifierKeys: !!(hkey && mkey), rejected, gated });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
