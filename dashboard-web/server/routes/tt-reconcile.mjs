@@ -1,8 +1,9 @@
 import express from 'express';
 import fs from 'fs';
+import { randomUUID } from 'node:crypto';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { parseTargetTalentMd, appendTTRows, updateTTLine, maxTTId, setNewBaselineId } from '../lib/target-talent.mjs';
-import { generateText, draftModel } from '../lib/anthropic.mjs';
+import { discoverTalentAtCompany, discoverPrincipalAtCompany } from '../lib/contact-discovery.mjs';
 import { normCompany, reconcilePreview } from '../lib/tt-reconcile-core.mjs';
 import { TARGET_TALENT_MD } from '../config.mjs';
 import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
@@ -60,6 +61,125 @@ const DISCOVER_REQUEST_OVERHEAD_MS = 30_000;
 const DISCOVER_REQUEST_TIMEOUT_MS =
   Math.ceil(MAX_DISCOVER_COMPANIES / DISCOVER_CONCURRENCY) * DISCOVER_COMPANY_TIMEOUT_MS
   + DISCOVER_REQUEST_OVERHEAD_MS;
+
+// Discovery jobs intentionally live only in memory. A dashboard restart may
+// lose an in-flight record, but results are available to apply as each company
+// lands, so a long run does not strand all of its useful work until the end.
+const discoverJobs = new Map();
+
+async function runDiscoverJob(job, tasks, generate) {
+  let next = 0;
+  const active = new Map();
+  const settled = new Set();
+  const refreshCurrent = () => { job.current = [...active.values()]; };
+  const worker = async () => {
+    while (next < tasks.length) {
+      const taskIndex = next++;
+      const task = tasks[taskIndex];
+      active.set(taskIndex, task.company);
+      refreshCurrent();
+      try {
+        // Request data never spreads into options, or future options would become externally settable.
+        const result = task.search === 'principal'
+          ? await discoverPrincipalAtCompany({ company: task.company, exampleRole: task.exampleRole, generate })
+          : await discoverTalentAtCompany({ company: task.company, exampleRole: task.exampleRole, generate });
+        if (result.error) {
+          job.errors.push({ company: task.company, error: result.error });
+          continue;
+        }
+        job.results.push({
+          company: task.company,
+          search: task.search,
+          suggestions: result.suggestions,
+          rejected: [],
+          duplicates: 0,
+        });
+      } catch (err) {
+        job.errors.push({ company: task.company, error: err.message });
+      } finally {
+        settled.add(taskIndex);
+        active.delete(taskIndex);
+        refreshCurrent();
+        job.done += 1;
+      }
+    }
+  };
+
+  // There is no batch here because no HTTP request waits for completion. The
+  // three workers exist only to respect the upstream rate limit.
+  try {
+    await Promise.all(Array.from({ length: Math.min(DISCOVER_CONCURRENCY, tasks.length) }, () => worker()));
+  } catch (err) {
+    // Company failures are handled inside each worker. This fallback accounts
+    // for every untouched task if the worker machinery itself ever fails.
+    tasks.forEach((task, index) => {
+      if (settled.has(index)) return;
+      job.errors.push({ company: task.company, error: err.message });
+      job.done += 1;
+    });
+  }
+  job.current = [];
+  job.status = 'done';
+  job.finishedAt = Date.now();
+}
+
+// GET /api/tt-reconcile/discover-run
+// Reattaches the wizard to the most recently started running discovery.
+router.get('/api/tt-reconcile/discover-run', (req, res) => {
+  const running = [...discoverJobs.values()]
+    .filter(job => job.status === 'running')
+    .sort((a, b) => b.startedAt - a.startedAt)[0] || null;
+  res.json(running);
+});
+
+// GET /api/tt-reconcile/discover-run/:jobId
+router.get('/api/tt-reconcile/discover-run/:jobId', (req, res) => {
+  const job = discoverJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Discovery job not found.' });
+  res.json(job);
+});
+
+// POST /api/tt-reconcile/discover-run
+// Starts the whole reconcile discovery and returns before model work finishes.
+router.post('/api/tt-reconcile/discover-run', (req, res) => {
+  const running = [...discoverJobs.values()].find(job => job.status === 'running');
+  if (running) return res.status(409).json({ error: 'A discovery run is already running.', jobId: running.jobId });
+  try {
+    const { talent = [], principal = [] } = req.body || {};
+    if (!Array.isArray(talent) || !Array.isArray(principal)) {
+      return res.status(400).json({ error: 'talent[] and principal[] are required.' });
+    }
+    const tasks = [
+      ...talent.filter(item => item?.company).map(item => ({ ...item, search: 'talent' })),
+      ...principal.filter(item => item?.company).map(item => ({ ...item, search: 'principal' })),
+    ];
+    if (tasks.length === 0) return res.status(400).json({ error: 'At least one company is required.' });
+
+    const jobId = randomUUID();
+    const job = {
+      jobId,
+      status: 'running',
+      total: tasks.length,
+      done: 0,
+      current: [],
+      results: [],
+      errors: [],
+      startedAt: Date.now(),
+      finishedAt: null,
+    };
+    discoverJobs.set(jobId, job);
+    try {
+      void runDiscoverJob(job, tasks, req.app.locals.generate);
+    } catch (err) {
+      job.status = 'error';
+      job.errors.push({ company: '', error: err.message });
+      job.finishedAt = Date.now();
+    }
+    res.json({ jobId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET /api/tt-reconcile/preview
 // Returns:
@@ -201,76 +321,6 @@ router.post('/api/tt-reconcile/discover', async (req, res) => {
       return res.status(400).json({ error: `Max ${MAX_DISCOVER_COMPANIES} companies per call (rate-limit protection).` });
     }
 
-    // Process all companies in parallel — sequential was ~5-15s × N which
-    // got painful past 5 companies. With parallel + Anthropic's hosted
-    // web_search tool, total wall time ≈ slowest single search.
-    const discoverOne = async (c) => {
-      const companyName = c.company;
-      const exampleRole = c.exampleRole || '';
-      if (!companyName) return null;
-
-      const prompt = `Find 2-3 Internal Talent Acquisition / People / Recruiting employees CURRENTLY employed at ${companyName} who would be relevant for a candidate targeting business/GTM/RevOps/Operations roles (specifically: ${exampleRole}).
-
-INSTRUCTIONS:
-1. USE THE web_search TOOL to search for current TA employees at ${companyName}. Try queries like:
-   - site:linkedin.com/in "${companyName}" "talent acquisition"
-   - site:linkedin.com/in "${companyName}" "recruiter"
-   - "${companyName}" "head of talent" OR "head of recruiting"
-   - "${companyName}" careers team
-2. Prioritize people whose LinkedIn profile shows ${companyName} as their CURRENT employer.
-3. Prefer: Heads/Directors/Sr. Managers of Talent Acquisition · Recruiters with business/commercial focus (not engineering) · People & Talent leads.
-4. Verify each person's current employer before including them — recent job changes are common.
-
-Output ONLY a JSON array (your final response after searching), no prose, no markdown:
-[
-  { "first": "First", "last": "Last", "title": "Senior Talent Acquisition Partner", "city": "New York", "state": "NY", "linkedin": "https://www.linkedin.com/in/example/", "confidence": "high|medium|low", "notes": "One line on where you found them + how recent the source." }
-]
-
-Confidence rules:
-- high   = LinkedIn profile shows ${companyName} as current employer (or equivalent recent source)
-- medium = found on a third-party source (ZoomInfo, RocketReach, company press release) but not directly verified on LinkedIn
-- low    = inferred / weak evidence
-
-If the search returns no reliable matches, return an empty array []. Never fabricate names.`;
-
-      try {
-        console.log(`[discover] start: ${companyName}`);
-        // Haiku 4.5 chosen over Sonnet 4.6 for the discover task: the hosted
-        // web_search tool pulls full page snippets into input context, which
-        // makes a single call blow past entry-tier Sonnet rate limits (30K
-        // input-tokens-per-minute on this org). Haiku has its own rate-limit
-        // pool, much higher headroom, and is plenty capable of "find 2-3 TA
-        // people at company X" with structured JSON output.
-        // 90-second hard cap per company — a stalled web_search must NOT hang
-        // the whole batch. Promise.race rejects, the catch below logs + returns
-        // an empty suggestion list, and the rest of the batch keeps going.
-        // Hybrid: web search via the API key (hosted web_search tool) when a key
-        // is set, else via the Claude plan's WebSearch tool. generateText returns
-        // the concatenated text; we extract the JSON array from it.
-        const apiCall = generateText(prompt, {
-          model: draftModel(),
-          maxTokens: 3000,
-          tools: [{
-            type: 'web_search_20260209',
-            name: 'web_search',
-            max_uses: 2,
-            allowed_callers: ['direct'],
-          }],
-        });
-        const timeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`discover timeout after 90s for ${companyName}`)), DISCOVER_COMPANY_TIMEOUT_MS)
-        );
-        const fullText = await Promise.race([apiCall, timeout]);
-        console.log(`[discover] done:  ${companyName}`);
-        const jsonMatch = fullText.match(/\[[\s\S]*\]/);
-        const suggestions = jsonMatch ? (() => { try { return JSON.parse(jsonMatch[0]); } catch { return []; } })() : [];
-        return { company: companyName, exampleRole, suggestions };
-      } catch (e) {
-        console.log(`[discover] ERROR: ${companyName} — ${e.message}`);
-        return { company: companyName, exampleRole, suggestions: [], error: e.message };
-      }
-    };
-
     // Cap in-flight discoverOne calls. Each call uses Anthropic's hosted
     // web_search tool (~4 search rounds, web content pulled into context),
     // which is heavy on input tokens per minute. Entry-tier org limits are
@@ -280,7 +330,10 @@ If the search returns no reliable matches, return an empty array []. Never fabri
     const results = [];
     for (let i = 0; i < companies.length; i += DISCOVER_CONCURRENCY) {
       const slice = companies.slice(i, i + DISCOVER_CONCURRENCY);
-      const chunkResults = await Promise.all(slice.map(discoverOne));
+      const chunkResults = await Promise.all(slice.map(c => {
+        if (!c.company) return null;
+        return discoverTalentAtCompany({ company: c.company, exampleRole: c.exampleRole, generate: req.app.locals.generate });
+      }));
       for (const r of chunkResults) if (r) results.push(r);
     }
     res.json({ results });
@@ -310,82 +363,13 @@ router.post('/api/tt-reconcile/discover-principal', async (req, res) => {
       return res.status(400).json({ error: `Max ${MAX_DISCOVER_COMPANIES} companies per call.` });
     }
 
-    const discoverPrincipal = async (c) => {
-      const companyName = c.company;
-      const exampleRole = c.exampleRole || '';
-      if (!companyName) return null;
-
-      const prompt = `Find 2-3 people who currently LEAD the ${exampleRole || 'Revenue Operations / GTM'} function at ${companyName}. We are looking for the HIRING MANAGER or their skip-level — the VP, Director, Senior Director, or Head of the target function — NOT a recruiter, HR person, or TA team member.
-
-INSTRUCTIONS:
-1. USE THE web_search TOOL to search for functional leaders at ${companyName}. Try queries like:
-   - site:linkedin.com/in "${companyName}" "VP Revenue Operations"
-   - site:linkedin.com/in "${companyName}" "Head of Sales Operations"
-   - site:linkedin.com/in "${companyName}" "Director GTM"
-   - "${companyName}" leadership team "${exampleRole || 'revenue operations'}"
-2. Prioritize VP, Director, Senior Director, Head of — NOT Managers or ICs.
-3. Target the person this ${exampleRole || 'role'} would REPORT TO (the direct manager), or their skip-level (one rung up).
-4. Do NOT include TA, People, HR, or Recruiting people — only functional leaders.
-5. Verify each person's current employer before including.
-
-Output ONLY a JSON array (your final response after searching), no prose, no markdown:
-[
-  { "first": "First", "last": "Last", "title": "VP Revenue Operations", "city": "New York", "state": "NY", "linkedin": "https://www.linkedin.com/in/example/", "confidence": "high|medium|low", "notes": "One line on source and recency. [principal]" }
-]
-
-Confidence rules:
-- high   = LinkedIn profile shows ${companyName} as current employer (or equivalent recent verified source)
-- medium = found on third-party source (ZoomInfo, RocketReach, press release) but not verified on LinkedIn
-- low    = inferred or weak evidence
-
-If the search returns no reliable matches, return []. Never fabricate names or titles.`;
-
-      try {
-        console.log(`[discover-principal] start: ${companyName}`);
-        const apiCall = generateText(prompt, {
-          model: draftModel(),
-          maxTokens: 3000,
-          tools: [{
-            type: 'web_search_20260209',
-            name: 'web_search',
-            max_uses: 2,
-            allowed_callers: ['direct'],
-          }],
-        });
-        const timeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`discover-principal timeout after 90s for ${companyName}`)), DISCOVER_COMPANY_TIMEOUT_MS)
-        );
-        const fullText = await Promise.race([apiCall, timeout]);
-        console.log(`[discover-principal] done:  ${companyName}`);
-        const jsonMatch = fullText.match(/\[[\s\S]*\]/);
-        let suggestions = jsonMatch ? (() => { try { return JSON.parse(jsonMatch[0]); } catch { return []; } })() : [];
-        // Guarantee the [principal] tag is in every suggestion's notes (the model
-        // is instructed to include it, but stamp it defensively on parse too).
-        suggestions = suggestions.map(s => {
-          const suggestion = {
-            ...s,
-            source: 'agent',
-            notes: /\[principal\]/i.test(s.notes || '') ? s.notes : `${s.notes || ''}${s.notes ? ' ' : ''}[principal]`.trim(),
-          };
-          const validation = validateStakeholder({ ...suggestion, company: companyName }, {
-            today: localDate(),
-          });
-          suggestion.validation = validation.ok
-            ? { ok: true }
-            : { ok: false, reasons: validation.reasons };
-          return suggestion;
-        });
-        return { company: companyName, exampleRole, suggestions };
-      } catch (e) {
-        console.log(`[discover-principal] ERROR: ${companyName} — ${e.message}`);
-        return { company: companyName, exampleRole, suggestions: [], error: e.message };
-      }
-    };
-
     const results = [];
     for (let i = 0; i < companies.length; i += DISCOVER_CONCURRENCY) {
       const slice = companies.slice(i, i + DISCOVER_CONCURRENCY);
-      const chunkResults = await Promise.all(slice.map(discoverPrincipal));
+      const chunkResults = await Promise.all(slice.map(c => {
+        if (!c.company) return null;
+        return discoverPrincipalAtCompany({ company: c.company, exampleRole: c.exampleRole, generate: req.app.locals.generate });
+      }));
       for (const r of chunkResults) if (r) results.push(r);
     }
     res.json({ results });

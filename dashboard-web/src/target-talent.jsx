@@ -2,7 +2,7 @@
 // pipeline micro-track, redesigned drawer, and 3-step reconcile wizard.
 // Adapted from Claude Design handoff to work with live API endpoints.
 
-const { useState, useEffect, useMemo, useCallback } = React;
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
 // This source is emitted as a standalone browser script, so load the small ESM
 // helper separately while keeping its pure function directly testable in Node.
 //
@@ -1506,6 +1506,42 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   const [discSel, setDiscSel] = useState(new Set());
   const [outcome, setOutcome] = useState(null);
   const [scanning, setScanning] = useState(false);
+  const [discoverJob, setDiscoverJob] = useState(null);
+  const [discoverJobId, setDiscoverJobId] = useState(null);
+  const seenSuggestions = useRef(new Set());
+
+  const absorbDiscoverJob = useCallback(job => {
+    if (!job?.jobId) return;
+    const landed = (job.results || []).map(result => ({
+      ...result,
+      suggestions: (result.suggestions || []).map(suggestion => ({
+        ...suggestion,
+        reconcileSearch: result.search,
+        reconcileSource: "agent",
+      })),
+    }));
+    setDiscoverJob(job);
+    setDiscoveries(landed);
+    setScanning(job.status === "running");
+    setDiscSel(selected => {
+      const next = new Set(selected);
+      for (const result of landed) {
+        for (const suggestion of (result.suggestions || [])) {
+          const key = `${suggestion.reconcileSearch}::${result.company}::${suggestion.first || ""} ${suggestion.last || ""}`;
+          if (seenSuggestions.current.has(key)) continue;
+          seenSuggestions.current.add(key);
+          const confidence = (suggestion.confidence || "low").toLowerCase();
+          if (confidence === "high" || confidence === "medium") next.add(key);
+        }
+      }
+      return next;
+    });
+    if (job.status === "error") {
+      setError(job.errors?.[0]?.error || "Contact discovery could not start.");
+    } else if (job.status === "done" && job.errors?.length) {
+      setError(`Discover finished with ${job.errors.length} partial error(s): ${job.errors.map(item => `${item.company}: ${item.error}`).join("; ")}`);
+    }
+  }, []);
 
   useEffect(() => {
     fetch("/api/tt-reconcile/preview")
@@ -1523,6 +1559,40 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
       .catch(e => { setError(e.message); setLoading(false); });
   }, [initialMode]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/tt-reconcile/discover-run")
+      .then(response => response.json())
+      .then(job => {
+        if (cancelled || !job?.jobId) return;
+        setStep(1);
+        setDiscoverJobId(job.jobId);
+        absorbDiscoverJob(job);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [absorbDiscoverJob]);
+
+  useEffect(() => {
+    if (!discoverJobId) return undefined;
+    let cancelled = false;
+    let timer;
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/tt-reconcile/discover-run/${encodeURIComponent(discoverJobId)}`);
+        const job = await response.json();
+        if (cancelled) return;
+        if (!response.ok) throw new Error(job.error || `HTTP ${response.status}`);
+        absorbDiscoverJob(job);
+        if (job.status === "running") timer = setTimeout(poll, 2000);
+      } catch (e) {
+        if (!cancelled) { setScanning(false); setError(e.message); }
+      }
+    };
+    poll();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [discoverJobId, absorbDiscoverJob]);
+
   const toggleSet = (setter, key) => setter(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
   const runDiscover = async () => {
@@ -1536,56 +1606,27 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
     if (talentCompanies.length === 0 && principalCompanies.length === 0) {
       setScanning(false); setDiscoveries([]); setDiscSel(new Set()); return;
     }
-    // 6 companies / server concurrency 3 * 90 seconds per company = 180 seconds
-    // worst case per request, which must stay under the route timeout. Six also
-    // respects the server's rate-limit guard of at most 15 companies per call.
-    const BATCH = 6;
-    const all = [];
-    const errs = [];
-    const searches = [
-      { companies: talentCompanies, endpoint: "/api/tt-reconcile/discover", search: "talent", source: "agent" },
-      { companies: principalCompanies, endpoint: "/api/tt-reconcile/discover-principal", search: "principal", source: "agent" },
-    ];
+    seenSuggestions.current = new Set();
+    setDiscoveries([]);
+    setDiscSel(new Set());
+    setDiscoverJob(null);
     try {
-      for (const search of searches) {
-        for (let i = 0; i < search.companies.length; i += BATCH) {
-          const slice = search.companies.slice(i, i + BATCH);
-          const res = await window.tjkMutate(search.endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ companies: slice }),
-          });
-          const d = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-          if (!res.ok || d.error) {
-            errs.push(`${search.search} batch ${Math.floor(i / BATCH) + 1}: ${d.error || `HTTP ${res.status}`}`);
-            continue;
-          }
-          for (const r of (d.results || [])) {
-            all.push({
-              ...r,
-              suggestions: (r.suggestions || []).map(s => ({
-                ...s,
-                reconcileSearch: search.search,
-                reconcileSource: search.source,
-              })),
-            });
-          }
-        }
+      const response = await window.tjkMutate("/api/tt-reconcile/discover-run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ talent: talentCompanies, principal: principalCompanies }),
+      });
+      const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      if (response.status === 409 && body.jobId) {
+        setError("A discovery run is already running. Showing its progress here.");
+        setDiscoverJobId(body.jobId);
+        return;
       }
-      setDiscoveries(all);
-      const pre = new Set();
-      for (const r of all) {
-        for (const s of (r.suggestions || [])) {
-          const conf = (s.confidence || "low").toLowerCase();
-          if (conf === "high" || conf === "medium") pre.add(`${s.reconcileSearch}::${r.company}::${s.first || ""} ${s.last || ""}`);
-        }
-      }
-      setDiscSel(pre);
-      if (errs.length) setError(`Discover finished with ${errs.length} partial error(s): ${errs.join("; ")}`);
+      if (!response.ok || body.error) throw new Error(body.error || `HTTP ${response.status}`);
+      setDiscoverJobId(body.jobId);
     } catch (e) {
-      setError((await discoverErrorCopy).discoverErrorMessage(e));
-    } finally {
       setScanning(false);
+      setError((await discoverErrorCopy).discoverErrorMessage(e));
     }
   };
 
@@ -1622,6 +1663,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   };
 
   const confColor = { High: "var(--green)", Medium: "var(--orange)", Low: "var(--red)" };
+  const foundCount = discoveries.reduce((n, result) => n + (result.suggestions || []).length, 0);
 
   return (
     <div className="modal-back" onClick={() => !scanning && !loading && onClose()}>
@@ -1690,28 +1732,29 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
           )}
           {step === 1 && (
             <div className="fade-up">
-              {scanning ? (
+              {scanning && (
                 <div className="scan">
                   <div className="scan-ring" />
-                  <div className="scan-log">Searching {gapSel.size} companies for contacts and {principalGapSel.size} for decision-makers…</div>
+                  <div className="scan-log">
+                    <div>{discoverJob?.done || 0} of {discoverJob?.total || 0} companies searched</div>
+                    <div>{(discoverJob?.current || []).length ? `Searching now: ${discoverJob.current.join(", ")}` : "Starting searches..."}</div>
+                    <div>{foundCount} people found so far</div>
+                  </div>
                 </div>
-              ) : (
-                <>
-                  <div className="rec-section-label"><TIcon d={TI.users} size={12} /> Discovered contacts &middot; {discSel.size} selected</div>
-                  <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Found {discoveries.reduce((n, r) => n + (r.suggestions || []).length, 0)} contacts.</div>
-                  {discoveries.map(r => (r.suggestions || []).map((s, i) => {
-                    const key = `${s.reconcileSearch}::${r.company}::${s.first || ""} ${s.last || ""}`;
-                    const conf = s.confidence || "Medium";
-                    return (
-                      <RecRow key={key} checked={discSel.has(key)} onToggle={() => toggleSet(setDiscSel, key)}
-                        av={ttInitials((s.first || "?") + " " + (s.last || "?"))} name={`${s.first} ${s.last}`}
-                        meta={`${s.title} · ${r.company}`}
-                        reason={s.linkedin ? <a className="link" href={window.safeHref(s.linkedin)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: "var(--accent)", fontSize: 11 }}>LinkedIn ↗</a> : null}
-                        right={<div style={{ display: "flex", gap: 6, alignItems: "center" }}><span className="tag accent">{s.reconcileSearch === "principal" ? "Decision-maker search" : "Talent search"}</span><span className={"conf " + conf}>{conf}</span></div>} />
-                    );
-                  }))}
-                </>
               )}
+              <div className="rec-section-label"><TIcon d={TI.users} size={12} /> Discovered contacts &middot; {discSel.size} selected</div>
+              <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Found {foundCount} contacts{scanning ? " so far" : ""}.</div>
+              {discoveries.map(r => (r.suggestions || []).map((s, i) => {
+                const key = `${s.reconcileSearch}::${r.company}::${s.first || ""} ${s.last || ""}`;
+                const conf = s.confidence || "Medium";
+                return (
+                  <RecRow key={key} checked={discSel.has(key)} onToggle={() => toggleSet(setDiscSel, key)}
+                    av={ttInitials((s.first || "?") + " " + (s.last || "?"))} name={`${s.first} ${s.last}`}
+                    meta={`${s.title} · ${r.company}`}
+                    reason={s.linkedin ? <a className="link" href={window.safeHref(s.linkedin)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: "var(--accent)", fontSize: 11 }}>LinkedIn ↗</a> : null}
+                    right={<div style={{ display: "flex", gap: 6, alignItems: "center" }}><span className="tag accent">{s.reconcileSearch === "principal" ? "Decision-maker search" : "Talent search"}</span><span className={"conf " + conf}>{conf}</span></div>} />
+                );
+              }))}
             </div>
           )}
           {step === 2 && (
@@ -1756,8 +1799,8 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
           {step > 0 && step < 2 && <button className="btn" onClick={() => setStep(s => s - 1)}><TIcon d={TI.undo} size={13} /> Back</button>}
           {step === 0 && !loading && <span className="mono" style={{ fontSize: 11, color: "var(--text-mute)" }}>{archSel.size} to archive &middot; {gapSel.size} contact searches &middot; {principalGapSel.size} decision-maker searches</span>}
           <div className="right" style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
-            {step === 0 && !loading && <button className="btn primary" onClick={runDiscover}>Discover contacts <TIcon d={TI.arrowR} size={13} /></button>}
-            {step === 1 && !scanning && <button className="btn primary" onClick={apply}>Apply changes <TIcon d={TI.arrowR} size={13} /></button>}
+            {step === 0 && !loading && <button className="btn primary" onClick={runDiscover} disabled={scanning}>{scanning ? "Discovery already running" : "Discover contacts"} <TIcon d={TI.arrowR} size={13} /></button>}
+            {step === 1 && <button className="btn primary" onClick={apply}>Add selected ({foundCount}{scanning ? " found so far" : " found"}) <TIcon d={TI.arrowR} size={13} /></button>}
             {/* No Undo. It used to flip a local boolean and assert "Changes
                 reverted" while the archive and bulk-add writes stayed on disk;
                 there is no revert endpoint, and inventing one would have to

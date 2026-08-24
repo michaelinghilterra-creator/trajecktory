@@ -5,7 +5,7 @@ import { ROOT_DIR } from '../config.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanProse } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
-import { loadInfluencer, toneInstruction, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
+import { loadInfluencer, toneInstruction, flattenConnectNote, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine, readTTCorrespondence } from '../lib/target-talent.mjs';
 import { parseReferralsMd } from '../lib/referrals.mjs';
@@ -265,7 +265,7 @@ Return ONLY the body of the connection note, ready to paste into LinkedIn. No qu
     const callClaude = async (targetMax) => {
       const text = await generateText(buildPrompt(targetMax), { model: draftModel(), maxTokens: 220 });
       // Clean before the 300-char cap check so the length test sees final text.
-      return cleanProse(text.trim());
+      return flattenConnectNote(cleanProse(text.trim()));
     };
 
     // First pass: aim for 280 to leave margin
@@ -274,10 +274,8 @@ Return ONLY the body of the connection note, ready to paste into LinkedIn. No qu
     if (response.length > 300) {
       response = await callClaude(250);
     }
-    // Still over? Deterministically trim to the 300-char cap, keeping the sign-off.
-    if (response.length > 300) {
-      response = fitConnectNote(response, id.firstName).text;
-    }
+    // Fit after flattening so the cap sees the exact one-line note returned.
+    response = fitConnectNote(response, id.firstName).text;
     res.json({ response, length: response.length });
   } catch (err) {
     console.error('Error generating connect request:', err);
@@ -362,13 +360,11 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       guidance, cvExcerpt, tone, toneText: toneInstruction(tone), targetMax,
     });
 
-    let response = cleanProse((await generateText(buildPrompt(280), { model: draftModel(), maxTokens: 220 })).trim());
+    let response = flattenConnectNote(cleanProse((await generateText(buildPrompt(280), { model: draftModel(), maxTokens: 220 })).trim()));
     if (response.length > 300) {
-      response = cleanProse((await generateText(buildPrompt(250), { model: draftModel(), maxTokens: 220 })).trim());
+      response = flattenConnectNote(cleanProse((await generateText(buildPrompt(250), { model: draftModel(), maxTokens: 220 })).trim()));
     }
-    if (response.length > 300) {
-      response = fitConnectNote(response, idn.firstName).text;
-    }
+    response = fitConnectNote(response, idn.firstName).text;
     res.json({ response, length: response.length, recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
   } catch (err) {
     console.error('Error generating connect note:', err);
