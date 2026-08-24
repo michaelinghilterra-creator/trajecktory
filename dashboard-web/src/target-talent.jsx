@@ -18,6 +18,31 @@ const TT_STATUS = [
 const TT_STATUS_MAP = Object.fromEntries(TT_STATUS.map(s => [s.id, s]));
 const TT_PIPELINE = TT_STATUS.filter(s => s.pipeline);
 
+const INFLUENCE_TIER_LABELS = Object.freeze({
+  hm: "Hiring manager",
+  exec: "Skip-level exec",
+  peer: "Functional peer",
+  ta: "Talent acquisition",
+  agency: "Agency recruiter",
+});
+const INFLUENCE_TIER_SHORT_LABELS = Object.freeze({
+  hm: "HM",
+  exec: "Exec",
+  peer: "Peer",
+  ta: "TA",
+  agency: "Agency",
+});
+
+function InfluenceTierBadge({ tier, source }) {
+  const confirmed = source === "tag";
+  return (
+    <span className="tag" title={confirmed ? "Set by you" : "Not confirmed yet"}
+      style={{ flex: "none", fontSize: 9.5, opacity: confirmed ? 1 : 0.5 }}>
+      {INFLUENCE_TIER_SHORT_LABELS[tier] || tier || "?"}
+    </span>
+  );
+}
+
 // ── LinkedIn connection axis ──────────────────────────────────────────────────
 // SEPARATE from the outreach pipeline above. The pipeline tracks how far the
 // CONVERSATION has progressed; this tracks whether they accepted your LinkedIn
@@ -345,7 +370,8 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
                       <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
                         <div className="mono-av sm" style={{ borderColor: m.color, color: m.color, flex: "none" }}>{ttInitials(c.first + " " + c.last)}</div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.first} {c.last}</div>
-                        {c.isHighValue && <span title="High value: reachable both ways (verified email + LinkedIn). Worth a multithread." style={{ flex: "none", color: "var(--yellow)", fontSize: 12 }}>★</span>}
+                        {c.isHighValue && <span title="Can move this hire" style={{ flex: "none", color: "var(--yellow)", fontSize: 12 }}>★</span>}
+                        <InfluenceTierBadge tier={c.influenceTier} source={c.influenceTierSource} />
                       </div>
                     </td>
                     <td title={c.title || "No job title recorded for this contact"}>
@@ -724,6 +750,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkedinStatus }) })
       .then(() => { load(); onUpdate?.(); });
   };
+  const updateInfluenceTier = influenceTier => {
+    window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ influenceTier }) })
+      .then(() => { load(); onUpdate?.(); });
+  };
   const saveNotes = () => {
     window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }) })
       .then(() => { load(); onUpdate?.(); });
@@ -831,10 +861,32 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         </div>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
           <span className="mono-av" style={{ width: 44, height: 44, fontSize: 14, borderRadius: 10, borderColor: cfg.statusColor(data.status), color: cfg.statusColor(data.status) }}>{ttInitials(cfg.avatarName(data) || "?")}</span>
-          <div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>{cfg.displayName(data) || "(no name)"}</h3>
             <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>{cfg.subtitle(data) || "—"}</div>
             <div style={{ fontSize: 12, color: "var(--accent)", marginTop: 3, fontWeight: 500 }}>{cfg.org(data) || ""}</div>
+            {cfg.kind === "ta" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 7, flexWrap: "wrap" }}>
+                <label htmlFor={`influence-tier-${data.id}`} style={{ fontSize: 10.5, color: "var(--text-mute)" }}>Role in the hire</label>
+                <select id={`influence-tier-${data.id}`} className="sel" value={data.influenceTier || "ta"}
+                  onChange={e => updateInfluenceTier(e.target.value)} style={{ fontSize: 11, padding: "3px 7px" }}>
+                  {Object.entries(INFLUENCE_TIER_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+                <span title={data.influenceTierSource === "title"
+                  ? "Read from the job title and not confirmed. Changing it here records your decision."
+                  : data.influenceTierSource === "tag"
+                    ? "Set by you."
+                    : "Nothing could be determined from the job title. Changing it here records your decision."}
+                  style={{ fontSize: 10.5, color: "var(--text-mute)" }}>
+                  {data.influenceTierSource === "title" ? "Inferred" : data.influenceTierSource === "tag" ? "Set" : "Not determined"}
+                </span>
+                {data.provenanceStale && (
+                  <span style={{ fontSize: 10.5, color: "var(--yellow)", lineHeight: 1.4 }}>
+                    A search found this contact on {data.provenance.date}, and they have not been checked since. People change jobs, so confirm they are still here before spending a message on them.
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1238,34 +1290,49 @@ function RecRow({ checked, onToggle, av, name, meta, reason, right }) {
 // Pipeline drawer's Contacts tab so the user can fill a single company's gap
 // (~3K tokens) instead of running the full multi-company batch Reconcile.
 // Exposed on window so the Pipeline drawer can render it.
-function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
+function FindContactsPanel({ company, exampleRole, onAdded, onCancel, initialMode = "ta" }) {
   const [phase, setPhase] = useState("idle"); // idle | scanning | review | adding | done
   const [suggestions, setSuggestions] = useState([]);
   const [sel, setSel] = useState(new Set());
   const [error, setError] = useState(null);
   const [addedCount, setAddedCount] = useState(0);
-  // Which kind of contact to search for: 'ta' = Talent Acquisition / recruiter
-  // gatekeeper (default), 'principal' = the hiring manager / skip-level you would
-  // actually report to (VP/Director of the target function). Principal mode hits a
-  // different endpoint and stamps the added contact [principal].
-  const [mode, setMode] = useState("ta");
+  const [rejected, setRejected] = useState([]);
+  const [discoveryRejected, setDiscoveryRejected] = useState([]);
+  const [unresolved, setUnresolved] = useState([]);
+  const [skippedBudget, setSkippedBudget] = useState([]);
+  const [creditsSpent, setCreditsSpent] = useState(null);
+  const [duplicateCount, setDuplicateCount] = useState(0);
+  // 'hunter' is the structured company-directory path. The model-backed TA and
+  // principal searches remain available when the directory has poor coverage.
+  const [mode, setMode] = useState(initialMode);
 
   const keyOf = (s) => `${s.first || ""} ${s.last || ""}`.trim();
 
   const runDiscover = () => {
-    setPhase("scanning"); setError(null);
-    const endpoint = mode === "principal" ? "/api/tt-reconcile/discover-principal" : "/api/tt-reconcile/discover";
+    setPhase("scanning"); setError(null); setRejected([]); setDiscoveryRejected([]);
+    setUnresolved([]); setSkippedBudget([]); setCreditsSpent(null); setDuplicateCount(0);
+    const endpoint = mode === "hunter"
+      ? "/api/tt-reconcile/discover-hunter"
+      : mode === "principal" ? "/api/tt-reconcile/discover-principal" : "/api/tt-reconcile/discover";
+    const body = mode === "hunter"
+      ? { companies: [{ company }] }
+      : { companies: [{ company, exampleRole: exampleRole || "" }] };
     window.tjkMutate(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companies: [{ company, exampleRole: exampleRole || "" }] }),
+      body: JSON.stringify(body),
     })
       .then(r => r.json().then(d => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (!ok || d.error) { setError(d.error || "Discovery failed."); setPhase("idle"); return; }
         const sug = (d.results || []).flatMap(r => r.suggestions || []);
         setSuggestions(sug);
-        const pre = new Set(sug.filter(s => ["high", "medium"].includes((s.confidence || "low").toLowerCase())).map(keyOf));
+        setDiscoveryRejected((d.results || []).flatMap(r => r.rejected || []));
+        setUnresolved(d.unresolved || []);
+        setSkippedBudget(d.skippedBudget || []);
+        setCreditsSpent(mode === "hunter" ? d.creditsSpent ?? 0 : null);
+        setDuplicateCount((d.results || []).reduce((sum, r) => sum + (r.duplicates || 0), 0));
+        const pre = new Set(sug.filter(s => s.validation?.ok !== false && (mode === "hunter" || ["high", "medium"].includes((s.confidence || "low").toLowerCase()))).map(keyOf));
         setSel(pre);
         setPhase("review");
       })
@@ -1277,7 +1344,7 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
   const add = () => {
     const contacts = suggestions.filter(s => sel.has(keyOf(s))).map(s => ({
       company, first: s.first || "", last: s.last || "", title: s.title || "",
-      city: s.city || "", state: s.state || "", linkedin: s.linkedin || "",
+      city: s.city || "", state: s.state || "", linkedin: s.linkedin || "", email: s.email || "",
       notes: [
         s.notes,
         `Added via Find ${mode === "principal" ? "hiring manager" : "contacts"} (confidence: ${s.confidence || "unknown"})`,
@@ -1286,9 +1353,17 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
     }));
     if (contacts.length === 0) { onCancel?.(); return; }
     setPhase("adding");
-    window.tjkMutate("/api/tt-reconcile/bulk-add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts }) })
+    window.tjkMutate("/api/tt-reconcile/bulk-add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contacts,
+        // The plain TA path is also model-backed, but gating it is outside this change.
+        source: mode === "hunter" ? "hunter" : mode === "principal" ? "agent" : "manual",
+      }),
+    })
       .then(r => r.json())
-      .then(d => { setAddedCount(d.written || contacts.length); setPhase("done"); onAdded?.(); })
+      .then(d => { setAddedCount(d.written ?? contacts.length); setRejected(d.rejected || []); setPhase("done"); onAdded?.(); })
       .catch(e => { setError(e.message); setPhase("review"); });
   };
 
@@ -1306,20 +1381,23 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
           <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
             <button className={"btn sm" + (mode === "ta" ? " primary" : "")} onClick={() => setMode("ta")}>TA / recruiter</button>
             <button className={"btn sm" + (mode === "principal" ? " primary" : "")} onClick={() => setMode("principal")}>Hiring manager</button>
+            <button className={"btn sm" + (mode === "hunter" ? " primary" : "")} onClick={() => setMode("hunter")}>Search the company directory</button>
           </div>
           <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>
-            {mode === "principal"
+            {mode === "hunter"
+              ? "Search Hunter's company directory. It costs one search credit per company, whatever the number of people it returns."
+              : mode === "principal"
               ? "Search the web for the VP / Director / Head of the target function at this company — the person you'd report to, not the recruiter. Added as a hiring principal."
               : "Search the web for 2-3 current Talent Acquisition contacts at this one company. One lookup, low usage."}
           </div>
-          <button className="btn primary sm" onClick={runDiscover}><TIcon d={TI.spark} size={12} /> {mode === "principal" ? "Find hiring manager" : "Find contacts"}</button>
+          <button className="btn primary sm" onClick={runDiscover}><TIcon d={TI.spark} size={12} /> {mode === "hunter" ? "Search directory" : mode === "principal" ? "Find hiring manager" : "Find contacts"}</button>
         </>
       )}
 
       {phase === "scanning" && (
         <div className="scan" style={{ padding: "10px 0" }}>
           <div className="scan-ring" />
-          <div className="scan-log">Searching for {mode === "principal" ? "the hiring manager" : "TA contacts"} at {company}…</div>
+          <div className="scan-log">Searching for {mode === "hunter" ? "people" : mode === "principal" ? "the hiring manager" : "TA contacts"} at {company}…</div>
         </div>
       )}
 
@@ -1328,17 +1406,23 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
           <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>
             {suggestions.length === 0 ? "No reliable contacts found." : `Found ${suggestions.length} · ${sel.size} selected`}
           </div>
+          {unresolved.map(name => <div key={`unresolved-${name}`} style={{ color: "var(--orange)", fontSize: 11, marginBottom: 6 }}>No website is on file for {name}, so there was nothing to search. Add a website to any contact there to fix it.</div>)}
+          {skippedBudget.map(name => <div key={`budget-${name}`} style={{ color: "var(--orange)", fontSize: 11, marginBottom: 6 }}>{name} was not searched because Hunter credits ran out.</div>)}
+          {discoveryRejected.map((person, i) => <div key={`rejected-${person.name || i}`} style={{ color: "var(--text-dim)", fontSize: 11, marginBottom: 6 }}>{person.name || "Unnamed contact"} was not suggested: {person.reasons?.[0] || "validation failed"}.</div>)}
+          {duplicateCount > 0 && <div style={{ color: "var(--text-dim)", fontSize: 11, marginBottom: 6 }}>{duplicateCount} contact{duplicateCount === 1 ? " is" : "s are"} already on file.</div>}
           {suggestions.map((s, i) => {
             const k = keyOf(s);
-            const conf = s.confidence || "Medium";
+            const conf = s.confidence || (mode === "hunter" ? "Validated" : "Medium");
+            const invalid = s.validation?.ok === false;
             return (
               <RecRow key={k + i} checked={sel.has(k)} onToggle={() => toggle(k)}
                 av={ttInitials((s.first || "?") + " " + (s.last || "?"))} name={`${s.first} ${s.last}`}
-                meta={s.title}
-                reason={s.linkedin ? <a className="link" href={window.safeHref(s.linkedin)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: "var(--accent)", fontSize: 11 }}>LinkedIn ↗</a> : null}
-                right={<span className={"conf " + conf}>{conf}</span>} />
+                meta={invalid ? `${s.title || ""} · Unsupported: ${s.validation.reasons?.[0] || "validation failed"}` : s.title}
+                reason={s.linkedin ? <a className="link" href={window.safeHref(s.linkedin)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: invalid ? "var(--red)" : "var(--accent)", fontSize: 11 }}>LinkedIn ↗</a> : null}
+                right={<span className={"conf " + conf} style={invalid ? { color: "var(--red)" } : undefined}>{invalid ? "Unsupported" : conf}</span>} />
             );
           })}
+          {creditsSpent != null && <div style={{ color: "var(--text-mute)", fontSize: 11, marginTop: 8 }}>Hunter search credits spent: {creditsSpent}</div>}
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <button className="btn primary sm" onClick={add} disabled={sel.size === 0}>Add {sel.size || ""} contact{sel.size === 1 ? "" : "s"}</button>
             <button className="btn sm" onClick={runDiscover}><TIcon d={TI.refresh} size={12} /> Search again</button>
@@ -1349,9 +1433,16 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
       {phase === "adding" && <div className="ai-loading"><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> Adding…</div>}
 
       {phase === "done" && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 12, color: "var(--green)" }}><TIcon d={TI.check} size={13} /> Added {addedCount} contact{addedCount === 1 ? "" : "s"}.</span>
-          {onCancel && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={onCancel}>Done</button>}
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 12, color: "var(--green)" }}><TIcon d={TI.check} size={13} /> Added {addedCount} contact{addedCount === 1 ? "" : "s"}.</span>
+            {onCancel && <button className="btn sm" style={{ marginLeft: "auto" }} onClick={onCancel}>Done</button>}
+          </div>
+          {rejected.map((person, i) => (
+            <div key={`${person.name || "contact"}-${i}`} style={{ color: "var(--red)", fontSize: 11, marginTop: 6 }}>
+              {person.name || "Unnamed contact"}: {person.reasons?.[0] || "validation failed"}
+            </div>
+          ))}
         </div>
       )}
     </div>

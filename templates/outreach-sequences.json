@@ -28,22 +28,114 @@
       ]
     },
     {
+      "id": "cold-intro-cro",
+      "label": "Cold intro to the CRO",
+      "scenario": "You have identified the CRO. You want to open with a useful point of view about pipeline coverage and forecast accuracy, grounded in one specific observation about their revenue engine.",
+      "channel": "email",
+      "touches": [
+        {
+          "step": 1,
+          "dayOffset": 0,
+          "label": "Cold intro",
+          "tone": "Lead with a point of view about where their pipeline number comes from and whether the forecast can be trusted. Reference one concrete observation or artifact, never a list. Do not lead with your availability or ask to chat about the role. Under 90 words. End with one low-friction question."
+        },
+        {
+          "step": 2,
+          "dayOffset": 7,
+          "label": "Follow-up",
+          "tone": "Add one new concrete observation or artifact about pipeline coverage or forecast confidence. Do not repeat the opener or stack examples. Ask one useful question. Under 60 words."
+        },
+        {
+          "step": 3,
+          "dayOffset": 14,
+          "label": "Final ping",
+          "tone": "Graceful last touch. Acknowledge this is the final note. Leave the door open with no pressure. Under 40 words."
+        }
+      ]
+    },
+    {
+      "id": "cold-intro-cfo",
+      "label": "Cold intro to the CFO",
+      "scenario": "You have identified the CFO. You want to open with a useful point of view about acquisition cost and comp-plan leakage, grounded in one specific observation about their revenue economics.",
+      "channel": "email",
+      "touches": [
+        {
+          "step": 1,
+          "dayOffset": 0,
+          "label": "Cold intro",
+          "tone": "Lead with a point of view about what they spend to acquire revenue or where incentives may leak money without producing the intended behavior. Reference one concrete observation or artifact, never a list. Do not lead with your availability or ask to chat about the role. Under 90 words. End with one low-friction question."
+        },
+        {
+          "step": 2,
+          "dayOffset": 10,
+          "label": "Follow-up",
+          "tone": "Add one new concrete observation or artifact about acquisition cost or comp-plan leakage. Do not repeat the opener or stack examples. Ask one financially grounded question. Under 60 words."
+        }
+      ]
+    },
+    {
+      "id": "cold-intro-vp-sales",
+      "label": "Cold intro to the VP of Sales",
+      "scenario": "You have identified the VP of Sales. You want to open with a useful point of view about rep productivity and ramp time, grounded in one specific observation about how the sales team operates.",
+      "channel": "email",
+      "touches": [
+        {
+          "step": 1,
+          "dayOffset": 0,
+          "label": "Cold intro",
+          "tone": "Lead with a point of view about what reps spend their day on or how long new reps take to carry quota. Reference one concrete observation or artifact, never a list. Do not lead with your availability or ask to chat about the role. Under 90 words. End with one low-friction question."
+        },
+        {
+          "step": 2,
+          "dayOffset": 7,
+          "label": "Follow-up",
+          "tone": "Add one new concrete observation or artifact about rep productivity or ramp time. Do not repeat the opener or stack examples. Ask one practical sales question. Under 60 words."
+        },
+        {
+          "step": 3,
+          "dayOffset": 14,
+          "label": "Final ping",
+          "tone": "Graceful last touch. Acknowledge this is the final note. Leave the door open with no pressure. Under 40 words."
+        }
+      ]
+    },
+    {
+      "id": "cold-intro-demandgen",
+      "label": "Cold intro to the demand generation lead",
+      "scenario": "You have identified the demand generation lead. You want to open with a useful point of view about lead quality, follow-up speed and the handoff from marketing to sales development, grounded in one specific observation.",
+      "channel": "email",
+      "touches": [
+        {
+          "step": 1,
+          "dayOffset": 0,
+          "label": "Cold intro",
+          "tone": "Lead with a point of view about lead quality or the friction between marketing and sales development over the handoff and follow-up speed. Reference one concrete observation or artifact, never a list. Do not lead with your availability or ask to chat about the role. Under 90 words. End with one low-friction question."
+        },
+        {
+          "step": 2,
+          "dayOffset": 8,
+          "label": "Follow-up",
+          "tone": "Add one new concrete observation or artifact about lead quality, follow-up speed or the sales handoff. Do not repeat the opener or stack examples. Ask one useful question. Under 60 words."
+        }
+      ]
+    },
+    {
       "id": "cold-intro-ta",
       "label": "Cold intro to TA/recruiter (gatekeeper)",
-      "scenario": "You have a TA or recruiter contact at a company you have applied to. You want to introduce yourself and confirm your application reached the right desk.",
+      "scenario": "You have a TA or recruiter contact at a company you have applied to. You want help with process, timeline and logistics only, without treating them as the hiring decision-maker or pitching revenue strategy.",
       "channel": "email",
       "touches": [
         {
           "step": 1,
           "dayOffset": 0,
           "label": "Intro + confirm",
-          "tone": "Brief, professional. Mention the specific role applied to. One line on fit. Ask if the application has been received. Under 60 words."
+          "tone": "Brief, professional and limited to process. Mention the specific role, ask whether the application was received, and clarify the timeline or next logistical step. Do not pitch revenue strategy or ask them to judge fit. Under 60 words."
         },
         {
           "step": 2,
           "dayOffset": 7,
           "label": "Follow-up",
-          "tone": "Short check-in. Add one data point not in the original application. Ask if a screen makes sense. Under 50 words."
+          "tone": "Short process check-in. Ask about timing, status or one necessary logistical detail. Do not add a strategic pitch or press for a hiring decision. Under 50 words."
         }
       ]
     },
