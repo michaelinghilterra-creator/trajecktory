@@ -19,6 +19,7 @@ import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
+import { INFLUENCE_TIERS } from '../../../lib/influence-tier.mjs';
 
 export const router = express.Router();
 
@@ -83,7 +84,7 @@ router.get('/api/target-talent/:id', (req, res) => {
 router.patch('/api/target-talent/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { status, notes, lastTouch, website, phone, linkedinStatus,
+    const { status, notes, lastTouch, website, phone, linkedinStatus, influenceTier,
             first, last, salute, title, company, city, state, zip, email, linkedin } = req.body || {};
     if (status && !TT_STATUSES.includes(status)) {
       return res.status(400).json({ error: `Invalid status. Must be one of: ${TT_STATUSES.join(', ')}` });
@@ -91,12 +92,15 @@ router.patch('/api/target-talent/:id', (req, res) => {
     if (linkedinStatus !== undefined && !isLinkedInState(linkedinStatus)) {
       return res.status(400).json({ error: `Invalid linkedinStatus. Must be one of: ${LINKEDIN_STATES.join(', ')}` });
     }
+    if (influenceTier !== undefined && !INFLUENCE_TIERS.includes(influenceTier)) {
+      return res.status(400).json({ error: `Invalid influenceTier. Must be one of: ${INFLUENCE_TIERS.join(', ')}` });
+    }
     // LinkedIn state lives in a sidecar (not the markdown row), so a request that
     // ONLY changes linkedinStatus must not require the contact's row to be
     // rewritten. Set it first, then only touch the row if a row field was given.
     if (linkedinStatus !== undefined) setLinkedInStatus(id, linkedinStatus);
     // Row fields — status/lastTouch/notes plus the editable identity fields.
-    const rowUpdates = { status, notes, lastTouch, website, phone,
+    const rowUpdates = { status, notes, lastTouch, website, phone, influenceTier,
                          first, last, salute, title, company, city, state, zip, email, linkedin };
     const touchesRow = Object.values(rowUpdates).some(v => v !== undefined);
     if (touchesRow) {

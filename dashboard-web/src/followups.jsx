@@ -7,6 +7,14 @@
 
 const { useState: useStateF, useEffect: useEffectF, useMemo: useMemoF } = React;
 
+const FOLLOWUP_TIER_LABELS = Object.freeze({
+  hm: 'Hiring manager',
+  exec: 'Skip-level exec',
+  peer: 'Functional peer',
+  ta: 'Talent acquisition',
+  agency: 'Agency recruiter',
+});
+
 const FU_CHANNELS = ['Email', 'LinkedIn', 'Phone', 'Form', 'Other'];
 
 const COACH_COLOR = {
@@ -300,6 +308,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   const [sourceFilter, setSourceFilter] = useStateF([]); // 'app' | 'ta'
   const [coldFilter, setColdFilter] = useStateF('all');  // 'all' | 'none' | 'awaiting'
   const [findFor, setFindFor] = useStateF(null);         // { company, role } for the Find-contacts modal
+  const [decisionMakerFor, setDecisionMakerFor] = useStateF(null);
   // Subview: 'overview' (KPIs), 'warm' (the urgent queue + nav badge), 'cold'
   // ("Applications out": cold portal apps that should not nag daily).
   const [subView, setSubView] = useStateF('overview');
@@ -356,6 +365,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   const ghosted = data.ghostedCandidates || [];
   // Applied roles with no contact at the company — the "find a contact" nudge.
   const contactlessApps = data.contactlessApps || [];
+  const unthreadedApps = data.unthreadedApps || [];
   // Applied roles going stale where you DO have a contact — surface the person to
   // ping, not a company card. Rendered in the Follow-ups queue with a stale pill.
   const staleAppContacts = data.staleAppContacts || [];
@@ -403,6 +413,15 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
     }).then(() => {
       load();
       window.tjkToast && window.tjkToast(days >= 300 ? `Muted — ${a.company} has no contacts to find` : `Snoozed ${a.company} for ${days} days`, 'success');
+    }).catch(() => {});
+  };
+  const snoozeStakeholder = (a, days) => {
+    window.tjkMutate('/api/followups/snooze', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: 'stakeholder', id: a.id, days }),
+    }).then(() => {
+      load();
+      window.tjkToast && window.tjkToast(days >= 300 ? `Muted: no decision-maker to chase at ${a.company}` : `Snoozed ${a.company} for ${days} days`, 'success');
     }).catch(() => {});
   };
   const archiveGhosted = (ids) => {
@@ -518,6 +537,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
     { id: 'overview', label: 'Overview',         n: null,        icon: window.ICON.pulse },
     { id: 'queue',    label: 'Follow-ups',       n: (data.actionableCount ?? (data.contactFollowups || []).length) || null, icon: window.ICON.send },
     { id: 'findcontact', label: 'Find a contact', n: contactlessApps.length, icon: window.ICON.search || window.ICON.userPlus },
+    { id: 'reachdm', label: 'Reach a decision-maker', n: unthreadedApps.length, icon: window.ICON.target || window.ICON.userPlus },
   ];
 
   const openFromOverview = (it) => {
@@ -692,6 +712,54 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
         </div>
       )}
 
+      {/* Reach a decision-maker: live roles where current contacts cannot decide */}
+      {(view === 'reachdm' || view === 'merged') && (
+        <div style={{ padding: '4px 0' }}>
+          <div className="ta-head">
+            <div>
+              <h1>Reach a decision-maker</h1>
+              <div className="sub">
+                {unthreadedApps.length === 0
+                  ? 'Every live application has someone who can move it. Good.'
+                  : `${unthreadedApps.length} role${unthreadedApps.length === 1 ? '' : 's'} where your contacts can help with the process, but cannot make the hiring decision. Someone else decides.`}
+              </div>
+            </div>
+          </div>
+          {unthreadedApps.length > 0 && (
+            <div className="col" style={{ gap: 8, marginTop: 12 }}>
+              {unthreadedApps.map(a => {
+                const tierLabel = FOLLOWUP_TIER_LABELS[a.topTier] || 'Current contacts';
+                return (
+                <div key={`dm-${a.id}`} className="action-card">
+                  <div className="action-card-row">
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span className="mono dim" style={{ fontSize: 10.5 }}>#{String(a.id).padStart(3, '0')}</span>
+                        <span className="action-card-co">{a.company}</span>
+                        <span className="dim">· {a.role || 'unknown role'}</span>
+                        <span className="pill" style={{ fontSize: 10.5 }}>{a.status}</span>
+                        {a.applyDate ? <span className="dim" style={{ fontSize: 11 }}>applied {a.applyDate}</span> : null}
+                      </div>
+                      <div className="mono dim" style={{ fontSize: 11, marginTop: 4 }}>
+                        {a.contactCount} contact{a.contactCount === 1 ? '' : 's'}, {tierLabel.toLowerCase()} only
+                      </div>
+                    </div>
+                    <div className="row" style={{ gap: 6, flex: 'none' }}>
+                      <button className="btn ghost sm" title="Remind me about this one in two weeks" onClick={() => snoozeStakeholder(a, 14)}>Snooze 2w</button>
+                      <button className="btn ghost sm" title="There is no decision-maker worth chasing at this company" onClick={() => snoozeStakeholder(a, 365)}>No decision-maker</button>
+                      <button className="btn accent sm" onClick={() => setDecisionMakerFor({ company: a.company, role: a.role })}>
+                        Find a decision-maker
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Find-contacts modal (reuses the per-company finder from TA Outreach) */}
       {findFor && FindContactsPanel && (
         <div className="modal-back" onClick={() => setFindFor(null)}>
@@ -699,6 +767,17 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
             <div className="modal-body" style={{ padding: 16 }}>
               <FindContactsPanel company={findFor.company} exampleRole={findFor.role}
                 onAdded={load} onCancel={() => setFindFor(null)} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {decisionMakerFor && FindContactsPanel && (
+        <div className="modal-back" onClick={() => setDecisionMakerFor(null)}>
+          <div className="modal" style={{ width: 560 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-body" style={{ padding: 16 }}>
+              <FindContactsPanel company={decisionMakerFor.company} exampleRole={decisionMakerFor.role}
+                initialMode="principal" onAdded={load} onCancel={() => setDecisionMakerFor(null)} />
             </div>
           </div>
         </div>

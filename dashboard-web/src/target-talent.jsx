@@ -18,6 +18,31 @@ const TT_STATUS = [
 const TT_STATUS_MAP = Object.fromEntries(TT_STATUS.map(s => [s.id, s]));
 const TT_PIPELINE = TT_STATUS.filter(s => s.pipeline);
 
+const INFLUENCE_TIER_LABELS = Object.freeze({
+  hm: "Hiring manager",
+  exec: "Skip-level exec",
+  peer: "Functional peer",
+  ta: "Talent acquisition",
+  agency: "Agency recruiter",
+});
+const INFLUENCE_TIER_SHORT_LABELS = Object.freeze({
+  hm: "HM",
+  exec: "Exec",
+  peer: "Peer",
+  ta: "TA",
+  agency: "Agency",
+});
+
+function InfluenceTierBadge({ tier, source }) {
+  const confirmed = source === "tag";
+  return (
+    <span className="tag" title={confirmed ? "Set by you" : "Not confirmed yet"}
+      style={{ flex: "none", fontSize: 9.5, opacity: confirmed ? 1 : 0.5 }}>
+      {INFLUENCE_TIER_SHORT_LABELS[tier] || tier || "?"}
+    </span>
+  );
+}
+
 // ── LinkedIn connection axis ──────────────────────────────────────────────────
 // SEPARATE from the outreach pipeline above. The pipeline tracks how far the
 // CONVERSATION has progressed; this tracks whether they accepted your LinkedIn
@@ -345,7 +370,8 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
                       <div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}>
                         <div className="mono-av sm" style={{ borderColor: m.color, color: m.color, flex: "none" }}>{ttInitials(c.first + " " + c.last)}</div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.first} {c.last}</div>
-                        {c.isHighValue && <span title="High value: reachable both ways (verified email + LinkedIn). Worth a multithread." style={{ flex: "none", color: "var(--yellow)", fontSize: 12 }}>★</span>}
+                        {c.isHighValue && <span title="Can move this hire" style={{ flex: "none", color: "var(--yellow)", fontSize: 12 }}>★</span>}
+                        <InfluenceTierBadge tier={c.influenceTier} source={c.influenceTierSource} />
                       </div>
                     </td>
                     <td title={c.title || "No job title recorded for this contact"}>
@@ -724,6 +750,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkedinStatus }) })
       .then(() => { load(); onUpdate?.(); });
   };
+  const updateInfluenceTier = influenceTier => {
+    window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ influenceTier }) })
+      .then(() => { load(); onUpdate?.(); });
+  };
   const saveNotes = () => {
     window.tjkMutate(cfg.base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notes }) })
       .then(() => { load(); onUpdate?.(); });
@@ -831,10 +861,27 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         </div>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
           <span className="mono-av" style={{ width: 44, height: 44, fontSize: 14, borderRadius: 10, borderColor: cfg.statusColor(data.status), color: cfg.statusColor(data.status) }}>{ttInitials(cfg.avatarName(data) || "?")}</span>
-          <div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <h3 style={{ margin: 0, fontSize: 19, fontWeight: 600 }}>{cfg.displayName(data) || "(no name)"}</h3>
             <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>{cfg.subtitle(data) || "—"}</div>
             <div style={{ fontSize: 12, color: "var(--accent)", marginTop: 3, fontWeight: 500 }}>{cfg.org(data) || ""}</div>
+            {cfg.kind === "ta" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 7, flexWrap: "wrap" }}>
+                <label htmlFor={`influence-tier-${data.id}`} style={{ fontSize: 10.5, color: "var(--text-mute)" }}>Role in the hire</label>
+                <select id={`influence-tier-${data.id}`} className="sel" value={data.influenceTier || "ta"}
+                  onChange={e => updateInfluenceTier(e.target.value)} style={{ fontSize: 11, padding: "3px 7px" }}>
+                  {Object.entries(INFLUENCE_TIER_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+                <span title={data.influenceTierSource === "title"
+                  ? "Read from the job title and not confirmed. Changing it here records your decision."
+                  : data.influenceTierSource === "tag"
+                    ? "Set by you."
+                    : "Nothing could be determined from the job title. Changing it here records your decision."}
+                  style={{ fontSize: 10.5, color: "var(--text-mute)" }}>
+                  {data.influenceTierSource === "title" ? "Inferred" : data.influenceTierSource === "tag" ? "Set" : "Not determined"}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1238,7 +1285,7 @@ function RecRow({ checked, onToggle, av, name, meta, reason, right }) {
 // Pipeline drawer's Contacts tab so the user can fill a single company's gap
 // (~3K tokens) instead of running the full multi-company batch Reconcile.
 // Exposed on window so the Pipeline drawer can render it.
-function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
+function FindContactsPanel({ company, exampleRole, onAdded, onCancel, initialMode = "ta" }) {
   const [phase, setPhase] = useState("idle"); // idle | scanning | review | adding | done
   const [suggestions, setSuggestions] = useState([]);
   const [sel, setSel] = useState(new Set());
@@ -1249,7 +1296,7 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel }) {
   // gatekeeper (default), 'principal' = the hiring manager / skip-level you would
   // actually report to (VP/Director of the target function). Principal mode hits a
   // different endpoint and stamps the added contact [principal].
-  const [mode, setMode] = useState("ta");
+  const [mode, setMode] = useState(initialMode);
 
   const keyOf = (s) => `${s.first || ""} ${s.last || ""}`.trim();
 
