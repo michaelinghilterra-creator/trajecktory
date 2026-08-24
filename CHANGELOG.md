@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.39.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.38.1...v2.39.0) (2026-08-24)
+
+
+### Features
+
+* check the ship gate's blind spots and make a failed preflight diagnosable ([#252](https://github.com/michaelinghilterra-creator/trajecktory/issues/252)) ([78efc4b](https://github.com/michaelinghilterra-creator/trajecktory/commit/78efc4b30d9be3f351344bddf8a97c5b1f399b39))
+
 ## [2.38.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.38.0...v2.38.1) (2026-08-24)
 
 
