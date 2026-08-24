@@ -520,6 +520,7 @@ for (const suite of [
   'tests/influence-ranking.test.mjs',
   'tests/stakeholder-gap.test.mjs',
   'tests/influence-ui-copy.test.mjs',
+  'tests/decision-maker-view.test.mjs',
   'tests/reconcile-discovery-sources.test.mjs',
   'tests/followup-queue-books.test.mjs',
   'tests/followups-cap.test.mjs',

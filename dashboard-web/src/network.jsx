@@ -3,6 +3,7 @@
 const NET_SUBTABS = [
   { id: 'followups', label: 'Follow-ups' },
   { id: 'referrals', label: 'Referrals' },
+  { id: 'decisionmakers', label: 'Decision Makers' },
   { id: 'ta', label: 'TA Outreach' },
   { id: 'influencers', label: 'Influencers' },
 ];
@@ -20,7 +21,8 @@ window.NetworkTab = function NetworkTab({ view, setView, search, pendingTaOpen, 
       </div>
       {active === 'followups' && window.FollowupsTab && <window.FollowupsTab chromeless apps={apps} onAction={onAction} openTaContact={openTaContact} search={search} toast={toast} />}
       {active === 'referrals' && window.ReferralsTab && <window.ReferralsTab search={search} />}
-      {active === 'ta' && window.TargetTalentTab && <window.TargetTalentTab initialOpenId={pendingTaOpen} onInitialOpenConsumed={onTaOpenConsumed} search={search} />}
+      {active === 'decisionmakers' && window.TargetTalentTab && <window.TargetTalentTab audience="decision-makers" search={search} />}
+      {active === 'ta' && window.TargetTalentTab && <window.TargetTalentTab audience="talent" initialOpenId={pendingTaOpen} onInitialOpenConsumed={onTaOpenConsumed} search={search} />}
       {active === 'influencers' && window.InfluencersView && <window.InfluencersView />}
     </div>
   );

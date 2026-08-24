@@ -43,6 +43,12 @@ const INFLUENCE_TIER_SHORT_LABELS = Object.freeze({
   ta: "TA",
   agency: "Agency",
 });
+// Keep this identical to canInfluenceHire in server/lib/followups.mjs. Talent
+// uses the complement so every current and future value always has one view.
+const DECISION_MAKER_TIERS = Object.freeze(new Set(["hm", "exec", "peer"]));
+// Alphabetical labels would put Functional peer before Hiring manager, which
+// reverses the purpose of this column.
+const DECISION_MAKER_SORT = Object.freeze({ hm: 0, exec: 1, peer: 2 });
 
 function InfluenceTierBadge({ tier, source }) {
   const confirmed = source === "tag";
@@ -204,7 +210,7 @@ function CreditBalances() {
   );
 }
 
-function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImported }) {
+function ContactsTableView({ contacts, audience, otherCount, onOpen, selId, onReconcile, onFindDecisionMakers, search, onImported }) {
   const [showArchived, setShowArchived] = useState(false);
   const [statusFilter, setStatusFilter] = useState(null);
   const [companyFilter, setCompanyFilter] = useState("");
@@ -245,6 +251,7 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
       case "status":   return (TT_STATUS_MAP[c.status] || { stage: -2 }).stage;
       case "linkedin": return TT_LINKEDIN_RANK[c.linkedinStatus] ?? 0;
       case "last":     return c.lastTouch || "";
+      case "influence": return DECISION_MAKER_SORT[c.influenceTier] ?? Number.MAX_SAFE_INTEGER;
       default:         return "";
     }
   };
@@ -291,18 +298,31 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
   const cols = [
     { k: "name",     label: "Contact",    w: 210 },
     { k: "title",    label: "Title",      w: 220 },
+    ...(audience === "decision-makers" ? [{ k: "influence", label: "Role in hire", w: 140 }] : []),
     { k: "company",  label: "Company",    w: 180 },
     { k: "location", label: "Location",   w: 140 },
     { k: "status",   label: "Status",     w: 150 },
     { k: "linkedin", label: "LinkedIn",   w: 130 },
     { k: "last",     label: "Last touch", w: 110 },
   ];
+  const decisionMakers = audience === "decision-makers";
+  const heading = decisionMakers ? "Decision Makers" : "TA Outreach";
+  const description = decisionMakers
+    ? "They can say yes to the hire."
+    : "They move you through the process, somebody else decides.";
+  const splitCopy = audience === "decision-makers"
+    ? `${active.length} contacts here. ${otherCount} talent contacts are on the TA Outreach tab.`
+    : audience === "talent"
+      ? `${active.length} contacts here. ${otherCount} decision makers are on the Decision Makers tab.`
+      : null;
 
   return (
     <div className="fade-up">
       <div className="ta-head">
         <div>
-          <h1>TA Outreach</h1>
+          <h1>{heading}</h1>
+          {audience && <div className="sub">{description}</div>}
+          {splitCopy && <div className="sub">{splitCopy}</div>}
           <div className="sub">{active.length} active contacts &middot; {companies.length} companies &middot; {archivedCount} archived</div>
           <CreditBalances />
         </div>
@@ -324,6 +344,10 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
             {importing ? "Importing…" : "Import CSV"}
             <input type="file" accept=".csv,text/csv" style={{ display: "none" }} disabled={importing} onChange={handleImport} />
           </label>
+          {decisionMakers && <button className="btn" onClick={onFindDecisionMakers}
+            title="Search every live application that has contacts but nobody who can decide, and propose people to add.">
+            <TIcon d={TI.users} size={14} /> Find decision-makers
+          </button>}
           <button className="btn primary" onClick={onReconcile}><TIcon d={TI.refresh} size={14} /> Reconcile</button>
         </div>
       </div>
@@ -388,6 +412,13 @@ function ContactsTableView({ contacts, onOpen, selId, onReconcile, search, onImp
                     <td title={c.title || "No job title recorded for this contact"}>
                       <span style={{ fontSize: 12, color: "var(--text-dim)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} aria-label={c.title || "No job title recorded"}>{c.title || "-"}</span>
                     </td>
+                    {decisionMakers && (
+                      <td>
+                        <span style={{ fontSize: 12, color: "var(--text-dim)", opacity: c.influenceTierSource === "tag" ? 1 : 0.5 }}>
+                          {INFLUENCE_TIER_LABELS[c.influenceTier] || c.influenceTier || "-"}
+                        </span>
+                      </td>
+                    )}
                     <td title={c.company || ""}>
                       <span style={{ fontWeight: 600, fontSize: 12, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.company}</span>
                     </td>
@@ -1463,7 +1494,7 @@ window.FindContactsPanel = FindContactsPanel;
 
 const STEPS = ["Preview", "Discover", "Apply"];
 
-function ReconcileModal({ onClose, onApplied }) {
+function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1482,13 +1513,15 @@ function ReconcileModal({ onClose, onApplied }) {
       .then(d => {
         if (d.error) { setError(d.error); setLoading(false); return; }
         setPreview(d);
-        setArchSel(new Set((d.toArchive || []).map(x => x.id)));
-        setGapSel(new Set((d.companiesNeedingContacts || []).map(c => c.company)));
+        // A focused principal search still uses the full wizard. Clearing the
+        // other selections prevents its bulk action from making unrelated edits.
+        setArchSel(initialMode === "principal" ? new Set() : new Set((d.toArchive || []).map(x => x.id)));
+        setGapSel(initialMode === "principal" ? new Set() : new Set((d.companiesNeedingContacts || []).map(c => c.company)));
         setPrincipalGapSel(new Set((d.companiesNeedingPrincipal || []).map(c => c.company)));
         setLoading(false);
       })
       .catch(e => { setError(e.message); setLoading(false); });
-  }, []);
+  }, [initialMode]);
 
   const toggleSet = (setter, key) => setter(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
@@ -1742,11 +1775,11 @@ function ReconcileModal({ onClose, onApplied }) {
 // ── Root component ───────────────────────────────────────────────────────────
 // TA Outreach is a single view (the Contacts table). The old Overview subtab was
 // removed, so the tab opens straight to the contacts list — no subtab bar.
-window.TargetTalentTab = function TargetTalentTab({ initialOpenId, onInitialOpenConsumed, search } = {}) {
+window.TargetTalentTab = function TargetTalentTab({ audience, initialOpenId, onInitialOpenConsumed, search } = {}) {
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [drawerId, setDrawerId] = useState(null);
-  const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [reconcileMode, setReconcileMode] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1757,6 +1790,29 @@ window.TargetTalentTab = function TargetTalentTab({ initialOpenId, onInitialOpen
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // Count on the SAME basis the table shows, which is active contacts only.
+  // Counting the whole book here put "25 contacts here" directly above a table
+  // rendering 2, and beside a stats line correctly reporting 2 active and 23
+  // archived. Three numbers for one question is how a working screen reads as
+  // broken, so the split line and the rows it describes share one filter.
+  const decisionMakerCount = useMemo(
+    () => contacts.filter(c => c.status !== "Archived" && DECISION_MAKER_TIERS.has(c.influenceTier)).length,
+    [contacts]
+  );
+  const activeCount = useMemo(() => contacts.filter(c => c.status !== "Archived").length, [contacts]);
+  const viewContacts = useMemo(() => {
+    if (audience === "decision-makers") {
+      return contacts.filter(c => DECISION_MAKER_TIERS.has(c.influenceTier));
+    }
+    if (audience === "talent") {
+      return contacts.filter(c => !DECISION_MAKER_TIERS.has(c.influenceTier));
+    }
+    return contacts;
+  }, [contacts, audience]);
+  const otherCount = audience === "decision-makers"
+    ? activeCount - decisionMakerCount
+    : audience === "talent" ? decisionMakerCount : 0;
+
   // Honor `initialOpenId` from a cross-tab hand-off (e.g. a Follow-Ups TA row
   // click). Open the drawer once, then notify the parent so the prop clears.
   useEffect(() => {
@@ -1766,14 +1822,16 @@ window.TargetTalentTab = function TargetTalentTab({ initialOpenId, onInitialOpen
     }
   }, [initialOpenId, onInitialOpenConsumed]);
 
-  if (loading && contacts.length === 0) return <div style={{ padding: 20, color: "var(--text-dim)" }}>Loading TA Outreach data…</div>;
+  if (loading && contacts.length === 0) return <div style={{ padding: 20, color: "var(--text-dim)" }}>Loading {audience === "decision-makers" ? "Decision Makers" : "TA Outreach"} data…</div>;
 
   return (
     <div style={{ flex: 1, maxWidth: "none", marginLeft: 0, marginRight: 0 }}>
-      <ContactsTableView contacts={contacts} onOpen={setDrawerId} selId={drawerId} onReconcile={() => setReconcileOpen(true)} search={search} onImported={load} />
+      <ContactsTableView contacts={viewContacts} audience={audience} otherCount={otherCount}
+        onOpen={setDrawerId} selId={drawerId} onReconcile={() => setReconcileMode("all")}
+        onFindDecisionMakers={() => setReconcileMode("principal")} search={search} onImported={load} />
 
       {drawerId != null && <TTDrawer id={drawerId} onClose={() => setDrawerId(null)} onUpdate={load} />}
-      {reconcileOpen && <ReconcileModal onClose={() => setReconcileOpen(false)} onApplied={load} />}
+      {reconcileMode && <ReconcileModal initialMode={reconcileMode} onClose={() => setReconcileMode(null)} onApplied={load} />}
     </div>
   );
 };
