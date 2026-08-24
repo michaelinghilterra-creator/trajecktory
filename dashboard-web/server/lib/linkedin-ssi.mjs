@@ -153,6 +153,18 @@ function toneInstruction(tone) {
 // contact (a target-talent lead or a recruiter reachable only on LinkedIn)
 // meant lifting the character-fit and prompt-assembly logic out of the route.
 
+// A connection note is one paragraph in a small box, so its layout must not
+// depend on the model following an advisory prompt rule. Flatten before fitting
+// so the cap is measured against the exact text returned to LinkedIn. This is
+// deliberately connection-note-only: follow-up messages are real DMs where
+// paragraphs are correct and must be preserved.
+export function flattenConnectNote(text) {
+  return String(text ?? '')
+    .replace(/\s*[\r\n]+\s*/g, ' ')
+    .replace(/ {2,}/g, ' ')
+    .trim();
+}
+
 // Trim a drafted note to LinkedIn's hard 300-char cap while KEEPING the
 // "Thanks, <first>" sign-off. Prefer cutting at a sentence end, then a word
 // boundary. Returns { text, length }. A note already within the cap is returned
@@ -212,7 +224,7 @@ HARD RULES:
 - Open with their first name + comma. Example: "Hi ${openExample},"
 - NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
 - One reason to connect that is grounded in the context above. Be specific, not generic.
-- End with a sign-off: "Thanks, ${first}" (with the comma).
+- Keep the whole note as ONE paragraph on a single line with no line breaks, and end that same line with the sign-off: "Thanks, ${first}" (with the comma). This is a short note in a small box, not an email.
 - No "I'd love to pick your brain". No "I hope this finds you well". No "Quick question for you".
 - Do NOT sound desperate and do NOT lead with being in market or looking for a job.
 - Do NOT include emojis.
