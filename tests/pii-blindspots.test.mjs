@@ -58,21 +58,21 @@ check(terms.phones.size === 1 && terms.phones.has('2025550147'), 'five phone for
 check(terms.derivedFrom.cv === false, 'empty source is reported as not derived');
 
 const addedLines = [
-  { file: 'alpha.mjs', line: 'const greeting = "Zorina";' },
-  { file: 'beta.mjs', line: 'const callback = "202 555 0147";' },
-  { file: 'gamma.mjs', line: 'const contact = "Orlena Venn";' },
-  { file: 'delta.mjs', line: 'const value = "first sales manager data";' },
-  { file: 'epsilon.mjs', line: `const blob = "${'Q'.repeat(40)}";` },
-  { file: 'zeta.mjs', line: `const digest = "${'ab'.repeat(16)}";` },
+  { file: 'fixture-a.mjs', line: 'const greeting = "Zorina";' },
+  { file: 'fixture-b.mjs', line: 'const callback = "202 555 0147";' },
+  { file: 'fixture-c.mjs', line: 'const contact = "Orlena Venn";' },
+  { file: 'fixture-d.mjs', line: 'const value = "first sales manager data";' },
+  { file: 'fixture-e.mjs', line: `const blob = "${'Q'.repeat(40)}";` },
+  { file: 'fixture-f.mjs', line: `const digest = "${'ab'.repeat(16)}";` },
 ];
 const scanned = scanAddedLines(addedLines, terms);
-check(scanned.findings.some(finding => finding.kind === 'identity' && finding.file === 'alpha.mjs'), 'first name alone produces an identity finding');
-check(scanned.findings.some(finding => finding.kind === 'phone' && finding.file === 'beta.mjs'), 'differently formatted phone produces a phone finding');
-check(scanned.findings.some(finding => finding.kind === 'person' && finding.file === 'gamma.mjs'), 'third-party full name produces a person finding');
-check(!scanned.findings.some(finding => finding.file === 'delta.mjs'), 'generic words produce no finding');
+check(scanned.findings.some(finding => finding.kind === 'identity' && finding.file === 'fixture-a.mjs'), 'first name alone produces an identity finding');
+check(scanned.findings.some(finding => finding.kind === 'phone' && finding.file === 'fixture-b.mjs'), 'differently formatted phone produces a phone finding');
+check(scanned.findings.some(finding => finding.kind === 'person' && finding.file === 'fixture-c.mjs'), 'third-party full name produces a person finding');
+check(!scanned.findings.some(finding => finding.file === 'fixture-d.mjs'), 'generic words produce no finding');
 const encoded = scanned.findings.filter(finding => finding.kind === 'encoded');
-check(encoded.some(finding => finding.file === 'epsilon.mjs'), 'base64-looking run produces an encoded finding');
-check(encoded.some(finding => finding.file === 'zeta.mjs'), 'hex run produces an encoded finding');
+check(encoded.some(finding => finding.file === 'fixture-e.mjs'), 'base64-looking run produces an encoded finding');
+check(encoded.some(finding => finding.file === 'fixture-f.mjs'), 'hex run produces an encoded finding');
 check(encoded.every(finding => finding.maskedTerm === null), 'encoded findings have null masked terms');
 
 const encodedRuleLines = [
