@@ -32,7 +32,7 @@ import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs'
 // else. It also imported normalizeUrl from scan-core, a re-export of
 // canonicalUrl, so the same function went by two names inside one file.
 import { canonicalUrl, normalizeCompany, sameRole, urlFromReport, urlForRow, buildDecidedIndex } from './lib/identity.mjs';
-import { markDone } from './lib/pipeline.mjs';
+import { markDone, sourceUrlOf } from './lib/pipeline.mjs';
 // next-jd.mjs (persistent JD counter) can be one update cycle behind on installs
 // updating from a pre-counter version. Load it defensively so a missing file
 // degrades to max+1 numbering instead of crashing merge-tracker at module load.
@@ -351,10 +351,25 @@ console.log(`📥 Found ${tsvFiles.length} pending additions`);
 // whatever the agent wrote rather than a guess. Only enforcing one direction
 // (strip) used to leave untagged self-sourced pastes to be misclassified as
 // API/Agent Scan by the dashboard's URL-host fallback.
+// resolve-jds.mjs (part of the API Scan step) rewrites a pipeline.md row for an
+// SPA-hosted posting (Lever, some Ashby/Greenhouse) to a `local:jds/<file>` path,
+// so the http(s) URL disappears from pipeline.md entirely and moves onto that
+// snapshot's own "Source URL:" header line. A URL-only scan of pipeline.md is
+// blind to every such row, so a genuinely scanner-found role got misread as "not
+// in pipeline.md" and mistagged self-sourced (a dozen scanner-found roles in a
+// single batch, all discovered by scan.mjs/discover.mjs, all snapshot-rewritten,
+// all misclassified). sourceUrlOf resolves a local: row back to the
+// real URL the same way lib/pipeline.mjs's own reconciliation does, so both
+// scanned forms count.
 const scannedUrls = new Set();
 if (existsSync(PIPELINE_FILE)) {
   for (const line of readFileSync(PIPELINE_FILE, 'utf-8').split('\n')) {
     for (const u of (line.match(/https?:\/\/[^\s|)]+/g) || [])) scannedUrls.add(canonicalUrl(u));
+    const localMatch = line.match(/local:\S+/);
+    if (localMatch) {
+      const resolved = sourceUrlOf(localMatch[0], CAREER_OPS);
+      if (resolved) scannedUrls.add(resolved);
+    }
   }
 }
 // Remove a [self-sourced] tag AND whatever delimiter the agent used to attach
