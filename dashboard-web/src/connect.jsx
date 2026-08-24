@@ -445,8 +445,9 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {channels.linkedin ? <span style={chipStyle(liDone)}>LinkedIn {liDone ? '✓ sent' : 'not sent'}</span> : null}
-          {channels.email ? <span style={chipStyle(emDone)}>Email {emDone ? '✓ sent' : 'not sent'}</span> : null}
+          {/* This tracks the message the card asks you to send now, not whether this person was ever contacted. Calling it "not sent" caused intact contact history to look lost. */}
+          {channels.linkedin ? <span style={chipStyle(liDone)}>LinkedIn {liDone ? '✓ sent' : 'to send'}</span> : null}
+          {channels.email ? <span style={chipStyle(emDone)}>Email {emDone ? '✓ sent' : 'to send'}</span> : null}
           {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={liSending || emSending}>💤 14d</button> : null}
           {onMute && !done ? <button className="btn ghost sm" title="Done for now. Removes them from the queue indefinitely without changing their status or logging a touch." onClick={() => onMute(c)} disabled={liSending || emSending}>Done for now</button> : null}
           {href ? <a className="btn ghost sm" href={href} target="_blank" rel="noreferrer">Open ↗</a> : null}

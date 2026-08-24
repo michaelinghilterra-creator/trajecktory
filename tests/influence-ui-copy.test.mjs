@@ -14,6 +14,7 @@ import { INFLUENCE_TIERS } from '../lib/influence-tier.mjs';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const followups = readFileSync(join(root, 'dashboard-web/src/followups.jsx'), 'utf8');
 const targetTalent = readFileSync(join(root, 'dashboard-web/src/target-talent.jsx'), 'utf8');
+const connect = readFileSync(join(root, 'dashboard-web/src/connect.jsx'), 'utf8');
 
 let passed = 0, failed = 0;
 function check(condition, label) {
@@ -29,6 +30,9 @@ check((followups.match(/contactless/g) || []).length === 10, 'the contactless bu
 check(followups.includes('unthreadedApps'), 'Follow-Ups reads the decision-maker gap');
 check(targetTalent.includes('influenceTierSource'), 'the contact UI distinguishes inferred and confirmed tiers');
 check(/JSON\.stringify\(\{\s*influenceTier\s*\}\)/.test(targetTalent), 'the contact UI PATCHes influenceTier');
+// This is the real guard: the phrasing regression is the bug, and both readings render fine.
+check(!connect.includes("'not sent'"), 'queue chips do not claim a message was not sent historically');
+check(connect.includes("'to send'"), 'queue chips describe the pending action');
 
 const labelMapMatch = targetTalent.match(/const INFLUENCE_TIER_LABELS = Object\.freeze\(\{([\s\S]*?)\}\);/);
 const labelMapSource = labelMapMatch ? labelMapMatch[1] : '';
