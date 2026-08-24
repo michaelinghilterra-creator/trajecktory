@@ -65,7 +65,8 @@ const DISCOVER_REQUEST_TIMEOUT_MS =
 // Returns:
 //   {
 //     toArchive: [{ id, first, last, company, title, reason, relatedApps:[{id,status,role}] }],
-//     companiesNeedingContacts: [{ company, exampleRole, appCount, mostRecentApp }]
+//     companiesNeedingContacts: [{ company, exampleRole, appCount, mostRecentApp }],
+//     companiesNeedingPrincipal: [{ company, exampleRole, appCount, mostRecentApp }]
 //   }
 router.get('/api/tt-reconcile/preview', (req, res) => {
   try {
