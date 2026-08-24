@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.38.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.37.1...v2.38.0) (2026-08-24)
+
+
+### Features
+
+* rank and source contacts by their influence over a hire ([#248](https://github.com/michaelinghilterra-creator/trajecktory/issues/248)) ([edbac39](https://github.com/michaelinghilterra-creator/trajecktory/commit/edbac391292150ea0a8a1bd50eae5415276b1192))
+
 ## [2.37.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.37.0...v2.37.1) (2026-08-24)
 
 
