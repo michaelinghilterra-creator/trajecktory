@@ -8,8 +8,9 @@ import { TARGET_TALENT_MD } from '../config.mjs';
 import { parseCsvContacts, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
 import { findAndVerify, hunterSearchesLeft, millionVerifierCreditsLeft, planFindBudget, DEFAULT_FIND_LIMIT } from '../../../find-contacts.mjs';
+import { hunterDomainSearch, planDomainBudget } from '../../../lib/hunter-domain.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
-import { validateStakeholder } from '../../../lib/stakeholder-additions.mjs';
+import { mergeStakeholderAdditions, validateStakeholder, knownDomainKey } from '../../../lib/stakeholder-additions.mjs';
 
 export const router = express.Router();
 
@@ -83,6 +84,7 @@ router.get('/api/tt-reconcile/credit-balances', async (req, res) => {
     res.json({
       hunter: { configured: !!hkey, left: hunter },
       millionVerifier: { configured: !!mkey, left: mv },
+      domainSearchCost: { creditsPerCompany: 1, note: 'One search credit per company, whatever the number of people it returns.' },
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -373,6 +375,108 @@ If the search returns no reliable matches, return []. Never fabricate names or t
       for (const r of chunkResults) if (r) results.push(r);
     }
     res.json({ results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/tt-reconcile/discover-hunter
+// body: { companies: [{ company, domain? }], limit? }
+// Uses Hunter Domain Search to propose people from a structured directory. It
+// never writes. The separate bulk-add route remains the only write boundary.
+router.post('/api/tt-reconcile/discover-hunter', async (req, res) => {
+  try {
+    const { companies, limit } = req.body || {};
+    if (!Array.isArray(companies) || companies.length === 0) {
+      return res.status(400).json({ error: 'companies[] required' });
+    }
+    if (companies.length > 15) {
+      return res.status(400).json({ error: 'Max 15 companies per call.' });
+    }
+
+    const hkey = loadEnvKey('HUNTER_API_KEY');
+    if (!hkey) {
+      return res.status(400).json({ error: 'HUNTER_API_KEY must be set in dashboard-web/.env to search company directories.' });
+    }
+
+    const existingRows = parseTargetTalentMd();
+    const existingDomains = new Map();
+    for (const row of existingRows) {
+      const domain = bareHostname(row.website);
+      const companyKey = normCompany(row.company);
+      if (companyKey && domain && !existingDomains.has(companyKey)) existingDomains.set(companyKey, domain);
+    }
+
+    const unresolved = [];
+    const resolved = [];
+    for (const entry of companies) {
+      const company = String(entry?.company || '').trim();
+      const suppliedDomain = String(entry?.domain || '').trim();
+      const domain = suppliedDomain
+        ? bareHostname(suppliedDomain)
+        : existingDomains.get(normCompany(company));
+      if (!domain) unresolved.push(company);
+      else resolved.push({ company, domain });
+    }
+
+    const creditsBefore = await hunterSearchesLeft(hkey);
+    const cap = planDomainBudget({ needed: resolved.length, limit, creditsLeft: creditsBefore });
+    const toSearch = resolved.slice(0, cap);
+    const skippedBudget = resolved.slice(cap).map(entry => entry.company);
+    const today = localDate();
+
+    const discoverOne = async ({ company, domain }) => {
+      try {
+        const found = await hunterDomainSearch(domain, hkey);
+        const candidates = found.candidates.map(candidate => ({
+          first: candidate.first,
+          last: candidate.last,
+          company,
+          title: candidate.title,
+          linkedin: candidate.linkedin,
+          email: candidate.email,
+          sourceCount: candidate.sourceCount,
+          source: 'hunter',
+        }));
+        // Key with the gate's own normalizer, not normCompany: they differ on legal
+        // suffixes, and a mismatched key would drop the domain check silently.
+        const knownDomains = { [knownDomainKey(company)]: domain };
+        const merged = mergeStakeholderAdditions(candidates, {
+          today,
+          existingRows,
+          knownDomains,
+        });
+        return {
+          company,
+          domain,
+          suggestions: merged.people,
+          rejected: merged.rejected,
+          duplicates: merged.duplicates,
+        };
+      } catch (error) {
+        return { company, domain, suggestions: [], rejected: [], duplicates: 0, error: String(error?.message || error) };
+      }
+    };
+
+    // Match the other discovery routes so a large request does not create an
+    // unbounded burst, while one failed company cannot discard its neighbours.
+    const CONCURRENCY = 3;
+    const results = [];
+    for (let i = 0; i < toSearch.length; i += CONCURRENCY) {
+      const chunk = await Promise.all(toSearch.slice(i, i + CONCURRENCY).map(discoverOne));
+      results.push(...chunk);
+    }
+
+    // The UI sends accepted suggestions to bulk-add with source hunter. Running
+    // validation twice is deliberate because the write path must never trust a
+    // caller's claim that data was validated earlier.
+    res.json({
+      results,
+      creditsBefore,
+      creditsSpent: toSearch.length,
+      unresolved,
+      skippedBudget,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

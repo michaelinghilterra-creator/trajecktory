@@ -1292,28 +1292,42 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel, initialMod
   const [error, setError] = useState(null);
   const [addedCount, setAddedCount] = useState(0);
   const [rejected, setRejected] = useState([]);
-  // Which kind of contact to search for: 'ta' = Talent Acquisition / recruiter
-  // gatekeeper (default), 'principal' = the hiring manager / skip-level you would
-  // actually report to (VP/Director of the target function). Principal mode hits a
-  // different endpoint and stamps the added contact [principal].
+  const [discoveryRejected, setDiscoveryRejected] = useState([]);
+  const [unresolved, setUnresolved] = useState([]);
+  const [skippedBudget, setSkippedBudget] = useState([]);
+  const [creditsSpent, setCreditsSpent] = useState(null);
+  const [duplicateCount, setDuplicateCount] = useState(0);
+  // 'hunter' is the structured company-directory path. The model-backed TA and
+  // principal searches remain available when the directory has poor coverage.
   const [mode, setMode] = useState(initialMode);
 
   const keyOf = (s) => `${s.first || ""} ${s.last || ""}`.trim();
 
   const runDiscover = () => {
-    setPhase("scanning"); setError(null); setRejected([]);
-    const endpoint = mode === "principal" ? "/api/tt-reconcile/discover-principal" : "/api/tt-reconcile/discover";
+    setPhase("scanning"); setError(null); setRejected([]); setDiscoveryRejected([]);
+    setUnresolved([]); setSkippedBudget([]); setCreditsSpent(null); setDuplicateCount(0);
+    const endpoint = mode === "hunter"
+      ? "/api/tt-reconcile/discover-hunter"
+      : mode === "principal" ? "/api/tt-reconcile/discover-principal" : "/api/tt-reconcile/discover";
+    const body = mode === "hunter"
+      ? { companies: [{ company }] }
+      : { companies: [{ company, exampleRole: exampleRole || "" }] };
     window.tjkMutate(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companies: [{ company, exampleRole: exampleRole || "" }] }),
+      body: JSON.stringify(body),
     })
       .then(r => r.json().then(d => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (!ok || d.error) { setError(d.error || "Discovery failed."); setPhase("idle"); return; }
         const sug = (d.results || []).flatMap(r => r.suggestions || []);
         setSuggestions(sug);
-        const pre = new Set(sug.filter(s => s.validation?.ok !== false && ["high", "medium"].includes((s.confidence || "low").toLowerCase())).map(keyOf));
+        setDiscoveryRejected((d.results || []).flatMap(r => r.rejected || []));
+        setUnresolved(d.unresolved || []);
+        setSkippedBudget(d.skippedBudget || []);
+        setCreditsSpent(mode === "hunter" ? d.creditsSpent ?? 0 : null);
+        setDuplicateCount((d.results || []).reduce((sum, r) => sum + (r.duplicates || 0), 0));
+        const pre = new Set(sug.filter(s => s.validation?.ok !== false && (mode === "hunter" || ["high", "medium"].includes((s.confidence || "low").toLowerCase()))).map(keyOf));
         setSel(pre);
         setPhase("review");
       })
@@ -1325,7 +1339,7 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel, initialMod
   const add = () => {
     const contacts = suggestions.filter(s => sel.has(keyOf(s))).map(s => ({
       company, first: s.first || "", last: s.last || "", title: s.title || "",
-      city: s.city || "", state: s.state || "", linkedin: s.linkedin || "",
+      city: s.city || "", state: s.state || "", linkedin: s.linkedin || "", email: s.email || "",
       notes: [
         s.notes,
         `Added via Find ${mode === "principal" ? "hiring manager" : "contacts"} (confidence: ${s.confidence || "unknown"})`,
@@ -1340,7 +1354,7 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel, initialMod
       body: JSON.stringify({
         contacts,
         // The plain TA path is also model-backed, but gating it is outside this change.
-        source: mode === "principal" ? "agent" : "manual",
+        source: mode === "hunter" ? "hunter" : mode === "principal" ? "agent" : "manual",
       }),
     })
       .then(r => r.json())
@@ -1362,20 +1376,23 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel, initialMod
           <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
             <button className={"btn sm" + (mode === "ta" ? " primary" : "")} onClick={() => setMode("ta")}>TA / recruiter</button>
             <button className={"btn sm" + (mode === "principal" ? " primary" : "")} onClick={() => setMode("principal")}>Hiring manager</button>
+            <button className={"btn sm" + (mode === "hunter" ? " primary" : "")} onClick={() => setMode("hunter")}>Search the company directory</button>
           </div>
           <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>
-            {mode === "principal"
+            {mode === "hunter"
+              ? "Search Hunter's company directory. It costs one search credit per company, whatever the number of people it returns."
+              : mode === "principal"
               ? "Search the web for the VP / Director / Head of the target function at this company — the person you'd report to, not the recruiter. Added as a hiring principal."
               : "Search the web for 2-3 current Talent Acquisition contacts at this one company. One lookup, low usage."}
           </div>
-          <button className="btn primary sm" onClick={runDiscover}><TIcon d={TI.spark} size={12} /> {mode === "principal" ? "Find hiring manager" : "Find contacts"}</button>
+          <button className="btn primary sm" onClick={runDiscover}><TIcon d={TI.spark} size={12} /> {mode === "hunter" ? "Search directory" : mode === "principal" ? "Find hiring manager" : "Find contacts"}</button>
         </>
       )}
 
       {phase === "scanning" && (
         <div className="scan" style={{ padding: "10px 0" }}>
           <div className="scan-ring" />
-          <div className="scan-log">Searching for {mode === "principal" ? "the hiring manager" : "TA contacts"} at {company}…</div>
+          <div className="scan-log">Searching for {mode === "hunter" ? "people" : mode === "principal" ? "the hiring manager" : "TA contacts"} at {company}…</div>
         </div>
       )}
 
@@ -1384,9 +1401,13 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel, initialMod
           <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>
             {suggestions.length === 0 ? "No reliable contacts found." : `Found ${suggestions.length} · ${sel.size} selected`}
           </div>
+          {unresolved.map(name => <div key={`unresolved-${name}`} style={{ color: "var(--orange)", fontSize: 11, marginBottom: 6 }}>No website is on file for {name}, so there was nothing to search. Add a website to any contact there to fix it.</div>)}
+          {skippedBudget.map(name => <div key={`budget-${name}`} style={{ color: "var(--orange)", fontSize: 11, marginBottom: 6 }}>{name} was not searched because Hunter credits ran out.</div>)}
+          {discoveryRejected.map((person, i) => <div key={`rejected-${person.name || i}`} style={{ color: "var(--text-dim)", fontSize: 11, marginBottom: 6 }}>{person.name || "Unnamed contact"} was not suggested: {person.reasons?.[0] || "validation failed"}.</div>)}
+          {duplicateCount > 0 && <div style={{ color: "var(--text-dim)", fontSize: 11, marginBottom: 6 }}>{duplicateCount} contact{duplicateCount === 1 ? " is" : "s are"} already on file.</div>}
           {suggestions.map((s, i) => {
             const k = keyOf(s);
-            const conf = s.confidence || "Medium";
+            const conf = s.confidence || (mode === "hunter" ? "Validated" : "Medium");
             const invalid = s.validation?.ok === false;
             return (
               <RecRow key={k + i} checked={sel.has(k)} onToggle={() => toggle(k)}
@@ -1396,6 +1417,7 @@ function FindContactsPanel({ company, exampleRole, onAdded, onCancel, initialMod
                 right={<span className={"conf " + conf} style={invalid ? { color: "var(--red)" } : undefined}>{invalid ? "Unsupported" : conf}</span>} />
             );
           })}
+          {creditsSpent != null && <div style={{ color: "var(--text-mute)", fontSize: 11, marginTop: 8 }}>Hunter search credits spent: {creditsSpent}</div>}
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <button className="btn primary sm" onClick={add} disabled={sel.size === 0}>Add {sel.size || ""} contact{sel.size === 1 ? "" : "s"}</button>
             <button className="btn sm" onClick={runDiscover}><TIcon d={TI.refresh} size={12} /> Search again</button>

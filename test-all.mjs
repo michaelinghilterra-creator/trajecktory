@@ -499,6 +499,7 @@ for (const suite of [
   'tests/verify-contacts.test.mjs',
   'tests/hunter-budget.test.mjs',
   'tests/hunter-domain.test.mjs',
+  'tests/hunter-discovery-route.test.mjs',
   'tests/stakeholder-additions.test.mjs',
   'tests/bulk-add-gate.test.mjs',
   'tests/scan-summary.test.mjs',
