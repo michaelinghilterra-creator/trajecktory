@@ -33,6 +33,11 @@ import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updat
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GMAIL_BASE = 'https://gmail.googleapis.com/gmail/v1/users/me';
+// A Gmail message or thread id, as the API actually issues them. Deliberately
+// admits nothing that can alter a URL: no dot (so no ".." traversal), no slash,
+// no percent (so no encoded slash), no question mark, hash or colon. Permissive
+// enough for every real id, and narrow enough that the path cannot be steered.
+const GMAIL_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 // The only scope this integration ever requests. Read-only by design: the whole
 // point is reading bounces and replies, never sending. Least privilege on purpose.
@@ -309,14 +314,23 @@ async function fetchProfileEmail({ accessToken, fetchImpl = fetch }) {
 
 // ── Gmail read wrappers (network; injectable fetch) ──────────────────────────
 async function listMessages({ q = '', accessToken, max = 50, fetchImpl = fetch } = {}) {
-  const url = `${GMAIL_BASE}/messages?q=${encodeURIComponent(q)}&maxResults=${max}`;
+  const requestedMax = Number(max);
+  const boundedMax = Number.isFinite(requestedMax)
+    ? Math.min(500, Math.max(1, Math.trunc(requestedMax)))
+    : 50;
+  const url = `${GMAIL_BASE}/messages?q=${encodeURIComponent(q)}&maxResults=${boundedMax}`;
   const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) throw new Error(`Gmail list failed (${res.status})`);
   const j = await res.json();
   return j.messages || []; // [{ id, threadId }]
 }
 async function getMessage({ id, accessToken, fetchImpl = fetch } = {}) {
-  const url = `${GMAIL_BASE}/messages/${id}?format=full`;
+  // This value reaches the client from an HTTP route parameter, and the request
+  // carries the user's OAuth token. A fixed host does not make its path safe, so
+  // constrain the id before any request for the same reason SAFE_SLUG does in
+  // lib/portal-additions.mjs, then keep encoding it at the interpolation boundary.
+  if (!GMAIL_ID.test(String(id ?? ''))) throw new Error('Gmail get failed (bad message id)');
+  const url = `${GMAIL_BASE}/messages/${encodeURIComponent(id)}?format=full`;
   const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) throw new Error(`Gmail get failed (${res.status})`);
   return res.json();
