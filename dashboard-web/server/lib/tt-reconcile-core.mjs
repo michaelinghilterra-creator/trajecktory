@@ -1,13 +1,15 @@
 // tt-reconcile-core.mjs — the ONE decision for TA reconcile, shared by the
 // dashboard route (routes/tt-reconcile.mjs) and the headless CLI
 // (reconcile-ta.mjs) so the two can never drift. Pure: takes parsed apps + TA
-// rows, returns what to archive and which active companies lack a contact.
+// rows, returns what to archive, which active companies lack a contact, and
+// which contacted companies still lack a hiring principal.
 //
 // Rule: a TA contact is archived when their company has logged applications and
 // NONE of them are still worth keeping — i.e. none are active (Evaluated..Offer)
 // AND none are "No Response". Recruiters are external firms, not tied to one
 // opportunity, and are never considered here.
 import { OUTREACH_ELIGIBLE_STATUSES, OUTREACH_DEAD_STATUSES } from './statuses.mjs';
+import { parseInfluenceTier, INFLUENCE_RANK } from '../../../lib/influence-tier.mjs';
 
 // The outreach rule lives in statuses.mjs as the single source of truth, shared
 // with the follow-up queues so the two can never disagree:
@@ -31,8 +33,8 @@ export function normCompany(s) {
 }
 
 // apps: parseApplicationsMd() output. ttRows: parseTargetTalentMd() output ALREADY
-// filtered to non-Archived. Returns { toArchive, companiesNeedingContacts }, the
-// exact shape the /api/tt-reconcile/preview endpoint returns.
+// filtered to non-Archived. Returns { toArchive, companiesNeedingContacts,
+// companiesNeedingPrincipal }, the exact shape the preview endpoint returns.
 export function reconcilePreview(apps, ttRows) {
   const appsByCompany = new Map();
   for (const a of apps) {
@@ -84,5 +86,30 @@ export function reconcilePreview(apps, ttRows) {
   }
   companiesNeedingContacts.sort((a, b) => (b.mostRecentApp.date || '').localeCompare(a.mostRecentApp.date || ''));
 
-  return { toArchive, companiesNeedingContacts };
+  // A mapped company still needs a principal when every known contact sits
+  // below the influence line. This is distinct from contact discovery because
+  // it records what is present while exposing the missing decision-maker.
+  const companiesNeedingPrincipal = [];
+  for (const [k, companyApps] of appsByCompany.entries()) {
+    const active = companyApps.filter(a => OUTREACH_ELIGIBLE_STATUSES.includes(a.status));
+    if (active.length === 0) continue;
+    const contacts = ttRows.filter(row => normCompany(row.company) === k);
+    if (contacts.length === 0) continue;
+    const canInfluence = contacts.some(row => {
+      const tier = row.influenceTier || parseInfluenceTier(row.notes);
+      return (INFLUENCE_RANK[tier] ?? INFLUENCE_RANK.ta) >= INFLUENCE_RANK.peer;
+    });
+    if (canInfluence) continue;
+    const mostRecent = active.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+    companiesNeedingPrincipal.push({
+      company: mostRecent.company,
+      exampleRole: mostRecent.role,
+      appCount: active.length,
+      mostRecentApp: { id: mostRecent.id, role: mostRecent.role, status: mostRecent.status, date: mostRecent.date },
+      contactCount: contacts.length,
+    });
+  }
+  companiesNeedingPrincipal.sort((a, b) => (b.mostRecentApp.date || '').localeCompare(a.mostRecentApp.date || ''));
+
+  return { toArchive, companiesNeedingContacts, companiesNeedingPrincipal };
 }

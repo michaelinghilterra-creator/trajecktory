@@ -4,8 +4,27 @@ import { TARGET_TALENT_MD, TT_CORR_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { TALENT_STATUS_LABELS, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { parseVerifyTag } from '../../../lib/email-verify.mjs';
+import { resolveInfluenceTier, setInfluenceTier } from '../../../lib/influence-tier.mjs';
+import { parseProvenance } from '../../../lib/stakeholder-additions.mjs';
 import { readLinkedInMap } from './tt-linkedin.mjs';
 import { parseCorrespondence, formatCorrespondence } from './correspondence-format.mjs';
+
+// A quarter is long enough that a leadership change is likely, and short enough
+// that a re-check is still cheap. Missing provenance is deliberately not stale:
+// that covers hand-entered and older rows, and a flag that fires everywhere is
+// the same as no flag because it trains the user to ignore it.
+const PROVENANCE_STALE_DAYS = 90;
+
+function localDateParts(date = new Date()) {
+  return [date.getFullYear(), date.getMonth(), date.getDate()];
+}
+
+function provenanceAgeDays(date) {
+  const [year, month, day] = String(date).split('-').map(Number);
+  if (!year || !month || !day) return null;
+  const [todayYear, todayMonth, todayDay] = localDateParts();
+  return Math.floor((Date.UTC(todayYear, todayMonth, todayDay) - Date.UTC(year, month - 1, day)) / 86400000);
+}
 
 // Derived from templates/states.yml (talent_states) rather than hardcoded here.
 // The previous local array is the exact drift the recruiter side already fixed:
@@ -38,6 +57,12 @@ function parseTargetTalentMd() {
     // before; `verified` is purely additive. The send gate (isSendable) reads
     // `verified.state`, so a message can never go to an unverified/dead address.
     const verified = parseVerifyTag(parts[11]);
+    const { tier: influenceTier, source: influenceTierSource } = resolveInfluenceTier({
+      notes: parts[15],
+      title: parts[6],
+    });
+    const provenance = parseProvenance(parts[15]);
+    const provenanceAge = provenance.date ? provenanceAgeDays(provenance.date) : null;
     rows.push({
       id,
       company:   parts[2],
@@ -55,11 +80,20 @@ function parseTargetTalentMd() {
       lastTouch: parts[14],
       notes:     parts[15],
       website:   (parts[16] || '').trim(),
-      // A [principal] tag in the notes marks this person as a hiring principal —
-      // the VP/Director/Head of the target function the user would report to, NOT
-      // the TA gatekeeper. Parsed here so every consumer reads the same signal
-      // without grepping notes themselves.
-      isPrincipal: /\[principal\]/i.test(parts[15] || ''),
+      // How much this person can move the hiring decision: hiring manager, skip-
+      // level exec, functional peer, internal TA, or agency recruiter. Read from
+      // a [tier:x] tag in the notes so every consumer shares one answer instead
+      // of grepping the cell themselves. See lib/influence-tier.mjs.
+      influenceTier,
+      influenceTierSource,
+      provenance,
+      provenanceStale: provenanceAge !== null && provenanceAge > PROVENANCE_STALE_DAYS,
+      // The hiring principal, i.e. the VP/Director/Head of the target function the
+      // user would report to, NOT the TA gatekeeper. Now derived from the tier
+      // rather than re-matching [principal], so the two can never disagree. An
+      // untagged hiring-manager title now counts as a principal too, but that is
+      // inferred from the title rather than confirmed by an explicit tag.
+      isPrincipal: influenceTier === 'hm',
       verified,  // { state, source, date, score, address, hadTag }
       // LinkedIn connection axis, separate from `status` (the outreach pipeline).
       // Default 'Not Connected' when the sidecar has no entry for this id.
@@ -95,6 +129,9 @@ function updateTTLine(id, updates) {
     if (updates.status     !== undefined) parts[13] = ` ${updates.status} `;
     if (updates.lastTouch  !== undefined) parts[14] = ` ${updates.lastTouch} `;
     if (updates.notes      !== undefined) parts[15] = cell(updates.notes);
+    if (updates.influenceTier !== undefined) {
+      parts[15] = cell(setInfluenceTier(parts[15].trim(), updates.influenceTier));
+    }
     if (updates.phone      !== undefined) parts[10] = cell(updates.phone);
     // Email cell may carry an inline [v:...] verification tag; cell() keeps it intact
     // (no pipe/newline in a tag). Used by the reconcile find-emails endpoint. When
@@ -272,4 +309,3 @@ function setNewBaselineId(id) {
 // GET /api/target-talent — list all
 
 export { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, appendTTRows, matchByCompany, findRelatedApps, crossLogAppNums, TT_STATUSES, maxTTId, getNewBaselineId, setNewBaselineId };
-

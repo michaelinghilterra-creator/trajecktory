@@ -115,6 +115,8 @@ export const OUTREACH_DEFAULTS = Object.freeze({
   awaitingReplyHold: 3,
   coldOutreachCap: Object.freeze({ linkedin: 3, email: 3 }),
   perCompanyPerDay: 3,
+  // At or below this many credits remaining, only decision-makers get one.
+  inmailReserveFloor: 3,
 });
 
 function safeOutreachNumber(raw, fallback) {
@@ -150,6 +152,7 @@ export function parseOutreachPolicy(text) {
       email: safeOutreachNumber(getNestedScalar(text, 'outreach', 'coldOutreachCap', 'email'), OUTREACH_DEFAULTS.coldOutreachCap.email),
     },
     perCompanyPerDay: safeOutreachNumber(getScalar(text, 'outreach', 'perCompanyPerDay'), OUTREACH_DEFAULTS.perCompanyPerDay),
+    inmailReserveFloor: safeOutreachNumber(getScalar(text, 'outreach', 'inmailReserveFloor'), OUTREACH_DEFAULTS.inmailReserveFloor),
   };
 }
 

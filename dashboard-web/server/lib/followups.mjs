@@ -14,6 +14,7 @@ import { parseReferralsMd, readReferralCorrespondence } from './referrals.mjs';
 import { resolvePeople } from './contact-identity.mjs';
 import { readPins } from './contact-links.mjs';
 import { buildTimeline } from './contact-timeline.mjs';
+import { INFLUENCE_RANK, DEFAULT_TIER } from '../../../lib/influence-tier.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
 // quickly each stage cools: warm Responded threads cool fastest, post-
@@ -589,7 +590,7 @@ function _localToday() {
 // so this one pass covers both channels. Each company's list is sorted newest-first.
 function buildCompanyTouchIndex({ ta }) {
   const idx = new Map();
-  const add = (companyRaw, key, name, msgs) => {
+  const add = (companyRaw, key, name, tier, msgs) => {
     const co = normalizeCompany(companyRaw);
     if (!co) return;
     for (const m of (msgs || [])) {
@@ -600,10 +601,10 @@ function buildCompanyTouchIndex({ ta }) {
       const date = (m.timestamp || '').slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
       if (!idx.has(co)) idx.set(co, []);
-      idx.get(co).push({ key, name, date, direction: m.direction, channel: isLinkedInEntry(m) ? 'linkedin' : 'email' });
+      idx.get(co).push({ key, name, date, direction: m.direction, channel: isLinkedInEntry(m) ? 'linkedin' : 'email', tier });
     }
   };
-  for (const r of (ta || [])) { try { add(r.company, `ta:${r.id}`, `${r.first || ''} ${r.last || ''}`.trim(), readTTCorrespondence(r.id)); } catch { /* skip unreadable */ } }
+  for (const r of (ta || [])) { try { add(r.company, `ta:${r.id}`, `${r.first || ''} ${r.last || ''}`.trim(), r.influenceTier || DEFAULT_TIER, readTTCorrespondence(r.id)); } catch { /* skip unreadable */ } }
   for (const arr of idx.values()) arr.sort((a, b) => b.date.localeCompare(a.date));
   return idx;
 }
@@ -638,7 +639,13 @@ function _companyOutreachFor(selfKey, companyTouches, today = null) {
     for (const x of companyTouches) if (x.direction === 'Sent' && x.date === today) keys.add(x.key);
     companyContactsSentToday = keys.size;
   }
-  return { lastTouch, touchedToday, selfLastTouch, companyLastComms, selfSentToday, companyContactsSentToday };
+  // Signals that a different decision-maker was reached today, so policy can
+  // defer a second landing on a gatekeeper without blocking this person's own
+  // thread. Influence stays defined by the shared rank table, not by a tier list.
+  const influentialSentToday = !!(today && Array.isArray(companyTouches) && companyTouches.some(x =>
+    x.key !== selfKey && x.direction === 'Sent' && x.date === today &&
+    INFLUENCE_RANK[x.tier] >= INFLUENCE_RANK.peer));
+  return { lastTouch, touchedToday, selfLastTouch, companyLastComms, selfSentToday, companyContactsSentToday, influentialSentToday };
 }
 
 // Statuses that mean "you already sent this contact a 1:1 LinkedIn message/invite",
@@ -709,6 +716,9 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
     companyOutreach,
     // Hiring-principal flag (TA contacts only; recruiters are never principals).
     isPrincipal: source === 'ta' ? (row.isPrincipal ?? false) : false,
+    // Some callers assemble the legacy principal shape without running the
+    // target-talent parser, so preserve its decision-maker priority here.
+    influenceTier: row.influenceTier || (row.isPrincipal ? 'hm' : DEFAULT_TIER),
     // Channel bucket: 1 = LinkedIn only, 2 = email only, 3 = both, 0 = neither.
     channelBucket: contactChannelBucket(row).bucket,
   };
@@ -836,7 +846,7 @@ function computeBothQueue({ taRows, apps } = {}) {
 // numeric `rank` (higher = do sooner) for the sort.
 //
 // RANK (importance first, then last-touch recency, per the agreed formula):
-//   + hiring principal (decision-maker)         +50
+//   + influence tier (decision-maker first)
 //   + dual-channel "both" (multithread, high value) +20
 //   + status weight (further in the process = more valuable to nudge)
 //   + overdue: older last self-touch = higher; never-contacted = neutral middle
@@ -850,9 +860,15 @@ const _FUQ_STATUS_WEIGHT = {
 // Store weights keep book size from deciding priority. A warm referral gets a
 // clear edge over cold TA at equal staleness.
 const _FUQ_STORE_WEIGHT = { ta: 0, referral: 40 };
+// Influence weights straddle the warm-referral bonus deliberately. A hiring
+// manager at 60 outranks referral's 40 because reaching that decision-maker is
+// the point of the motion, while a cold peer at 30 stays below a warm intro.
+// TA and agency contacts are not penalized: their zero bonus leaves status and
+// staleness to decide their slot exactly as before.
+const _FUQ_INFLUENCE_WEIGHT = { hm: 60, exec: 45, peer: 30, ta: 0, agency: 0 };
 function _followupRank(r) {
   let score = _FUQ_STORE_WEIGHT[r.source] || 0;
-  if (r.isPrincipal) score += 50;
+  score += _FUQ_INFLUENCE_WEIGHT[r.influenceTier] || 0;
   if (r.channel === 'both') score += 20;
   score += _FUQ_STATUS_WEIGHT[r.status] || 0;
   // Recency: a contact you last touched long ago is more overdue. Never-contacted
@@ -904,13 +920,43 @@ function computeFollowupQueue(opts = {}) {
   return result;
 }
 
-// "High value" = reachable BOTH ways (a verified/sendable email AND a LinkedIn
-// handle). It was once its own Network directory page; now it is a per-contact
-// SIGNAL (a star + filter) on the TA and Recruiter tables, computed by this one
-// predicate so every surface agrees on what "high value" means. Same dual-channel
-// criteria the both-queue uses (contactChannelBucket bucket 3).
+// ─── The influence axis ──────────────────────────────────────────────────────
+// One of the two axes that decide who to work next. This one, and ONLY this one,
+// sets priority: how much can this person move the hiring decision? The other
+// axis is reachability (contactChannelBucket, above), which picks the channel and
+// nothing else. They must stay separate. Collapsing them is what produced the
+// bug fixed here: a CRO reachable only on LinkedIn ranked below a TA coordinator
+// with a verified address, so the queue worked whoever was easiest to email.
+//
+// Falls back to the ta rank rather than throwing, because a contact row can reach
+// this function from anywhere: a legacy row with no tag, a queue row, a shape from
+// a book that has no tier concept yet. A missing tier means "we have not
+// classified this person", and the safe reading of that is the default gatekeeper
+// tier, not an accidental promotion.
+function influenceRank(row) {
+  const tier = row?.influenceTier;
+  return typeof tier === 'string' && Object.hasOwn(INFLUENCE_RANK, tier)
+    ? INFLUENCE_RANK[tier]
+    : INFLUENCE_RANK[DEFAULT_TIER];
+}
+
+// Can this person actually move the hire? True for a hiring manager, a skip-level
+// exec and a functional peer, all of whom sit inside or next to the decision.
+// False for internal TA and for an agency recruiter: both are routes to the
+// decision, not part of it, and outreach to them is about process rather than fit.
+function canInfluenceHire(row) {
+  return influenceRank(row) >= INFLUENCE_RANK.peer;
+}
+
+// "High value" now means influence over the hire, not ease of contact. It was
+// once its own Network directory page; today it is a per-contact SIGNAL (a star
+// plus filter) on the contact tables, computed by this one predicate so every
+// surface agrees. The old definition was `hasEmail && hasLinkedIn`, which ranked
+// convenience and is exactly the confusion the two axes exist to end. Kept as an
+// alias so the existing call sites read naturally at the surface while there is
+// only ONE implementation underneath.
 function isHighValueContact(row) {
-  return contactChannelBucket(row).bucket === 3;
+  return canInfluenceHire(row);
 }
 
 // Applied roles in OUTREACH_ELIGIBLE_STATUSES that have ZERO contacts (no TA or
@@ -939,6 +985,50 @@ function computeContactlessApps({ apps, taRows } = {}) {
       status: a.status,
       applyDate: a.date || null,
       score: a.score || null,
+    });
+  }
+  out.sort((a, b) => (b.applyDate || '').localeCompare(a.applyDate || ''));
+  return out;
+}
+
+// Talent-only coverage is not real coverage under the influence model: talent
+// can route a candidate through the process, but cannot make the hiring decision.
+// This queue surfaces live applications where the company is mapped but no
+// non-archived contact can influence the hire, so the user can add a hiring
+// manager, executive, or peer. It stays separate from computeContactlessApps so
+// the established nobody-at-the-company count remains comparable and so one
+// application can never be presented as both unmapped and merely unthreaded.
+function computeUnthreadedApps({ apps, taRows } = {}) {
+  const appList = apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })();
+  const { ta } = _bothBooks({ taRows });
+  const contactsByCompany = new Map();
+  for (const contact of ta) {
+    // Deliberately unlike computeContactlessApps, archived rows do not count
+    // here: mapping a company once is coverage there, but an archived decision
+    // maker cannot move a live hire and therefore is not active threading.
+    if (contact.status === 'Archived') continue;
+    const company = normalizeCompany(contact.company);
+    if (!company) continue;
+    if (!contactsByCompany.has(company)) contactsByCompany.set(company, []);
+    contactsByCompany.get(company).push(contact);
+  }
+
+  const out = [];
+  for (const a of appList) {
+    if (!OUTREACH_ELIGIBLE_STATUSES.includes(a.status)) continue;
+    const contacts = contactsByCompany.get(normalizeCompany(a.company)) || [];
+    if (contacts.length === 0 || contacts.some(canInfluenceHire)) continue;
+    const top = contacts.slice().sort((x, y) => influenceRank(y) - influenceRank(x))[0];
+    out.push({
+      source: 'stakeholder',
+      id: a.id,
+      company: a.company || '',
+      role: a.role || '',
+      status: a.status,
+      applyDate: a.date || null,
+      score: a.score || null,
+      contactCount: contacts.length,
+      topTier: top?.influenceTier || DEFAULT_TIER,
     });
   }
   out.sort((a, b) => (b.applyDate || '').localeCompare(a.applyDate || ''));
@@ -1211,7 +1301,8 @@ export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
   computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
   computeFollowupQueue, _followupRank,
-  isHighValueContact, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts,
+  _companyOutreachFor,
+  influenceRank, canInfluenceHire, isHighValueContact, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts,
   computeJustConnectedQueue,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };

@@ -30,7 +30,10 @@ function snoozeDateIn(days) { const d = new Date(); d.setDate(d.getDate() + days
 // has no reachable contact (e.g. a company you checked and confirmed has none).
 // It is a SEPARATE bucket from 'app' on purpose: muting the find-a-contact nudge
 // must not also suppress that application's own stale follow-up.
-const _SNOOZE_BUCKETS = ['app', 'ta', 'contactless', 'referral', 'influencer'];
+// 'stakeholder' defers the "needs a decision-maker" nudge when talent coverage
+// is enough for now. It stays separate from 'contactless' just as 'contactless'
+// stays separate from 'app', so muting one company nudge cannot hide another.
+const _SNOOZE_BUCKETS = ['app', 'ta', 'contactless', 'stakeholder', 'referral', 'influencer'];
 
 function readSnooze() {
   try {

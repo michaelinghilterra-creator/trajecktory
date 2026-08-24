@@ -46,7 +46,7 @@ function perCompanyApplies(source, company) {
   return !PER_COMPANY_EXEMPT_SOURCES.has(source);
 }
 
-export function canContact({ timeline = [], channel = 'email', source = '', company = '', companyTouches = 0, inmail = {}, policy = {}, now = new Date() } = {}) {
+export function canContact({ timeline = [], channel = 'email', source = '', company = '', companyTouches = 0, canInfluence, inmail = {}, policy = {}, now = new Date() } = {}) {
   const p = normalizedPolicy(policy);
   if (p.enabled === false) return { allowed: true, blocks: [], nextEligible: null };
   const events = Array.isArray(timeline) ? timeline : [];
@@ -117,6 +117,7 @@ export function canContact({ timeline = [], channel = 'email', source = '', comp
 
   const companyCount = Array.isArray(companyTouches) ? companyTouches.length : Number(companyTouches?.count ?? companyTouches) || 0;
   const selfSentToday = !!companyTouches?.selfSentToday;
+  const influentialSentToday = !!companyTouches?.influentialSentToday;
   // Already messaged this PERSON today. Applies to every book, and is not the
   // per-company rule despite sharing its name here.
   if (selfSentToday) {
@@ -125,8 +126,25 @@ export function canContact({ timeline = [], channel = 'email', source = '', comp
     blocks.push({ rule: 'perCompanyPerDay', reason: `You have already contacted ${companyCount} people at this company today.`, until: addDays(today, 1) });
   }
 
+  // Deliberately asymmetric: reaching a decision-maker holds a later gatekeeper
+  // until tomorrow, but reaching a gatekeeper must never delay the person who can
+  // actually decide. Protecting a process note is not worth spending the motion.
+  if (influentialSentToday && canInfluence === false && perCompanyApplies(source, company)) {
+    blocks.push({
+      rule: 'sameDayStakeholderGap',
+      reason: 'You reached a decision-maker at this company today. This one can wait a day.',
+      until: addDays(today, 1),
+    });
+  }
+
   if (wanted === 'linkedin' && inmail.alreadyInvited && inmail.exhausted && !inmail.freeDm) {
     blocks.push({ rule: 'inmailBudget', reason: 'No InMail credits remain for this LinkedIn message.', until: null });
+  }
+  // Preserve the scarce tail of the allowance for contacts who can move the
+  // hiring decision instead of spending it on whichever gatekeeper appears first.
+  if (wanted === 'linkedin' && inmail.alreadyInvited && !inmail.freeDm && !inmail.exhausted &&
+      Number.isFinite(inmail.remaining) && inmail.remaining <= p.inmailReserveFloor && inmail.canInfluence === false) {
+    blocks.push({ rule: 'inmailReserve', reason: 'Saving the last InMail credits for people who can move the decision.', until: null });
   }
 
   const permanent = blocks.some(b => b.until == null);
