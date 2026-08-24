@@ -710,7 +710,9 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
     companyOutreach,
     // Hiring-principal flag (TA contacts only; recruiters are never principals).
     isPrincipal: source === 'ta' ? (row.isPrincipal ?? false) : false,
-    influenceTier: row.influenceTier || DEFAULT_TIER,
+    // Some callers assemble the legacy principal shape without running the
+    // target-talent parser, so preserve its decision-maker priority here.
+    influenceTier: row.influenceTier || (row.isPrincipal ? 'hm' : DEFAULT_TIER),
     // Channel bucket: 1 = LinkedIn only, 2 = email only, 3 = both, 0 = neither.
     channelBucket: contactChannelBucket(row).bucket,
   };
@@ -838,7 +840,7 @@ function computeBothQueue({ taRows, apps } = {}) {
 // numeric `rank` (higher = do sooner) for the sort.
 //
 // RANK (importance first, then last-touch recency, per the agreed formula):
-//   + hiring principal (decision-maker)         +50
+//   + influence tier (decision-maker first)
 //   + dual-channel "both" (multithread, high value) +20
 //   + status weight (further in the process = more valuable to nudge)
 //   + overdue: older last self-touch = higher; never-contacted = neutral middle
@@ -852,9 +854,15 @@ const _FUQ_STATUS_WEIGHT = {
 // Store weights keep book size from deciding priority. A warm referral gets a
 // clear edge over cold TA at equal staleness.
 const _FUQ_STORE_WEIGHT = { ta: 0, referral: 40 };
+// Influence weights straddle the warm-referral bonus deliberately. A hiring
+// manager at 60 outranks referral's 40 because reaching that decision-maker is
+// the point of the motion, while a cold peer at 30 stays below a warm intro.
+// TA and agency contacts are not penalized: their zero bonus leaves status and
+// staleness to decide their slot exactly as before.
+const _FUQ_INFLUENCE_WEIGHT = { hm: 60, exec: 45, peer: 30, ta: 0, agency: 0 };
 function _followupRank(r) {
   let score = _FUQ_STORE_WEIGHT[r.source] || 0;
-  if (r.isPrincipal) score += 50;
+  score += _FUQ_INFLUENCE_WEIGHT[r.influenceTier] || 0;
   if (r.channel === 'both') score += 20;
   score += _FUQ_STATUS_WEIGHT[r.status] || 0;
   // Recency: a contact you last touched long ago is more overdue. Never-contacted

@@ -505,6 +505,7 @@ for (const suite of [
   'tests/followup-queue.test.mjs',
   'tests/influence-tier.test.mjs',
   'tests/influence-predicate.test.mjs',
+  'tests/influence-ranking.test.mjs',
   'tests/followup-queue-books.test.mjs',
   'tests/followups-cap.test.mjs',
   'tests/followups-snooze.test.mjs',

@@ -128,6 +128,12 @@ export function canContact({ timeline = [], channel = 'email', source = '', comp
   if (wanted === 'linkedin' && inmail.alreadyInvited && inmail.exhausted && !inmail.freeDm) {
     blocks.push({ rule: 'inmailBudget', reason: 'No InMail credits remain for this LinkedIn message.', until: null });
   }
+  // Preserve the scarce tail of the allowance for contacts who can move the
+  // hiring decision instead of spending it on whichever gatekeeper appears first.
+  if (wanted === 'linkedin' && inmail.alreadyInvited && !inmail.freeDm && !inmail.exhausted &&
+      Number.isFinite(inmail.remaining) && inmail.remaining <= p.inmailReserveFloor && inmail.canInfluence === false) {
+    blocks.push({ rule: 'inmailReserve', reason: 'Saving the last InMail credits for people who can move the decision.', until: null });
+  }
 
   const permanent = blocks.some(b => b.until == null);
   const nextEligible = blocks.length === 0 || permanent ? null : timed.concat(blocks.map(b => b.until).filter(Boolean)).sort().at(-1) || null;

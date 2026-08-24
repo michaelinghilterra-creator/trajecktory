@@ -10,7 +10,7 @@ import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, canInfluenceHire, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 
 // Different contacts per COMPANY the queue surfaces as actionable per day. Reaching
 // more than this at one company in a day reads as blasting; the overflow is HELD
@@ -215,7 +215,8 @@ router.get('/api/followups/stale', (req, res) => {
     //     rotate in on a later day. Assigned in priority order over the (pre-sorted)
     //     list so the best contacts fill each company's slots.
     // Order matters: inmailBlocked first (a blocked row does not spend a daily slot).
-    const inmailOut = getInmailBudget().remaining === 0;
+    const inmailBudget = getInmailBudget();
+    const inmailOut = inmailBudget.remaining === 0;
     const outreachPolicy = getOutreachPolicy();
     const companySlots = new Map();
     for (const c of contactFollowups) {
@@ -230,13 +231,20 @@ router.get('/api/followups/stale', (req, res) => {
         source: c.source,        // decides whether the per-company cap applies
         company: c.company,
         companyTouches: { count: used, selfSentToday: !!c.companyOutreach?.selfSentToday },
-        inmail: { exhausted: inmailOut, alreadyInvited, freeDm: !!c.freeDm },
+        inmail: {
+          exhausted: inmailOut,
+          alreadyInvited,
+          freeDm: !!c.freeDm,
+          remaining: inmailBudget.remaining,
+          canInfluence: canInfluenceHire(c),
+        },
         policy: outreachPolicy,
         now: new Date(),
       });
       c.blocks = decision.blocks;
       c.nextEligible = decision.nextEligible;
       c.inmailBlocked = decision.blocks.some(b => b.rule === 'inmailBudget');
+      c.inmailReserved = decision.blocks.some(b => b.rule === 'inmailReserve');
       c.heldDaily = decision.blocks.some(b => b.rule === 'perCompanyPerDay');
       c.capped = decision.blocks.some(b => b.rule === 'coldOutreachCap');
       if (decision.allowed) companySlots.set(companyKey, used + 1);
@@ -249,6 +257,7 @@ router.get('/api/followups/stale', (req, res) => {
     const actionableCount = contactFollowups.filter(c => c.blocks.length === 0).length;
     const withheldDailyCount = contactFollowups.filter(c => c.heldDaily).length;
     const inmailBlockedCount = contactFollowups.filter(c => c.inmailBlocked).length;
+    const inmailReservedCount = contactFollowups.filter(c => c.inmailReserved).length;
 
     res.json({
       thresholds: STALE_THRESHOLD_BY_STATUS,
@@ -280,10 +289,11 @@ router.get('/api/followups/stale', (req, res) => {
       // response and the Find-a-contact nudge, which need the app-level view.
       actionableCount,
       // Counts behind the "N held for later" / "N waiting on InMail" affordances. Each
-      // held contact is FLAGGED (heldDaily / inmailBlocked) on contactFollowups, not
+      // held contact is FLAGGED (heldDaily / inmailBlocked / inmailReserved) on contactFollowups, not
       // removed, so the client can reveal them via "Show" and nothing is silently lost.
       withheldDailyCount,
       inmailBlockedCount,
+      inmailReservedCount,
       perCompanyPerDay: outreachPolicy.perCompanyPerDay,
       contactFollowups,
       snoozedContactFollowups,
