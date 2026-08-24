@@ -10,6 +10,19 @@ import { record as recordActivation, readActivation, summarizeActivation, setAct
 
 export const router = express.Router();
 
+// Terminal colour codes are meaningful in a console, but this text is rendered
+// as HTML, where a browser exposes the escape sequences as visible junk.
+export function stripAnsiSgr(value) {
+  return String(value == null ? '' : value).replace(/[\x1B]\[[0-9;]*[A-Za-z]/g, '');
+}
+
+// exec repeats the child's stderr after the command line in err.message. Keep
+// that first line here to deduplicate the panel, since the full detail remains
+// available to the client in the separate stderr field below.
+export function firstLine(value) {
+  return String(value == null ? '' : value).split(/\r?\n/, 1)[0];
+}
+
 // ── Launchpad / guided setup ──────────────────────────────────────────────────
 // Thin, deterministic endpoints backing the visual onboarding module. The
 // dashboard NEVER calls an LLM here: generative work (parse CV, draft narrative,
@@ -25,6 +38,59 @@ router.get('/api/setup/state', (req, res) => {
   catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// A failed helper launch and a failed doctor check need different remedies. In
+// particular, Windows returns NTSTATUS values above the ordinary process-exit
+// range when the helper could not start, so telling the user to inspect their
+// setup sends them in the wrong direction when restarting the dashboard is what
+// clears the stale process state.
+export function classifyPreflightFailure({ error, code, stderr, stdout, badJson = false } = {}) {
+  if (badJson) {
+    return {
+      kind: 'bad-json',
+      hint: 'The helper ran, but its result was not valid JSON. The install may be damaged or out of sync.',
+    };
+  }
+
+  const numericCode = typeof code === 'number' ? code : Number(code);
+  if (Number.isFinite(numericCode) && numericCode >= 0x80000000) {
+    const status = numericCode >>> 0;
+    const reason = status === 0xC0000142
+      ? 'The helper process could not initialize.'
+      : status === 0xC0000005
+        ? 'The helper process crashed on an access violation.'
+        : status === 0xC000013A
+          ? 'The helper process was interrupted before it could run.'
+          : `Windows stopped the helper process with status 0x${status.toString(16).toUpperCase()}.`;
+    return {
+      kind: 'process-did-not-start',
+      // Leads with what to do, because that is what the reader needs first. The
+      // reason follows, and the explanation last. Saying "restart" without
+      // saying why reads as superstition, and this failure genuinely looks like
+      // broken setup until you know it is not.
+      hint: `Restart the dashboard, then run this check again. ${reason} Windows refused to start it, which is almost always a dashboard that has been left running too long rather than anything wrong with your setup, and a fresh server process clears it.`,
+    };
+  }
+
+  if ((Number.isFinite(numericCode) && numericCode !== 0) || error || (stderr || '').trim()) {
+    return {
+      kind: 'doctor-failed',
+      hint: 'The setup helper ran but exited with an error. Check the stderr details below for the specific cause.',
+    };
+  }
+
+  if (!(stdout || '').trim()) {
+    return {
+      kind: 'empty-output',
+      hint: 'The helper ran but printed nothing, which usually means the install is broken.',
+    };
+  }
+
+  return {
+    kind: 'doctor-failed',
+    hint: 'The setup helper failed. Check the stderr details below for the specific cause.',
+  };
+}
+
 // POST /api/setup/preflight — run doctor.mjs --json and return parsed checks.
 router.post('/api/setup/preflight', (req, res) => {
   // Use the running server's own node binary (process.execPath) rather than
@@ -35,16 +101,28 @@ router.post('/api/setup/preflight', (req, res) => {
   exec(cmd, { cwd: SETUP_ROOT, maxBuffer: 2 * 1024 * 1024 }, (err, stdout, stderr) => {
     const raw = (stdout || '').trim();
     if (err || !raw) {
+      const classification = classifyPreflightFailure({ error: err, code: err?.code, stderr, stdout });
       return res.status(500).json({
         ok: false,
-        error: err ? `doctor failed to run: ${err.message}` : 'doctor produced no output',
+        error: err ? `doctor failed to run: ${firstLine(stripAnsiSgr(err.message))}` : 'doctor produced no output',
         code: err && err.code != null ? err.code : null,
-        stderr: (stderr || '').slice(0, 500),
+        stderr: stripAnsiSgr(stderr).slice(0, 500),
         raw: raw.slice(0, 500),
+        ...classification,
+        command: cmd,
       });
     }
     try { res.json(JSON.parse(raw)); }
-    catch (e) { res.status(500).json({ ok: false, error: 'preflight output was not valid JSON', parseError: e.message, raw: raw.slice(0, 500) }); }
+    catch (e) {
+      res.status(500).json({
+        ok: false,
+        error: 'preflight output was not valid JSON',
+        parseError: e.message,
+        raw: raw.slice(0, 500),
+        ...classifyPreflightFailure({ badJson: true }),
+        command: cmd,
+      });
+    }
   });
 });
 
@@ -758,4 +836,3 @@ router.post('/api/setup/cv-upload', (req, res) => {
 });
 
 // Fallback — serve index.html for any non-API route
-

@@ -2196,7 +2196,26 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
                   </div>
                 );
               })}
-              {preflight.error && <div style={{ color: 'var(--red)', fontSize: 13 }}>{preflight.error}</div>}
+              {(preflight.hint || preflight.error || preflight.code != null || preflight.stderr || preflight.command) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {preflight.hint && <div style={{ color: 'var(--red)', fontSize: 13 }}>{preflight.hint}</div>}
+                  {preflight.error && (
+                    <div style={{ color: preflight.hint ? 'var(--text-dim)' : 'var(--red)', fontSize: preflight.hint ? 12 : 13 }}>
+                      {preflight.error}
+                    </div>
+                  )}
+                  {preflight.code != null && (
+                    <div className="mono" style={{ color: 'var(--text-dim)', fontSize: 12 }}>
+                      Exit code: {preflight.code}
+                      {Number(preflight.code) >= 0x80000000 ? ` (0x${(Number(preflight.code) >>> 0).toString(16).toUpperCase()})` : ''}
+                    </div>
+                  )}
+                  {preflight.stderr && preflight.stderr.trim() && (
+                    <pre style={{ margin: 0, background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text-dim)', padding: 10, fontSize: 11, fontFamily: 'var(--mono)', maxHeight: 140, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{preflight.stderr}</pre>
+                  )}
+                  {preflight.command && <div className="mono" style={{ color: 'var(--text-mute)', fontSize: 11 }}>{preflight.command}</div>}
+                </div>
+              )}
             </div>
           )}
           {!preflightOk
