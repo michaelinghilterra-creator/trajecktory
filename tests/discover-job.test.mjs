@@ -25,7 +25,7 @@ process.env.HUNTER_API_KEY = ' ';
 process.env.MILLIONVERIFIER_API_KEY = ' ';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-routeModule.setDiscoverModelCallForTests(async prompt => {
+const generate = async prompt => {
   const company = ['Alpha Example', 'Beta Example', 'Broken Example', 'Delta Example']
     .find(name => prompt.includes(name));
   const waits = { 'Alpha Example': 40, 'Beta Example': 180, 'Broken Example': 80, 'Delta Example': 240 };
@@ -40,9 +40,10 @@ routeModule.setDiscoverModelCallForTests(async prompt => {
     confidence: 'high',
     notes: 'Invented fixture source.',
   }]);
-});
+};
 
 const app = express();
+app.locals.generate = generate;
 app.use(express.json());
 app.use(routeModule.router);
 const server = app.listen(0);
@@ -125,7 +126,6 @@ const missing = await get('/invented-unknown-job');
 check(missing.status === 404, 'unknown job id returns 404');
 check(fs.readFileSync(targetFile, 'utf8') === header, 'background discovery never writes to the contact file');
 
-routeModule.setDiscoverModelCallForTests();
 server.closeAllConnections?.();
 await new Promise(resolve => server.close(resolve));
 try { const undici = await import('undici'); await undici.getGlobalDispatcher().close(); } catch {}
