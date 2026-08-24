@@ -99,15 +99,26 @@ for (const file of files) {
   const num = file.match(/^(\d+)/)[1];
   const rurl = reportUrlOf(md);
   if (rurl && /^local:/i.test(rurl) && TEMPLATE_VAR.test(rurl)) badUrlReports.push({ num, file, url: rurl });
-  const cs = hasV1Frontmatter(md) ? v1ToCheatsheet(parseV1(md).data) : parseReport(md);
+  const v1 = hasV1Frontmatter(md) ? parseV1(md).data : null;
+  const cs = v1 ? v1ToCheatsheet(v1) : parseReport(md);
 
   // Block A is always present; the Overview tab needs companyBrief + keywords to look complete
   const hasBlockA = !!extractSection(md, 'A');
 
+  // In a v1 report `summary` (which carries companyBrief) and `keywords` are
+  // OPTIONAL sections — templates/report-schema-v1.md says to omit them when not
+  // generated — so a report that never produced them is complete, not drifted.
+  // Presence of a "## A)" heading cannot stand in for them either: under v1, A is
+  // "Match on CV", not a role summary. Real drift for a v1 report is the
+  // frontmatter CARRYING the field while the conversion drops it, so check the
+  // frontmatter itself. Legacy prose reports keep the Block A test.
+  const hasBriefSource    = v1 ? !!v1.summary?.companyBrief    : hasBlockA;
+  const hasKeywordsSource = v1 ? (v1.keywords?.length || 0) > 0 : hasBlockA;
+
   const checks = [
-    { letter: 'A', name: 'CompanyBrief',  hasMd: hasBlockA,
+    { letter: 'A', name: 'CompanyBrief',  hasMd: hasBriefSource,
       hasParsed: !!cs.companyBrief },
-    { letter: 'A', name: 'Keywords',      hasMd: hasBlockA,
+    { letter: 'A', name: 'Keywords',      hasMd: hasKeywordsSource,
       hasParsed: (cs.keywords?.length || 0) > 0 },
     { letter: 'D', name: 'Comp',          hasMd: hasListContent(extractSection(md, 'D')) || /\$[\d,]+K?/.test(extractSection(md, 'D') || ''),
       hasParsed: (cs.comp?.stated || cs.comp?.market || (cs.comp?.sources?.length > 0)) },

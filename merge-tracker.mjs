@@ -32,7 +32,7 @@ import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs'
 // else. It also imported normalizeUrl from scan-core, a re-export of
 // canonicalUrl, so the same function went by two names inside one file.
 import { canonicalUrl, normalizeCompany, sameRole, urlFromReport, urlForRow, buildDecidedIndex } from './lib/identity.mjs';
-import { markDone } from './lib/pipeline.mjs';
+import { markDone, sourceUrlOf } from './lib/pipeline.mjs';
 // next-jd.mjs (persistent JD counter) can be one update cycle behind on installs
 // updating from a pre-counter version. Load it defensively so a missing file
 // degrades to max+1 numbering instead of crashing merge-tracker at module load.
@@ -51,6 +51,7 @@ const ADDITIONS_DIR = join(CAREER_OPS, 'batch/tracker-additions');
 const MERGED_DIR = join(ADDITIONS_DIR, 'merged');
 const DROPPED_DIR = join(ADDITIONS_DIR, 'dropped');
 const DROPS_LOG = join(CAREER_OPS, 'data/merge-drops.tsv');
+const SOURCE_LOG = join(CAREER_OPS, 'data/source-corrections.tsv');
 const PIPELINE_FILE = join(CAREER_OPS, 'data/pipeline.md');
 const DRY_RUN = process.argv.includes('--dry-run');
 const VERIFY = process.argv.includes('--verify');
@@ -351,10 +352,25 @@ console.log(`📥 Found ${tsvFiles.length} pending additions`);
 // whatever the agent wrote rather than a guess. Only enforcing one direction
 // (strip) used to leave untagged self-sourced pastes to be misclassified as
 // API/Agent Scan by the dashboard's URL-host fallback.
+// resolve-jds.mjs (part of the API Scan step) rewrites a pipeline.md row for an
+// SPA-hosted posting (Lever, some Ashby/Greenhouse) to a `local:jds/<file>` path,
+// so the http(s) URL disappears from pipeline.md entirely and moves onto that
+// snapshot's own "Source URL:" header line. A URL-only scan of pipeline.md is
+// blind to every such row, so a genuinely scanner-found role got misread as "not
+// in pipeline.md" and mistagged self-sourced (a dozen scanner-found roles in a
+// single batch, all discovered by scan.mjs/discover.mjs, all snapshot-rewritten,
+// all misclassified). sourceUrlOf resolves a local: row back to the
+// real URL the same way lib/pipeline.mjs's own reconciliation does, so both
+// scanned forms count.
 const scannedUrls = new Set();
 if (existsSync(PIPELINE_FILE)) {
   for (const line of readFileSync(PIPELINE_FILE, 'utf-8').split('\n')) {
     for (const u of (line.match(/https?:\/\/[^\s|)]+/g) || [])) scannedUrls.add(canonicalUrl(u));
+    const localMatch = line.match(/local:\S+/);
+    if (localMatch) {
+      const resolved = sourceUrlOf(localMatch[0], CAREER_OPS);
+      if (resolved) scannedUrls.add(resolved);
+    }
   }
 }
 // Remove a [self-sourced] tag AND whatever delimiter the agent used to attach
@@ -372,20 +388,44 @@ function stripSourceTag(notes) {
     .replace(new RegExp(`\\s*${SOURCE_TAG_SEPARATOR}\\s*$`), '')
     .trim();
 }
-function enforceSource(reportLink, notes, label) {
+// Durable audit trail for every tag flip this function makes. console.log alone
+// disappears once the terminal scrollback is gone — which is exactly what
+// happened 2026-08-23: ten scanner-found roles got mistagged self-sourced by the
+// local:-URL blind spot below, and by the time it was noticed there was no record
+// of WHICH rows had been touched or why, only applications.md's after-the-fact
+// state. Anything this function changes without the user watching belongs in a
+// file, per the same "suppressed must stay auditable" rule merge-drops.tsv
+// follows for dropped additions.
+const sourceLogRows = [];
+function logSourceFlip(action, num, company, role, url) {
+  sourceLogRows.push([new Date().toISOString().slice(0, 10), action, num, company, role, url]
+    .map(v => String(v ?? '').replace(/[\t\r\n]+/g, ' ')).join('\t'));
+}
+function flushSourceLog() {
+  if (!sourceLogRows.length) return;
+  const header = 'date\taction\tnum\tcompany\trole\turl\n';
+  if (!existsSync(SOURCE_LOG)) writeFileSync(SOURCE_LOG, header, 'utf-8');
+  appendFileSync(SOURCE_LOG, sourceLogRows.join('\n') + '\n', 'utf-8');
+}
+function enforceSource(reportLink, notes, num, company, role) {
+  const label = company || '';
   const u = reportUrl(reportLink);
   if (!u) return notes;                                 // unknown origin — don't guess
   if (scannedUrls.has(canonicalUrl(u))) {
     // Scanned: strip a stray [self-sourced] tag.
     if (!notes) return notes;
     const cleaned = stripSourceTag(notes);
-    if (cleaned !== notes) console.log(`   ↳ source: stripped [self-sourced] from scanned URL (${label || ''})`);
+    if (cleaned !== notes) {
+      console.log(`   ↳ source: stripped [self-sourced] from scanned URL (${label})`);
+      logSourceFlip('stripped-self-sourced', num, company, role, u);
+    }
     return cleaned;
   }
   // Not in pipeline.md → self-sourced. Tag it unless already source-tagged.
   if (/\[self-sourced\]|\[referral:/i.test(notes || '')) return notes;
   const tagged = notes ? `[self-sourced] ${notes}` : '[self-sourced]';
-  console.log(`   ↳ source: tagged [self-sourced] (not in pipeline.md) (${label || ''})`);
+  console.log(`   ↳ source: tagged [self-sourced] (not in pipeline.md) (${label})`);
+  logSourceFlip('added-self-sourced', num, company, role, u);
   return tagged;
 }
 
@@ -492,7 +532,7 @@ for (const file of tsvFiles) {
   const addition = parseTsvContent(content, file);
   if (!addition) { skipped++; continue; }
   // Enforce source from pipeline.md before any status/dedup logic reads the notes.
-  addition.notes = enforceSource(addition.report, addition.notes, addition.company);
+  addition.notes = enforceSource(addition.report, addition.notes, addition.num, addition.company, addition.role);
   addition._file = file;
   addition._reportNum = extractReportNum(addition.report);
   addition._normCompany = normalizeCompany(addition.company);
@@ -723,6 +763,11 @@ if (!DRY_RUN) {
     if (!existsSync(DROPS_LOG)) writeFileSync(DROPS_LOG, header, 'utf-8');
     appendFileSync(DROPS_LOG, rows, 'utf-8');
     console.log(`📝 Logged ${drops.length} dropped addition${drops.length === 1 ? '' : 's'} to ${basename(DROPS_LOG)} (TSVs in tracker-additions/dropped/)`);
+  }
+
+  if (sourceLogRows.length) {
+    flushSourceLog();
+    console.log(`📝 Logged ${sourceLogRows.length} source-tag correction${sourceLogRows.length === 1 ? '' : 's'} to ${basename(SOURCE_LOG)}`);
   }
 }
 

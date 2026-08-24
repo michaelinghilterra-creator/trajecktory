@@ -1119,6 +1119,15 @@ function parseLegacyProseReportV2(lines) {
     }
   }
 
+  // Final fallback: the May-2026 batch reports open with a "## A) Role Summary"
+  // table (Domain / TL;DR) and carry no prose in D or B for the loops above to
+  // find, so the Overview tab rendered blank for them. parseSectionA already
+  // synthesizes exactly that table into a brief, so reuse it rather than leaving
+  // real content in the file unparsed.
+  if (!companyBrief) {
+    companyBrief = parseSectionA(getSectionLines(lines, 'A')).companyBrief || null;
+  }
+
   // Remote: look for "Fully remote" or "remote" in positives bullets, then anywhere in D
   let remote = null;
   let inPositives = false;

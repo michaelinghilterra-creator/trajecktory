@@ -19,6 +19,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTracker } from './lib/tracker.mjs';
 import { canonicalUrl, urlForRow } from './lib/identity.mjs';
+import { sourceUrlOf } from './lib/pipeline.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md (original)
@@ -27,6 +28,7 @@ const APPS_FILE = existsSync(join(CAREER_OPS, 'data/applications.md'))
   : join(CAREER_OPS, 'applications.md');
 const ADDITIONS_DIR = join(CAREER_OPS, 'batch/tracker-additions');
 const REPORTS_DIR = join(CAREER_OPS, 'reports');
+const PIPELINE_FILE = join(CAREER_OPS, 'data/pipeline.md');
 const STATES_FILE = existsSync(join(CAREER_OPS, 'templates/states.yml'))
   ? join(CAREER_OPS, 'templates/states.yml')
   : join(CAREER_OPS, 'states.yml');
@@ -203,6 +205,20 @@ for (const e of entries) {
   }
 }
 if (boldScores === 0) ok('No bold in scores');
+
+// A broader "does this [self-sourced] URL also appear in pipeline.md" check was
+// tried here and dropped 2026-08-23: pipeline.md accumulates for the life of the
+// tracker and is never pruned, so a posting the scanner snapshots months apart
+// from a genuine self-sourced paste (confirmed against a real paste of a posting
+// the scanner also found) is a common, expected coincidence, not a bug. Even
+// restricted to local: snapshot matches it flagged the overwhelming majority of
+// candidates going back to the earliest rows, which is noise no one reads, not
+// signal. The real fix for the bug that motivated this (resolve-jds.mjs moving a
+// scanned URL off pipeline.md onto a local: snapshot, so merge-tracker read a
+// scanner-found row as self-sourced) lives at the point of decision instead:
+// merge-tracker.mjs's enforceSource resolves local: rows before classifying, and
+// logs every correction it makes to data/source-corrections.tsv. Check that file
+// for an after-the-fact audit trail rather than re-deriving one here.
 
 // --- Summary ---
 console.log('\n' + '='.repeat(50));
