@@ -23,7 +23,7 @@ const resolutionCases = [
   [{ notes: '[tier:peer]', title: 'VP Revenue Operations' }, { tier: 'peer', source: 'tag' }],
   [{ notes: '[principal]', title: 'Talent Acquisition Partner' }, { tier: 'hm', source: 'tag' }],
   [{ notes: '', title: 'VP Revenue Operations' }, { tier: 'hm', source: 'title' }],
-  [{ notes: '', title: 'Revenue Operations Analyst' }, { tier: DEFAULT_TIER, source: 'default' }],
+  [{ notes: '', title: 'Revenue Ops Analyst' }, { tier: DEFAULT_TIER, source: 'default' }],
   [{ notes: '', title: '' }, { tier: DEFAULT_TIER, source: 'default' }],
   [{ notes: '', title: 'VP Sales Development', track: 'salesdev' }, { tier: 'hm', source: 'title' }],
 ];
@@ -57,7 +57,7 @@ const row = (id, title, notes) => `| ${id} | Example ${id} | Last | First | Ms. 
 const fixtureLines = [
   '| ID | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |',
   '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
-  row(1, 'Revenue Operations Analyst', '[tier:exec]'),
+  row(1, 'Revenue Ops Analyst', '[tier:exec]'),
   row(2, 'Talent Acquisition Partner', '[principal]'),
   row(3, 'VP Revenue Operations', ''),
   row(4, 'Technical Recruiter', ''),
