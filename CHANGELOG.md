@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.41.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.40.0...v2.41.0) (2026-08-24)
+
+
+### Features
+
+* run contact discovery in the background, and share one implementation ([#257](https://github.com/michaelinghilterra-creator/trajecktory/issues/257)) ([5b9e33d](https://github.com/michaelinghilterra-creator/trajecktory/commit/5b9e33d6e896a7ac70a6fe884433acf45278c82c))
+
 ## [2.40.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.39.0...v2.40.0) (2026-08-24)
 
 
