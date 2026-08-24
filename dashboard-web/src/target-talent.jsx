@@ -3,6 +3,17 @@
 // Adapted from Claude Design handoff to work with live API endpoints.
 
 const { useState, useEffect, useMemo, useCallback } = React;
+// This source is emitted as a standalone browser script, so load the small ESM
+// helper separately while keeping its pure function directly testable in Node.
+//
+// The fallback is not defensive habit. This helper exists to explain a NETWORK
+// failure, and it is itself fetched over the network, so the one moment it is
+// needed is the moment it is likeliest to be missing. Without a fallback the
+// await would reject inside the catch block that was handling the original
+// error, and the user would see nothing at all rather than something imperfect.
+const discoverErrorCopy = import("/discover-error-message.mjs").catch(() => ({
+  discoverErrorMessage: (err) => String(err?.message || "Contact discovery failed."),
+}));
 
 // ── Status pipeline ──────────────────────────────────────────────────────────
 const TT_STATUS = [
@@ -1485,10 +1496,10 @@ function ReconcileModal({ onClose, onApplied }) {
       .filter(c => gapSel.has(c.company))
       .map(c => ({ company: c.company, exampleRole: c.exampleRole }));
     if (companies.length === 0) { setScanning(false); setDiscoveries([]); return; }
-    // Server caps each call at 15 companies. Batch sequentially so very large
-    // pipelines still complete without tripping the rate-limit guard, and
-    // surface partial-failure errors instead of silently returning 0 contacts.
-    const BATCH = 15;
+    // 6 companies / server concurrency 3 * 90 seconds per company = 180 seconds
+    // worst case per request, which must stay under the route timeout. Six also
+    // respects the server's rate-limit guard of at most 15 companies per call.
+    const BATCH = 6;
     const all = [];
     const errs = [];
     try {
@@ -1517,7 +1528,7 @@ function ReconcileModal({ onClose, onApplied }) {
       setDiscSel(pre);
       if (errs.length) setError(`Discover finished with ${errs.length} partial error(s): ${errs.join("; ")}`);
     } catch (e) {
-      setError(e.message);
+      setError((await discoverErrorCopy).discoverErrorMessage(e));
     } finally {
       setScanning(false);
     }
