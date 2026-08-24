@@ -985,6 +985,50 @@ function computeContactlessApps({ apps, taRows } = {}) {
   return out;
 }
 
+// Talent-only coverage is not real coverage under the influence model: talent
+// can route a candidate through the process, but cannot make the hiring decision.
+// This queue surfaces live applications where the company is mapped but no
+// non-archived contact can influence the hire, so the user can add a hiring
+// manager, executive, or peer. It stays separate from computeContactlessApps so
+// the established nobody-at-the-company count remains comparable and so one
+// application can never be presented as both unmapped and merely unthreaded.
+function computeUnthreadedApps({ apps, taRows } = {}) {
+  const appList = apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })();
+  const { ta } = _bothBooks({ taRows });
+  const contactsByCompany = new Map();
+  for (const contact of ta) {
+    // Deliberately unlike computeContactlessApps, archived rows do not count
+    // here: mapping a company once is coverage there, but an archived decision
+    // maker cannot move a live hire and therefore is not active threading.
+    if (contact.status === 'Archived') continue;
+    const company = normalizeCompany(contact.company);
+    if (!company) continue;
+    if (!contactsByCompany.has(company)) contactsByCompany.set(company, []);
+    contactsByCompany.get(company).push(contact);
+  }
+
+  const out = [];
+  for (const a of appList) {
+    if (!OUTREACH_ELIGIBLE_STATUSES.includes(a.status)) continue;
+    const contacts = contactsByCompany.get(normalizeCompany(a.company)) || [];
+    if (contacts.length === 0 || contacts.some(canInfluenceHire)) continue;
+    const top = contacts.slice().sort((x, y) => influenceRank(y) - influenceRank(x))[0];
+    out.push({
+      source: 'stakeholder',
+      id: a.id,
+      company: a.company || '',
+      role: a.role || '',
+      status: a.status,
+      applyDate: a.date || null,
+      score: a.score || null,
+      contactCount: contacts.length,
+      topTier: top?.influenceTier || DEFAULT_TIER,
+    });
+  }
+  out.sort((a, b) => (b.applyDate || '').localeCompare(a.applyDate || ''));
+  return out;
+}
+
 // The person-first counterpart to computeContactlessApps: applications going
 // stale at companies where you DO have a contact. You follow up with people, not
 // companies, so instead of a company card this surfaces the specific contact to
@@ -1251,7 +1295,7 @@ export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
   computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
   computeFollowupQueue, _followupRank,
-  influenceRank, canInfluenceHire, isHighValueContact, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts,
+  influenceRank, canInfluenceHire, isHighValueContact, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts,
   computeJustConnectedQueue,
   GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };

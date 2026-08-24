@@ -10,7 +10,7 @@ import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, canInfluenceHire, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, canInfluenceHire, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 
 // Different contacts per COMPANY the queue surfaces as actionable per day. Reaching
 // more than this at one company in a day reads as blasting; the overflow is HELD
@@ -278,6 +278,14 @@ router.get('/api/followups/stale', (req, res) => {
         const until = snooze.contactless?.[String(it.id)];
         return !(until && until > today);
       }),
+      // Live applications with talent coverage but nobody who can influence the
+      // hiring decision. This is separate from contactlessApps because the user
+      // has mapped the company, but still needs a decision-maker thread. Its own
+      // snooze bucket lets that nudge be deferred without hiding another one.
+      unthreadedApps: computeUnthreadedApps().filter(it => {
+        const until = snooze.stakeholder?.[String(it.id)];
+        return !(until && until > today);
+      }),
       // People-first: applications going stale at companies where you HAVE a
       // contact. Surfaces the specific person to ping (with an "app going stale"
       // signal) instead of a company card. Company-only stale apps are covered by
@@ -305,7 +313,7 @@ router.get('/api/followups/stale', (req, res) => {
 });
 
 // POST /api/followups/snooze — defer a stale alert.
-//   body: { source: 'app' | 'ta' | 'contactless' | 'referral' | 'influencer', id, days? = 14 }
+//   body: { source: 'app' | 'ta' | 'contactless' | 'stakeholder' | 'referral' | 'influencer', id, days? = 14 }
 router.post('/api/followups/snooze', (req, res) => {
   try {
     const { source, id, days } = req.body || {};
@@ -323,7 +331,7 @@ router.post('/api/followups/snooze', (req, res) => {
 });
 
 // POST /api/followups/unsnooze — bring an alert back early.
-//   body: { source: 'app' | 'ta' | 'contactless' | 'referral' | 'influencer', id }
+//   body: { source: 'app' | 'ta' | 'contactless' | 'stakeholder' | 'referral' | 'influencer', id }
 router.post('/api/followups/unsnooze', (req, res) => {
   try {
     const { source, id } = req.body || {};
