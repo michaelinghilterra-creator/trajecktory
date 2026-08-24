@@ -51,6 +51,7 @@ const ADDITIONS_DIR = join(CAREER_OPS, 'batch/tracker-additions');
 const MERGED_DIR = join(ADDITIONS_DIR, 'merged');
 const DROPPED_DIR = join(ADDITIONS_DIR, 'dropped');
 const DROPS_LOG = join(CAREER_OPS, 'data/merge-drops.tsv');
+const SOURCE_LOG = join(CAREER_OPS, 'data/source-corrections.tsv');
 const PIPELINE_FILE = join(CAREER_OPS, 'data/pipeline.md');
 const DRY_RUN = process.argv.includes('--dry-run');
 const VERIFY = process.argv.includes('--verify');
@@ -387,20 +388,44 @@ function stripSourceTag(notes) {
     .replace(new RegExp(`\\s*${SOURCE_TAG_SEPARATOR}\\s*$`), '')
     .trim();
 }
-function enforceSource(reportLink, notes, label) {
+// Durable audit trail for every tag flip this function makes. console.log alone
+// disappears once the terminal scrollback is gone — which is exactly what
+// happened 2026-08-23: ten scanner-found roles got mistagged self-sourced by the
+// local:-URL blind spot below, and by the time it was noticed there was no record
+// of WHICH rows had been touched or why, only applications.md's after-the-fact
+// state. Anything this function changes without the user watching belongs in a
+// file, per the same "suppressed must stay auditable" rule merge-drops.tsv
+// follows for dropped additions.
+const sourceLogRows = [];
+function logSourceFlip(action, num, company, role, url) {
+  sourceLogRows.push([new Date().toISOString().slice(0, 10), action, num, company, role, url]
+    .map(v => String(v ?? '').replace(/[\t\r\n]+/g, ' ')).join('\t'));
+}
+function flushSourceLog() {
+  if (!sourceLogRows.length) return;
+  const header = 'date\taction\tnum\tcompany\trole\turl\n';
+  if (!existsSync(SOURCE_LOG)) writeFileSync(SOURCE_LOG, header, 'utf-8');
+  appendFileSync(SOURCE_LOG, sourceLogRows.join('\n') + '\n', 'utf-8');
+}
+function enforceSource(reportLink, notes, num, company, role) {
+  const label = company || '';
   const u = reportUrl(reportLink);
   if (!u) return notes;                                 // unknown origin — don't guess
   if (scannedUrls.has(canonicalUrl(u))) {
     // Scanned: strip a stray [self-sourced] tag.
     if (!notes) return notes;
     const cleaned = stripSourceTag(notes);
-    if (cleaned !== notes) console.log(`   ↳ source: stripped [self-sourced] from scanned URL (${label || ''})`);
+    if (cleaned !== notes) {
+      console.log(`   ↳ source: stripped [self-sourced] from scanned URL (${label})`);
+      logSourceFlip('stripped-self-sourced', num, company, role, u);
+    }
     return cleaned;
   }
   // Not in pipeline.md → self-sourced. Tag it unless already source-tagged.
   if (/\[self-sourced\]|\[referral:/i.test(notes || '')) return notes;
   const tagged = notes ? `[self-sourced] ${notes}` : '[self-sourced]';
-  console.log(`   ↳ source: tagged [self-sourced] (not in pipeline.md) (${label || ''})`);
+  console.log(`   ↳ source: tagged [self-sourced] (not in pipeline.md) (${label})`);
+  logSourceFlip('added-self-sourced', num, company, role, u);
   return tagged;
 }
 
@@ -507,7 +532,7 @@ for (const file of tsvFiles) {
   const addition = parseTsvContent(content, file);
   if (!addition) { skipped++; continue; }
   // Enforce source from pipeline.md before any status/dedup logic reads the notes.
-  addition.notes = enforceSource(addition.report, addition.notes, addition.company);
+  addition.notes = enforceSource(addition.report, addition.notes, addition.num, addition.company, addition.role);
   addition._file = file;
   addition._reportNum = extractReportNum(addition.report);
   addition._normCompany = normalizeCompany(addition.company);
@@ -738,6 +763,11 @@ if (!DRY_RUN) {
     if (!existsSync(DROPS_LOG)) writeFileSync(DROPS_LOG, header, 'utf-8');
     appendFileSync(DROPS_LOG, rows, 'utf-8');
     console.log(`📝 Logged ${drops.length} dropped addition${drops.length === 1 ? '' : 's'} to ${basename(DROPS_LOG)} (TSVs in tracker-additions/dropped/)`);
+  }
+
+  if (sourceLogRows.length) {
+    flushSourceLog();
+    console.log(`📝 Logged ${sourceLogRows.length} source-tag correction${sourceLogRows.length === 1 ? '' : 's'} to ${basename(SOURCE_LOG)}`);
   }
 }
 
