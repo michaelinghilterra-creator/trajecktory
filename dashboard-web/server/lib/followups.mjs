@@ -583,16 +583,19 @@ function _localToday() {
 }
 
 // Every outbound touch (email OR LinkedIn invite), grouped by normalized company,
-// so a queue row can show when anyone at that company was last reached — the thing
+// so a queue row can show when anyone at that company was last reached, the thing
 // you otherwise had to leave the queue and reconcile by hand across the Pipeline
-// drawer and the Network tab. Sourced from the correspondence logs (both books):
+// drawer and the Network tab. The source list mirrors buildTimeline in
+// contact-timeline.mjs so both paths answer touch-history questions from the same
+// three books. Sourced from the available correspondence logs:
 // a LinkedIn invite is logged there too, with a subject isLinkedInInvite detects,
 // so this one pass covers both channels. Each company's list is sorted newest-first.
-function buildCompanyTouchIndex({ ta }) {
+function buildCompanyTouchIndex({ ta, referrals, influencers }) {
   const idx = new Map();
   const add = (companyRaw, key, name, tier, msgs) => {
     const co = normalizeCompany(companyRaw);
     if (!co) return;
+    if (!idx.has(co)) idx.set(co, []);
     for (const m of (msgs || [])) {
       // Include BOTH directions now: the queue shows last comms (sent OR received),
       // for this contact and for the org. The Sent-only "reached out today" hold-off
@@ -600,11 +603,14 @@ function buildCompanyTouchIndex({ ta }) {
       if (m.direction !== 'Sent' && m.direction !== 'Received') continue;
       const date = (m.timestamp || '').slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-      if (!idx.has(co)) idx.set(co, []);
       idx.get(co).push({ key, name, date, direction: m.direction, channel: isLinkedInEntry(m) ? 'linkedin' : 'email', tier });
     }
   };
   for (const r of (ta || [])) { try { add(r.company, `ta:${r.id}`, `${r.first || ''} ${r.last || ''}`.trim(), r.influenceTier || DEFAULT_TIER, readTTCorrespondence(r.id)); } catch { /* skip unreadable */ } }
+  for (const r of (referrals || [])) { try { add(r.where, `referral:${r.id}`, r.name || '', DEFAULT_TIER, readReferralCorrespondence(r.id)); } catch { /* skip unreadable */ } }
+  // Influencers have no correspondence reader. Include their companies in the
+  // index so all three books are keyed consistently, without inventing history.
+  for (const r of (influencers || [])) add(r.company, `influencer:${r.id}`, r.name || '', r.influenceTier || DEFAULT_TIER, []);
   for (const arr of idx.values()) arr.sort((a, b) => b.date.localeCompare(a.date));
   return idx;
 }
@@ -614,7 +620,7 @@ function buildCompanyTouchIndex({ ta }) {
 // context. Given a contact's key and their company's newest-first touch list,
 // returns the same companyOutreach shape the queue rows carry (this contact's own
 // last touch, the org's last comms, and the same-day hold-off signals).
-function _companyOutreachFor(selfKey, companyTouches, today = null) {
+function _companyOutreachFor(selfKey, companyTouches, today = null, { rowLastTouch = null } = {}) {
   let lastTouch = null, selfLastTouch = null, companyLastComms = null, selfSentToday = null;
   if (Array.isArray(companyTouches)) {
     const sent = companyTouches.find(x => x.key !== selfKey && x.direction === 'Sent');
@@ -627,6 +633,13 @@ function _companyOutreachFor(selfKey, companyTouches, today = null) {
       const st = companyTouches.find(x => x.key === selfKey && x.direction === 'Sent' && x.date === today);
       if (st) selfSentToday = { channel: st.channel };
     }
+  }
+  const stampedDate = String(rowLastTouch || '').slice(0, 10);
+  if (!selfLastTouch && /^\d{4}-\d{2}-\d{2}$/.test(stampedDate)) {
+    // A stamped lastTouch with no correspondence means the message was sent but
+    // its body was never logged. Calling that "no prior correspondence" is false
+    // and can cause a cold re-pitch to a warm contact.
+    selfLastTouch = { date: stampedDate, direction: 'Sent', channel: null, fromRowStamp: true };
   }
   const touchedToday = (lastTouch && today && lastTouch.date === today) ? { name: lastTouch.name, channel: lastTouch.channel } : null;
   // How many DISTINCT contacts at this company you have already SENT to today. Drives
@@ -697,9 +710,9 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
   const company = row.company;
   const status = row.status || '';
   const selfKey = `${source}:${row.id}`;
-  const companyOutreach = _companyOutreachFor(selfKey, companyTouches, today);
+  const companyOutreach = _companyOutreachFor(selfKey, companyTouches, today, { rowLastTouch: row.lastTouch });
   return {
-    source,                                       // always 'ta'
+    source,
     id: row.id,
     name: `${row.first || ''} ${row.last || ''}`.trim(),
     firstName: row.first || '',
@@ -746,11 +759,11 @@ function _sortByCompanyName(out) {
 // from both queues by CONNECT_QUEUE_EXCLUDE_STATUS, so a reply on either channel
 // automatically stops the other — the existing status-based gate serves as the
 // reply-anywhere-pauses-all mechanism.
-function computeConnectQueue({ taRows, apps } = {}) {
-  const { ta } = _bothBooks({ taRows });
+function computeConnectQueue({ taRows, referralRows, influencers, apps } = {}) {
+  const { ta, referrals, influencers: influencerRows } = _bothBooks({ taRows, referralRows, influencers });
   const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const baselineId = getNewBaselineId();
-  const touchIdx = buildCompanyTouchIndex({ ta });
+  const touchIdx = buildCompanyTouchIndex({ ta, referrals, influencers: influencerRows });
   const today = _localToday();
   const out = [];
   const consider = (row, source) => {
@@ -771,11 +784,11 @@ function computeConnectQueue({ taRows, apps } = {}) {
 // companies you've applied to, that you have not emailed yet. Working this list
 // logs verified EMAIL touches (the 13/week floor) the same one-at-a-time way the
 // connect queue logs LinkedIn connects.
-function computeEmailQueue({ taRows, apps } = {}) {
-  const { ta } = _bothBooks({ taRows });
+function computeEmailQueue({ taRows, referralRows, influencers, apps } = {}) {
+  const { ta, referrals, influencers: influencerRows } = _bothBooks({ taRows, referralRows, influencers });
   const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const baselineId = getNewBaselineId();
-  const touchIdx = buildCompanyTouchIndex({ ta });
+  const touchIdx = buildCompanyTouchIndex({ ta, referrals, influencers: influencerRows });
   const today = _localToday();
   const out = [];
   const consider = (row, source) => {
@@ -818,11 +831,11 @@ function _channelsDone(source, id) {
   } catch { /* unreadable log → treat as nothing done yet */ }
   return { linkedinDone, emailDone };
 }
-function computeBothQueue({ taRows, apps } = {}) {
-  const { ta } = _bothBooks({ taRows });
+function computeBothQueue({ taRows, referralRows, influencers, apps } = {}) {
+  const { ta, referrals, influencers: influencerRows } = _bothBooks({ taRows, referralRows, influencers });
   const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const baselineId = getNewBaselineId();
-  const touchIdx = buildCompanyTouchIndex({ ta });
+  const touchIdx = buildCompanyTouchIndex({ ta, referrals, influencers: influencerRows });
   const today = _localToday();
   const out = [];
   const consider = (row, source) => {
@@ -882,6 +895,9 @@ function _followupRank(r) {
 function computeFollowupQueue(opts = {}) {
   const books = _bothBooks(opts);
   const eligible = outreachEligibleCompanies(opts.apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
+  const baselineId = getNewBaselineId();
+  const touchIdx = buildCompanyTouchIndex(books);
+  const today = _localToday();
   const rows = [
     ...computeConnectQueue(opts).map(r => ({ ...r, channel: 'linkedin' })),
     ...computeEmailQueue(opts).map(r => ({ ...r, channel: 'email' })),
@@ -899,7 +915,10 @@ function computeFollowupQueue(opts = {}) {
     if (!_passesCompanyGate('referral', shaped.company, eligible)) continue;
     const channel = _hasLinkedIn(shaped) && isSendable(shaped) ? 'both' : isSendable(shaped) ? 'email' : _hasLinkedIn(shaped) ? 'linkedin' : 'none';
     if (channel === 'none') continue;
-    rows.push({ ..._queueRow(shaped, 'referral'), channel, queueReason: reason, notContacted: reason === 'Reach out' });
+    rows.push({
+      ..._queueRow(shaped, 'referral', baselineId, touchIdx.get(normalizeCompany(shaped.company)), today),
+      channel, queueReason: reason, notContacted: reason === 'Reach out',
+    });
   }
   for (const r of rows) r.rank = _followupRank(r);
   const people = resolvePeople({ ta: books.ta, referrals: books.referrals, influencers: books.influencers, pins: opts.pins ?? readPins() });
@@ -1106,12 +1125,13 @@ function computeStaleAppContacts({ staleApps, taRows } = {}) {
 // exclude a contact at the pipeline-status level once the conversation is 'Sent'
 // or beyond — the LinkedIn axis is a separate signal. Gated to companies with a
 // live application, same as the outreach queues.
-function computeJustConnectedQueue({ taRows, apps } = {}) {
-  const ta = taRows ?? (() => { try { return parseTargetTalentMd(); } catch { return []; } })();
+function computeJustConnectedQueue({ taRows, referralRows, influencers, apps } = {}) {
+  const books = _bothBooks({ taRows, referralRows, influencers });
+  const { ta } = books;
   const applied = outreachEligibleCompanies(apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
   const liMap = readLinkedInMap();
   const baselineId = getNewBaselineId();
-  const touchIdx = buildCompanyTouchIndex({ ta });
+  const touchIdx = buildCompanyTouchIndex(books);
   const today = _localToday();
   const out = [];
   for (const row of ta) {
@@ -1228,20 +1248,33 @@ function computeContactFollowups(opts = {}) {
 
   // Attach last-touch context to every contact so the card's CompanyOutreach block
   // renders for the merged-in stale-app and gone-quiet contacts too (the outreach
-  // rows already carry it). One touch-index pass over both contact books.
-  const { ta } = _bothBooks({});
-  const touchIdx = buildCompanyTouchIndex({ ta });
+  // rows already carry it). One touch-index pass over all three contact books.
+  const books = _bothBooks(opts);
+  const touchIdx = buildCompanyTouchIndex(books);
   const nowDay = _localToday();
   for (const item of byKey.values()) {
     if (!item.companyOutreach) {
-      item.companyOutreach = _companyOutreachFor(`${item.source}:${item.id}`, touchIdx.get(normalizeCompany(item.company)), nowDay);
+      item.companyOutreach = _companyOutreachFor(
+        `${item.source}:${item.id}`,
+        touchIdx.get(normalizeCompany(item.company)),
+        nowDay,
+        { rowLastTouch: item.lastTouch },
+      );
     }
     // "Not contacted" cannot be true of somebody who accepted your invite: an
     // invite went out, so the badge contradicted the "Just connected" one sitting
     // beside it on the same row. It happened because notContacted is derived from
     // each book's own status vocabulary, and a referral sits at "Not Asked" no
     // matter what has actually passed between you.
-    if (item.queueReason === 'Just connected' || item.linkedinStatus === 'Connected' || item.freeDm) {
+    // The general form of the same rule: "Not contacted" cannot be true of
+    // anybody we have a recorded touch for, whatever their book's status says.
+    // A referral messaged last week still sits at "Catching Up", so the status
+    // vocabulary alone reported them as never contacted and the queue offered a
+    // cold first-touch invite to an open thread. selfLastTouch is the one answer
+    // to "have we reached this person", including the row-stamp case where only
+    // the date was ever recorded.
+    if (item.queueReason === 'Just connected' || item.linkedinStatus === 'Connected' || item.freeDm
+        || item.companyOutreach?.selfLastTouch) {
       item.notContacted = false;
     }
     // Cold-outreach cap: once a TA or referral contact hits the channel ceiling with no

@@ -98,6 +98,11 @@ function relDaysAgo(dateStr) {
   return `${Math.floor(days / 7)} weeks ago`;
 }
 function chLabel(ch) { return ch === 'linkedin' ? 'LinkedIn invite' : 'email'; }
+function selfTouchLine(self) {
+  if (!self) return 'This contact: no prior correspondence yet';
+  if (self.fromRowStamp) return `This contact: last touch recorded ${self.date}, message not logged`;
+  return `This contact: last ${self.direction === 'Received' ? 'reply received' : `${chLabel(self.channel)} sent`} ${relDaysAgo(self.date)} (${self.date})`;
+}
 
 // Two timing signals per row so you never have to open the card to know where you
 // stand: (1) THIS contact — the last message to/from this person, either direction;
@@ -109,9 +114,7 @@ function CompanyOutreach({ c }) {
   if (!o) return null;
   const self = o.selfLastTouch;
   const org = o.companyLastComms;
-  const selfLine = self
-    ? `This contact: last ${self.direction === 'Received' ? 'reply received' : `${chLabel(self.channel)} sent`} ${relDaysAgo(self.date)} (${self.date})`
-    : 'This contact: no prior correspondence yet';
+  const selfLine = selfTouchLine(self);
   return (
     <div style={{ marginTop: 5, display: 'flex', flexDirection: 'column', gap: 3 }}>
       <div className="dim" style={{ fontSize: 11 }}
@@ -189,8 +192,8 @@ function isAlreadyInvited(c) {
   // It matters because the other two signals are target-talent-shaped and a
   // referral matches neither. CONTACTED_STATUSES holds TA vocabulary (Sent,
   // Replied, Meeting Scheduled) while a referral sits at "Not Asked", and
-  // selfLastTouch comes from a touch index built only from TA correspondence and
-  // keyed ta:<id>, so a referral row has none. Both read as never-invited.
+  // selfLastTouch now covers every contact book and also honors a row's stamped
+  // last touch when the message body was never logged.
   if (c.linkedinStatus === 'Connected' || c.freeDm) return true;
   return !!(c.companyOutreach && c.companyOutreach.selfLastTouch)
     || CONTACTED_STATUSES.has(c.status);
