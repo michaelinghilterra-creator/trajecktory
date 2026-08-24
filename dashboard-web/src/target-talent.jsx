@@ -880,6 +880,11 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
                   style={{ fontSize: 10.5, color: "var(--text-mute)" }}>
                   {data.influenceTierSource === "title" ? "Inferred" : data.influenceTierSource === "tag" ? "Set" : "Not determined"}
                 </span>
+                {data.provenanceStale && (
+                  <span style={{ fontSize: 10.5, color: "var(--yellow)", lineHeight: 1.4 }}>
+                    A search found this contact on {data.provenance.date}, and they have not been checked since. People change jobs, so confirm they are still here before spending a message on them.
+                  </span>
+                )}
               </div>
             )}
           </div>

@@ -5,8 +5,26 @@ import { parseApplicationsMd } from './applications.mjs';
 import { TALENT_STATUS_LABELS, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { parseVerifyTag } from '../../../lib/email-verify.mjs';
 import { resolveInfluenceTier, setInfluenceTier } from '../../../lib/influence-tier.mjs';
+import { parseProvenance } from '../../../lib/stakeholder-additions.mjs';
 import { readLinkedInMap } from './tt-linkedin.mjs';
 import { parseCorrespondence, formatCorrespondence } from './correspondence-format.mjs';
+
+// A quarter is long enough that a leadership change is likely, and short enough
+// that a re-check is still cheap. Missing provenance is deliberately not stale:
+// that covers hand-entered and older rows, and a flag that fires everywhere is
+// the same as no flag because it trains the user to ignore it.
+const PROVENANCE_STALE_DAYS = 90;
+
+function localDateParts(date = new Date()) {
+  return [date.getFullYear(), date.getMonth(), date.getDate()];
+}
+
+function provenanceAgeDays(date) {
+  const [year, month, day] = String(date).split('-').map(Number);
+  if (!year || !month || !day) return null;
+  const [todayYear, todayMonth, todayDay] = localDateParts();
+  return Math.floor((Date.UTC(todayYear, todayMonth, todayDay) - Date.UTC(year, month - 1, day)) / 86400000);
+}
 
 // Derived from templates/states.yml (talent_states) rather than hardcoded here.
 // The previous local array is the exact drift the recruiter side already fixed:
@@ -43,6 +61,8 @@ function parseTargetTalentMd() {
       notes: parts[15],
       title: parts[6],
     });
+    const provenance = parseProvenance(parts[15]);
+    const provenanceAge = provenance.date ? provenanceAgeDays(provenance.date) : null;
     rows.push({
       id,
       company:   parts[2],
@@ -66,6 +86,8 @@ function parseTargetTalentMd() {
       // of grepping the cell themselves. See lib/influence-tier.mjs.
       influenceTier,
       influenceTierSource,
+      provenance,
+      provenanceStale: provenanceAge !== null && provenanceAge > PROVENANCE_STALE_DAYS,
       // The hiring principal, i.e. the VP/Director/Head of the target function the
       // user would report to, NOT the TA gatekeeper. Now derived from the tier
       // rather than re-matching [principal], so the two can never disagree. An
