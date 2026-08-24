@@ -7,6 +7,7 @@
 import {
   discoverTalentAtCompany,
   discoverPrincipalAtCompany,
+  resolveTimeoutMs,
 } from '../dashboard-web/server/lib/contact-discovery.mjs';
 
 let passed = 0;
@@ -17,6 +18,17 @@ const check = (condition, message) => {
 };
 
 console.log('contact-discovery.test.mjs');
+
+check(resolveTimeoutMs(9e15) === 90_000, 'an absurd timeout is clamped to the default ceiling');
+check(
+  resolveTimeoutMs(-1) === 1_000 && resolveTimeoutMs(0) === 1_000,
+  'negative and zero timeouts are clamped to the floor',
+);
+check(
+  [NaN, '1000', null].every(value => resolveTimeoutMs(value) === 90_000),
+  'non-finite timeout values fall back to the default without throwing',
+);
+check(resolveTimeoutMs(2_500) === 2_500, 'a shorter timeout is honored for tests and callers');
 
 const calls = [];
 const generate = async (prompt, options) => {
@@ -49,6 +61,20 @@ check(
     && calls[0].prompt.includes('Talent Example')
     && calls[0].options.model === 'model.example',
   'the injected generate function receives the prompt and model options',
+);
+
+let fallbackModelOptions;
+await discoverTalentAtCompany({
+  company: 'Fallback Model Example',
+  model: 42,
+  generate: async (_prompt, options) => {
+    fallbackModelOptions = options;
+    return '[]';
+  },
+});
+check(
+  typeof fallbackModelOptions.model === 'string' && fallbackModelOptions.model !== 42,
+  'a non-string model falls back to the configured draft model',
 );
 
 const principal = await discoverPrincipalAtCompany({

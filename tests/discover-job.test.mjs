@@ -25,7 +25,9 @@ process.env.HUNTER_API_KEY = ' ';
 process.env.MILLIONVERIFIER_API_KEY = ' ';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-const generate = async prompt => {
+const generateCalls = [];
+const generate = async (prompt, options) => {
+  generateCalls.push({ prompt, options });
   const company = ['Alpha Example', 'Beta Example', 'Broken Example', 'Delta Example']
     .find(name => prompt.includes(name));
   const waits = { 'Alpha Example': 40, 'Beta Example': 180, 'Broken Example': 80, 'Delta Example': 240 };
@@ -86,7 +88,7 @@ check(initiallyRunning.status === 200 && initiallyRunning.body === null, 'runnin
 
 const started = await post({
   talent: [
-    { company: 'Alpha Example', exampleRole: 'Operations Lead' },
+    { company: 'Alpha Example', exampleRole: 'Operations Lead', timeoutMs: 9e15, model: 'request-model.example' },
     { company: 'Broken Example', exampleRole: 'Operations Lead' },
   ],
   principal: [
@@ -119,6 +121,13 @@ check(final.results.some(item => item.company === 'Alpha Example'), 'one thrown 
 check(final.results.length + final.errors.length === final.total, 'every company lands in exactly one outcome collection');
 check(final.results.every(item => ['talent', 'principal'].includes(item.search)), 'each result identifies the search that produced it');
 check(final.results.every(item => Array.isArray(item.suggestions) && Array.isArray(item.rejected) && Number.isFinite(item.duplicates)), 'each result has the complete incremental outcome shape');
+const alphaGenerateCall = generateCalls.find(call => call.prompt.includes('Alpha Example'));
+check(
+  alphaGenerateCall
+    && alphaGenerateCall.options.model !== 'request-model.example'
+    && !Object.hasOwn(alphaGenerateCall.options, 'timeoutMs'),
+  'the job route does not forward request timeout or model fields to discovery generation',
+);
 
 const after = await get('');
 check(after.body === null, 'running endpoint returns null after the run finishes');

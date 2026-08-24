@@ -79,9 +79,10 @@ async function runDiscoverJob(job, tasks, generate) {
       active.set(taskIndex, task.company);
       refreshCurrent();
       try {
+        // Request data never spreads into options, or future options would become externally settable.
         const result = task.search === 'principal'
-          ? await discoverPrincipalAtCompany({ ...task, generate })
-          : await discoverTalentAtCompany({ ...task, generate });
+          ? await discoverPrincipalAtCompany({ company: task.company, exampleRole: task.exampleRole, generate })
+          : await discoverTalentAtCompany({ company: task.company, exampleRole: task.exampleRole, generate });
         if (result.error) {
           job.errors.push({ company: task.company, error: result.error });
           continue;
@@ -331,7 +332,7 @@ router.post('/api/tt-reconcile/discover', async (req, res) => {
       const slice = companies.slice(i, i + DISCOVER_CONCURRENCY);
       const chunkResults = await Promise.all(slice.map(c => {
         if (!c.company) return null;
-        return discoverTalentAtCompany({ ...c, generate: req.app.locals.generate });
+        return discoverTalentAtCompany({ company: c.company, exampleRole: c.exampleRole, generate: req.app.locals.generate });
       }));
       for (const r of chunkResults) if (r) results.push(r);
     }
@@ -367,7 +368,7 @@ router.post('/api/tt-reconcile/discover-principal', async (req, res) => {
       const slice = companies.slice(i, i + DISCOVER_CONCURRENCY);
       const chunkResults = await Promise.all(slice.map(c => {
         if (!c.company) return null;
-        return discoverPrincipalAtCompany({ ...c, generate: req.app.locals.generate });
+        return discoverPrincipalAtCompany({ company: c.company, exampleRole: c.exampleRole, generate: req.app.locals.generate });
       }));
       for (const r of chunkResults) if (r) results.push(r);
     }

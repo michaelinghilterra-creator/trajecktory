@@ -8,6 +8,12 @@ import { generateText, draftModel } from './anthropic.mjs';
 import { validateStakeholder } from '../../../lib/stakeholder-additions.mjs';
 
 const DEFAULT_TIMEOUT_MS = 90_000;
+const MIN_TIMEOUT_MS = 1_000;
+
+export function resolveTimeoutMs(timeoutMs) {
+  if (!Number.isFinite(timeoutMs)) return DEFAULT_TIMEOUT_MS;
+  return Math.min(DEFAULT_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, timeoutMs));
+}
 
 function localDate(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -23,10 +29,14 @@ function parseSuggestions(fullText) {
 export async function discoverTalentAtCompany({
   company,
   exampleRole = '',
-  model = draftModel(),
-  timeoutMs = DEFAULT_TIMEOUT_MS,
+  model,
+  timeoutMs,
   generate = generateText,
 }) {
+  // Bound timers so a bad option cannot cause resource exhaustion by extending a search indefinitely.
+  const resolvedTimeoutMs = resolveTimeoutMs(timeoutMs);
+  // Keep invalid model options on the configured draft model instead of passing unchecked values downstream.
+  const resolvedModel = typeof model === 'string' && model.trim() ? model : draftModel();
   const prompt = `Find 2-3 Internal Talent Acquisition / People / Recruiting employees CURRENTLY employed at ${company} who would be relevant for a candidate targeting business/GTM/RevOps/Operations roles (specifically: ${exampleRole}).
 
 INSTRUCTIONS:
@@ -67,7 +77,7 @@ If the search returns no reliable matches, return an empty array []. Never fabri
     // is set, else via the Claude plan's WebSearch tool. generateText returns
     // the concatenated text; we extract the JSON array from it.
     const apiCall = generate(prompt, {
-      model,
+      model: resolvedModel,
       maxTokens: 3000,
       tools: [{
         type: 'web_search_20260209',
@@ -77,7 +87,7 @@ If the search returns no reliable matches, return an empty array []. Never fabri
       }],
     });
     const timeout = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error(`discover timeout after 90s for ${company}`)), timeoutMs);
+      timeoutId = setTimeout(() => reject(new Error(`discover timeout after 90s for ${company}`)), resolvedTimeoutMs);
     });
     const fullText = await Promise.race([apiCall, timeout]);
     console.log(`[discover] done:  ${company}`);
@@ -93,10 +103,14 @@ If the search returns no reliable matches, return an empty array []. Never fabri
 export async function discoverPrincipalAtCompany({
   company,
   exampleRole = '',
-  model = draftModel(),
-  timeoutMs = DEFAULT_TIMEOUT_MS,
+  model,
+  timeoutMs,
   generate = generateText,
 }) {
+  // Bound timers so a bad option cannot cause resource exhaustion by extending a search indefinitely.
+  const resolvedTimeoutMs = resolveTimeoutMs(timeoutMs);
+  // Keep invalid model options on the configured draft model instead of passing unchecked values downstream.
+  const resolvedModel = typeof model === 'string' && model.trim() ? model : draftModel();
   const prompt = `Find 2-3 people who currently LEAD the ${exampleRole || 'Revenue Operations / GTM'} function at ${company}. We are looking for the HIRING MANAGER or their skip-level — the VP, Director, Senior Director, or Head of the target function — NOT a recruiter, HR person, or TA team member.
 
 INSTRUCTIONS:
@@ -126,7 +140,7 @@ If the search returns no reliable matches, return []. Never fabricate names or t
   try {
     console.log(`[discover-principal] start: ${company}`);
     const apiCall = generate(prompt, {
-      model,
+      model: resolvedModel,
       maxTokens: 3000,
       tools: [{
         type: 'web_search_20260209',
@@ -136,7 +150,7 @@ If the search returns no reliable matches, return []. Never fabricate names or t
       }],
     });
     const timeout = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error(`discover-principal timeout after 90s for ${company}`)), timeoutMs);
+      timeoutId = setTimeout(() => reject(new Error(`discover-principal timeout after 90s for ${company}`)), resolvedTimeoutMs);
     });
     const fullText = await Promise.race([apiCall, timeout]);
     console.log(`[discover-principal] done:  ${company}`);
