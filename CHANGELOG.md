@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.40.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.39.0...v2.40.0) (2026-08-24)
+
+
+### Features
+
+* make the contact book tell the truth about who has been reached ([#255](https://github.com/michaelinghilterra-creator/trajecktory/issues/255)) ([079ea16](https://github.com/michaelinghilterra-creator/trajecktory/commit/079ea163f6f1eadf26e80a24da215492c2614ca9))
+* validate report frontmatter at write time ([#254](https://github.com/michaelinghilterra-creator/trajecktory/issues/254)) ([c8dd351](https://github.com/michaelinghilterra-creator/trajecktory/commit/c8dd351f7bf513c96b76eb371d32118b7b6b67e1))
+
 ## [2.39.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.38.1...v2.39.0) (2026-08-24)
 
 
