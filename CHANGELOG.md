@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.37.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.37.0...v2.37.1) (2026-08-24)
+
+
+### Bug Fixes
+
+* classify scanner-found roles correctly and parse legacy report briefs ([#246](https://github.com/michaelinghilterra-creator/trajecktory/issues/246)) ([93281e6](https://github.com/michaelinghilterra-creator/trajecktory/commit/93281e67f8bdc8d2d3a12b9248418e8b6721fc87))
+
 ## [2.37.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.36.1...v2.37.0) (2026-08-23)
 
 
