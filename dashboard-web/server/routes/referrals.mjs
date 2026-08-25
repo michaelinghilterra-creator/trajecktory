@@ -336,7 +336,11 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
     // accepted invite and any earlier note, then makes the chosen ask. Genuine
     // first-touch connect notes go through /api/linkedin-drafts/connect-note.
     if (channel === 'linkedin') {
-      const topic = req.body?.topic
+      // reply / followup-sent arrive as `mode` (the shared drawer builds the draft
+      // body with buildDraftBody); every other intent arrives as `topic`. Both map
+      // to a guidance line below, so fold mode into topic here.
+      const topic = req.body?.mode
+        || req.body?.topic
         || (ref.status === 'Intro Made' ? 'intro-thanks'
           : ref.status === 'Asked' ? 'nudge'
           : 'reconnect');

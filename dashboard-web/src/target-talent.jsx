@@ -636,6 +636,10 @@ const CONTACT_CFG_TA = {
   // and reads prior messages when it can resolve the contact. Name and company
   // alone left it guessing and skipped the gate entirely.
   linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ source: "ta", id: d.id, name: `${d.first || ""} ${d.last || ""}`.trim(), role: d.title, company: d.company, firstName: d.first, tone }) },
+  // Same LinkedIn intent tuning as referrals: the TA /draft route accepts
+  // channel:'linkedin' and drafts a context-aware DM (stage-framed candidacy ask)
+  // that reads the merged thread. "Connect note" keeps the 300-char first touch.
+  linkedInIntents: true,
 };
 
 const CONTACT_CFG_REFERRAL = {
@@ -850,7 +854,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
       if (cfg.linkedInIntents && draftStage !== "connect") {
         window.tjkMutate(`${cfg.base(id)}/draft`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ topic: draftStage, channel: "linkedin", override }),
+          // buildDraftBody emits the book-appropriate field (topic for referrals,
+          // interviewStage for TA; mode for reply / followup-sent). The server's
+          // LinkedIn branch reads the same shape as its email path.
+          body: JSON.stringify({ ...cfg.buildDraftBody(draftStage), channel: "linkedin", override }),
         })
           .then(r => r.json())
           .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { setDraftResult({ body: d.draft.body || "", subject: "", linkedin: true }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
