@@ -56,15 +56,29 @@ export function canContact({ timeline = [], channel = 'email', source = '', comp
   const blocks = [];
   const timed = [];
 
+  const channelSent = (ch) => sent
+    .filter(e => channelKey(e.channel || (isLinkedInEntry(e) ? 'linkedin' : 'email')) === ch);
+
   // Newest outbound touch on one channel. Sorted defensively: the enforcement
   // timeline arrives ascending, but this must not silently read the wrong message
   // if a caller ever hands over an unsorted array.
-  const newestOn = (ch) => sent
-    .filter(e => channelKey(e.channel || (isLinkedInEntry(e) ? 'linkedin' : 'email')) === ch)
+  const newestOn = (ch) => channelSent(ch)
     .map(e => e.at || e.timestamp)
     .filter(Boolean)
     .sort()
     .at(-1);
+
+  // Required gap before the NEXT touch on this channel. With a schedule set, the
+  // gap widens with the number of prior touches already sent on this channel: the
+  // 2nd touch waits schedule[0], the 3rd schedule[1], and the last entry repeats
+  // for everything after. Without a schedule it is the flat minDaysBetweenTouches,
+  // which is exactly the pre-schedule behavior.
+  const schedule = Array.isArray(p.touchGapSchedule) && p.touchGapSchedule.length ? p.touchGapSchedule : null;
+  const gapFor = (ch) => {
+    if (!schedule) return p.minDaysBetweenTouches;
+    const prior = channelSent(ch).length; // touches already on this channel; next is prior+1
+    return schedule[Math.min(Math.max(prior - 1, 0), schedule.length - 1)];
+  };
 
   // A 'both' row means "reach this person somehow", so it is blocked on the gap
   // rule only when EVERY channel is inside the window. One clear channel is still
@@ -73,20 +87,26 @@ export function canContact({ timeline = [], channel = 'email', source = '', comp
   // the intent: those are the high-value people most at risk of being over-worked.
   const gapChannels = wanted === 'both' ? ['linkedin', 'email'] : [wanted];
   const gapHits = gapChannels
-    .map(ch => ({ ch, at: newestOn(ch) }))
-    .filter(hit => hit.at && day(hit.at) && today < addDays(hit.at, p.minDaysBetweenTouches));
+    .map(ch => ({ ch, at: newestOn(ch), gap: gapFor(ch) }))
+    .filter(hit => hit.at && day(hit.at) && today < addDays(hit.at, hit.gap));
 
   if (gapHits.length === gapChannels.length && gapHits.length > 0) {
     // Report the channel that frees up first, so nextEligible is the soonest the
     // person can be reached at all rather than the last channel to clear.
     const soonest = gapHits
-      .map(hit => ({ ...hit, until: addDays(hit.at, p.minDaysBetweenTouches) }))
+      .map(hit => ({ ...hit, until: addDays(hit.at, hit.gap) }))
       .sort((a, b) => a.until.localeCompare(b.until))[0];
     const elapsed = Math.max(0, Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${day(soonest.at)}T00:00:00Z`)) / DAY_MS));
     const where = wanted === 'both' ? 'on every channel you have' : 'on this channel';
+    // With a schedule active, say which touch this is and why the gap is what it is,
+    // so a widening hold (e.g. 6 days before touch 3) does not read as a bug.
+    const nextTouchNum = channelSent(soonest.ch).length + 1;
+    const cadenceNote = schedule
+      ? ` This is touch #${nextTouchNum}, so the gap is ${soonest.gap} day${soonest.gap === 1 ? '' : 's'} (it widens as you follow up more).`
+      : '';
     blocks.push({
       rule: 'minDaysBetweenTouches',
-      reason: `You messaged them ${elapsed === 0 ? 'today' : `${elapsed} day${elapsed === 1 ? '' : 's'} ago`} ${where}.`,
+      reason: `You messaged them ${elapsed === 0 ? 'today' : `${elapsed} day${elapsed === 1 ? '' : 's'} ago`} ${where}.${cadenceNote}`,
       until: soonest.until,
     });
     timed.push(soonest.until);

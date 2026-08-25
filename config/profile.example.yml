@@ -95,14 +95,23 @@ outreach:
   enabled: true
   # Days that must pass before the same person can be touched again on the SAME
   # channel. A both-channel contact is only blocked when every channel is inside
-  # the window, because one clear channel is still actionable.
+  # the window, because one clear channel is still actionable. This is the fallback
+  # gap and the awaiting-reply floor; if touchGapSchedule is set it drives spacing.
   minDaysBetweenTouches: 3
+  # Optional widening per-channel gap. A comma list: the gap before touch 2, then
+  # touch 3, etc.; the last value repeats. It SUPERSEDES minDaysBetweenTouches when
+  # set. The count that picks the gap is prior Sent touches on that channel, so
+  # LinkedIn and email widen separately. With coldOutreachCap: 3 a "3,6" schedule
+  # gives 3 cold touches per channel (Day 1 / 4 / 10), then the channel rests.
+  # Remove this line for a flat gap. Uncomment to use:
+  # touchGapSchedule: "3,6"
   maxTouchesPer30d: 6
   # Hold while a substantive message is still unanswered. Kept equal to
-  # minDaysBetweenTouches on purpose: a longer value here silently becomes the
-  # real floor, whatever minDaysBetweenTouches says.
+  # minDaysBetweenTouches by default so it never silently becomes the real floor;
+  # raise it above the first gap if you want to wait out more of your reply window.
   awaitingReplyHold: 3
   # Cumulative cold touches per channel, lifted the moment they actually reply.
+  # This is the hard per-channel STOP; touchGapSchedule only spaces touches out.
   coldOutreachCap:
     linkedin: 3
     email: 3
