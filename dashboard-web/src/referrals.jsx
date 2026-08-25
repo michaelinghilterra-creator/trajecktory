@@ -464,6 +464,53 @@ function RefStat({ n, label, accent }) {
 // Exposed so the unified Contacts table (network.jsx) can open a referral in the
 // same drawer used inside the Referrals subtab.
 window.ReferralDrawer = ReferralDrawer;
+
+// Self-contained: open the referral contact drawer by id ALONE. It fetches the
+// referral book itself, finds the row, and wires the same patch / log-today /
+// find-email / remove handlers the Referrals subtab uses. This is what lets other
+// surfaces (the Follow-ups queue) pop the exact same drawer in place instead of
+// navigating away to the Referrals subtab to find the person.
+function ReferralDrawerById({ id, onClose, onChanged }) {
+  const [rows, setRows] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [finding, setFinding] = useState(false);
+  const toast = window.tjkToast || (() => {});
+  const load = useCallback(() => {
+    fetch('/api/referrals').then(r => r.json())
+      .then(d => { setRows(d.referrals || []); setStatuses(d.statuses || []); })
+      .catch(() => {});
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const row = rows.find(r => String(r.id) === String(id));
+  const patch = (rid, updates) => {
+    setRows(prev => prev.map(r => r.id === rid ? { ...r, ...updates } : r));
+    window.tjkMutate(`/api/referrals/${rid}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+      .then(r => { if (!r.ok) { toast('Save failed', 'error'); load(); } onChanged && onChanged(); })
+      .catch(() => { toast('Save failed', 'error'); load(); });
+  };
+  const logToday = (r) => { const updates = { lastTouch: refLocalToday() }; if (r.status === 'Not Asked') updates.status = 'Catching Up'; patch(r.id, updates); };
+  const findEmailOne = (r) => {
+    setFinding(true);
+    window.tjkMutate('/api/referrals/find-emails', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [r.id] }) })
+      .then(res => res.json()).then(d => { setFinding(false); if (!d.ok) { toast(d.error || 'Email lookup failed', 'error'); return; } load(); onChanged && onChanged(); })
+      .catch(() => { setFinding(false); toast('Email lookup failed', 'error'); });
+  };
+  const remove = (r) => {
+    if (!window.confirm(`Remove ${r.name || 'this person'} from your referral tracker?`)) return;
+    window.tjkMutate(`/api/referrals/${r.id}`, { method: 'DELETE' })
+      .then(res => { if (!res.ok) toast('Delete failed', 'error'); onChanged && onChanged(); })
+      .catch(() => toast('Delete failed', 'error'));
+    onClose && onClose();
+  };
+  if (!row) return null;   // still loading, or this id is not in the referral book
+  return (
+    <ReferralDrawer row={row} statuses={statuses} onClose={onClose}
+      onPatch={patch} onLogToday={logToday} onFindEmail={findEmailOne} finding={finding}
+      onChanged={() => { load(); onChanged && onChanged(); }}
+      onRemove={remove} />
+  );
+}
+window.ReferralDrawerById = ReferralDrawerById;
 window.REF_STATUS_COLORS = REF_STATUS_COLORS;
 
 function refInitials(name) {

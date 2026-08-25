@@ -216,7 +216,7 @@ function DraftBlockBanner({ block }) {
   </div>;
 }
 
-function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmailRemaining, onInmailSent }) {
+function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmailRemaining, onInmailSent, onOpenContact }) {
   const [note, setNote] = useStateCq(null);
   const [liLoading, setLiLoading] = useStateCq(false);
   const [liSending, setLiSending] = useStateCq(false);
@@ -400,7 +400,15 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <div>
           <div style={{ fontWeight: 600 }}>
-            {c.name || '(no name)'}{' '}
+            {/* Name opens the contact drawer in place (correspondence + details) for
+                referral / TA contacts, so you never leave the queue to read history.
+                Influencers have no correspondence store, so their name is plain text.
+                "Open ↗" still goes to their LinkedIn profile. */}
+            {onOpenContact && (c.source === 'referral' || c.source === 'ta')
+              ? <span role="button" tabIndex={0} onClick={() => onOpenContact(c)} onKeyDown={window.kbdActivate ? window.kbdActivate(() => onOpenContact(c)) : undefined}
+                  title="Open contact details and correspondence"
+                  style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'color-mix(in srgb, var(--accent) 45%, transparent)', textUnderlineOffset: 2 }}>{c.name || '(no name)'}</span>
+              : (c.name || '(no name)')}{' '}
             <span className="dim" style={{ fontWeight: 400 }}>· {c.role || 'unknown role'}</span>
             {' '}<BookChip source={c.source} />
             {channels.linkedin && channels.email && c.isHighValue !== false ? <span title="High value: reachable on both email and LinkedIn. Worked on both channels."
@@ -778,6 +786,9 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
   const [recText, setRecText] = useStateCq('');
   const [recBusy, setRecBusy] = useStateCq(false);
   const [recResult, setRecResult] = useStateCq(null);
+  // The contact drawer popped in place from a row's name (correspondence + details),
+  // holds the clicked queue row { source, id, ... }. Keeps the user in the queue.
+  const [drawer, setDrawer] = useStateCq(null);
   // Who is hidden by "Done for now", read from the SERVER. The mute itself lives
   // in a data file, so the restore list has to come from there: keeping it in
   // localStorage meant clearing site data left contacts muted with nothing that
@@ -1098,7 +1109,18 @@ window.FollowupQueueTab = function FollowupQueueTab({ toast, items, onReload }) 
                 ? 'Nothing to send right now: the remaining contacts are held (you already reached out at their company today, or you are out of InMail credits). They return automatically.'
                 : `No ${channel} contacts in the queue right now.`}
           </div>
-        : rows.map(c => <FollowupCard key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onChannelDone={onChannelDone} onSnooze={snoozeContact} onMute={muteContact} inmailRemaining={inmail ? inmail.remaining : undefined} onInmailSent={spendInmail} />)}
+        : rows.map(c => <FollowupCard key={`${c.source}:${c.id}`} c={c} toast={toast} onDone={dropRow} onChannelDone={onChannelDone} onSnooze={snoozeContact} onMute={muteContact} inmailRemaining={inmail ? inmail.remaining : undefined} onInmailSent={spendInmail} onOpenContact={setDrawer} />)}
+
+      {/* Contact drawer, popped in place from a row's name. Referral and TA rows
+          open their own by-id drawers (each fetches its own detail, so an id from
+          one book never resolves against the other). A refresh reloads the queue so
+          any status / touch change made in the drawer is reflected immediately. */}
+      {drawer && drawer.source === 'referral' && window.ReferralDrawerById && (
+        <window.ReferralDrawerById id={drawer.id} onClose={() => setDrawer(null)} onChanged={load} />
+      )}
+      {drawer && drawer.source === 'ta' && window.TargetTalentDrawer && (
+        <window.TargetTalentDrawer id={drawer.id} onClose={() => setDrawer(null)} onUpdate={load} />
+      )}
     </div>
   );
 };
