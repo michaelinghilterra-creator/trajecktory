@@ -111,5 +111,27 @@ for (const bad of [[], null, undefined]) {
   check(noBlock.touchGapSchedule === null, 'parse: no outreach block -> null (pre-schedule behavior)');
 }
 
+// ── LinkedIn invite is not a message touch (gap clock starts on acceptance) ──────
+{
+  const INVITE = 'LinkedIn connection request';
+  const pol = { minDaysBetweenTouches: 3, touchGapSchedule: [3, 6], awaitingReplyHold: 0, maxTouchesPer30d: 99, coldOutreachCap: { email: 99, linkedin: 99 } };
+
+  // Only a LinkedIn invite on file → it does NOT start the LinkedIn gap clock.
+  let r = canContact({ timeline: [sent('2026-08-24', 'LinkedIn', 'Sent', INVITE)], channel: 'linkedin', now, policy: pol });
+  check(!r.blocks.some(b => b.rule === 'minDaysBetweenTouches'), 'invite: a pending invite does not start the gap clock');
+
+  // An invite mis-tagged onto the email channel must not inflate the email touch count.
+  // Two real email touches → next is touch #3 (gap 6), not #4. (The invite here was
+  // stored with channel=Email, so it would wrongly count as a third email.)
+  r = canContact({ timeline: [
+    sent('2026-08-10', 'Email', 'Sent', 'Intro'),
+    sent('2026-08-11', 'Email', 'Sent', INVITE), // invite mis-tagged as Email
+    sent('2026-08-20', 'Email', 'Sent', 'Following up'),
+  ], channel: 'email', now, policy: pol });
+  const gap = r.blocks.find(b => b.rule === 'minDaysBetweenTouches');
+  check(!!gap && gap.reason.includes('touch #3'), 'invite: mis-tagged invite excluded — email count is touch #3, not #4');
+  check(r.nextEligible === '2026-08-26', 'invite: gap anchors to the real last email (08-20 + 6)');
+}
+
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed} passed, ${failed} failed`);
 process.exitCode = failed ? 1 : 0;

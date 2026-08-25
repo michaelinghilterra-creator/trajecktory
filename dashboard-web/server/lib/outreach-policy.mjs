@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { DATA_DIR } from '../config.mjs';
 import { summarizeThread, outreachCapState, isChannelCapped } from './correspondence-context.mjs';
-import { isLinkedInEntry } from './channels.mjs';
+import { isLinkedInEntry, isLinkedInInvite } from './channels.mjs';
 import { OUTREACH_DEFAULTS } from './profile.mjs';
 
 const DAY_MS = 86400000;
@@ -56,7 +56,14 @@ export function canContact({ timeline = [], channel = 'email', source = '', comp
   const blocks = [];
   const timed = [];
 
+  // Touches that anchor the message-gap clock on a channel. A LinkedIn connection
+  // request is NOT a message touch: it is a request to connect, and the follow-up
+  // clock starts when they ACCEPT, not when the invite is sent. So invites are
+  // excluded here — they neither start the gap nor advance the widening touch count.
+  // (A pending invite is instead held by the invitePending rule below; a mis-tagged
+  // invite stored on the email channel therefore stops inflating the email count.)
   const channelSent = (ch) => sent
+    .filter(e => !isLinkedInInvite(e.subject))
     .filter(e => channelKey(e.channel || (isLinkedInEntry(e) ? 'linkedin' : 'email')) === ch);
 
   // Newest outbound touch on one channel. Sorted defensively: the enforcement
