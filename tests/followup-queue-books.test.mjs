@@ -93,5 +93,16 @@ console.log('\nconnected contacts are not first touches');
   check(alreadyInvited(sentTa) === true, 'the target-talent status path is unchanged');
 }
 
+// A 1st-degree referral is ALREADY connected, so the queue marks it freeDm and the
+// client offers a direct message instead of a cold connection-request invite. A
+// referrer with any other descriptor still needs an invite.
+{
+  const firstDegree = referral(20, 'Warm Connection', 'Not Asked', { how: '1st-degree LinkedIn connection' });
+  const conferenceMet = referral(21, 'Cold Referrer', 'Not Asked', { how: 'met at a conference' });
+  const q = computeFollowupQueue({ taRows: [], referralRows: [firstDegree, conferenceMet], influencers: [], apps: [{ company: 'No Requisition Inc', status: 'Applied' }], pins: {} });
+  check(q.some(r => r.source === 'referral' && r.id === 20 && r.freeDm === true), '1st-degree referral is freeDm (direct message, not a connect note)');
+  check(q.some(r => r.source === 'referral' && r.id === 21 && !r.freeDm), 'a non-1st-degree referrer is not freeDm (still needs an invite)');
+}
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

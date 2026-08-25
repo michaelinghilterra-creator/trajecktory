@@ -555,6 +555,11 @@ function _bothBooks({ taRows, referralRows, influencers } = {}) {
   return { ta, referrals, influencers: influencerRows };
 }
 
+// A referral's "how you know them" descriptor that means they are already a
+// 1st-degree LinkedIn connection (the LinkedIn import stamps exactly this phrasing).
+// Matches "1st-degree" / "first degree" so a message routes as a free DM, not an invite.
+const FIRST_DEGREE_RE = /\b(?:1st|first)[-\s]?degree\b/i;
+
 const QUEUE_POLICY_BY_STORE = {
   ta: { gateOnLiveApplication: true, reason: row => !String(row.status || '').trim() || row.status === 'Not Contacted' ? 'Reach out' : 'Follow up' },
   // This uses the strict application-based gate. The looser Stage 1 definition
@@ -915,9 +920,16 @@ function computeFollowupQueue(opts = {}) {
     if (!_passesCompanyGate('referral', shaped.company, eligible)) continue;
     const channel = _hasLinkedIn(shaped) && isSendable(shaped) ? 'both' : isSendable(shaped) ? 'email' : _hasLinkedIn(shaped) ? 'linkedin' : 'none';
     if (channel === 'none') continue;
+    // A referral whose descriptor says they are a 1st-degree connection is ALREADY
+    // connected: you cannot send them a connection request, and a message is a free
+    // DM, not an InMail. Mark freeDm so the queue offers a direct message (warm
+    // reconnect) instead of a cold connect note, and the InMail rules treat the
+    // touch as free. Manually-added referrers with any other descriptor are left as
+    // needing an invite. (The LinkedIn referral import stamps this descriptor.)
+    const freeDm = FIRST_DEGREE_RE.test(String(row.how || ''));
     rows.push({
       ..._queueRow(shaped, 'referral', baselineId, touchIdx.get(normalizeCompany(shaped.company)), today),
-      channel, queueReason: reason, notContacted: reason === 'Reach out',
+      channel, queueReason: reason, notContacted: reason === 'Reach out', freeDm,
     });
   }
   for (const r of rows) r.rank = _followupRank(r);

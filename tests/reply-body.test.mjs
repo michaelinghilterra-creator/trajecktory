@@ -16,8 +16,9 @@ process.env.TJK_DATA_DIR = tmp;
 const {
   scanDecisions, logReplyToContact, previewEntry, MAX_CORR_BODY,
 } = await import('../dashboard-web/server/lib/google.mjs');
-const { TARGET_TALENT_MD } = await import('../dashboard-web/server/config.mjs');
+const { TARGET_TALENT_MD, REFERRALS_MD } = await import('../dashboard-web/server/config.mjs');
 const { readTTCorrespondence } = await import('../dashboard-web/server/lib/target-talent.mjs');
+const { readReferralCorrespondence, parseReferralsMd } = await import('../dashboard-web/server/lib/referrals.mjs');
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -76,6 +77,36 @@ logReplyToContact({ source: 'ta', id: 1 }, { subject: 'Heading reply', body: 'Fi
 stored = readTTCorrespondence(1);
 check(stored.filter(m => m.subject === 'Heading reply').length === 1, 'heading-like body line remains one correspondence message');
 check(stored.length === 3, 'body heading does not create a phantom correspondence entry');
+
+// ── Referral replies must reach the CARD, not just the app note ──────────────────
+// logReplyToContact used to return false for any non-'ta' source, so a synced Gmail
+// reply from a network referral was never written to the person's correspondence and
+// the drawer had nothing to draft a follow-up from.
+fs.writeFileSync(REFERRALS_MD, [
+  '# Referrals', '',
+  '| # | Name | How you know them | Where they are now | Target | Status | Last Touch | Notes | LinkedIn | Email |',
+  '|---|---|---|---|---|---|---|---|---|---|',
+  // #50: pure-LinkedIn referral, no twin (slug + name match nothing in TA).
+  '| 50 | Jane Doe | 1st-degree | SomeCo | Role | Asked | 2026-08-01 | connected | https://www.linkedin.com/in/janedoe-unique | jane@someco.example |',
+  // #51: linked to TA #1 via an explicit backref, so its reply logs to the TWIN.
+  '| 51 | Twin Person | 1st-degree | Fictional Labs | Role | Asked | 2026-08-01 | from TA Outreach #1 | https://www.linkedin.com/in/twinperson | twin@fictional.example |',
+  '',
+].join('\n'));
+
+const refReply = 'Great to hear from you. Let me know how I can be useful.';
+check(logReplyToContact({ source: 'referral', id: 50 }, { subject: 'Re: Reconnecting', body: refReply, timestamp: '2026-08-25T14:30:00Z' }) === true,
+  'a referral reply is logged (returns true, no longer dropped)');
+const refStored = readReferralCorrespondence(50);
+check(refStored.some(m => m.direction === 'Received' && m.body.includes('be useful')),
+  'a no-twin referral reply lands on the referral’s own correspondence');
+check((parseReferralsMd().find(r => r.id === 50) || {}).status === 'Responded',
+  'a referral reply advances Asked → Responded');
+
+logReplyToContact({ source: 'referral', id: 51 }, { subject: 'Re: Reconnecting', body: 'Twin reply body', timestamp: '2026-08-25T15:00:00Z' });
+check(readTTCorrespondence(1).some(m => m.direction === 'Received' && m.body.includes('Twin reply body')),
+  'a twin-linked referral reply lands on the TA twin’s correspondence (same store the drawer reads)');
+check(!readReferralCorrespondence(51).some(m => m.direction === 'Received'),
+  'a twin-linked referral does not double-log to its own file');
 
 const projected = previewEntry({ msgId: 'm2', body: 'P'.repeat(1500), snippet: 'short' });
 check(projected.bodyPreview.length <= 1000, 'list body preview is bounded');

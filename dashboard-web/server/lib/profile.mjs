@@ -111,6 +111,14 @@ let _outreachCache = null; // { mtimeMs, policy }
 export const OUTREACH_DEFAULTS = Object.freeze({
   enabled: true,
   minDaysBetweenTouches: 3,
+  // Widening per-channel gap. When set (a list like [3, 6]) it SUPERSEDES the flat
+  // minDaysBetweenTouches: the first entry is the gap before touch 2, the next
+  // before touch 3, and so on; the last entry repeats for every touch after that.
+  // null means "use the flat gap" — the behavior before this existed. The count
+  // that picks the entry is the number of prior Sent touches ON THAT CHANNEL, so
+  // LinkedIn and email widen on their own clocks. This only spaces touches; the
+  // hard STOP on unanswered cold touches is still coldOutreachCap.
+  touchGapSchedule: null,
   maxTouchesPer30d: 6,
   awaitingReplyHold: 3,
   coldOutreachCap: Object.freeze({ linkedin: 3, email: 3 }),
@@ -118,6 +126,17 @@ export const OUTREACH_DEFAULTS = Object.freeze({
   // At or below this many credits remaining, only decision-makers get one.
   inmailReserveFloor: 3,
 });
+
+// "3,6" -> [3, 6]. Any empty/negative/non-numeric part is dropped; an all-empty or
+// missing value returns null so the caller falls back to the flat gap. A scalar so
+// it parses with getScalar and never needs a YAML list reader.
+function parseGapSchedule(raw) {
+  // Drop empty tokens BEFORE Number(): Number('') is 0, so an absent value or a
+  // stray comma would otherwise parse to a spurious 0-day gap instead of null.
+  const parts = String(raw || '').split(',').map(s => s.trim()).filter(Boolean)
+    .map(Number).filter(n => Number.isFinite(n) && n >= 0);
+  return parts.length ? parts : null;
+}
 
 function safeOutreachNumber(raw, fallback) {
   if (raw === '') return fallback;
@@ -137,6 +156,7 @@ export function parseOutreachPolicy(text) {
     ...OUTREACH_DEFAULTS,
     enabled: true,
     minDaysBetweenTouches: 0,
+    touchGapSchedule: null,
     maxTouchesPer30d: Number.POSITIVE_INFINITY,
     awaitingReplyHold: 0,
     coldOutreachCap: { ...OUTREACH_DEFAULTS.coldOutreachCap },
@@ -145,6 +165,7 @@ export function parseOutreachPolicy(text) {
   return {
     enabled: enabledRaw === '' ? true : enabledRaw !== 'false',
     minDaysBetweenTouches: safeOutreachNumber(getScalar(text, 'outreach', 'minDaysBetweenTouches'), OUTREACH_DEFAULTS.minDaysBetweenTouches),
+    touchGapSchedule: parseGapSchedule(getScalar(text, 'outreach', 'touchGapSchedule')),
     maxTouchesPer30d: safeOutreachNumber(getScalar(text, 'outreach', 'maxTouchesPer30d'), OUTREACH_DEFAULTS.maxTouchesPer30d),
     awaitingReplyHold: safeOutreachNumber(getScalar(text, 'outreach', 'awaitingReplyHold'), OUTREACH_DEFAULTS.awaitingReplyHold),
     coldOutreachCap: {

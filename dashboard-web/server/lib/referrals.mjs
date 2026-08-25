@@ -4,6 +4,7 @@ import { REFERRALS_MD, REFERRAL_CORR_DIR } from '../config.mjs';
 import { REFERRAL_STATUS_LABELS } from './statuses.mjs';
 import { parseVerifyTag, setVerifyTag } from '../../../lib/email-verify.mjs';
 import { parseCorrespondence, formatCorrespondence } from './correspondence-format.mjs';
+import { linkedinKey } from './contact-identity.mjs';
 
 // ── Referral tracker ──────────────────────────────────────────────────────────
 // Backs the "Referrals" page. A referral is a person in the user's OWN network
@@ -163,6 +164,32 @@ function readReferralCorrespondence(id) {
 function writeReferralCorrespondence(id, messages) {
   fs.mkdirSync(REFERRAL_CORR_DIR, { recursive: true });
   fs.writeFileSync(path.join(REFERRAL_CORR_DIR, `${id}.md`), formatCorrespondence(messages));
+}
+
+// Resolve a referral to its TA-outreach TWIN: the same human tracked in the TA
+// book. A linked referral shares (and logs to) the twin's correspondence, so the
+// referral card and the TA card are one timeline. Match precedence, strongest
+// first: an explicit "from TA Outreach #<id>" backref in notes, then an exact
+// LinkedIn-slug match, then name (+ company when both are present). Returns
+// { source:'ta', contact } or null for a pure-LinkedIn referral with no twin.
+//
+// Shared source of truth: routes/referrals.mjs (the drawer read/write) and
+// lib/google.mjs (logging a synced Gmail reply to the card) both call this, so a
+// reply is written to the SAME store the drawer reads. When they disagreed, a
+// referral's reply was logged to the twin while the card read the referral's own
+// file, and the reply was invisible on the card that prompted it.
+const _normName = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+export function resolveReferralLink(refRow, taRows = []) {
+  const taRef = (refRow.notes || '').match(/TA Outreach #(\d+)/i);
+  if (taRef) { const c = taRows.find(r => r.id === parseInt(taRef[1], 10)); if (c) return { source: 'ta', contact: c }; }
+  const s = linkedinKey(refRow.linkedin);
+  if (s) { const ta = taRows.find(r => linkedinKey(r.linkedin) === s); if (ta) return { source: 'ta', contact: ta }; }
+  const nn = _normName(refRow.name), nc = _normName(refRow.where);
+  if (nn && nn.length >= 4) {
+    const ta = taRows.find(r => _normName(`${r.first} ${r.last}`) === nn && (!nc || _normName(r.company) === nc));
+    if (ta) return { source: 'ta', contact: ta };
+  }
+  return null;
 }
 
 export { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence };
