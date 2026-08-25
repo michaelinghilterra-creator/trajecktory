@@ -43,6 +43,18 @@ const REF_TOPICS = [
   { v: 'nudge', label: 'Nudge' },
 ];
 const REF_TONES = ['Warm', 'Direct', 'Curious', 'Concise'];
+// LinkedIn intents. 'connect' is the only one that drafts a <=300-char first-touch
+// connection note (via /connect-note); every other intent is a real DM drafted by
+// the referral /draft route with channel:'linkedin', which reads the same merged
+// email+LinkedIn history the email path does. So an already-connected referral
+// gets the right ask (e.g. flag my resume with TA), not another connect request.
+const REF_LI_TOPICS = [
+  { v: 'connect', label: 'Connect note' },
+  { v: 'reconnect', label: 'Reconnect' },
+  { v: 'ask', label: 'Referral ask' },
+  { v: 'intro-thanks', label: 'Thank for intro' },
+  { v: 'nudge', label: 'Nudge' },
+];
 
 function refLocalToday() {
   const d = new Date();
@@ -572,21 +584,38 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
     if (!compose) return;
     setGenerating(true);
     const fail = (msg) => { setGenerating(false); toast(msg || 'Draft failed', 'error'); };
+    const blockedMsg = (d) => `Outreach paused${d.nextEligible ? ` until ${String(d.nextEligible).slice(0, 10)}` : ''}: ${(d.blocks || []).join('; ') || 'cooldown or cap in effect'}`;
     if ((compose.channel || 'Email') === 'LinkedIn') {
-      const first = String(row.name || '').trim().split(/\s+/)[0] || '';
-      window.tjkMutate('/api/linkedin-drafts/connect-note', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        // source and id are what let the server run the outreach guardrail and read
-        // this person's prior messages. Sending only name and company left `resolved`
-        // null on the server, and its canContact call sits inside `if (resolved?.id
-        // != null)`, so this path silently skipped the cooldown, the caps and the
-        // per-company throttle, and drafted with no knowledge of the thread. The raw
-        // fields stay as a fallback for the ad-hoc case.
-        body: JSON.stringify({ source: 'referral', id: row.id, name: row.name, role: row.how, company: row.where, reason: row.target || row.how, firstName: first, tone: compose.tone || 'Warm' }),
-      }).then(r => r.json()).then(d => {
-        if (d && d.response) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.response })); setGenerating(false); }
-        else fail(d && d.error);
-      }).catch(() => fail());
+      const liTopic = compose.topic || 'reconnect';
+      // 'connect' → a genuine first-touch <=300-char connection note. Every other
+      // intent is a real DM drafted by the referral /draft route (channel:linkedin),
+      // which reads the merged email+LinkedIn thread and makes the chosen ask.
+      if (liTopic === 'connect') {
+        const first = String(row.name || '').trim().split(/\s+/)[0] || '';
+        window.tjkMutate('/api/linkedin-drafts/connect-note', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          // source and id are what let the server run the outreach guardrail and read
+          // this person's prior messages. Sending only name and company left `resolved`
+          // null on the server, and its canContact call sits inside `if (resolved?.id
+          // != null)`, so this path silently skipped the cooldown, the caps and the
+          // per-company throttle, and drafted with no knowledge of the thread. The raw
+          // fields stay as a fallback for the ad-hoc case.
+          body: JSON.stringify({ source: 'referral', id: row.id, name: row.name, role: row.how, company: row.where, reason: row.target || row.how, firstName: first, tone: compose.tone || 'Warm' }),
+        }).then(r => r.json()).then(d => {
+          if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
+          if (d && d.response) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.response })); setGenerating(false); }
+          else fail(d && d.error);
+        }).catch(() => fail());
+      } else {
+        window.tjkMutate(`/api/referrals/${row.id}/draft`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic: liTopic, channel: 'linkedin' }),
+        }).then(r => r.json()).then(d => {
+          if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
+          if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.draft.body || '' })); setGenerating(false); }
+          else fail(d && d.error);
+        }).catch(() => fail());
+      }
     } else {
       const topic = compose.topic || 'reconnect';
       const mode = topic === 'reply' ? 'reply' : topic === 'followup-sent' ? 'followup-sent' : undefined;
@@ -594,6 +623,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic, mode }),
       }).then(r => r.json()).then(d => {
+        if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
         if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: d.draft.subject || c.subject, body: d.draft.body || '' })); setGenerating(false); }
         else fail(d && d.error);
       }).catch(() => fail());
@@ -771,17 +801,28 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
                       {corr.length > 0 && <option value="followup-sent">Follow up on last sent</option>}
                     </select>
                   ) : (
-                    <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      {REF_TONES.map(t => {
-                        const on = (compose.tone || 'Warm') === t;
-                        return (
-                          <button key={t} className="btn sm" onClick={() => setCompose(c => ({ ...c, tone: t }))}
-                            style={{ borderColor: on ? 'var(--accent)' : 'var(--border)', background: on ? 'var(--accent-bg)' : 'transparent', color: on ? 'var(--accent)' : 'var(--text-dim)', fontWeight: on ? 600 : 400 }}>
-                            {t}
-                          </button>
-                        );
-                      })}
-                    </span>
+                    <>
+                      <select value={compose.topic || 'reconnect'} style={{ ...inputStyle, width: 'auto' }}
+                        onChange={e => setCompose(c => ({ ...c, topic: e.target.value }))}>
+                        {REF_LI_TOPICS.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
+                        {corr.length > 0 && <option value="reply">Reply to last</option>}
+                        {corr.length > 0 && <option value="followup-sent">Follow up on last sent</option>}
+                      </select>
+                      {/* Tone only shapes the <=300-char connect note; a real DM is warm by default. */}
+                      {(compose.topic || 'reconnect') === 'connect' && (
+                        <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {REF_TONES.map(t => {
+                            const on = (compose.tone || 'Warm') === t;
+                            return (
+                              <button key={t} className="btn sm" onClick={() => setCompose(c => ({ ...c, tone: t }))}
+                                style={{ borderColor: on ? 'var(--accent)' : 'var(--border)', background: on ? 'var(--accent-bg)' : 'transparent', color: on ? 'var(--accent)' : 'var(--text-dim)', fontWeight: on ? 600 : 400 }}>
+                                {t}
+                              </button>
+                            );
+                          })}
+                        </span>
+                      )}
+                    </>
                   )}
                   <button className="btn ghost sm" disabled={generating} onClick={generate}>{generating ? 'Generating…' : '✨ Generate'}</button>
                 </div>

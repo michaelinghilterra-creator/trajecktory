@@ -5,7 +5,7 @@ import { reconcile, parseConnectionsCsv, saveConnections, linkedinStatus, stageF
 import { detectAcceptances, computePendingAcceptances } from '../lib/linkedin-acceptance.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
+import { cleanEmailBody, cleanEmailSubject, cleanProse } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
@@ -285,9 +285,17 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
 // person (ref.how), where they are now (ref.where), and the role being targeted
 // through them (ref.target), plus any live application at their company.
 //
-// Body: { topic?: 'reconnect'|'ask'|'intro-thanks'|'nudge', mode?: 'reply'|'followup-sent' }
+// Body: { topic?: 'reconnect'|'ask'|'intro-thanks'|'nudge', mode?: 'reply'|'followup-sent', channel?: 'email'|'linkedin' }
 // reply / followup-sent read the shared TWIN thread when the referral is linked,
 // so a reply drafts against the real history the drawer shows.
+//
+// channel: 'linkedin' produces a paste-ready LinkedIn DM (no subject) instead of
+// an email. Both channels read the SAME merged correspondence (the log stores
+// email and LinkedIn messages together), so a LinkedIn draft for an already-
+// connected referral acknowledges the accepted invite and any prior email, and
+// makes the intent-appropriate ask (e.g. "flag my resume with TA") rather than a
+// generic connect request. Genuine first-touch connect notes (<=300 chars) still
+// go through /api/linkedin-drafts/connect-note; this path is the real message.
 const REF_TOPIC_GUIDANCE = {
   reconnect: 'RECONNECT (no ask yet). The goal is purely to reopen the relationship after time apart. Reference how you know each other warmly and specifically, share a light line on what you are up to now, and invite a catch-up. Do NOT make a referral ask in this message — the ask comes after they reply.',
   ask: 'THE REFERRAL ASK. You are back in touch (or already close). Make one specific, easy-to-decline ask: a quick intro to the right person, or flagging your application internally at their company. Name the role/company you are targeting. Offer to send a short blurb and resume to make it a two-minute forward. Keep it low-pressure and gracious about a no.',
@@ -309,10 +317,11 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
     const link = resolveReferralLink(ref, parseTargetTalentMd());
     const prior = link && link.source === 'ta' ? readTTCorrespondence(link.contact.id)
       : readReferralCorrespondence(id);
+    const channel = req.body?.channel === 'linkedin' ? 'linkedin' : 'email';
     const context = getPersonContext('referral', id);
-    const decision = canContact({ timeline: context?.timeline || [], channel: 'email', company: ref.where, policy: getOutreachPolicy() });
+    const decision = canContact({ timeline: context?.timeline || [], channel, company: ref.where, policy: getOutreachPolicy() });
     if (!decision.allowed && !req.body?.override) return res.json({ blocked: true, blocks: decision.blocks, nextEligible: decision.nextEligible });
-    if (!decision.allowed) logOutreachOverride({ contactRef: `referral:${id}`, channel: 'email', blocks: decision.blocks });
+    if (!decision.allowed) logOutreachOverride({ contactRef: `referral:${id}`, channel, blocks: decision.blocks });
 
     const cvMd            = readProjectFile(ROOT_DIR, 'cv.md');
     const profileMd       = readProjectFile(ROOT_DIR, 'modes/_profile.md');
@@ -320,6 +329,68 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
 
     const contactLabel = `someone in ${me.firstName}'s own professional network (a warm personal contact, NOT a cold recruiter lead)`;
     const contactBlock = `Name:            ${ref.name}\nHow you know them: ${ref.how || '(unspecified)'}\nWhere now / reach: ${ref.where || '(unspecified)'}\nTarget through them: ${ref.target || '(unspecified)'}`;
+
+    // LINKEDIN channel: a paste-ready DM, not an email and not a 300-char connect
+    // note. It reads the SAME merged `prior` history as the email path (which
+    // already contains both email and LinkedIn messages), so it acknowledges the
+    // accepted invite and any earlier note, then makes the chosen ask. Genuine
+    // first-touch connect notes go through /api/linkedin-drafts/connect-note.
+    if (channel === 'linkedin') {
+      const topic = req.body?.topic
+        || (ref.status === 'Intro Made' ? 'intro-thanks'
+          : ref.status === 'Asked' ? 'nudge'
+          : 'reconnect');
+      const LI_MODE_GUIDANCE = {
+        reply: 'REPLY. Respond directly and specifically to their most recent message in the thread below. Pick up what they actually said, answer or advance it, and keep it warm. Do not restart the conversation or re-introduce yourself.',
+        'followup-sent': 'FOLLOW UP ON YOUR LAST MESSAGE. Your last note has gone unanswered. Send one light, no-guilt bump that references the earlier note specifically (name what it was about), adds one small new thing or an easy out, and never uses needy filler like "just following up" or "circling back".',
+      };
+      const topicGuidance = LI_MODE_GUIDANCE[topic] || REF_TOPIC_GUIDANCE[topic] || REF_TOPIC_GUIDANCE.reconnect;
+
+      const connected = (context?.timeline || []).some(e => e.kind === 'invite-accepted');
+      const relatedApps = findRelatedApps(ref.where);
+      const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status)) || relatedApps[0];
+      const relatedContext = topApp
+        ? `== LIVE APPLICATION AT ${String(ref.where || '').toUpperCase()} ==\nRole:   ${topApp.role}\nStatus: ${topApp.status} (applied ${topApp.date})\nWhen the intent is a referral ask, this is the specific opening to reference. Do NOT generalize.`
+        : `No application currently logged at ${ref.where || 'their company'}. If the intent is an ask, frame it around the kind of roles ${me.firstName} targets (see profile) rather than a specific req.`;
+
+      const prompt = `You are drafting a warm, personal LinkedIn DIRECT MESSAGE from ${me.fullName} to ${contactLabel}. This is a private 1:1 message to paste into LinkedIn, NOT an email and NOT a connection request.
+
+${connected
+  ? 'YOU ARE ALREADY CONNECTED (they accepted the invite). Do NOT say you sent a connection request, do NOT ask whether it arrived, and do NOT imply the connection is pending. This is a real message to an established connection.'
+  : 'Write a real, purposeful message. Do NOT write "I would like to connect" — this is a message, not a new invite.'}
+
+== THE CONTACT ==
+${contactBlock}
+
+${relatedContext}
+
+== ${me.firstName.toUpperCase()}'S CV (source of truth — do not invent metrics or experience) ==
+${cvMd}
+${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md) ==\n${articleDigestMd}\n` : ''}
+== VOICE RULES (from modes/_profile.md — must follow) ==
+${profileMd}
+
+== MESSAGE INTENT ==
+${topicGuidance}
+
+== STYLE REQUIREMENTS ==
+- Warm and personal, grounded in HOW YOU KNOW THEM above. Reference the shared history naturally.
+- LinkedIn DM voice: conversational and tight. 40 to 110 words. Never a wall of text.
+- 2 to 3 short paragraphs separated by a LITERAL \\n\\n between paragraphs, so it scans on a phone.
+- Direct, human, no corporate filler ("I hope this finds you well", "reaching out to touch base").
+- NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
+- Never invent metrics, claims, or a shared history not supported above or on the CV.
+- If (and only if) the intent is a referral ask, make it specific and trivially easy to decline (e.g. flagging the application internally to the right person / TA), and offer to send a short blurb + resume.
+- Close with one low-friction next step or a genuine sign-off matching the intent. Do NOT ask for a call or a specific block of time.
+${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
+Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subject line, NO signature block, NO trailing sign-off (no '${me.firstName}', no 'Best,\\n${me.firstName}'), and NO greeting or bare first-name address (the UI prefills 'Hi ${firstName},', so the first sentence MUST begin with substantive content — do NOT start with '${firstName}', 'Hi', 'Hello', or 'Hey'). No quotes, no preface, no explanation.`;
+
+      let body = _stripLeadingSalutation((await generateText(prompt, { model: draftModel(), maxTokens: 700 })).trim(), firstName);
+      body = _stripTrailingSignature(body);
+      body = cleanProse(body);
+      body = (await reviseForCadence(body, { surface: 'prose' })).text;
+      return res.json({ ok: true, draft: { subject: '', body }, messageType: topic, channel: 'linkedin', relatedApp: topApp || null });
+    }
 
     // REPLY mode: respond to their most recent inbound message.
     if (req.body?.mode === 'reply') {
