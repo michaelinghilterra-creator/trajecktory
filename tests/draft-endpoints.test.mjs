@@ -63,6 +63,8 @@ const cases = [
   ['followup-message (already-invited / connected)', '/api/linkedin-drafts/followup-message', { source: 'ta', id: 1 }],
   ['target-talent email draft',                     '/api/target-talent/1/draft',           {}],
   ['referral draft',                                `/api/referrals/${refRow.id}/draft`,     {}],
+  ['referral LinkedIn draft (real DM)',             `/api/referrals/${refRow.id}/draft`,     { channel: 'linkedin', topic: 'ask' }],
+  ['target-talent LinkedIn draft (real DM)',        '/api/target-talent/1/draft',            { channel: 'linkedin', interviewStage: 'general' }],
 ];
 for (const [name, p, body] of cases) {
   const res = await post(p, body);

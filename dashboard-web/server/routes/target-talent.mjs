@@ -3,14 +3,14 @@ import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { pauseSequence } from '../lib/sequences.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
+import { cleanEmailBody, cleanEmailSubject, cleanProse } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { appendFollowupRow, parseFollowupsMd } from '../lib/followups.mjs';
 import { logConnect } from '../lib/connects.mjs';
 import { isLinkedInInvite } from '../lib/channels.mjs';
-import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES } from '../lib/tt-linkedin.mjs';
+import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES, getLinkedInStatus } from '../lib/tt-linkedin.mjs';
 import { isHighValueContact } from '../lib/followups.mjs';
 import { appendReferralRows, parseReferralsMd } from '../lib/referrals.mjs';
 import { linkedinKey } from '../lib/contact-identity.mjs';
@@ -262,10 +262,26 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
   }
 });
 
+// Interview-stage framing, shared by the email and LinkedIn draft paths. Keyed by
+// application status (which carries the interview round) plus a legacy 'TA Screen'
+// alias. 'general' (or unset) keeps default first-touch / follow-up behavior.
+const STAGE_GUIDANCE = {
+  'Phone Screen': 'PHONE / TA SCREEN STAGE. This contact is (or could be) the recruiter screen. Goal is to surface yourself and confirm fit for the screen. Keep it light and logistics-friendly; reinforce the one proof point most relevant to the role and express readiness to talk.',
+  'TA Screen': 'PHONE / TA SCREEN STAGE. This contact is (or could be) the recruiter screen. Goal is to surface yourself and confirm fit for the screen. Keep it light and logistics-friendly; reinforce the one proof point most relevant to the role and express readiness to talk.',
+  '1st Interview': 'FIRST INTERVIEW STAGE. You are early in the interview loop. Reference momentum ("enjoyed the conversation", "following the process") without naming details you may not have. Reinforce one differentiated strength and signal continued interest.',
+  '2nd Interview': 'SECOND INTERVIEW STAGE. You are progressing through the loop. Acknowledge the process is advancing, add a specific new value point or artifact relevant to the team, and keep the ask low-friction (e.g. logistics or a brief sync).',
+  '3rd Interview': 'THIRD / LATE INTERVIEW STAGE. You are late in the process, likely near a decision. Tone is confident and concise: reaffirm strong fit, address any likely open question proactively, and make it easy to move to next steps. Do not sound impatient.',
+  '4th Interview': 'FINAL-LOOP STAGE. You are at the last round, decision imminent. Be confident and concise: reaffirm fit in one line, proactively close any lingering question, and make the next step effortless. Do not sound anxious or over-eager.',
+};
+
 // POST /api/target-talent/:id/draft — Claude-draft outreach
 //   Internal-TA voice: references the specific role(s) you applied to at this
 //   company. Different framing from the recruiter draft — this is warm
 //   in-network outreach, not blind recruiter pitch.
+//   channel:'linkedin' returns a paste-ready LinkedIn DM (no subject) instead of an
+//   email, reading the same merged thread so it acknowledges an accepted invite and
+//   makes the stage-appropriate ask. First-touch connect notes still go through
+//   /api/linkedin-drafts/connect-note.
 router.post('/api/target-talent/:id/draft', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -279,9 +295,78 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
     const articleDigestMd = readProjectFile(projectRoot, 'article-digest.md');
     const prior = readTTCorrespondence(id);
     const context = getPersonContext('ta', id);
-    const decision = canContact({ timeline: context?.timeline || [], channel: 'email', company: r.company, policy: getOutreachPolicy() });
+    const channel = req.body?.channel === 'linkedin' ? 'linkedin' : 'email';
+    const decision = canContact({ timeline: context?.timeline || [], channel, company: r.company, policy: getOutreachPolicy() });
     if (!decision.allowed && !req.body?.override) return res.json({ blocked: true, blocks: decision.blocks, nextEligible: decision.nextEligible });
-    if (!decision.allowed) logOutreachOverride({ contactRef: `ta:${id}`, channel: 'email', blocks: decision.blocks });
+    if (!decision.allowed) logOutreachOverride({ contactRef: `ta:${id}`, channel, blocks: decision.blocks });
+
+    // LINKEDIN channel: a paste-ready DM (no subject), not an email and not a
+    // 300-char connect note. It reads the SAME merged `prior` thread as the email
+    // path, so it acknowledges an accepted invite and any earlier note, then makes
+    // the stage-appropriate candidacy ask. reply / followup-sent nudge the thread;
+    // every other stage is fresh, interview-stage-framed outreach. First-touch
+    // connect notes go through /api/linkedin-drafts/connect-note.
+    if (channel === 'linkedin') {
+      const me = getIdentity();
+      const mode = req.body?.mode === 'reply' ? 'reply' : req.body?.mode === 'followup-sent' ? 'followup-sent' : null;
+      const relatedApps = findRelatedApps(r.company);
+      const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status)) || relatedApps[0];
+      const interviewStage = req.body?.interviewStage
+        || (topApp && isInterviewStage(topApp.status) ? topApp.status : 'general');
+      const stageGuidance = STAGE_GUIDANCE[interviewStage] || '';
+      const connected = (context?.timeline || []).some(e => e.kind === 'invite-accepted')
+        || getLinkedInStatus(Number(id)) === 'Connected';
+      const thread = summarizeThread(prior);
+      const relatedContext = topApp
+        ? `== RELATED APPLICATION AT ${String(r.company || '').toUpperCase()} ==\nRole:   ${topApp.role}\nStatus: ${topApp.status} (applied ${topApp.date})\nReference this role specifically. Do NOT generalize.`
+        : `No application currently logged for ${r.company}. Signal genuine interest in their team and the kind of roles ${me.firstName} targets (see profile).`;
+      const intentGuidance = mode === 'reply'
+        ? 'REPLY. Respond directly and specifically to their most recent message in the thread below. Pick up what they said and advance it. Do not restart the conversation.'
+        : mode === 'followup-sent'
+          ? 'FOLLOW UP ON YOUR LAST MESSAGE. Your last note is unanswered. Send one light, no-guilt bump that names what the earlier note was about, adds one small new thing, and never uses needy filler like "just following up" or "circling back".'
+          : (stageGuidance || 'FIRST / FRESH TOUCH. Surface yourself as a strong candidate: specific interest in the company, that you applied (or are about to), and one reason you are worth a reply.');
+
+      let cvMd = ''; try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
+      let articleDigestMd = ''; try { articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md'); } catch {}
+      let profileMd = ''; try { profileMd = readProjectFile(ROOT_DIR, 'modes/_profile.md'); } catch {}
+      const cvExcerpt = (articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 900)}\n\nCV:\n` : '') + (cvMd ? cvMd.slice(0, 3200) : '(CV not available)');
+
+      const prompt = `You are drafting a brief LinkedIn DIRECT MESSAGE from ${me.fullName} to an internal Talent Acquisition / People-team contact at ${r.company}, a company he is actively pursuing. This is a private 1:1 message to paste into LinkedIn, NOT an email and NOT a connection request.
+
+${connected
+  ? 'YOU ARE ALREADY CONNECTED (they accepted the invite). Do NOT say you sent a connection request, do NOT ask whether it arrived, and do NOT imply the connection is pending.'
+  : 'Write a real, purposeful message. Do NOT write "I would like to connect" — this is a message, not a new invite.'}
+
+== THE CONTACT ==
+Name:    ${r.salute || ''} ${r.first} ${r.last}
+Title:   ${r.title || '(unknown)'}
+Company: ${r.company || '(unknown)'}
+
+${relatedContext}
+
+== ${me.firstName.toUpperCase()}'S CV (source of truth — do not invent metrics or experience) ==
+${cvExcerpt}
+${profileMd ? `\n== VOICE RULES (from modes/_profile.md — must follow) ==\n${profileMd}\n` : ''}
+== MESSAGE INTENT ==
+${intentGuidance}
+
+== STYLE REQUIREMENTS ==
+- LinkedIn DM voice: warm, direct, senior-operator. 40 to 110 words. Never a wall of text.
+- 2 to 3 short paragraphs separated by a LITERAL \\n\\n between paragraphs, so it scans on a phone.
+- Open with specific interest in ${r.company} and that ${me.firstName} applied (or is about to), then ONE concrete proof point from the CV or portfolio that makes him worth a reply.
+- No corporate filler ("I hope this finds you well", "reaching out to touch base"). No em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
+- Never invent metrics or claims not on the CV.
+- Close with ONE low-friction ask: a quick reply, or a pointer to the right person for the role. Do NOT ask for a call, a chat, a meeting, or any amount of their time.
+${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nTHREAD STATE: ${thread.stateLine}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
+Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subject line, NO signature block, NO trailing sign-off (no '${me.firstName}', no 'Best,\\n${me.firstName}'), and NO greeting or bare first-name address (the UI prefills 'Hi ${r.first},', so the first sentence MUST begin with substantive content — do NOT start with '${r.first}', 'Hi', 'Hello', or 'Hey'). No quotes, no preface, no explanation.`;
+
+      let body = _stripLeadingSalutation((await generateText(prompt, { model: draftModel(), maxTokens: 700 })).trim(), r.first);
+      body = _stripTrailingSignature(body);
+      body = cleanProse(body);
+      body = (await reviseForCadence(body, { surface: 'prose' })).text;
+      return res.json({ ok: true, draft: { subject: '', body }, messageType: mode || interviewStage, channel: 'linkedin', relatedApp: topApp || null });
+    }
+
     const isFirstTouch = prior.length === 0;
     const messageType = req.body?.messageType || (isFirstTouch ? 'first-touch' : 'follow-up');
     // Full-thread state so a follow-up nudges rather than re-pitching a message
@@ -327,20 +412,6 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
       draft.subject = cleanEmailSubject(collapseRe(draft.subject, sent.subject));
       return res.json({ ok: true, draft, messageType: 'followup-sent', relatedApp: null });
     }
-
-    // Interview-stage tuning: the drawer passes where the user is in the loop so
-    // the draft's framing matches. 'general' (or unset) keeps the default
-    // first-touch / follow-up behavior unchanged.
-    // Keyed by application status (which now carries the interview round) plus a
-    // legacy 'TA Screen' alias. 'general' (or unset) keeps default behavior.
-    const STAGE_GUIDANCE = {
-      'Phone Screen': 'PHONE / TA SCREEN STAGE. This contact is (or could be) the recruiter screen. Goal is to surface yourself and confirm fit for the screen. Keep it light and logistics-friendly; reinforce the one proof point most relevant to the role and express readiness to talk.',
-      'TA Screen': 'PHONE / TA SCREEN STAGE. This contact is (or could be) the recruiter screen. Goal is to surface yourself and confirm fit for the screen. Keep it light and logistics-friendly; reinforce the one proof point most relevant to the role and express readiness to talk.',
-      '1st Interview': 'FIRST INTERVIEW STAGE. You are early in the interview loop. Reference momentum ("enjoyed the conversation", "following the process") without naming details you may not have. Reinforce one differentiated strength and signal continued interest.',
-      '2nd Interview': 'SECOND INTERVIEW STAGE. You are progressing through the loop. Acknowledge the process is advancing, add a specific new value point or artifact relevant to the team, and keep the ask low-friction (e.g. logistics or a brief sync).',
-      '3rd Interview': 'THIRD / LATE INTERVIEW STAGE. You are late in the process, likely near a decision. Tone is confident and concise: reaffirm strong fit, address any likely open question proactively, and make it easy to move to next steps. Do not sound impatient.',
-      '4th Interview': 'FINAL-LOOP STAGE. You are at the last round, decision imminent. Be confident and concise: reaffirm fit in one line, proactively close any lingering question, and make the next step effortless. Do not sound anxious or over-eager.',
-    };
 
     // Pull related applications to ground the outreach in a real role
     const relatedApps = findRelatedApps(r.company);
