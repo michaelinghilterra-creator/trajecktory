@@ -29,6 +29,7 @@ import { GOOGLE_TOKENS_PATH, GOOGLE_SYNC_PATH } from '../config.mjs';
 import { classifyBounce } from '../../../lib/bounce-parse.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from './target-talent.mjs';
+import { parseReferralsMd, readReferralCorrespondence, writeReferralCorrespondence, updateReferralLine, resolveReferralLink } from './referrals.mjs';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -699,6 +700,33 @@ function logReplyToContact(contact, { subject, body, timestamp, advanceStatus = 
     const messages = readTTCorrespondence(id); messages.push(entry); writeTTCorrespondence(id, messages);
     const upd = advanceStatus ? replyStatusUpdate(r.status || '', today) : null;
     if (upd) updateTTLine(id, upd);
+    return true;
+  }
+  // Referrals were dropped here before: this returned false for any non-'ta'
+  // source, so a synced Gmail reply from a network referral flipped the app status
+  // but was never written to the person's card — the drawer that offered to draft a
+  // follow-up had no reply to work from. Write to the SAME store the referral drawer
+  // reads (routes/referrals.mjs): the TA twin if linked, otherwise the referral's own
+  // correspondence. resolveReferralLink is shared so the read and write cannot drift.
+  if (contact.source === 'referral') {
+    const refRow = parseReferralsMd().find(x => x.id === id);
+    if (!refRow) return false;
+    const link = resolveReferralLink(refRow, parseTargetTalentMd());
+    if (link && link.source === 'ta') {
+      const messages = readTTCorrespondence(link.contact.id); messages.push(entry); writeTTCorrespondence(link.contact.id, messages);
+      const upd = advanceStatus ? replyStatusUpdate(link.contact.status || '', today) : null;
+      if (upd) updateTTLine(link.contact.id, upd);
+      return true;
+    }
+    const messages = readReferralCorrespondence(id); messages.push(entry); writeReferralCorrespondence(id, messages);
+    if (advanceStatus) {
+      // Mirror routes/referrals.mjs: a received reply advances Asked → Responded and
+      // seeds a first touch, but never regresses a later win (Intro Made, Applied
+      // w/ Referral). A reply is also a touch, so stamp Last Touch either way.
+      const st = refRow.status || '';
+      const next = st === 'Asked' ? 'Responded' : (!st || st === 'Not Asked') ? 'Catching Up' : null;
+      updateReferralLine(id, next ? { status: next, lastTouch: today } : { lastTouch: today });
+    }
     return true;
   }
   return false;
