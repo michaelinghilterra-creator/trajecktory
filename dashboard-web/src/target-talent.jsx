@@ -636,6 +636,10 @@ const CONTACT_CFG_TA = {
   // and reads prior messages when it can resolve the contact. Name and company
   // alone left it guessing and skipped the gate entirely.
   linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ source: "ta", id: d.id, name: `${d.first || ""} ${d.last || ""}`.trim(), role: d.title, company: d.company, firstName: d.first, tone }) },
+  // Same LinkedIn intent tuning as referrals: the TA /draft route accepts
+  // channel:'linkedin' and drafts a context-aware DM (stage-framed candidacy ask)
+  // that reads the merged thread. "Connect note" keeps the 300-char first touch.
+  linkedInIntents: true,
 };
 
 const CONTACT_CFG_REFERRAL = {
@@ -671,6 +675,13 @@ const CONTACT_CFG_REFERRAL = {
   // and reads prior messages when it can resolve the contact. Name and company
   // alone left it guessing and skipped the gate entirely.
   linkedIn: { tones: ["Warm", "Direct", "Curious", "Concise"], payload: (d, tone) => ({ source: "referral", id: d.id, name: d.name, role: d.how, company: d.where, reason: d.target || d.how, firstName: d.first, tone }) },
+  // LinkedIn drafts can be intent-tuned like email (not just a connect note): the
+  // referral /draft route accepts channel:'linkedin' and reads the merged
+  // email+LinkedIn thread, so an already-connected referral gets the right ask
+  // instead of another connect request. The 300-char connect note stays available
+  // as the "connect" intent. Only referrals set this; the TA /draft route has no
+  // channel:'linkedin' branch, so TA LinkedIn stays a connect note for now.
+  linkedInIntents: true,
   // Referral-only row actions the TA card has no concept of.
   extraActions: ({ data, reload, onClose }) => (
     React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
@@ -837,6 +848,22 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     // route (a different motion from email), and mark the result so the compose
     // area drops the greeting/signature and the Gmail button.
     if (outChannel === "LinkedIn" && cfg.linkedIn) {
+      // Intent-tuned LinkedIn message (referrals): route through the context-aware
+      // /draft route with channel:'linkedin' so it reads the merged thread and makes
+      // the chosen ask. The "connect" intent still drafts a 300-char connect note.
+      if (cfg.linkedInIntents && draftStage !== "connect") {
+        window.tjkMutate(`${cfg.base(id)}/draft`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          // buildDraftBody emits the book-appropriate field (topic for referrals,
+          // interviewStage for TA; mode for reply / followup-sent). The server's
+          // LinkedIn branch reads the same shape as its email path.
+          body: JSON.stringify({ ...cfg.buildDraftBody(draftStage), channel: "linkedin", override }),
+        })
+          .then(r => r.json())
+          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { setDraftResult({ body: d.draft.body || "", subject: "", linkedin: true }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+          .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
+        return;
+      }
       window.tjkMutate("/api/linkedin-drafts/connect-note", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source: cfg.kind, id, ...cfg.linkedIn.payload(data, liTone), override }),
@@ -1111,16 +1138,18 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         <div className="ds-section">
           <div className="ds-label">
             <TIcon d={TI.spark} size={12} /> Outreach
-            {outChannel === "Email"
+            {(outChannel === "Email" || (outChannel === "LinkedIn" && cfg.linkedInIntents))
               ? (
-                <select value={draftStage} onChange={e => setDraftStage(e.target.value)} title="Tune the draft: Reply responds to their last message; Follow up nudges the last message you sent; the stages tune fresh outreach"
+                <select value={draftStage} onChange={e => setDraftStage(e.target.value)} title={outChannel === "LinkedIn" ? "Tune the LinkedIn message: Connect note is a short first-touch request; the rest are real DMs that read the thread and make the chosen ask" : "Tune the draft: Reply responds to their last message; Follow up nudges the last message you sent; the stages tune fresh outreach"}
                   style={{ marginLeft: "auto", fontSize: 11, padding: "2px 6px", borderRadius: 5, background: "var(--panel-2)", color: "var(--text-dim)", border: "1px solid var(--border)" }}>
                   {/* Reply is offered only when there is an inbound message to reply to;
-                      Follow up on last sent only when you have actually sent one. */}
+                      Follow up on last sent only when you have actually sent one. On
+                      LinkedIn, "Connect note" is the 300-char first-touch request. */}
                   {[
                     ...(corr.some(m => m.direction === "Received") ? [{ v: "reply", l: "↩ Reply to last message" }] : []),
                     ...(corr.some(m => m.direction === "Sent") ? [{ v: "followup-sent", l: "↗ Follow up on last sent" }] : []),
                     ...cfg.stageOpts,
+                    ...(outChannel === "LinkedIn" ? [{ v: "connect", l: "＋ Connect note" }] : []),
                   ].map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
                 </select>
               )
@@ -1134,13 +1163,15 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
               {["Email", "LinkedIn"].map(ch => {
                 const on = outChannel === ch;
                 return (
-                  <button key={ch} className="btn sm" onClick={() => setOutChannel(ch)}
+                  <button key={ch} className="btn sm" onClick={() => { setOutChannel(ch); if (ch === "Email" && draftStage === "connect") setDraftStage(cfg.defaultStage(data)); }}
                     style={{ borderColor: on ? "var(--accent)" : "var(--border)", background: on ? "var(--accent-bg)" : "transparent", color: on ? "var(--accent)" : "var(--text-dim)", fontWeight: on ? 600 : 400 }}>
-                    {ch === "LinkedIn" ? "LinkedIn note" : "Email"}
+                    {ch === "LinkedIn" ? "LinkedIn" : "Email"}
                   </button>
                 );
               })}
-              {outChannel === "LinkedIn" && (
+              {/* Tone shapes only the short connect note; a real intent-tuned DM is
+                  warm by default and reads the thread, so tone is hidden for it. */}
+              {outChannel === "LinkedIn" && (!cfg.linkedInIntents || draftStage === "connect") && (
                 <span style={{ display: "flex", gap: 4, flexWrap: "wrap", marginLeft: 4 }}>
                   {cfg.linkedIn.tones.map(t => {
                     const on = liTone === t;
@@ -1157,7 +1188,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           )}
           {!composing && !draftResult && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button className={draftBlock ? "btn ghost sm" : "btn primary sm"} onClick={() => { setComposing(true); generateDraft(!!draftBlock); }}><TIcon d={TI.spark} size={12} /> {draftBlock ? "Draft anyway" : `Draft ${outChannel === "LinkedIn" ? "LinkedIn note" : "email"}`}</button>
+              <button className={draftBlock ? "btn ghost sm" : "btn primary sm"} onClick={() => { setComposing(true); generateDraft(!!draftBlock); }}><TIcon d={TI.spark} size={12} /> {draftBlock ? "Draft anyway" : `Draft ${outChannel === "LinkedIn" ? ((cfg.linkedInIntents && draftStage !== "connect") ? "LinkedIn message" : "LinkedIn note") : "email"}`}</button>
               <button className="btn sm" onClick={() => setLogModal({ direction: "Sent", channel: outChannel, subject: "", body: "" })}><TIcon d={TI.outbound} size={12} /> Log sent</button>
               <button className="btn sm" onClick={() => setLogModal({ direction: "Received", channel: outChannel, subject: "", body: "" })}><TIcon d={TI.inbound} size={12} /> Log reply</button>
             </div>
