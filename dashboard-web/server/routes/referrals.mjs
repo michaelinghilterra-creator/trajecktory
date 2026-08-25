@@ -1,6 +1,6 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
-import { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence } from '../lib/referrals.mjs';
+import { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence, resolveReferralLink } from '../lib/referrals.mjs';
 import { reconcile, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
 import { detectAcceptances, computePendingAcceptances } from '../lib/linkedin-acceptance.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
@@ -15,7 +15,6 @@ import { getPersonContext } from '../lib/person-context.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
 import { findAndVerify, hunterSearchesLeft } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
-import { linkedinKey } from '../lib/contact-identity.mjs';
 
 export const router = express.Router();
 
@@ -27,30 +26,6 @@ function splitName(name) {
   return { first: parts[0] || '', last: parts.slice(1).join(' ') };
 }
 
-const _norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
-// Resolve a referral to its TA-outreach TWIN: the same human tracked in the TA
-// book. This is what makes the drawer "unified": a linked referral shows (and
-// logs to) the twin's correspondence, so a referral and its TA-contact twin are
-// one shared timeline. Match precedence, strongest first:
-//   1) an explicit backref stamped in notes ("from TA Outreach #<id>")
-//   2) an exact LinkedIn-URL slug match (reliable identity)
-//   3) name + company (lower confidence, only when both agree)
-// Returns { source:'ta', contact } or null (a pure-LinkedIn referral with no twin,
-// using its own correspondence store).
-function resolveReferralLink(refRow, taRows) {
-  const taRef = (refRow.notes || '').match(/TA Outreach #(\d+)/i);
-  if (taRef) { const c = taRows.find(r => r.id === parseInt(taRef[1], 10)); if (c) return { source: 'ta', contact: c }; }
-  const s = linkedinKey(refRow.linkedin);
-  if (s) {
-    const ta = taRows.find(r => linkedinKey(r.linkedin) === s); if (ta) return { source: 'ta', contact: ta };
-  }
-  const nn = _norm(refRow.name), nc = _norm(refRow.where);
-  if (nn && nn.length >= 4) {
-    const ta = taRows.find(r => _norm(`${r.first} ${r.last}`) === nn && (!nc || _norm(r.company) === nc)); if (ta) return { source: 'ta', contact: ta };
-  }
-  return null;
-}
 
 // ── Referrals ─────────────────────────────────────────────────────────────────
 // The warm channel: people in the user's own network who can introduce them or
