@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.42.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.41.0...v2.42.0) (2026-08-25)
+
+
+### Features
+
+* widen outreach cadence and fix follow-up queue surfacing ([#259](https://github.com/michaelinghilterra-creator/trajecktory/issues/259)) ([592e38a](https://github.com/michaelinghilterra-creator/trajecktory/commit/592e38aa024d7b8c5da9bb088bcf6a999f614099))
+
 ## [2.41.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.40.0...v2.41.0) (2026-08-24)
 
 
