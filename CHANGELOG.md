@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.43.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.42.0...v2.43.0) (2026-08-25)
+
+
+### Features
+
+* LinkedIn draft intent tuning and in-place contact drawer for follow-ups ([#261](https://github.com/michaelinghilterra-creator/trajecktory/issues/261)) ([45b4524](https://github.com/michaelinghilterra-creator/trajecktory/commit/45b452482684d1a56faa98f01d577c00fd8944ac))
+
 ## [2.42.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.41.0...v2.42.0) (2026-08-25)
 
 
