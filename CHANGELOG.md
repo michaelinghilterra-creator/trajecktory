@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.44.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.43.0...v2.44.0) (2026-08-27)
+
+
+### Features
+
+* Obsidian batch-eval prep/postfix scripts and bounce-apply cursor fix ([#263](https://github.com/michaelinghilterra-creator/trajecktory/issues/263)) ([56242d6](https://github.com/michaelinghilterra-creator/trajecktory/commit/56242d618b82c2fce254e692021ebcd4d5721e06))
+
 ## [2.43.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.42.0...v2.43.0) (2026-08-25)
 
 
