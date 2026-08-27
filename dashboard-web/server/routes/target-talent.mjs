@@ -271,7 +271,6 @@ const STAGE_GUIDANCE = {
   '1st Interview': 'FIRST INTERVIEW STAGE. You are early in the interview loop. Reference momentum ("enjoyed the conversation", "following the process") without naming details you may not have. Reinforce one differentiated strength and signal continued interest.',
   '2nd Interview': 'SECOND INTERVIEW STAGE. You are progressing through the loop. Acknowledge the process is advancing, add a specific new value point or artifact relevant to the team, and keep the ask low-friction (e.g. logistics or a brief sync).',
   '3rd Interview': 'THIRD / LATE INTERVIEW STAGE. You are late in the process, likely near a decision. Tone is confident and concise: reaffirm strong fit, address any likely open question proactively, and make it easy to move to next steps. Do not sound impatient.',
-  '4th Interview': 'FINAL-LOOP STAGE. You are at the last round, decision imminent. Be confident and concise: reaffirm fit in one line, proactively close any lingering question, and make the next step effortless. Do not sound anxious or over-eager.',
 };
 
 // POST /api/target-talent/:id/draft — Claude-draft outreach

@@ -54,8 +54,6 @@ const ALIASES = {
   'first interview': '1st interview', 'round 1': '1st interview',
   'second interview': '2nd interview', 'round 2': '2nd interview',
   'third interview': '3rd interview', 'round 3': '3rd interview',
-  'fourth interview': '4th interview', 'round 4': '4th interview',
-  'final round': '4th interview', 'final loop': '4th interview',
   'oferta': 'offer',
   'rechazado': 'rejected', 'rechazada': 'rejected',
   'descartado': 'discarded', 'descartada': 'discarded',
@@ -64,7 +62,7 @@ const ALIASES = {
 };
 
 // Interview-family rungs (normalized lowercase), in order.
-const INTERVIEW_STAGES = ['phone screen', '1st interview', '2nd interview', '3rd interview', '4th interview'];
+const INTERVIEW_STAGES = ['phone screen', '1st interview', '2nd interview', '3rd interview'];
 const ACTIONABLE_STATUSES = ['applied', 'responded', ...INTERVIEW_STAGES];
 
 function normalizeStatus(raw) {

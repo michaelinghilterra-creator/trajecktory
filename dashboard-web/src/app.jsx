@@ -211,7 +211,7 @@ function App() {
     try { localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ tab, pipelineView, networkSub })); }
     catch (e) { /* storage unavailable (private mode, quota); stays session-only */ }
   }, [tab, pipelineView, networkSub]);
-  const [filters, setFilters] = useState({ statuses: [], archetypes: [], scoreMin: 0 });
+  const [filters, setFilters] = useState({ statuses: [], archetypes: [], scoreMin: 0, dateFrom: '', dateTo: '' });
   const [cmdOpen, setCmdOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
 
@@ -457,13 +457,14 @@ function App() {
     const canonicalStatus = STATUS_ALIASES[newStatus] || newStatus;
 
     // Auto-attribute the exit stage: when a row goes Rejected / No Response from an
-    // interview round (or Responded / Offer), stamp the furthest stage reached so
-    // the funnel + rejections-by-stage analytics credit the right rung even though
-    // the live status is now terminal. An explicit reachedStage (the drawer's
-    // "Mark as Lost") still wins.
+    // interview round (or Offer), stamp the furthest stage reached so the funnel +
+    // rejections-by-stage analytics credit the right rung even though the live
+    // status is now terminal. Anchored at Phone Screen (the first real advance),
+    // so an Applied -> Rejected loss stays a pre-interview loss with no tag. An
+    // explicit reachedStage (the drawer's "Mark as Lost") still wins.
     if (!reachedStage && (canonicalStatus === "Rejected" || canonicalStatus === "No Response")) {
       const fi = window.FUNNEL_ORDER.indexOf(app.status);
-      if (fi >= window.FUNNEL_ORDER.indexOf("Responded")) reachedStage = app.status;
+      if (fi >= window.FUNNEL_ORDER.indexOf("Phone Screen")) reachedStage = app.status;
     }
 
     // Build notes update (prefix-tag) only if reachedStage was set
@@ -496,7 +497,7 @@ function App() {
       setDebriefPrompt({ appId: app.id, company: app.company, role: app.role, stage: app.status });
     }
     if (!silent) {
-      const verb = { Applied: "Applied to", SKIP: "Skipped", Discarded: "Discarded", Closed: "Marked closed:", "Not a Fit": "Not a fit:", Rejected: "Marked rejected:", Responded: "Marked responded:", Offer: "Marked offer:" }[newStatus] || (window.isInterviewStage(newStatus) ? `Moved to ${newStatus}:` : "Updated");
+      const verb = { Applied: "Applied to", SKIP: "Skipped", Discarded: "Discarded", Closed: "Marked closed:", "Not a Fit": "Not a fit:", Rejected: "Marked rejected:", Offer: "Marked offer:" }[newStatus] || (window.isInterviewStage(newStatus) ? `Moved to ${newStatus}:` : "Updated");
       const suffix = reachedStage ? ` (reached ${reachedStage})` : "";
       toast(`${verb} ${app.company}${suffix}`, newStatus === "Applied" || newStatus === "Offer" ? "success" : newStatus === "SKIP" || newStatus === "Discarded" || newStatus === "Closed" || newStatus === "Not a Fit" || newStatus === "Rejected" ? "warn" : null);
     }
@@ -510,9 +511,9 @@ function App() {
   const handleDrawerAction = (app, actionId, eventDate) => {
     const MAP = {
       apply_manual: 'Applied', apply_claude: 'Applied', already_applied: 'Applied',
-      responded: 'Responded', offer: 'Offer', accept: 'Offer', reopen: 'Evaluated',
-      Applied: 'Applied', Responded: 'Responded', Offer: 'Offer',
-      'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview', '4th Interview': '4th Interview',
+      offer: 'Offer', accept: 'Offer', reopen: 'Evaluated',
+      Applied: 'Applied', Offer: 'Offer',
+      'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview',
       SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
     };
     const next = MAP[actionId];
@@ -535,7 +536,7 @@ function App() {
       { section: "Navigate", icon: "▥", label: "Go to Pipeline",     run: () => setTab("pipeline") },
       { section: "Navigate", icon: "↻", label: "Go to Follow-Ups",   run: () => { setNetworkSub("followups"); setTab("network"); } },
       { section: "Navigate", icon: "◈", label: "Go to Interview",    run: () => setTab("interview") },
-      { section: "Navigate", icon: "≡", label: "Go to All Entries",  run: () => { setTab("pipeline"); setPipelineView("all"); } },
+      { section: "Navigate", icon: "≡", label: "Go to Roles",        run: () => { setTab("pipeline"); setPipelineView("table"); } },
       { section: "Navigate", icon: "◍", label: "Go to LinkedIn",     run: () => setTab("linkedin-ssi") },
       { section: "Navigate", icon: "⇄", label: "Go to Referrals",    run: () => { setNetworkSub("referrals"); setTab("network"); } },
       { section: "Navigate", icon: "◎", label: "Go to TA Outreach",  run: () => { setNetworkSub("ta"); setTab("network"); } },
@@ -600,7 +601,7 @@ function App() {
 
   // Route a universal-search pick to the right destination, reusing the existing
   // deep-link hand-offs. Contacts open their drawer; a company row opens the
-  // pipeline drawer for that exact posting (falling back to a filtered All Entries
+  // pipeline drawer for that exact posting (falling back to filtered Roles
   // when the row is not in memory); a referral lands on Referrals filtered by name.
   const pickResult = (item) => {
     if (!item) return;
@@ -610,7 +611,7 @@ function App() {
       case "company": {
         const app = apps.find(a => String(a.id) === String(item.id));
         if (app) { setDrawerApp(app); setSearch(""); }
-        else { setPendingSearch(item.company || item.name); setPipelineView("all"); setTab("pipeline"); }
+        else { setPendingSearch(item.company || item.name); setPipelineView("table"); setTab("pipeline"); }
         break;
       }
       default: break;

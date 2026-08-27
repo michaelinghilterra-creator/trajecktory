@@ -15,6 +15,8 @@ import { getPersonContext } from '../lib/person-context.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
 import { findAndVerify, hunterSearchesLeft } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
+import { computeReferralFollowups } from '../lib/followups.mjs';
+import { snoozeToday, readSnooze, writeSnooze, pruneSnooze, isMuted } from '../lib/sidecars.mjs';
 
 export const router = express.Router();
 
@@ -43,6 +45,21 @@ router.get('/api/referrals', (req, res) => {
     const activeSet = activeFormSet();
     const rows = parseReferralsMd().map(({ raw, ...rest }) => ({ ...rest, stage: stageForRow(rest, activeSet) }));
     res.json({ referrals: rows, statuses: REFERRAL_STATUSES, linkedin: linkedinStatus() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/api/referrals/followups', (req, res) => {
+  try {
+    const snooze = readSnooze();
+    if (pruneSnooze(snooze)) writeSnooze(snooze);
+    const today = snoozeToday();
+    const queue = computeReferralFollowups().filter(it => {
+      const until = snooze[it.source]?.[String(it.id)];
+      return !(until && until > today) && !isMuted(it.id, it.source);
+    });
+    res.json({ queue });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

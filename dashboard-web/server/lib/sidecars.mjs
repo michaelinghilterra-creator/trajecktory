@@ -1,11 +1,32 @@
 import fs from 'fs';
-import { SNOOZE_PATH, APPLY_DATES_PATH, STATUS_EVENTS_PATH, MUTE_PATH } from '../config.mjs';
+import path from 'path';
+import { SNOOZE_PATH, APPLY_DATES_PATH, STATUS_EVENTS_PATH, MUTE_PATH, DATA_DIR } from '../config.mjs';
 import { ALL_STATUSES } from './statuses.mjs';
 
 // A calendar date the caller supplied, or null. Anything that is not exactly
 // YYYY-MM-DD is rejected rather than written, so a malformed date degrades to
 // "today" instead of corrupting a column every timing metric parses.
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const RECONCILE_DISMISSED_PATH = path.join(DATA_DIR, 'reconcile-dismissed.json');
+
+function readReconcileDismissed() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(RECONCILE_DISMISSED_PATH, 'utf8'));
+    return new Set(Array.isArray(raw) ? raw.filter(key => typeof key === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+function addReconcileDismissed(keys) {
+  const dismissed = readReconcileDismissed();
+  for (const key of keys || []) {
+    if (typeof key === 'string' && key) dismissed.add(key);
+  }
+  const tempPath = `${RECONCILE_DISMISSED_PATH}.${process.pid}.tmp`;
+  fs.writeFileSync(tempPath, JSON.stringify([...dismissed], null, 2) + '\n');
+  fs.renameSync(tempPath, RECONCILE_DISMISSED_PATH);
+  return dismissed;
+}
 
 // ─── Follow-up snooze store ───────────────────────────────────────────────────
 // Defers a stale follow-up alert without logging a touch. Shape:
@@ -186,6 +207,7 @@ function parseStatusEvents() {
 }
 
 export {
+  readReconcileDismissed, addReconcileDismissed,
   snoozeToday, snoozeDateIn,
   readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS,
   readMute, writeMute, setMute, isMuted,

@@ -121,6 +121,18 @@ export const OUTREACH_DEFAULTS = Object.freeze({
   touchGapSchedule: null,
   maxTouchesPer30d: 6,
   awaitingReplyHold: 3,
+  // A rest day that spans BOTH channels. The per-channel gap above only spaces
+  // touches on the same channel, so a LinkedIn message on Monday left an email
+  // free on Tuesday. This holds every channel for this many days after the most
+  // recent touch on ANY channel, so a contact reached yesterday is not prompted
+  // again today regardless of which channel it was. 1 = one clear rest day
+  // (Monday touch clears Wednesday). 0 disables it.
+  minDaysBetweenTouchesAnyChannel: 1,
+  // Cool-off after someone accepts a LinkedIn connection before the "just
+  // connected, send the ask" card surfaces. Asking a brand-new connection to flag
+  // your application the day after they accept reads as hounding; let the
+  // relationship breathe first. Counted in business days. 0 surfaces immediately.
+  connectedCooloffDays: 5,
   coldOutreachCap: Object.freeze({ linkedin: 3, email: 3 }),
   perCompanyPerDay: 3,
   // At or below this many credits remaining, only decision-makers get one.
@@ -168,6 +180,8 @@ export function parseOutreachPolicy(text) {
     touchGapSchedule: parseGapSchedule(getScalar(text, 'outreach', 'touchGapSchedule')),
     maxTouchesPer30d: safeOutreachNumber(getScalar(text, 'outreach', 'maxTouchesPer30d'), OUTREACH_DEFAULTS.maxTouchesPer30d),
     awaitingReplyHold: safeOutreachNumber(getScalar(text, 'outreach', 'awaitingReplyHold'), OUTREACH_DEFAULTS.awaitingReplyHold),
+    minDaysBetweenTouchesAnyChannel: safeOutreachNumber(getScalar(text, 'outreach', 'minDaysBetweenTouchesAnyChannel'), OUTREACH_DEFAULTS.minDaysBetweenTouchesAnyChannel),
+    connectedCooloffDays: safeOutreachNumber(getScalar(text, 'outreach', 'connectedCooloffDays'), OUTREACH_DEFAULTS.connectedCooloffDays),
     coldOutreachCap: {
       linkedin: safeOutreachNumber(getNestedScalar(text, 'outreach', 'coldOutreachCap', 'linkedin'), OUTREACH_DEFAULTS.coldOutreachCap.linkedin),
       email: safeOutreachNumber(getNestedScalar(text, 'outreach', 'coldOutreachCap', 'email'), OUTREACH_DEFAULTS.coldOutreachCap.email),

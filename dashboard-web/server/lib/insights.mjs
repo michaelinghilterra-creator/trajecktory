@@ -85,10 +85,15 @@ function buildInsightsContext() {
   // rate roughly 3x. 'No Response' (ghosted) stays in the denominator but never in
   // the numerator, so ghosting honestly drags the rate down instead of vanishing.
   const { furthestIdx, idxOf } = makeFurthestIdx(parseStatusEvents());
-  const APPLIED_IDX = idxOf('Applied'), RESPONDED_IDX = idxOf('Responded');
+  const APPLIED_IDX = idxOf('Applied');
   const SCREEN_IDX = idxOf('Phone Screen'), OFFER_IDX = idxOf('Offer');
   const hasApplied   = a => furthestIdx(a) >= APPLIED_IDX;
-  const hasResponded = a => furthestIdx(a) >= RESPONDED_IDX;
+  // Responded is no longer a stage; without a rung between Applied and Phone
+  // Screen, "got traction" collapses to reaching a screen. These archetype/sector
+  // rates are read as traction (comparable to a screen benchmark), so they measure
+  // reaching a screen. The broad any-answer response rate (which counts rejections)
+  // is the Pipeline Analytics Response Rate card.
+  const hasResponded = a => furthestIdx(a) >= SCREEN_IDX;
   const hasInterview = a => furthestIdx(a) >= SCREEN_IDX;
 
   const applied = apps.filter(hasApplied);
@@ -288,17 +293,16 @@ export function stageFunnelStats() {
     conversion.push({ from, to, fromN: reached[from], toN: reached[to], rate: reached[from] ? Math.round(reached[to] / reached[from] * 100) : 0 });
   }
 
-  // Attribute each terminal loss to the FURTHEST rung it reached, across the whole
-  // funnel — Responded and Offer included, not just the interview rounds. Uses the
-  // shared furthestIdx (events + the [reached:] tag) so this agrees with the
-  // "reached each stage" panel. Previously a Responded loss and an Offer loss both
-  // fell into "Pre-interview", which mislabeled the deepest reach as the shallowest.
-  const RESPONDED_STAGE = 'Responded', OFFER_STAGE = 'Offer';
+  // Attribute each terminal loss to the FURTHEST rung it reached, across the
+  // funnel — the interview rounds and Offer. Uses the shared furthestIdx (events +
+  // the [reached:] tag) so this agrees with the "reached each stage" panel.
+  // Responded is no longer a rung, so a loss with no screen/interview signal is a
+  // pre-interview loss (rejected before anyone talked to you).
+  const OFFER_STAGE = 'Offer';
   const rejectedAtStage = {};
   for (const s of INTERVIEW_STAGES) rejectedAtStage[s] = 0;
-  rejectedAtStage[RESPONDED_STAGE] = 0;  // lost after a reply, before any interview
   rejectedAtStage[OFFER_STAGE] = 0;      // lost at/after an offer (deepest reach)
-  let rejectedPreInterview = 0;  // never advanced past Applied — lost before any reply
+  let rejectedPreInterview = 0;  // never advanced past Applied — lost before any screen
 
   const terminal = apps.filter(a => a.status === 'Rejected' || a.status === 'No Response');
   for (const a of terminal) {
@@ -320,7 +324,6 @@ export function stageFunnelStats() {
     // knowable answer: they were rejected before anyone talked to you.
     if (rung === OFFER_STAGE) rejectedAtStage[OFFER_STAGE]++;
     else if (isInterviewStage(rung)) rejectedAtStage[rung]++;
-    else if (rung === RESPONDED_STAGE) rejectedAtStage[RESPONDED_STAGE]++;
     else rejectedPreInterview++;
   }
 

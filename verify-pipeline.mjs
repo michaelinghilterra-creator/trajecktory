@@ -40,8 +40,8 @@ mkdirSync(REPORTS_DIR, { recursive: true });
 // Canonical statuses + aliases come from states.yml (the source of truth),
 // with a hardcoded fallback if the file is missing or unparseable.
 const FALLBACK_STATUSES = [
-  'evaluated', 'applied', 'responded',
-  'phone screen', '1st interview', '2nd interview', '3rd interview', '4th interview',
+  'evaluated', 'applied',
+  'phone screen', '1st interview', '2nd interview', '3rd interview',
   'offer', 'rejected', 'discarded', 'skip', 'closed', 'not a fit', 'no response',
 ];
 const EXTRA_ALIASES = {

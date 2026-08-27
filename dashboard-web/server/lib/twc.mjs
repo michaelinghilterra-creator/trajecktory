@@ -68,12 +68,10 @@ export function twcWeekStart(ymd) {
 const RESULT_BY_STATUS = {
   Evaluated: 'Submitted application',
   Applied: 'Submitted application',
-  Responded: 'Employer responded',
   'Phone Screen': 'Interviewed',
   '1st Interview': 'Interviewed',
   '2nd Interview': 'Interviewed',
   '3rd Interview': 'Interviewed',
-  '4th Interview': 'Interviewed',
   Offer: 'Offer received',
   Rejected: 'Not hired',
   'No Response': 'No reply',

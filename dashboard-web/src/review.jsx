@@ -113,7 +113,7 @@ function replyCompany(reply) {
 
 // One reply row, made actionable. The reply resolves to one or more candidate
 // applications (server-attached by company); the user picks when there is more
-// than one, then Log (note only), Responded, or Rejected. Each POSTs to the
+// than one, then Log (note only) or Rejected. Each POSTs to the
 // existing /replies/:msgId/:action, which logs a note and (for the status ones)
 // flips the application status. Once acted, the row shows a confirmation.
 function ReplyRow({ reply, toast }) {
@@ -188,7 +188,6 @@ function ReplyRow({ reply, toast }) {
             <span className="dim">{cands[0].role} — {cands[0].status}</span>
           )}
           <button className="btn sm" onClick={() => act('log')} disabled={busy}>Log</button>
-          <button className="btn sm" onClick={() => act('responded')} disabled={busy}>Responded</button>
           <button className="btn ghost sm" onClick={() => act('rejected')} disabled={busy}>Rejected</button>
           <button className="btn ghost sm" onClick={() => act('not-related')} disabled={busy} title="This email isn't about your job search. Hide it and stop surfacing future emails from this sender.">Not job-related</button>
         </div>
@@ -236,7 +235,7 @@ function GmailSweep({ sweep, onApplyBounces, busy, toast }) {
         </div>
       )}
       <div className="dim" style={{ fontSize: 12, marginTop: 8, marginBottom: 4 }}>
-        Replies since June: {all.length} to handle{handledCount ? `, ${handledCount} already handled` : ''} · {unknown.length} unknown. Log records it on the application; Responded/Rejected also set status.
+        Replies since June: {all.length} to handle{handledCount ? `, ${handledCount} already handled` : ''} · {unknown.length} unknown. Log records it on the application; Rejected also sets status.
         {all.length > SWEEP_ROW_LIMIT ? ` Showing the first ${SWEEP_ROW_LIMIT} (rejections first).` : ''}
       </div>
       {rows.length === 0

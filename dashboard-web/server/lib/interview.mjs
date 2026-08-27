@@ -58,7 +58,7 @@ function prettifyDocName(base, companySlug) {
   return s.length > DOC_LABEL_MAX ? s.slice(0, DOC_LABEL_MAX - 1).trimEnd() + '…' : s;
 }
 
-// Active for this tab = the interview ladder (Phone Screen .. 4th Interview,
+// Active for this tab = the interview ladder (Phone Screen .. 3rd Interview,
 // from states.yml via statuses.mjs) plus Offer, which is still a live session
 // you prep for (the negotiation call). Everything else — Applied, Rejected,
 // Discarded, or no tracker row at all — is archive.
@@ -175,7 +175,7 @@ function buildSession(folder, row) {
     : null;
 
   // The tracker is only a usable stage fallback when its status IS a stage: the
-  // interview ladder (Phone Screen .. 4th Interview). "Rejected"/"Discarded"/
+  // interview ladder (Phone Screen .. 3rd Interview). "Rejected"/"Discarded"/
   // "Offer" are OUTCOMES, not rounds: a round that was later rejected is still a
   // hiring-manager round, and stamping "Rejected" on it states something that never
   // happened. And even a real stage only describes where the app stands TODAY, i.e.

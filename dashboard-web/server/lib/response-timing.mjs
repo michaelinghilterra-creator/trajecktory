@@ -45,7 +45,9 @@ export function responseProgressStats({
   const cleanWindows = [...new Set(windows.filter(Number.isFinite))].sort((a, b) => a - b);
   const applyAnchor = makeApplyAnchor({ applyDates, events });
   const { furthestIdx } = makeFurthestIdx(events);
-  const respondedIdx = FUNNEL_ORDER.indexOf('Responded');
+  // Responded is no longer a stage: a row counts as decided when it reached a
+  // screen or later (or carries a terminal decision status, handled below).
+  const screenIdx = FUNNEL_ORDER.indexOf('Phone Screen');
   let preAnchorDropped = 0;
 
   const records = [];
@@ -85,7 +87,7 @@ export function responseProgressStats({
     }
     const stampedIdx = FUNNEL_ORDER.indexOf(app.reached);
     const reachedIdx = Math.max(furthestIdx(app), stampedIdx);
-    const rowDecision = decisionBucket(app.status) !== null || reachedIdx >= respondedIdx;
+    const rowDecision = decisionBucket(app.status) !== null || reachedIdx >= screenIdx;
     records.push({
       app,
       anchor,

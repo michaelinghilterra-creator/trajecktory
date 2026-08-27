@@ -472,6 +472,7 @@ for (const suite of [
   'tests/tracker.test.mjs',
   'tests/tracker-writers.test.mjs',
   'tests/pipeline.test.mjs',
+  'tests/pipeline-firstseen.test.mjs',
   'tests/triage-results.test.mjs',
   'tests/portal-additions.test.mjs',
   'tests/backfill-tracker-urls.test.mjs',

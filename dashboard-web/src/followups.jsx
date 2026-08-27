@@ -1,6 +1,6 @@
 // Follow-Ups Tab — Stale Applications Action Queue
 // Dedicated page for the highest-leverage daily action: timing follow-ups
-// for Applied / Responded / Interview entries that have gone quiet.
+// for Applied / Interview entries that have gone quiet.
 // Each row carries coach intelligence from the cadence rules (server-side)
 // so you see at a glance whether a touch is overdue, due now, or whether
 // it's time to give up entirely.
@@ -25,13 +25,11 @@ const COACH_COLOR = {
 const STATUS_COLOR = {
   // Application statuses
   Applied:   { bg: 'rgba(96,165,250,0.16)', color: '#60a5fa' },
-  Responded: { bg: 'rgba(34,211,238,0.16)', color: '#22d3ee' },
   // Interview ladder (amber -> deep-orange ramp)
   'Phone Screen':  { bg: 'rgba(252,211,77,0.16)', color: '#fcd34d' },
   '1st Interview': { bg: 'rgba(251,191,36,0.16)', color: '#fbbf24' },
   '2nd Interview': { bg: 'rgba(245,158,11,0.16)', color: '#f59e0b' },
   '3rd Interview': { bg: 'rgba(249,115,22,0.16)', color: '#f97316' },
-  '4th Interview': { bg: 'rgba(234,88,12,0.16)',  color: '#ea580c' },
   // Target-talent statuses (shared color tokens — different meaning but same palette)
   Sent:                { bg: 'rgba(96,165,250,0.16)', color: '#60a5fa' },
   Replied:             { bg: 'rgba(34,211,238,0.16)', color: '#22d3ee' },
@@ -80,8 +78,8 @@ function ChannelBadge({ channel }) {
   );
 }
 
-// Bucket by days since last touch. Tiered thresholds (Applied 10d, Responded
-// 5d, Interview 3d) mean items can arrive on this list well under 14d, so the
+// Bucket by days since last touch. Tiered thresholds (Applied 10d, Interview
+// 3d) mean items can arrive on this list well under 14d, so the
 // buckets start at 0d and step up from there.
 // `days` is BUSINESS days (weekends excluded), so the labels say so — a "45+"
 // here is ~9 calendar weeks, and reading it as calendar days undersells the gap.
@@ -300,7 +298,7 @@ function FUOverview({ items, thresholds, taThreshold, onOpen, compact }) {
 }
 
 window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, apps = [], toast, chromeless }) {
-  const [data, setData]       = useStateF({ thresholds: { Applied: 7, Responded: 5, 'Phone Screen': 3, '1st Interview': 3, '2nd Interview': 3, '3rd Interview': 3, '4th Interview': 3 }, taThreshold: 14, ghostDays: 45, warm: [], cold: [], snoozed: [], ghostedCandidates: [] });
+  const [data, setData]       = useStateF({ thresholds: { Applied: 7, 'Phone Screen': 3, '1st Interview': 3, '2nd Interview': 3, '3rd Interview': 3 }, taThreshold: 14, ghostDays: 45, warm: [], cold: [], snoozed: [], ghostedCandidates: [] });
   const [loading, setLoading] = useStateF(true);
   const [selected, setSelected] = useStateF(null); // app id (only for 'app' source rows)
   const [statusFilter, setStatusFilter] = useStateF([]);
@@ -555,14 +553,14 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
   // (handleAction) and then refresh the queue.
   const FU_ACTION_MAP = {
     apply_manual: 'Applied', apply_claude: 'Applied', already_applied: 'Applied',
-    responded: 'Responded', offer: 'Offer', accept: 'Offer',
+    offer: 'Offer', accept: 'Offer',
     reopen: 'Evaluated',
     // funnel statuses (advance CTA / stage track emit the canonical status) map to themselves
-    Applied: 'Applied', Responded: 'Responded', Offer: 'Offer',
-    'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview', '4th Interview': '4th Interview',
+    Applied: 'Applied', Offer: 'Offer',
+    'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview',
     SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
   };
-  const ACTIVE = ['Evaluated', 'Applied', 'Responded', ...window.INTERVIEW_STAGES, 'Offer'];
+  const ACTIVE = ['Evaluated', 'Applied', ...window.INTERVIEW_STAGES, 'Offer'];
   // onAction here is app.jsx's handleAction(app, status, silent, reachedStage,
   // eventDate) — the date rides in the 5th slot, so the two middle args stay
   // undefined to keep their existing defaults.
@@ -840,86 +838,10 @@ function SourcePill({ source }) {
   );
 }
 
-// Pipeline "Awaiting response": the APPLICATION follow-up view (has this app gone
-// quiet?). It lives in Pipeline now, not Follow-Ups, because it is application-level
-// — Follow-Ups is contact-level after the revamp. Built here so it can reuse
-// FollowupRow, the age grouping, FUKpi, and the /stale endpoint; pipeline.jsx mounts
-// it via window.AwaitingResponseView and hands in onOpenApp to open the app drawer.
-window.AwaitingResponseView = function AwaitingResponseView({ onOpenApp, search }) {
-  const [data, setData] = useStateF({});
-  const [loading, setLoading] = useStateF(true);
-  const load = () => fetch('/api/followups/stale').then(r => r.json()).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
-  useEffectF(() => { load(); }, []);
-  const act = (url, body) => window.tjkMutate(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(() => load()).catch(() => {});
-  // Application stale items only (both warm and cold); contacts stay in Follow-Ups.
-  const appItems = useMemoF(() => [...(data.warm || []), ...(data.cold || [])].filter(it => (it.source || 'app') === 'app'), [data]);
-  const q = (search || '').trim().toLowerCase();
-  const items = q ? appItems.filter(it => `${it.company || ''} ${it.role || ''}`.toLowerCase().includes(q)) : appItems;
-  const grouped = useMemoF(() => {
-    const order = ['45d+', '21-45d', '10-21d', '0-10d']; const groups = {};
-    for (const it of items) { const k = ageBucket(it.daysSinceLastTouch).key; (groups[k] = groups[k] || []).push(it); }
-    const sample = { '45d+': 45, '21-45d': 21, '10-21d': 10, '0-10d': 0 };
-    return order.map(k => ({ key: k, label: ageBucket(sample[k]).label, items: groups[k] || [] })).filter(g => g.items.length);
-  }, [items]);
-  const ghosted = data.ghostedCandidates || [];
-  const parseScore = s => { const m = String(s ?? '').match(/(\d+(?:\.\d+)?)/); return m ? parseFloat(m[1]) : 0; };
-  const interviewStale = items.filter(it => window.isInterviewStage(it.status)).length;
-  const highLeverage = items.filter(it => parseScore(it.score) >= 4.0).length;
-  const avgSilence = items.length ? Math.round(items.reduce((s, it) => s + (it.daysSinceLastTouch || 0), 0) / items.length) : 0;
-  const archiveGhosted = () => {
-    const ids = ghosted.map(g => g.id);
-    if (!ids.length) return;
-    if (!window.confirm(`Archive ${ids.length} ghosted application${ids.length === 1 ? '' : 's'} to "No Response"?\n\nThey'll leave the active pipeline but still count as applications-with-no-reply in your analytics.`)) return;
-    act('/api/followups/archive-ghosted', { ids });
-  };
-
-  if (loading) return <div className="no-data" style={{ padding: 24 }}>Loading…</div>;
-
-  return (
-    <div className="col" style={{ gap: 14 }}>
-      <div className="ta-head">
-        <div>
-          <h1>Awaiting response</h1>
-          <div className="sub">{items.length} application{items.length === 1 ? '' : 's'} sent and going quiet. Nudge the strongest first; snooze or mark awaiting to stop the nag.</div>
-        </div>
-      </div>
-      {items.length > 0 && (
-        <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
-          <FUKpi label="Awaiting" value={items.length} sub="applications with no reply yet" tone="neutral" />
-          <FUKpi label="Interview silence" value={interviewStale} sub={interviewStale ? 'nudge same-day' : 'none right now'} tone={interviewStale ? 'danger' : 'good'} />
-          <FUKpi label="High leverage" value={highLeverage} sub="score ≥ 4.0 going cold" tone={highLeverage ? 'accent' : 'neutral'} />
-          <FUKpi label="Avg silence" value={`${avgSilence}d`} sub="mean days since last touch" tone={avgSilence >= 21 ? 'warn' : 'neutral'} />
-        </div>
-      )}
-      {ghosted.length > 0 && (
-        <div className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span className="dim" style={{ fontSize: 12 }}>{ghosted.length} application{ghosted.length === 1 ? '' : 's'} past the ghost window with no reply.</span>
-          <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={archiveGhosted}>Archive to No Response</button>
-        </div>
-      )}
-      {grouped.length === 0 ? (
-        <div className="card" style={{ padding: 18 }}>
-          <div className="dim" style={{ fontSize: 12 }}>Nothing awaiting a nudge. Applications you've sent are either fresh or already answered.</div>
-        </div>
-      ) : grouped.map(group => (
-        <div key={group.key} className="card padded-lg">
-          <div className="card-head" style={{ marginBottom: 10 }}>
-            <span className="card-title">{group.label}</span>
-            <span className="card-meta mono">{group.items.length} entr{group.items.length === 1 ? 'y' : 'ies'}</span>
-          </div>
-          <div className="col" style={{ gap: 6 }}>
-            {group.items.map(it => (
-              <FollowupRow key={`app-${it.id}`} item={it}
-                onSnooze={() => act('/api/followups/snooze', { source: 'app', id: it.id, days: 14 })}
-                onMute={() => act('/api/followups/mute', { id: it.id })}
-                onOpen={() => onOpenApp && onOpenApp(it.id)} />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
+// (Removed) The Pipeline "Awaiting response" subtab and its AwaitingResponseView
+// lived here. It duplicated the Follow-Ups stale feed filtered to applications and
+// added no distinct value, so it was retired. FollowupRow below is still shared by
+// the Follow-Ups tab.
 
 function FollowupRow({ item, onOpen, onSnooze, onMute, onUnmute, onFind }) {
   const coachStyle = COACH_COLOR[item.coachLevel] || COACH_COLOR.overdue;

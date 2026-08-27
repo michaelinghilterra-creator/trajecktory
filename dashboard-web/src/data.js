@@ -8,14 +8,14 @@ window.APPS = (() => {
     [4,  "2026-04-29", "Example Co",        "Director, Partner Ecosystem", "BizDev",        4.0, "Evaluated", 210, 220, "Defense",     "Mid",     "Edge compute, gov-heavy"],
     [5,  "2026-04-28", "Lattice",           "VP, Revenue Operations",         "RevOps",        4.2, "Applied",   235, 240, "HR-Tech",     "Late",    "Recruiter reached out"],
     [6,  "2026-04-28", "Ramp",              "Head of Sales Operations",       "SalesOps",      4.6, "2nd Interview", 270, 250, "Fintech",     "Late",    "Round 2 with CRO Wed"],
-    [7,  "2026-04-27", "Notion",            "Director, RevOps",               "RevOps",        4.1, "Responded", 225, 230, "Productivity","Late",    "Recruiter screen scheduled"],
+    [7,  "2026-04-27", "Notion",            "Director, RevOps",               "RevOps",        4.1, "Phone Screen", 225, 230, "Productivity","Late",    "Recruiter screen scheduled"],
     [8,  "2026-04-27", "Vanta",             "VP, Revenue Strategy",           "Strategy",      4.3, "Applied",   245, 240, "Security",    "Late",    "Solid comp, fast growth"],
     [9,  "2026-04-26", "Linear",            "Head of GTM Analytics",          "Analytics",     4.4, "1st Interview", 240, 235, "Productivity","Mid",     "Loop on Friday"],
     [10, "2026-04-26", "Modal Labs",        "Director, Channel Enablement",    "SalesDev",      3.6, "Evaluated", 195, 220, "AI Infra",    "Early",   "Early stage, scrappy"],
     [11, "2026-04-25", "Anthropic",         "VP, Revenue Operations",         "RevOps",        4.7, "Applied",   285, 260, "AI",          "Late",    "Dream comp"],
     [12, "2026-04-25", "Replicate",         "Director, BizDev",               "BizDev",        3.8, "Evaluated", 200, 220, "AI Infra",    "Early",   "Borderline, weigh equity"],
     [13, "2026-04-24", "Mercury",           "Head of Revenue Operations",     "RevOps",        4.2, "Applied",   235, 235, "Fintech",     "Mid",     "Banking-for-startups"],
-    [14, "2026-04-24", "Retool",            "Director, Analytics",            "Analytics",     4.0, "Responded", 220, 225, "DevTools",    "Mid",     "Hiring manager wants chat"],
+    [14, "2026-04-24", "Retool",            "Director, Analytics",            "Analytics",     4.0, "Phone Screen", 220, 225, "DevTools",    "Mid",     "Hiring manager wants chat"],
     [15, "2026-04-23", "Hex",               "VP, GTM Strategy",               "Strategy",      4.1, "Applied",   230, 230, "Analytics",   "Mid",     "Notebook-native"],
     [16, "2026-04-23", "Census",            "Director, RevOps",               "RevOps",        3.9, "Rejected",  210, 225, "Data",        "Mid",     "Comp gap, declined"],
     [17, "2026-04-22", "Airbyte",           "Head of Partner Programs",      "SalesDev",      3.5, "Discarded", 180, 220, "Data",        "Mid",     "Below band"],
@@ -23,7 +23,7 @@ window.APPS = (() => {
     [19, "2026-04-21", "Clay",              "Director, RevOps",               "RevOps",        4.3, "Applied",   240, 235, "GTM Tools",   "Early",   "Hot, very hot"],
     [20, "2026-04-21", "Apollo.io",         "VP, Sales Operations",           "SalesOps",      3.7, "Evaluated", 205, 225, "GTM Tools",   "Mid",     "Mature, slowing"],
     [21, "2026-04-20", "Pinecone",          "Director, BizDev",               "BizDev",        3.9, "Applied",   215, 225, "AI Infra",    "Mid",     "Sent referral"],
-    [22, "2026-04-20", "Decagon",           "Head of GTM",                    "Strategy",      4.4, "Responded", 250, 245, "AI",          "Early",   "AI agents, fast"],
+    [22, "2026-04-20", "Decagon",           "Head of GTM",                    "Strategy",      4.4, "Phone Screen", 250, 245, "AI",          "Early",   "AI agents, fast"],
     [23, "2026-04-19", "Sierra",            "VP, Revenue Operations",         "RevOps",        4.6, "Applied",   270, 255, "AI",          "Early",   "Bret Taylor, premium"],
     [24, "2026-04-19", "Glean",             "Director, Analytics",            "Analytics",     4.2, "2nd Interview", 235, 235, "AI",          "Late",    "Onsite scheduled"],
     [25, "2026-04-18", "Writer",            "Head of RevOps",                 "RevOps",        3.8, "Rejected",  210, 230, "AI",          "Mid",     "Already filled"],
@@ -52,7 +52,7 @@ window.APPS = (() => {
     [48, "2026-04-07", "Alloy",             "VP, RevOps",                     "RevOps",        4.2, "Applied",   240, 235, "Fintech",     "Mid",     "Identity fraud"],
     [49, "2026-04-06", "Stytch",            "Director, Analytics",            "Analytics",     3.8, "Rejected",  205, 225, "Auth",        "Mid",     "Internal hire"],
     [50, "2026-04-06", "Rippling",          "VP, Revenue Operations",         "RevOps",        4.4, "Applied",   260, 250, "HR-Tech",     "Late",    "Multi-product"],
-    [51, "2026-04-05", "Deel",              "Head of GTM Analytics",          "Analytics",     4.0, "Responded", 225, 230, "HR-Tech",     "Late",    "Global payroll"],
+    [51, "2026-04-05", "Deel",              "Head of GTM Analytics",          "Analytics",     4.0, "Phone Screen", 225, 230, "HR-Tech",     "Late",    "Global payroll"],
     [52, "2026-04-05", "Brex",              "Director, RevOps",               "RevOps",        3.9, "Applied",   215, 225, "Fintech",     "Late",    "Recruiter pinged"],
     [53, "2026-05-12", "Contoso Capital",   "Director of Customer Support", "RevOps",        4.2, "Evaluated", 250, 240, "Fintech",     "Mid",     "Series B lender; build RevOps from scratch"],
   ];
@@ -66,10 +66,10 @@ window.APPS = (() => {
 // Interview-family rungs, in funnel order. The single place the ladder is
 // defined; the rest of the UI derives STATUSES / FUNNEL_ORDER / colors from it
 // so we never re-hardcode the rounds per view. Mirrors templates/states.yml.
-window.INTERVIEW_STAGES = ["Phone Screen","1st Interview","2nd Interview","3rd Interview","4th Interview"];
+window.INTERVIEW_STAGES = ["Phone Screen","1st Interview","2nd Interview","3rd Interview"];
 window.isInterviewStage = (s) => window.INTERVIEW_STAGES.includes(s);
 
-window.STATUSES = ["Evaluated","Applied","Responded",...window.INTERVIEW_STAGES,"Offer","Rejected","Discarded","SKIP","Closed","Not a Fit","No Response"];
+window.STATUSES = ["Evaluated","Applied",...window.INTERVIEW_STAGES,"Offer","Rejected","Discarded","SKIP","Closed","Not a Fit","No Response"];
 // The SINGLE source of the archetype list for the browser — the Sankey, the
 // pipeline filter and grouping, and the tracker all read window.ARCHETYPES from
 // here (data.js loads before every bundle). Keep this in the same ORDER as, and
@@ -84,13 +84,11 @@ window.ARCHETYPES = ["RevOps","SalesOps","Analytics","Marketing","BizDev","Sales
 window.STATUS_META = {
   Evaluated:  { color: "#a78bfa", bg: "rgba(167,139,250,0.12)", icon: "◆" },
   Applied:    { color: "#60a5fa", bg: "rgba(96,165,250,0.12)",  icon: "↗" },
-  Responded:  { color: "#22d3ee", bg: "rgba(34,211,238,0.12)",  icon: "↩" },
   // Interview ladder: amber -> deep-orange ramp (heats up toward Offer green).
   "Phone Screen":   { color: "#fcd34d", bg: "rgba(252,211,77,0.14)",  icon: "☎" },
   "1st Interview":  { color: "#fbbf24", bg: "rgba(251,191,36,0.14)",  icon: "①" },
   "2nd Interview":  { color: "#f59e0b", bg: "rgba(245,158,11,0.14)",  icon: "②" },
   "3rd Interview":  { color: "#f97316", bg: "rgba(249,115,22,0.14)",  icon: "③" },
-  "4th Interview":  { color: "#ea580c", bg: "rgba(234,88,12,0.14)",   icon: "④" },
   // Defensive fallback for any legacy "Interview" rows (colored as 1st round).
   Interview:  { color: "#fbbf24", bg: "rgba(251,191,36,0.14)",  icon: "●" },
   Offer:      { color: "#22c55e", bg: "rgba(34,197,94,0.14)",   icon: "★" },
@@ -108,7 +106,7 @@ window.fmtScore = (s) => s != null ? s.toFixed(1) : "N/A";
 
 // Funnel order — left to right. Derived from the interview ladder so the rungs
 // live in exactly one place.
-window.FUNNEL_ORDER = ["Evaluated","Applied","Responded",...window.INTERVIEW_STAGES,"Offer"];
+window.FUNNEL_ORDER = ["Evaluated","Applied",...window.INTERVIEW_STAGES,"Offer"];
 
 // Parse a JD-stated comp string into a clean display + midpoint $K number.
 // Handles ranges ("$165,000 – $185,000 USD/year" → mid 175), single numbers
@@ -194,6 +192,14 @@ window.appReached = (app, stage) => {
   const reachedIdx = order.indexOf(reached);
   return reachedIdx >= idx;
 };
+
+// Did the company respond? The single derived reply-rate rule, mirror of
+// hasResponded() in server/lib/statuses.mjs. "Responded" is no longer a stage:
+// a response = the app reached a screen or later (any interview rung or Offer),
+// OR the company said no (Rejected). A still-Applied row, a ghost (No Response),
+// and candidate-side closes do NOT count. A rejection after a screen already
+// counts via appReached; this also credits an Applied -> Rejected form letter.
+window.appResponded = (app) => window.appReached(app, "Phone Screen") || app.status === "Rejected";
 
 window.TODAY = new Date();
 window.daysAgo = (iso) => Math.floor((window.TODAY - new Date(iso)) / 86400000);

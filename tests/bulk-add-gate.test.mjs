@@ -93,15 +93,18 @@ check(manualRow?.notes === unsupported.notes && !/\[tier:|\[src:/.test(manualRow
 
 reset();
 const legacy = await post({ contacts: [unsupported] });
+// Email finding now runs in the background, so the response returns
+// emailVerification ('running' | 'skipped') instead of the old synchronous
+// emailsFound / budgetHit counts.
 const responseFields = [
-  'budgetHit', 'emailsFound', 'gated', 'ok', 'rejected', 'requested',
+  'emailVerification', 'gated', 'ok', 'rejected', 'requested',
   'skipped', 'verifierKeys', 'written',
 ];
 check(legacy.body.gated === false && legacy.body.rejected.length === 0,
   'missing source reports the ungated path');
-check(JSON.stringify(Object.keys(legacy.body).sort()) === JSON.stringify(responseFields)
+check(JSON.stringify(Object.keys(legacy.body).sort()) === JSON.stringify(responseFields.slice().sort())
   && legacy.body.requested === 1 && legacy.body.written === 1 && legacy.body.skipped === 0,
-  'missing source preserves the legacy response fields and adds only gate metadata');
+  'missing source preserves the response fields and adds only gate metadata');
 
 server.closeAllConnections?.();
 await new Promise(resolve => server.close(resolve));

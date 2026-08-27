@@ -20,17 +20,13 @@ states:
 
   - id: applied
     label: Applied
-    aliases: [aplicado, enviada, aplicada, sent]
+    # 'responded'/'respondido' fold in here: a company reply with nothing booked
+    # is not a distinct funnel stage (a polite "we'll be in touch" is not
+    # traction). Response is derived from reaching a screen or a rejection.
+    aliases: [aplicado, enviada, aplicada, sent, responded, respondido]
     description: Application submitted
     dashboard_group: applied
     funnel_order: 1
-
-  - id: responded
-    label: Responded
-    aliases: [respondido]
-    description: Company has responded (not yet interview)
-    dashboard_group: responded
-    funnel_order: 2
 
   - id: phone_screen
     label: Phone Screen
@@ -38,7 +34,7 @@ states:
     description: Recruiter / TA phone screen
     dashboard_group: interview
     group: interview
-    funnel_order: 3
+    funnel_order: 2
 
   - id: interview_1
     label: 1st Interview
@@ -46,7 +42,7 @@ states:
     description: First interview round (hiring manager or first panel)
     dashboard_group: interview
     group: interview
-    funnel_order: 4
+    funnel_order: 3
 
   - id: interview_2
     label: 2nd Interview
@@ -54,30 +50,24 @@ states:
     description: Second interview round
     dashboard_group: interview
     group: interview
-    funnel_order: 5
+    funnel_order: 4
 
   - id: interview_3
     label: 3rd Interview
-    aliases: [third interview, round 3, 3rd interview, interview 3]
-    description: Third interview round
+    # 3rd is now the final interview rung. Legacy '4th interview'/'final round'
+    # text folds in here so old rows and aliases still resolve.
+    aliases: [third interview, round 3, 3rd interview, interview 3, fourth interview, round 4, 4th interview, interview 4, final round, final loop]
+    description: Third (final) interview round
     dashboard_group: interview
     group: interview
-    funnel_order: 6
-
-  - id: interview_4
-    label: 4th Interview
-    aliases: [fourth interview, round 4, 4th interview, interview 4, final round, final loop]
-    description: Fourth interview round (final loop)
-    dashboard_group: interview
-    group: interview
-    funnel_order: 7
+    funnel_order: 5
 
   - id: offer
     label: Offer
     aliases: [oferta]
     description: Offer received
     dashboard_group: offer
-    funnel_order: 8
+    funnel_order: 6
 
   - id: rejected
     label: Rejected

@@ -922,21 +922,34 @@ function WeeklyView({ weeks, target, setSsiData }) {
   ];
   const recordedCount = (weeks || []).filter((w) => w.brand != null).length;
 
-  // On a fresh install `weeks` is empty, which left the dropdown with no options,
-  // selectedWk stuck at null, and Save permanently disabled: the tracker could
-  // never be started at all. Offer this week plus the next eleven so there is
-  // always something to record against. Real weeks win as soon as any exist.
+  // Keep enough empty weeks ahead that the tracker never runs out of options.
   const weekOptions = useMemo(() => {
-    if (weeks && weeks.length) return weeks;
-    const monday = new Date();
-    monday.setHours(0, 0, 0, 0);
-    monday.setDate(monday.getDate() - ((monday.getDay() || 7) - 1));
+    const storedWeeks = weeks || [];
     const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    return Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(monday);
-      d.setDate(d.getDate() + i * 7);
-      return { wk: i + 1, date: ymd(d), brand: null, people: null, engage: null, rel: null };
-    });
+    const usedWeeks = new Set(storedWeeks.map((w) => w.wk));
+    const usedDates = new Set(storedWeeks.map((w) => w.date));
+    const lastWk = storedWeeks.reduce((max, w) => Math.max(max, w.wk), 0);
+    const latestDate = storedWeeks.reduce((latest, w) => (!latest || w.date > latest ? w.date : latest), "");
+    const nextDate = latestDate ? new Date(`${latestDate}T00:00:00`) : new Date();
+    nextDate.setHours(0, 0, 0, 0);
+    if (latestDate) nextDate.setDate(nextDate.getDate() + 7);
+    else nextDate.setDate(nextDate.getDate() - ((nextDate.getDay() || 7) - 1));
+
+    const generated = [];
+    let nextWk = lastWk + 1;
+    const generatedCount = storedWeeks.length ? 8 : 12;
+    while (generated.length < generatedCount) {
+      const date = ymd(nextDate);
+      while (usedWeeks.has(nextWk)) nextWk += 1;
+      if (!usedDates.has(date)) {
+        generated.push({ wk: nextWk, date, brand: null, people: null, engage: null, rel: null });
+        usedWeeks.add(nextWk);
+        usedDates.add(date);
+        nextWk += 1;
+      }
+      nextDate.setDate(nextDate.getDate() + 7);
+    }
+    return [...storedWeeks, ...generated];
   }, [weeks]);
 
   // Default the form to the first un-recorded week; fall back to the first week.
@@ -1034,7 +1047,7 @@ function WeeklyView({ weeks, target, setSsiData }) {
         <div className="card">
           <div className="card-head">
             <div className="card-title"><span className="dot" />Momentum</div>
-            <span className="mute2 mono" style={{ marginLeft: "auto", fontSize: 10.5 }}>{recordedCount}/12 weeks logged</span>
+            <span className="mute2 mono" style={{ marginLeft: "auto", fontSize: 10.5 }}>{recordedCount} weeks logged</span>
           </div>
           <WeekTrend weeks={weeks || []} target={target} height={148} />
           <div className="chips" style={{ marginTop: 16, gap: 12 }}>

@@ -116,7 +116,7 @@ function formatDebriefNote(stage, fields = {}, { date = '', company = '', role =
 // `apps` are parsed tracker rows (a.status + a.notes carry the [reached:] tag);
 // `notes` is the app-notes map ({ "<id>": [{ text }] }). Injectable for tests.
 function pendingDebriefs({ apps = [], notes = {} } = {}) {
-  const ladder = INTERVIEW_STAGES;            // ordered Phone Screen -> 4th Interview
+  const ladder = INTERVIEW_STAGES;            // ordered Phone Screen -> 3rd Interview
   const stageSet = new Set(ladder);
   const out = [];
   for (const a of apps) {

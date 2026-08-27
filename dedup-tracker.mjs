@@ -66,7 +66,6 @@ const STATUS_RANK = {
   '1st interview': 6,
   '2nd interview': 7,
   '3rd interview': 8,
-  '4th interview': 9,
   'offer': 10,
   // Defensive: legacy generic interview folds into the 1st round.
   'interview': 6,

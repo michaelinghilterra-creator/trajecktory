@@ -15,21 +15,20 @@ import { resolvePeople } from './contact-identity.mjs';
 import { readPins } from './contact-links.mjs';
 import { buildTimeline } from './contact-timeline.mjs';
 import { INFLUENCE_RANK, DEFAULT_TIER } from '../../../lib/influence-tier.mjs';
+import { getOutreachPolicy } from './profile.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
-// quickly each stage cools: warm Responded threads cool fastest, post-
-// interview windows tighter still, cold Applied gets the longest leash.
+// quickly each stage cools: post-interview windows are tight, while cold Applied
+// gets the longest leash.
 // Applied is intentionally generous (7 business days, ~10 calendar): chasing a
 // cold portal application 2 days after applying just manufactures noise.
 const STALE_THRESHOLD_BY_STATUS = {
   Applied:   7,
-  Responded: 5,
   // Interview rounds cool fast — chase within a few business days of going quiet.
   'Phone Screen':  3,
   '1st Interview': 3,
   '2nd Interview': 3,
   '3rd Interview': 3,
-  '4th Interview': 3,
 };
 
 // An Applied application with no reply this many CALENDAR days after applying is
@@ -153,10 +152,10 @@ function computeStaleApps() {
   // sort each app's follow-ups by date desc
   for (const list of followupsByApp.values()) list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-  const TRACKED_STATUSES = ['Applied', 'Responded', ...INTERVIEW_STAGES];
+  const TRACKED_STATUSES = ['Applied', ...INTERVIEW_STAGES];
   const CAP_BY_STATUS = {
-    Applied: 2, Responded: 1,
-    'Phone Screen': 1, '1st Interview': 1, '2nd Interview': 1, '3rd Interview': 1, '4th Interview': 1,
+    Applied: 2,
+    'Phone Screen': 1, '1st Interview': 1, '2nd Interview': 1, '3rd Interview': 1,
   };
 
   // Cadence resets each interview round: the date an app ENTERED its current
@@ -209,8 +208,8 @@ function computeStaleApps() {
       coachLevel = 'overdue';
     }
 
-    // Warm vs cold. Responded / any interview round always count as warm (a human
-    // engaged, nudging pays off). An Applied app is warm only when there's a
+    // Warm vs cold. Any interview round always counts as warm (a human engaged,
+    // nudging pays off). An Applied app is warm only when there's a
     // usable EMAIL channel; a LinkedIn-only contact routes to the connect queue
     // (a separate manual motion) rather than the email follow-up nudge here, so
     // it stays a cold "application out" that sits in a calm ledger rather than
@@ -221,7 +220,7 @@ function computeStaleApps() {
     const isMutedApp = !!muted.app?.[String(a.id)];
     let klass;
     if (isMutedApp) klass = 'cold';
-    else if (a.status === 'Responded' || isInterviewStage(a.status)) klass = 'warm';
+    else if (isInterviewStage(a.status)) klass = 'warm';
     else klass = (channel === 'email') ? 'warm' : 'cold';
 
     stale.push({
@@ -871,8 +870,8 @@ function computeBothQueue({ taRows, referralRows, influencers, apps } = {}) {
 // The weights are intentionally simple and live here so they are easy to tune;
 // changing them changes only the order, never which rows appear.
 const _FUQ_STATUS_WEIGHT = {
-  'Responded': 25, 'Phone Screen': 40,
-  '1st Interview': 45, '2nd Interview': 50, '3rd Interview': 55, '4th Interview': 60,
+  'Phone Screen': 40,
+  '1st Interview': 45, '2nd Interview': 50, '3rd Interview': 55,
   'Sent': 5, 'Drafted': 3,
 };
 // Store weights keep book size from deciding priority. A warm referral gets a
@@ -903,7 +902,7 @@ function computeFollowupQueue(opts = {}) {
   const baselineId = getNewBaselineId();
   const touchIdx = buildCompanyTouchIndex(books);
   const today = _localToday();
-  const rows = [
+  const rows = opts.onlyReferrals === true ? [] : [
     ...computeConnectQueue(opts).map(r => ({ ...r, channel: 'linkedin' })),
     ...computeEmailQueue(opts).map(r => ({ ...r, channel: 'email' })),
     ...computeBothQueue(opts).map(r => ({ ...r, channel: 'both' })),
@@ -912,7 +911,7 @@ function computeFollowupQueue(opts = {}) {
     const days = _businessDaysAgo(String(date || '').slice(0, 10));
     return days != null && days >= CONTACT_STALE_THRESHOLD_DAYS;
   };
-  for (const row of books.referrals) {
+  for (const row of opts.excludeReferrals === true ? [] : books.referrals) {
     const reason = QUEUE_POLICY_BY_STORE.referral.reason(row);
     if (!reason || (reason === 'Follow up' && !staleEnough(row.lastTouch))) continue;
     const parts = String(row.name || '').trim().split(/\s+/);
@@ -949,6 +948,10 @@ function computeFollowupQueue(opts = {}) {
     (a.company || '').localeCompare(b.company || '') ||
     (a.name || '').localeCompare(b.name || ''));
   return result;
+}
+
+function computeReferralFollowups(opts = {}) {
+  return computeFollowupQueue({ ...opts, onlyReferrals: true });
 }
 
 // ─── The influence axis ──────────────────────────────────────────────────────
@@ -1145,12 +1148,21 @@ function computeJustConnectedQueue({ taRows, referralRows, influencers, apps } =
   const baselineId = getNewBaselineId();
   const touchIdx = buildCompanyTouchIndex(books);
   const today = _localToday();
+  // Hold a fresh acceptance out of the queue for a cool-off so the first ask does
+  // not land the day after they connect. Business days, user-configurable.
+  const cooloffDays = getOutreachPolicy().connectedCooloffDays;
   const out = [];
   for (const row of ta) {
     if (row.linkedinStatus !== 'Connected') continue;            // accepted the invite
     if (row.status === 'Archived') continue;
     if (!applied.has(normalizeCompany(row.company))) continue;   // only live applications
     const connectedOn = liMap[String(row.id)]?.updated || '';
+    // Cool-off: with a known connect date, stay quiet until it is old enough. A
+    // missing date still surfaces (below) rather than risk hiding a real cue.
+    if (connectedOn && cooloffDays > 0) {
+      const age = _businessDaysAgo(connectedOn);
+      if (age != null && age < cooloffDays) continue;
+    }
     // Not yet messaged since connecting: no Sent LinkedIn entry dated on/after the
     // connect date. The original invite predates the connection, so it never counts.
     // With no connect date on file, surface it rather than risk hiding a fresh DM cue.
@@ -1232,7 +1244,7 @@ function computeContactFollowups(opts = {}) {
   //    and free-DM framing win the dedup, and highest-ranked so it floats to the top.
   for (const r of computeJustConnectedQueue(opts)) put(r);
   // 1) Outreach queue — already the click-and-go shape; carries channel + rank.
-  for (const r of computeFollowupQueue(opts)) put({ ...r, queueReason: r.notContacted ? 'Reach out' : 'Follow up' });
+  for (const r of computeFollowupQueue({ ...opts, excludeReferrals: true })) put({ ...r, queueReason: r.notContacted ? 'Reach out' : 'Follow up' });
   // 2) Applications going stale, contact-first — click-and-go shape + staleDays.
   for (const r of computeStaleAppContacts({ staleApps: opts.staleApps })) {
     put({ ...r, daysSinceLastTouch: r.staleDays ?? null, coachLevel: r.coachLevel || 'overdue', queueReason: 'App going stale' });
@@ -1345,7 +1357,7 @@ function countWithheldContacts({ taRows } = {}) {
 export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
   computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
-  computeFollowupQueue, _followupRank,
+  computeFollowupQueue, computeReferralFollowups, _followupRank,
   _companyOutreachFor,
   influenceRank, canInfluenceHire, isHighValueContact, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts,
   computeJustConnectedQueue,

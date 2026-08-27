@@ -57,7 +57,7 @@ fs.writeFileSync(path.join(sandbox, 'applications.md'), [
   row(1, 'Alpha', 'Applied'),
   row(2, 'Beta', 'Rejected'),                                   // + 1st Interview EVENT, no tag
   row(3, 'Gamma', 'Rejected', '[reached: Phone Screen]'),       // tag only, no events
-  row(4, 'Delta', 'Offer', '[reached: Responded]'),             // STALE tag, behind live status
+  row(4, 'Delta', 'Offer', '[reached: Phone Screen]'),          // STALE tag, behind live status
   row(5, 'Epsilon', 'Discarded'),                               // off-funnel, no evidence
   row(6, 'Iota', 'No Response'),                                // floors at Applied
   row(7, 'Eta', 'Evaluated'),
@@ -88,16 +88,16 @@ try {
   eq(at(2, 'Rejected', ''), idxOf('1st Interview'),
     'EVENT-ONLY interview evidence is credited — the case charts.jsx eff() cannot see');
   eq(at(3, 'Rejected', '[reached: Phone Screen]'), idxOf('Phone Screen'), 'tag is credited when it is the only evidence');
-  eq(at(4, 'Offer', '[reached: Responded]'), idxOf('Offer'),
+  eq(at(4, 'Offer', '[reached: Phone Screen]'), idxOf('Offer'),
     'a STALE tag never drags a row backwards — live status wins by max (eff() gets this wrong)');
   eq(at(8, 'SKIP', ''), idxOf('Applied'),
     'an event lifts an off-funnel row — live-status engines return -1 here');
 
   // ── appReached: the client-side mirror ───────────────────────────────────
-  check(appReached({ reached: '1st Interview' }, 'Responded'), 'appReached prefers the stamped rung');
-  check(!appReached({ reached: 'Applied' }, 'Responded'), 'appReached rejects a rung above the stamp');
+  check(appReached({ reached: '1st Interview' }, 'Phone Screen'), 'appReached prefers the stamped rung');
+  check(!appReached({ reached: 'Applied' }, 'Phone Screen'), 'appReached rejects a rung above the stamp');
   check(appReached({ reached: null, status: 'Offer' }, 'Applied'), 'appReached falls back to live status');
-  check(appReached({ reached: null, status: 'Rejected', notes: '[reached: Phone Screen]' }, 'Responded'),
+  check(appReached({ reached: null, status: 'Rejected', notes: '[reached: Phone Screen]' }, 'Phone Screen'),
     'appReached falls back to the tag');
   check(!appReached({ reached: 'Offer' }, 'Nonsense Rung'), 'an unknown stage name is never "reached"');
   eq(reachedStage('[reached: 2nd Interview] and more'), '2nd Interview', 'tag parser handles multi-word labels');
@@ -127,7 +127,6 @@ try {
   // enteredFunnel() in statuses.mjs.
   eq(f.reached['Evaluated'], 8, 'the first rung counts every evaluated row, including ones later declined');
   eq(f.reached['Applied'], 6, 'Applied rung');
-  eq(f.reached['Responded'], 3, 'Responded rung');
   eq(f.reached['Phone Screen'], 3, 'Phone Screen rung');
   eq(f.reached['1st Interview'], 2, '1st Interview rung');
   eq(f.reached['Offer'], 1, 'Offer rung');

@@ -97,7 +97,6 @@ export function applicationCohorts({ weeks = 8, today = new Date() } = {}) {
   const apps = parseApplicationsMd();
   const byId = new Map(apps.map(a => [a.id, a]));
   const iApplied = FUNNEL_ORDER.indexOf('Applied');
-  const iResponded = FUNNEL_ORDER.indexOf('Responded');
   const iScreen = FUNNEL_ORDER.indexOf('Phone Screen');
 
   const cohorts = new Map();
@@ -114,7 +113,10 @@ export function applicationCohorts({ weeks = 8, today = new Date() } = {}) {
     // rows get pruned. Counted rather than dropped, so a cohort's sent total always
     // reconciles with the sidecar.
     if (!row) c.orphaned++;
-    if (idx >= iResponded) c.replied++;
+    // "Replied" = got any answer (reached a screen or later, OR a rejection), so
+    // it stays distinct from and broader than "Screened" now that there is no
+    // Responded rung between them. A form-letter rejection is still a reply.
+    if (idx >= iScreen || row?.status === 'Rejected') c.replied++;
     if (idx >= iScreen) c.screened++;
     cohorts.set(wk, c);
   }

@@ -117,7 +117,7 @@ CONFIRM-TO-ACT: You may PROPOSE an action, which the app shows as a one-tap Conf
 <action>{"kind":"...","label":"..."}</action>
 PROPOSE one whenever the user REPORTS an outcome or clearly wants a change made — e.g. "I got a rejection from X", "they want to schedule a screen", "I got an offer", "remind me to Y". A short warm line plus the button is ideal (e.g. "Sorry to hear it. I can log that for you:").
 Supported kinds:
-- Log an application outcome: {"kind":"logOutcome","appId":<number from the active-applications list>,"status":"Rejected","company":"<company>","label":"Mark <company> as Rejected"}. Use the matching appId from the live state; if you cannot find the company there, do NOT guess an id — ask which company instead. Allowed status values: Rejected, Responded, No Response, Discarded, Offer.
+- Log an application outcome: {"kind":"logOutcome","appId":<number from the active-applications list>,"status":"Rejected","company":"<company>","label":"Mark <company> as Rejected"}. Use the matching appId from the live state; if you cannot find the company there, do NOT guess an id — ask which company instead. Allowed status values: Rejected, No Response, Discarded, Offer.
 - Add a to-do: {"kind":"addTodo","text":"<short task>","label":"Add to-do: <short task>"}.
 Do not mention the <action> tag or JSON in your prose; the app renders it as a button. If no change is wanted, do not emit one. Never emit more than one.`;
 
@@ -162,7 +162,7 @@ export function parseAction(reply) {
   return { text, action };
 }
 
-const OUTCOME_STATUSES = new Set(['Rejected', 'Responded', 'No Response', 'Discarded', 'Offer']);
+const OUTCOME_STATUSES = new Set(['Rejected', 'No Response', 'Discarded', 'Offer']);
 function validateAction(obj) {
   if (!obj || typeof obj !== 'object') return null;
   if (obj.kind === 'logOutcome') {

@@ -714,7 +714,7 @@ window.Sankey = function Sankey({ apps }) {
     const stageColor = (s) => (meta[s] && meta[s].color) || "var(--accent)";
     // Concise node labels so 10 columns stay legible (column headers carry the
     // full stage name). Lost = "✕ <short>", live = a friendly "still here" line.
-    const SHORT = { "Phone Screen": "Screen", "1st Interview": "1st", "2nd Interview": "2nd", "3rd Interview": "3rd", "4th Interview": "4th" };
+    const SHORT = { "Phone Screen": "Screen", "1st Interview": "1st", "2nd Interview": "2nd", "3rd Interview": "3rd" };
     const shortOf = (s) => SHORT[s] || s;
     const liveLabel = (s, i) => i === 0 ? "Still Evaluating" : i === 1 ? "Awaiting Reply" : i === 2 ? "In Reply" : `In ${shortOf(s)}`;
     const mainId = (i) => i === 0 ? "evaluated" : `reached-${i}`;
@@ -750,7 +750,7 @@ window.Sankey = function Sankey({ apps }) {
 
   // Columns derived from the funnel ladder: archetype source + one per rung.
   const SANKEY_STAGES = window.FUNNEL_ORDER;
-  const COL_SHORT = { "Evaluated": "TRIAGED", "Applied": "APPLIED", "Responded": "REPLIED", "Phone Screen": "SCREEN", "1st Interview": "1ST", "2nd Interview": "2ND", "3rd Interview": "3RD", "4th Interview": "4TH", "Offer": "OFFER" };
+  const COL_SHORT = { "Evaluated": "TRIAGED", "Applied": "APPLIED", "Phone Screen": "SCREEN", "1st Interview": "1ST", "2nd Interview": "2ND", "3rd Interview": "3RD", "Offer": "OFFER" };
   const colHeaders = ["ARCHETYPE", ...SANKEY_STAGES.map(s => COL_SHORT[s] || s.toUpperCase())];
 
   const W = 1280, H = 480;
@@ -931,7 +931,7 @@ window.StageFunnel = function StageFunnel() {
   // widen), so these are always the trailing deep stages — e.g. 2nd Interview
   // through Offer before you have reached them — and an empty row adds nothing.
   // The panel grows back down on its own as you actually reach a deeper stage.
-  const shownOrder = order.filter(s => s !== 'Responded' && (reached[s] || 0) > 0);
+  const shownOrder = order.filter(s => (reached[s] || 0) > 0);
   const maxReached = Math.max(1, ...shownOrder.map(s => reached[s] || 0));
   const convByTo = {};
   for (let i = 1; i < shownOrder.length; i++) {
