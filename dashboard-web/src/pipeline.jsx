@@ -980,7 +980,6 @@ const PL_SUBTABS = [
   { id: 'table',     label: 'Active',    icon: PI.list },
   { id: 'all',       label: 'All',       icon: PI.list },
   { id: 'discovery', label: 'Discovery', icon: PI.pulse },
-  { id: 'awaiting',  label: 'Awaiting response', icon: PI.clock || PI.pulse },
   { id: 'analytics', label: 'Analytics', icon: PI.chart },
 ];
 
@@ -2459,12 +2458,6 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
       )}
       {subView === 'discovery' && (
         <DiscoveryInbox inbox={inbox} onReload={loadInbox} />
-      )}
-      {subView === 'awaiting' && window.AwaitingResponseView && (
-        <window.AwaitingResponseView
-          search={search}
-          onOpenApp={(id) => { const a = apps.find(x => x.id === id); if (a) handleOpen(a); }}
-        />
       )}
       {subView === 'analytics' && (
         <AnalyticsView apps={activeApps} allApps={apps} compTweaks={compTweaks} onOpen={handleOpen} isStale={isStale} />
