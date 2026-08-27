@@ -1540,6 +1540,10 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   const [discoverJob, setDiscoverJob] = useState(null);
   const [discoverJobId, setDiscoverJobId] = useState(null);
   const seenSuggestions = useRef(new Set());
+  const dismissedSuggestions = useRef(new Set());
+  const reloadTimer = useRef(null);
+
+  useEffect(() => () => clearTimeout(reloadTimer.current), []);
 
   const absorbDiscoverJob = useCallback(job => {
     if (!job?.jobId) return;
@@ -1549,7 +1553,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
         ...suggestion,
         reconcileSearch: result.search,
         reconcileSource: "agent",
-      })),
+      })).filter(suggestion => !dismissedSuggestions.current.has(`${suggestion.reconcileSearch}::${result.company}::${suggestion.first || ""} ${suggestion.last || ""}`)),
     }));
     setDiscoverJob(job);
     setDiscoveries(landed);
@@ -1667,7 +1671,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   const apply = async () => {
     setStep(2); setLoading(true);
     try {
-      let archived = 0, added = 0, emailsFound = 0, verifierKeys = true, rejected = [];
+      let archived = 0, added = 0, skipped = 0, emailVerification = "skipped", rejected = [];
       if (archSel.size > 0) {
         const r = await window.tjkMutate("/api/tt-reconcile/archive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(archSel) }) });
         const d = await r.json();
@@ -1686,14 +1690,28 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
         const r = await window.tjkMutate("/api/tt-reconcile/bulk-add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contacts: toAdd, source: "agent" }) });
         const d = await r.json();
         added = d.written || 0;
-        emailsFound = d.emailsFound || 0;
-        verifierKeys = d.verifierKeys !== false;
+        skipped = d.skipped || 0;
+        emailVerification = d.emailVerification || "skipped";
         rejected = d.rejected || [];
       }
-      setOutcome({ archived, added, emailsFound, verifierKeys, rejected });
+      setOutcome({ archived, added, skipped, emailVerification, rejected });
       setLoading(false);
       onApplied?.();
+      clearTimeout(reloadTimer.current);
+      reloadTimer.current = setTimeout(() => onApplied?.(), 8000);
     } catch (e) { setError(e.message); setLoading(false); }
+  };
+
+  const dismissSuggestion = (result, suggestion, key) => {
+    dismissedSuggestions.current.add(key);
+    setDiscoveries(current => current.map(item => item === result
+      ? { ...item, suggestions: (item.suggestions || []).filter(candidate => candidate !== suggestion) }
+      : item));
+    setDiscSel(selected => { const next = new Set(selected); next.delete(key); return next; });
+    void window.tjkMutate("/api/tt-reconcile/dismiss", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ suggestions: [{ company: result.company, first: suggestion.first, last: suggestion.last }] }),
+    }).catch(() => {});
   };
 
   const confColor = { High: "var(--green)", Medium: "var(--orange)", Low: "var(--red)" };
@@ -1788,14 +1806,14 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
                     av={ttInitials((s.first || "?") + " " + (s.last || "?"))} name={`${s.first} ${s.last}`}
                     meta={`${s.title} · ${r.company}`}
                     reason={s.linkedin ? <a className="link" href={window.safeHref(s.linkedin)} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: "var(--accent)", fontSize: 11 }}>LinkedIn ↗</a> : null}
-                    right={<div style={{ display: "flex", gap: 6, alignItems: "center" }}><span className="tag accent">{s.reconcileSearch === "principal" ? "Decision-maker search" : "Talent search"}</span><span className={"conf " + conf}>{conf}</span></div>} />
+                    right={<div style={{ display: "flex", gap: 6, alignItems: "center" }}><span className="tag accent">{s.reconcileSearch === "principal" ? "Decision-maker search" : "Talent search"}</span><span className={"conf " + conf}>{conf}</span><button className="btn sm" onClick={e => { e.stopPropagation(); dismissSuggestion(r, s, key); }}>Dismiss</button></div>} />
                 );
               }))}
             </div>
           )}
           {step === 2 && (
             <div className="fade-up" style={{ textAlign: "center", padding: "12px 0" }}>
-              {loading ? <div className="ai-loading" style={{ justifyContent: "center" }}><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> Applying changes and verifying emails…</div> : <>
+              {loading ? <div className="ai-loading" style={{ justifyContent: "center" }}><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> Applying changes…</div> : <>
                 <div className="apply-done-icon"><TIcon d={TI.check} size={26} stroke={3} /></div>
                 <h2 style={{ fontSize: 17, margin: "0 0 6px" }}>Reconcile complete</h2>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 18 }}>
@@ -1805,10 +1823,15 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
                   <div className="apply-grid" style={{ maxWidth: 480, margin: "0 auto" }}>
                     <div className="apply-tile"><div className="at-v" style={{ color: "var(--orange)" }}>{outcome.archived}</div><div className="at-k">Archived</div></div>
                     <div className="apply-tile"><div className="at-v" style={{ color: "var(--green)" }}>{outcome.added}</div><div className="at-k">Contacts added</div></div>
-                    <div className="apply-tile"><div className="at-v" style={{ color: "var(--accent)" }}>{outcome.emailsFound || 0}</div><div className="at-k">Emails verified</div></div>
+                    <div className="apply-tile"><div className="at-v" style={{ color: "var(--accent)" }}>{outcome.skipped || 0}</div><div className="at-k">Already on your list</div></div>
                   </div>
                 )}
-                {outcome && outcome.verifierKeys === false && outcome.added > 0 && (
+                {outcome && outcome.emailVerification === "running" && (
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", maxWidth: 440, margin: "12px auto 0", lineHeight: 1.6 }}>
+                    Finding and verifying emails in the background; they will appear on the contacts shortly.
+                  </div>
+                )}
+                {outcome && outcome.emailVerification === "skipped" && outcome.added > 0 && (
                   <div style={{ fontSize: 11, color: "var(--orange)", maxWidth: 440, margin: "12px auto 0", lineHeight: 1.6 }}>
                     Email finding was skipped. Set <b>HUNTER_API_KEY</b> and <b>MILLIONVERIFIER_API_KEY</b> in
                     dashboard-web/.env to auto-find and verify addresses for new contacts.
@@ -1840,7 +1863,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
           ].filter(Boolean).join(" · ")}</span>}
           <div className="right" style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
             {step === 0 && !loading && <button className="btn primary" onClick={runDiscover} disabled={scanning}>{scanning ? "Discovery already running" : "Discover contacts"} <TIcon d={TI.arrowR} size={13} /></button>}
-            {step === 1 && <button className="btn primary" onClick={apply}>Add selected ({foundCount}{scanning ? " found so far" : " found"}) <TIcon d={TI.arrowR} size={13} /></button>}
+            {step === 1 && <button className="btn primary" onClick={apply} disabled={discSel.size === 0}>Add selected ({discSel.size}) <TIcon d={TI.arrowR} size={13} /></button>}
             {/* No Undo. It used to flip a local boolean and assert "Changes
                 reverted" while the archive and bulk-add writes stayed on disk;
                 there is no revert endpoint, and inventing one would have to
