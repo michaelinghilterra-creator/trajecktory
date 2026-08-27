@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.0.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.44.0...v3.0.0) (2026-08-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* two canonical application states (Responded, 4th Interview) are removed from templates/states.yml. Existing rows are auto-migrated by normalize-statuses; downstream tooling that hardcodes those labels should read the states file instead.
+
+### Features
+
+* beta-tester feedback across pipeline stages, reconcile, referrals, discovery, and Today ([#265](https://github.com/michaelinghilterra-creator/trajecktory/issues/265)) ([b4e34d5](https://github.com/michaelinghilterra-creator/trajecktory/commit/b4e34d523f0951d03923c452582784f1edf0d3eb))
+
 ## [2.44.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.43.0...v2.44.0) (2026-08-27)
 
 
