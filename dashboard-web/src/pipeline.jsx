@@ -2018,36 +2018,35 @@ function DiscoBadge({ label, color, title }) {
   );
 }
 
-function discoInitials(name) {
-  const p = String(name || '').replace(/['"]/g, '').split(/\s+/).filter(Boolean);
-  if (!p.length) return '?';
-  return ((p[0][0] || '') + (p.length > 1 ? p[1][0] : '')).toUpperCase();
-}
-
-// One discovery row: avatar, company, title (a link to the posting when we have a
-// URL), and a trailing badge slot. Shared by the pending and gated lists so both
-// read as the same polished card, not two hand-rolled layouts.
-function DiscoRow({ company, title, url, accent, badge, sub, first }) {
-  return (
-    <div className="row" style={{ gap: 10, alignItems: 'center', padding: '9px 2px', borderTop: first ? 'none' : '1px solid var(--border)' }}>
-      <div className="mono-av sm" style={{ flex: 'none', borderColor: accent, color: accent }}>{discoInitials(company)}</div>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company || '—'}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {url
-            ? <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-dim)' }} onClick={e => e.stopPropagation()}>{title || 'View posting'}</a>
-            : (title || '—')}
-        </div>
-        {sub && <div className="dim mono" style={{ fontSize: 10.5, lineHeight: 1.4, marginTop: 2 }}>{sub}</div>}
-      </div>
-      {badge}
-    </div>
-  );
-}
-
 function DiscoveryInbox({ inbox, onReload }) {
+  const [sortKey, setSortKey] = useStateP('company');
+  const [sortDir, setSortDir] = useStateP('asc');
+  const setSort = (key) => {
+    if (sortKey === key) setSortDir(dir => dir === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+  const counts = inbox?.counts || { pending: 0, gated: 0, done: 0 };
+  const rows = useMemoP(() => {
+    const combined = [
+      ...(inbox?.pending || []).map(row => ({ ...row, discoveryStatus: 'Pending' })),
+      ...(inbox?.gated || []).map(row => ({ ...row, discoveryStatus: 'Gated' })),
+    ];
+    return combined.sort((a, b) => {
+      const av = String(a[sortKey] || '').toLocaleLowerCase();
+      const bv = String(b[sortKey] || '').toLocaleLowerCase();
+      const primary = av.localeCompare(bv);
+      if (primary) return sortDir === 'asc' ? primary : -primary;
+      return String(a.title || '').localeCompare(String(b.title || ''));
+    });
+  }, [inbox, sortKey, sortDir]);
   if (!inbox) return <div className="card padded-lg dim" style={{ fontSize: 12 }}>Loading discovery queue…</div>;
-  const { counts = { pending: 0, gated: 0, done: 0 }, pending = [], gated = [] } = inbox;
+  const cols = [
+    { k: 'company', label: 'Company' },
+    { k: 'title', label: 'Title' },
+    { k: 'dateAdded', label: 'Added' },
+    { k: 'discoveryStatus', label: 'Status' },
+    { k: 'url', label: 'URL' },
+  ];
   return (
     <div className="col" style={{ gap: 16 }}>
       <div className="card padded-lg col" style={{ gap: 10 }}>
@@ -2062,25 +2061,34 @@ function DiscoveryInbox({ inbox, onReload }) {
         </div>
       </div>
 
-      <div className="card padded-lg col" style={{ gap: 0 }}>
-        <div className="card-head" style={{ marginBottom: 4 }}><span className="card-title">Pending evaluation ({pending.length})</span></div>
-        {pending.length === 0 && <div className="dim" style={{ fontSize: 12, padding: '6px 0' }}>Nothing waiting. Run a scan to find new roles.</div>}
-        {pending.map((p, i) => (
-          <DiscoRow key={p.url || i} company={p.company} title={p.title} url={p.url} accent="var(--accent)" first={i === 0}
-            badge={p.readable
-              ? <DiscoBadge label="ready" color="var(--green)" title="JD is readable — ready to evaluate" />
-              : <DiscoBadge label="needs JD paste" color="var(--orange)" title="No readable JD yet — paste the description to evaluate" />} />
-        ))}
-      </div>
-
-      <div className="card padded-lg col" style={{ gap: 0 }}>
-        <div className="card-head" style={{ marginBottom: 4 }}><span className="card-title">Gated ({gated.length})</span></div>
-        {gated.length === 0 && <div className="dim" style={{ fontSize: 12, padding: '6px 0' }}>No gated rows.</div>}
-        {gated.map((g, i) => (
-          <DiscoRow key={g.url || i} company={g.company} title={g.title} url={g.url} accent="var(--red)" first={i === 0}
-            sub={g.reason || 'gated'}
-            badge={<DiscoBadge label="gated" color="var(--red)" title={g.reason || 'gated'} />} />
-        ))}
+      <div className="card padded-lg">
+        <div className="tbl-wrap" style={{ border: 'none', borderRadius: 0, background: 'transparent' }}>
+          <table className="tbl pl-tbl">
+            <thead><tr>{cols.map(col => (
+              <th key={col.k} className={sortKey === col.k ? 'sorted' : ''} role="button" tabIndex={0}
+                aria-sort={sortKey === col.k ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                onClick={() => setSort(col.k)} onKeyDown={window.kbdActivate(() => setSort(col.k))}>
+                {col.label}<span className="sort-ind">{sortKey === col.k ? (sortDir === 'asc' ? '↑' : '↓') : '·'}</span>
+              </th>
+            ))}</tr></thead>
+            <tbody>
+              {rows.length === 0 && <tr><td colSpan={cols.length}><div className="no-data" style={{ padding: 30, textAlign: 'center' }}>Nothing waiting. Run a scan to find new roles.</div></td></tr>}
+              {rows.map((row, index) => (
+                <tr key={`${row.discoveryStatus}:${row.url || index}`}>
+                  <td className="t-co-cell"><span className="co-name">{row.company || 'Unknown'}</span></td>
+                  <td className="t-role">{row.title || 'Untitled role'}</td>
+                  <td className="t-date">{row.dateAdded}</td>
+                  <td>
+                    <DiscoBadge label={row.discoveryStatus} color={row.discoveryStatus === 'Gated' ? 'var(--red)' : 'var(--accent)'} title={row.reason || row.discoveryStatus} />
+                    {row.discoveryStatus === 'Gated' && <div className="dim" style={{ fontSize: 10.5, marginTop: 3 }}>{row.reason || 'gated'}</div>}
+                    {row.discoveryStatus === 'Pending' && row.readable && <div className="dim" style={{ fontSize: 10.5, marginTop: 3 }}>readable</div>}
+                  </td>
+                  <td>{row.url && <a className="link" href={window.safeHref(row.url)} target="_blank" rel="noreferrer">Open JD ↗</a>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

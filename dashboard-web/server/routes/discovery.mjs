@@ -11,6 +11,10 @@ import fs from 'fs';
 import path from 'path';
 import { DATA_DIR } from '../config.mjs';
 import { pipelineInbox } from '../../../lib/pipeline.mjs';
+import {
+  enrichInboxDates, localToday, readPipelineFirstSeen,
+  scanHistoryFirstSeen, writePipelineFirstSeen,
+} from '../lib/pipeline-firstseen.mjs';
 
 export const router = express.Router();
 
@@ -19,7 +23,16 @@ export const router = express.Router();
 // often this is polled). A missing pipeline.md is an empty inbox, not an error.
 router.get('/api/pipeline/inbox', (_req, res) => {
   const file = path.join(DATA_DIR, 'pipeline.md');
+  const scanHistoryFile = path.join(DATA_DIR, 'scan-history.tsv');
+  const firstSeenFile = path.join(DATA_DIR, 'pipeline-firstseen.json');
   let text = '';
   try { text = fs.readFileSync(file, 'utf8'); } catch { /* no pipeline yet → empty inbox */ }
-  res.json(pipelineInbox(text));
+  let scanHistoryText = '';
+  try { scanHistoryText = fs.readFileSync(scanHistoryFile, 'utf8'); } catch { /* no scan history yet */ }
+  const sidecar = readPipelineFirstSeen(firstSeenFile);
+  const result = enrichInboxDates(
+    pipelineInbox(text), sidecar, scanHistoryFirstSeen(scanHistoryText), localToday(),
+  );
+  if (result.changed) writePipelineFirstSeen(firstSeenFile, sidecar);
+  res.json(result.inbox);
 });
