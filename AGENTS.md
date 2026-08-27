@@ -682,13 +682,11 @@ Guarded by `tests/tracker.test.mjs` and `tests/tracker-writers.test.mjs`.
 | State | When to use |
 |-------|-------------|
 | `Evaluated` | Report completed, pending decision |
-| `Applied` | Application sent |
-| `Responded` | Company replied / recruiter reached out, no screen booked yet |
+| `Applied` | Application sent (a bare company reply with nothing booked stays here; "Responded" is not a stage) |
 | `Phone Screen` | TA / recruiter phone screen |
 | `1st Interview` | First interview round |
 | `2nd Interview` | Second interview round |
-| `3rd Interview` | Third interview round |
-| `4th Interview` | Fourth interview round (final loop) |
+| `3rd Interview` | Third (final) interview round |
 | `Offer` | Offer received |
 | `Rejected` | Rejected by company |
 | `Discarded` | Discarded by candidate or offer closed |

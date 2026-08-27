@@ -46,11 +46,28 @@ export const CLOSED_STATUSES = ALL_STATUSES.filter(s => !FUNNEL_ORDER.includes(s
 
 // Response outcomes are centralized beside the canonical status ladder. Timing
 // consumers import these sets instead of maintaining another status vocabulary.
+//
+// "Responded" is no longer a funnel stage. A response is DERIVED: the company
+// either advanced you (reached a screen or later) or turned you down. A bare
+// reply with nothing booked is not counted, so `advance` anchors on Phone Screen,
+// the first real advance past Applied.
 export const RESPONSE_DECISION_BUCKETS = Object.freeze({
-  advance: new Set(FUNNEL_ORDER.slice(FUNNEL_ORDER.indexOf('Responded'))),
+  advance: new Set(FUNNEL_ORDER.slice(FUNNEL_ORDER.indexOf('Phone Screen'))),
   employerNo: new Set(ALL_STATUSES.filter(s => s === 'Rejected')),
   candidateSide: new Set(ALL_STATUSES.filter(s => ['Not a Fit', 'SKIP', 'Discarded'].includes(s))),
 });
+
+// The single derived "did the company respond?" rule, shared by every reply-rate
+// consumer so the definition lives in one place. Responded = reached a screen or
+// later (advance) OR the company said no (Rejected). A still-Applied row, a ghost
+// (No Response), and candidate-side closes are all NOT responses.
+const _respondedStatuses = new Set([
+  ...RESPONSE_DECISION_BUCKETS.advance,
+  ...RESPONSE_DECISION_BUCKETS.employerNo,
+]);
+export function hasResponded({ status, reached } = {}) {
+  return _respondedStatuses.has(reached) || _respondedStatuses.has(status);
+}
 
 // ── Outreach eligibility (the ONE rule for who is worth contacting) ────────────
 // A company is worth spending a TA contact on — sourcing new contacts, keeping

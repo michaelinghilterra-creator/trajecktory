@@ -454,7 +454,7 @@ function extractEmail(s) {
 // often contains interview-ish words ("we interviewed many strong candidates").
 // Deliberately coarse: this only picks the SUGGESTED action; a human confirms the
 // flip. positive = wants to talk / schedule / advance; negative = a pass; neutral
-// = a human reply that is neither (logs a note, nudges Applied → Responded).
+// = a human reply that is neither (logs a note without changing status).
 const REPLY_NEGATIVE_RE = /\b(unfortunately|not (moving|move) forward|decided (to|not) to|move (ahead|forward) with (other|another)|other candidates|will not be (moving|proceeding)|regret to|not (a )?(fit|match)|not the right (fit|match|time)|pursue other|filled the (role|position|seat)|no longer (considering|moving|open)|have to pass|passing on)\b/i;
 const REPLY_POSITIVE_RE = /\b(schedul(e|ing)|set up (a )?(call|time|chat|meeting)|book (a )?time|find (a )?time|calendar|availab(le|ility)|when are you (free|available)|phone screen|screening call|next steps?|move you forward|(would |i'?d )?(love|like|happy) to (talk|chat|speak|meet|connect|learn more)|let'?s (talk|chat|connect|set)|great to connect|interview)\b/i;
 

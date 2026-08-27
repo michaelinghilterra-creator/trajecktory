@@ -578,7 +578,7 @@ function MsgNode({ m }) {
 // carries the exact interview round, so we default the stage precisely; the user
 // can still refine it in the dropdown.
 function stageFromApps(apps) {
-  const top = (apps || []).find(a => window.isInterviewStage(a.status) || ["Responded", "Applied", "Evaluated"].includes(a.status)) || (apps || [])[0];
+  const top = (apps || []).find(a => window.isInterviewStage(a.status) || ["Applied", "Evaluated"].includes(a.status)) || (apps || [])[0];
   if (!top) return "general";
   if (window.isInterviewStage(top.status)) return top.status;
   return "general";
@@ -590,7 +590,6 @@ const TT_STAGE_OPTS = [
   { v: "1st Interview", l: "1st Interview" },
   { v: "2nd Interview", l: "2nd Interview" },
   { v: "3rd Interview", l: "3rd Interview" },
-  { v: "4th Interview", l: "4th Interview" },
 ];
 
 // ── Contact-book adapters ─────────────────────────────────────────────────────
@@ -763,9 +762,9 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         setNotes(d.notes || "");
         setWebsite(d.website || "");
         setEditingWeb(false);
-        // Pre-check every ACTIVE related application (Evaluated/Applied/Responded/interview rounds).
+        // Pre-check every ACTIVE related application (Evaluated/Applied/interview rounds).
         // Closed-state apps (Rejected/Discarded/Closed/SKIP/Not a Fit) start unchecked.
-        const ACTIVE = new Set(["Evaluated", "Applied", "Responded", ...window.INTERVIEW_STAGES]);
+        const ACTIVE = new Set(["Evaluated", "Applied", ...window.INTERVIEW_STAGES]);
         const preChecked = new Set(
           (d.relatedApps || []).filter(a => ACTIVE.has(a.status)).map(a => a.id)
         );

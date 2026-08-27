@@ -457,13 +457,14 @@ function App() {
     const canonicalStatus = STATUS_ALIASES[newStatus] || newStatus;
 
     // Auto-attribute the exit stage: when a row goes Rejected / No Response from an
-    // interview round (or Responded / Offer), stamp the furthest stage reached so
-    // the funnel + rejections-by-stage analytics credit the right rung even though
-    // the live status is now terminal. An explicit reachedStage (the drawer's
-    // "Mark as Lost") still wins.
+    // interview round (or Offer), stamp the furthest stage reached so the funnel +
+    // rejections-by-stage analytics credit the right rung even though the live
+    // status is now terminal. Anchored at Phone Screen (the first real advance),
+    // so an Applied -> Rejected loss stays a pre-interview loss with no tag. An
+    // explicit reachedStage (the drawer's "Mark as Lost") still wins.
     if (!reachedStage && (canonicalStatus === "Rejected" || canonicalStatus === "No Response")) {
       const fi = window.FUNNEL_ORDER.indexOf(app.status);
-      if (fi >= window.FUNNEL_ORDER.indexOf("Responded")) reachedStage = app.status;
+      if (fi >= window.FUNNEL_ORDER.indexOf("Phone Screen")) reachedStage = app.status;
     }
 
     // Build notes update (prefix-tag) only if reachedStage was set
@@ -496,7 +497,7 @@ function App() {
       setDebriefPrompt({ appId: app.id, company: app.company, role: app.role, stage: app.status });
     }
     if (!silent) {
-      const verb = { Applied: "Applied to", SKIP: "Skipped", Discarded: "Discarded", Closed: "Marked closed:", "Not a Fit": "Not a fit:", Rejected: "Marked rejected:", Responded: "Marked responded:", Offer: "Marked offer:" }[newStatus] || (window.isInterviewStage(newStatus) ? `Moved to ${newStatus}:` : "Updated");
+      const verb = { Applied: "Applied to", SKIP: "Skipped", Discarded: "Discarded", Closed: "Marked closed:", "Not a Fit": "Not a fit:", Rejected: "Marked rejected:", Offer: "Marked offer:" }[newStatus] || (window.isInterviewStage(newStatus) ? `Moved to ${newStatus}:` : "Updated");
       const suffix = reachedStage ? ` (reached ${reachedStage})` : "";
       toast(`${verb} ${app.company}${suffix}`, newStatus === "Applied" || newStatus === "Offer" ? "success" : newStatus === "SKIP" || newStatus === "Discarded" || newStatus === "Closed" || newStatus === "Not a Fit" || newStatus === "Rejected" ? "warn" : null);
     }
@@ -510,9 +511,9 @@ function App() {
   const handleDrawerAction = (app, actionId, eventDate) => {
     const MAP = {
       apply_manual: 'Applied', apply_claude: 'Applied', already_applied: 'Applied',
-      responded: 'Responded', offer: 'Offer', accept: 'Offer', reopen: 'Evaluated',
-      Applied: 'Applied', Responded: 'Responded', Offer: 'Offer',
-      'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview', '4th Interview': '4th Interview',
+      offer: 'Offer', accept: 'Offer', reopen: 'Evaluated',
+      Applied: 'Applied', Offer: 'Offer',
+      'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview',
       SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
     };
     const next = MAP[actionId];

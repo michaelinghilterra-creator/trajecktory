@@ -336,7 +336,7 @@ router.get('/api/google/replies', async (req, res) => {
 });
 
 // POST /api/google/replies/:msgId/:action — record a reply against a specific
-// application. `action` is one of: log (note only), responded, rejected, or an
+// application. `action` is one of: log (note only), rejected, or an
 // interview stage label. Always logs the note to app-notes.json; the status ones
 // also flip the application status (which logs a status event, so the debrief
 // prompt picks it up). The appId is explicit so a reply is never auto-attached to
@@ -389,8 +389,7 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     addNote(id, `### Reply logged (${today})\n${header}${fullBody ? `\n\n${fullBody}` : ''}`);
 
     let statusFlip = null;
-    if (action === 'responded') statusFlip = 'Responded';
-    else if (action === 'rejected') statusFlip = 'Rejected';
+    if (action === 'rejected') statusFlip = 'Rejected';
     else if (INTERVIEW_STAGES.includes(action)) statusFlip = action;
     else if (action !== 'log') return res.status(400).json({ error: `Unknown action: ${action}` });
 

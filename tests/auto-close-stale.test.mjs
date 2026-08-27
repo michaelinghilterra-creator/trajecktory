@@ -31,8 +31,8 @@ const r = (o) => ({ id: o.id, status: o.status, reached: o.reached ?? null, comp
 const rows = [
   r({ id: 1, status: 'Applied', reached: 'Applied', company: 'Kestrel' }),                 // 25d → eligible
   r({ id: 2, status: 'Applied', reached: 'Applied', company: 'Northwind' }),               // 10d → too fresh
-  r({ id: 3, status: 'Applied', reached: 'Responded', company: 'Bexad' }),                  // warm (replied) → never
-  r({ id: 4, status: 'Responded', reached: 'Responded', company: 'Cobalt' }),               // not Applied → skip
+  r({ id: 3, status: 'Applied', reached: 'Phone Screen', company: 'Bexad' }),               // warm (reached a screen) → never
+  r({ id: 4, status: '1st Interview', reached: '1st Interview', company: 'Cobalt' }),        // not Applied → skip
   r({ id: 5, status: 'No Response', reached: 'Applied', company: 'Vela' }),                  // already closed → skip
   r({ id: 6, status: 'Applied', reached: 'Applied', company: 'Meridian', date: '2026-06-29' }), // no apply-date → tracker-date fallback, 25d → eligible
   r({ id: 7, status: 'Applied', reached: '1st Interview', company: 'Aster' }),               // warm (HM interview) → never
@@ -58,8 +58,8 @@ const ids = stale.map(s => s.id);
 check(JSON.stringify([...ids].sort((a, b) => a - b)) === JSON.stringify([1, 6, 8, 10]),
   `selects exactly the cold+stale rows {1,6,8,10} (got ${JSON.stringify(ids)})`);
 check(!ids.includes(2), '#2 applied 10d ago is too fresh → not closed');
-check(!ids.includes(3), '#3 reached Responded (warm) → never closed');
-check(!ids.includes(4), '#4 status Responded (not Applied) → skipped');
+check(!ids.includes(3), '#3 reached Phone Screen (warm) → never closed');
+check(!ids.includes(4), '#4 status 1st Interview (not Applied) → skipped');
 check(!ids.includes(5), '#5 already No Response → skipped');
 check(!ids.includes(7), '#7 reached 1st Interview (warm) → never closed');
 check(!ids.includes(9), '#9 applied 20d ago is one day short of 21 → not closed');

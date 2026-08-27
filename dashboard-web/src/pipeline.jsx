@@ -13,13 +13,11 @@ const { useState: useStateP, useMemo: useMemoP, useEffect: useEffectP, useRef: u
 const STATUS = [
   { id: 'Evaluated',     short: 'Eval',    color: 'var(--accent)', hex: '#a78bfa', rgb: '167,139,250', stage: 0, icon: '◆' },
   { id: 'Applied',       short: 'Applied', color: 'var(--blue)',   hex: '#60a5fa', rgb: '96,165,250',  stage: 1, icon: '↗' },
-  { id: 'Responded',     short: 'Replied', color: 'var(--cyan)',   hex: '#22d3ee', rgb: '34,211,238',  stage: 2, icon: '↩' },
-  { id: 'Phone Screen',  short: 'Screen',  color: '#fcd34d',       hex: '#fcd34d', rgb: '252,211,77',  stage: 3, icon: '☎' },
-  { id: '1st Interview', short: '1st',     color: '#fbbf24',       hex: '#fbbf24', rgb: '251,191,36',  stage: 4, icon: '①' },
-  { id: '2nd Interview', short: '2nd',     color: 'var(--orange)', hex: '#f59e0b', rgb: '245,158,11',  stage: 5, icon: '②' },
-  { id: '3rd Interview', short: '3rd',     color: '#f97316',       hex: '#f97316', rgb: '249,115,22',  stage: 6, icon: '③' },
-  { id: '4th Interview', short: '4th',     color: '#ea580c',       hex: '#ea580c', rgb: '234,88,12',   stage: 7, icon: '④' },
-  { id: 'Offer',         short: 'Offer',   color: 'var(--green)',  hex: '#22c55e', rgb: '34,197,94',   stage: 8, icon: '★' },
+  { id: 'Phone Screen',  short: 'Screen',  color: '#fcd34d',       hex: '#fcd34d', rgb: '252,211,77',  stage: 2, icon: '☎' },
+  { id: '1st Interview', short: '1st',     color: '#fbbf24',       hex: '#fbbf24', rgb: '251,191,36',  stage: 3, icon: '①' },
+  { id: '2nd Interview', short: '2nd',     color: 'var(--orange)', hex: '#f59e0b', rgb: '245,158,11',  stage: 4, icon: '②' },
+  { id: '3rd Interview', short: '3rd',     color: '#f97316',       hex: '#f97316', rgb: '249,115,22',  stage: 5, icon: '③' },
+  { id: 'Offer',         short: 'Offer',   color: 'var(--green)',  hex: '#22c55e', rgb: '34,197,94',   stage: 6, icon: '★' },
 ];
 const STATUS_MAP = Object.fromEntries(STATUS.map(s => [s.id, s]));
 const ACTIVE_STATUSES = STATUS.map(s => s.id);
@@ -197,7 +195,7 @@ function Kpi({ k, v, sub, icon, color }) {
 
 // ─── Overview sub-tab ──────────────────────────────────────────────────────
 function OverviewKpis({ apps, isStale = () => false }) {
-  const inFlight = apps.filter(a => ['Responded', 'Offer'].includes(a.status) || window.isInterviewStage(a.status)).length;
+  const inFlight = apps.filter(a => a.status === 'Offer' || window.isInterviewStage(a.status)).length;
   const scored = apps.filter(a => a.score != null);
   const avg = scored.length ? (scored.reduce((s, a) => s + a.score, 0) / scored.length).toFixed(2) : '-';
   const strong = scored.filter(a => a.score >= 4.0).length;
@@ -831,7 +829,8 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
   // window.appReached reads the server-stamped `reached` rung (live status maxed
   // with the event log and the [reached:] tag), the same engine the Overview uses.
   const appliedAll = ratePool.filter(a => window.appReached(a, 'Applied')).length;
-  const respAll = ratePool.filter(a => window.appReached(a, 'Responded')).length;
+  // Responded is derived, not a rung: reached a screen or later, OR a rejection.
+  const respAll = ratePool.filter(a => window.appResponded(a)).length;
   const intvAll = ratePool.filter(a => window.appReached(a, 'Phone Screen')).length;
   const respRate = appliedAll ? Math.round((respAll / appliedAll) * 100) : 0;
   const intvRate = appliedAll ? Math.round((intvAll / appliedAll) * 100) : 0;
@@ -989,7 +988,7 @@ const PL_SUBTABS = [
 // /tracker tab's filter UI and table, but routes opens through Pipeline's
 // local drawer so users can Reopen a row back to Evaluated in one click.
 const ALL_ENTRIES_STATUSES = [
-  'Evaluated', 'Applied', 'Responded', ...window.INTERVIEW_STAGES, 'Offer',
+  'Evaluated', 'Applied', ...window.INTERVIEW_STAGES, 'Offer',
   'Rejected', 'Discarded', 'SKIP', 'Closed', 'Not a Fit', 'No Response',
 ];
 function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays = () => null, triage = null }) {
@@ -1120,7 +1119,7 @@ const DRAWER_TABS = [
   { id: 'followup',  label: 'Follow-up',  icon: PI.send },
 ];
 // The Follow-up tab only makes sense once an application is out the door.
-const FOLLOWUP_TAB_STATUSES = ['Applied', 'Responded', ...window.INTERVIEW_STAGES];
+const FOLLOWUP_TAB_STATUSES = ['Applied', ...window.INTERVIEW_STAGES];
 
 // Today in the user's LOCAL timezone. Deliberately not toISOString().slice(0,10),
 // which is UTC and rolls over around 5-7pm US time — pre-filling a status change
@@ -1321,7 +1320,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   const engMeta = engine ? ENGINE_META[engine] : { hex: '#8b8b94', rgb: '139,139,148' };
 
   // status-aware footer. The primary CTA advances one rung along the funnel
-  // (Applied → Responded → Phone Screen → 1st → 2nd → 3rd → 4th → Offer); the
+  // (Applied → Phone Screen → 1st → 2nd → 3rd → Offer); the
   // button id IS the next canonical status, dispatched via onAction's MAP.
   const st = app.status;
   const stIdx = window.FUNNEL_ORDER.indexOf(st);
@@ -1336,7 +1335,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     primary = [{ id: 'accept', label: 'Accept Offer', cls: 'success', check: true }];
   } else if (stIdx >= 1 && stIdx < window.FUNNEL_ORDER.length - 1) {
     const next = window.FUNNEL_ORDER[stIdx + 1];
-    primary = [{ id: next, label: next === 'Responded' ? 'Mark Responded' : `Move to ${next}`, cls: 'primary', check: true }];
+    primary = [{ id: next, label: `Move to ${next}`, cls: 'primary', check: true }];
   } else if (['SKIP', 'Rejected', 'Closed', 'Discarded', 'Not a Fit', 'No Response'].includes(st)) {
     primary = [{ id: 'reopen', label: 'Reopen → Evaluated', cls: 'primary', check: true }];
     // Re-queue a near-threshold auto-discard (a noisy 2.9, just under the 3.0 cut)
@@ -1431,8 +1430,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
             const fillStage = isClosed ? dropStage : m.stage;
             const dropLabel = (dropStage >= 0 && STATUS[dropStage]) ? STATUS[dropStage].id : null;
             const statusColor = window.STATUS_META[app.status]?.color || m.color;
-            const FOURTH = STATUS_MAP['4th Interview'].stage;
-            const track = STATUS.filter(s => s.stage !== FOURTH || fillStage >= FOURTH);
+            const track = STATUS;
             return (
           <div className="ds-section">
             <div className="ds-label"><PIcon d={PI.trend} size={12} /> Pipeline stage <span className="r">{isClosed ? (dropLabel ? `lost at ${dropLabel}` : app.status.toLowerCase()) : `stage ${m.stage + 1}/${STATUS.length}`}</span></div>
@@ -2361,11 +2359,11 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
       const body = { status: newStatus };
       if (eventDate) body.eventDate = eventDate;
       // Auto-attribute the exit stage: closing from an interview round (or
-      // Responded/Offer) stamps [reached: <stage>] so the funnel + rejections-
+      // Phone Screen/Offer) stamps [reached: <stage>] so the funnel + rejections-
       // by-stage analytics credit the right rung. Mirrors app.jsx handleAction.
       if (newStatus === 'Rejected' || newStatus === 'No Response') {
         const fi = window.FUNNEL_ORDER.indexOf(a.status);
-        if (fi >= window.FUNNEL_ORDER.indexOf('Responded')) {
+        if (fi >= window.FUNNEL_ORDER.indexOf('Phone Screen')) {
           const tag = `[reached: ${a.status}]`;
           const stripped = (a.notes || '').trim().replace(/^\[reached:\s*[^\]]+\]\s*/i, '').trim();
           body.notes = stripped ? `${tag} ${stripped}` : tag;
@@ -2417,11 +2415,11 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
     }
     const MAP = {
       apply_manual: 'Applied', apply_claude: 'Applied', already_applied: 'Applied',
-      responded: 'Responded', offer: 'Offer', accept: 'Offer',
+      offer: 'Offer', accept: 'Offer',
       reopen: 'Evaluated',
       // funnel statuses (the advance CTA sets id = next canonical status) + closers map to themselves
-      Applied: 'Applied', Responded: 'Responded', Offer: 'Offer',
-      'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview', '4th Interview': '4th Interview',
+      Applied: 'Applied', Offer: 'Offer',
+      'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview',
       SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
     };
     const next = MAP[actionId];

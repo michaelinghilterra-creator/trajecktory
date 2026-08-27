@@ -32,7 +32,7 @@ const APPLY = process.argv.includes('--apply');
 
 // Actions that represent a reply RECEIVED from the contact (belongs on the card).
 // dismiss / not-related are hides and are intentionally excluded.
-const REPLYISH = new Set(['log', 'responded', 'rejected', 'Phone Screen', '1st Interview', '2nd Interview', '3rd Interview', '4th Interview']);
+const REPLYISH = new Set(['log', 'rejected', 'Phone Screen', '1st Interview', '2nd Interview', '3rd Interview']);
 
 // Must match logReplyToContact's normalizeCorrTimestamp exactly, so the added
 // timestamp is the email's real date.

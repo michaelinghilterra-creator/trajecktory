@@ -18,19 +18,17 @@ import { INFLUENCE_RANK, DEFAULT_TIER } from '../../../lib/influence-tier.mjs';
 import { getOutreachPolicy } from './profile.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
-// quickly each stage cools: warm Responded threads cool fastest, post-
-// interview windows tighter still, cold Applied gets the longest leash.
+// quickly each stage cools: post-interview windows are tight, while cold Applied
+// gets the longest leash.
 // Applied is intentionally generous (7 business days, ~10 calendar): chasing a
 // cold portal application 2 days after applying just manufactures noise.
 const STALE_THRESHOLD_BY_STATUS = {
   Applied:   7,
-  Responded: 5,
   // Interview rounds cool fast — chase within a few business days of going quiet.
   'Phone Screen':  3,
   '1st Interview': 3,
   '2nd Interview': 3,
   '3rd Interview': 3,
-  '4th Interview': 3,
 };
 
 // An Applied application with no reply this many CALENDAR days after applying is
@@ -154,10 +152,10 @@ function computeStaleApps() {
   // sort each app's follow-ups by date desc
   for (const list of followupsByApp.values()) list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-  const TRACKED_STATUSES = ['Applied', 'Responded', ...INTERVIEW_STAGES];
+  const TRACKED_STATUSES = ['Applied', ...INTERVIEW_STAGES];
   const CAP_BY_STATUS = {
-    Applied: 2, Responded: 1,
-    'Phone Screen': 1, '1st Interview': 1, '2nd Interview': 1, '3rd Interview': 1, '4th Interview': 1,
+    Applied: 2,
+    'Phone Screen': 1, '1st Interview': 1, '2nd Interview': 1, '3rd Interview': 1,
   };
 
   // Cadence resets each interview round: the date an app ENTERED its current
@@ -210,8 +208,8 @@ function computeStaleApps() {
       coachLevel = 'overdue';
     }
 
-    // Warm vs cold. Responded / any interview round always count as warm (a human
-    // engaged, nudging pays off). An Applied app is warm only when there's a
+    // Warm vs cold. Any interview round always counts as warm (a human engaged,
+    // nudging pays off). An Applied app is warm only when there's a
     // usable EMAIL channel; a LinkedIn-only contact routes to the connect queue
     // (a separate manual motion) rather than the email follow-up nudge here, so
     // it stays a cold "application out" that sits in a calm ledger rather than
@@ -222,7 +220,7 @@ function computeStaleApps() {
     const isMutedApp = !!muted.app?.[String(a.id)];
     let klass;
     if (isMutedApp) klass = 'cold';
-    else if (a.status === 'Responded' || isInterviewStage(a.status)) klass = 'warm';
+    else if (isInterviewStage(a.status)) klass = 'warm';
     else klass = (channel === 'email') ? 'warm' : 'cold';
 
     stale.push({
@@ -872,8 +870,8 @@ function computeBothQueue({ taRows, referralRows, influencers, apps } = {}) {
 // The weights are intentionally simple and live here so they are easy to tune;
 // changing them changes only the order, never which rows appear.
 const _FUQ_STATUS_WEIGHT = {
-  'Responded': 25, 'Phone Screen': 40,
-  '1st Interview': 45, '2nd Interview': 50, '3rd Interview': 55, '4th Interview': 60,
+  'Phone Screen': 40,
+  '1st Interview': 45, '2nd Interview': 50, '3rd Interview': 55,
   'Sent': 5, 'Drafted': 3,
 };
 // Store weights keep book size from deciding priority. A warm referral gets a
