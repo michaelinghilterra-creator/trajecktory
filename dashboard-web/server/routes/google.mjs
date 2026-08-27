@@ -6,6 +6,7 @@ import {
   getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions, heldBackBounceIds,
   buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, candidateAppsFor, createDraft,
   getMessage, parseGmailMessage, extractEmail, logReplyToContact, previewEntry,
+  getTodayCalendarEvents,
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { PORT, TT_CORR_DIR } from '../config.mjs';
@@ -60,6 +61,33 @@ router.get('/api/google/status', (req, res) => {
     res.json(googleStatus());
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/google/calendar/today — the day's events for the Today tab. One-way
+// read: Google Calendar is the record of truth and this never writes. Degrades
+// gracefully to an empty list with a reason flag (never a 500) so the Today tab
+// always renders: not connected, or connected without the calendar scope (a user
+// from before this shipped) both return canReadCalendar:false so the UI can offer
+// a one-time reconnect.
+router.get('/api/google/calendar/today', async (req, res) => {
+  try {
+    const status = googleStatus();
+    if (!status.connected || !status.canReadCalendar) {
+      return res.json({
+        connected: status.connected,
+        canReadCalendar: false,
+        needsReconnect: status.connected && !status.canReadCalendar,
+        needsConnect: !status.connected,
+        events: [],
+      });
+    }
+    const events = await getTodayCalendarEvents();
+    res.json({ connected: true, canReadCalendar: true, events });
+  } catch (err) {
+    // A refresh failure or a revoked scope should not break the tab; surface it as
+    // a reconnect nudge rather than an error page.
+    res.json({ connected: true, canReadCalendar: false, needsReconnect: true, events: [], note: err.message });
   }
 });
 

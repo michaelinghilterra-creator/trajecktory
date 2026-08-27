@@ -219,6 +219,16 @@ function TodayView({ today, streak, prefs, setPrefs, activeTaskId, setActiveTask
   const remaining = today.filter(t => !t.done).length;
   const weekday = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
 
+  // Google Calendar is the record of truth for the day's agenda (one-way read).
+  // Degrades to nothing / a reconnect nudge if not connected or the scope is
+  // missing, so the manual cadence below always remains as the fallback.
+  const [cal, setCal] = useStateF(null);
+  useEffectF(() => {
+    let alive = true;
+    fetch('/api/google/calendar/today').then(r => r.json()).then(d => { if (alive) setCal(d); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   const start = (t) => {
     // Request notification permission on the first Start (a user gesture) — never on load.
     if (prefs.notify && typeof Notification !== 'undefined' && Notification.permission === 'default') {
@@ -249,6 +259,36 @@ function TodayView({ today, streak, prefs, setPrefs, activeTaskId, setActiveTask
       </div>
 
       <StreakStrip streak={streak} />
+
+      {cal && cal.canReadCalendar && (
+        <div className="card" style={{ padding: 14 }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: cal.events.length ? 10 : 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>📅 Google Calendar</div>
+            <span className="dim mono" style={{ fontSize: 10.5 }}>{cal.events.length} event{cal.events.length === 1 ? '' : 's'} today</span>
+          </div>
+          {cal.events.length === 0 ? (
+            <div className="dim" style={{ fontSize: 12 }}>Nothing on your calendar today.</div>
+          ) : (
+            <div className="col" style={{ gap: 6 }}>
+              {cal.events.map(ev => (
+                <div key={ev.id} className="row" style={{ gap: 10, alignItems: 'baseline' }}>
+                  <span className="mono" style={{ fontSize: 11.5, minWidth: 96, color: 'var(--text-dim)' }}>
+                    {ev.allDay ? 'all day' : `${ev.start || '--:--'}${ev.end ? `–${ev.end}` : ''}`}
+                  </span>
+                  <span style={{ fontSize: 13 }}>{ev.title}</span>
+                  {ev.location ? <span className="dim" style={{ fontSize: 11 }}>· {ev.location}</span> : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {cal && cal.needsReconnect && (
+        <div className="card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span className="dim" style={{ fontSize: 12 }}>📅 Reconnect Google to show today's calendar here (a one-time re-consent adds calendar read access).</span>
+          <a className="btn sm" style={{ marginLeft: 'auto' }} href="/api/google/auth-start">Reconnect Google</a>
+        </div>
+      )}
 
       {activeTask && (
         <FocusTimer

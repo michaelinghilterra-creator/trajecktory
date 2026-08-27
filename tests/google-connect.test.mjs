@@ -11,7 +11,7 @@
  * Run: node tests/google-connect.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { pkceChallenge, buildAuthUrl, exchangeCode, fetchProfileEmail, GMAIL_READONLY_SCOPE, GMAIL_COMPOSE_SCOPE, GMAIL_SCOPES } from '../dashboard-web/server/lib/google.mjs';
+import { pkceChallenge, buildAuthUrl, exchangeCode, fetchProfileEmail, GMAIL_READONLY_SCOPE, GMAIL_COMPOSE_SCOPE, GMAIL_SCOPES, GOOGLE_SCOPES, CALENDAR_READONLY_SCOPE, getTodayCalendarEvents } from '../dashboard-web/server/lib/google.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -39,8 +39,9 @@ check(u.origin + u.pathname === 'https://accounts.google.com/o/oauth2/v2/auth', 
 check(u.searchParams.get('client_id') === '78999004600-example.apps.googleusercontent.com', 'client_id set');
 check(u.searchParams.get('redirect_uri') === 'http://localhost:3333/api/google/callback', 'redirect_uri round-trips exactly');
 check(u.searchParams.get('response_type') === 'code', 'response_type=code');
-check(u.searchParams.get('scope') === GMAIL_SCOPES, 'scope requests readonly + compose (drafts, never send)');
+check(u.searchParams.get('scope') === GOOGLE_SCOPES, 'scope requests gmail (read + compose) plus calendar read');
 check(u.searchParams.get('scope').includes(GMAIL_READONLY_SCOPE) && u.searchParams.get('scope').includes(GMAIL_COMPOSE_SCOPE), 'both the read and the compose scopes are present');
+check(u.searchParams.get('scope').includes(CALENDAR_READONLY_SCOPE), 'the read-only calendar scope is requested (one-way Today sync)');
 check(u.searchParams.get('access_type') === 'offline', 'access_type=offline (so a refresh token is issued)');
 check(u.searchParams.get('prompt') === 'consent', 'prompt=consent (so re-consent still yields a refresh token)');
 check(u.searchParams.get('state') === 'st_abc123', 'state carried through');
@@ -74,6 +75,26 @@ const email = await fetchProfileEmail({ accessToken: 'at', fetchImpl: async () =
 check(email === 'someone@example.test', 'profile email read from the Gmail profile');
 const nullEmail = await fetchProfileEmail({ accessToken: 'at', fetchImpl: async () => ({ ok: false, status: 403 }) });
 check(nullEmail === null, 'a failed profile lookup returns null (non-fatal, connection still valid)');
+
+// ── getTodayCalendarEvents (injected fetch + token) — one-way read mapping ────
+let calReqUrl = '';
+const calEvents = await getTodayCalendarEvents({
+  getToken: async () => 'at_cal',
+  fetchImpl: async (url) => {
+    calReqUrl = url;
+    return { ok: true, json: async () => ({ items: [
+      { id: 'e1', summary: 'Standup', status: 'confirmed', start: { dateTime: '2026-08-27T09:30:00-04:00' }, end: { dateTime: '2026-08-27T10:00:00-04:00' } },
+      { id: 'e2', summary: 'Conference', status: 'confirmed', start: { date: '2026-08-27' }, end: { date: '2026-08-28' } },
+      { id: 'e3', summary: 'Cancelled thing', status: 'cancelled', start: { dateTime: '2026-08-27T12:00:00-04:00' } },
+    ] }) };
+  },
+});
+check(calReqUrl.includes('/calendars/primary/events') && calReqUrl.includes('singleEvents=true'), 'reads primary calendar with recurring events expanded');
+check(calEvents.length === 2, 'cancelled events are filtered out');
+const timed = calEvents.find(e => e.id === 'e1');
+check(timed && timed.allDay === false && /^\d\d:\d\d$/.test(timed.start || ''), 'a timed event maps to allDay:false with an HH:MM start');
+const allday = calEvents.find(e => e.id === 'e2');
+check(allday && allday.allDay === true && allday.start === null, 'an all-day event maps to allDay:true with no clock time');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
