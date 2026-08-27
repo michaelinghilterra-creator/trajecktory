@@ -111,6 +111,7 @@ Thanks either way,
 window.ReferralsTab = function ReferralsTab({ search } = {}) {
   const [rows, setRows] = useState([]);
   const [followups, setFollowups] = useState([]);
+  const [fuSort, setFuSort] = useState({ key: 'name', dir: 'asc' });
   const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -362,22 +363,48 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
         <div className="card-title">Follow up now · {followups.length}</div>
         {followups.length === 0 ? (
           <div className="no-data" style={{ padding: '16px 0 0' }}>No referral follow-ups right now</div>
-        ) : (
-          <div className="col" style={{ gap: 8, marginTop: 12 }}>
-            {followups.map(item => {
-              const channelHint = item.freeDm ? 'free DM' : item.channel === 'both' ? 'LinkedIn + email' : item.channel;
-              return (
-                <button type="button" key={`${item.source}:${item.id}`} className="subtab"
-                  onClick={() => setFollowupDrawerId(item.id)} style={{ width: '100%', textAlign: 'left', justifyContent: 'flex-start' }}>
-                  <span style={{ fontWeight: 600, color: 'var(--text)' }}>{item.name || '(no name)'}</span>
-                  <span className="dim">· {item.where || item.company || 'reach not recorded'}</span>
-                  <span className="dim">· {item.target || item.role || 'target not recorded'}</span>
-                  <span className="mono dim" style={{ marginLeft: 'auto', fontSize: 10.5 }}>{item.queueReason} · {channelHint}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        ) : (() => {
+          const fuVal = (it) => fuSort.key === 'company' ? (it.where || it.company || '').toLowerCase()
+            : fuSort.key === 'target' ? (it.target || it.role || '').toLowerCase()
+            : fuSort.key === 'reason' ? (it.queueReason || '').toLowerCase()
+            : fuSort.key === 'channel' ? (it.freeDm ? 'free dm' : it.channel || '').toLowerCase()
+            : (it.name || '').toLowerCase();
+          const dir = fuSort.dir === 'asc' ? 1 : -1;
+          const sorted = [...followups].sort((a, b) => fuVal(a) < fuVal(b) ? -dir : fuVal(a) > fuVal(b) ? dir : 0);
+          const setFu = (k) => setFuSort(s => ({ key: k, dir: s.key === k && s.dir === 'asc' ? 'desc' : 'asc' }));
+          const FU_COLS = [{ k: 'name', l: 'Name' }, { k: 'company', l: 'Company' }, { k: 'target', l: 'Target' }, { k: 'reason', l: 'Reason' }, { k: 'channel', l: 'Channel' }];
+          return (
+            <div style={{ overflowX: 'auto', marginTop: 12 }}>
+              <table className="tbl ssi-tbl" style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    {FU_COLS.map(c => (
+                      <th key={c.k} className={fuSort.key === c.k ? 'sorted' : ''} role="button" tabIndex={0}
+                        onClick={() => setFu(c.k)} onKeyDown={window.kbdActivate(() => setFu(c.k))}>
+                        {c.l}<span className="sort-ind">{fuSort.key === c.k ? (fuSort.dir === 'asc' ? '↑' : '↓') : '·'}</span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map(item => {
+                    const channelHint = item.freeDm ? 'free DM' : item.channel === 'both' ? 'LinkedIn + email' : item.channel;
+                    return (
+                      <tr key={`${item.source}:${item.id}`} className={followupDrawerId === item.id ? 'selected' : ''} tabIndex={0}
+                        onKeyDown={window.kbdActivate(() => setFollowupDrawerId(item.id))} onClick={() => setFollowupDrawerId(item.id)}>
+                        <td style={{ fontWeight: 600, color: 'var(--text)' }}>{item.name || '(no name)'}</td>
+                        <td className="dim">{item.where || item.company || 'reach not recorded'}</td>
+                        <td className="dim">{item.target || item.role || 'target not recorded'}</td>
+                        <td className="dim">{item.queueReason || ''}</td>
+                        <td className="mono dim" style={{ fontSize: 10.5 }}>{channelHint}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Stage subtabs */}
