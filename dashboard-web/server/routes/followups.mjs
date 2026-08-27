@@ -113,7 +113,7 @@ router.get('/api/followups/queue', (req, res) => {
     const snooze = readSnooze();
     if (pruneSnooze(snooze)) writeSnooze(snooze);
     const today = snoozeToday();
-    const queue = computeFollowupQueue().filter(it => {
+    const queue = computeFollowupQueue({ excludeReferrals: true }).filter(it => {
       const until = snooze[it.source]?.[String(it.id)];
       return !(until && until > today) && !isMuted(it.id, it.source);
     });

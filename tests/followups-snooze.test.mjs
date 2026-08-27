@@ -9,6 +9,7 @@ process.env.TJK_DATA_DIR = sandbox;
 
 const express = (await import('express')).default;
 const { router } = await import('../dashboard-web/server/routes/followups.mjs');
+const { router: referralsRouter } = await import('../dashboard-web/server/routes/referrals.mjs');
 const { appendReferralRows, REFERRAL_HEADER } = await import('../dashboard-web/server/lib/referrals.mjs');
 const { readSnooze, writeSnooze, readMute, isMuted } = await import('../dashboard-web/server/lib/sidecars.mjs');
 
@@ -50,6 +51,7 @@ for (let i = 1; i <= 7; i++) {
 const app = express();
 app.use(express.json());
 app.use(router);
+app.use(referralsRouter);
 const server = app.listen(0);
 await new Promise(resolve => server.once('listening', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -60,6 +62,7 @@ const post = (url, body) => fetch(base + url, {
   body: JSON.stringify(body),
 }).then(async response => ({ status: response.status, body: await response.json().catch(() => ({})) }));
 const getQueue = () => fetch(base + '/api/followups/queue').then(response => response.json()).then(body => body.queue || []);
+const getReferralQueue = () => fetch(base + '/api/referrals/followups').then(response => response.json()).then(body => body.queue || []);
 
 let passed = 0;
 const check = (condition, message) => {
@@ -81,13 +84,15 @@ response = await post('/api/followups/snooze', { source: 'unknown', id: 7007, da
 check(response.status === 400, 'an unknown snooze source still returns 400');
 
 let queue = await getQueue();
-check(!queue.some(row => row.source === 'referral' && row.id === 7007), 'a snoozed referral is absent from the queue');
+check(!queue.some(row => row.source === 'referral'), 'the main queue excludes referrals');
+queue = await getReferralQueue();
+check(!queue.some(row => row.source === 'referral' && row.id === 7007), 'a snoozed referral is absent from the referral queue');
 check(!readSnooze().app['7007'], 'snoozing referral 7007 leaves application 7007 untouched');
 
 const expired = readSnooze();
 expired.referral['7007'] = '2000-01-01';
 writeSnooze(expired);
-queue = await getQueue();
+queue = await getReferralQueue();
 check(queue.some(row => row.source === 'referral' && row.id === 7007), 'a referral returns after its snooze date has passed');
 
 fs.writeFileSync(path.join(sandbox, 'followup-snooze.json'), JSON.stringify({
@@ -105,12 +110,12 @@ check(isMuted(7012) && readMute().app['7012'], 'a legacy flat mute file reads ap
 response = await post('/api/followups/mute', { source: 'referral', id: 7007 });
 check(response.status === 200 && isMuted(7007, 'referral'), 'referral 7007 can be muted');
 check(!isMuted(7007, 'app'), 'referral 7007 and application 7007 mute independently');
-queue = await getQueue();
-check(!queue.some(row => row.source === 'referral' && row.id === 7007), 'a muted referral is absent from the queue');
+queue = await getReferralQueue();
+check(!queue.some(row => row.source === 'referral' && row.id === 7007), 'a muted referral is absent from the referral queue');
 
 response = await post('/api/followups/unmute', { source: 'referral', id: 7007 });
 check(response.status === 200 && !isMuted(7007, 'referral'), 'referral 7007 can be unmuted');
-queue = await getQueue();
+queue = await getReferralQueue();
 check(queue.some(row => row.source === 'referral' && row.id === 7007), 'unmuting returns the referral row');
 
 server.closeAllConnections?.();

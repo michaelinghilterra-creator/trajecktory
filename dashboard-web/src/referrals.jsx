@@ -110,6 +110,7 @@ Thanks either way,
 // ─── The tab ────────────────────────────────────────────────────────────────
 window.ReferralsTab = function ReferralsTab({ search } = {}) {
   const [rows, setRows] = useState([]);
+  const [followups, setFollowups] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -119,6 +120,7 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
   const [sortKey, setSortKey] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
   const [drawerId, setDrawerId] = useState(null);   // open contact drawer
+  const [followupDrawerId, setFollowupDrawerId] = useState(null);
   const [linkedin, setLinkedin] = useState({ count: 0, importedAt: null });
   const [reconciling, setReconciling] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -129,9 +131,11 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
   const toast = window.tjkToast || (() => {});
 
   const load = useCallback(() => {
-    fetch('/api/referrals')
-      .then(r => r.json())
-      .then(d => { setRows(d.referrals || []); setStatuses(d.statuses || []); setLinkedin(d.linkedin || { count: 0 }); setLoading(false); })
+    Promise.all([
+      fetch('/api/referrals').then(r => r.json()),
+      fetch('/api/referrals/followups').then(r => r.json()),
+    ])
+      .then(([d, f]) => { setRows(d.referrals || []); setStatuses(d.statuses || []); setLinkedin(d.linkedin || { count: 0 }); setFollowups(f.queue || []); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -353,6 +357,29 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
         </div>
       )}
 
+      {/* Actionable referral follow-ups */}
+      <div className="card padded-lg">
+        <div className="card-title">Follow up now · {followups.length}</div>
+        {followups.length === 0 ? (
+          <div className="no-data" style={{ padding: '16px 0 0' }}>No referral follow-ups right now</div>
+        ) : (
+          <div className="col" style={{ gap: 8, marginTop: 12 }}>
+            {followups.map(item => {
+              const channelHint = item.freeDm ? 'free DM' : item.channel === 'both' ? 'LinkedIn + email' : item.channel;
+              return (
+                <button type="button" key={`${item.source}:${item.id}`} className="subtab"
+                  onClick={() => setFollowupDrawerId(item.id)} style={{ width: '100%', textAlign: 'left', justifyContent: 'flex-start' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text)' }}>{item.name || '(no name)'}</span>
+                  <span className="dim">· {item.where || item.company || 'reach not recorded'}</span>
+                  <span className="dim">· {item.target || item.role || 'target not recorded'}</span>
+                  <span className="mono dim" style={{ marginLeft: 'auto', fontSize: 10.5 }}>{item.queueReason} · {channelHint}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Stage subtabs */}
       <div className="subtabs">
         {REF_SUBTABS.map(s => (
@@ -422,6 +449,10 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
           onChanged={load}
           onRemove={(r) => { remove(r); setDrawerId(null); }}
         />
+      )}
+
+      {followupDrawerId != null && window.ReferralDrawerById && (
+        <window.ReferralDrawerById id={followupDrawerId} onClose={() => setFollowupDrawerId(null)} onChanged={load} />
       )}
 
       {/* Templates */}
