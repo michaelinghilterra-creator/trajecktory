@@ -15,6 +15,7 @@ import { resolvePeople } from './contact-identity.mjs';
 import { readPins } from './contact-links.mjs';
 import { buildTimeline } from './contact-timeline.mjs';
 import { INFLUENCE_RANK, DEFAULT_TIER } from '../../../lib/influence-tier.mjs';
+import { getOutreachPolicy } from './profile.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
 // quickly each stage cools: warm Responded threads cool fastest, post-
@@ -1149,12 +1150,21 @@ function computeJustConnectedQueue({ taRows, referralRows, influencers, apps } =
   const baselineId = getNewBaselineId();
   const touchIdx = buildCompanyTouchIndex(books);
   const today = _localToday();
+  // Hold a fresh acceptance out of the queue for a cool-off so the first ask does
+  // not land the day after they connect. Business days, user-configurable.
+  const cooloffDays = getOutreachPolicy().connectedCooloffDays;
   const out = [];
   for (const row of ta) {
     if (row.linkedinStatus !== 'Connected') continue;            // accepted the invite
     if (row.status === 'Archived') continue;
     if (!applied.has(normalizeCompany(row.company))) continue;   // only live applications
     const connectedOn = liMap[String(row.id)]?.updated || '';
+    // Cool-off: with a known connect date, stay quiet until it is old enough. A
+    // missing date still surfaces (below) rather than risk hiding a real cue.
+    if (connectedOn && cooloffDays > 0) {
+      const age = _businessDaysAgo(connectedOn);
+      if (age != null && age < cooloffDays) continue;
+    }
     // Not yet messaged since connecting: no Sent LinkedIn entry dated on/after the
     // connect date. The original invite predates the connection, so it never counts.
     // With no connect date on file, surface it rather than risk hiding a fresh DM cue.
