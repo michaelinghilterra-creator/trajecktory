@@ -607,13 +607,13 @@ for (const { addition, existing: duplicate } of updatesByExisting.values()) {
     const lineIdx = appLines.indexOf(duplicate.raw);
     if (lineIdx >= 0) {
       // Determine status for the updated entry:
-      //   - Preserve user-set terminal states (Applied/Responded/interview rounds/Offer/Rejected)
+      //   - Preserve user-set terminal states (Applied/interview rounds/Offer/Rejected)
       //     — the user took action on this, don't undo it
       //   - If old status was Discarded/SKIP from auto-discard AND the new score
       //     would NOT trigger auto-discard, reset to Evaluated (the re-eval
       //     showed it's worth a fresh look)
       //   - Otherwise keep the existing status
-      const userTerminal = ['Applied', 'Responded', 'Phone Screen', '1st Interview', '2nd Interview', '3rd Interview', '4th Interview', 'Offer', 'Rejected'].includes(duplicate.status);
+      const userTerminal = ['Applied', 'Phone Screen', '1st Interview', '2nd Interview', '3rd Interview', 'Offer', 'Rejected'].includes(duplicate.status);
       const autoDiscarded = /auto-discarded:/i.test(duplicate.notes || '');
       const newNotesLower = (addition.notes || '').toLowerCase();
       const newRecAgainst = /\b(do not apply|do not pursue|recommend against|hard\s*(?:no|blocker|disqualifier)|location\s+(?:blocker|hard.?no|mismatch|disqualifier)|international\s+relocation|not recommended|not applicable)\b/.test(newNotesLower);

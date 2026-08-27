@@ -119,6 +119,32 @@ export function canContact({ timeline = [], channel = 'email', source = '', comp
     timed.push(soonest.until);
   }
 
+  // Cross-channel rest: the per-channel gap above cannot see across channels, so a
+  // LinkedIn message yesterday left an email free today. This holds EVERY channel
+  // for a rest day after the most recent touch on ANY channel (connection invites
+  // excluded, same as the gap clock). gap 0 = touched today, 1 = yesterday; with
+  // restDays 1 a Monday touch clears on Wednesday.
+  const restDays = p.minDaysBetweenTouchesAnyChannel;
+  const newestAnyChannel = sent
+    .filter(e => !isLinkedInInvite(e.subject))
+    .map(e => e.at || e.timestamp)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+  if (restDays > 0 && newestAnyChannel && day(newestAnyChannel)) {
+    const lastDay = day(newestAnyChannel);
+    const gap = Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${lastDay}T00:00:00Z`)) / DAY_MS);
+    if (gap >= 0 && gap <= restDays) {
+      const until = addDays(lastDay, restDays + 1);
+      blocks.push({
+        rule: 'crossChannelRest',
+        reason: `You reached them on another channel ${gap === 0 ? 'today' : `${gap} day${gap === 1 ? '' : 's'} ago`}. Give them a rest day before the next touch.`,
+        until,
+      });
+      timed.push(until);
+    }
+  }
+
   const windowStart = new Date(now.getTime() - 30 * DAY_MS);
   const recentSent = sent.filter(e => {
     const t = Date.parse(e.at || e.timestamp || '');

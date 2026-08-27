@@ -77,12 +77,12 @@ function normalizeStatus(raw) {
   if (/^(interview|entrevista|first interview|round ?1|1st interview)$/i.test(s)) return { status: '1st Interview' };
   if (/^(second interview|round ?2|2nd interview)$/i.test(s)) return { status: '2nd Interview' };
   if (/^(third interview|round ?3|3rd interview)$/i.test(s)) return { status: '3rd Interview' };
-  if (/^(fourth interview|round ?4|4th interview|final round|final loop)$/i.test(s)) return { status: '4th Interview' };
+  if (/^(fourth interview|round ?4|4th interview|final round|final loop)$/i.test(s)) return { status: '3rd Interview' };
 
   // Already canonical (English, per states.yml) — just fix casing/bold
   const canonical = [
-    'Evaluated', 'Applied', 'Responded',
-    'Phone Screen', '1st Interview', '2nd Interview', '3rd Interview', '4th Interview',
+    'Evaluated', 'Applied',
+    'Phone Screen', '1st Interview', '2nd Interview', '3rd Interview',
     'Offer', 'Rejected', 'Discarded', 'SKIP', 'Closed', 'Not a Fit', 'No Response',
   ];
   for (const c of canonical) {
@@ -92,7 +92,7 @@ function normalizeStatus(raw) {
   // Spanish aliases → English canonicals
   if (['evaluada'].includes(lower)) return { status: 'Evaluated' };
   if (['aplicado', 'enviada', 'aplicada', 'applied', 'sent'].includes(lower)) return { status: 'Applied' };
-  if (['respondido'].includes(lower)) return { status: 'Responded' };
+  if (['responded', 'respondido'].includes(lower)) return { status: 'Applied' };
   if (['oferta'].includes(lower)) return { status: 'Offer' };
   if (['cerrada', 'descartada'].includes(lower)) return { status: 'Discarded' };
   if (['no aplicar', 'no_aplicar', 'skip'].includes(lower)) return { status: 'SKIP' };

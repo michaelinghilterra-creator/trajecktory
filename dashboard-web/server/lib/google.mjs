@@ -50,6 +50,14 @@ export const GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.reado
 // stays too so the reply/bounce sweep keeps working. The user re-consents to both.
 export const GMAIL_COMPOSE_SCOPE = 'https://www.googleapis.com/auth/gmail.compose';
 export const GMAIL_SCOPES = `${GMAIL_READONLY_SCOPE} ${GMAIL_COMPOSE_SCOPE}`;
+
+// Read-only calendar, requested alongside the Gmail scopes so one Google
+// connection covers both. The Today tab reads the day's events; it NEVER writes
+// to the calendar (there is no event-create wrapper here, by design). Google is
+// the record of truth: this is a one-way read. A user connected before this
+// shipped has a token without it and re-consents once to grant it.
+export const CALENDAR_READONLY_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+export const GOOGLE_SCOPES = `${GMAIL_SCOPES} ${CALENDAR_READONLY_SCOPE}`;
 export const MAX_CORR_BODY = 20000;
 const CORR_BODY_TRUNCATION_MARKER = '\n\n[Message truncated at 20000 characters]';
 
@@ -132,7 +140,7 @@ function clientConfigured() {
 function googleStatus(tokens = readTokens(), now = Date.now()) {
   const configured = clientConfigured();
   if (!tokens || !tokens.refresh_token) {
-    return { configured, connected: false, connectedEmail: null, scopes: [], canReadMail: false, canDraft: false, expired: true, expiresAt: null };
+    return { configured, connected: false, connectedEmail: null, scopes: [], canReadMail: false, canDraft: false, canReadCalendar: false, expired: true, expiresAt: null };
   }
   const scopes = tokenScopes(tokens);
   const expiresAt = tokens.expiry_date || null;
@@ -143,6 +151,7 @@ function googleStatus(tokens = readTokens(), now = Date.now()) {
     scopes,
     canReadMail: scopes.some(s => /gmail\.(readonly|modify)/.test(s)),
     canDraft: scopes.some(s => /gmail\.(compose|modify)/.test(s)),
+    canReadCalendar: scopes.some(s => /auth\/calendar(\.readonly)?$/.test(s)),
     expired: !expiresAt || expiresAt <= now,
     expiresAt,
   };
@@ -259,7 +268,7 @@ export function randomState() {
 // Build the Google consent URL. Pure given its inputs. access_type=offline plus
 // prompt=consent guarantees a refresh token even on a re-consent (Google withholds
 // one on a silent re-grant otherwise, which is exactly the case here).
-export function buildAuthUrl({ clientId, redirectUri, state, codeChallenge, scope = GMAIL_SCOPES }) {
+export function buildAuthUrl({ clientId, redirectUri, state, codeChallenge, scope = GOOGLE_SCOPES }) {
   const p = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -335,6 +344,52 @@ async function getMessage({ id, accessToken, fetchImpl = fetch } = {}) {
   const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) throw new Error(`Gmail get failed (${res.status})`);
   return res.json();
+}
+
+// ── Calendar read wrapper (network; injectable fetch) — READ ONLY ─────────────
+// One-way: reads events, never creates or edits them (no write wrapper exists).
+const CALENDAR_BASE = 'https://www.googleapis.com/calendar/v3';
+async function listCalendarEvents({ accessToken, timeMin, timeMax, calendarId = 'primary', max = 50, fetchImpl = fetch } = {}) {
+  const params = new URLSearchParams({
+    singleEvents: 'true',            // expand recurring events into instances
+    orderBy: 'startTime',
+    timeMin, timeMax,
+    maxResults: String(Math.min(250, Math.max(1, Number(max) || 50))),
+  });
+  const url = `${CALENDAR_BASE}/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`;
+  const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) throw new Error(`Calendar list failed (${res.status})`);
+  const j = await res.json();
+  return j.items || [];
+}
+
+// Today's events in the user's LOCAL day, mapped to a small UI shape. The server
+// runs on the user's own machine, so new Date() is already their local time.
+// Returns [{ id, title, allDay, start:"HH:MM"|null, end, location }] in start order.
+export async function getTodayCalendarEvents({ now = new Date(), fetchImpl = fetch, getToken = getAccessToken } = {}) {
+  const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(now); dayEnd.setHours(23, 59, 59, 999);
+  const accessToken = await getToken();
+  const items = await listCalendarEvents({
+    accessToken, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), fetchImpl,
+  });
+  const hhmm = (iso) => {
+    const d = new Date(iso);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
+  return items
+    .filter(ev => ev.status !== 'cancelled')
+    .map(ev => {
+      const allDay = !!(ev.start && ev.start.date && !ev.start.dateTime);
+      return {
+        id: ev.id,
+        title: ev.summary || '(no title)',
+        allDay,
+        start: allDay ? null : (ev.start && ev.start.dateTime ? hhmm(ev.start.dateTime) : null),
+        end: allDay ? null : (ev.end && ev.end.dateTime ? hhmm(ev.end.dateTime) : null),
+        location: ev.location || '',
+      };
+    });
 }
 
 // ── Draft creation (network; injectable fetch) — CREATE ONLY, NEVER SEND ───────
@@ -454,7 +509,7 @@ function extractEmail(s) {
 // often contains interview-ish words ("we interviewed many strong candidates").
 // Deliberately coarse: this only picks the SUGGESTED action; a human confirms the
 // flip. positive = wants to talk / schedule / advance; negative = a pass; neutral
-// = a human reply that is neither (logs a note, nudges Applied → Responded).
+// = a human reply that is neither (logs a note without changing status).
 const REPLY_NEGATIVE_RE = /\b(unfortunately|not (moving|move) forward|decided (to|not) to|move (ahead|forward) with (other|another)|other candidates|will not be (moving|proceeding)|regret to|not (a )?(fit|match)|not the right (fit|match|time)|pursue other|filled the (role|position|seat)|no longer (considering|moving|open)|have to pass|passing on)\b/i;
 const REPLY_POSITIVE_RE = /\b(schedul(e|ing)|set up (a )?(call|time|chat|meeting)|book (a )?time|find (a )?time|calendar|availab(le|ility)|when are you (free|available)|phone screen|screening call|next steps?|move you forward|(would |i'?d )?(love|like|happy) to (talk|chat|speak|meet|connect|learn more)|let'?s (talk|chat|connect|set)|great to connect|interview)\b/i;
 

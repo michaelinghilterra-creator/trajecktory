@@ -1,5 +1,5 @@
 // Pipeline Module — Console redesign with sub-tabs.
-// Overview (default) · Table · All · Analytics.
+// Overview (default) · Roles · Discovery · Analytics.
 // The application drawer is PipelineDrawer, defined in this file.
 //
 // NOTE: wrapped in an IIFE so locals don't collide with other modules
@@ -13,13 +13,11 @@ const { useState: useStateP, useMemo: useMemoP, useEffect: useEffectP, useRef: u
 const STATUS = [
   { id: 'Evaluated',     short: 'Eval',    color: 'var(--accent)', hex: '#a78bfa', rgb: '167,139,250', stage: 0, icon: '◆' },
   { id: 'Applied',       short: 'Applied', color: 'var(--blue)',   hex: '#60a5fa', rgb: '96,165,250',  stage: 1, icon: '↗' },
-  { id: 'Responded',     short: 'Replied', color: 'var(--cyan)',   hex: '#22d3ee', rgb: '34,211,238',  stage: 2, icon: '↩' },
-  { id: 'Phone Screen',  short: 'Screen',  color: '#fcd34d',       hex: '#fcd34d', rgb: '252,211,77',  stage: 3, icon: '☎' },
-  { id: '1st Interview', short: '1st',     color: '#fbbf24',       hex: '#fbbf24', rgb: '251,191,36',  stage: 4, icon: '①' },
-  { id: '2nd Interview', short: '2nd',     color: 'var(--orange)', hex: '#f59e0b', rgb: '245,158,11',  stage: 5, icon: '②' },
-  { id: '3rd Interview', short: '3rd',     color: '#f97316',       hex: '#f97316', rgb: '249,115,22',  stage: 6, icon: '③' },
-  { id: '4th Interview', short: '4th',     color: '#ea580c',       hex: '#ea580c', rgb: '234,88,12',   stage: 7, icon: '④' },
-  { id: 'Offer',         short: 'Offer',   color: 'var(--green)',  hex: '#22c55e', rgb: '34,197,94',   stage: 8, icon: '★' },
+  { id: 'Phone Screen',  short: 'Screen',  color: '#fcd34d',       hex: '#fcd34d', rgb: '252,211,77',  stage: 2, icon: '☎' },
+  { id: '1st Interview', short: '1st',     color: '#fbbf24',       hex: '#fbbf24', rgb: '251,191,36',  stage: 3, icon: '①' },
+  { id: '2nd Interview', short: '2nd',     color: 'var(--orange)', hex: '#f59e0b', rgb: '245,158,11',  stage: 4, icon: '②' },
+  { id: '3rd Interview', short: '3rd',     color: '#f97316',       hex: '#f97316', rgb: '249,115,22',  stage: 5, icon: '③' },
+  { id: 'Offer',         short: 'Offer',   color: 'var(--green)',  hex: '#22c55e', rgb: '34,197,94',   stage: 6, icon: '★' },
 ];
 const STATUS_MAP = Object.fromEntries(STATUS.map(s => [s.id, s]));
 const ACTIVE_STATUSES = STATUS.map(s => s.id);
@@ -197,7 +195,7 @@ function Kpi({ k, v, sub, icon, color }) {
 
 // ─── Overview sub-tab ──────────────────────────────────────────────────────
 function OverviewKpis({ apps, isStale = () => false }) {
-  const inFlight = apps.filter(a => ['Responded', 'Offer'].includes(a.status) || window.isInterviewStage(a.status)).length;
+  const inFlight = apps.filter(a => a.status === 'Offer' || window.isInterviewStage(a.status)).length;
   const scored = apps.filter(a => a.score != null);
   const avg = scored.length ? (scored.reduce((s, a) => s + a.score, 0) / scored.length).toFixed(2) : '-';
   const strong = scored.filter(a => a.score >= 4.0).length;
@@ -313,12 +311,15 @@ function OverviewView({ apps, onOpen, onAction, search }) {
 // re-list the labels here — a second copy is exactly what drifted and left the new
 // buckets off the Sankey while the pipeline filter showed them.
 const ARCHETYPES = window.ARCHETYPES;
+const ALL_ENTRIES_STATUSES = window.STATUSES;
 
 function applyFilters(apps, filters, search) {
   return apps.filter(a => {
     if (filters.statuses.length && !filters.statuses.includes(a.status)) return false;
     if (filters.archetype && a.archetype !== filters.archetype) return false;
     if (filters.scoreMin && (a.score == null || a.score < filters.scoreMin)) return false;
+    if (filters.dateFrom && (!a.date || a.date < filters.dateFrom)) return false;
+    if (filters.dateTo && (!a.date || a.date > filters.dateTo)) return false;
     if (search && search.trim()) {
       const q = search.toLowerCase();
       const hay = `${a.company} ${a.role} ${a.status} ${a.archetype} ${a.sector || ''} ${a.source || ''}`.toLowerCase();
@@ -330,7 +331,7 @@ function applyFilters(apps, filters, search) {
 
 function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, right }) {
   const toggleStatus = (s) => setFilters(f => ({ ...f, statuses: f.statuses.includes(s) ? f.statuses.filter(x => x !== s) : [...f.statuses, s] }));
-  const active = filters.statuses.length || filters.archetype || filters.scoreMin || (search && search.trim());
+  const active = filters.statuses.length || filters.archetype || filters.scoreMin || filters.dateFrom || filters.dateTo || (search && search.trim());
   const scoreSteps = [0, 3.0, 3.5, 4.0, 4.5];
   // One pass over apps instead of one filter per status on every render/keystroke.
   const statusCounts = useMemoP(() => {
@@ -342,13 +343,15 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
     <div className="pl-toolbar">
       <div className="tb-row">
         <div className="statline">
-          {STATUS.map(s => {
-            const n = statusCounts[s.id] || 0;
-            const on = filters.statuses.includes(s.id);
+          {ALL_ENTRIES_STATUSES.map(status => {
+            const meta = window.STATUS_META[status];
+            if (!meta) return null;
+            const n = statusCounts[status] || 0;
+            const on = filters.statuses.includes(status);
             return (
-              <button key={s.id} className={'stat-chip' + (on ? ' on' : '') + (n === 0 ? ' zero' : '')} onClick={() => toggleStatus(s.id)}>
-                <span className="sc-dot" style={{ background: s.color, boxShadow: n ? `0 0 6px ${s.color}` : 'none' }} />
-                {s.id}<span className="sc-n">{n}</span>
+              <button key={status} className={'stat-chip' + (on ? ' on' : '') + (n === 0 ? ' zero' : '')} onClick={() => toggleStatus(status)}>
+                <span className="sc-dot" style={{ background: meta.color, boxShadow: n ? `0 0 6px ${meta.color}` : 'none' }} />
+                {status}<span className="sc-n">{n}</span>
               </button>
             );
           })}
@@ -366,8 +369,16 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
             </button>
           ))}
         </div>
+        <label className="mono dim" style={{ fontSize: 10.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+          From
+          <input className="sel" type="date" value={filters.dateFrom || ''} onChange={(e) => setFilters(f => ({ ...f, dateFrom: e.target.value }))} />
+        </label>
+        <label className="mono dim" style={{ fontSize: 10.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+          To
+          <input className="sel" type="date" value={filters.dateTo || ''} onChange={(e) => setFilters(f => ({ ...f, dateTo: e.target.value }))} />
+        </label>
         {active ? (
-          <button className="btn ghost sm" onClick={() => setFilters({ statuses: [], archetype: '', scoreMin: 0 })}>
+          <button className="btn ghost sm" onClick={() => setFilters({ statuses: [], archetype: '', archetypes: [], scoreMin: 0, dateFrom: '', dateTo: '' })}>
             <PIcon d={PI.x} size={12} /> Clear
           </button>
         ) : null}
@@ -485,7 +496,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
   return (
     <div className="fade-up card padded-lg">
       <div className="card-head">
-        <span className="card-title">Active Roles</span>
+        <span className="card-title">Roles</span>
         <div className="row" style={{ gap: 12, alignItems: 'center' }}>
           <span className="card-meta mono">{sorted.length} of {apps.length} item{sorted.length === 1 ? '' : 's'}</span>
           {onExport && <button className="btn sm" onClick={onExport}><PIcon d={PI.download} size={13} /> Export CSV</button>}
@@ -831,7 +842,8 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
   // window.appReached reads the server-stamped `reached` rung (live status maxed
   // with the event log and the [reached:] tag), the same engine the Overview uses.
   const appliedAll = ratePool.filter(a => window.appReached(a, 'Applied')).length;
-  const respAll = ratePool.filter(a => window.appReached(a, 'Responded')).length;
+  // Responded is derived, not a rung: reached a screen or later, OR a rejection.
+  const respAll = ratePool.filter(a => window.appResponded(a)).length;
   const intvAll = ratePool.filter(a => window.appReached(a, 'Phone Screen')).length;
   const respRate = appliedAll ? Math.round((respAll / appliedAll) * 100) : 0;
   const intvRate = appliedAll ? Math.round((intvAll / appliedAll) * 100) : 0;
@@ -977,135 +989,10 @@ function exportCSV(rows) {
 // ─── Sub-tabs ──────────────────────────────────────────────────────────────
 const PL_SUBTABS = [
   { id: 'overview',  label: 'Overview',  icon: PI.pulse },
-  { id: 'table',     label: 'Active',    icon: PI.list },
-  { id: 'all',       label: 'All',       icon: PI.list },
+  { id: 'table',     label: 'Roles',     icon: PI.list },
   { id: 'discovery', label: 'Discovery', icon: PI.pulse },
-  { id: 'awaiting',  label: 'Awaiting response', icon: PI.clock || PI.pulse },
   { id: 'analytics', label: 'Analytics', icon: PI.chart },
 ];
-
-// ─── All Entries sub-tab ───────────────────────────────────────────────────
-// Unfiltered view of every row across every status, including closed-state
-// (SKIP / Rejected / Closed / Discarded / Not a Fit). Mirrors the legacy
-// /tracker tab's filter UI and table, but routes opens through Pipeline's
-// local drawer so users can Reopen a row back to Evaluated in one click.
-const ALL_ENTRIES_STATUSES = [
-  'Evaluated', 'Applied', 'Responded', ...window.INTERVIEW_STAGES, 'Offer',
-  'Rejected', 'Discarded', 'SKIP', 'Closed', 'Not a Fit', 'No Response',
-];
-function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays = () => null, triage = null }) {
-  const [sortKey, setSortKey] = useStateP('date');
-  const [sortDir, setSortDir] = useStateP('desc');
-  const [filters, setFilters] = useStateP({ statuses: [], archetypes: [], scoreMin: 0 });
-
-  const filtered = useMemoP(() => {
-    return apps.filter(a => {
-      if (filters.statuses.length && !filters.statuses.includes(a.status)) return false;
-      if (filters.archetypes.length && !filters.archetypes.includes(a.archetype)) return false;
-      if (filters.scoreMin && a.score < filters.scoreMin) return false;
-      if (search) {
-        const ql = search.toLowerCase();
-        const hay = `${a.company} ${a.role} ${a.status} ${a.archetype} ${a.sector}`.toLowerCase();
-        if (!hay.includes(ql)) return false;
-      }
-      return true;
-    });
-  }, [apps, filters, search]);
-
-  const sorted = useMemoP(() => {
-    const arr = [...filtered];
-    const dir = sortDir === 'asc' ? 1 : -1;
-    arr.sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === 'id') {
-        cmp = (a._triage ? Number.MAX_SAFE_INTEGER : (a.id || 0)) - (b._triage ? Number.MAX_SAFE_INTEGER : (b.id || 0));
-      } else if (sortKey === 'score') {
-        const as = a.score != null ? a.score : -1;
-        const bs = b.score != null ? b.score : -1;
-        cmp = as - bs;
-      } else if (sortKey === 'date') {
-        cmp = (a.date || '').localeCompare(b.date || '');
-        if (cmp === 0) {
-          const as = a.score != null ? a.score : -1;
-          const bs = b.score != null ? b.score : -1;
-          return bs - as;
-        }
-      } else {
-        const av = (a[sortKey] || '').toString().toLowerCase();
-        const bv = (b[sortKey] || '').toString().toLowerCase();
-        cmp = av.localeCompare(bv);
-      }
-      return cmp * dir;
-    });
-    return arr;
-  }, [filtered, sortKey, sortDir]);
-
-  const toggleStatus = (s) => setFilters(f => ({ ...f, statuses: f.statuses.includes(s) ? f.statuses.filter(x => x !== s) : [...f.statuses, s] }));
-  const toggleArch = (a) => setFilters(f => ({ ...f, archetypes: f.archetypes.includes(a) ? f.archetypes.filter(x => x !== a) : [...f.archetypes, a] }));
-  const setSort = (k) => {
-    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(k); setSortDir(k === 'score' || k === 'date' ? 'desc' : 'asc'); }
-  };
-
-  const breakdown = useMemoP(() => {
-    return ALL_ENTRIES_STATUSES
-      .map(s => ({ s, n: apps.filter(a => a.status === s).length, meta: window.STATUS_META[s] }))
-      .filter(x => x.n > 0 && x.meta);
-  }, [apps]);
-
-  const archetypes = useMemoP(() => window.ARCHETYPES || [], []);
-
-  return (
-    <div className="fade-up card padded-lg">
-      <div className="card-head">
-        <span className="card-title">All Entries</span>
-        <span className="card-meta mono">{sorted.length} of {apps.length} item{sorted.length === 1 ? '' : 's'}</span>
-      </div>
-
-      {/* Status breakdown — flat row, no inner card */}
-      <div className="row" style={{ flexWrap: 'wrap', gap: 14, marginBottom: 10 }}>
-        {breakdown.map(({ s, n, meta }) => (
-          <span key={s} className="row mono" style={{ gap: 6, fontSize: 11, color: 'var(--text-dim)', cursor: 'pointer' }} onClick={() => toggleStatus(s)}>
-            <span style={{ width: 7, height: 7, borderRadius: 50, background: meta.color, display: 'inline-block', flexShrink: 0 }}></span>
-            {s}
-            <span style={{ color: filters.statuses.includes(s) ? 'var(--accent)' : 'var(--text)' }}>{n}</span>
-          </span>
-        ))}
-        <span className="mono dim" style={{ fontSize: 11, marginLeft: 'auto' }}>click to filter</span>
-      </div>
-
-      {/* Filter chips — flat, no inner card */}
-      <div className="col" style={{ gap: 8, marginBottom: 10 }}>
-        <div className="filterbar">
-          <span className="mono dim" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Status</span>
-          {ALL_ENTRIES_STATUSES.map(s => window.STATUS_META[s] && (
-            <button type="button" key={s} className={`chip ${filters.statuses.includes(s) ? 'on' : ''}`} onClick={() => toggleStatus(s)}>
-              <span className="dot" style={{ width: 6, height: 6, borderRadius: 50, background: window.STATUS_META[s].color, display: 'inline-block' }}></span>
-              {s}
-            </button>
-          ))}
-        </div>
-        <div className="filterbar">
-          <span className="mono dim" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Archetype</span>
-          {archetypes.map(a => (
-            <button type="button" key={a} className={`chip ${filters.archetypes.includes(a) ? 'on' : ''}`} onClick={() => toggleArch(a)}>{a}</button>
-          ))}
-        </div>
-        <div className="filterbar">
-          <span className="mono dim" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Score ≥</span>
-          {[0, 3.0, 3.5, 4.0, 4.5].map(s => (
-            <button type="button" key={s} className={`chip ${filters.scoreMin === s ? 'on' : ''}`} onClick={() => setFilters(f => ({ ...f, scoreMin: s }))}>{s === 0 ? 'any' : s.toFixed(1)}</button>
-          ))}
-          {(filters.statuses.length || filters.archetypes.length || filters.scoreMin) ? (
-            <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={() => setFilters({ statuses: [], archetypes: [], scoreMin: 0 })}>Clear all</button>
-          ) : null}
-        </div>
-      </div>
-
-      <window.PipelineTable rows={sorted} sortKey={sortKey} sortDir={sortDir} setSort={setSort} onOpen={onOpen} isStale={isStale} staleDays={staleDays} triage={triage} flat />
-    </div>
-  );
-}
 
 // ─── Pipeline Drawer (760px) — inline evaluation report ──────────────────
 const DRAWER_TABS = [
@@ -1121,7 +1008,7 @@ const DRAWER_TABS = [
   { id: 'followup',  label: 'Follow-up',  icon: PI.send },
 ];
 // The Follow-up tab only makes sense once an application is out the door.
-const FOLLOWUP_TAB_STATUSES = ['Applied', 'Responded', ...window.INTERVIEW_STAGES];
+const FOLLOWUP_TAB_STATUSES = ['Applied', ...window.INTERVIEW_STAGES];
 
 // Today in the user's LOCAL timezone. Deliberately not toISOString().slice(0,10),
 // which is UTC and rolls over around 5-7pm US time — pre-filling a status change
@@ -1322,7 +1209,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   const engMeta = engine ? ENGINE_META[engine] : { hex: '#8b8b94', rgb: '139,139,148' };
 
   // status-aware footer. The primary CTA advances one rung along the funnel
-  // (Applied → Responded → Phone Screen → 1st → 2nd → 3rd → 4th → Offer); the
+  // (Applied → Phone Screen → 1st → 2nd → 3rd → Offer); the
   // button id IS the next canonical status, dispatched via onAction's MAP.
   const st = app.status;
   const stIdx = window.FUNNEL_ORDER.indexOf(st);
@@ -1337,7 +1224,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     primary = [{ id: 'accept', label: 'Accept Offer', cls: 'success', check: true }];
   } else if (stIdx >= 1 && stIdx < window.FUNNEL_ORDER.length - 1) {
     const next = window.FUNNEL_ORDER[stIdx + 1];
-    primary = [{ id: next, label: next === 'Responded' ? 'Mark Responded' : `Move to ${next}`, cls: 'primary', check: true }];
+    primary = [{ id: next, label: `Move to ${next}`, cls: 'primary', check: true }];
   } else if (['SKIP', 'Rejected', 'Closed', 'Discarded', 'Not a Fit', 'No Response'].includes(st)) {
     primary = [{ id: 'reopen', label: 'Reopen → Evaluated', cls: 'primary', check: true }];
     // Re-queue a near-threshold auto-discard (a noisy 2.9, just under the 3.0 cut)
@@ -1432,8 +1319,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
             const fillStage = isClosed ? dropStage : m.stage;
             const dropLabel = (dropStage >= 0 && STATUS[dropStage]) ? STATUS[dropStage].id : null;
             const statusColor = window.STATUS_META[app.status]?.color || m.color;
-            const FOURTH = STATUS_MAP['4th Interview'].stage;
-            const track = STATUS.filter(s => s.stage !== FOURTH || fillStage >= FOURTH);
+            const track = STATUS;
             return (
           <div className="ds-section">
             <div className="ds-label"><PIcon d={PI.trend} size={12} /> Pipeline stage <span className="r">{isClosed ? (dropLabel ? `lost at ${dropLabel}` : app.status.toLowerCase()) : `stage ${m.stage + 1}/${STATUS.length}`}</span></div>
@@ -2132,36 +2018,35 @@ function DiscoBadge({ label, color, title }) {
   );
 }
 
-function discoInitials(name) {
-  const p = String(name || '').replace(/['"]/g, '').split(/\s+/).filter(Boolean);
-  if (!p.length) return '?';
-  return ((p[0][0] || '') + (p.length > 1 ? p[1][0] : '')).toUpperCase();
-}
-
-// One discovery row: avatar, company, title (a link to the posting when we have a
-// URL), and a trailing badge slot. Shared by the pending and gated lists so both
-// read as the same polished card, not two hand-rolled layouts.
-function DiscoRow({ company, title, url, accent, badge, sub, first }) {
-  return (
-    <div className="row" style={{ gap: 10, alignItems: 'center', padding: '9px 2px', borderTop: first ? 'none' : '1px solid var(--border)' }}>
-      <div className="mono-av sm" style={{ flex: 'none', borderColor: accent, color: accent }}>{discoInitials(company)}</div>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{company || '—'}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {url
-            ? <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-dim)' }} onClick={e => e.stopPropagation()}>{title || 'View posting'}</a>
-            : (title || '—')}
-        </div>
-        {sub && <div className="dim mono" style={{ fontSize: 10.5, lineHeight: 1.4, marginTop: 2 }}>{sub}</div>}
-      </div>
-      {badge}
-    </div>
-  );
-}
-
 function DiscoveryInbox({ inbox, onReload }) {
+  const [sortKey, setSortKey] = useStateP('company');
+  const [sortDir, setSortDir] = useStateP('asc');
+  const setSort = (key) => {
+    if (sortKey === key) setSortDir(dir => dir === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+  const counts = inbox?.counts || { pending: 0, gated: 0, done: 0 };
+  const rows = useMemoP(() => {
+    const combined = [
+      ...(inbox?.pending || []).map(row => ({ ...row, discoveryStatus: 'Pending' })),
+      ...(inbox?.gated || []).map(row => ({ ...row, discoveryStatus: 'Gated' })),
+    ];
+    return combined.sort((a, b) => {
+      const av = String(a[sortKey] || '').toLocaleLowerCase();
+      const bv = String(b[sortKey] || '').toLocaleLowerCase();
+      const primary = av.localeCompare(bv);
+      if (primary) return sortDir === 'asc' ? primary : -primary;
+      return String(a.title || '').localeCompare(String(b.title || ''));
+    });
+  }, [inbox, sortKey, sortDir]);
   if (!inbox) return <div className="card padded-lg dim" style={{ fontSize: 12 }}>Loading discovery queue…</div>;
-  const { counts = { pending: 0, gated: 0, done: 0 }, pending = [], gated = [] } = inbox;
+  const cols = [
+    { k: 'company', label: 'Company' },
+    { k: 'title', label: 'Title' },
+    { k: 'dateAdded', label: 'Added' },
+    { k: 'discoveryStatus', label: 'Status' },
+    { k: 'url', label: 'URL' },
+  ];
   return (
     <div className="col" style={{ gap: 16 }}>
       <div className="card padded-lg col" style={{ gap: 10 }}>
@@ -2176,25 +2061,34 @@ function DiscoveryInbox({ inbox, onReload }) {
         </div>
       </div>
 
-      <div className="card padded-lg col" style={{ gap: 0 }}>
-        <div className="card-head" style={{ marginBottom: 4 }}><span className="card-title">Pending evaluation ({pending.length})</span></div>
-        {pending.length === 0 && <div className="dim" style={{ fontSize: 12, padding: '6px 0' }}>Nothing waiting. Run a scan to find new roles.</div>}
-        {pending.map((p, i) => (
-          <DiscoRow key={p.url || i} company={p.company} title={p.title} url={p.url} accent="var(--accent)" first={i === 0}
-            badge={p.readable
-              ? <DiscoBadge label="ready" color="var(--green)" title="JD is readable — ready to evaluate" />
-              : <DiscoBadge label="needs JD paste" color="var(--orange)" title="No readable JD yet — paste the description to evaluate" />} />
-        ))}
-      </div>
-
-      <div className="card padded-lg col" style={{ gap: 0 }}>
-        <div className="card-head" style={{ marginBottom: 4 }}><span className="card-title">Gated ({gated.length})</span></div>
-        {gated.length === 0 && <div className="dim" style={{ fontSize: 12, padding: '6px 0' }}>No gated rows.</div>}
-        {gated.map((g, i) => (
-          <DiscoRow key={g.url || i} company={g.company} title={g.title} url={g.url} accent="var(--red)" first={i === 0}
-            sub={g.reason || 'gated'}
-            badge={<DiscoBadge label="gated" color="var(--red)" title={g.reason || 'gated'} />} />
-        ))}
+      <div className="card padded-lg">
+        <div className="tbl-wrap" style={{ border: 'none', borderRadius: 0, background: 'transparent' }}>
+          <table className="tbl pl-tbl">
+            <thead><tr>{cols.map(col => (
+              <th key={col.k} className={sortKey === col.k ? 'sorted' : ''} role="button" tabIndex={0}
+                aria-sort={sortKey === col.k ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                onClick={() => setSort(col.k)} onKeyDown={window.kbdActivate(() => setSort(col.k))}>
+                {col.label}<span className="sort-ind">{sortKey === col.k ? (sortDir === 'asc' ? '↑' : '↓') : '·'}</span>
+              </th>
+            ))}</tr></thead>
+            <tbody>
+              {rows.length === 0 && <tr><td colSpan={cols.length}><div className="no-data" style={{ padding: 30, textAlign: 'center' }}>Nothing waiting. Run a scan to find new roles.</div></td></tr>}
+              {rows.map((row, index) => (
+                <tr key={`${row.discoveryStatus}:${row.url || index}`}>
+                  <td className="t-co-cell"><span className="co-name">{row.company || 'Unknown'}</span></td>
+                  <td className="t-role">{row.title || 'Untitled role'}</td>
+                  <td className="t-date">{row.dateAdded}</td>
+                  <td>
+                    <DiscoBadge label={row.discoveryStatus} color={row.discoveryStatus === 'Gated' ? 'var(--red)' : 'var(--accent)'} title={row.reason || row.discoveryStatus} />
+                    {row.discoveryStatus === 'Gated' && <div className="dim" style={{ fontSize: 10.5, marginTop: 3 }}>{row.reason || 'gated'}</div>}
+                    {row.discoveryStatus === 'Pending' && row.readable && <div className="dim" style={{ fontSize: 10.5, marginTop: 3 }}>readable</div>}
+                  </td>
+                  <td>{row.url && <a className="link" href={window.safeHref(row.url)} target="_blank" rel="noreferrer">Open JD ↗</a>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -2202,8 +2096,7 @@ function DiscoveryInbox({ inbox, onReload }) {
 
 window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFilters, onOpen, onQuickAction, onDataChanged, search, compTweaks }) {
   // Use the external view prop when it matches a known subtab, otherwise default to 'overview'.
-  // This lets the command palette in app.jsx jump directly to the All subtab.
-  const VALID_SUBVIEWS = ['overview', 'table', 'all', 'analytics'];
+  const VALID_SUBVIEWS = ['overview', 'table', 'discovery', 'analytics'];
   const initialSub = VALID_SUBVIEWS.includes(view) ? view : 'overview';
   const [subView, setSubViewRaw] = useStateP(initialSub);
   const setSubView = (s) => { setSubViewRaw(s); if (setView) setView(s); };
@@ -2211,10 +2104,10 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   const [drawerApp, setDrawerApp] = useStateP(null);
 
   const activeApps = useMemoP(() => apps.filter(a => ACTIVE_STATUSES.includes(a.status)), [apps]);
-  const filtered = useMemoP(() => applyFilters(activeApps, filters, search), [activeApps, filters, search]);
+  const filtered = useMemoP(() => applyFilters(apps, filters, search), [apps, filters, search]);
 
   // ── Triage (Option B): provisional rows from data/triage-results.tsv ───────
-  // Surfaced in the Table + All views so a scanned-but-unevaluated role is
+  // Surfaced in the Roles view so a scanned-but-unevaluated role is
   // visible where users look. NEVER written to applications.md, so Overview /
   // Analytics (which read `apps` / `activeApps`) are unaffected by construction.
   const [triageCards, setTriageCards] = useStateP([]);
@@ -2265,6 +2158,8 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
     if (filters && (filters.statuses?.length || filters.archetype || filters.archetypes?.length)) return [];
     let rows = triageRows;
     if (filters && filters.scoreMin) rows = rows.filter(r => r.score != null && r.score >= filters.scoreMin);
+    if (filters && filters.dateFrom) rows = rows.filter(r => r.date && r.date >= filters.dateFrom);
+    if (filters && filters.dateTo) rows = rows.filter(r => r.date && r.date <= filters.dateTo);
     if (search) { const ql = search.toLowerCase(); rows = rows.filter(r => `${r.company} ${r.role}`.toLowerCase().includes(ql)); }
     return rows;
   }, [triageRows, filters, search]);
@@ -2352,8 +2247,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   const handleOpen = (a) => { if (a && a._triage) return; setDrawerApp(a); };
 
   const onExport = () => {
-    const rows = subView === 'table' ? filtered : activeApps;
-    exportCSV(rows);
+    exportCSV(filtered);
   };
 
   // Drawer action handlers — primary actions advance status via API PATCH
@@ -2362,11 +2256,11 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
       const body = { status: newStatus };
       if (eventDate) body.eventDate = eventDate;
       // Auto-attribute the exit stage: closing from an interview round (or
-      // Responded/Offer) stamps [reached: <stage>] so the funnel + rejections-
+      // Phone Screen/Offer) stamps [reached: <stage>] so the funnel + rejections-
       // by-stage analytics credit the right rung. Mirrors app.jsx handleAction.
       if (newStatus === 'Rejected' || newStatus === 'No Response') {
         const fi = window.FUNNEL_ORDER.indexOf(a.status);
-        if (fi >= window.FUNNEL_ORDER.indexOf('Responded')) {
+        if (fi >= window.FUNNEL_ORDER.indexOf('Phone Screen')) {
           const tag = `[reached: ${a.status}]`;
           const stripped = (a.notes || '').trim().replace(/^\[reached:\s*[^\]]+\]\s*/i, '').trim();
           body.notes = stripped ? `${tag} ${stripped}` : tag;
@@ -2418,11 +2312,11 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
     }
     const MAP = {
       apply_manual: 'Applied', apply_claude: 'Applied', already_applied: 'Applied',
-      responded: 'Responded', offer: 'Offer', accept: 'Offer',
+      offer: 'Offer', accept: 'Offer',
       reopen: 'Evaluated',
       // funnel statuses (the advance CTA sets id = next canonical status) + closers map to themselves
-      Applied: 'Applied', Responded: 'Responded', Offer: 'Offer',
-      'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview', '4th Interview': '4th Interview',
+      Applied: 'Applied', Offer: 'Offer',
+      'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview',
       SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
     };
     const next = MAP[actionId];
@@ -2452,19 +2346,10 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
         <OverviewView apps={apps} onOpen={handleOpen} onAction={onQuickAction} search={search} />
       )}
       {subView === 'table' && (
-        <TableView apps={[...activeApps, ...triageRows]} filtered={[...filtered, ...triageInTable]} filters={filters} setFilters={setFilters} search={search} setSearch={() => {}} onOpen={handleOpen} selId={selId} onExport={onExport} isStale={isStale} staleDays={staleDays} triage={triage} />
-      )}
-      {subView === 'all' && (
-        <AllEntriesView apps={[...apps, ...triageRows]} onOpen={handleOpen} search={search} isStale={isStale} staleDays={staleDays} triage={triage} />
+        <TableView apps={[...apps, ...triageRows]} filtered={[...filtered, ...triageInTable]} filters={filters} setFilters={setFilters} search={search} setSearch={() => {}} onOpen={handleOpen} selId={selId} onExport={onExport} isStale={isStale} staleDays={staleDays} triage={triage} />
       )}
       {subView === 'discovery' && (
         <DiscoveryInbox inbox={inbox} onReload={loadInbox} />
-      )}
-      {subView === 'awaiting' && window.AwaitingResponseView && (
-        <window.AwaitingResponseView
-          search={search}
-          onOpenApp={(id) => { const a = apps.find(x => x.id === id); if (a) handleOpen(a); }}
-        />
       )}
       {subView === 'analytics' && (
         <AnalyticsView apps={activeApps} allApps={apps} compTweaks={compTweaks} onOpen={handleOpen} isStale={isStale} />

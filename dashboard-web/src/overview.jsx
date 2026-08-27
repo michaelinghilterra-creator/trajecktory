@@ -123,9 +123,9 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
     // Short axis labels so the 9-rung ladder doesn't overlap on the x-axis.
     // `label` keeps the full name for tooltips + the conversion rows below.
     const SHORT = {
-      "Evaluated": "Eval", "Applied": "Applied", "Responded": "Replied",
+      "Evaluated": "Eval", "Applied": "Applied",
       "Phone Screen": "Screen", "1st Interview": "1st", "2nd Interview": "2nd",
-      "3rd Interview": "3rd", "4th Interview": "4th", "Offer": "Offer",
+      "3rd Interview": "3rd", "Offer": "Offer",
     };
     // The FIRST rung is membership, not progression. Every tracked row was
     // evaluated: an evaluation is what creates the row. Asking
@@ -192,7 +192,12 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
   // "Rejected") while still sitting in the denominator.
   const { responded, appliedN, responseRate } = useMemoO(() => {
     const at = stage => funnel.find(f => f.label === stage)?.value || 0;
-    const appliedN = at("Applied"), responded = at("Responded");
+    const appliedN = at("Applied");
+    // Responded is no longer a funnel rung. Reaching a screen is the first advance
+    // past Applied, so this traction rate reads the Phone Screen rung (comparable
+    // to the cold-apply-to-screen benchmark). The broad "any answer incl. a
+    // rejection" number lives on the Pipeline Analytics Response Rate card.
+    const responded = at("Phone Screen");
     return { responded, appliedN, responseRate: appliedN ? Math.round((responded / appliedN) * 100) : 0 };
   }, [funnel]);
   const avgScore = useMemoO(() => {
@@ -204,7 +209,7 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
 
   // Score distribution insights
   const scoreInsights = useMemoO(() => {
-    const appliedStatuses = ["Applied", "Responded", "Offer", "Rejected", "No Response", ...window.INTERVIEW_STAGES];
+    const appliedStatuses = ["Applied", "Offer", "Rejected", "No Response", ...window.INTERVIEW_STAGES];
     const bands = [
       { label: "Strong",  min: 4.0, max: Infinity, color: "var(--green)"  },
       { label: "Border",  min: 3.0, max: 4.0,      color: "var(--yellow)" },
@@ -338,11 +343,13 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
       <div className="grid cols-5" style={{ marginTop: 12 }}>
         {(() => {
           const iApplied = window.FUNNEL_ORDER.indexOf('Applied');
-          const iResp = window.FUNNEL_ORDER.indexOf('Responded');
           const sent = apps.filter(a => window.FUNNEL_ORDER.indexOf(a.reached) >= iApplied);
+          // Benchmarked against the cold-apply-to-SCREEN median, so this measures
+          // reaching a screen (traction), not any answer. The broad response rate
+          // that counts rejections lives on the Pipeline Analytics Response card.
           const rate = (rows) => {
             const n = rows.length;
-            const k = rows.filter(a => window.FUNNEL_ORDER.indexOf(a.reached) >= iResp).length;
+            const k = rows.filter(a => window.appReached(a, 'Phone Screen')).length;
             return { n, k, pct: n ? Math.round((k / n) * 1000) / 10 : null };
           };
           const warm = rate(sent.filter(isWarmApp));

@@ -12,6 +12,7 @@ import { findAndVerify, hunterSearchesLeft, millionVerifierCreditsLeft, planFind
 import { hunterDomainSearch, planDomainBudget } from '../../../lib/hunter-domain.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { mergeStakeholderAdditions, validateStakeholder, knownDomainKey } from '../../../lib/stakeholder-additions.mjs';
+import { readReconcileDismissed, addReconcileDismissed } from '../lib/sidecars.mjs';
 
 export const router = express.Router();
 
@@ -67,7 +68,12 @@ const DISCOVER_REQUEST_TIMEOUT_MS =
 // lands, so a long run does not strand all of its useful work until the end.
 const discoverJobs = new Map();
 
+function dismissKey({ company, first, last }) {
+  return `${normCompany(company)}|${(last || '').toLowerCase().trim()}|${(first || '').toLowerCase().trim()}`;
+}
+
 async function runDiscoverJob(job, tasks, generate) {
+  const dismissed = readReconcileDismissed();
   let next = 0;
   const active = new Map();
   const settled = new Set();
@@ -90,7 +96,7 @@ async function runDiscoverJob(job, tasks, generate) {
         job.results.push({
           company: task.company,
           search: task.search,
-          suggestions: result.suggestions,
+          suggestions: (result.suggestions || []).filter(suggestion => !dismissed.has(dismissKey({ company: task.company, ...suggestion }))),
           rejected: [],
           duplicates: 0,
         });
@@ -121,6 +127,33 @@ async function runDiscoverJob(job, tasks, generate) {
   job.current = [];
   job.status = 'done';
   job.finishedAt = Date.now();
+}
+
+router.post('/api/tt-reconcile/dismiss', (req, res) => {
+  try {
+    const suggestions = req.body?.suggestions;
+    if (!Array.isArray(suggestions)) return res.status(400).json({ error: 'suggestions[] required' });
+    const keys = suggestions.map(dismissKey);
+    addReconcileDismissed(keys);
+    res.json({ dismissed: keys.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+async function verifyEmailsInBackground(written, toWrite, hkey, mkey) {
+  let budget = await hunterSearchesLeft(hkey);
+  if (budget == null) budget = Infinity;
+  for (let i = 0; i < written.length; i++) {
+    const c = toWrite[i];
+    if ((c.email || '').trim() || !c.first || !c.last || !c.company) continue;
+    if (budget <= 0) break;
+    try {
+      const found = await findAndVerify(c.company, c.first, c.last, hkey, mkey);
+      budget -= 1;
+      if (found.found && found.verify) updateTTLine(written[i].id, { email: setVerifyTag(found.email, found.verify) });
+    } catch { /* leave without an address; the LinkedIn fallback covers it */ }
+  }
 }
 
 // GET /api/tt-reconcile/discover-run
@@ -531,32 +564,17 @@ router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
     // does not needlessly advance the watermark.
     if (toWrite.length) setNewBaselineId(maxTTId());
     const written = appendTTRows(toWrite);   // [{id}], in the same order as toWrite
+    if (written.length) addReconcileDismissed(toWrite.map(dismissKey));
 
-    // Find + verify an email for each newly-added contact via the API feeds
-    // (Hunter Email Finder into MillionVerifier), and write ONLY a verified
-    // address. This replaces the old first.last@company guess: a reconcile add now
-    // yields a deliverable address or none (the contact goes to LinkedIn instead).
-    let emailsFound = 0, budgetHit = false;
     const hkey = loadEnvKey('HUNTER_API_KEY');
     const mkey = loadEnvKey('MILLIONVERIFIER_API_KEY');
-    if (hkey && mkey) {
-      // Budget guardrail: don't let a large bulk-add drain the Hunter free tier.
-      // Stop finding once credits run out (unknown balance → don't block, still
-      // bounded by how many contacts were added).
-      let budget = await hunterSearchesLeft(hkey);
-      if (budget == null) budget = Infinity;
-      for (let i = 0; i < written.length; i++) {
-        const c = toWrite[i];
-        if ((c.email || '').trim() || !c.first || !c.last || !c.company) continue;
-        if (budget <= 0) { budgetHit = true; break; }
-        try {
-          const f = await findAndVerify(c.company, c.first, c.last, hkey, mkey);
-          budget -= 1;
-          if (f.found && f.verify) { updateTTLine(written[i].id, { email: setVerifyTag(f.email, f.verify) }); emailsFound++; }
-        } catch { /* leave without an address; the LinkedIn fallback covers it */ }
-      }
-    }
-    res.json({ ok: true, requested: contacts.length, written: written.length, skipped: contacts.length - written.length, emailsFound, budgetHit, verifierKeys: !!(hkey && mkey), rejected, gated });
+    res.json({
+      ok: true, requested: contacts.length, written: written.length,
+      skipped: contacts.length - written.length, rejected, gated,
+      verifierKeys: !!(hkey && mkey),
+      emailVerification: (hkey && mkey) ? 'running' : 'skipped',
+    });
+    if (hkey && mkey) verifyEmailsInBackground(written, toWrite, hkey, mkey).catch(() => {});
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
