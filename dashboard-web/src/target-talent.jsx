@@ -1580,11 +1580,14 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
       .then(d => {
         if (d.error) { setError(d.error); setLoading(false); return; }
         setPreview(d);
-        // A focused principal search still uses the full wizard. Clearing the
-        // other selections prevents its bulk action from making unrelated edits.
+        // Each reconcile is scoped to ONE contact type so it never queues the
+        // other: 'talent' works the TA list (archive + companies needing contacts)
+        // and 'principal' works decision-makers only. Clearing the out-of-scope
+        // selections keeps the bulk action from making unrelated edits. 'all' (the
+        // legacy global reconcile) still selects everything.
         setArchSel(initialMode === "principal" ? new Set() : new Set((d.toArchive || []).map(x => x.id)));
         setGapSel(initialMode === "principal" ? new Set() : new Set((d.companiesNeedingContacts || []).map(c => c.company)));
-        setPrincipalGapSel(new Set((d.companiesNeedingPrincipal || []).map(c => c.company)));
+        setPrincipalGapSel(initialMode === "talent" ? new Set() : new Set((d.companiesNeedingPrincipal || []).map(c => c.company)));
         setLoading(false);
       })
       .catch(e => { setError(e.message); setLoading(false); });
@@ -1702,7 +1705,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
         <div className="modal-head">
           <div className="modal-head-top">
             <span className="mono-av sm" style={{ background: "var(--accent-bg)", color: "var(--accent)", borderRadius: 7, borderColor: "rgba(167,139,250,0.4)" }}><TIcon d={TI.refresh} size={14} /></span>
-            <div><h2>Reconcile contacts</h2><div className="sub">sync your TA list against the live application pipeline</div></div>
+            <div><h2>Reconcile contacts</h2><div className="sub">{initialMode === "principal" ? "find decision-makers for companies in your live pipeline" : "sync your TA list against the live application pipeline"}</div></div>
             <button className="icon-btn" style={{ marginLeft: "auto" }} onClick={onClose}><TIcon d={TI.x} size={15} /></button>
           </div>
           <div className="stepper">
@@ -1723,6 +1726,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
           {step === 0 && (
             <div className="fade-up">
               {loading ? <div className="ai-loading"><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> Analyzing applications + TA contacts…</div> : <>
+                {initialMode !== "principal" && (<>
                 <div className="rec-section-label"><TIcon d={TI.flag} size={12} /> Archive candidates &middot; {archSel.size} selected</div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Contacts at companies with no active applications.</div>
                 {preview.toArchive.length === 0
@@ -1743,7 +1747,8 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
                       reason={`${c.appCount} active app${c.appCount === 1 ? "" : "s"}, nobody to talk to`}
                       right={<span className="tag accent">{c.appCount} app{c.appCount !== 1 ? "s" : ""}</span>} />
                   ))}
-                {Array.isArray(preview.companiesNeedingPrincipal) && (
+                </>)}
+                {initialMode !== "talent" && Array.isArray(preview.companiesNeedingPrincipal) && (
                   <>
                     <div className="rec-section-label" style={{ marginTop: 22 }}><TIcon d={TI.users} size={12} /> Companies where nobody can make the decision &middot; {principalGapSel.size} selected</div>
                     <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>These companies have contacts, but nobody who can influence the hire.</div>
@@ -1828,7 +1833,11 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
         </div>
         <div className="modal-foot">
           {step > 0 && step < 2 && <button className="btn" onClick={() => setStep(s => s - 1)}><TIcon d={TI.undo} size={13} /> Back</button>}
-          {step === 0 && !loading && <span className="mono" style={{ fontSize: 11, color: "var(--text-mute)" }}>{archSel.size} to archive &middot; {gapSel.size} contact searches &middot; {principalGapSel.size} decision-maker searches</span>}
+          {step === 0 && !loading && <span className="mono" style={{ fontSize: 11, color: "var(--text-mute)" }}>{[
+            initialMode !== "principal" ? `${archSel.size} to archive` : null,
+            initialMode !== "principal" ? `${gapSel.size} contact searches` : null,
+            initialMode !== "talent" ? `${principalGapSel.size} decision-maker searches` : null,
+          ].filter(Boolean).join(" · ")}</span>}
           <div className="right" style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
             {step === 0 && !loading && <button className="btn primary" onClick={runDiscover} disabled={scanning}>{scanning ? "Discovery already running" : "Discover contacts"} <TIcon d={TI.arrowR} size={13} /></button>}
             {step === 1 && <button className="btn primary" onClick={apply}>Add selected ({foundCount}{scanning ? " found so far" : " found"}) <TIcon d={TI.arrowR} size={13} /></button>}
@@ -1901,7 +1910,7 @@ window.TargetTalentTab = function TargetTalentTab({ audience, initialOpenId, onI
   return (
     <div style={{ flex: 1, maxWidth: "none", marginLeft: 0, marginRight: 0 }}>
       <ContactsTableView contacts={viewContacts} audience={audience} otherCount={otherCount}
-        onOpen={setDrawerId} selId={drawerId} onReconcile={() => setReconcileMode("all")}
+        onOpen={setDrawerId} selId={drawerId} onReconcile={() => setReconcileMode(audience === "decision-makers" ? "principal" : "talent")}
         onFindDecisionMakers={() => setReconcileMode("principal")} search={search} onImported={load} />
 
       {drawerId != null && <TTDrawer id={drawerId} onClose={() => setDrawerId(null)} onUpdate={load} />}
