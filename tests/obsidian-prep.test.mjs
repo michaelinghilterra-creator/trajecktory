@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { formatTrackerLine, TRACKER_HEADER, TRACKER_SEPARATOR } from '../lib/tracker.mjs';
@@ -33,7 +33,7 @@ function trackerRow(fields) {
 }
 
 test('prep deduplicates, keeps reopened and thin files, and writes joined batch files', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'obsidian-prep-'));
+  const tmp = makeSandbox('obsidian-prep');
   try {
     const source = path.join(tmp, 'Open Roles');
     const triaged = path.join(tmp, 'Triaged');

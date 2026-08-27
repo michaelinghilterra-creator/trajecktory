@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { formatTrackerLine, parseTrackerLine, TRACKER_HEADER, TRACKER_SEPARATOR } from '../lib/tracker.mjs';
@@ -16,7 +16,7 @@ function row(num, company, status, report, url) {
 }
 
 test('postfix repairs this run, recovers strays, and leaves unrelated rows alone', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'obsidian-postfix-'));
+  const tmp = makeSandbox('obsidian-postfix');
   try {
     const repo = path.join(tmp, 'repo');
     const source = path.join(tmp, 'Open Roles');
