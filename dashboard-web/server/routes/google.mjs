@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import {
   readTokens, writeTokens, readSync, writeSync, googleStatus, checkHealth, clientConfigured,
-  getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions,
+  getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions, heldBackBounceIds,
   buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, candidateAppsFor, createDraft,
   getMessage, parseGmailMessage, extractEmail, logReplyToContact, previewEntry,
 } from '../lib/google.mjs';
@@ -242,10 +242,19 @@ router.post('/api/google/scan-bounces', async (req, res) => {
       if (ok) applied.push({ source: b.flip.source, id: row.id });
     }
 
+    const isFlippable = (flip) => {
+      const row = taRows.find(r => r.id === flip.id);
+      return !!row && row.verified?.state !== 'bounced';
+    };
+    const heldBack = heldBackBounceIds(bounces, { confirmSet, isFlippable });
+
     // Advance the cursor over everything fetched (cap the history so the file
     // cannot grow without bound). A dry run leaves the cursor untouched.
     if (!dryRun) {
-      sync.seenMessageIds = [...new Set([...sync.seenMessageIds, ...fresh.map(m => m.id)])].slice(-3000);
+      sync.seenMessageIds = [...new Set([
+        ...sync.seenMessageIds,
+        ...fresh.map(m => m.id).filter(id => !heldBack.has(id)),
+      ])].slice(-3000);
       sync.lastCheckedAt = new Date().toISOString();
       writeSync(sync);
     }

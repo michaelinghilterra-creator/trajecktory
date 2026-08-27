@@ -630,6 +630,24 @@ function scanDecisions({ messages = [], taRows = [], apps = [] } = {}) {
   return { bounces, replies, other };
 }
 
+// On a bounce APPLY, decide which fetched message ids must be HELD BACK from the
+// seen-cursor. A hard bounce whose contact is still flippable (a matching contact
+// row exists and is not already bounced) but was NOT confirmed this round must stay
+// unseen, so a later per-contact apply can still find it. Everything else advances:
+// confirmed flips, soft bounces, bounces with no matched contact, and contacts
+// already marked bounced. `isFlippable(flip)` returns whether flip's contact row
+// exists and is not already bounced. Returns a Set of msgIds to keep out of the cursor.
+function heldBackBounceIds(bounces = [], { confirmSet, isFlippable } = {}) {
+  const held = new Set();
+  for (const b of bounces) {
+    if (!b || !b.flip) continue;              // soft / unmatched → advance
+    if (!isFlippable(b.flip)) continue;       // no row, or already bounced → advance
+    const key = `${b.flip.source}:${b.flip.id}`;
+    if (!confirmSet.has(key)) held.add(b.msgId); // pending & unconfirmed → hold back
+  }
+  return held;
+}
+
 function previewEntry(entry, { max = 1000 } = {}) {
   const { body, ...preview } = entry || {};
   const text = String(body || '');
@@ -735,6 +753,6 @@ function logReplyToContact(contact, { subject, body, timestamp, advanceStatus = 
 export {
   readTokens, writeTokens, readSync, writeSync, tokenScopes,
   clientConfigured, googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
-  parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions,
+  parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, heldBackBounceIds,
   exchangeCode, fetchProfileEmail, candidateAppsFor, createDraft, logReplyToContact, previewEntry,
 };
