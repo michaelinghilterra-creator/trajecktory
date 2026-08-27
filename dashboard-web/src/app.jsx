@@ -211,7 +211,7 @@ function App() {
     try { localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ tab, pipelineView, networkSub })); }
     catch (e) { /* storage unavailable (private mode, quota); stays session-only */ }
   }, [tab, pipelineView, networkSub]);
-  const [filters, setFilters] = useState({ statuses: [], archetypes: [], scoreMin: 0 });
+  const [filters, setFilters] = useState({ statuses: [], archetypes: [], scoreMin: 0, dateFrom: '', dateTo: '' });
   const [cmdOpen, setCmdOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
 
@@ -536,7 +536,7 @@ function App() {
       { section: "Navigate", icon: "▥", label: "Go to Pipeline",     run: () => setTab("pipeline") },
       { section: "Navigate", icon: "↻", label: "Go to Follow-Ups",   run: () => { setNetworkSub("followups"); setTab("network"); } },
       { section: "Navigate", icon: "◈", label: "Go to Interview",    run: () => setTab("interview") },
-      { section: "Navigate", icon: "≡", label: "Go to All Entries",  run: () => { setTab("pipeline"); setPipelineView("all"); } },
+      { section: "Navigate", icon: "≡", label: "Go to Roles",        run: () => { setTab("pipeline"); setPipelineView("table"); } },
       { section: "Navigate", icon: "◍", label: "Go to LinkedIn",     run: () => setTab("linkedin-ssi") },
       { section: "Navigate", icon: "⇄", label: "Go to Referrals",    run: () => { setNetworkSub("referrals"); setTab("network"); } },
       { section: "Navigate", icon: "◎", label: "Go to TA Outreach",  run: () => { setNetworkSub("ta"); setTab("network"); } },
@@ -601,7 +601,7 @@ function App() {
 
   // Route a universal-search pick to the right destination, reusing the existing
   // deep-link hand-offs. Contacts open their drawer; a company row opens the
-  // pipeline drawer for that exact posting (falling back to a filtered All Entries
+  // pipeline drawer for that exact posting (falling back to filtered Roles
   // when the row is not in memory); a referral lands on Referrals filtered by name.
   const pickResult = (item) => {
     if (!item) return;
@@ -611,7 +611,7 @@ function App() {
       case "company": {
         const app = apps.find(a => String(a.id) === String(item.id));
         if (app) { setDrawerApp(app); setSearch(""); }
-        else { setPendingSearch(item.company || item.name); setPipelineView("all"); setTab("pipeline"); }
+        else { setPendingSearch(item.company || item.name); setPipelineView("table"); setTab("pipeline"); }
         break;
       }
       default: break;

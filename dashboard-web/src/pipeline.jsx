@@ -1,5 +1,5 @@
 // Pipeline Module — Console redesign with sub-tabs.
-// Overview (default) · Table · All · Analytics.
+// Overview (default) · Roles · Discovery · Analytics.
 // The application drawer is PipelineDrawer, defined in this file.
 //
 // NOTE: wrapped in an IIFE so locals don't collide with other modules
@@ -311,12 +311,15 @@ function OverviewView({ apps, onOpen, onAction, search }) {
 // re-list the labels here — a second copy is exactly what drifted and left the new
 // buckets off the Sankey while the pipeline filter showed them.
 const ARCHETYPES = window.ARCHETYPES;
+const ALL_ENTRIES_STATUSES = window.STATUSES;
 
 function applyFilters(apps, filters, search) {
   return apps.filter(a => {
     if (filters.statuses.length && !filters.statuses.includes(a.status)) return false;
     if (filters.archetype && a.archetype !== filters.archetype) return false;
     if (filters.scoreMin && (a.score == null || a.score < filters.scoreMin)) return false;
+    if (filters.dateFrom && (!a.date || a.date < filters.dateFrom)) return false;
+    if (filters.dateTo && (!a.date || a.date > filters.dateTo)) return false;
     if (search && search.trim()) {
       const q = search.toLowerCase();
       const hay = `${a.company} ${a.role} ${a.status} ${a.archetype} ${a.sector || ''} ${a.source || ''}`.toLowerCase();
@@ -328,7 +331,7 @@ function applyFilters(apps, filters, search) {
 
 function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, right }) {
   const toggleStatus = (s) => setFilters(f => ({ ...f, statuses: f.statuses.includes(s) ? f.statuses.filter(x => x !== s) : [...f.statuses, s] }));
-  const active = filters.statuses.length || filters.archetype || filters.scoreMin || (search && search.trim());
+  const active = filters.statuses.length || filters.archetype || filters.scoreMin || filters.dateFrom || filters.dateTo || (search && search.trim());
   const scoreSteps = [0, 3.0, 3.5, 4.0, 4.5];
   // One pass over apps instead of one filter per status on every render/keystroke.
   const statusCounts = useMemoP(() => {
@@ -340,13 +343,15 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
     <div className="pl-toolbar">
       <div className="tb-row">
         <div className="statline">
-          {STATUS.map(s => {
-            const n = statusCounts[s.id] || 0;
-            const on = filters.statuses.includes(s.id);
+          {ALL_ENTRIES_STATUSES.map(status => {
+            const meta = window.STATUS_META[status];
+            if (!meta) return null;
+            const n = statusCounts[status] || 0;
+            const on = filters.statuses.includes(status);
             return (
-              <button key={s.id} className={'stat-chip' + (on ? ' on' : '') + (n === 0 ? ' zero' : '')} onClick={() => toggleStatus(s.id)}>
-                <span className="sc-dot" style={{ background: s.color, boxShadow: n ? `0 0 6px ${s.color}` : 'none' }} />
-                {s.id}<span className="sc-n">{n}</span>
+              <button key={status} className={'stat-chip' + (on ? ' on' : '') + (n === 0 ? ' zero' : '')} onClick={() => toggleStatus(status)}>
+                <span className="sc-dot" style={{ background: meta.color, boxShadow: n ? `0 0 6px ${meta.color}` : 'none' }} />
+                {status}<span className="sc-n">{n}</span>
               </button>
             );
           })}
@@ -364,8 +369,16 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
             </button>
           ))}
         </div>
+        <label className="mono dim" style={{ fontSize: 10.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+          From
+          <input className="sel" type="date" value={filters.dateFrom || ''} onChange={(e) => setFilters(f => ({ ...f, dateFrom: e.target.value }))} />
+        </label>
+        <label className="mono dim" style={{ fontSize: 10.5, display: 'flex', alignItems: 'center', gap: 6 }}>
+          To
+          <input className="sel" type="date" value={filters.dateTo || ''} onChange={(e) => setFilters(f => ({ ...f, dateTo: e.target.value }))} />
+        </label>
         {active ? (
-          <button className="btn ghost sm" onClick={() => setFilters({ statuses: [], archetype: '', scoreMin: 0 })}>
+          <button className="btn ghost sm" onClick={() => setFilters({ statuses: [], archetype: '', archetypes: [], scoreMin: 0, dateFrom: '', dateTo: '' })}>
             <PIcon d={PI.x} size={12} /> Clear
           </button>
         ) : null}
@@ -483,7 +496,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
   return (
     <div className="fade-up card padded-lg">
       <div className="card-head">
-        <span className="card-title">Active Roles</span>
+        <span className="card-title">Roles</span>
         <div className="row" style={{ gap: 12, alignItems: 'center' }}>
           <span className="card-meta mono">{sorted.length} of {apps.length} item{sorted.length === 1 ? '' : 's'}</span>
           {onExport && <button className="btn sm" onClick={onExport}><PIcon d={PI.download} size={13} /> Export CSV</button>}
@@ -976,134 +989,10 @@ function exportCSV(rows) {
 // ─── Sub-tabs ──────────────────────────────────────────────────────────────
 const PL_SUBTABS = [
   { id: 'overview',  label: 'Overview',  icon: PI.pulse },
-  { id: 'table',     label: 'Active',    icon: PI.list },
-  { id: 'all',       label: 'All',       icon: PI.list },
+  { id: 'table',     label: 'Roles',     icon: PI.list },
   { id: 'discovery', label: 'Discovery', icon: PI.pulse },
   { id: 'analytics', label: 'Analytics', icon: PI.chart },
 ];
-
-// ─── All Entries sub-tab ───────────────────────────────────────────────────
-// Unfiltered view of every row across every status, including closed-state
-// (SKIP / Rejected / Closed / Discarded / Not a Fit). Mirrors the legacy
-// /tracker tab's filter UI and table, but routes opens through Pipeline's
-// local drawer so users can Reopen a row back to Evaluated in one click.
-const ALL_ENTRIES_STATUSES = [
-  'Evaluated', 'Applied', ...window.INTERVIEW_STAGES, 'Offer',
-  'Rejected', 'Discarded', 'SKIP', 'Closed', 'Not a Fit', 'No Response',
-];
-function AllEntriesView({ apps, onOpen, search, isStale = () => false, staleDays = () => null, triage = null }) {
-  const [sortKey, setSortKey] = useStateP('date');
-  const [sortDir, setSortDir] = useStateP('desc');
-  const [filters, setFilters] = useStateP({ statuses: [], archetypes: [], scoreMin: 0 });
-
-  const filtered = useMemoP(() => {
-    return apps.filter(a => {
-      if (filters.statuses.length && !filters.statuses.includes(a.status)) return false;
-      if (filters.archetypes.length && !filters.archetypes.includes(a.archetype)) return false;
-      if (filters.scoreMin && a.score < filters.scoreMin) return false;
-      if (search) {
-        const ql = search.toLowerCase();
-        const hay = `${a.company} ${a.role} ${a.status} ${a.archetype} ${a.sector}`.toLowerCase();
-        if (!hay.includes(ql)) return false;
-      }
-      return true;
-    });
-  }, [apps, filters, search]);
-
-  const sorted = useMemoP(() => {
-    const arr = [...filtered];
-    const dir = sortDir === 'asc' ? 1 : -1;
-    arr.sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === 'id') {
-        cmp = (a._triage ? Number.MAX_SAFE_INTEGER : (a.id || 0)) - (b._triage ? Number.MAX_SAFE_INTEGER : (b.id || 0));
-      } else if (sortKey === 'score') {
-        const as = a.score != null ? a.score : -1;
-        const bs = b.score != null ? b.score : -1;
-        cmp = as - bs;
-      } else if (sortKey === 'date') {
-        cmp = (a.date || '').localeCompare(b.date || '');
-        if (cmp === 0) {
-          const as = a.score != null ? a.score : -1;
-          const bs = b.score != null ? b.score : -1;
-          return bs - as;
-        }
-      } else {
-        const av = (a[sortKey] || '').toString().toLowerCase();
-        const bv = (b[sortKey] || '').toString().toLowerCase();
-        cmp = av.localeCompare(bv);
-      }
-      return cmp * dir;
-    });
-    return arr;
-  }, [filtered, sortKey, sortDir]);
-
-  const toggleStatus = (s) => setFilters(f => ({ ...f, statuses: f.statuses.includes(s) ? f.statuses.filter(x => x !== s) : [...f.statuses, s] }));
-  const toggleArch = (a) => setFilters(f => ({ ...f, archetypes: f.archetypes.includes(a) ? f.archetypes.filter(x => x !== a) : [...f.archetypes, a] }));
-  const setSort = (k) => {
-    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(k); setSortDir(k === 'score' || k === 'date' ? 'desc' : 'asc'); }
-  };
-
-  const breakdown = useMemoP(() => {
-    return ALL_ENTRIES_STATUSES
-      .map(s => ({ s, n: apps.filter(a => a.status === s).length, meta: window.STATUS_META[s] }))
-      .filter(x => x.n > 0 && x.meta);
-  }, [apps]);
-
-  const archetypes = useMemoP(() => window.ARCHETYPES || [], []);
-
-  return (
-    <div className="fade-up card padded-lg">
-      <div className="card-head">
-        <span className="card-title">All Entries</span>
-        <span className="card-meta mono">{sorted.length} of {apps.length} item{sorted.length === 1 ? '' : 's'}</span>
-      </div>
-
-      {/* Status breakdown — flat row, no inner card */}
-      <div className="row" style={{ flexWrap: 'wrap', gap: 14, marginBottom: 10 }}>
-        {breakdown.map(({ s, n, meta }) => (
-          <span key={s} className="row mono" style={{ gap: 6, fontSize: 11, color: 'var(--text-dim)', cursor: 'pointer' }} onClick={() => toggleStatus(s)}>
-            <span style={{ width: 7, height: 7, borderRadius: 50, background: meta.color, display: 'inline-block', flexShrink: 0 }}></span>
-            {s}
-            <span style={{ color: filters.statuses.includes(s) ? 'var(--accent)' : 'var(--text)' }}>{n}</span>
-          </span>
-        ))}
-        <span className="mono dim" style={{ fontSize: 11, marginLeft: 'auto' }}>click to filter</span>
-      </div>
-
-      {/* Filter chips — flat, no inner card */}
-      <div className="col" style={{ gap: 8, marginBottom: 10 }}>
-        <div className="filterbar">
-          <span className="mono dim" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Status</span>
-          {ALL_ENTRIES_STATUSES.map(s => window.STATUS_META[s] && (
-            <button type="button" key={s} className={`chip ${filters.statuses.includes(s) ? 'on' : ''}`} onClick={() => toggleStatus(s)}>
-              <span className="dot" style={{ width: 6, height: 6, borderRadius: 50, background: window.STATUS_META[s].color, display: 'inline-block' }}></span>
-              {s}
-            </button>
-          ))}
-        </div>
-        <div className="filterbar">
-          <span className="mono dim" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Archetype</span>
-          {archetypes.map(a => (
-            <button type="button" key={a} className={`chip ${filters.archetypes.includes(a) ? 'on' : ''}`} onClick={() => toggleArch(a)}>{a}</button>
-          ))}
-        </div>
-        <div className="filterbar">
-          <span className="mono dim" style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Score ≥</span>
-          {[0, 3.0, 3.5, 4.0, 4.5].map(s => (
-            <button type="button" key={s} className={`chip ${filters.scoreMin === s ? 'on' : ''}`} onClick={() => setFilters(f => ({ ...f, scoreMin: s }))}>{s === 0 ? 'any' : s.toFixed(1)}</button>
-          ))}
-          {(filters.statuses.length || filters.archetypes.length || filters.scoreMin) ? (
-            <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={() => setFilters({ statuses: [], archetypes: [], scoreMin: 0 })}>Clear all</button>
-          ) : null}
-        </div>
-      </div>
-
-      <window.PipelineTable rows={sorted} sortKey={sortKey} sortDir={sortDir} setSort={setSort} onOpen={onOpen} isStale={isStale} staleDays={staleDays} triage={triage} flat />
-    </div>
-  );
-}
 
 // ─── Pipeline Drawer (760px) — inline evaluation report ──────────────────
 const DRAWER_TABS = [
@@ -2199,8 +2088,7 @@ function DiscoveryInbox({ inbox, onReload }) {
 
 window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFilters, onOpen, onQuickAction, onDataChanged, search, compTweaks }) {
   // Use the external view prop when it matches a known subtab, otherwise default to 'overview'.
-  // This lets the command palette in app.jsx jump directly to the All subtab.
-  const VALID_SUBVIEWS = ['overview', 'table', 'all', 'analytics'];
+  const VALID_SUBVIEWS = ['overview', 'table', 'discovery', 'analytics'];
   const initialSub = VALID_SUBVIEWS.includes(view) ? view : 'overview';
   const [subView, setSubViewRaw] = useStateP(initialSub);
   const setSubView = (s) => { setSubViewRaw(s); if (setView) setView(s); };
@@ -2208,10 +2096,10 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   const [drawerApp, setDrawerApp] = useStateP(null);
 
   const activeApps = useMemoP(() => apps.filter(a => ACTIVE_STATUSES.includes(a.status)), [apps]);
-  const filtered = useMemoP(() => applyFilters(activeApps, filters, search), [activeApps, filters, search]);
+  const filtered = useMemoP(() => applyFilters(apps, filters, search), [apps, filters, search]);
 
   // ── Triage (Option B): provisional rows from data/triage-results.tsv ───────
-  // Surfaced in the Table + All views so a scanned-but-unevaluated role is
+  // Surfaced in the Roles view so a scanned-but-unevaluated role is
   // visible where users look. NEVER written to applications.md, so Overview /
   // Analytics (which read `apps` / `activeApps`) are unaffected by construction.
   const [triageCards, setTriageCards] = useStateP([]);
@@ -2262,6 +2150,8 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
     if (filters && (filters.statuses?.length || filters.archetype || filters.archetypes?.length)) return [];
     let rows = triageRows;
     if (filters && filters.scoreMin) rows = rows.filter(r => r.score != null && r.score >= filters.scoreMin);
+    if (filters && filters.dateFrom) rows = rows.filter(r => r.date && r.date >= filters.dateFrom);
+    if (filters && filters.dateTo) rows = rows.filter(r => r.date && r.date <= filters.dateTo);
     if (search) { const ql = search.toLowerCase(); rows = rows.filter(r => `${r.company} ${r.role}`.toLowerCase().includes(ql)); }
     return rows;
   }, [triageRows, filters, search]);
@@ -2349,8 +2239,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   const handleOpen = (a) => { if (a && a._triage) return; setDrawerApp(a); };
 
   const onExport = () => {
-    const rows = subView === 'table' ? filtered : activeApps;
-    exportCSV(rows);
+    exportCSV(filtered);
   };
 
   // Drawer action handlers — primary actions advance status via API PATCH
@@ -2449,10 +2338,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
         <OverviewView apps={apps} onOpen={handleOpen} onAction={onQuickAction} search={search} />
       )}
       {subView === 'table' && (
-        <TableView apps={[...activeApps, ...triageRows]} filtered={[...filtered, ...triageInTable]} filters={filters} setFilters={setFilters} search={search} setSearch={() => {}} onOpen={handleOpen} selId={selId} onExport={onExport} isStale={isStale} staleDays={staleDays} triage={triage} />
-      )}
-      {subView === 'all' && (
-        <AllEntriesView apps={[...apps, ...triageRows]} onOpen={handleOpen} search={search} isStale={isStale} staleDays={staleDays} triage={triage} />
+        <TableView apps={[...apps, ...triageRows]} filtered={[...filtered, ...triageInTable]} filters={filters} setFilters={setFilters} search={search} setSearch={() => {}} onOpen={handleOpen} selId={selId} onExport={onExport} isStale={isStale} staleDays={staleDays} triage={triage} />
       )}
       {subView === 'discovery' && (
         <DiscoveryInbox inbox={inbox} onReload={loadInbox} />
