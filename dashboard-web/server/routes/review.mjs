@@ -80,8 +80,8 @@ router.get('/api/linkedin/connects', (req, res) => {
 });
 router.post('/api/linkedin/connects', (req, res) => {
   try {
-    const { name, source, date } = req.body || {};
-    const list = logConnect({ name, source, date });
+    const { name, source, id, date } = req.body || {};
+    const list = logConnect({ name, source, id, date });
     res.json({ ok: true, total: list.length });
   } catch (err) {
     res.status(500).json({ error: err.message });

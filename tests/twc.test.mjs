@@ -94,6 +94,45 @@ fs.writeFileSync(path.join(ttCorr, '302.md'), [
   '', 'Request sent.', '',
 ].join('\n'));
 
+// Referrals. 501 is UNLINKED (no TA twin) so its own correspondence must be swept.
+// 502 IS linked to TA 301 (same LinkedIn slug linkedin.com/in/jane), so in production
+// it logs to the twin's dir; the stray own-file below simulates that and MUST be
+// ignored, or the linked referral would be double-counted.
+fs.writeFileSync(path.join(tmp, 'referrals.md'), [
+  '# Referral tracker', '',
+  '| # | Name | How you know them | Where they are now | Target company/role | Status | Last Touch | Notes | LinkedIn | Email |',
+  '|---|------|-------------------|--------------------|---------------------|--------|------------|-------|----------|-------|',
+  '| 501 | Nadia Vex | Conference | Hooli | Data Lead | Asked | 2026-07-23 |  | linkedin.com/in/nadia |  |',
+  '| 502 | Jane Doe | Former colleague | Acme | Widget Operations Manager | Asked | 2026-07-20 |  | linkedin.com/in/jane |  |',
+  '',
+].join('\n'));
+const refCorr = path.join(tmp, 'referral-correspondence');
+fs.mkdirSync(refCorr, { recursive: true });
+fs.writeFileSync(path.join(refCorr, '501.md'), [
+  '## 2026-07-23 09:00 | Sent | LinkedIn connection request',
+  '', 'Hi Nadia, would love to connect about Hooli.', '',
+].join('\n'));
+fs.writeFileSync(path.join(refCorr, '502.md'), [
+  '## 2026-07-20 08:00 | Sent | LinkedIn connection request',
+  '', 'Linked referral — logged to its twin in production; must be ignored here.', '',
+].join('\n'));
+
+// LinkedIn connects ledger (data/linkedin-connects.json). Exercises the id-based
+// join + dedup added in section 5 of buildActivities:
+//  - Rich Roe carries contact id 302 but a NAME that would NOT normalize-match the
+//    302 correspondence connect ("R. Roe" vs "Rich Roe"), so counting it once PROVES
+//    the dedup is by id, not by name.
+//  - Jane Doe (id 301) is ledger-only (no correspondence connect) and must be added,
+//    resolved to Acme by id, with the cached employer joined.
+//  - Ghost Lead has no id and no TA name match: still counts, blank Employer.
+//  - Late Person is out of the fortnight range and must be filtered out.
+fs.writeFileSync(path.join(tmp, 'linkedin-connects.json'), JSON.stringify([
+  { date: '2026-07-25', id: 302, name: 'R. Roe', source: 'ta' },
+  { date: '2026-07-26', id: 301, name: 'Jane Doe', source: 'ta' },
+  { date: '2026-07-26', name: 'Ghost Lead', source: 'ta' },
+  { date: '2026-08-05', id: 301, name: 'Jane Doe', source: 'ta' },
+], null, 2));
+
 // One cached employer so the join + the cached flag are exercised. Key is
 // normalizeToken('Acme') === 'acme'.
 fs.writeFileSync(path.join(tmp, 'employer-directory.json'), JSON.stringify({
@@ -125,8 +164,13 @@ try {
   const narrow = buildActivities({ from: '2026-07-20', to: '2026-07-27' });
   // apps 201/202/206 (3), interview 205 (1), follow-ups.md rows 1+2 (2),
   // correspondence: 301 new email + 302 LinkedIn (2); 301's 07-22 email dedups
-  // against follow-ups.md row 2 → 8 total, not 9.
-  check(narrow.length === 8, `8 activities in the fortnight (got ${narrow.length})`);
+  // against follow-ups.md row 2 → 8 from those sources. Ledger section 5 then adds
+  // two in-range connects (Jane Doe 301 on 07-26, Ghost Lead on 07-26); the Rich Roe
+  // ledger row dedups against the 302 correspondence connect by id, and Late Person
+  // (Jane Doe 08-05) is out of range → 10 from apps/interview/follow-ups/corr/ledger.
+  // Then the UNLINKED referral 501 adds its 07-23 LinkedIn connect (+1); the LINKED
+  // referral 502's own file is ignored → 11 total.
+  check(narrow.length === 11, `11 activities in the fortnight incl. ledger + referral connects (got ${narrow.length})`);
   check(!narrow.some(a => a.company === 'Initech'), 'an Evaluated-but-never-applied role is excluded');
   check(!narrow.some(a => a.date === '2026-07-19'), 'an out-of-range application (204 on 07-19) is filtered out');
 
@@ -136,10 +180,32 @@ try {
   const acmeEmail = find(narrow, a => a.company === 'Acme' && a.date === '2026-07-24' && a.method === 'Email');
   check(acmeEmail && acmeEmail.result === 'Sent follow-up',
     'a Sent email in the correspondence log (never cross-logged) becomes a Follow-up activity');
-  const linkedin = find(narrow, a => a.kind === 'outreach');
+  const linkedin = find(narrow, a => a.kind === 'outreach' && a.company === 'Globex');
   check(linkedin && linkedin.company === 'Globex' && linkedin.method === 'LinkedIn'
     && linkedin.result === 'Sent connection request' && /LinkedIn connection request/.test(linkedin.activity),
     'a LinkedIn connection request becomes a Networking activity with method LinkedIn, not an email touch');
+
+  // ── 2c. Connects ledger (section 5): id-based dedup + join + best-effort employer ─
+  const globexConnects = narrow.filter(a => a.kind === 'outreach' && a.company === 'Globex' && a.date === '2026-07-25');
+  check(globexConnects.length === 1,
+    `a connect in BOTH correspondence and the ledger is counted once, deduped by id despite a different name (got ${globexConnects.length})`);
+  const janeConnect = find(narrow, a => a.kind === 'outreach' && a.contact === 'Jane Doe' && a.date === '2026-07-26');
+  check(janeConnect && janeConnect.company === 'Acme' && janeConnect.method === 'LinkedIn'
+    && janeConnect.result === 'Sent connection request' && janeConnect.employerAddress === '1 Acme Way, Austin, TX 78701',
+    'a ledger-only connect is added, resolved to its TA company by id, with the cached employer joined');
+  const ghostConnect = find(narrow, a => a.kind === 'outreach' && a.contact === 'Ghost Lead');
+  check(ghostConnect && ghostConnect.company === '' && ghostConnect.method === 'LinkedIn',
+    'a ledger-only connect with no id and no TA name match still counts, with a blank Employer column');
+  check(!narrow.some(a => a.date === '2026-08-05'),
+    'an out-of-range ledger connect (Jane Doe 08-05) is filtered out');
+
+  // ── 2d. Referral correspondence: unlinked swept, linked ignored (no double-count) ─
+  const refConnect = find(narrow, a => a.kind === 'outreach' && a.contact === 'Nadia Vex' && a.date === '2026-07-23');
+  check(refConnect && refConnect.company === 'Hooli' && refConnect.method === 'LinkedIn'
+    && refConnect.result === 'Sent connection request' && refConnect.contactId == null,
+    'an UNLINKED referral\'s own LinkedIn send is counted, with its company and no TA contact id');
+  check(!narrow.some(a => a.kind === 'outreach' && a.contact === 'Jane Doe' && a.date === '2026-07-20'),
+    'a LINKED referral\'s own correspondence file is NOT re-read (the TA twin already covers it)');
 
   // ── 3. Date sourcing ─────────────────────────────────────────────────────────
   const app206 = find(narrow, a => a.kind === 'application' && a.appId === 206);

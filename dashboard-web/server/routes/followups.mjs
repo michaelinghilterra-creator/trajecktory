@@ -55,7 +55,7 @@ router.post('/api/followups/reconcile-sent-invites', (req, res) => {
         msgs.push({ timestamp: today, direction: 'Sent', channel: 'LinkedIn', subject: LINKEDIN_INVITE_SUBJECT, body: 'Reconciled from LinkedIn Sent invitations (exact send date unknown).' });
         writeTTCorrespondence(contact.id, msgs);
         markInvitePending(contact.id, today);
-        try { logConnect({ name: label(contact).name, source: 'ta', date: today }); } catch { /* metric best-effort */ }
+        try { logConnect({ name: label(contact).name, source: 'ta', id: contact.id, date: today }); } catch { /* metric best-effort */ }
       }
       newlyMarked.push(label(contact));
     }

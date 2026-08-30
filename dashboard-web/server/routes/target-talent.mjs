@@ -197,7 +197,7 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     // the connects log so "LinkedIn connects" counts it and "verified touches"
     // (email only) does not. Idempotent on (date, name, source).
     if (direction === 'Sent' && (channel === 'LinkedIn' || isLinkedInInvite(subject))) {
-      logConnect({ name: `${r.first || ''} ${r.last || ''}`.trim(), source: 'ta', date: ts.slice(0, 10) });
+      logConnect({ name: `${r.first || ''} ${r.last || ''}`.trim(), source: 'ta', id, date: ts.slice(0, 10) });
       // The invite just went out → advance the LinkedIn axis to 'Invite Pending'.
       // Only from 'Not Connected'; never regress someone already 'Connected'. The
       // user flips it to 'Connected' by hand when the invite is accepted.

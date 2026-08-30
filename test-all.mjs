@@ -585,6 +585,7 @@ for (const suite of [
   'tests/linkedin-referrals.test.mjs',
   'tests/rolling-floor.test.mjs',
   'tests/twc.test.mjs',
+  'tests/connects.test.mjs',
   'tests/text-hygiene.test.mjs',
   'tests/cadence.test.mjs',
   'tests/obsidian-prep.test.mjs',
