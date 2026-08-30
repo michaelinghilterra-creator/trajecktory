@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.0.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.0.0...v3.0.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* align follow-up email ask with LinkedIn prompt (no meeting ask) ([#268](https://github.com/michaelinghilterra-creator/trajecktory/issues/268)) ([830958b](https://github.com/michaelinghilterra-creator/trajecktory/commit/830958ba5ef460f90469064855634777060fdb2b))
+* count all LinkedIn connects in the Activity Tracker ([#267](https://github.com/michaelinghilterra-creator/trajecktory/issues/267)) ([b8547bb](https://github.com/michaelinghilterra-creator/trajecktory/commit/b8547bb5dadc565559b1a5e09c94e6d4f9a166ca))
+
 ## [3.0.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v2.44.0...v3.0.0) (2026-08-27)
 
 
