@@ -554,7 +554,7 @@ ${profileMd}
 - NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
 - Reference the specific role + company by name.
 - ${fuCount === 0 ? 'Lead with one specific reason this role matters to you (drawn from the report). Add one NEW data point or framing that wasn\'t in the original application (a recent thought, a relevant proof point, a question).' : 'Acknowledge this is a follow-up. Add genuinely new value — do not just repeat the original pitch. Reference a recent insight, market shift, or a specific question about the role.'}
-- Close with a low-friction ask: brief reply on timing, or a 15-min intro.
+- Close with ONE low-friction ask: a quick reply on timing, or being pointed to the right person for this role. Do NOT ask for a call, a chat, a quick call, an intro, or time on their calendar. A meeting ask on an unsolicited follow-up reads as tone-deaf.
 - Never invent metrics or claims not on the CV.
 
 Output ONLY a JSON object — no markdown, no code fences, no explanation:
