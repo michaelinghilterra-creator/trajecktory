@@ -37,11 +37,13 @@ import { parseApplicationsMd } from './applications.mjs';
 import { readApplyDates, parseStatusEvents } from './sidecars.mjs';
 import { parseFollowupsMd } from './followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence } from './target-talent.mjs';
+import { parseReferralsMd, readReferralCorrespondence, resolveReferralLink } from './referrals.mjs';
 import { isLinkedInEntry } from './channels.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
 import { appReached, isInterviewStage } from './statuses.mjs';
 import { readEmployerDirectory, employerKey, hasEmployer, mergeEmployers } from './employer-directory.mjs';
 import { toCsv } from './csv.mjs';
+import { readConnects } from './connects.mjs';
 import { generateText, draftModel } from './anthropic.mjs';
 
 const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -212,13 +214,27 @@ export function buildActivities({ from, to } = {}) {
     });
   }
 
-  // 4) Outreach straight from the correspondence logs (target-talent + recruiters).
+  // 4) Outreach straight from the correspondence logs (target-talent + referrals).
   // Every Sent message is a dated employer contact: an email follow-up, or a
   // LinkedIn connection request (networking). Deduped against the follow-ups.md
   // rows above so a cross-logged touch is not double-counted. This is what makes
   // the report reflect ALL outreach automatically, no manual cross-log required.
+  //
+  // The target-talent rows are parsed once here and reused for the referral-twin
+  // check and the section-5 ledger join. Referrals are folded in as a second book,
+  // but ONLY the unlinked ones: a referral with a TA/recruiter twin shares (and logs
+  // to) the twin's correspondence dir, so it is already swept via the TA book above;
+  // reading it again here would double-count it. Each book adapts its own row shape
+  // (TA has first/last + a shared-namespace id; a referral has a single name and an
+  // id from a DIFFERENT namespace, so it must not seed the ledger's id-based dedup).
+  const taRows = safe(parseTargetTalentMd, []) || [];
+  const unlinkedReferrals = (safe(parseReferralsMd, []) || [])
+    .filter(r => !resolveReferralLink(r, taRows));
   const books = [
-    { rows: safe(parseTargetTalentMd, []) || [], read: readTTCorrespondence, companyOf: (r) => r.company },
+    { rows: taRows, read: readTTCorrespondence,
+      companyOf: (r) => r.company, contactOf: (r) => `${r.first || ''} ${r.last || ''}`.trim(), idOf: (r) => r.id },
+    { rows: unlinkedReferrals, read: readReferralCorrespondence,
+      companyOf: (r) => r.where, contactOf: (r) => r.name || '', idOf: () => null },
   ];
   for (const book of books) {
     for (const c of book.rows) {
@@ -231,7 +247,7 @@ export function buildActivities({ from, to } = {}) {
         const company = book.companyOf(c) || '';
         const co = normalizeCompany(company);
         const subject = msg.subject || '';
-        const contactName = `${c.first || ''} ${c.last || ''}`.trim();
+        const contactName = book.contactOf(c);
         // Already captured as a follow-ups.md row?
         if (loggedSig.has(`s|${date}|${co}|${normSub(subject)}`)) continue;
         if (contactName && loggedSig.has(`c|${date}|${co}|${normNm(contactName)}`)) continue;
@@ -253,10 +269,65 @@ export function buildActivities({ from, to } = {}) {
           employerPhone: (emp && emp.phone) || '',
           contact: contactName, method: linkedin ? 'LinkedIn' : 'Email',
           result: linkedin ? 'Sent connection request' : 'Sent follow-up',
-          appId,
+          appId, contactId: book.idOf(c),
         });
       }
     }
+  }
+
+  // 5) LinkedIn connection requests straight from the authoritative connects
+  // ledger (data/linkedin-connects.json, written by lib/connects.mjs logConnect).
+  // Section 4 only sees connects that were ALSO written to a correspondence log;
+  // the manual "log a connect" button and any bulk/legacy import write ONLY the
+  // ledger, so without this every such invite is invisible here while
+  // weekly-collect.mjs already counts it (that mismatch is the bug this fixes).
+  //
+  // Identity is the contact id, not the name: logConnect now records the id of the
+  // contact the invite went to, so a ledger connect dedups EXACTLY against the
+  // section-4 connect for the same (date, contact id). Name is the fallback key for
+  // legacy rows logged before id capture (until `node backfill-connect-ids.mjs`
+  // stamps their ids). Employer is recovered by id → target-talent company (name as
+  // the fallback), so these rows carry the same Employer/Type columns as the rest.
+  const seenConnect = new Set();
+  for (const a of activities) {
+    if (a.kind !== 'outreach') continue;
+    if (a.contactId !== undefined && a.contactId !== null) seenConnect.add(`id|${a.date}|${a.contactId}`);
+    seenConnect.add(`nm|${a.date}|${normNm(a.contact)}`);
+  }
+  // taRows was parsed once in section 4 and is reused here.
+  const taById = new Map();
+  const taByName = new Map();
+  for (const c of taRows) {
+    if (c.id !== undefined && c.id !== null) taById.set(String(c.id), c.company || '');
+    const k = normNm(`${c.first || ''} ${c.last || ''}`);
+    if (k && !taByName.has(k)) taByName.set(k, c.company || '');
+  }
+  for (const e of (safe(readConnects, null) || [])) {
+    const date = String((e && e.date) || '').slice(0, 10);
+    if (!isYmd(date)) continue;
+    const hasId = e.id !== undefined && e.id !== null && e.id !== '';
+    const nm = normNm(e.name);
+    // Already counted from correspondence (id when we have one, name otherwise), or
+    // already emitted from an earlier ledger row for the same invite.
+    if ((hasId && seenConnect.has(`id|${date}|${e.id}`)) || seenConnect.has(`nm|${date}|${nm}`)) continue;
+    if (hasId) seenConnect.add(`id|${date}|${e.id}`);
+    seenConnect.add(`nm|${date}|${nm}`);
+
+    const company = (hasId && taById.get(String(e.id))) || taByName.get(nm) || '';
+    const emp = company ? empFor(company) : null;
+    const { role, appId } = company ? roleFor(company) : { role: '', appId: '' };
+    activities.push({
+      kind: 'outreach',
+      date, week: twcWeekStart(date), dateApprox: false,
+      activity: 'Networking — LinkedIn connection request',
+      role, company,
+      employerAddress: (emp && emp.hqAddress) || '',
+      employerWebPage: (emp && emp.website) || '',
+      employerPhone: (emp && emp.phone) || '',
+      contact: e.name || '', method: 'LinkedIn',
+      result: 'Sent connection request',
+      appId, contactId: hasId ? e.id : null,
+    });
   }
 
   const inRange = (d) => (!from || d >= from) && (!to || d <= to);
