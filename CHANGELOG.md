@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.0.1...v3.1.0) (2026-09-01)
+
+
+### Features
+
+* harden Network tab contact search targeting and consumption ([#270](https://github.com/michaelinghilterra-creator/trajecktory/issues/270)) ([c735b6e](https://github.com/michaelinghilterra-creator/trajecktory/commit/c735b6ee612b6fe66bbef7451fd7dcfd025887a1))
+
 ## [3.0.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.0.0...v3.0.1) (2026-08-30)
 
 
