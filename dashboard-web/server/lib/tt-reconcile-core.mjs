@@ -35,7 +35,7 @@ export function normCompany(s) {
 // apps: parseApplicationsMd() output. ttRows: parseTargetTalentMd() output ALREADY
 // filtered to non-Archived. Returns { toArchive, companiesNeedingContacts,
 // companiesNeedingPrincipal }, the exact shape the preview endpoint returns.
-export function reconcilePreview(apps, ttRows) {
+export function reconcilePreview(apps, ttRows, { mode } = {}) {
   const appsByCompany = new Map();
   for (const a of apps) {
     const k = normCompany(a.company);
@@ -65,6 +65,18 @@ export function reconcilePreview(apps, ttRows) {
       relatedApps: companyApps.map(a => ({ id: a.id, status: a.status, role: a.role, date: a.date })),
     });
   }
+
+  // When mode is set, archive only contacts belonging to that subtab.
+  // talent → ta/agency tiers; principal → hm/exec/peer (decision-makers).
+  // Untagged contacts default to 'ta' via parseInfluenceTier.
+  const scopedArchive = mode
+    ? toArchive.filter(c => {
+        const row = ttRows.find(r => r.id === c.id);
+        const tier = (row && row.influenceTier) || parseInfluenceTier((row && row.notes) || '');
+        const isDM = (INFLUENCE_RANK[tier] ?? INFLUENCE_RANK.ta) >= INFLUENCE_RANK.peer;
+        return mode === 'principal' ? isDM : !isDM;
+      })
+    : toArchive;
 
   // Companies worth a contact (>=1 outreach-eligible app: currently-live funnel or
   // a ghosted No Response) that have no TA contact yet — the discover targets. An
@@ -111,5 +123,5 @@ export function reconcilePreview(apps, ttRows) {
   }
   companiesNeedingPrincipal.sort((a, b) => (b.mostRecentApp.date || '').localeCompare(a.mostRecentApp.date || ''));
 
-  return { toArchive, companiesNeedingContacts, companiesNeedingPrincipal };
+  return { toArchive: scopedArchive, companiesNeedingContacts, companiesNeedingPrincipal };
 }

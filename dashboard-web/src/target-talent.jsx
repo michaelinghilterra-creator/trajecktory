@@ -1578,7 +1578,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   }, []);
 
   useEffect(() => {
-    fetch("/api/tt-reconcile/preview")
+    fetch(`/api/tt-reconcile/preview?mode=${initialMode}`)
       .then(r => r.json())
       .then(d => {
         if (d.error) { setError(d.error); setLoading(false); return; }
@@ -1588,7 +1588,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
         // and 'principal' works decision-makers only. Clearing the out-of-scope
         // selections keeps the bulk action from making unrelated edits. 'all' (the
         // legacy global reconcile) still selects everything.
-        setArchSel(initialMode === "principal" ? new Set() : new Set((d.toArchive || []).map(x => x.id)));
+        setArchSel(new Set((d.toArchive || []).map(x => x.id)));
         setGapSel(initialMode === "principal" ? new Set() : new Set((d.companiesNeedingContacts || []).map(c => c.company)));
         setPrincipalGapSel(initialMode === "talent" ? new Set() : new Set((d.companiesNeedingPrincipal || []).map(c => c.company)));
         setLoading(false);
@@ -1743,7 +1743,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
           {step === 0 && (
             <div className="fade-up">
               {loading ? <div className="ai-loading"><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> Analyzing applications + TA contacts…</div> : <>
-                {initialMode !== "principal" && (<>
+                {(<>
                 <div className="rec-section-label"><TIcon d={TI.flag} size={12} /> Archive candidates &middot; {archSel.size} selected</div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Contacts at companies with no active applications.</div>
                 {preview.toArchive.length === 0

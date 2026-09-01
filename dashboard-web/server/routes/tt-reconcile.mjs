@@ -229,7 +229,9 @@ router.get('/api/tt-reconcile/preview', (req, res) => {
     // /bulk-add, right before contacts are actually written (see there).
     const apps = parseApplicationsMd();
     const ttRows = parseTargetTalentMd().filter(r => r.status !== 'Archived');
-    res.json(reconcilePreview(apps, ttRows));
+    const mode = req.query.mode === 'talent' || req.query.mode === 'principal'
+      ? req.query.mode : undefined;
+    res.json(reconcilePreview(apps, ttRows, { mode }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
