@@ -46,7 +46,7 @@ INSTRUCTIONS:
    - "${company}" "head of talent" OR "head of recruiting"
    - "${company}" careers team
 2. Prioritize people whose LinkedIn profile shows ${company} as their CURRENT employer.
-3. Prefer: Heads/Directors/Sr. Managers of Talent Acquisition · Recruiters with business/commercial focus (not engineering) · People & Talent leads.
+3. Prefer: Talent Acquisition Partners / Recruiters / TA Business Partners / HR Business Partners (HRBPs) / People-team members focused on business, GTM, or commercial hiring, at any seniority (at a small company the Head of Talent may be the right person). Do NOT return revenue-function leaders (VP/Head/Director of Revenue Operations, Sales Operations, GTM, Sales, or Marketing): those belong to the decision-maker search, not here.
 4. Verify each person's current employer before including them — recent job changes are common.
 
 Output ONLY a JSON array (your final response after searching), no prose, no markdown:
@@ -100,6 +100,33 @@ If the search returns no reliable matches, return an empty array []. Never fabri
   }
 }
 
+/**
+ * Two static query sets keyed by track. The model's web_search tool is capped at
+ * max_uses: 2, so order matters: the top titles do the work.
+ */
+const DM_QUERIES = {
+  revops: [
+    '"VP Revenue Operations" OR "Head of Revenue Operations"',
+    '"VP Sales Operations" OR "Head of Sales Operations"',
+    '"Chief Revenue Officer"',
+    '"Director GTM" OR "Head of GTM"',
+    '"VP Marketing"',
+  ],
+  salesdev: [
+    '"VP Sales"',
+    '"VP Sales Development" OR "Head of Sales Development"',
+    '"VP Business Development"',
+    '"Chief Revenue Officer"',
+    '"VP Marketing"',
+  ],
+};
+
+function detectTrack(exampleRole) {
+  const lower = (exampleRole || '').toLowerCase();
+  if (/\b(sdr|bdr|sales development|business development)\b/.test(lower)) return 'salesdev';
+  return 'revops';
+}
+
 export async function discoverPrincipalAtCompany({
   company,
   exampleRole = '',
@@ -111,13 +138,15 @@ export async function discoverPrincipalAtCompany({
   const resolvedTimeoutMs = resolveTimeoutMs(timeoutMs);
   // Keep invalid model options on the configured draft model instead of passing unchecked values downstream.
   const resolvedModel = typeof model === 'string' && model.trim() ? model : draftModel();
+  const track = detectTrack(exampleRole);
+  const queryLines = DM_QUERIES[track]
+    .map(q => `   - site:linkedin.com/in "${company}" ${q}`)
+    .join('\n');
   const prompt = `Find 2-3 people who currently LEAD the ${exampleRole || 'Revenue Operations / GTM'} function at ${company}. We are looking for the HIRING MANAGER or their skip-level — the VP, Director, Senior Director, or Head of the target function — NOT a recruiter, HR person, or TA team member.
 
 INSTRUCTIONS:
 1. USE THE web_search TOOL to search for functional leaders at ${company}. Try queries like:
-   - site:linkedin.com/in "${company}" "VP Revenue Operations"
-   - site:linkedin.com/in "${company}" "Head of Sales Operations"
-   - site:linkedin.com/in "${company}" "Director GTM"
+${queryLines}
    - "${company}" leadership team "${exampleRole || 'revenue operations'}"
 2. Prioritize VP, Director, Senior Director, Head of — NOT Managers or ICs.
 3. Target the person this ${exampleRole || 'role'} would REPORT TO (the direct manager), or their skip-level (one rung up).
@@ -126,7 +155,7 @@ INSTRUCTIONS:
 
 Output ONLY a JSON array (your final response after searching), no prose, no markdown:
 [
-  { "first": "First", "last": "Last", "title": "VP Revenue Operations", "city": "New York", "state": "NY", "linkedin": "https://www.linkedin.com/in/example/", "confidence": "high|medium|low", "notes": "One line on source and recency. [principal]" }
+  { "first": "First", "last": "Last", "title": "${track === 'salesdev' ? 'VP Sales' : 'VP Revenue Operations'}", "city": "New York", "state": "NY", "linkedin": "https://www.linkedin.com/in/example/", "confidence": "high|medium|low", "notes": "One line on source and recency. [principal]" }
 ]
 
 Confidence rules:

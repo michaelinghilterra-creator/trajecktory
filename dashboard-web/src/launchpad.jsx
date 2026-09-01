@@ -630,7 +630,7 @@ function ModelsCostPanel() {
           (how many per pass) and the rolling cap (how many total per click). Label
           and explain each separately, with a worked example. */}
       <div style={{ display: 'flex', gap: 16, marginTop: 4, marginBottom: 6 }}>
-        {state.batch.filter(b => b.key !== 'roll_max').map(b => (
+        {state.batch.filter(b => b.key !== 'roll_max' && b.key !== 'reconcile_max').map(b => (
           <div key={b.key} className="field" style={{ flex: 1 }}>
             <label>{b.label}</label>
             <input className="inp" type="number" min={b.min} max={b.max} value={b.current} disabled={busy}
@@ -656,6 +656,19 @@ function ModelsCostPanel() {
           <b style={{ color: 'var(--text-dim)' }}>Example</b> — batch size 5, rolling cap 20, 50 roles queued: Evaluate scores 5 at a time, rolls through 4 batches, and stops at 20. Click Evaluate again for the next 20.<br />
           If only 12 are queued, it scores all 12 and stops (the queue emptied first). The spend confirm always shows the real total before it starts.
         </div>
+      </div>
+
+      {/* Reconcile cap -- max companies per reconcile discovery run. */}
+      <div style={{ ...LP_SUB, marginTop: 18 }}>Reconcile discovery</div>
+      {state.batch.filter(b => b.key === 'reconcile_max').map(b => (
+        <div key={b.key} className="field" style={{ marginBottom: 6, maxWidth: 240 }}>
+          <label>{b.label}</label>
+          <input className="inp" type="number" min={b.min} max={b.max} value={b.current} disabled={busy}
+            onChange={e => save(b.key, e.target.value)} />
+        </div>
+      ))}
+      <div style={{ fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5, marginBottom: 14 }}>
+        <b style={{ color: 'var(--text-dim)' }}>Reconcile cap</b> -- the most companies ONE Reconcile click searches for contacts. The preview lists them most-recent-first, so lowering this trims from the oldest applications. Does not affect manual single-company searches.
       </div>
 
       {/* Per-day totals — cost + machine time rolled up by day, the numbers the

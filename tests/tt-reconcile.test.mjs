@@ -32,10 +32,10 @@ const apps = [
   { id: 9, company: 'Prospectus', status: 'Evaluated', role: 'Analytics Dir', date: '2026-03-06' },
 ];
 const ttRows = [
-  { id: 10, first: 'A', last: 'One', company: 'Acme Labs', title: 'TA', status: 'Not Contacted' },
+  { id: 10, first: 'A', last: 'One', company: 'Acme Labs', title: 'TA Partner', status: 'Not Contacted', notes: '[tier:ta]' },
   { id: 11, first: 'B', last: 'Two', company: 'Northwind', title: 'TA', status: 'Sent' },
   { id: 12, first: 'C', last: 'Three', company: 'Zenith', title: 'TA', status: 'Not Contacted' },
-  { id: 13, first: 'D', last: 'Four', company: 'acme labs', title: 'TA', status: 'Dormant' },
+  { id: 13, first: 'D', last: 'Four', company: 'acme labs', title: 'VP Revenue Operations', status: 'Dormant', notes: '[tier:hm]' },
   { id: 14, first: 'E', last: 'Five', company: 'Ghostly', title: 'TA', status: 'Not Contacted' },
   { id: 15, first: 'F', last: 'Six', company: 'Limbo Co', title: 'TA', status: 'Not Contacted' },
 ];
@@ -71,6 +71,46 @@ check(normCompany('Grow Therapy') === normCompany('Grow Therapy — New York'), 
 // Distinct companies must stay distinct, and a suffix token inside a word is kept.
 check(normCompany('Stripe') !== normCompany('Square'), 'normCompany keeps distinct companies distinct');
 check(normCompany('Costco') === 'costco', 'normCompany does not strip a suffix inside a word');
+
+// --- Mode-scoped archive ---
+const talentArchive = reconcilePreview(apps, ttRows, { mode: 'talent' });
+const principalArchive = reconcilePreview(apps, ttRows, { mode: 'principal' });
+const unmodedArchive = reconcilePreview(apps, ttRows);
+
+check(
+  talentArchive.toArchive.some(c => c.id === 10)
+    && !talentArchive.toArchive.some(c => c.id === 13),
+  'talent mode archives TA-tier contact (#10) but not DM-tier (#13)',
+);
+check(
+  principalArchive.toArchive.some(c => c.id === 13)
+    && !principalArchive.toArchive.some(c => c.id === 10),
+  'principal mode archives DM-tier contact (#13) but not TA-tier (#10)',
+);
+check(
+  unmodedArchive.toArchive.some(c => c.id === 10)
+    && unmodedArchive.toArchive.some(c => c.id === 13),
+  'no mode archives both tiers (backward compat)',
+);
+
+// --- Search-cap gate ---
+const cappedAttempts = {
+  brightwave: { talent: 2, lastSearched: '2026-03-10' },
+  vanished: { talent: 1, lastSearched: '2026-02-01' },
+};
+const withCap = reconcilePreview(apps, ttRows, { attempts: cappedAttempts });
+const withCapCos = withCap.companiesNeedingContacts.map(c => c.company);
+check(!withCapCos.includes('Brightwave'), 'Brightwave excluded when at talent search cap');
+check(withCapCos.includes('Vanished'), 'Vanished still included (only 1 attempt, below cap)');
+check(withCap.searchCapped === 1, 'searchCapped count reflects one capped company');
+
+// New-app-date resets the cap.
+const resetAttempts = {
+  brightwave: { talent: 2, lastSearched: '2026-02-01' },
+};
+const withReset = reconcilePreview(apps, ttRows, { attempts: resetAttempts });
+const resetCos = withReset.companiesNeedingContacts.map(c => c.company);
+check(resetCos.includes('Brightwave'), 'Brightwave re-included when app date (2026-03-01) is newer than lastSearched');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

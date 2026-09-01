@@ -510,6 +510,7 @@ for (const suite of [
   'tests/bulk-add-gate.test.mjs',
   'tests/scan-summary.test.mjs',
   'tests/tt-reconcile.test.mjs',
+  'tests/contact-search-attempts.test.mjs',
   'tests/discover-error-copy.test.mjs',
   'tests/tt-linkedin.test.mjs',
   'tests/connect-queue.test.mjs',

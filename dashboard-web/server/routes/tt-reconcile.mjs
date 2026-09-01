@@ -13,6 +13,8 @@ import { hunterDomainSearch, planDomainBudget } from '../../../lib/hunter-domain
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { mergeStakeholderAdditions, validateStakeholder, knownDomainKey } from '../../../lib/stakeholder-additions.mjs';
 import { readReconcileDismissed, addReconcileDismissed } from '../lib/sidecars.mjs';
+import { readAttempts, recordAttempt, writeAttempts } from '../lib/contact-search-attempts.mjs';
+import { currentBatch } from '../lib/pricing.mjs';
 
 export const router = express.Router();
 
@@ -50,18 +52,16 @@ function bareHostname(website) {
 // lib/tt-reconcile-core.mjs (reconcilePreview), shared with the reconcile-ta.mjs
 // CLI so the two can never drift. normCompany is imported from there too.
 
-const MAX_DISCOVER_COMPANIES = 15;
 const DISCOVER_CONCURRENCY = 3;
 const DISCOVER_COMPANY_TIMEOUT_MS = 90_000;
 const DISCOVER_REQUEST_OVERHEAD_MS = 30_000;
 // These are the only routes here that hold a request open for minutes, so their
 // timeout is an explicit route decision instead of weakening the server default.
-// 15 companies / concurrency 3 = 5 rounds; 5 * 90 seconds = 450 seconds, plus
-// 30 seconds for request and response overhead. The proper long-term shape is
-// the agent route pattern: return a jobId immediately and let the client poll.
-const DISCOVER_REQUEST_TIMEOUT_MS =
-  Math.ceil(MAX_DISCOVER_COMPANIES / DISCOVER_CONCURRENCY) * DISCOVER_COMPANY_TIMEOUT_MS
-  + DISCOVER_REQUEST_OVERHEAD_MS;
+function discoverRequestTimeoutMs() {
+  const max = currentBatch('reconcile_max');
+  return Math.ceil(max / DISCOVER_CONCURRENCY) * DISCOVER_COMPANY_TIMEOUT_MS
+    + DISCOVER_REQUEST_OVERHEAD_MS;
+}
 
 // Discovery jobs intentionally live only in memory. A dashboard restart may
 // lose an in-flight record, but results are available to apply as each company
@@ -74,6 +74,16 @@ function dismissKey({ company, first, last }) {
 
 async function runDiscoverJob(job, tasks, generate) {
   const dismissed = readReconcileDismissed();
+  const attempts = readAttempts();
+  const apps = parseApplicationsMd();
+  // Pre-compute each company's newest app date for the attempt-reset check.
+  const appDateByCompany = new Map();
+  for (const a of apps) {
+    const k = normCompany(a.company);
+    if (!k) continue;
+    const existing = appDateByCompany.get(k);
+    if (!existing || (a.date || '') > existing) appDateByCompany.set(k, a.date || '');
+  }
   let next = 0;
   const active = new Map();
   const settled = new Set();
@@ -91,6 +101,11 @@ async function runDiscoverJob(job, tasks, generate) {
           : await discoverTalentAtCompany({ company: task.company, exampleRole: task.exampleRole, generate });
         if (result.error) {
           job.errors.push({ company: task.company, error: result.error });
+          // Timeouts and persistent errors still count toward the cap.
+          // A company that errors every time is just as unlikely to yield
+          // contacts on retry as one that returns empty.
+          const appDate = appDateByCompany.get(normCompany(task.company)) || '';
+          recordAttempt(task.company, task.search, appDate, attempts);
           continue;
         }
         job.results.push({
@@ -100,8 +115,17 @@ async function runDiscoverJob(job, tasks, generate) {
           rejected: [],
           duplicates: 0,
         });
+        // Record successful-but-empty searches as an attempt toward the cap.
+        const kept = job.results[job.results.length - 1].suggestions;
+        if (kept.length === 0) {
+          const appDate = appDateByCompany.get(normCompany(task.company)) || '';
+          recordAttempt(task.company, task.search, appDate, attempts);
+        }
       } catch (err) {
         job.errors.push({ company: task.company, error: err.message });
+        // Thrown errors (timeouts) also count toward the cap.
+        const appDate = appDateByCompany.get(normCompany(task.company)) || '';
+        recordAttempt(task.company, task.search, appDate, attempts);
       } finally {
         settled.add(taskIndex);
         active.delete(taskIndex);
@@ -125,6 +149,7 @@ async function runDiscoverJob(job, tasks, generate) {
     });
   }
   job.current = [];
+  try { writeAttempts(attempts); } catch (err) { console.log(`[discover] failed to write attempts: ${err.message}`); }
   job.status = 'done';
   job.finishedAt = Date.now();
 }
@@ -158,9 +183,11 @@ async function verifyEmailsInBackground(written, toWrite, hkey, mkey) {
 
 // GET /api/tt-reconcile/discover-run
 // Reattaches the wizard to the most recently started running discovery.
+// Pass ?mode=talent or ?mode=principal to only match jobs for that subtab.
 router.get('/api/tt-reconcile/discover-run', (req, res) => {
+  const mode = req.query.mode || null;
   const running = [...discoverJobs.values()]
-    .filter(job => job.status === 'running')
+    .filter(job => job.status === 'running' && (!mode || job.mode === mode))
     .sort((a, b) => b.startedAt - a.startedAt)[0] || null;
   res.json(running);
 });
@@ -174,11 +201,12 @@ router.get('/api/tt-reconcile/discover-run/:jobId', (req, res) => {
 
 // POST /api/tt-reconcile/discover-run
 // Starts the whole reconcile discovery and returns before model work finishes.
+// Pass mode in the body so jobs from different subtabs don't collide.
 router.post('/api/tt-reconcile/discover-run', (req, res) => {
-  const running = [...discoverJobs.values()].find(job => job.status === 'running');
+  const { talent = [], principal = [], mode = null } = req.body || {};
+  const running = [...discoverJobs.values()].find(job => job.status === 'running' && (!mode || job.mode === mode));
   if (running) return res.status(409).json({ error: 'A discovery run is already running.', jobId: running.jobId });
   try {
-    const { talent = [], principal = [] } = req.body || {};
     if (!Array.isArray(talent) || !Array.isArray(principal)) {
       return res.status(400).json({ error: 'talent[] and principal[] are required.' });
     }
@@ -187,10 +215,15 @@ router.post('/api/tt-reconcile/discover-run', (req, res) => {
       ...principal.filter(item => item?.company).map(item => ({ ...item, search: 'principal' })),
     ];
     if (tasks.length === 0) return res.status(400).json({ error: 'At least one company is required.' });
+    const maxCompanies = currentBatch('reconcile_max');
+    if (tasks.length > maxCompanies) {
+      tasks.splice(maxCompanies);
+    }
 
     const jobId = randomUUID();
     const job = {
       jobId,
+      mode: mode || (tasks[0]?.search === 'principal' ? 'principal' : 'talent'),
       status: 'running',
       total: tasks.length,
       done: 0,
@@ -229,7 +262,10 @@ router.get('/api/tt-reconcile/preview', (req, res) => {
     // /bulk-add, right before contacts are actually written (see there).
     const apps = parseApplicationsMd();
     const ttRows = parseTargetTalentMd().filter(r => r.status !== 'Archived');
-    res.json(reconcilePreview(apps, ttRows));
+    const mode = req.query.mode === 'talent' || req.query.mode === 'principal'
+      ? req.query.mode : undefined;
+    const attempts = readAttempts();
+    res.json(reconcilePreview(apps, ttRows, { mode, attempts }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -344,14 +380,15 @@ router.post('/api/tt-reconcile/find-emails', async (req, res) => {
 //   { results: [{ company, suggestions: [{ first, last, title, city, state,
 //                                          linkedin, confidence, notes }] }] }
 router.post('/api/tt-reconcile/discover', async (req, res) => {
-  req.setTimeout(DISCOVER_REQUEST_TIMEOUT_MS);
+  req.setTimeout(discoverRequestTimeoutMs());
   try {
     const { companies } = req.body || {};
     if (!Array.isArray(companies) || companies.length === 0) {
       return res.status(400).json({ error: 'companies[] required' });
     }
-    if (companies.length > MAX_DISCOVER_COMPANIES) {
-      return res.status(400).json({ error: `Max ${MAX_DISCOVER_COMPANIES} companies per call (rate-limit protection).` });
+    const maxCompanies = currentBatch('reconcile_max');
+    if (companies.length > maxCompanies) {
+      return res.status(400).json({ error: `Max ${maxCompanies} companies per call (rate-limit protection).` });
     }
 
     // Cap in-flight discoverOne calls. Each call uses Anthropic's hosted
@@ -386,14 +423,15 @@ router.post('/api/tt-reconcile/discover', async (req, res) => {
 // Response: { results: [{ company, suggestions: [{first,last,title,city,state,
 //                          linkedin,confidence,notes}] }] }
 router.post('/api/tt-reconcile/discover-principal', async (req, res) => {
-  req.setTimeout(DISCOVER_REQUEST_TIMEOUT_MS);
+  req.setTimeout(discoverRequestTimeoutMs());
   try {
     const { companies } = req.body || {};
     if (!Array.isArray(companies) || companies.length === 0) {
       return res.status(400).json({ error: 'companies[] required' });
     }
-    if (companies.length > MAX_DISCOVER_COMPANIES) {
-      return res.status(400).json({ error: `Max ${MAX_DISCOVER_COMPANIES} companies per call.` });
+    const maxCompanies = currentBatch('reconcile_max');
+    if (companies.length > maxCompanies) {
+      return res.status(400).json({ error: `Max ${maxCompanies} companies per call.` });
     }
 
     const results = [];
