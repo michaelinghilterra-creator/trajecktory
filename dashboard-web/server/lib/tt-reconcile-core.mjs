@@ -10,6 +10,7 @@
 // opportunity, and are never considered here.
 import { OUTREACH_ELIGIBLE_STATUSES, OUTREACH_DEAD_STATUSES } from './statuses.mjs';
 import { parseInfluenceTier, INFLUENCE_RANK } from '../../../lib/influence-tier.mjs';
+import { isAtCap } from './contact-search-attempts.mjs';
 
 // The outreach rule lives in statuses.mjs as the single source of truth, shared
 // with the follow-up queues so the two can never disagree:
@@ -35,8 +36,9 @@ export function normCompany(s) {
 // apps: parseApplicationsMd() output. ttRows: parseTargetTalentMd() output ALREADY
 // filtered to non-Archived. Returns { toArchive, companiesNeedingContacts,
 // companiesNeedingPrincipal }, the exact shape the preview endpoint returns.
-export function reconcilePreview(apps, ttRows, { mode } = {}) {
+export function reconcilePreview(apps, ttRows, { mode, attempts } = {}) {
   const appsByCompany = new Map();
+  let searchCapped = 0;
   for (const a of apps) {
     const k = normCompany(a.company);
     if (!k) continue;
@@ -89,6 +91,7 @@ export function reconcilePreview(apps, ttRows, { mode } = {}) {
     const active = companyApps.filter(a => OUTREACH_ELIGIBLE_STATUSES.includes(a.status));
     if (active.length === 0) continue;
     const mostRecent = active.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+    if (attempts && isAtCap(mostRecent.company, 'talent', mostRecent.date, attempts)) { searchCapped++; continue; }
     companiesNeedingContacts.push({
       company: mostRecent.company,
       exampleRole: mostRecent.role,
@@ -113,6 +116,7 @@ export function reconcilePreview(apps, ttRows, { mode } = {}) {
     });
     if (canInfluence) continue;
     const mostRecent = active.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+    if (attempts && isAtCap(mostRecent.company, 'principal', mostRecent.date, attempts)) { searchCapped++; continue; }
     companiesNeedingPrincipal.push({
       company: mostRecent.company,
       exampleRole: mostRecent.role,
@@ -123,5 +127,5 @@ export function reconcilePreview(apps, ttRows, { mode } = {}) {
   }
   companiesNeedingPrincipal.sort((a, b) => (b.mostRecentApp.date || '').localeCompare(a.mostRecentApp.date || ''));
 
-  return { toArchive: scopedArchive, companiesNeedingContacts, companiesNeedingPrincipal };
+  return { toArchive: scopedArchive, companiesNeedingContacts, companiesNeedingPrincipal, searchCapped };
 }

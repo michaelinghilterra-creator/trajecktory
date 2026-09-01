@@ -13,6 +13,7 @@ import { hunterDomainSearch, planDomainBudget } from '../../../lib/hunter-domain
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { mergeStakeholderAdditions, validateStakeholder, knownDomainKey } from '../../../lib/stakeholder-additions.mjs';
 import { readReconcileDismissed, addReconcileDismissed } from '../lib/sidecars.mjs';
+import { readAttempts, recordAttempt, writeAttempts } from '../lib/contact-search-attempts.mjs';
 
 export const router = express.Router();
 
@@ -74,6 +75,16 @@ function dismissKey({ company, first, last }) {
 
 async function runDiscoverJob(job, tasks, generate) {
   const dismissed = readReconcileDismissed();
+  const attempts = readAttempts();
+  const apps = parseApplicationsMd();
+  // Pre-compute each company's newest app date for the attempt-reset check.
+  const appDateByCompany = new Map();
+  for (const a of apps) {
+    const k = normCompany(a.company);
+    if (!k) continue;
+    const existing = appDateByCompany.get(k);
+    if (!existing || (a.date || '') > existing) appDateByCompany.set(k, a.date || '');
+  }
   let next = 0;
   const active = new Map();
   const settled = new Set();
@@ -100,6 +111,13 @@ async function runDiscoverJob(job, tasks, generate) {
           rejected: [],
           duplicates: 0,
         });
+        // Record the empty search as an attempt toward the cap.
+        // Only count successful-but-empty, not errors (handled above).
+        const kept = job.results[job.results.length - 1].suggestions;
+        if (kept.length === 0) {
+          const appDate = appDateByCompany.get(normCompany(task.company)) || '';
+          recordAttempt(task.company, task.search, appDate, attempts);
+        }
       } catch (err) {
         job.errors.push({ company: task.company, error: err.message });
       } finally {
@@ -125,6 +143,7 @@ async function runDiscoverJob(job, tasks, generate) {
     });
   }
   job.current = [];
+  try { writeAttempts(attempts); } catch (err) { console.log(`[discover] failed to write attempts: ${err.message}`); }
   job.status = 'done';
   job.finishedAt = Date.now();
 }
@@ -231,7 +250,8 @@ router.get('/api/tt-reconcile/preview', (req, res) => {
     const ttRows = parseTargetTalentMd().filter(r => r.status !== 'Archived');
     const mode = req.query.mode === 'talent' || req.query.mode === 'principal'
       ? req.query.mode : undefined;
-    res.json(reconcilePreview(apps, ttRows, { mode }));
+    const attempts = readAttempts();
+    res.json(reconcilePreview(apps, ttRows, { mode, attempts }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

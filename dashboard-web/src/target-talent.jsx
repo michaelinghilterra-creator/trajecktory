@@ -1755,6 +1755,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
                   ))}
                 <div className="rec-section-label" style={{ marginTop: 22 }}><TIcon d={TI.building} size={12} /> Companies with nobody to talk to &middot; {gapSel.size} selected</div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Companies in your pipeline with no contact yet.</div>
+                {(preview.searchCapped || 0) > 0 && <div style={{ color: "var(--orange)", fontSize: 11, marginBottom: 6 }}>{preview.searchCapped} company{preview.searchCapped === 1 ? " was" : "ies were"} skipped: searched twice with no results.</div>}
                 {preview.companiesNeedingContacts.length === 0
                   ? <div className="empty" style={{ padding: "12px 0" }}>All companies covered.</div>
                   : preview.companiesNeedingContacts.map(c => (
@@ -1769,6 +1770,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
                   <>
                     <div className="rec-section-label" style={{ marginTop: 22 }}><TIcon d={TI.users} size={12} /> Companies where nobody can make the decision &middot; {principalGapSel.size} selected</div>
                     <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>These companies have contacts, but nobody who can influence the hire.</div>
+                    {(preview.searchCapped || 0) > 0 && <div style={{ color: "var(--orange)", fontSize: 11, marginBottom: 6 }}>{preview.searchCapped} company{preview.searchCapped === 1 ? " was" : "ies were"} skipped: searched twice with no results.</div>}
                     {preview.companiesNeedingPrincipal.length === 0
                       ? <div className="empty" style={{ padding: "12px 0" }}>Every company has a decision-maker.</div>
                       : preview.companiesNeedingPrincipal.map(c => (

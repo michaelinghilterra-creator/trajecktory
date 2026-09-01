@@ -93,5 +93,24 @@ check(
   'no mode archives both tiers (backward compat)',
 );
 
+// --- Search-cap gate ---
+const cappedAttempts = {
+  brightwave: { talent: 2, lastSearched: '2026-03-10' },
+  vanished: { talent: 1, lastSearched: '2026-02-01' },
+};
+const withCap = reconcilePreview(apps, ttRows, { attempts: cappedAttempts });
+const withCapCos = withCap.companiesNeedingContacts.map(c => c.company);
+check(!withCapCos.includes('Brightwave'), 'Brightwave excluded when at talent search cap');
+check(withCapCos.includes('Vanished'), 'Vanished still included (only 1 attempt, below cap)');
+check(withCap.searchCapped === 1, 'searchCapped count reflects one capped company');
+
+// New-app-date resets the cap.
+const resetAttempts = {
+  brightwave: { talent: 2, lastSearched: '2026-02-01' },
+};
+const withReset = reconcilePreview(apps, ttRows, { attempts: resetAttempts });
+const resetCos = withReset.companiesNeedingContacts.map(c => c.company);
+check(resetCos.includes('Brightwave'), 'Brightwave re-included when app date (2026-03-01) is newer than lastSearched');
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
