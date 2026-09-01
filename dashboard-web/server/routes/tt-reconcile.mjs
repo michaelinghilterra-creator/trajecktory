@@ -101,6 +101,11 @@ async function runDiscoverJob(job, tasks, generate) {
           : await discoverTalentAtCompany({ company: task.company, exampleRole: task.exampleRole, generate });
         if (result.error) {
           job.errors.push({ company: task.company, error: result.error });
+          // Timeouts and persistent errors still count toward the cap.
+          // A company that errors every time is just as unlikely to yield
+          // contacts on retry as one that returns empty.
+          const appDate = appDateByCompany.get(normCompany(task.company)) || '';
+          recordAttempt(task.company, task.search, appDate, attempts);
           continue;
         }
         job.results.push({
@@ -110,8 +115,7 @@ async function runDiscoverJob(job, tasks, generate) {
           rejected: [],
           duplicates: 0,
         });
-        // Record the empty search as an attempt toward the cap.
-        // Only count successful-but-empty, not errors (handled above).
+        // Record successful-but-empty searches as an attempt toward the cap.
         const kept = job.results[job.results.length - 1].suggestions;
         if (kept.length === 0) {
           const appDate = appDateByCompany.get(normCompany(task.company)) || '';
@@ -119,6 +123,9 @@ async function runDiscoverJob(job, tasks, generate) {
         }
       } catch (err) {
         job.errors.push({ company: task.company, error: err.message });
+        // Thrown errors (timeouts) also count toward the cap.
+        const appDate = appDateByCompany.get(normCompany(task.company)) || '';
+        recordAttempt(task.company, task.search, appDate, attempts);
       } finally {
         settled.add(taskIndex);
         active.delete(taskIndex);
@@ -176,9 +183,11 @@ async function verifyEmailsInBackground(written, toWrite, hkey, mkey) {
 
 // GET /api/tt-reconcile/discover-run
 // Reattaches the wizard to the most recently started running discovery.
+// Pass ?mode=talent or ?mode=principal to only match jobs for that subtab.
 router.get('/api/tt-reconcile/discover-run', (req, res) => {
+  const mode = req.query.mode || null;
   const running = [...discoverJobs.values()]
-    .filter(job => job.status === 'running')
+    .filter(job => job.status === 'running' && (!mode || job.mode === mode))
     .sort((a, b) => b.startedAt - a.startedAt)[0] || null;
   res.json(running);
 });
@@ -192,11 +201,12 @@ router.get('/api/tt-reconcile/discover-run/:jobId', (req, res) => {
 
 // POST /api/tt-reconcile/discover-run
 // Starts the whole reconcile discovery and returns before model work finishes.
+// Pass mode in the body so jobs from different subtabs don't collide.
 router.post('/api/tt-reconcile/discover-run', (req, res) => {
-  const running = [...discoverJobs.values()].find(job => job.status === 'running');
+  const { talent = [], principal = [], mode = null } = req.body || {};
+  const running = [...discoverJobs.values()].find(job => job.status === 'running' && (!mode || job.mode === mode));
   if (running) return res.status(409).json({ error: 'A discovery run is already running.', jobId: running.jobId });
   try {
-    const { talent = [], principal = [] } = req.body || {};
     if (!Array.isArray(talent) || !Array.isArray(principal)) {
       return res.status(400).json({ error: 'talent[] and principal[] are required.' });
     }
@@ -207,12 +217,13 @@ router.post('/api/tt-reconcile/discover-run', (req, res) => {
     if (tasks.length === 0) return res.status(400).json({ error: 'At least one company is required.' });
     const maxCompanies = currentBatch('reconcile_max');
     if (tasks.length > maxCompanies) {
-      tasks.splice(maxCompanies);  // trim tail; preview lists arrive most-recent-first
+      tasks.splice(maxCompanies);
     }
 
     const jobId = randomUUID();
     const job = {
       jobId,
+      mode: mode || (tasks[0]?.search === 'principal' ? 'principal' : 'talent'),
       status: 'running',
       total: tasks.length,
       done: 0,

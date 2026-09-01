@@ -1598,7 +1598,8 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/tt-reconcile/discover-run")
+    const modeParam = initialMode === "principal" ? "principal" : "talent";
+    fetch(`/api/tt-reconcile/discover-run?mode=${modeParam}`)
       .then(response => response.json())
       .then(job => {
         if (cancelled || !job?.jobId) return;
@@ -1608,7 +1609,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [absorbDiscoverJob]);
+  }, [absorbDiscoverJob, initialMode]);
 
   useEffect(() => {
     if (!discoverJobId) return undefined;
@@ -1651,7 +1652,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
       const response = await window.tjkMutate("/api/tt-reconcile/discover-run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ talent: talentCompanies, principal: principalCompanies }),
+        body: JSON.stringify({ talent: talentCompanies, principal: principalCompanies, mode: initialMode === "principal" ? "principal" : "talent" }),
       });
       const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
       if (response.status === 409 && body.jobId) {
