@@ -14,6 +14,7 @@ import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { mergeStakeholderAdditions, validateStakeholder, knownDomainKey } from '../../../lib/stakeholder-additions.mjs';
 import { readReconcileDismissed, addReconcileDismissed } from '../lib/sidecars.mjs';
 import { readAttempts, recordAttempt, writeAttempts } from '../lib/contact-search-attempts.mjs';
+import { currentBatch } from '../lib/pricing.mjs';
 
 export const router = express.Router();
 
@@ -51,18 +52,16 @@ function bareHostname(website) {
 // lib/tt-reconcile-core.mjs (reconcilePreview), shared with the reconcile-ta.mjs
 // CLI so the two can never drift. normCompany is imported from there too.
 
-const MAX_DISCOVER_COMPANIES = 15;
 const DISCOVER_CONCURRENCY = 3;
 const DISCOVER_COMPANY_TIMEOUT_MS = 90_000;
 const DISCOVER_REQUEST_OVERHEAD_MS = 30_000;
 // These are the only routes here that hold a request open for minutes, so their
 // timeout is an explicit route decision instead of weakening the server default.
-// 15 companies / concurrency 3 = 5 rounds; 5 * 90 seconds = 450 seconds, plus
-// 30 seconds for request and response overhead. The proper long-term shape is
-// the agent route pattern: return a jobId immediately and let the client poll.
-const DISCOVER_REQUEST_TIMEOUT_MS =
-  Math.ceil(MAX_DISCOVER_COMPANIES / DISCOVER_CONCURRENCY) * DISCOVER_COMPANY_TIMEOUT_MS
-  + DISCOVER_REQUEST_OVERHEAD_MS;
+function discoverRequestTimeoutMs() {
+  const max = currentBatch('reconcile_max');
+  return Math.ceil(max / DISCOVER_CONCURRENCY) * DISCOVER_COMPANY_TIMEOUT_MS
+    + DISCOVER_REQUEST_OVERHEAD_MS;
+}
 
 // Discovery jobs intentionally live only in memory. A dashboard restart may
 // lose an in-flight record, but results are available to apply as each company
@@ -206,6 +205,10 @@ router.post('/api/tt-reconcile/discover-run', (req, res) => {
       ...principal.filter(item => item?.company).map(item => ({ ...item, search: 'principal' })),
     ];
     if (tasks.length === 0) return res.status(400).json({ error: 'At least one company is required.' });
+    const maxCompanies = currentBatch('reconcile_max');
+    if (tasks.length > maxCompanies) {
+      tasks.splice(maxCompanies);  // trim tail; preview lists arrive most-recent-first
+    }
 
     const jobId = randomUUID();
     const job = {
@@ -366,14 +369,15 @@ router.post('/api/tt-reconcile/find-emails', async (req, res) => {
 //   { results: [{ company, suggestions: [{ first, last, title, city, state,
 //                                          linkedin, confidence, notes }] }] }
 router.post('/api/tt-reconcile/discover', async (req, res) => {
-  req.setTimeout(DISCOVER_REQUEST_TIMEOUT_MS);
+  req.setTimeout(discoverRequestTimeoutMs());
   try {
     const { companies } = req.body || {};
     if (!Array.isArray(companies) || companies.length === 0) {
       return res.status(400).json({ error: 'companies[] required' });
     }
-    if (companies.length > MAX_DISCOVER_COMPANIES) {
-      return res.status(400).json({ error: `Max ${MAX_DISCOVER_COMPANIES} companies per call (rate-limit protection).` });
+    const maxCompanies = currentBatch('reconcile_max');
+    if (companies.length > maxCompanies) {
+      return res.status(400).json({ error: `Max ${maxCompanies} companies per call (rate-limit protection).` });
     }
 
     // Cap in-flight discoverOne calls. Each call uses Anthropic's hosted
@@ -408,14 +412,15 @@ router.post('/api/tt-reconcile/discover', async (req, res) => {
 // Response: { results: [{ company, suggestions: [{first,last,title,city,state,
 //                          linkedin,confidence,notes}] }] }
 router.post('/api/tt-reconcile/discover-principal', async (req, res) => {
-  req.setTimeout(DISCOVER_REQUEST_TIMEOUT_MS);
+  req.setTimeout(discoverRequestTimeoutMs());
   try {
     const { companies } = req.body || {};
     if (!Array.isArray(companies) || companies.length === 0) {
       return res.status(400).json({ error: 'companies[] required' });
     }
-    if (companies.length > MAX_DISCOVER_COMPANIES) {
-      return res.status(400).json({ error: `Max ${MAX_DISCOVER_COMPANIES} companies per call.` });
+    const maxCompanies = currentBatch('reconcile_max');
+    if (companies.length > maxCompanies) {
+      return res.status(400).json({ error: `Max ${maxCompanies} companies per call.` });
     }
 
     const results = [];
