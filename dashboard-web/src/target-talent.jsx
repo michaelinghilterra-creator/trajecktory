@@ -1578,7 +1578,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
   }, []);
 
   useEffect(() => {
-    fetch("/api/tt-reconcile/preview")
+    fetch(`/api/tt-reconcile/preview?mode=${initialMode}`)
       .then(r => r.json())
       .then(d => {
         if (d.error) { setError(d.error); setLoading(false); return; }
@@ -1588,7 +1588,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
         // and 'principal' works decision-makers only. Clearing the out-of-scope
         // selections keeps the bulk action from making unrelated edits. 'all' (the
         // legacy global reconcile) still selects everything.
-        setArchSel(initialMode === "principal" ? new Set() : new Set((d.toArchive || []).map(x => x.id)));
+        setArchSel(new Set((d.toArchive || []).map(x => x.id)));
         setGapSel(initialMode === "principal" ? new Set() : new Set((d.companiesNeedingContacts || []).map(c => c.company)));
         setPrincipalGapSel(initialMode === "talent" ? new Set() : new Set((d.companiesNeedingPrincipal || []).map(c => c.company)));
         setLoading(false);
@@ -1598,7 +1598,8 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/tt-reconcile/discover-run")
+    const modeParam = initialMode === "principal" ? "principal" : "talent";
+    fetch(`/api/tt-reconcile/discover-run?mode=${modeParam}`)
       .then(response => response.json())
       .then(job => {
         if (cancelled || !job?.jobId) return;
@@ -1608,7 +1609,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [absorbDiscoverJob]);
+  }, [absorbDiscoverJob, initialMode]);
 
   useEffect(() => {
     if (!discoverJobId) return undefined;
@@ -1651,7 +1652,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
       const response = await window.tjkMutate("/api/tt-reconcile/discover-run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ talent: talentCompanies, principal: principalCompanies }),
+        body: JSON.stringify({ talent: talentCompanies, principal: principalCompanies, mode: initialMode === "principal" ? "principal" : "talent" }),
       });
       const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
       if (response.status === 409 && body.jobId) {
@@ -1743,7 +1744,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
           {step === 0 && (
             <div className="fade-up">
               {loading ? <div className="ai-loading"><span className="scan-ring" style={{ width: 16, height: 16, borderWidth: 2 }} /> Analyzing applications + TA contacts…</div> : <>
-                {initialMode !== "principal" && (<>
+                {(<>
                 <div className="rec-section-label"><TIcon d={TI.flag} size={12} /> Archive candidates &middot; {archSel.size} selected</div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Contacts at companies with no active applications.</div>
                 {preview.toArchive.length === 0
@@ -1755,6 +1756,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
                   ))}
                 <div className="rec-section-label" style={{ marginTop: 22 }}><TIcon d={TI.building} size={12} /> Companies with nobody to talk to &middot; {gapSel.size} selected</div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>Companies in your pipeline with no contact yet.</div>
+                {(preview.searchCapped || 0) > 0 && <div style={{ color: "var(--orange)", fontSize: 11, marginBottom: 6 }}>{preview.searchCapped} company{preview.searchCapped === 1 ? " was" : "ies were"} skipped: searched twice with no results.</div>}
                 {preview.companiesNeedingContacts.length === 0
                   ? <div className="empty" style={{ padding: "12px 0" }}>All companies covered.</div>
                   : preview.companiesNeedingContacts.map(c => (
@@ -1769,6 +1771,7 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
                   <>
                     <div className="rec-section-label" style={{ marginTop: 22 }}><TIcon d={TI.users} size={12} /> Companies where nobody can make the decision &middot; {principalGapSel.size} selected</div>
                     <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 10 }}>These companies have contacts, but nobody who can influence the hire.</div>
+                    {(preview.searchCapped || 0) > 0 && <div style={{ color: "var(--orange)", fontSize: 11, marginBottom: 6 }}>{preview.searchCapped} company{preview.searchCapped === 1 ? " was" : "ies were"} skipped: searched twice with no results.</div>}
                     {preview.companiesNeedingPrincipal.length === 0
                       ? <div className="empty" style={{ padding: "12px 0" }}>Every company has a decision-maker.</div>
                       : preview.companiesNeedingPrincipal.map(c => (

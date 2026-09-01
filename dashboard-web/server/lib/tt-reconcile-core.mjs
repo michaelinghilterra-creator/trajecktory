@@ -10,6 +10,7 @@
 // opportunity, and are never considered here.
 import { OUTREACH_ELIGIBLE_STATUSES, OUTREACH_DEAD_STATUSES } from './statuses.mjs';
 import { parseInfluenceTier, INFLUENCE_RANK } from '../../../lib/influence-tier.mjs';
+import { isAtCap } from './contact-search-attempts.mjs';
 
 // The outreach rule lives in statuses.mjs as the single source of truth, shared
 // with the follow-up queues so the two can never disagree:
@@ -35,8 +36,9 @@ export function normCompany(s) {
 // apps: parseApplicationsMd() output. ttRows: parseTargetTalentMd() output ALREADY
 // filtered to non-Archived. Returns { toArchive, companiesNeedingContacts,
 // companiesNeedingPrincipal }, the exact shape the preview endpoint returns.
-export function reconcilePreview(apps, ttRows) {
+export function reconcilePreview(apps, ttRows, { mode, attempts } = {}) {
   const appsByCompany = new Map();
+  let searchCapped = 0;
   for (const a of apps) {
     const k = normCompany(a.company);
     if (!k) continue;
@@ -66,6 +68,18 @@ export function reconcilePreview(apps, ttRows) {
     });
   }
 
+  // When mode is set, archive only contacts belonging to that subtab.
+  // talent → ta/agency tiers; principal → hm/exec/peer (decision-makers).
+  // Untagged contacts default to 'ta' via parseInfluenceTier.
+  const scopedArchive = mode
+    ? toArchive.filter(c => {
+        const row = ttRows.find(r => r.id === c.id);
+        const tier = (row && row.influenceTier) || parseInfluenceTier((row && row.notes) || '');
+        const isDM = (INFLUENCE_RANK[tier] ?? INFLUENCE_RANK.ta) >= INFLUENCE_RANK.peer;
+        return mode === 'principal' ? isDM : !isDM;
+      })
+    : toArchive;
+
   // Companies worth a contact (>=1 outreach-eligible app: currently-live funnel or
   // a ghosted No Response) that have no TA contact yet — the discover targets. An
   // Evaluated-only company is excluded here: no application means no reason to
@@ -77,6 +91,7 @@ export function reconcilePreview(apps, ttRows) {
     const active = companyApps.filter(a => OUTREACH_ELIGIBLE_STATUSES.includes(a.status));
     if (active.length === 0) continue;
     const mostRecent = active.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+    if (attempts && isAtCap(mostRecent.company, 'talent', mostRecent.date, attempts)) { searchCapped++; continue; }
     companiesNeedingContacts.push({
       company: mostRecent.company,
       exampleRole: mostRecent.role,
@@ -101,6 +116,7 @@ export function reconcilePreview(apps, ttRows) {
     });
     if (canInfluence) continue;
     const mostRecent = active.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+    if (attempts && isAtCap(mostRecent.company, 'principal', mostRecent.date, attempts)) { searchCapped++; continue; }
     companiesNeedingPrincipal.push({
       company: mostRecent.company,
       exampleRole: mostRecent.role,
@@ -111,5 +127,5 @@ export function reconcilePreview(apps, ttRows) {
   }
   companiesNeedingPrincipal.sort((a, b) => (b.mostRecentApp.date || '').localeCompare(a.mostRecentApp.date || ''));
 
-  return { toArchive, companiesNeedingContacts, companiesNeedingPrincipal };
+  return { toArchive: scopedArchive, companiesNeedingContacts, companiesNeedingPrincipal, searchCapped };
 }

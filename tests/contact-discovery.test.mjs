@@ -62,6 +62,11 @@ check(
     && calls[0].options.model === 'model.example',
   'the injected generate function receives the prompt and model options',
 );
+check(
+  calls[0].prompt.includes('Talent Acquisition Partners')
+    && calls[0].prompt.includes('Do NOT return revenue-function leaders'),
+  'TA prompt targets IC recruiters and excludes revenue-function leadership',
+);
 
 let fallbackModelOptions;
 await discoverTalentAtCompany({
@@ -104,6 +109,34 @@ check(
     && principal.suggestions.every(suggestion => /\[principal\]/i.test(suggestion.notes))
     && principal.suggestions.every(suggestion => suggestion.validation && typeof suggestion.validation.ok === 'boolean'),
   'principal search stamps notes and attaches validation to every suggestion',
+);
+
+// RevOps track (default)
+let revopsPrompt;
+await discoverPrincipalAtCompany({
+  company: 'RevOps Track Example',
+  exampleRole: 'Revenue Operations Manager',
+  generate: async (prompt) => { revopsPrompt = prompt; return '[]'; },
+});
+check(
+  revopsPrompt.includes('VP Revenue Operations')
+    && revopsPrompt.includes('VP Sales Operations')
+    && !revopsPrompt.includes('"VP Sales"'),
+  'RevOps exampleRole injects RevOps-track DM queries (not Sales Dev)',
+);
+
+// Sales Dev track
+let salesdevPrompt;
+await discoverPrincipalAtCompany({
+  company: 'SalesDev Track Example',
+  exampleRole: 'Sales Development Representative',
+  generate: async (prompt) => { salesdevPrompt = prompt; return '[]'; },
+});
+check(
+  salesdevPrompt.includes('"VP Sales"')
+    && salesdevPrompt.includes('Sales Development')
+    && !salesdevPrompt.includes('VP Revenue Operations'),
+  'Sales Dev exampleRole injects Sales-Dev-track DM queries (not RevOps)',
 );
 
 const failedCall = await discoverTalentAtCompany({

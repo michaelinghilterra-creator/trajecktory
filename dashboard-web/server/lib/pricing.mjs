@@ -125,6 +125,11 @@ export const BATCH = [
   // rollMax() in routes/agent.mjs via currentBatch('roll_max'), so this is the one
   // source of truth for its default/range. Set to 1 to effectively disable rolling.
   { key: 'roll_max',   envKey: 'TJK_EVAL_ROLL_MAX',  label: 'Rolling cap (evals per run)', default: 60, min: 1, max: 200 },
+  // Reconcile cap: the MOST companies one Reconcile click discovers before it stops.
+  // Applies to the async discover-run fan-out AND the synchronous per-company routes.
+  // Read by currentBatch('reconcile_max') in routes/tt-reconcile.mjs. Replaces the
+  // old hardcoded MAX_DISCOVER_COMPANIES = 15.
+  { key: 'reconcile_max', envKey: 'TJK_RECONCILE_MAX', label: 'Max companies per reconcile run', default: 15, min: 1, max: 50 },
 ];
 
 const sectionByKey = Object.fromEntries(SECTIONS.map((s) => [s.key, s]));
