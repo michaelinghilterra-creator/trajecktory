@@ -25,6 +25,7 @@ export {
   cleanEmailSubject,
   cleanAtsField,
   cleanMarkdownProse,
+  stripDraftMeta,
   _replaceEmDashes,
 } from '../../../lib/text-hygiene-core.mjs';
 

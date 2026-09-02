@@ -11,198 +11,33 @@ const byLoggedAtDesc = (a, b) =>
 // is the natural order for the influencer picker dropdowns.
 const byNameAsc = (a, b) => (a.name || "").localeCompare(b.name || "");
 
-/* Radial gauge: 270° arc, value out of max, with target tick. */
-function RadialGauge({ value, max = 100, target, size = 196, stroke = 14 }) {
-  const r = (size - stroke) / 2;
-  const cx = size / 2, cy = size / 2;
-  const START = 135, SWEEP = 270;
-  const toXY = (deg) => {
-    const a = (deg * Math.PI) / 180;
-    return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
-  };
-  const arcPath = (fromDeg, toDeg) => {
-    const [x1, y1] = toXY(fromDeg);
-    const [x2, y2] = toXY(toDeg);
-    const large = toDeg - fromDeg > 180 ? 1 : 0;
-    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
-  };
-  const frac = Math.max(0, Math.min(1, value / max));
-  const endDeg = START + SWEEP * frac;
-  const targetDeg = target != null ? START + SWEEP * (target / max) : null;
-  const [tx, ty] = targetDeg != null ? toXY(targetDeg) : [0, 0];
-
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: "block" }}>
-      <defs>
-        <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="var(--accent)" />
-          <stop offset="100%" stopColor="var(--accent-2)" />
-        </linearGradient>
-      </defs>
-      <path d={arcPath(START, START + SWEEP)} fill="none" stroke="var(--panel-2)" strokeWidth={stroke} strokeLinecap="round" />
-      <path d={arcPath(START, endDeg)} fill="none" stroke="url(#gaugeGrad)" strokeWidth={stroke} strokeLinecap="round"
-        style={{ filter: "drop-shadow(0 0 6px rgba(167,139,250,.45))" }} />
-      {targetDeg != null && (
-        <line x1={cx + (r - stroke / 1.4) * Math.cos((targetDeg * Math.PI) / 180)}
-              y1={cy + (r - stroke / 1.4) * Math.sin((targetDeg * Math.PI) / 180)}
-              x2={cx + (r + stroke / 1.4) * Math.cos((targetDeg * Math.PI) / 180)}
-              y2={cy + (r + stroke / 1.4) * Math.sin((targetDeg * Math.PI) / 180)}
-              stroke="var(--text-dim)" strokeWidth={2} strokeLinecap="round" />
-      )}
-    </svg>
-  );
-}
-
-/* Sparkline from array of numbers */
-function Sparkline({ data, w = 120, h = 32, color = "var(--accent)" }) {
-  const vals = data.filter((d) => d != null);
-  if (vals.length < 2) return <svg width={w} height={h} />;
-  const min = Math.min(...vals), max = Math.max(...vals);
-  const span = max - min || 1;
-  const step = w / (data.length - 1);
-  const pts = data.map((d, i) => {
-    if (d == null) return null;
-    const x = i * step;
-    const y = h - 4 - ((d - min) / span) * (h - 8);
-    return [x, y];
-  }).filter(Boolean);
-  const dPath = pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
-  const area = dPath + ` L ${pts[pts.length - 1][0].toFixed(1)} ${h} L ${pts[0][0].toFixed(1)} ${h} Z`;
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }}>
-      <defs>
-        <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={area} fill="url(#spark)" />
-      <path d={dPath} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-      {pts.length > 0 && <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="2.6" fill={color} />}
-    </svg>
-  );
-}
-
-/* Weekly trend chart */
-function WeekTrend({ weeks, target, height = 120 }) {
-  const totals = weeks.map((w) => {
-    const parts = [w.brand, w.people, w.engage, w.rel];
-    // Any null pillar means the week is not fully recorded; a partial sum would
-    // render a NaN bar. Treat the whole week as null (no bar) unless all four exist.
-    return parts.some((x) => x == null) ? null : parts.reduce((a, b) => a + b, 0);
-  });
-  const max = 100;
-  // Stacked pillar segments so each bar encodes the four series shown in the
-  // legend (was a single gradient) and uses solid colors (was a fade-to-
-  // transparent gradient that dissolved at the baseline on light themes).
-  const PILLAR_SEG = [
-    { key: "brand",  color: "var(--accent)" },
-    { key: "people", color: "var(--blue)" },
-    { key: "engage", color: "var(--cyan)" },
-    { key: "rel",    color: "var(--green)" },
-  ];
-  return (
-    <div style={{ position: "relative", height }}>
-      <div style={{ position: "absolute", left: 0, right: 0, bottom: (target / max) * height,
-        borderTop: "1px dashed rgba(139,139,148,.4)", height: 0 }}>
-        <span style={{ position: "absolute", right: 0, top: -16, fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>
-          target {target}
-        </span>
-      </div>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: "100%" }}>
-        {weeks.map((w, i) => {
-          const t = totals[i];
-          const hPct = t == null ? 0 : (t / max) * 100;
-          return (
-            <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%", justifyContent: "flex-end", gap: 6 }}>
-              {t == null ? (
-                <div style={{ width: "100%", height: 3, borderRadius: 2, background: "var(--panel-2)" }} />
-              ) : (
-                <div style={{
-                  width: "100%", height: `${hPct}%`, minHeight: 4, borderRadius: "4px 4px 2px 2px",
-                  overflow: "hidden", display: "flex", flexDirection: "column-reverse",
-                }}>
-                  {PILLAR_SEG.map((p) => {
-                    const v = w[p.key] || 0;
-                    const segPct = t ? (v / t) * 100 : 0;
-                    return v > 0 ? <div key={p.key} title={`${p.key}: ${v}`} style={{ height: `${segPct}%`, background: p.color }} /> : null;
-                  })}
-                </div>
-              )}
-              <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{w.wk}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function LinkedInSSITab({ toast }) {
-  const [ssiData, setSsiData] = useState(null);
   const [influencers, setInfluencers] = useState([]);
   const [engagementLog, setEngagementLog] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState("dashboard");
+  const [activeView, setActiveView] = useState("posts");
   const [selectedInfluencer, setSelectedInfluencer] = useState(null);
   const engagementRhythm = useMemo(() => weeklyEngagementRhythm(engagementLog), [engagementLog]);
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/linkedin-ssi/summary').then(r => r.json()).catch(e => { console.error('Summary fetch:', e); return { currentSsi: null, targetSsi: 60, weeks: [] }; }),
       fetch('/api/linkedin-ssi/influencers').then(r => r.json()).catch(e => { console.error('Influencers fetch:', e); return []; }),
       fetch('/api/linkedin-ssi/engagement-log').then(r => r.json()).catch(e => { console.error('Log fetch:', e); return []; })
-    ]).then(([ssi, infl, log]) => {
-      // Normalize data: map API names to design spec names.
-      // score and prevScore are null until the user has actually recorded weeks.
-      // They used to fall back to 39 and a literal 35, so a fresh install showed a
-      // 39/100 gauge and a green "+4 this wk" for a measurement nobody had taken.
-      const weeks = (ssi.weeks || []).map(w => ({
-        wk: w.weekNum,
-        date: w.weekOf,
-        brand: w.brand,
-        people: w.findPeople,
-        engage: w.engageInsights,
-        rel: w.relationships
-      }));
-      const totals = weeks
-        .filter(w => w.brand != null && w.people != null && w.engage != null && w.rel != null)
-        .map(w => w.brand + w.people + w.engage + w.rel);
-      const normalized = {
-        score: (ssi.currentSsi === null || ssi.currentSsi === undefined) ? null : ssi.currentSsi,
-        target: ssi.targetSsi || 60,
-        weeks,
-        // Only meaningful with two recorded weeks to compare.
-        prevScore: totals.length >= 2 ? totals[totals.length - 2] : null,
-      };
-      setSsiData(normalized);
+    ]).then(([infl, log]) => {
       setInfluencers(infl);
       setEngagementLog([...(log || [])].sort(byLoggedAtDesc));
       setLoading(false);
     });
   }, []);
 
-  const stats = useMemo(() => {
-    if (!influencers.length) return { following: 0, connected: 0, engaged: 0 };
-    return {
-      following: influencers.filter(i => i.following).length,
-      connected: influencers.filter(i => i.connected).length,
-      engaged: influencers.filter(i => i.engaged).length
-    };
-  }, [influencers]);
-
-  if (loading) return <div style={{ padding: "20px", color: "var(--text-dim)" }}>Loading Visibility data…</div>;
-  if (!ssiData) return <div style={{ padding: "20px", color: "var(--text-dim)" }}>Failed to load Visibility data. Please refresh.</div>;
+  if (loading) return <div style={{ padding: "20px", color: "var(--text-dim)" }}>Loading Social data…</div>;
 
   return (
     <div style={{ flex: 1, maxWidth: "none", marginLeft: 0, marginRight: 0 }}>
       <div>
         {/* Subtabs */}
         <div className="subtabs">
-          <button className={"subtab" + (activeView === "dashboard" ? " active" : "")} onClick={() => setActiveView("dashboard")}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: "6px", display: "inline-block"}}><path d={window.ICON.pulse} /></svg>
-            Overview
-          </button>
           <button className={"subtab" + (activeView === "posts" ? " active" : "")} onClick={() => setActiveView("posts")}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: "6px", display: "inline-block"}}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             Posts
@@ -219,218 +54,21 @@ function LinkedInSSITab({ toast }) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight: "6px", display: "inline-block"}}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             Activity Log
           </button>
-          <button className={"subtab" + (activeView === "weekly" ? " active" : "")} onClick={() => setActiveView("weekly")}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight: "6px", display: "inline-block"}}><path d="M4 9h16M4 9a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2M4 9v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9M9 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2H9V5z"/></svg>
-            Weekly Tracker
-          </button>
         </div>
       </div>
 
       <div style={{ flex: 1 }}>
         <div className="ta-head">
           <div>
-            <h1>Visibility</h1>
+            <h1>Social</h1>
             <div className="sub">
-              score {ssiData?.score ?? '-'} / 100 · target {ssiData?.target ?? 60} · {influencers.length} influencers tracked · {engagementRhythm.count} engagements this week
+              {influencers.length} influencers tracked · {engagementRhythm.count} engagements this week
             </div>
             <div style={{ fontSize: 11, color: "var(--text-mute)", marginTop: 3 }}>
-              Tracks your LinkedIn Social Selling Index (SSI). Independent tool, not affiliated with or endorsed by LinkedIn.
-            </div>
-            <div style={{ fontSize: 11, color: "var(--text-mute)", marginTop: 3 }}>
-              This is a distribution list for the fractional RevOps pivot, not a job search channel.
+              LinkedIn content, influencer engagement, and activity tracking.
             </div>
           </div>
         </div>
-
-        {/* DASHBOARD */}
-        {activeView === "dashboard" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {/* Row 1: KPIs */}
-            <div className="grid cols-4">
-              <div className="kpi">
-                <span className="k">Following</span>
-                <span className="v">{stats.following}</span>
-                <span className="sub">{stats.following}/{influencers.length} influencers</span>
-              </div>
-              <div className="kpi">
-                <span className="k">Connected</span>
-                <span className="v">{stats.connected}</span>
-                <span className="sub">LinkedIn connections</span>
-              </div>
-              <div className="kpi">
-                <span className="k">Engaged</span>
-                <span className="v">{stats.engaged}</span>
-                <span className="sub">with recent activity</span>
-              </div>
-              <div className="kpi">
-                <span className="k">This Week</span>
-                <span className="v">{engagementRhythm.count}</span>
-                <span className="sub">engagements logged</span>
-              </div>
-            </div>
-
-            {/* Row 2: Score + Breakdown */}
-            <div className="grid" style={{ gridTemplateColumns: "1fr 1.1fr" }}>
-              <div className="card fade-up" style={{ minWidth: 0 }}>
-                <div className="card-head">
-                  <div className="card-title"><span className="dot" />Visibility Score</div>
-                </div>
-                {(() => {
-                  // Everything below is gated on an actually-recorded score. The
-                  // gauge, the weekly delta and the sparkline all used to render
-                  // from hardcoded fallbacks, so a fresh install showed a measured
-                  // number and a week-on-week gain that had never happened.
-                  const hasScore = ssiData?.score != null;
-                  const target = ssiData?.target || 60;
-                  const delta = (hasScore && ssiData?.prevScore != null) ? ssiData.score - ssiData.prevScore : null;
-                  const totals = (ssiData?.weeks || [])
-                    .filter(w => w.brand != null && w.people != null && w.engage != null && w.rel != null)
-                    .map(w => w.brand + w.people + w.engage + w.rel);
-                  return (
-                    <>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", padding: "6px 0 2px" }}>
-                        <div style={{ position: "relative" }}>
-                          <RadialGauge value={hasScore ? ssiData.score : 0} max={100} target={target} size={200} stroke={15} />
-                          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                            {hasScore ? (
-                              <>
-                                <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 52, lineHeight: 1, color: "var(--accent-2)" }}>{ssiData.score}</div>
-                                <div style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--text-mute)", letterSpacing: ".06em" }}>/ 100</div>
-                              </>
-                            ) : (
-                              <>
-                                <div style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 19, lineHeight: 1.2, color: "var(--text-mute)", textAlign: "center" }}>Not measured</div>
-                                <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-mute)", letterSpacing: ".06em", marginTop: 3 }}>yet</div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="divider" />
-
-                      {hasScore ? (
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-mute)", letterSpacing: ".1em" }}>TARGET {target}</span>
-                              {delta != null && (
-                                <span className={"pill " + (delta >= 0 ? "green" : "red")}><span className="d" />{delta >= 0 ? "+" : ""}{delta} this wk</span>
-                              )}
-                            </div>
-                            <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--text-dim)" }}>
-                              <span style={{ color: "var(--accent-2)" }}>{Math.min(100, Math.round((ssiData.score / target) * 100))}%</span> to goal &middot; {Math.max(0, target - ssiData.score)} pts to go
-                            </div>
-                          </div>
-                          {totals.length >= 2 && (
-                            <div style={{ textAlign: "right" }}>
-                              <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)", letterSpacing: ".12em", marginBottom: 2 }}>LAST 3 WEEKS</div>
-                              <Sparkline data={totals.slice(-3)} w={130} h={34} />
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 11, color: "var(--text-mute)", lineHeight: 1.7 }}>
-                          Your Social Selling Index is a score LinkedIn calculates, so trajecktory cannot read
-                          it for you. Open your SSI page on LinkedIn, then record the four sub-scores under{" "}
-                          <b>Weekly Tracker</b>. This gauge starts tracking from your first entry, and
-                          shows a week-on-week trend once you have two.
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-
-              {(() => {
-                // Use the latest FULLY-recorded week (all four pillars), matching the
-                // gauge score. Keying on `brand != null` alone let a half-entered week
-                // qualify and rendered un-entered pillars as "0/25", contradicting the
-                // gauge and the "a blank source must never read 0" rule.
-                const complete = (ssiData?.weeks || []).filter(w =>
-                  w.brand != null && w.people != null && w.engage != null && w.rel != null);
-                const lastWeek = complete.slice(-1)[0];
-                if (!lastWeek) return null;  // no complete week: the gauge's empty state covers it
-                const prevWeek = complete.length >= 2 ? complete.slice(-2)[0] : lastWeek;
-
-                const pillars = [
-                  { key: "brand", label: "Brand", color: "var(--accent)", value: lastWeek.brand || 0, hint: "Profile, content, thought leadership" },
-                  { key: "people", label: "Audience", color: "var(--blue)", value: lastWeek.people || 0, hint: "Search, targeting, prospect lists" },
-                  { key: "engage", label: "Engagement", color: "var(--cyan)", value: lastWeek.engage || 0, hint: "Comments, shares, reactions" },
-                  { key: "rel", label: "Relationships", color: "var(--green)", value: lastWeek.rel || 0, hint: "Connections, DMs, conversations" },
-                ];
-                return (
-                  <div className="card fade-up" style={{ animationDelay: ".05s", minWidth: 0 }}>
-                    <div className="card-head">
-                      <div className="card-title"><span className="dot" />Score Breakdown</div>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-                      {pillars.map((p) => {
-                        const pct = (p.value / 25) * 100;
-                        const prevVal = prevWeek[p.key] || 0;
-                        const delta = p.value - prevVal;
-                        return (
-                          <div key={p.key}>
-                            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 7 }}>
-                              <span style={{ width: 8, height: 8, borderRadius: 99, background: p.color, flex: "none" }} />
-                              <span style={{ fontSize: 13, color: "var(--text)" }}>{p.label}</span>
-                              <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontWeight: 700, fontSize: 13 }}>
-                                {p.value % 1 === 0 ? p.value : p.value.toFixed(1)}
-                                <span style={{ color: "var(--text-mute)", fontWeight: 400 }}> / 25</span>
-                              </span>
-                              {delta !== 0 && (
-                                <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: delta > 0 ? "var(--green)" : "var(--text-mute)", width: 34, textAlign: "right" }}>
-                                  {delta > 0 ? "+" : ""}{delta.toFixed(1)}
-                                </span>
-                              )}
-                            </div>
-                            <div className="bar"><span style={{ width: `${pct}%`, background: p.color, opacity: pct === 0 ? 0 : 1 }} /></div>
-                            <div style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)", marginTop: 6, marginLeft: 16 }}>{p.hint}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Row 3: Recent Activity + Momentum */}
-            <div className="grid" style={{ gridTemplateColumns: "1.5fr 1fr" }}>
-              <div className="card fade-up" style={{ minWidth: 0 }}>
-                <div className="card-head">
-                  <div className="card-title"><span className="dot" />Recent Activity</div>
-                  <div className="act"><button className="btn ghost sm" onClick={() => setActiveView("activity")}>View log →</button></div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {(engagementLog || []).slice(0, 3).map((a, i) => (
-                    <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", minWidth: 0 }}>
-                      <div className="mono-av sm" style={{ flex: "none" }}>
-                        {(a.influencer || "?").split(" ").filter(Boolean).map((w,i,a) => i===0||i===a.length-1?w[0]:"").join("").toUpperCase()}
-                      </div>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
-                          <span style={{ fontSize: 12, color: "var(--text)", fontWeight: 500, overflowWrap: "anywhere" }}>{a.influencer}</span>
-                          <span className="tag accent">{a.actionType}</span>
-                          <span style={{ marginLeft: "auto", fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{a.date?.slice(5) || ""}</span>
-                        </div>
-                        <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 3, lineHeight: 1.45, overflowWrap: "anywhere" }}>{a.message}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="card fade-up" style={{ minWidth: 0 }}>
-                <div className="card-head">
-                  <div className="card-title"><span className="dot" />Weekly Momentum</div>
-                  <div className="act"><button className="btn ghost sm" onClick={() => setActiveView("weekly")}>Open tracker →</button></div>
-                </div>
-                <WeekTrend weeks={ssiData?.weeks || []} target={ssiData?.target || 60} height={132} />
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* POSTS */}
         {activeView === "posts" && window.PostsTab && (
@@ -452,10 +90,6 @@ function LinkedInSSITab({ toast }) {
           <ActivityView influencers={influencers} engagementLog={engagementLog} setEngagementLog={setEngagementLog} />
         )}
 
-        {/* WEEKLY */}
-        {activeView === "weekly" && ssiData && (
-          <WeeklyView weeks={ssiData?.weeks || []} target={ssiData?.target || 60} setSsiData={setSsiData} />
-        )}
       </div>
 
       <InfluencerDrawer
@@ -913,237 +547,6 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
   );
 }
 
-function WeeklyView({ weeks, target, setSsiData }) {
-  const PILLAR_FIELDS = [
-    { key: "brand", label: "Brand", color: "var(--accent)", apiKey: "brand" },
-    { key: "people", label: "Audience", color: "var(--blue)", apiKey: "findPeople" },
-    { key: "engage", label: "Engagement", color: "var(--cyan)", apiKey: "engageInsights" },
-    { key: "rel", label: "Relationships", color: "var(--green)", apiKey: "relationships" },
-  ];
-  const recordedCount = (weeks || []).filter((w) => w.brand != null).length;
-
-  // Keep enough empty weeks ahead that the tracker never runs out of options.
-  const weekOptions = useMemo(() => {
-    const storedWeeks = weeks || [];
-    const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const usedWeeks = new Set(storedWeeks.map((w) => w.wk));
-    const usedDates = new Set(storedWeeks.map((w) => w.date));
-    const lastWk = storedWeeks.reduce((max, w) => Math.max(max, w.wk), 0);
-    const latestDate = storedWeeks.reduce((latest, w) => (!latest || w.date > latest ? w.date : latest), "");
-    const nextDate = latestDate ? new Date(`${latestDate}T00:00:00`) : new Date();
-    nextDate.setHours(0, 0, 0, 0);
-    if (latestDate) nextDate.setDate(nextDate.getDate() + 7);
-    else nextDate.setDate(nextDate.getDate() - ((nextDate.getDay() || 7) - 1));
-
-    const generated = [];
-    let nextWk = lastWk + 1;
-    const generatedCount = storedWeeks.length ? 8 : 12;
-    while (generated.length < generatedCount) {
-      const date = ymd(nextDate);
-      while (usedWeeks.has(nextWk)) nextWk += 1;
-      if (!usedDates.has(date)) {
-        generated.push({ wk: nextWk, date, brand: null, people: null, engage: null, rel: null });
-        usedWeeks.add(nextWk);
-        usedDates.add(date);
-        nextWk += 1;
-      }
-      nextDate.setDate(nextDate.getDate() + 7);
-    }
-    return [...storedWeeks, ...generated];
-  }, [weeks]);
-
-  // Default the form to the first un-recorded week; fall back to the first week.
-  const defaultWeekNum = useMemo(() => {
-    if (!weekOptions.length) return null;
-    const firstEmpty = weekOptions.find((w) => w.brand == null);
-    return (firstEmpty || weekOptions[0]).wk;
-  }, [weekOptions]);
-
-  const [selectedWk, setSelectedWk] = useState(defaultWeekNum);
-  const [form, setForm] = useState({ brand: "", people: "", engage: "", rel: "", notes: "" });
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const [saveOk, setSaveOk] = useState(false);
-
-  // Keep selectedWk in sync when weeks load asynchronously
-  useEffect(() => {
-    if (selectedWk == null && defaultWeekNum != null) setSelectedWk(defaultWeekNum);
-  }, [defaultWeekNum]);
-
-  // Prefill the form whenever the selected week changes (preserves existing values for re-edit)
-  useEffect(() => {
-    if (selectedWk == null) return;
-    const w = weekOptions.find((x) => x.wk === selectedWk);
-    if (!w) return;
-    setForm({
-      brand: w.brand != null ? String(w.brand) : "",
-      people: w.people != null ? String(w.people) : "",
-      engage: w.engage != null ? String(w.engage) : "",
-      rel: w.rel != null ? String(w.rel) : "",
-      notes: w.notes || "",
-    });
-    setSaveError("");
-    setSaveOk(false);
-  }, [selectedWk, weeks]);
-
-  const updateField = (key, val) => {
-    setForm((f) => ({ ...f, [key]: val }));
-    setSaveOk(false);
-  };
-
-  const save = async () => {
-    if (selectedWk == null) return;
-    setSaving(true);
-    setSaveError("");
-    setSaveOk(false);
-    try {
-      const payload = {
-        weekNum: selectedWk,
-        // Carried so the server can create the week when it does not exist yet.
-        weekOf: (weekOptions.find((w) => w.wk === selectedWk) || {}).date || "",
-        brand: form.brand === "" ? null : Number(form.brand),
-        findPeople: form.people === "" ? null : Number(form.people),
-        engageInsights: form.engage === "" ? null : Number(form.engage),
-        relationships: form.rel === "" ? null : Number(form.rel),
-        notes: form.notes,
-      };
-      const res = await window.tjkMutate('/api/linkedin-ssi/tracker', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
-      // Renormalize the server's response into the shape the page uses. Must match
-      // the initial fetch exactly, including the null handling: falling back to 39
-      // and 35 here would reintroduce the invented score on the very first save.
-      const nextWeeks = (data.weeks || []).map((w) => ({
-        wk: w.weekNum, date: w.weekOf,
-        brand: w.brand, people: w.findPeople,
-        engage: w.engageInsights, rel: w.relationships,
-        notes: w.notes,
-      }));
-      const nextTotals = nextWeeks
-        .filter((w) => w.brand != null && w.people != null && w.engage != null && w.rel != null)
-        .map((w) => w.brand + w.people + w.engage + w.rel);
-      const normalized = {
-        score: (data.currentSsi === null || data.currentSsi === undefined) ? null : data.currentSsi,
-        target: data.targetSsi || 60,
-        weeks: nextWeeks,
-        prevScore: nextTotals.length >= 2 ? nextTotals[nextTotals.length - 2] : null,
-      };
-      setSsiData(normalized);
-      setSaveOk(true);
-    } catch (e) {
-      setSaveError(e.message || 'Save failed.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fade-up" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div className="grid" style={{ gridTemplateColumns: "1fr minmax(0, 380px)", alignItems: "start" }}>
-        <div className="card">
-          <div className="card-head">
-            <div className="card-title"><span className="dot" />Momentum</div>
-            <span className="mute2 mono" style={{ marginLeft: "auto", fontSize: 10.5 }}>{recordedCount} weeks logged</span>
-          </div>
-          <WeekTrend weeks={weeks || []} target={target} height={148} />
-          <div className="chips" style={{ marginTop: 16, gap: 12 }}>
-            {PILLAR_FIELDS.map((p) => (
-              <span key={p.key} className="pill" style={{ color: "var(--text-dim)" }}>
-                <span className="d" style={{ background: p.color, boxShadow: "none" }} />{p.label}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-head">
-            <div className="card-title"><span className="dot" />Record Weekly Update</div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div className="field"><label>Week</label>
-              <select className="sel" value={selectedWk ?? ""} onChange={(e) => setSelectedWk(Number(e.target.value))}>
-                {weekOptions.map((w) => (
-                  <option key={w.wk} value={w.wk}>
-                    Week {w.wk} · {w.date}{w.brand != null ? " · ✓ recorded" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid cols-2" style={{ gap: 10 }}>
-              {PILLAR_FIELDS.map((p) => (
-                <div className="field" key={p.key}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: 99, background: p.color }} />{p.label} (0-25)
-                  </label>
-                  <input
-                    className="inp" type="number" min="0" max="25" placeholder="0"
-                    value={form[p.key]}
-                    onChange={(e) => updateField(p.key, e.target.value)}
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="field"><label>Weekly notes</label>
-              <textarea
-                className="ta" style={{ minHeight: 70 }}
-                placeholder="What moved the needle this week?"
-                value={form.notes}
-                onChange={(e) => updateField("notes", e.target.value)}
-              />
-            </div>
-            {saveError && (
-              <div style={{ fontSize: 11, color: "var(--red, #e06262)", fontFamily: "var(--mono)" }}>{saveError}</div>
-            )}
-            {saveOk && (
-              <div style={{ fontSize: 11, color: "var(--green)", fontFamily: "var(--mono)" }}>
-                ✓ Saved · Visibility score recalculated
-              </div>
-            )}
-            <button className="btn primary block" onClick={save} disabled={saving || selectedWk == null}>
-              {saving ? "Saving…" : "Save Weekly Update"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid" style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
-        {weekOptions.map((w, i) => {
-          const recorded = w.brand != null;
-          const total = recorded ? w.brand + w.people + w.engage + w.rel : null;
-          return (
-            <div key={w.wk} className="card" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10, opacity: recorded ? 1 : 0.66 }}>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-                <span style={{ fontFamily: "var(--mono)", fontSize: 11, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: recorded ? "var(--text)" : "var(--text-dim)" }}>Week {w.wk}</span>
-                <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>{w.date?.slice(5) || ""}</span>
-              </div>
-              {recorded ? (
-                <>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                    <span style={{ fontFamily: "var(--mono)", fontWeight: 700, fontSize: 22, color: "var(--accent-2)" }}>{total.toFixed(0)}</span>
-                    <span style={{ fontFamily: "var(--mono)", fontSize: 10.5, color: "var(--text-mute)" }}>/ 100</span>
-                  </div>
-                  <div style={{ display: "flex", height: 6, borderRadius: 99, overflow: "hidden", background: "var(--panel-2)" }}>
-                    {PILLAR_FIELDS.map((p) => (
-                      <div key={p.key} title={`${p.label}: ${w[p.key]}`} style={{ width: `${(w[p.key] / 100) * 100}%`, background: p.color }} />
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 44, color: "var(--text-mute)", fontFamily: "var(--mono)", fontSize: 12 }}>
-                  not recorded
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function AIResponseView({ influencers, lockedInfluencer, onLog }) {
   const [post, setPost] = useState("");

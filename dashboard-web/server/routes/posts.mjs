@@ -2,7 +2,7 @@ import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { listPosts, listQueued, createPost, updatePost, deletePost, getPost, attachBuffer, applyBufferMetrics, LANE_CHANNEL } from '../lib/posts.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { cleanProse } from '../lib/text-hygiene.mjs';
+import { cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { listChannels, createScheduledPost, fetchPostMetrics, toDueIso, SERVICE_FOR } from '../lib/buffer.mjs';
@@ -276,7 +276,7 @@ HARD RULES:
 - No emojis unless one genuinely earns its place.
 - Return ONLY the post text, ready to paste. No quotes, no preface, no explanation.`;
 
-    const text = (await reviseForCadence(cleanProse((await generateText(prompt, { model: draftModel(), maxTokens: 500 })).trim()), { surface: 'prose' })).text;
+    const text = (await reviseForCadence(stripDraftMeta(cleanProse((await generateText(prompt, { model: draftModel(), maxTokens: 500 })).trim())), { surface: 'prose' })).text;
     if (!text) return res.status(502).json({ error: 'The model returned an empty draft. Try again.' });
     // Persist as a Claude-sourced draft so it lands in the composer, editable.
     const post = createPost({ text, source: 'claude', lane: useLane, channel: useChannel });
@@ -315,7 +315,7 @@ VOICE AND MESSAGE RULES (follow every one):
 - Under 60 words. NO em dashes; use periods, commas, colons, semicolons, or parentheses.
 ${toneLine}- Return ONLY the reply text, ready to paste. No quotes, no preface, no explanation.`;
 
-    const reply = (await reviseForCadence(cleanProse((await generateText(prompt, { model: draftModel(), maxTokens: 320 })).trim()), { surface: 'prose' })).text;
+    const reply = (await reviseForCadence(stripDraftMeta(cleanProse((await generateText(prompt, { model: draftModel(), maxTokens: 320 })).trim())), { surface: 'prose' })).text;
     if (!reply) return res.status(502).json({ error: 'The model returned an empty reply. Try again.' });
     res.json({ ok: true, reply });
   } catch (err) {

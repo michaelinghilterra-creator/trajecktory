@@ -76,10 +76,13 @@ console.log('\nconnected contacts are not first touches');
 {
   // Mirrors what the client's isAlreadyInvited must conclude. Kept in step with
   // dashboard-web/src/connect.jsx; if that logic moves, this should move with it.
-  const alreadyInvited = (c) =>
-    c.linkedinStatus === 'Connected' || !!c.freeDm ||
-    !!(c.companyOutreach && c.companyOutreach.selfLastTouch) ||
-    ['Sent', 'Replied', 'Meeting Scheduled'].includes(c.status);
+  const alreadyInvited = (c) => {
+    if (c.linkedinStatus === 'Connected' || c.freeDm) return true;
+    const slt = c.companyOutreach && c.companyOutreach.selfLastTouch;
+    if (slt && slt.channel === 'linkedin') return true;
+    if (slt && slt.channel === 'email') return false;
+    return ['Sent', 'Replied', 'Meeting Scheduled'].includes(c.status);
+  };
 
   const connectedReferral = { source: 'referral', id: 7001, status: 'Not Asked', linkedinStatus: 'Connected', freeDm: true, companyOutreach: {} };
   check(alreadyInvited(connectedReferral) === true,
@@ -91,6 +94,21 @@ console.log('\nconnected contacts are not first touches');
 
   const sentTa = { source: 'ta', id: 5, status: 'Sent', companyOutreach: {} };
   check(alreadyInvited(sentTa) === true, 'the target-talent status path is unchanged');
+
+  const emailOnly = { source: 'ta', id: 6, status: 'Not Contacted', companyOutreach: { selfLastTouch: { channel: 'email', date: '2026-08-01', direction: 'Sent' } } };
+  check(alreadyInvited(emailOnly) === false, 'an email-only touch does not count as a LinkedIn invite');
+
+  const emailWithSentStatus = { source: 'ta', id: 9, status: 'Sent', companyOutreach: { selfLastTouch: { channel: 'email', date: '2026-08-01', direction: 'Sent' } } };
+  check(alreadyInvited(emailWithSentStatus) === false, 'email touch with Sent status is not a LinkedIn invite (the Meagan bug)');
+
+  const linkedinTouch = { source: 'ta', id: 7, status: 'Not Contacted', companyOutreach: { selfLastTouch: { channel: 'linkedin', date: '2026-08-01', direction: 'Sent' } } };
+  check(alreadyInvited(linkedinTouch) === true, 'a LinkedIn touch counts as already invited');
+
+  const nullChannel = { source: 'ta', id: 8, status: 'Not Contacted', companyOutreach: { selfLastTouch: { channel: null, date: '2026-08-01', direction: 'Sent', fromRowStamp: true } } };
+  check(alreadyInvited(nullChannel) === false, 'a stamped touch with null channel and no Sent status is not a LinkedIn invite');
+
+  const nullChannelSent = { source: 'ta', id: 10, status: 'Sent', companyOutreach: { selfLastTouch: { channel: null, date: '2026-08-01', direction: 'Sent', fromRowStamp: true } } };
+  check(alreadyInvited(nullChannelSent) === true, 'a stamped touch with null channel but Sent status trusts the status (log gap)');
 }
 
 // A 1st-degree referral is ALREADY connected, so the queue marks it freeDm and the

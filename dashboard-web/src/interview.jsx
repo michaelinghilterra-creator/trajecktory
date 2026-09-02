@@ -280,7 +280,7 @@ function Board({ data, derived, cam, present, onMeasure, openRef, measureOnly })
       {/* THE BOARD: one full-height grid, no scroll */}
       <div className="cols">
         <div>{col1.map(sectionFor)}</div>
-        <div>{col2.map(sectionFor)}{rulesPanel}</div>
+        <div>{col2.map(sectionFor)}</div>
       </div>
     </div>
   );

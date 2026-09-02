@@ -3,7 +3,7 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { cleanProse } from '../lib/text-hygiene.mjs';
+import { cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { loadInfluencer, toneInstruction, flattenConnectNote, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
@@ -137,7 +137,7 @@ HARD RULES:
 Return ONLY the comment text, ready to paste. No quotes, no preface, no explanation.`;
 
     const response = await generateText(prompt, { model: draftModel(), maxTokens: 300 });
-    res.json({ response: (await reviseForCadence(cleanProse(response.trim()), { surface: 'prose' })).text });
+    res.json({ response: (await reviseForCadence(stripDraftMeta(cleanProse(response.trim())), { surface: 'prose' })).text });
   } catch (err) {
     console.error('Error generating response:', err);
     res.status(500).json({ error: err.message });
@@ -205,7 +205,7 @@ HARD RULES:
 Return ONLY the reply text, ready to paste. No quotes, no preface, no explanation.`;
 
     const response = await generateText(prompt, { model: draftModel(), maxTokens: 400 });
-    res.json({ response: (await reviseForCadence(cleanProse(response.trim()), { surface: 'prose' })).text });
+    res.json({ response: (await reviseForCadence(stripDraftMeta(cleanProse(response.trim())), { surface: 'prose' })).text });
   } catch (err) {
     console.error('Error generating reply:', err);
     res.status(500).json({ error: err.message });
@@ -265,7 +265,7 @@ Return ONLY the body of the connection note, ready to paste into LinkedIn. No qu
     const callClaude = async (targetMax) => {
       const text = await generateText(buildPrompt(targetMax), { model: draftModel(), maxTokens: 220 });
       // Clean before the 300-char cap check so the length test sees final text.
-      return flattenConnectNote(cleanProse(text.trim()));
+      return flattenConnectNote(stripDraftMeta(cleanProse(text.trim())));
     };
 
     // First pass: aim for 280 to leave margin
@@ -360,9 +360,9 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       guidance, cvExcerpt, tone, toneText: toneInstruction(tone), targetMax,
     });
 
-    let response = flattenConnectNote(cleanProse((await generateText(buildPrompt(280), { model: draftModel(), maxTokens: 220 })).trim()));
+    let response = flattenConnectNote(stripDraftMeta(cleanProse((await generateText(buildPrompt(280), { model: draftModel(), maxTokens: 220 })).trim())));
     if (response.length > 300) {
-      response = flattenConnectNote(cleanProse((await generateText(buildPrompt(250), { model: draftModel(), maxTokens: 220 })).trim()));
+      response = flattenConnectNote(stripDraftMeta(cleanProse((await generateText(buildPrompt(250), { model: draftModel(), maxTokens: 220 })).trim())));
     }
     response = fitConnectNote(response, idn.firstName).text;
     res.json({ response, length: response.length, recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
@@ -490,7 +490,7 @@ HARD RULES:
 
 Return ONLY the message text, ready to paste, including the "Hi ${recipientFirst}," opener and the "Thanks, ${idn.firstName}" sign-off. No preface, no quotes, no explanation.`;
 
-    let response = cleanProse((await generateText(prompt, { model: draftModel(), maxTokens: 500 })).trim());
+    let response = stripDraftMeta(cleanProse((await generateText(prompt, { model: draftModel(), maxTokens: 500 })).trim()));
     response = (await reviseForCadence(response, { surface: 'prose' })).text;
     res.json({ response, length: response.length, recipient: { source: 'ta', id, name }, inmail: !connected });
   } catch (err) {

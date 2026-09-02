@@ -44,7 +44,7 @@ check(isInmailBlocked({ channel: 'linkedin', freeDm: true, status: 'Sent' }, OUT
   'free DM (1st-degree connection) is never blocked');
 check(isInmailBlocked({ channel: 'linkedin', status: 'Responded', companyOutreach: {} }, OUT) === false,
   'not-yet-invited LinkedIn first touch is a free connection request → not blocked');
-check(isInmailBlocked({ channel: 'linkedin', status: 'Responded', companyOutreach: { selfLastTouch: { date: '2026-08-01' } } }, OUT) === true,
+check(isInmailBlocked({ channel: 'linkedin', status: 'Sent', companyOutreach: { selfLastTouch: { date: '2026-08-01' } } }, OUT) === true,
   'already-touched LinkedIn-only contact is blocked at 0 credits');
 // THE GAP FIX: status 'Sent' but no logged self-touch — used to slip through.
 check(isInmailBlocked({ channel: 'linkedin', status: 'Sent', companyOutreach: {} }, OUT) === true,

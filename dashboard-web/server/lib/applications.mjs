@@ -6,6 +6,7 @@ import { parseTrackerLine, formatTrackerLine, hasStrayPipe } from '../../../lib/
 import { hasV1Frontmatter, parseV1, v1Header } from '../v1-loader.mjs';
 import { logStatusEvent, parseStatusEvents, readApplyDates } from './sidecars.mjs';
 import { FUNNEL_ORDER, makeApplyAnchor, makeFurthestIdx, isInbound, isOutbound } from './statuses.mjs';
+import { getArchetypeRules } from './profile.mjs';
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
@@ -23,28 +24,20 @@ function parseScore(raw) {
 // it visible as a gap in the archetype rules rather than dressing it up as a target.
 export const ARCHETYPE_UNCLASSIFIED = 'Unclassified';
 
-// Infer a role's archetype from its TITLE by keyword. Order is precedence: the
-// target archetypes are matched first, so a prefixed title (Revenue/Sales
-// Operations) is claimed before the broad catch-all buckets below can grab it.
+// Infer a role's archetype from its TITLE by keyword. Reads the user's archetype
+// definitions from config/profile.yml (via getArchetypeRules in profile.mjs),
+// matching title_variants against the role title. Falls back to "Unclassified"
+// when no archetype's patterns match.
 //
-// The last three (Operations / Sales Leadership / Partnerships) exist so those
-// roles stop hiding inside "Unclassified" — they are NOT target archetypes, just
-// honestly-labeled non-targets. Enablement folds into SalesOps and bare "data"
-// into Analytics per the owner's taxonomy; demand-gen / growth / marketing is its
-// own Marketing bucket. Title-only, so a genuinely ambiguous title (bare "Manager"
-// with no function) still lands in Unclassified.
+// This used to be hardcoded to RevOps/Sales/Analytics patterns, which meant every
+// non-sales user saw their entire tracker classified as "Unclassified". The rules
+// now come from the same profile.yml archetypes the user defines during onboarding.
 function inferArchetype(role) {
   const r = role.toLowerCase();
-  if (/rev\s*ops|revenue ops|revenue operations/.test(r)) return 'RevOps';
-  if (/sales ops|sales operations|gtm ops|gtm operations|commercial ops|enablement/.test(r)) return 'SalesOps';
-  if (/analytics|business intelligence|\bbi\b|data & insights|revenue intelligence|\bdata\b/.test(r)) return 'Analytics';
-  if (/business development|biz\s*dev|bds|strategic partnerships|corporate development/.test(r)) return 'BizDev';
-  if (/sales development|\bsdr\b|\bbdr\b/.test(r)) return 'SalesDev';
-  if (/strategy|strategic planning|chief of staff/.test(r)) return 'Strategy';
-  if (/demand gen|growth marketing|marketing|growth|demand generation/.test(r)) return 'Marketing';
-  if (/\boperations?\b|\bops\b/.test(r)) return 'Operations';
-  if (/sales|account|commercial|customer|revenue officer|chief revenue|\bcro\b/.test(r)) return 'Sales Leadership';
-  if (/partner|alliance/.test(r)) return 'Partnerships';
+  const rules = getArchetypeRules();
+  for (const rule of rules) {
+    if (rule.pattern.test(r)) return rule.name;
+  }
   return ARCHETYPE_UNCLASSIFIED;
 }
 

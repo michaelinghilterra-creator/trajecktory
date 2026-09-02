@@ -71,15 +71,15 @@ window.isInterviewStage = (s) => window.INTERVIEW_STAGES.includes(s);
 
 window.STATUSES = ["Evaluated","Applied",...window.INTERVIEW_STAGES,"Offer","Rejected","Discarded","SKIP","Closed","Not a Fit","No Response"];
 // The SINGLE source of the archetype list for the browser — the Sankey, the
-// pipeline filter and grouping, and the tracker all read window.ARCHETYPES from
-// here (data.js loads before every bundle). Keep this in the same ORDER as, and
-// covering the same labels as, inferArchetype() in server/lib/applications.mjs;
-// a label the server can emit but this list omits simply never renders (that is
-// how the four newest buckets went missing from the Sankey). The non-target
-// buckets (Operations / Sales Leadership / Partnerships) are honestly-labeled
-// non-archetypes; "Unclassified" is the catch-all fall-through — keep it last and
-// never treat it as a targeting recommendation.
-window.ARCHETYPES = ["RevOps","SalesOps","Analytics","Marketing","BizDev","SalesDev","Strategy","Operations","Sales Leadership","Partnerships","Unclassified"];
+// Archetype list for pipeline filters, chart axes, and tracker grouping.
+// Fetched from /api/archetypes (derived from the user's profile.yml) at startup.
+// The fallback is a single "Unclassified" entry so the UI degrades gracefully
+// before the fetch completes or if profile.yml has no archetypes defined yet.
+window.ARCHETYPES = ["Unclassified"];
+fetch('/api/archetypes')
+  .then(r => r.ok ? r.json() : null)
+  .then(names => { if (names && names.length) window.ARCHETYPES = names; })
+  .catch(() => {});
 
 window.STATUS_META = {
   Evaluated:  { color: "#a78bfa", bg: "rgba(167,139,250,0.12)", icon: "◆" },
