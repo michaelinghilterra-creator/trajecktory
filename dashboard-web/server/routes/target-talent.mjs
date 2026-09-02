@@ -3,7 +3,7 @@ import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { pauseSequence } from '../lib/sequences.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, draftModel } from '../lib/anthropic.mjs';
-import { cleanEmailBody, cleanEmailSubject, cleanProse } from '../lib/text-hygiene.mjs';
+import { cleanEmailBody, cleanEmailSubject, cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
@@ -361,6 +361,7 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
 
       let body = _stripLeadingSalutation((await generateText(prompt, { model: draftModel(), maxTokens: 700 })).trim(), r.first);
       body = _stripTrailingSignature(body);
+      body = stripDraftMeta(body);
       body = cleanProse(body);
       body = (await reviseForCadence(body, { surface: 'prose' })).text;
       return res.json({ ok: true, draft: { subject: '', body }, messageType: mode || interviewStage, channel: 'linkedin', relatedApp: topApp || null });
@@ -386,6 +387,7 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
       const draft = JSON.parse(jsonMatch[0]);
       draft.body = _stripLeadingSalutation(draft.body, r.first);
       draft.body = _stripTrailingSignature(draft.body);
+      draft.body = stripDraftMeta(draft.body);
       draft.body = cleanEmailBody(draft.body);
       draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
       draft.subject = cleanEmailSubject(collapseRe(draft.subject, inbound.subject));
@@ -406,6 +408,7 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
       const draft = JSON.parse(jsonMatch[0]);
       draft.body = _stripLeadingSalutation(draft.body, r.first);
       draft.body = _stripTrailingSignature(draft.body);
+      draft.body = stripDraftMeta(draft.body);
       draft.body = cleanEmailBody(draft.body);
       draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
       draft.subject = cleanEmailSubject(collapseRe(draft.subject, sent.subject));
@@ -506,6 +509,7 @@ Output ONLY a JSON object — no markdown, no code fences, no explanation:
     const draft = JSON.parse(jsonMatch[0]);
     draft.body = _stripLeadingSalutation(draft.body, r.first);
     draft.body = _stripTrailingSignature(draft.body);
+    draft.body = stripDraftMeta(draft.body);
     draft.body = cleanEmailBody(draft.body);
     draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
     draft.subject = cleanEmailSubject(draft.subject);

@@ -30,18 +30,19 @@
 
 ## Your Adaptive Framing
 
-<!-- Map YOUR projects to each archetype. Example:
-     | Platform / LLMOps | My monitoring dashboard project | article-digest.md |
-     | Agentic | My chatbot with HITL escalation | cv.md section 3 | -->
+<!-- Map YOUR projects to each archetype. The "Cover letter hook" column drives the
+     opening line of every cover letter for that archetype — open on the gap the role
+     is trying to solve, then land your most relevant proof point.
+     Example:
+     | Platform / LLMOps | My monitoring dashboard project | article-digest.md | Open on the gap between deploying models and knowing if they work — then land the eval framework |
+     | Agentic | My chatbot with HITL escalation | cv.md section 3 | Open on the gap between automation and reliability — then land the HITL orchestration story |
+-->
 
-| If the role is... | Emphasize about you... | Proof point sources |
-|-------------------|------------------------|---------------------|
-| Platform / LLMOps | Production systems builder, observability, evals | article-digest.md + cv.md |
-| Agentic / Automation | Multi-agent orchestration, HITL, reliability | article-digest.md + cv.md |
-| Technical AI PM | Product discovery, PRDs, metrics | cv.md + article-digest.md |
-| Solutions Architect | System design, integrations, enterprise-ready | article-digest.md + cv.md |
-| Forward Deployed Engineer | Fast delivery, client-facing, prototype to prod | cv.md + article-digest.md |
-| AI Transformation Lead | Change management, team enablement, adoption | cv.md + article-digest.md |
+| If the role is... | Emphasize about you... | Proof point sources | Cover letter hook |
+|-------------------|------------------------|---------------------|-------------------|
+| <!-- Archetype 1 --> | <!-- Key skills/identity to lead with --> | <!-- cv.md / article-digest.md sections --> | <!-- Open on [the gap] — then land [your proof point] --> |
+| <!-- Archetype 2 --> | <!-- Key skills/identity to lead with --> | <!-- cv.md / article-digest.md sections --> | <!-- Open on [the gap] — then land [your proof point] --> |
+| <!-- Archetype 3 --> | <!-- Key skills/identity to lead with --> | <!-- cv.md / article-digest.md sections --> | <!-- Open on [the gap] — then land [your proof point] --> |
 
 ## Your Evaluation Tuning
 

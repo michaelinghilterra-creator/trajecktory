@@ -2606,12 +2606,13 @@ window.LaunchpadTab = function LaunchpadTab({ toast, setTab }) {
 
 // ─── Setup shell — wraps Launchpad as sub-tab #1 plus added modules ──────────
 const SETUP_ICONS = {
-  launchpad: 'M5 3l14 9-14 9V3z',
-  guide:     'M2 4h7a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H2z M22 4h-7a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5H22z',
-  pitch:     'M21 11.5a8.38 8.38 0 0 1-9 8.5 8.38 8.38 0 0 1-4-1L3 21l1.5-5a8.38 8.38 0 0 1-1-4 8.5 8.5 0 0 1 17 0z',
-  twc:       'M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22z M12 6v6l4 2',
-  changelog: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h6',
-  about:     'M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22z M12 16v-4 M12 8h.01',
+  launchpad:  'M5 3l14 9-14 9V3z',
+  customize:  'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  guide:      'M2 4h7a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H2z M22 4h-7a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5H22z',
+  pitch:      'M21 11.5a8.38 8.38 0 0 1-9 8.5 8.38 8.38 0 0 1-4-1L3 21l1.5-5a8.38 8.38 0 0 1-1-4 8.5 8.5 0 0 1 17 0z',
+  twc:        'M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22z M12 6v6l4 2',
+  changelog:  'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h6',
+  about:      'M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22z M12 16v-4 M12 8h.01',
 };
 function SetupIcon({ name, size = 14 }) {
   const d = SETUP_ICONS[name];
@@ -2626,6 +2627,7 @@ function SetupIcon({ name, size = 14 }) {
 
 const SETUP_SUBTABS = [
   { id: 'launchpad', label: 'Launchpad',              icon: 'launchpad' },
+  { id: 'customize', label: 'Customize',              icon: 'customize' },
   { id: 'guide',     label: 'Day-to-day guide',       icon: 'guide' },
   { id: 'pitch',     label: 'Tell Me About Yourself', icon: 'pitch' },
   { id: 'twc',       label: 'Activity Tracker',       icon: 'twc' },
@@ -2649,6 +2651,7 @@ window.SetupTab = function SetupTab({ toast, setTab }) {
       </div>
 
       {view === 'launchpad' && window.LaunchpadTab && <window.LaunchpadTab toast={toast} setTab={setTab} />}
+      {view === 'customize' && window.CustomizePanel && <window.CustomizePanel />}
       {view === 'guide'     && window.DayToDayGuidePanel && <window.DayToDayGuidePanel />}
       {view === 'pitch'     && <TellMeAboutYouPanel />}
       {view === 'twc'       && <TwcPanel toast={toast} />}

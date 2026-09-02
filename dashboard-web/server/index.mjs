@@ -38,7 +38,7 @@ import { router as systemRoutes, updateJobs } from './routes/system.mjs';
 import { router as sequencesRoutes } from './routes/sequences.mjs';
 import { router as searchRoutes } from './routes/search.mjs';
 import { router as peopleRoutes } from './routes/people.mjs';
-import { getIdentity } from './lib/profile.mjs';
+import { getIdentity, getArchetypeNames } from './lib/profile.mjs';
 
 // ── Process-level safety net ─────────────────────────────────────────────────
 // This dashboard is a long-lived local server for a non-technical user. A single
@@ -219,6 +219,10 @@ app.use(peopleRoutes);
 // is hardcoded in the client bundle. Reads config/profile.yml via the cached
 // loader. Open GET (reads stay unauthenticated like the rest of the UI data).
 app.get('/api/identity', (req, res) => res.json(getIdentity()));
+
+// Archetype names derived from profile.yml, so the client's filter dropdowns and
+// chart axes match the user's actual target roles instead of hardcoded RevOps buckets.
+app.get('/api/archetypes', (req, res) => res.json(getArchetypeNames()));
 
 // SPA deep-link fallback. Express 5 (path-to-regexp v8) requires named
 // wildcards, so the Express 4 bare '*' becomes '/*splat' (the match is unused;

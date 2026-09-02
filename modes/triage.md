@@ -44,19 +44,19 @@ For each URL that survives that filter:
 Weigh, in order of importance:
 - **North-Star archetype + level fit (BIGGEST factor):** match against the HIGH/MEDIUM archetypes and the Director/VP level in `_profile.md`. A Manager/IC/below role is a weak fit; C-suite is the wrong level.
 - **CV evidence match** (skills / experience / proof points from `cv.md`).
-- **Location policy** (`profile.yml` `location.policy`): fully remote is always fine. Onsite/hybrid is fine inside the approved DFW-metro list. A role OUTSIDE that list is a hard no **only if it REQUIRES onsite/hybrid attendance with no remote option.** If the posting offers a remote / "Remote U.S." option, OR makes onsite conditional on living near an office (e.g. "hybrid 50% if within commuting distance"), it is NOT a hard no — the candidate takes the remote option, so score it on fit and treat the hybrid clause as ~3.0, not a deal-breaker. Read the location line carefully: a listed "Remote" option beside NYC/other offices means remote is available.
+- **Location policy** (`profile.yml` `location.policy`): fully remote is always fine if `remote_ok: true`. Onsite/hybrid is fine inside the approved metro lists. A role OUTSIDE the approved list is a hard no **only if it REQUIRES onsite/hybrid attendance with no remote option.** If the posting offers a remote option, OR makes onsite conditional on living near an office (e.g. "hybrid 50% if within commuting distance"), it is NOT a hard no — the candidate takes the remote option, so score it on fit and treat the hybrid clause as ~3.0, not a deal-breaker. Read the location line carefully: a listed "Remote" option beside city offices means remote is available.
 - **Comp** vs the target band; comp not stated = neutral.
 - **Red flags / deal-breakers.**
 
 **HARD DEAL-BREAKERS (cap the score at 2.5 or below):**
-- Pure individual-contributor or quota-carrying field-sales roles.
-- Dropped tracks: Sales Development (SDR/BDR) leadership and Business Development / Corporate Development.
-- Onsite or hybrid **required** outside the approved DFW-metro list **with no remote option** (a stated "Remote U.S." / remote option, or onsite that is only conditional on living near an office, means this deal-breaker does NOT apply).
-- Roles that are mostly marketing, finance/FP&A-only, product management, or engineering.
+Read the user's deal-breakers from `modes/_profile.md` → Evaluation Tuning → "Deal-breakers (hard nos)". Apply each one listed there as a hard cap at 2.5 or below.
+
+Additionally, always apply this location deal-breaker regardless of field:
+- Onsite or hybrid **required** outside the user's approved metro list in `config/profile.yml` → `location.policy` **with no remote option** (a stated "Remote U.S." / remote option, or onsite that is only conditional on living near an office, means this deal-breaker does NOT apply).
 
 **Anchors:** 4.5+ strong (apply now) · 4.0-4.4 good (worth applying) · 3.5-3.9 decent-not-ideal · below 3.5 recommend against.
 
-**ANTI-INFLATION (critical):** Across this candidate's history only about **1 in 5 roles is a genuine 4.0+**. Do NOT inflate. Default into the **2.5-3.5** range unless the role clearly hits the right archetype AND level AND location. A RevOps/Analytics-sounding title alone is NOT enough for a 4 — check level, function, location, and real CV evidence.
+**ANTI-INFLATION (critical):** Only about **1 in 5 roles is a genuine 4.0+**. Do NOT inflate. Default into the **2.5-3.5** range unless the role clearly hits the right archetype AND level AND location. A title that sounds like a target archetype alone is NOT enough for a 4. Check level, function, location, and real CV evidence against `cv.md`.
 
 ## Output — `data/triage-results.tsv`
 

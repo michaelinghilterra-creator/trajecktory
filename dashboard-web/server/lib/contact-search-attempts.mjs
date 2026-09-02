@@ -35,7 +35,9 @@ export function writeAttempts(attempts) {
 export function recordAttempt(company, type, appDate, attempts) {
   const key = normCompany(company);
   if (!key) return;
-  if (!attempts[key]) attempts[key] = {};
+  // Block prototype-polluting keys before any property access.
+  if (key === '__proto__' || key === 'constructor' || key === 'prototype') return;
+  if (!Object.hasOwn(attempts, key)) attempts[key] = {};
   const entry = attempts[key];
   const today = localDate();
 
@@ -55,8 +57,9 @@ export function recordAttempt(company, type, appDate, attempts) {
 export function isAtCap(company, type, appDate, attempts, cap = 2) {
   const key = normCompany(company);
   if (!key) return false;
+  if (key === '__proto__' || key === 'constructor' || key === 'prototype') return false;
+  if (!Object.hasOwn(attempts, key)) return false;
   const entry = attempts[key];
-  if (!entry) return false;
   const count = entry[type] || 0;
   if (count < cap) return false;
   // A newer app date re-opens the company for searching.

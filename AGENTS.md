@@ -217,6 +217,227 @@ This system is designed to be customized by YOU (AI Agent). When the user asks y
 - "Change the CV template design" → edit `templates/cv-template.html`
 - "Adjust the scoring weights" → edit `modes/_profile.md` for user-specific weighting, or edit `modes/_shared.md` and `batch/batch-prompt.md` only when changing the shared system defaults for everyone
 
+### Customization Assistance (Post-Onboarding)
+
+The Launchpad handles the basics (identity, resume, target roles, location, comp, companies). The sections below are the **post-onboarding** customizations that make the system genuinely yours. Without them, evaluations, cover letters, and outreach default to generic behavior.
+
+**When to offer customization help:** When the user says any of these (or similar):
+- "Help me customize" / "what else can I configure"
+- "My results don't look right" / "the scores feel off"
+- "The cover letters are generic" / "the outreach doesn't fit my field"
+- "I'm not in [whatever the default archetypes are]"
+- "What should I set up next"
+
+**How to walk through a section:** Ask 2-4 focused questions, write the changes to the correct file, confirm what you changed. Never dump all 11 sections at once. Start with whichever section the user's complaint maps to, or follow the recommended order below.
+
+**Recommended order (core first):**
+1 → 2 → 3 → 4 → 5 → 6 (high-value core, each builds on prior context)
+7-11 in any order (enhancements, do when relevant)
+
+---
+
+#### Section 1: Scoring Priorities & Deal-Breakers
+
+**What it controls:** Which evaluation dimensions matter most. What roles to auto-reject before scoring.
+
+**Files:** `config/profile.yml` → `scoring.weights` + `modes/_profile.md` → "Evaluation Tuning"
+
+**Still at defaults when:** The `scoring.weights` block matches `profile.example.yml` values exactly (fit: 0.35, northStar: 0.25, level: 0.15, comp: 0, location: 0.10), AND the "Evaluation Tuning" section in `_profile.md` still has HTML comment placeholders.
+
+**Questions to ask:**
+> "What matters most when you evaluate a role? Rank these: skills fit, alignment with your dream role, seniority match, compensation, location/remote policy."
+>
+> "Are there any hard deal-breakers? Things that should auto-reject a role regardless of score. For example: specific industries, company stages, on-site requirements, excluded titles."
+
+**What to write:**
+- Adjust `scoring.weights` in `config/profile.yml` to match their ranking. Weights are renormalized, so relative ordering is what matters.
+- Fill in the "Priorities" and "Deal-breakers" lists in `modes/_profile.md` → "Your Evaluation Tuning" section.
+- Mirror any title or keyword deal-breakers into `portals.yml` → `title_filter.negative` so the scanner never surfaces them.
+
+---
+
+#### Section 2: Outreach Stakeholders & Messaging
+
+**What it controls:** Who the user reaches out to (hiring managers, recruiters, VPs) and how their messages sound. Drives the sequence library and contacto mode.
+
+**Files:** `templates/outreach-sequences.json` + `modes/_profile.md` → "Your Negotiation Scripts"
+
+**Still at defaults when:** `outreach-sequences.json` still contains sequences targeting CRO/CFO/VP Sales stakeholders with sales-specific talking points, OR the negotiation scripts in `_profile.md` still have the template placeholder text.
+
+**Questions to ask:**
+> "When you reach out to people at target companies, who are the decision-makers for your roles? (e.g., VP Engineering, Head of Data, CTO, Hiring Manager)"
+>
+> "What's your elevator pitch? In one sentence, what do you offer that's different from other candidates in your space?"
+
+**What to write:**
+- Update the `stakeholderType` and talking points in relevant sequences in `outreach-sequences.json` to match their field's decision-makers.
+- Update the negotiation scripts in `modes/_profile.md` → "Your Negotiation Scripts" with their actual pitch and comp framing.
+
+---
+
+#### Section 3: Voice & Achievement Framing
+
+**What it controls:** Power verbs, tone, prohibited phrases, how achievements are written. Shapes every cover letter, application answer, and outreach message.
+
+**Files:** `modes/_profile.md` → "Your Adaptive Framing" table + voice cues throughout
+
+**Still at defaults when:** The "Your Adaptive Framing" table rows are HTML comment placeholders (`<!-- Archetype 1 -->`, etc.) or the "Cover letter hook" column is empty.
+
+**Questions to ask:**
+> "How would you describe your professional voice? (e.g., direct and technical, warm and consultative, data-driven and precise)"
+>
+> "Are there any words or phrases you never want in your applications? (e.g., 'passionate', 'synergy', specific jargon that doesn't fit your field)"
+>
+> "For each of your target archetypes, what's the single strongest project or achievement you'd lead with?"
+
+**What to write:**
+- Fill in the "Your Adaptive Framing" table: one row per archetype from `config/profile.yml`, mapping each to the framing, proof points, and cover letter hook.
+- Add any voice rules (prohibited phrases, tone preferences) to `_profile.md`.
+
+---
+
+#### Section 4: Narrative & Branding
+
+**What it controls:** Professional headline, superpowers, exit story, proof points. Used in CV summaries, cover letter openings, and outreach.
+
+**Files:** `config/profile.yml` → `narrative` block
+
+**Still at defaults when:** `narrative.headline` matches the example ("ML Engineer turned AI product builder") or is empty, OR `narrative.superpowers` has fewer than 3 entries.
+
+**Questions to ask:**
+> "What's your one-line professional headline? The thing you'd put at the top of LinkedIn."
+>
+> "What are your top 3-5 superpowers? Not skills, superpowers. Things you do better than almost anyone else in your field."
+>
+> "What's your exit story? Why are you looking, and what are you looking for? This frames everything."
+
+**What to write:**
+- Fill in `narrative.headline`, `narrative.exit_story`, `narrative.superpowers`, and `narrative.proof_points` in `config/profile.yml`.
+
+---
+
+#### Section 5: Exit Narrative & Sensitive Framing
+
+**What it controls:** How short tenures, career gaps, degree status, and the transition narrative are framed. Read by every mode that generates candidate-facing content.
+
+**Files:** `modes/_profile.md` → "Your Exit Narrative" + "Your Cross-cutting Advantage"
+
+**Still at defaults when:** The "Your Exit Narrative" section still says `Use the candidate's exit story from config/profile.yml` without specific framing instructions, OR the "Cross-cutting Advantage" section still has the template placeholder.
+
+**Questions to ask:**
+> "Is there anything in your background that needs careful framing? Short tenures, career pivots, gaps, non-traditional education?"
+>
+> "What's your 'signature move'? The thing that makes you different from every other candidate with the same job titles?"
+
+**What to write:**
+- Replace the generic instructions in the "Your Exit Narrative" section with specific framing language for each sensitive topic.
+- Replace the "Cross-cutting Advantage" placeholder with their actual differentiator.
+
+---
+
+#### Section 6: Interview Themes & Story Bank
+
+**What it controls:** Behavioral interview stories (STAR+R format) that get pulled into cheat sheets and run sheets.
+
+**Files:** `interview-prep/story-bank.md`
+
+**Still at defaults when:** `story-bank.md` does not exist or has fewer than 3 stories.
+
+**Questions to ask:**
+> "Tell me about 3-5 of your best professional achievements. For each: what was the situation, what did you do, and what was the measurable result?"
+>
+> "Which behavioral themes come up most in your target roles? (e.g., leadership, conflict resolution, technical problem-solving, cross-functional collaboration)"
+
+**What to write:**
+- Each story in STAR+R format in `interview-prep/story-bank.md`. Tag each with behavioral themes so the interview prep system can match stories to questions.
+
+---
+
+#### Section 7: Search Queries
+
+**What it controls:** The web search queries used by `scan.mjs` when searching for new job postings beyond the configured portals.
+
+**Files:** `portals.yml` → `search_queries`
+
+**Still at defaults when:** `search_queries` in `portals.yml` still match the example queries or are absent.
+
+**Questions to ask:**
+> "What search terms would you use on Google to find your ideal job postings? Think beyond just job titles. Include tools, industries, or niche terms that signal the right roles."
+
+**What to write:**
+- Update `search_queries` in `portals.yml` with targeted queries for their field.
+
+---
+
+#### Section 8: Geo Pre-Filter
+
+**What it controls:** Which locations pass the scanner's geographic filter. Home coordinates, commute radius, approved metro areas.
+
+**Files:** `portals.yml` → `title_filter.location_policy` + `config/profile.yml` → `location`
+
+**Still at defaults when:** `location_policy.home` coordinates match the example values, OR the approved metro list is empty or still has example cities.
+
+**Questions to ask:**
+> "Are you targeting remote-only, hybrid, or on-site roles? If hybrid/on-site, which metro areas are you willing to commute to?"
+>
+> "What's the maximum commute you'd accept in miles/km?"
+
+**What to write:**
+- Update `location` in `config/profile.yml` and `title_filter.location_policy` in `portals.yml` with their actual coordinates, radius, and approved metros.
+
+---
+
+#### Section 9: Social & Content Strategy
+
+**What it controls:** LinkedIn presence, content themes, and social proof strategy. Used by the outreach and coaching modes.
+
+**Files:** `modes/_profile.md` (add a "Your Social & Content Strategy" section if missing)
+
+**Still at defaults when:** No social/content strategy section exists in `_profile.md`.
+
+**Questions to ask:**
+> "Are you active on LinkedIn or other professional platforms? What themes do you post about or want to be known for?"
+>
+> "Do you have any published articles, talks, or open-source projects you want to reference in applications?"
+
+**What to write:**
+- Add a "Your Social & Content Strategy" section to `modes/_profile.md` with their content themes, posting cadence preferences, and platform strategy.
+- If they have published work, add it to `article-digest.md`.
+
+---
+
+#### Section 10: Outreach Cadence
+
+**What it controls:** How often and how aggressively follow-ups are sent. Spacing between touches, cold outreach caps, per-company daily limits.
+
+**Files:** `config/profile.yml` → `outreach` block
+
+**Still at defaults when:** The `outreach` block matches `profile.example.yml` exactly (minDaysBetweenTouches: 3, maxTouchesPer30d: 6, coldOutreachCap linkedin/email: 3).
+
+**Questions to ask:**
+> "How aggressive do you want follow-ups to be? Some people prefer a gentle 1-touch approach, others want persistent multi-channel outreach."
+>
+> "Is there a maximum number of times you'd contact someone cold before stopping?"
+
+**What to write:**
+- Adjust `outreach.minDaysBetweenTouches`, `outreach.maxTouchesPer30d`, `outreach.coldOutreachCap`, and `outreach.perCompanyPerDay` in `config/profile.yml`.
+
+---
+
+#### Section 11: Article Digest / Portfolio
+
+**What it controls:** Compact proof points from published work, case studies, or portfolio projects. Referenced in cover letters and evaluations as evidence.
+
+**Files:** `article-digest.md` (project root)
+
+**Still at defaults when:** `article-digest.md` does not exist.
+
+**Questions to ask:**
+> "Do you have any published articles, case studies, conference talks, or notable projects with measurable outcomes? Even internal projects count if they had clear results."
+
+**What to write:**
+- Create `article-digest.md` with one section per proof point: title, link (if public), hero metric, and a 2-3 sentence summary of what was built and what it achieved.
+
 ### Language Modes
 
 Default modes are in `modes/` (English). Additional language-specific modes are available:

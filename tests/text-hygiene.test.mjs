@@ -16,7 +16,7 @@
 
 import {
   cleanText, cleanUniversal, cleanProse, cleanEmailBody, cleanEmailSubject,
-  cleanAtsField, cleanMarkdownProse, _replaceEmDashes,
+  cleanAtsField, cleanMarkdownProse, stripDraftMeta, _replaceEmDashes,
 } from '../dashboard-web/server/lib/text-hygiene.mjs';
 import { cleanMarkdown } from '../clean-generated-text.mjs';
 
@@ -144,6 +144,19 @@ check(cm.includes('`inline' + EM + 'code`'), 'markdown: inline code span untouch
 eq(cleanMarkdown(cm), cm, 'markdown: cleanMarkdown is idempotent');
 eq(cleanMarkdown('a\r\nb'), 'a\r\nb', 'markdown: CRLF line endings preserved');
 eq(cleanMarkdown('a\nb'), 'a\nb', 'markdown: LF line endings preserved');
+
+// --- stripDraftMeta: strip LLM metadata that leaks into drafted output ---
+console.log('\nstripDraftMeta');
+eq(stripDraftMeta('253 chars, within limit. Hi Jordan, saw you'), 'Hi Jordan, saw you', 'strips leading char count annotation');
+eq(stripDraftMeta('(280 characters) Hi Alex, great to see'), 'Hi Alex, great to see', 'strips parenthesized char count');
+eq(stripDraftMeta('Hi Alex, nice note. (253 chars)'), 'Hi Alex, nice note.', 'strips trailing char count');
+eq(stripDraftMeta('"Hi Alex, nice to meet you."'), 'Hi Alex, nice to meet you.', 'strips wrapping quotes');
+eq(stripDraftMeta("Here's the connection note:\nHi Alex, saw your work."), 'Hi Alex, saw your work.', 'strips preamble');
+eq(stripDraftMeta('Sure, Hi Alex, saw your work.'), 'Hi Alex, saw your work.', 'strips filler opener');
+eq(stripDraftMeta('Reconnecting on LinkedIn is a light, low-risk personal message, so no need for tools here. Here\'s the draft:\nGood to see Acme Corp'), 'Good to see Acme Corp', 'strips LLM reasoning before preamble');
+eq(stripDraftMeta('Hi Alex, saw your work at Acme.'), 'Hi Alex, saw your work at Acme.', 'clean text passes through unchanged');
+eq(stripDraftMeta(''), '', 'empty string is safe');
+eq(stripDraftMeta(null), null, 'null is safe');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

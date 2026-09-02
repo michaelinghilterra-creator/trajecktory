@@ -63,13 +63,9 @@ Follow the **cover letter structure from _profile.md** exactly. Under 350 words 
 
 **Adaptive hook by archetype (read from report Block A):**
 
-| Archetype | Hook angle |
-|-----------|------------|
-| Revenue Operations | Open on the gap between having a CRM and having a revenue system — then land MEDDPICC |
-| Analytics / BI | Open on the gap between dashboards and decisions — then land the executive-reporting infrastructure story (pull the cycle-time numbers from cv.md) |
-| Sales Operations | Open on the gap between sales activity and sales clarity — then land MEDDPICC + CRM governance |
-| Commercial Excellence / Sales Strategy | Open on the gap between sales effort and sales effectiveness — then land sales process programs + seller productivity |
-| Sales / Revenue Enablement | Open on the gap between hiring sellers and ramping them — then land the MEDDPICC rollout as deploying a methodology to a whole salesforce (pull the seller count from cv.md) + seller-productivity systems |
+Read the user's archetype-specific hook angles from `modes/_profile.md` → "Your Adaptive Framing" table. Match the detected archetype from Block A to the user's framing row and use that as the hook angle.
+
+If `_profile.md` does not have a hook defined for this archetype, derive the hook from Block A and Block E of the evaluation report: open on the gap the role is trying to solve, then land the candidate's most relevant proof point from `cv.md`.
 
 **Keep the letter consistent with the tailored CV.** When a CV is being
 generated for the same role, read the archetype's `resume_framing` block in

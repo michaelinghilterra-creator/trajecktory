@@ -1205,13 +1205,9 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
                   <CopyBtn value={draftResult.subject || ""} />
                 </div>
               )}
-              <div style={{ position: "relative" }}>
-                <textarea className="ta" value={draftEmail} onChange={e => setDraftEmail(e.target.value)} rows={draftResult.linkedin ? 6 : 10} aria-label="Editable message draft" style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }} />
-                <div style={{ position: "absolute", top: 8, right: 8 }}>
-                  <CopyBtn value={draftEmail} />
-                </div>
-              </div>
+              <textarea className="ta" value={draftEmail} onChange={e => setDraftEmail(e.target.value)} rows={draftResult.linkedin ? 6 : 10} aria-label="Editable message draft" style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }} />
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <CopyBtn value={draftEmail} />
                 <button className="btn primary sm" onClick={() => setLogModal({ direction: "Sent", channel: draftResult.linkedin ? "LinkedIn" : "Email", subject: draftResult.linkedin ? "LinkedIn note" : draftResult.subject, body: draftEmail })}><TIcon d={TI.check} size={12} /> I sent this</button>
                 <button className="btn sm" onClick={() => saveCorrAndClose({ direction: "Draft", channel: draftResult.linkedin ? "LinkedIn" : "Email", subject: draftResult.linkedin ? "LinkedIn note" : draftResult.subject, body: draftEmail })}><TIcon d={TI.pen} size={12} /> Save as draft</button>
                 {!draftResult.linkedin && <window.GmailDraftBtn to={data.email} subject={draftResult.subject} body={draftEmail} />}
