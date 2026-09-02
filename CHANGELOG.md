@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.1.0...v3.2.0) (2026-09-02)
+
+
+### Features
+
+* Customize subtab, outreach/interview fixes, and prototype-pollution security patch ([#272](https://github.com/michaelinghilterra-creator/trajecktory/issues/272)) ([e16aade](https://github.com/michaelinghilterra-creator/trajecktory/commit/e16aade7dc8cb7f0c65b982b47ba6675dff4ff1a))
+
 ## [3.1.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.0.1...v3.1.0) (2026-09-01)
 
 
