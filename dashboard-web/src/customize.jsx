@@ -113,8 +113,8 @@ window.CustomizePanel = function CustomizePanel() {
   const barColor = pct >= 80 ? '#22c55e' : pct >= 40 ? '#eab308' : '#f85149';
 
   return (
-    <div style={{ padding: '20px 24px', maxWidth: 720 }}>
-      <div style={{ marginBottom: 20 }}>
+    <div style={{ padding: '20px 24px' }}>
+      <div style={{ marginBottom: 20, maxWidth: 720 }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
           Customize trajecktory
         </div>
@@ -132,7 +132,7 @@ window.CustomizePanel = function CustomizePanel() {
 
       {copied && (
         <div style={{
-          padding: '8px 12px', marginBottom: 12, borderRadius: 6,
+          padding: '8px 12px', marginBottom: 12, borderRadius: 6, maxWidth: 720,
           background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)',
           fontSize: 12, color: '#22c55e',
         }}>
@@ -140,14 +140,16 @@ window.CustomizePanel = function CustomizePanel() {
         </div>
       )}
 
-      {[['core', core], ['enhance', enhance]].map(([group, items]) => (
-        <div key={group} style={{ marginBottom: 20 }}>
-          <div className="card-title" style={{ marginBottom: 10 }}>{GROUP_LABELS[group]}</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {items.map(s => <CustomizeCard key={s.id} section={s} onCopy={handleCopy} />)}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+        {[['core', core], ['enhance', enhance]].map(([group, items]) => (
+          <div key={group}>
+            <div className="card-title" style={{ marginBottom: 10 }}>{GROUP_LABELS[group]}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {items.map(s => <CustomizeCard key={s.id} section={s} onCopy={handleCopy} />)}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 };

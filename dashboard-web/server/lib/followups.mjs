@@ -682,7 +682,8 @@ export function isInmailBlocked(item, { inmailOut } = {}) {
   if (!inmailOut) return false;
   if (!item || item.channel !== 'linkedin' || item.freeDm) return false;
   const co = item.companyOutreach;
-  const alreadyInvited = !!(co && co.selfLastTouch && co.selfLastTouch.channel === 'linkedin') || CONTACTED_STATUSES.has(item.status);
+  const slt = co && co.selfLastTouch;
+  const alreadyInvited = !!(slt && slt.channel === 'linkedin') || (!(slt && slt.channel === 'email') && CONTACTED_STATUSES.has(item.status));
   return alreadyInvited;
 }
 

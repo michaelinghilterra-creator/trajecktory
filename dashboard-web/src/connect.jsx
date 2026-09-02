@@ -194,12 +194,15 @@ function isAlreadyInvited(c) {
   // Replied, Meeting Scheduled) while a referral sits at "Not Asked", and
   // selfLastTouch now covers every contact book and also honors a row's stamped
   // last touch when the message body was never logged. Only a LinkedIn-channel
-  // touch counts; an email-only touch (channel 'email' or null) does not prove
-  // a LinkedIn invite was sent.
+  // touch counts as a prior invite. When selfLastTouch exists with channel
+  // 'email', skip the status fallback: the 'Sent' status was set by email, not
+  // LinkedIn. When there is no selfLastTouch at all (the correspondence-log gap),
+  // fall through to CONTACTED_STATUSES which trusts the TA status.
   if (c.linkedinStatus === 'Connected' || c.freeDm) return true;
   const slt = c.companyOutreach && c.companyOutreach.selfLastTouch;
-  return !!(slt && slt.channel === 'linkedin')
-    || CONTACTED_STATUSES.has(c.status);
+  if (slt && slt.channel === 'linkedin') return true;
+  if (slt && slt.channel === 'email') return false;
+  return CONTACTED_STATUSES.has(c.status);
 }
 
 function followupChannels(c) {

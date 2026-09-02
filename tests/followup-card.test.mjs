@@ -39,8 +39,10 @@ check(isAlreadyInvited({ linkedinStatus: 'Connected' }), 'connected contacts cou
 check(isAlreadyInvited({ status: 'Sent', companyOutreach: {} }), 'sent status counts as already invited');
 check(!isAlreadyInvited({ status: 'Not Contacted', companyOutreach: {} }), 'untouched contacts are not already invited');
 check(!isAlreadyInvited({ status: 'Not Contacted', companyOutreach: { selfLastTouch: { channel: 'email', date: '2026-08-01', direction: 'Sent' } } }), 'email-only touch is not a LinkedIn invite');
+check(!isAlreadyInvited({ status: 'Sent', companyOutreach: { selfLastTouch: { channel: 'email', date: '2026-08-01', direction: 'Sent' } } }), 'email touch with Sent status is not a LinkedIn invite');
 check(isAlreadyInvited({ status: 'Not Contacted', companyOutreach: { selfLastTouch: { channel: 'linkedin', date: '2026-08-01', direction: 'Sent' } } }), 'LinkedIn touch counts as already invited');
-check(!isAlreadyInvited({ status: 'Not Contacted', companyOutreach: { selfLastTouch: { channel: null, date: '2026-08-01', direction: 'Sent', fromRowStamp: true } } }), 'null channel from row stamp is not a LinkedIn invite');
+check(!isAlreadyInvited({ status: 'Not Contacted', companyOutreach: { selfLastTouch: { channel: null, date: '2026-08-01', direction: 'Sent', fromRowStamp: true } } }), 'null channel from row stamp without Sent status is not a LinkedIn invite');
+check(isAlreadyInvited({ status: 'Sent', companyOutreach: { selfLastTouch: { channel: null, date: '2026-08-01', direction: 'Sent', fromRowStamp: true } } }), 'null channel with Sent status trusts the status');
 
 check(JSON.stringify(followupChannels({ channel: 'linkedin', linkedin: 'linkedin.com/in/a', email: 'a@example.com' })) === JSON.stringify({ linkedin: true, email: false }), 'LinkedIn only omits email even when an address exists');
 check(JSON.stringify(followupChannels({ channel: 'email', linkedin: 'linkedin.com/in/a', email: 'a@example.com' })) === JSON.stringify({ linkedin: false, email: true }), 'email only omits LinkedIn');
