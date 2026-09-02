@@ -224,7 +224,7 @@ router.get('/api/followups/stale', (req, res) => {
       const seeded = c.companyOutreach?.companyContactsSentToday || 0;
       const used = companySlots.has(companyKey) ? companySlots.get(companyKey) : seeded;
       const context = getPersonContext(c.source, c.id);
-      const alreadyInvited = !!c.companyOutreach?.selfLastTouch || new Set(['Sent', 'Replied', 'Meeting Scheduled']).has(c.status);
+      const alreadyInvited = c.companyOutreach?.selfLastTouch?.channel === 'linkedin' || new Set(['Sent', 'Replied', 'Meeting Scheduled']).has(c.status);
       const canInfluence = canInfluenceHire(c);
       const decision = canContact({
         timeline: context?.timeline || [],

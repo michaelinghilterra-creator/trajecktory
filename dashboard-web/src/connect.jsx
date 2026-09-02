@@ -155,10 +155,10 @@ function CompanyOutreach({ c }) {
 // connect-note, which resolves only from the connect/both queues that EXCLUDE these
 // statuses (and would 400 with "Provide a recipient").
 const CONTACTED_STATUSES = new Set(['Sent', 'Replied', 'Meeting Scheduled']);
-// Already invited when we hold a per-contact touch OR the CRM status says so. Status
-// is the reliable signal: selfLastTouch is derived from the correspondence-log index,
-// which can be empty even after status advanced to Sent — that gap is what wrongly
-// routed already-contacted contacts to the first-touch connect-note endpoint and 400'd.
+// Already invited when we hold a per-contact LinkedIn touch OR the CRM status says so.
+// Status is the reliable signal: selfLastTouch is derived from the correspondence-log
+// index, which can be empty even after status advanced to Sent. The selfLastTouch check
+// is channel-gated: an email touch does NOT count as a LinkedIn invite.
 // The API base for a queue row, chosen by which BOOK the row came from.
 //
 // The old row components each hardcoded the target talent contact route. That
@@ -193,9 +193,12 @@ function isAlreadyInvited(c) {
   // referral matches neither. CONTACTED_STATUSES holds TA vocabulary (Sent,
   // Replied, Meeting Scheduled) while a referral sits at "Not Asked", and
   // selfLastTouch now covers every contact book and also honors a row's stamped
-  // last touch when the message body was never logged.
+  // last touch when the message body was never logged. Only a LinkedIn-channel
+  // touch counts; an email-only touch (channel 'email' or null) does not prove
+  // a LinkedIn invite was sent.
   if (c.linkedinStatus === 'Connected' || c.freeDm) return true;
-  return !!(c.companyOutreach && c.companyOutreach.selfLastTouch)
+  const slt = c.companyOutreach && c.companyOutreach.selfLastTouch;
+  return !!(slt && slt.channel === 'linkedin')
     || CONTACTED_STATUSES.has(c.status);
 }
 
