@@ -310,7 +310,8 @@ function OverviewView({ apps, onOpen, onAction, search }) {
 // Single source is window.ARCHETYPES (data.js, loaded before this bundle). Do NOT
 // re-list the labels here — a second copy is exactly what drifted and left the new
 // buckets off the Sankey while the pipeline filter showed them.
-const ARCHETYPES = window.ARCHETYPES;
+// Read at render time (not module scope) so the async /api/archetypes fetch has
+// resolved before any component touches the list.
 const ALL_ENTRIES_STATUSES = window.STATUSES;
 
 function applyFilters(apps, filters, search) {
@@ -360,7 +361,7 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
       <div className="tb-row">
         <select className="sel" value={filters.archetype} onChange={(e) => setFilters(f => ({ ...f, archetype: e.target.value }))}>
           <option value="">All archetypes</option>
-          {ARCHETYPES.map(a => <option key={a} value={a}>{a}</option>)}
+          {window.ARCHETYPES.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
         <div className="score-seg" title="Minimum score">
           {scoreSteps.map(s => (
@@ -808,7 +809,7 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
   }).filter(s => s.n > 0).sort((a, b) => b.avg - a.avg);
   const bestSource = [...bySource].sort((a, b) => b.strongRate - a.strongRate)[0];
 
-  const byArch = ARCHETYPES.map(k => {
+  const byArch = window.ARCHETYPES.map(k => {
     const items = ratePool.filter(a => a.archetype === k);
     const applied = items.filter(a => reached(a, 1)).length;
     const interviewed = items.filter(a => reached(a, 3)).length;

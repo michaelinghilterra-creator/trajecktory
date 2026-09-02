@@ -96,6 +96,89 @@ function getCertEntries(text) {
   return entries.filter(e => e.name);
 }
 
+// Parse archetype names + title_variants from profile.yml. Returns an array of
+// { name, variants: string[] } where variants are the raw title_variant strings
+// (lowercased for matching). Falls back to an empty array for a fresh user.
+//
+// This is the only place that reads the archetype structure. inferArchetype() in
+// applications.mjs consumes the output via getArchetypeRules() below.
+function parseArchetypes(text) {
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  // Find the "archetypes:" key under "target_roles:"
+  let inTargetRoles = false;
+  let archetypesStart = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^target_roles:\s*$/.test(lines[i])) { inTargetRoles = true; continue; }
+    if (inTargetRoles && /^\S/.test(lines[i])) break; // left the section
+    if (inTargetRoles && /^\s+archetypes:\s*$/.test(lines[i])) { archetypesStart = i + 1; break; }
+  }
+  if (archetypesStart === -1) return [];
+
+  const result = [];
+  let current = null;
+  let inVariants = false;
+  for (let i = archetypesStart; i < lines.length; i++) {
+    const ln = lines[i];
+    if (/^\S/.test(ln)) break; // dedented to a new top-level block
+    // A new list item at the archetype level (indented "- name:")
+    const nameMatch = ln.match(/^\s+-\s+name:\s*"?([^"]*?)"?\s*$/);
+    if (nameMatch) {
+      if (current) result.push(current);
+      current = { name: nameMatch[1].trim(), variants: [] };
+      inVariants = false;
+      continue;
+    }
+    // Start of title_variants block
+    if (current && /^\s+title_variants:\s*$/.test(ln)) { inVariants = true; continue; }
+    // A variant entry (indented "- ...")
+    if (current && inVariants) {
+      const varMatch = ln.match(/^\s+-\s+"?([^"]*?)"?\s*$/);
+      if (varMatch) {
+        current.variants.push(varMatch[1].trim().toLowerCase());
+        continue;
+      }
+      // Any non-list line ends the variants block
+      if (/^\s+\S/.test(ln) && !/^\s+-/.test(ln)) inVariants = false;
+    }
+  }
+  if (current) result.push(current);
+  return result;
+}
+
+let _archetypeCache = null; // { mtimeMs, rules }
+
+// Returns archetype classification rules derived from profile.yml. Each entry
+// has { name, pattern: RegExp } built from title_variants. Cached by mtime.
+export function getArchetypeRules() {
+  let mtimeMs = 0;
+  try { mtimeMs = fs.statSync(PROFILE_YML).mtimeMs; } catch { /* missing profile */ }
+  if (_archetypeCache && _archetypeCache.mtimeMs === mtimeMs) return _archetypeCache.rules;
+
+  let text = '';
+  try { text = fs.readFileSync(PROFILE_YML, 'utf8'); } catch { /* fresh user */ }
+
+  const archetypes = parseArchetypes(text);
+  const rules = archetypes
+    .filter(a => a.variants.length > 0)
+    .map(a => {
+      // Build a regex from title_variants. Escape regex chars, join with |.
+      const escaped = a.variants.map(v => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      return { name: a.name, pattern: new RegExp(escaped.join('|'), 'i') };
+    });
+  _archetypeCache = { mtimeMs, rules };
+  return rules;
+}
+
+// Returns the list of archetype names from profile.yml (for the client's filter
+// dropdowns and chart axes). Always ends with "Unclassified".
+export function getArchetypeNames() {
+  const rules = getArchetypeRules();
+  const names = rules.map(r => r.name);
+  if (!names.includes('Unclassified')) names.push('Unclassified');
+  return names;
+}
+
 let _cache = null; // { mtimeMs, identity }
 let _outreachCache = null; // { mtimeMs, policy }
 

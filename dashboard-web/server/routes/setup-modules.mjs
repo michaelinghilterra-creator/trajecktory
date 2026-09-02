@@ -15,6 +15,7 @@ import { cleanProse } from '../lib/text-hygiene.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { loadProfileContext } from '../lib/insights.mjs';
 import { buildActivities, weeklyCounts, employersInActivities, toTwcCsv, enrichEmployers, ENRICH_MAX } from '../lib/twc.mjs';
+import { getArchetypeRules } from '../lib/profile.mjs';
 
 export const router = express.Router();
 
@@ -236,5 +237,162 @@ router.post('/api/setup/twc/enrich', async (req, res) => {
       return res.status(400).json({ error: `Max ${ENRICH_MAX} companies per call (rate-limit protection).` });
     }
     res.json(await enrichEmployers(companies));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Customize — post-onboarding customization status ────────────────────────
+// Returns the configured/default status of each customization section so the
+// Customize subtab can show cards with status indicators.
+function safeRead(rel) {
+  try { return fs.readFileSync(path.join(ROOT_DIR, rel), 'utf8'); } catch { return null; }
+}
+
+router.get('/api/setup/customize', (req, res) => {
+  try {
+    const profile = safeRead('config/profile.yml') || '';
+    const modeProfile = safeRead('modes/_profile.md') || '';
+    const portals = safeRead('portals.yml') || '';
+    const sequences = safeRead('templates/outreach-sequences.json') || '';
+    const storyBank = safeRead('interview-prep/story-bank.md') || '';
+    const articleDigest = safeRead('article-digest.md');
+
+    const hasArchetypeRules = getArchetypeRules().length > 0;
+
+    // Check _profile.md for HTML comment placeholders (template defaults)
+    const framingPlaceholder = /<!--\s*Archetype \d\s*-->/.test(modeProfile);
+    const framingFilled = /\|\s*\S[^|]*\|\s*\S[^|]*\|\s*\S[^|]*\|\s*\S[^|]*\|/.test(
+      modeProfile.split(/## Your Adaptive Framing/i)[1]?.split(/^## /m)[0] || ''
+    );
+    const evalTuningFilled = (() => {
+      const section = (modeProfile.split(/## Your Evaluation Tuning/i)[1] || '').split(/^## /m)[0] || '';
+      const hasRealPriority = /^\d+\.\s+\S/m.test(section.replace(/^\d+\.\s+<!--.*?-->\s*$/gm, ''));
+      const hasRealDealbreaker = /^-\s+\S/m.test(section.replace(/^-\s+<!--.*?-->\s*$/gm, ''));
+      return hasRealPriority || hasRealDealbreaker;
+    })();
+    const exitFilled = (() => {
+      const section = (modeProfile.split(/## Your Exit Narrative/i)[1] || '').split(/^## /m)[0] || '';
+      return !/Use the candidate's exit story from/.test(section) || section.length > 300;
+    })();
+    const crossCuttingFilled = (() => {
+      const section = (modeProfile.split(/## Your Cross-cutting Advantage/i)[1] || '').split(/^## /m)[0] || '';
+      return !/Technical builder with real-world proof/.test(section) && section.trim().length > 50;
+    })();
+
+    // Scoring: compare weights to example defaults
+    const exampleWeights = { fit: 0.35, northStar: 0.25, level: 0.15, comp: 0, location: 0.10 };
+    const scoringCustomized = (() => {
+      const m = profile.match(/fit:\s*([\d.]+)/);
+      const n = profile.match(/northStar:\s*([\d.]+)/);
+      if (!m || !n) return false;
+      return parseFloat(m[1]) !== exampleWeights.fit || parseFloat(n[1]) !== exampleWeights.northStar;
+    })();
+
+    // Narrative
+    const headline = (profile.match(/headline:\s*"?([^"\n]*)"?/m) || [])[1] || '';
+    const superpowers = (profile.match(/superpowers:\s*\n((?:\s+-\s+.*\n?)*)/m) || [])[1] || '';
+    const superpowerCount = (superpowers.match(/^\s+-/gm) || []).length;
+    const narrativeExampleHeadline = 'ML Engineer turned AI product builder';
+
+    // Outreach cadence
+    const minDays = (profile.match(/minDaysBetweenTouches:\s*(\d+)/) || [])[1];
+    const maxTouches = (profile.match(/maxTouchesPer30d:\s*(\d+)/) || [])[1];
+    const outreachCustomized = (minDays && minDays !== '3') || (maxTouches && maxTouches !== '6');
+
+    // Outreach sequences: check for sales-specific stakeholder types
+    const hasSalesStakeholders = /CRO|CFO|VP.Sales|Chief Revenue/i.test(sequences);
+
+    // Story bank
+    const storyCount = (storyBank.match(/^##\s+/gm) || []).length;
+
+    // Search queries in portals
+    const hasSearchQueries = /search_queries:/i.test(portals) &&
+      /^\s+-\s+"?\S/m.test((portals.split(/search_queries:/i)[1] || '').split(/^[a-z_]+:/m)[0] || '');
+
+    // Location policy
+    const hasLocationPolicy = /location_policy:/i.test(portals);
+
+    const sections = [
+      {
+        id: 'scoring', order: 1, group: 'core',
+        label: 'Scoring Priorities & Deal-Breakers',
+        desc: 'Which evaluation dimensions matter most. What roles to auto-reject.',
+        files: ['config/profile.yml (scoring.weights)', 'modes/_profile.md (Evaluation Tuning)'],
+        status: (scoringCustomized || evalTuningFilled) ? 'configured' : 'default',
+      },
+      {
+        id: 'outreach-stakeholders', order: 2, group: 'core',
+        label: 'Outreach Stakeholders & Messaging',
+        desc: 'Who you reach out to and how your messages sound.',
+        files: ['templates/outreach-sequences.json', 'modes/_profile.md (Negotiation Scripts)'],
+        status: !hasSalesStakeholders ? 'configured' : 'default',
+      },
+      {
+        id: 'voice', order: 3, group: 'core',
+        label: 'Voice & Achievement Framing',
+        desc: 'Tone, power verbs, prohibited phrases, per-archetype proof points.',
+        files: ['modes/_profile.md (Adaptive Framing)'],
+        status: (framingFilled && !framingPlaceholder) ? 'configured' : 'default',
+      },
+      {
+        id: 'narrative', order: 4, group: 'core',
+        label: 'Narrative & Branding',
+        desc: 'Professional headline, superpowers, exit story, proof points.',
+        files: ['config/profile.yml (narrative)'],
+        status: (headline && headline !== narrativeExampleHeadline && superpowerCount >= 3) ? 'configured' : 'default',
+      },
+      {
+        id: 'exit', order: 5, group: 'core',
+        label: 'Exit Narrative & Sensitive Framing',
+        desc: 'How short tenures, career gaps, and your transition are framed.',
+        files: ['modes/_profile.md (Exit Narrative, Cross-cutting Advantage)'],
+        status: (exitFilled && crossCuttingFilled) ? 'configured' : 'default',
+      },
+      {
+        id: 'stories', order: 6, group: 'core',
+        label: 'Interview Themes & Story Bank',
+        desc: 'STAR+R stories for behavioral interviews and cheat sheets.',
+        files: ['interview-prep/story-bank.md'],
+        status: storyCount >= 3 ? 'configured' : 'default',
+      },
+      {
+        id: 'search-queries', order: 7, group: 'enhance',
+        label: 'Search Queries',
+        desc: 'Web search queries for discovering job postings beyond your portals.',
+        files: ['portals.yml (search_queries)'],
+        status: hasSearchQueries ? 'configured' : 'default',
+      },
+      {
+        id: 'geo', order: 8, group: 'enhance',
+        label: 'Geo Pre-Filter',
+        desc: 'Home coordinates, commute radius, approved metro areas.',
+        files: ['portals.yml (location_policy)', 'config/profile.yml (location)'],
+        status: hasLocationPolicy ? 'configured' : 'default',
+      },
+      {
+        id: 'social', order: 9, group: 'enhance',
+        label: 'Social & Content Strategy',
+        desc: 'LinkedIn presence, content themes, and social proof.',
+        files: ['modes/_profile.md (Social & Content Strategy)'],
+        status: /social.*content.*strategy|content.*strategy/i.test(modeProfile) ? 'configured' : 'default',
+      },
+      {
+        id: 'cadence', order: 10, group: 'enhance',
+        label: 'Outreach Cadence',
+        desc: 'Follow-up frequency, spacing, and cold-outreach caps.',
+        files: ['config/profile.yml (outreach)'],
+        status: outreachCustomized ? 'configured' : 'default',
+      },
+      {
+        id: 'portfolio', order: 11, group: 'enhance',
+        label: 'Article Digest / Portfolio',
+        desc: 'Proof points from published work, case studies, and projects.',
+        files: ['article-digest.md'],
+        status: (articleDigest && articleDigest.trim().length > 50) ? 'configured' : 'default',
+      },
+    ];
+
+    const total = sections.length;
+    const configured = sections.filter(s => s.status === 'configured').length;
+    res.json({ sections, total, configured });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
