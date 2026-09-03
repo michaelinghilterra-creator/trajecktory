@@ -298,9 +298,7 @@ function ContactsTableView({ contacts, audience, otherCount, onOpen, selId, onRe
   const cols = [
     { k: "name",     label: "Contact",    w: 210 },
     { k: "title",    label: "Title",      w: 220 },
-    ...(audience === "decision-makers" ? [{ k: "influence", label: "Role in hire", w: 140 }] : []),
     { k: "company",  label: "Company",    w: 180 },
-    { k: "location", label: "Location",   w: 140 },
     { k: "status",   label: "Status",     w: 150 },
     { k: "linkedin", label: "LinkedIn",   w: 130 },
     { k: "last",     label: "Last touch", w: 110 },
@@ -412,18 +410,8 @@ function ContactsTableView({ contacts, audience, otherCount, onOpen, selId, onRe
                     <td title={c.title || "No job title recorded for this contact"}>
                       <span style={{ fontSize: 12, color: "var(--text-dim)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} aria-label={c.title || "No job title recorded"}>{c.title || "-"}</span>
                     </td>
-                    {decisionMakers && (
-                      <td>
-                        <span style={{ fontSize: 12, color: "var(--text-dim)", opacity: c.influenceTierSource === "tag" ? 1 : 0.5 }}>
-                          {INFLUENCE_TIER_LABELS[c.influenceTier] || c.influenceTier || "-"}
-                        </span>
-                      </td>
-                    )}
                     <td title={c.company || ""}>
                       <span style={{ fontWeight: 600, fontSize: 12, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.company}</span>
-                    </td>
-                    <td>
-                      <span style={{ fontSize: 12, color: loc ? "var(--text-dim)" : "var(--text-mute)" }} title={loc || "No location recorded for this contact"} aria-label={loc || "No location recorded"}>{loc || "-"}</span>
                     </td>
                     <td><StatusBadge status={c.status} size="sm" /></td>
                     <td><LinkedInBadge status={c.linkedinStatus} size="sm" /></td>
