@@ -487,7 +487,6 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
     { k: 'date',      label: 'Date',      w: 90,  cls: 't-date' },
     { k: 'company',   label: 'Company',   w: 190 },
     { k: 'role',      label: 'Role',      w: 210, cls: 't-role' },
-    { k: 'archetype', label: 'Archetype', w: 90,  cls: 't-arch' },
     { k: 'salary',    label: 'Comp',      w: 112, cls: 't-comp' },
     { k: 'status',    label: 'Status',    w: 116 },
     { k: 'score',     label: 'Score',     w: 80 },
@@ -550,7 +549,6 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
                       </>
                     )}
                   </td>
-                  <td className="t-arch">{a.archetype}</td>
                   <td className="t-comp" title={a.compStated || 'Not Stated'}>
                     {formatCompMidpoint(a)}
                   </td>
@@ -2458,7 +2456,6 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
                   </>
                 )}
               </td>
-              <td><span className="mono dim" style={{ fontSize: 11 }}>{a.archetype}</span></td>
               <td className="mono dim" style={{ fontSize: 11 }} title={a.compStated || 'Not Stated'}>
                 {formatCompMidpoint(a)}
               </td>
