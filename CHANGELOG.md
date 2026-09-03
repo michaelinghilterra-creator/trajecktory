@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.2.0...v3.2.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* **dashboard:** remove unused columns from Pipeline, TA Outreach, and Decision Makers tables ([#275](https://github.com/michaelinghilterra-creator/trajecktory/issues/275)) ([a7dfafe](https://github.com/michaelinghilterra-creator/trajecktory/commit/a7dfafe9510bd14861820cd3b68ed6092253c6ac))
+
 ## [3.2.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.1.0...v3.2.0) (2026-09-02)
 
 
