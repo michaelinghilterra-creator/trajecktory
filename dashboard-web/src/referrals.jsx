@@ -21,6 +21,7 @@ const REF_SUBTABS = [
   { id: 'stage1', label: 'Stage 1', hint: 'Inside a company you are targeting — warm path into a live opening' },
   { id: 'stage2', label: 'Stage 2', hint: 'Warm referrers elsewhere in your network' },
   { id: 'all', label: 'All', hint: 'Everyone, including people you added by hand' },
+  { id: 'archived', label: 'Archived', hint: 'Referral contacts archived after their companies left the active pipeline' },
 ];
 
 const REF_STATUS_COLORS = {
@@ -32,6 +33,7 @@ const REF_STATUS_COLORS = {
   'Applied w/ Referral': '#22c55e',
   'No': 'var(--text-mute)',
   'Dormant': 'var(--text-mute)',
+  'Archived': '#9ca3af',
 };
 
 // AI-draft controls for the referral card. Email topics map to the referral
@@ -124,6 +126,7 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
   const [followupDrawerId, setFollowupDrawerId] = useState(null);
   const [linkedin, setLinkedin] = useState({ count: 0, importedAt: null });
   const [reconciling, setReconciling] = useState(false);
+  const [cleaningUp, setCleaningUp] = useState(false);
   const [importing, setImporting] = useState(false);
   const [lastImport, setLastImport] = useState(null);   // persistent import summary
   const [findingId, setFindingId] = useState(null);     // per-contact email find in flight
@@ -142,14 +145,17 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
   useEffect(() => { load(); }, [load]);
 
   const stageCounts = useMemo(() => ({
-    stage1: rows.filter(r => r.stage === 'stage1').length,
-    stage2: rows.filter(r => r.stage === 'stage2').length,
-    all: rows.length,
+    stage1: rows.filter(r => r.status !== 'Archived' && r.stage === 'stage1').length,
+    stage2: rows.filter(r => r.status !== 'Archived' && r.stage === 'stage2').length,
+    all: rows.filter(r => r.status !== 'Archived').length,
+    archived: rows.filter(r => r.status === 'Archived').length,
   }), [rows]);
 
   const filtered = useMemo(() => {
     const q = (search || '').trim().toLowerCase();
-    let out = subtab === 'all' ? rows : rows.filter(r => r.stage === subtab);
+    let out = subtab === 'archived'
+      ? rows.filter(r => r.status === 'Archived')
+      : rows.filter(r => r.status !== 'Archived' && (subtab === 'all' || r.stage === subtab));
     if (q) out = out.filter(r => [r.name, r.how, r.where, r.target, r.notes].some(v => (v || '').toLowerCase().includes(q)));
     const dir = sortDir === 'asc' ? 1 : -1;
     const val = x => sortKey === 'last' ? (x.lastTouch || '')
@@ -214,9 +220,30 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
     window.tjkMutate('/api/referrals/reconcile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
       .then(r => r.json()).then(d => {
         setReconciling(false);
-        if (d.ok) { toast(d.stage1Added ? `+${d.stage1Added} new Stage-1 warm path${d.stage1Added === 1 ? '' : 's'}` : 'Reconciled — no new matches', 'success'); load(); }
+        if (d.ok) {
+          const message = d.stage1Added && d.unarchived
+            ? `+${d.stage1Added} new, ${d.unarchived} restored`
+            : d.stage1Added
+              ? `+${d.stage1Added} new Stage-1 warm path${d.stage1Added === 1 ? '' : 's'}`
+              : d.unarchived
+                ? `${d.unarchived} previously archived referral(s) restored`
+                : 'Reconciled — no new matches';
+          toast(message, 'success'); load();
+        }
         else toast(d.error || 'Reconcile failed', 'error');
       }).catch(() => { setReconciling(false); toast('Reconcile failed', 'error'); });
+  };
+
+  const cleanupStale = () => {
+    setCleaningUp(true);
+    window.tjkMutate('/api/referrals/cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+      .then(r => r.json()).then(d => {
+        setCleaningUp(false);
+        if (Number.isFinite(d.archived)) {
+          toast(d.archived ? `Archived ${d.archived} stale referral(s)` : 'No stale referrals found', 'success');
+          load();
+        } else toast(d.error || 'Cleanup failed', 'error');
+      }).catch(() => { setCleaningUp(false); toast('Cleanup failed', 'error'); });
   };
 
   // Upload a fresh LinkedIn Connections.csv: replaces the haystack, then seeds
@@ -309,6 +336,10 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
           <button className="btn sm" onClick={reconcileLinkedin} disabled={reconciling || !linkedin.count}
             title="Re-scan your stored connections against your current pipeline and pull in new Stage-1 warm paths">
             {reconciling ? 'Reconciling…' : '↻ Reconcile'}
+          </button>
+          <button className="btn sm" onClick={cleanupStale} disabled={cleaningUp}
+            title="Archive referral contacts at companies you no longer have active applications with">
+            {cleaningUp ? 'Cleaning up...' : 'Clean up stale'}
           </button>
           <button className="btn sm" onClick={() => fileRef.current && fileRef.current.click()} disabled={importing}
             title="Upload a fresh LinkedIn Connections.csv export (Settings → Data Privacy → Get a copy of your data → Connections)">

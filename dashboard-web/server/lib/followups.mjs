@@ -889,6 +889,7 @@ function _followupRank(r) {
   score += _FUQ_INFLUENCE_WEIGHT[r.influenceTier] || 0;
   if (r.channel === 'both') score += 20;
   score += _FUQ_STATUS_WEIGHT[r.status] || 0;
+  if (r.appScore != null) score += r.appScore * 5;
   // Recency: a contact you last touched long ago is more overdue. Never-contacted
   // rows (no prior self-touch) get a neutral middle so importance decides their
   // slot rather than floating them to either extreme.
@@ -897,9 +898,22 @@ function _followupRank(r) {
   score += (days == null) ? 15 : Math.min(days, 60) * 0.5;
   return score;
 }
+function _bestScoreByCompany(apps) {
+  const map = new Map();
+  for (const a of apps) {
+    if (a.score == null) continue;
+    const key = normalizeCompany(a.company);
+    if (!key) continue;
+    const prev = map.get(key);
+    if (prev == null || a.score > prev) map.set(key, a.score);
+  }
+  return map;
+}
 function computeFollowupQueue(opts = {}) {
   const books = _bothBooks(opts);
-  const eligible = outreachEligibleCompanies(opts.apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })());
+  const appList = opts.apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })();
+  const eligible = outreachEligibleCompanies(appList);
+  const companyScores = _bestScoreByCompany(appList);
   const baselineId = getNewBaselineId();
   const touchIdx = buildCompanyTouchIndex(books);
   const today = _localToday();
@@ -914,7 +928,7 @@ function computeFollowupQueue(opts = {}) {
   };
   for (const row of opts.excludeReferrals === true ? [] : books.referrals) {
     const reason = QUEUE_POLICY_BY_STORE.referral.reason(row);
-    if (!reason || (reason === 'Follow up' && !staleEnough(row.lastTouch))) continue;
+    if (!reason || (row.lastTouch && !staleEnough(row.lastTouch))) continue;
     const parts = String(row.name || '').trim().split(/\s+/);
     const shaped = { ...row, first: parts[0] || '', last: parts.slice(1).join(' '), title: row.target || '', company: row.where || '' };
     if (!_passesCompanyGate('referral', shaped.company, eligible)) continue;
@@ -932,7 +946,10 @@ function computeFollowupQueue(opts = {}) {
       channel, queueReason: reason, notContacted: reason === 'Reach out', freeDm,
     });
   }
-  for (const r of rows) r.rank = _followupRank(r);
+  for (const r of rows) {
+    r.appScore = companyScores.get(normalizeCompany(r.company)) ?? null;
+    r.rank = _followupRank(r);
+  }
   const people = resolvePeople({ ta: books.ta, referrals: books.referrals, influencers: books.influencers, pins: opts.pins ?? readPins() });
   const personByRef = new Map(people.flatMap(person => person.refs.map(ref => [ref, person.id])));
   const deduped = new Map();

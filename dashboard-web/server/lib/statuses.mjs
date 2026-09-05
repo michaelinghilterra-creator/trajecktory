@@ -129,8 +129,13 @@ export const TALENT_REPLIED = new Set(_talentStates.filter(s => s.replied).map(s
 
 // Referral ladder (people in the user's own network). `asked` marks the rungs
 // where a referral ask has gone out, mirroring how `contacted` works above.
-export const REFERRAL_STATES = _referralStates;
-export const REFERRAL_STATUS_LABELS = _referralStates.map(s => s.label);
+export const REFERRAL_STATES = [..._referralStates, {
+  id: 'archived',
+  label: 'Archived',
+  color: '#9ca3af',
+  asked: false,
+}];
+export const REFERRAL_STATUS_LABELS = REFERRAL_STATES.map(s => s.label);
 export const REFERRAL_ASKED = new Set(_referralStates.filter(s => s.asked).map(s => s.label));
 
 // A status seen in the data that no ladder knows about is a silent data-quality
