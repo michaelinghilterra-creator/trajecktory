@@ -10,7 +10,11 @@ data/applications.md
 data/pipeline.md
 data/scan-history.tsv
 data/insights/
-reports/*.md
+# Globbed to the whole dir, not just *.md: evaluation reports live at the top
+# level, but reports/jds/ holds raw JD text whose filenames alone name employers.
+# A *.md rule only matches the top level, so those 142 files sat untracked but
+# visible, one `git add -A` from being committed.
+reports/*
 !reports/.gitkeep
 output/*
 !output/.gitkeep
