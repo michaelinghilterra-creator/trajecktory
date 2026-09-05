@@ -1843,13 +1843,16 @@ function ReconcileModal({ onClose, onApplied, initialMode } = {}) {
         <div className="modal-foot">
           {step > 0 && step < 2 && <button className="btn" onClick={() => setStep(s => s - 1)}><TIcon d={TI.undo} size={13} /> Back</button>}
           {step === 0 && !loading && <span className="mono" style={{ fontSize: 11, color: "var(--text-mute)" }}>{[
-            initialMode !== "principal" ? `${archSel.size} to archive` : null,
-            initialMode !== "principal" ? `${gapSel.size} contact searches` : null,
-            initialMode !== "talent" ? `${principalGapSel.size} decision-maker searches` : null,
-          ].filter(Boolean).join(" · ")}</span>}
+            initialMode !== "principal" && archSel.size > 0 ? `${archSel.size} to retire` : null,
+            initialMode !== "principal" && gapSel.size > 0 ? `${gapSel.size} contact searches` : null,
+            initialMode !== "talent" && principalGapSel.size > 0 ? `${principalGapSel.size} decision-maker searches` : null,
+          ].filter(Boolean).join(" · ") || "Nothing to do"}</span>}
           <div className="right" style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
-            {step === 0 && !loading && <button className="btn primary" onClick={runDiscover} disabled={scanning}>{scanning ? "Discovery already running" : "Discover contacts"} <TIcon d={TI.arrowR} size={13} /></button>}
-            {step === 1 && <button className="btn primary" onClick={apply} disabled={discSel.size === 0}>Add selected ({discSel.size}) <TIcon d={TI.arrowR} size={13} /></button>}
+            {step === 0 && !loading && archSel.size > 0 && (gapSel.size === 0 && principalGapSel.size === 0) && <button className="btn primary" onClick={apply}>Retire {archSel.size} contact{archSel.size !== 1 ? "s" : ""} <TIcon d={TI.arrowR} size={13} /></button>}
+            {step === 0 && !loading && (gapSel.size > 0 || principalGapSel.size > 0) && <button className="btn primary" onClick={runDiscover} disabled={scanning}>{scanning ? "Discovery already running" : "Discover contacts"} <TIcon d={TI.arrowR} size={13} /></button>}
+            {step === 1 && <button className="btn primary" onClick={apply} disabled={scanning}>
+              {discSel.size > 0 ? `Add selected (${discSel.size})` : archSel.size > 0 ? `Retire ${archSel.size} contact${archSel.size !== 1 ? "s" : ""}` : "Apply"} <TIcon d={TI.arrowR} size={13} />
+            </button>}
             {/* No Undo. It used to flip a local boolean and assert "Changes
                 reverted" while the archive and bulk-add writes stayed on disk;
                 there is no revert endpoint, and inventing one would have to

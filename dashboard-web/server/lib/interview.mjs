@@ -419,12 +419,34 @@ function getPrep(id, round) {
   return { markdown, html };
 }
 
+// Collect a Set of "id:stage" keys for rounds whose runsheet .run.md carries a
+// real debrief body (not just the stub template). Used by pendingDebriefs() so a
+// debrief captured in a chat session (which writes to the runsheet) is not
+// flagged as missing just because it was never saved to app-notes.json.
+function collectRunsheetDebriefs() {
+  const out = new Set();
+  for (const folder of scanPrepFolders()) {
+    for (const r of folder.rounds) {
+      if (!r.runPath) continue;
+      const sheet = readRunsheet(r.runPath);
+      if (!sheet) continue;
+      const id = Number.isFinite(sheet.data?.id) ? sheet.data.id : null;
+      const stage = typeof sheet.data?.stage === 'string' ? sheet.data.stage : null;
+      if (id == null || !stage) continue;
+      const db = buildDebrief(sheet.body);
+      if (db?.hasProse) out.add(`${id}:${stage}`);
+    }
+  }
+  return out;
+}
+
 export {
   listSessions,
   findSession,
   getRunsheet,
   getPrep,
   getDoc,
+  collectRunsheetDebriefs,
   isActiveInterviewStatus,
   INTERVIEW_STAGES,
 };

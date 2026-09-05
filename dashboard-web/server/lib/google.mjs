@@ -330,7 +330,10 @@ async function listMessages({ q = '', accessToken, max = 50, fetchImpl = fetch }
     : 50;
   const url = `${GMAIL_BASE}/messages?q=${encodeURIComponent(q)}&maxResults=${boundedMax}`;
   const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!res.ok) throw new Error(`Gmail list failed (${res.status})`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Gmail list failed (${res.status}): ${body.slice(0, 300)}`);
+  }
   const j = await res.json();
   return j.messages || []; // [{ id, threadId }]
 }
@@ -342,7 +345,10 @@ async function getMessage({ id, accessToken, fetchImpl = fetch } = {}) {
   if (!GMAIL_ID.test(String(id ?? ''))) throw new Error('Gmail get failed (bad message id)');
   const url = `${GMAIL_BASE}/messages/${encodeURIComponent(id)}?format=full`;
   const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!res.ok) throw new Error(`Gmail get failed (${res.status})`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Gmail get failed (${res.status}): ${body.slice(0, 300)}`);
+  }
   return res.json();
 }
 

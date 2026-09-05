@@ -80,6 +80,17 @@ check(p14.length === 3 && p14.join(',') === '1st Interview,2nd Interview,Phone S
   'terminal row owes a debrief for every reached round (via the [reached:] tag)');
 check(pendingDebriefs({}).length === 0, 'empty input is safe');
 
+// runsheetDebriefs: a round with a real debrief body in its .run.md is not pending
+const rsDebriefs = new Set(['13:Phone Screen']);
+const pendWithRs = pendingDebriefs({ apps, notes, runsheetDebriefs: rsDebriefs });
+const pendWithRsIds = pendWithRs.map(p => `${p.id}:${p.stage}`);
+check(!pendWithRsIds.includes('13:Phone Screen'),
+  'a round with a runsheet debrief body is not pending');
+check(pendWithRs.some(p => p.id === 11),
+  'runsheetDebriefs does not suppress unrelated pending entries');
+check(pendingDebriefs({ apps, notes, runsheetDebriefs: new Set() }).length === pend.length,
+  'empty runsheetDebriefs set behaves like omitted');
+
 // ── formatDebriefNote ────────────────────────────────────────────────────────
 const note = formatDebriefNote('Phone Screen',
   { outcome: 'rejected', objection: 'Wanted more years in a pure RevOps title', reason: 'The final candidate has deeper tooling experience', answeredBy: 'The recruiter, not the hiring manager', hm: 'Avery Chen, 3 months in seat, optimizes for hands-on delivery', landed: 'KPI baseline story', next: 'None, closed out' },

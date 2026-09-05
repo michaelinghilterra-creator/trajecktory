@@ -532,11 +532,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
                   <td className="t-co-cell">
                     <div className="co-cell">
                       <span className="co-name">{a.company}</span>
-                      {stale && (
-                        <span className="stale-tag" title="Flagged by Follow-Ups engine, overdue for a nudge">
-                          ↻ {staleDays(a) ?? sit}d overdue
-                        </span>
-                      )}
+                      {/* overdue pill removed: pipeline staleness is manually pruned */}
                     </div>
                   </td>
                   <td className="t-role">
@@ -2438,11 +2434,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
               <td className="company t-co-cell">
                 <div className="co-cell">
                   <span className="co-name">{a.company}</span>
-                  {stale && (
-                    <span className="stale-tag" title="Flagged by Follow-Ups engine, overdue for a nudge">
-                      ↻ {staleDays(a) ?? ''}{staleDays(a) != null ? 'd overdue' : 'overdue'}
-                    </span>
-                  )}
+                  {/* overdue pill removed: pipeline staleness is manually pruned */}
                 </div>
               </td>
               <td className="role" title={a.role}

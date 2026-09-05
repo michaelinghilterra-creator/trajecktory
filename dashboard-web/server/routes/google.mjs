@@ -296,6 +296,34 @@ router.post('/api/google/scan-bounces', async (req, res) => {
       proposed: proposals,
     });
   } catch (err) {
+    console.error('[scan-bounces]', err.message);
+    const rateLimited = /quota exceeded/i.test(err.message);
+    res.status(rateLimited ? 429 : 500).json({ error: err.message, rateLimited });
+  }
+});
+
+// POST /api/google/apply-bounce — flip a single contact to bounced WITHOUT
+// re-querying Gmail. The dry-run sweep already classified the bounce and the
+// user confirmed it in the UI; this endpoint just writes the flip. Avoids the
+// rate-limit wall that the full scan-bounces path hits when the per-minute
+// quota is exhausted by the preceding dry-run.
+router.post('/api/google/apply-bounce', (req, res) => {
+  try {
+    const { source, id } = req.body || {};
+    if (!source || id == null) return res.status(400).json({ error: 'source and id are required' });
+    const numId = parseInt(id, 10);
+    if (!Number.isFinite(numId)) return res.status(400).json({ error: `Invalid id: ${id}` });
+    const taRows = parseTargetTalentMd();
+    const row = taRows.find(r => r.id === numId);
+    if (!row) return res.status(404).json({ error: `Contact ${numId} not found` });
+    if (row.verified?.state === 'bounced') return res.json({ ok: true, alreadyBounced: true, flipped: 0 });
+    const today = new Date().toISOString().slice(0, 10);
+    const newCell = setVerifyTag(row.email, { state: 'bounced', source: 'gmail', date: today });
+    const ok = updateTTLine(numId, { email: newCell, status: 'Bounced' });
+    if (!ok) return res.status(500).json({ error: `Failed to update contact ${numId}` });
+    res.json({ ok: true, flipped: 1, id: numId });
+  } catch (err) {
+    console.error('[apply-bounce]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

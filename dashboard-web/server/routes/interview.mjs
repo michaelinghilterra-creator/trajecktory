@@ -1,5 +1,5 @@
 import express from 'express';
-import { listSessions, getRunsheet, getPrep, getDoc } from '../lib/interview.mjs';
+import { listSessions, getRunsheet, getPrep, getDoc, collectRunsheetDebriefs } from '../lib/interview.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { readAppNotes, addNote } from '../lib/notes.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
@@ -68,7 +68,8 @@ router.get('/api/interview/debriefs/pending', (req, res) => {
   try {
     const apps = parseApplicationsMd();
     const notes = readAppNotes();
-    res.json({ pending: pendingDebriefs({ apps, notes }) });
+    const runsheetDebriefs = collectRunsheetDebriefs();
+    res.json({ pending: pendingDebriefs({ apps, notes, runsheetDebriefs }) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
