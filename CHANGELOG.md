@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.3.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.3.0...v3.3.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* **dashboard:** harden debrief detection, fix bounce flip, split reconcile, remove overdue pill ([#279](https://github.com/michaelinghilterra-creator/trajecktory/issues/279)) ([5732e0f](https://github.com/michaelinghilterra-creator/trajecktory/commit/5732e0f33b2064c994133206b7166324b95d6209))
+
 ## [3.3.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.2.1...v3.3.0) (2026-09-05)
 
 
