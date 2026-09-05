@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.3.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.2.1...v3.3.0) (2026-09-05)
+
+
+### Features
+
+* **dashboard:** add persistent server logging and crash diagnostics ([#277](https://github.com/michaelinghilterra-creator/trajecktory/issues/277)) ([bae2b5d](https://github.com/michaelinghilterra-creator/trajecktory/commit/bae2b5dfa21688a927d62cac7e5967cbcbc46651))
+
 ## [3.2.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.2.0...v3.2.1) (2026-09-03)
 
 
