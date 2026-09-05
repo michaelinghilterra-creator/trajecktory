@@ -1,7 +1,7 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence, resolveReferralLink } from '../lib/referrals.mjs';
-import { reconcile, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
+import { reconcile, cleanupStale, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
 import { detectAcceptances, computePendingAcceptances } from '../lib/linkedin-acceptance.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, draftModel } from '../lib/anthropic.mjs';
@@ -75,6 +75,14 @@ router.post('/api/referrals/reconcile', (req, res) => {
     // Same LinkedIn haystack tells us which invited TA contacts have now accepted.
     const accepted = detectAcceptances({});
     res.json({ ok: true, ...result, acceptedFlipped: accepted.flipped.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/api/referrals/cleanup', (req, res) => {
+  try {
+    res.json(cleanupStale());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
