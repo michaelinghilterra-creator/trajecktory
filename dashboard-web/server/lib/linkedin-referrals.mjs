@@ -16,7 +16,7 @@ import path from 'node:path';
 import { DATA_DIR } from '../config.mjs';
 import { ACTIVE_STATUSES } from './statuses.mjs';
 import { parseApplicationsMd } from './applications.mjs';
-import { parseReferralsMd, appendReferralRows } from './referrals.mjs';
+import { parseReferralsMd, appendReferralRows, updateReferralLine } from './referrals.mjs';
 
 // DATA_DIR, never ROOT_DIR + 'data'. Those look equivalent and are not: only
 // DATA_DIR honors TJK_DATA_DIR, so a hardcoded ROOT_DIR path escapes the test
@@ -100,6 +100,19 @@ export function stageForRow(row, activeSet) {
   return companyForms(row.where).some(f => activeSet.has(f)) ? 'stage1' : 'stage2';
 }
 export function activeFormSet() { return activeFormIndex().set; }
+
+// Soft-archive referral contacts whose companies are no longer represented in
+// the active pipeline. Completed outcomes remain visible as durable history.
+export function cleanupStale() {
+  const { set: activeSet } = activeFormIndex(activeCompanies());
+  let archived = 0;
+  for (const row of parseReferralsMd()) {
+    if (['Archived', 'No', 'Applied w/ Referral'].includes(row.status)) continue;
+    if (companyForms(row.where).some(f => activeSet.has(f))) continue;
+    if (updateReferralLine(row.id, { status: 'Archived' })) archived++;
+  }
+  return { archived };
+}
 
 // ── the haystack ────────────────────────────────────────────────────────────
 export function parseConnectionsCsv(text) {
@@ -215,11 +228,19 @@ export function reconcile({ seedPool = false } = {}) {
   const rows = stage1.map((c) => toRow(c, c.target));
   if (seedPool) rows.push(...stage2.map((c) => toRow(c, null)));
   if (rows.length) appendReferralRows(rows);
+  const { set: activeSet } = activeFormIndex(active);
+  let unarchived = 0;
+  for (const row of parseReferralsMd()) {
+    if (row.status !== 'Archived') continue;
+    if (!companyForms(row.where).some(f => activeSet.has(f))) continue;
+    if (updateReferralLine(row.id, { status: 'Not Asked' })) unarchived++;
+  }
   return {
     connections: connections.length,
     activeCompanies: active.length,
     stage1Added: stage1.length,
     stage2Added: seedPool ? stage2.length : 0,
     stage2Available: stage2.length,
+    unarchived,
   };
 }
