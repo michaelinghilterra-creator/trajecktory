@@ -115,7 +115,12 @@ function formatDebriefNote(stage, fields = {}, { date = '', company = '', role =
 // round you skipped and then advanced past keeps surfacing until you write it.
 // `apps` are parsed tracker rows (a.status + a.notes carry the [reached:] tag);
 // `notes` is the app-notes map ({ "<id>": [{ text }] }). Injectable for tests.
-function pendingDebriefs({ apps = [], notes = {} } = {}) {
+// `runsheetDebriefs` is an optional Set of "id:stage" keys for rounds whose
+// runsheet .run.md file already carries a real debrief body (hasProse). This
+// prevents a debrief captured in a chat session (which writes to the runsheet)
+// from appearing as "pending" when it was never saved to app-notes.json.
+function pendingDebriefs({ apps = [], notes = {}, runsheetDebriefs } = {}) {
+  const rsSet = runsheetDebriefs instanceof Set ? runsheetDebriefs : new Set();
   const ladder = INTERVIEW_STAGES;            // ordered Phone Screen -> 3rd Interview
   const stageSet = new Set(ladder);
   const out = [];
@@ -133,6 +138,7 @@ function pendingDebriefs({ apps = [], notes = {} } = {}) {
     for (let i = 0; i <= concludedUpto; i++) {
       const stage = ladder[i];
       if (list.some(n => isDebriefFor(n.text, stage))) continue;
+      if (rsSet.has(`${a.id}:${stage}`)) continue;
       out.push({ id: a.id, company: a.company, role: a.role, stage });
     }
   }

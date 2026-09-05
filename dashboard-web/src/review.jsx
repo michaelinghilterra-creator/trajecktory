@@ -296,12 +296,20 @@ function GmailPanel({ toast }) {
   const applyBounces = (confirm = []) => {
     if (!Array.isArray(confirm) || confirm.length === 0) return;
     setBusy(true);
-    fetch('/api/google/scan-bounces', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dryRun: false, since: GMAIL_SINCE, confirm }) })
-      .then(r => r.json())
-      .then(res => {
-        if (res.error) { toast && toast(res.error, 'error'); return; }
-        toast && toast(`Applied ${res.flipped} bounce flip${res.flipped === 1 ? '' : 's'}.`, 'success');
-        checkEmail();
+    // Direct per-contact flip: avoids re-querying Gmail (which rate-limits after
+    // the dry-run sweep that surfaced these proposals). Each key is "source:id".
+    Promise.all(confirm.map(key => {
+      const sep = key.indexOf(':');
+      const source = key.slice(0, sep), id = key.slice(sep + 1);
+      return fetch('/api/google/apply-bounce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source, id }) })
+        .then(r => r.json());
+    }))
+      .then(results => {
+        const errs = results.filter(r => r.error);
+        const flipped = results.reduce((n, r) => n + (r.flipped || 0), 0);
+        if (errs.length) { toast && toast(errs[0].error, 'error'); return; }
+        toast && toast(`Applied ${flipped} bounce flip${flipped === 1 ? '' : 's'}. Click "Check email" to refresh.`, 'success');
+        setSweep(null);
       })
       .catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(false));
   };
