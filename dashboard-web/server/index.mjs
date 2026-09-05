@@ -1,3 +1,6 @@
+import { initCrashCapture, serverStats, countRequest, countStatus5xx } from './crash-capture.mjs';
+initCrashCapture();
+
 import express from 'express';
 import cors from 'cors';
 import { rateLimit } from 'express-rate-limit';
@@ -40,20 +43,9 @@ import { router as searchRoutes } from './routes/search.mjs';
 import { router as peopleRoutes } from './routes/people.mjs';
 import { getIdentity, getArchetypeNames } from './lib/profile.mjs';
 
-// ── Process-level safety net ─────────────────────────────────────────────────
-// This dashboard is a long-lived local server for a non-technical user. A single
-// bad request must never take the whole thing down. The most common trigger is a
-// file read that lands while another process is renaming or rewriting data
-// underneath it (a scan, a tracker merge, an in-app update, or a dev editing
-// files). Express does not catch rejections thrown from async route handlers, so
-// without these a transient error would exit the process and the dashboard would
-// vanish mid-use. We log loudly (root causes stay findable) and keep serving.
-process.on('unhandledRejection', (reason) => {
-  console.error(`[${new Date().toISOString()}] UNHANDLED REJECTION (server kept alive):`, reason);
-});
-process.on('uncaughtException', (err) => {
-  console.error(`[${new Date().toISOString()}] UNCAUGHT EXCEPTION (server kept alive):`, err);
-});
+// Process-level safety nets (unhandledRejection, uncaughtException, exit,
+// signals) are registered in crash-capture.mjs, which also tees all console
+// output to a persistent log file. No duplicate handlers needed here.
 
 const app = express();
 
@@ -146,12 +138,15 @@ app.use((req, res, next) => {
   });
 });
 // Lightweight request logger so long-running endpoints (tt-reconcile/discover,
-// Claude drafts) are visible in server stdout for debugging.
+// Claude drafts) are visible in server stdout for debugging. The console.log
+// call is teed to the persistent log file by crash-capture.mjs.
 app.use((req, res, next) => {
   if (req.path === '/' || /\.(css|js|jsx|woff2?|ico|png|svg)$/.test(req.path)) return next();
+  countRequest();
   const t0 = Date.now();
   res.on('finish', () => {
     const ms = Date.now() - t0;
+    if (res.statusCode >= 500) countStatus5xx();
     console.log(`[${new Date().toISOString().slice(11, 19)}] ${req.method} ${req.path} → ${res.statusCode} (${ms}ms)`);
   });
   next();
@@ -223,6 +218,10 @@ app.get('/api/identity', (req, res) => res.json(getIdentity()));
 // Archetype names derived from profile.yml, so the client's filter dropdowns and
 // chart axes match the user's actual target roles instead of hardcoded RevOps buckets.
 app.get('/api/archetypes', (req, res) => res.json(getArchetypeNames()));
+
+// Server diagnostics: uptime, memory, error counts, last crash info. Open GET
+// so the dashboard can show a health indicator and surface crash history.
+app.get('/api/diagnostics', (req, res) => res.json(serverStats()));
 
 // SPA deep-link fallback. Express 5 (path-to-regexp v8) requires named
 // wildcards, so the Express 4 bare '*' becomes '/*splat' (the match is unused;
