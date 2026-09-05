@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.4.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.3.1...v3.4.0) (2026-09-05)
+
+
+### Features
+
+* **referrals:** soft-archive stale referrals, cooldown for reach-out rows, rank by JD score ([#281](https://github.com/michaelinghilterra-creator/trajecktory/issues/281)) ([12680e0](https://github.com/michaelinghilterra-creator/trajecktory/commit/12680e070e8597ba5071ba4aab1ce6e02f5def0f))
+
 ## [3.3.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.3.0...v3.3.1) (2026-09-05)
 
 
