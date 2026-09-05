@@ -6,9 +6,9 @@
     "node": ">=18"
   },
   "scripts": {
-    "start": "node build.mjs && node server/index.mjs",
+    "start": "node build.mjs && node --report-on-fatalerror --report-directory=logs server/index.mjs",
     "build": "node build.mjs",
-    "dev": "node build.mjs && node server/index.mjs"
+    "dev": "node build.mjs && node --report-on-fatalerror --report-directory=logs server/index.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
