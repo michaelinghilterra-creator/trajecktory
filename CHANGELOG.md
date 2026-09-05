@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.4.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.4.0...v3.4.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* ignore all of reports/, not just top-level .md ([69d0974](https://github.com/michaelinghilterra-creator/trajecktory/commit/69d0974b03ac3c63a883ed0045611ce3832a0166))
+
 ## [3.4.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.3.1...v3.4.0) (2026-09-05)
 
 
