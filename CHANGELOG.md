@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.5.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.4.0...v3.5.0) (2026-09-05)
+
+
+### Features
+
+* prune-gated deletion safety, plus regression coverage ([#289](https://github.com/michaelinghilterra-creator/trajecktory/issues/289)) ([5a46f76](https://github.com/michaelinghilterra-creator/trajecktory/commit/5a46f763799808794ec5e3120fa67278492ee7fd))
+
+
+### Bug Fixes
+
+* close gitignore exposure gaps in reports/, batch/ and installer/ ([#287](https://github.com/michaelinghilterra-creator/trajecktory/issues/287)) ([1cf4391](https://github.com/michaelinghilterra-creator/trajecktory/commit/1cf439166f60ca299313a6f80537e51c028a87cd))
+* ignore all of reports/, not just top-level .md ([69d0974](https://github.com/michaelinghilterra-creator/trajecktory/commit/69d0974b03ac3c63a883ed0045611ce3832a0166))
+
+
+### Reverts
+
+* fix: ignore all of reports/, not just top-level .md ([#285](https://github.com/michaelinghilterra-creator/trajecktory/issues/285)) ([d53001a](https://github.com/michaelinghilterra-creator/trajecktory/commit/d53001a608cc6572a6d5d8e5f02b902c685ff758))
+
 ## [3.4.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.3.1...v3.4.0) (2026-09-05)
 
 
