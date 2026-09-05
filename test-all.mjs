@@ -591,6 +591,7 @@ for (const suite of [
   'tests/cadence.test.mjs',
   'tests/obsidian-prep.test.mjs',
   'tests/obsidian-postfix.test.mjs',
+  'tests/prune-gated.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);
