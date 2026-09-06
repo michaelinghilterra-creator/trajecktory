@@ -589,6 +589,7 @@ for (const suite of [
   'tests/connects.test.mjs',
   'tests/text-hygiene.test.mjs',
   'tests/cadence.test.mjs',
+  'tests/outreach-rubric.test.mjs',
   'tests/obsidian-prep.test.mjs',
   'tests/obsidian-postfix.test.mjs',
   'tests/prune-gated.test.mjs',
