@@ -412,19 +412,25 @@ ${topicGuidance}
 - If (and only if) the intent is a referral ask, make it specific and trivially easy to decline (e.g. flagging the application internally to the right person / TA), and offer to send a short blurb + resume.
 - Close with one low-friction next step or a genuine sign-off matching the intent. Do NOT ask for a call or a specific block of time.
 ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
-Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subject line, NO signature block, NO trailing sign-off (no '${me.firstName}', no 'Best,\\n${me.firstName}'), and NO greeting or bare first-name address (the UI prefills 'Hi ${firstName},', so the first sentence MUST begin with substantive content — do NOT start with '${firstName}', 'Hi', 'Hello', or 'Hey'). No quotes, no preface, no explanation.`;
+== BODY REQUIREMENTS ==
+- Omit a subject line.
+- Omit a signature block and any trailing sign-off, including '${me.firstName}' or 'Best,\\n${me.firstName}'.
+- Omit a greeting and any bare first-name address.
+- The UI prefills 'Hi ${firstName},', so the first sentence must begin with substantive content. Do not start with '${firstName}', 'Hi', 'Hello', or 'Hey'.`;
 
       const narrative = getNarrative();
       const result = await generateWithRubric(prompt, 'referral_dm', {
         model: draftModel(), maxTokens: 700, cvMd, plainTextFallback: true,
         rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
       });
+      if (result.error) return res.status(500).json({ error: 'Could not parse LinkedIn draft from model output' });
       const dm = await finishDraft({
         body: result.body, surface: 'referral_dm',
         review: result.review,
+        reviewStatus: result.reviewStatus,
         cleaner: 'prose', stripSalutationFor: firstName, stripSignature: true,
       });
-      return res.json({ ok: true, draft: { subject: '', body: dm.body }, review: dm.review, messageType: topic, channel: 'linkedin', relatedApp: topApp || null });
+      return res.json({ ok: true, draft: { subject: '', body: dm.body }, review: dm.review, reviewStatus: dm.reviewStatus, surfaceId: 'referral_dm', messageType: topic, channel: 'linkedin', relatedApp: topApp || null });
     }
 
     // REPLY mode: respond to their most recent inbound message.
@@ -441,10 +447,11 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
       const reply = await finishDraft({
         body: result.body, subject: result.subject, surface: 'reply_email',
         review: result.review,
+        reviewStatus: result.reviewStatus,
         cleaner: 'email', stripSalutationFor: firstName, stripSignature: true,
         subjectTransform: (subject) => collapseRe(subject, inbound.subject),
       });
-      return res.json({ ok: true, draft: { subject: reply.subject, body: reply.body }, review: reply.review, messageType: 'reply' });
+      return res.json({ ok: true, draft: { subject: reply.subject, body: reply.body }, review: reply.review, reviewStatus: reply.reviewStatus, surfaceId: 'reply_email', messageType: 'reply' });
     }
 
     // FOLLOW-UP-ON-LAST-SENT mode: nudge a thread built on your last sent message.
@@ -461,10 +468,11 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
       const followup = await finishDraft({
         body: result.body, subject: result.subject, surface: 'followup_sent',
         review: result.review,
+        reviewStatus: result.reviewStatus,
         cleaner: 'email', stripSalutationFor: firstName, stripSignature: true,
         subjectTransform: (subject) => collapseRe(subject, sent.subject),
       });
-      return res.json({ ok: true, draft: { subject: followup.subject, body: followup.body }, review: followup.review, messageType: 'followup-sent' });
+      return res.json({ ok: true, draft: { subject: followup.subject, body: followup.body }, review: followup.review, reviewStatus: followup.reviewStatus, surfaceId: 'followup_sent', messageType: 'followup-sent' });
     }
 
     // Fresh outreach. Topic defaults from the ladder: an already-asked contact
@@ -507,8 +515,14 @@ ${topicGuidance}
 - If (and only if) the intent is a referral ask, make it specific and trivially easy to decline, and offer to send a short blurb + resume.
 - Close with a low-friction next step or a genuine sign-off, matching the intent.
 ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slice().reverse().slice(0, 3).map(m => `--- ${m.direction} on ${m.timestamp} | Subject: ${m.subject}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold.\n` : ''}
-Output ONLY a JSON object — no markdown, no code fences, no explanation:
-{"subject": "<subject line — short and human>", "body": "<message body — plain text, no signature block, NO trailing sign-off (no '${me.firstName}', no 'Best,\\n${me.firstName}'), NO greeting and NO bare first-name address. STRUCTURE: 2-4 short paragraphs separated by a LITERAL \\n\\n between paragraphs. The UI prefills 'Hi ${firstName},' so the first sentence MUST begin with substantive content — do NOT start with '${firstName}', 'Hi', 'Hello', or 'Hey'.>"}`;
+== SUBJECT REQUIREMENTS ==
+- Keep the subject line short and human.
+
+== BODY REQUIREMENTS ==
+- Use plain text and omit a signature block and every trailing sign-off, including '${me.firstName}' or 'Best,\\n${me.firstName}'.
+- Omit a greeting and any bare first-name address.
+- Write 2 to 4 short paragraphs separated by a literal \\n\\n between paragraphs.
+- The UI prefills 'Hi ${firstName},', so the first sentence must begin with substantive content. Do not start with '${firstName}', 'Hi', 'Hello', or 'Hey'.`;
 
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'referral_email', {
@@ -519,9 +533,10 @@ Output ONLY a JSON object — no markdown, no code fences, no explanation:
     const draft = await finishDraft({
       body: result.body, subject: result.subject, surface: 'referral_email',
       review: result.review,
+      reviewStatus: result.reviewStatus,
       cleaner: 'email', stripSalutationFor: firstName, stripSignature: true,
     });
-    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: draft.review, messageType: topic, relatedApp: topApp || null });
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: draft.review, reviewStatus: draft.reviewStatus, surfaceId: 'referral_email', messageType: topic, relatedApp: topApp || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

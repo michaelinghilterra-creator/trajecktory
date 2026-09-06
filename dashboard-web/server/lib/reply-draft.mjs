@@ -91,8 +91,13 @@ ${profileMd}
 - NO em dashes anywhere (use periods, commas, semicolons, colons, or parentheses). Never invent a metric or claim not on the CV.
 - The UI prefills "Hi ${firstName}," so the body MUST begin with substantive content, not a greeting and not their name.
 
-Output ONLY a JSON object — no markdown, no code fences, no explanation:
-{"subject": "<usually \\"RE: ${sent.subject}\\" to keep it on the same thread, unless a fresh subject is clearly better>", "body": "<plain-text follow-up, 1-2 short paragraphs separated by a LITERAL \\n\\n, NO greeting, NO sign-off, NO signature block, NO contact info>"}`;
+== SUBJECT REQUIREMENTS ==
+- Usually use "RE: ${sent.subject}" to keep the same thread, unless a fresh subject is clearly better.
+
+== BODY REQUIREMENTS ==
+- Use plain text.
+- Write 1 to 2 short paragraphs separated by a literal \\n\\n.
+- Omit the greeting, sign-off, signature block, and contact information.`;
 }
 
 // Build the reply prompt. `contactLabel` is a short human phrase ("an executive
@@ -134,6 +139,11 @@ ${profileMd}
 - Maximum 120 words. NO em dashes anywhere (use periods, commas, semicolons, colons, or parentheses). Never invent a metric or claim not on the CV.
 - The UI prefills "Hi ${firstName}," so the body MUST begin with substantive content, not a greeting and not their name.
 
-Output ONLY a JSON object — no markdown, no code fences, no explanation:
-{"subject": "<usually \\"RE: ${inbound.subject}\\" unless a genuinely fresh subject is clearly better>", "body": "<plain-text reply, 2-3 short paragraphs separated by a LITERAL \\n\\n between paragraphs, NO greeting, NO sign-off, NO signature block, NO contact info>"}`;
+== SUBJECT REQUIREMENTS ==
+- Usually use "RE: ${inbound.subject}", unless a genuinely fresh subject is clearly better.
+
+== BODY REQUIREMENTS ==
+- Use plain text.
+- Write 2 to 3 short paragraphs separated by a literal \\n\\n between paragraphs.
+- Omit the greeting, sign-off, signature block, and contact information.`;
 }

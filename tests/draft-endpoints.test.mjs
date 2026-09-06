@@ -70,7 +70,25 @@ const cases = [
 for (const [name, p, body] of cases) {
   const res = await post(p, body);
   check(res.status === 200 && !res.body.error, `${name} → 200 (${res.body.error || 'ok'})`);
+  check(typeof res.body.surfaceId === 'string' && typeof res.body.reviewStatus === 'string', `${name} returns surface and review status`);
 }
+
+process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
+  critique: { weakest_dimension: 'clarity', fixes: ['Open with the result.'] },
+  score: 71,
+  dimensions: [
+    { id: 'relevance', score: 7, explanation: 'q' },
+    { id: 'clarity', score: 6, explanation: 'q' },
+  ],
+  subject: 'Stub subject',
+  body: 'Stub body for the smoke test.',
+});
+for (const [name, p, body] of cases) {
+  const res = await post(p, body);
+  check(res.status === 200 && res.body.review?.score > 0 && res.body.reviewStatus === 'ok', `${name} returns a successful rubric review`);
+}
+
+process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({ subject: 'Stub subject', body: 'Stub body for the smoke test.' });
 
 // Independent review endpoint
 const reviewRes = await post('/api/drafts/review', {

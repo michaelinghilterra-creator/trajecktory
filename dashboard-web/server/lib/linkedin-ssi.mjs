@@ -220,7 +220,7 @@ WHY CONNECT: ${guidance || `Anchor on shared focus in the GTM / RevOps / analyti
 TONE DIRECTIVE (${tone}): ${toneText}
 
 HARD RULES:
-- ABSOLUTE MAXIMUM ${targetMax} characters TOTAL (including the "Thanks, ${first}" sign-off). LinkedIn caps connection notes at 300 characters and will reject anything longer. Count characters before responding. Aim for ${targetMax - 20} to leave safety margin.
+- The connection note text itself has an ABSOLUTE MAXIMUM of ${targetMax} characters, including the "Thanks, ${first}" sign-off. The JSON wrapper does not count toward this note-text limit. LinkedIn caps connection notes at 300 characters and will reject longer note text. Count the note text characters before responding. Aim for ${targetMax - 20} to leave a safety margin.
 - Open with their first name + comma. Example: "Hi ${openExample},"
 - NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
 - One reason to connect that is grounded in the context above. Be specific, not generic.
@@ -229,7 +229,8 @@ HARD RULES:
 - Do NOT sound desperate and do NOT lead with being in market or looking for a job.
 - Do NOT include emojis.
 
-Return ONLY the body of the connection note, ready to paste into LinkedIn. No quotes, no preface, no character count, no explanation.`;
+== BODY REQUIREMENTS ==
+- Include the connection note text with no preface, character count, or explanation.`;
 }
 
 export {

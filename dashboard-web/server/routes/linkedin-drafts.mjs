@@ -136,7 +136,7 @@ HARD RULES:
 - Do NOT start with "Great post" or "Love this" or any generic opener.
 - Do NOT include a signature, name, or sign-off. UI handles that.
 
-Return ONLY the comment text, ready to paste. No quotes, no preface, no explanation.`;
+Respond with the comment text ready to paste, without quotes, a preface, or an explanation.`;
 
     const response = await generateText(prompt, { model: draftModel(), maxTokens: 300 });
     res.json({ response: (await reviseForCadence(stripDraftMeta(cleanProse(response.trim())), { surface: 'prose' })).text });
@@ -204,7 +204,7 @@ HARD RULES:
 - No corporate filler ("hope this finds you well"), no "Great point", no generic openers.
 - No signature or sign-off. The UI handles that.
 
-Return ONLY the reply text, ready to paste. No quotes, no preface, no explanation.`;
+Respond with the reply text ready to paste, without quotes, a preface, or an explanation.`;
 
     const response = await generateText(prompt, { model: draftModel(), maxTokens: 400 });
     res.json({ response: (await reviseForCadence(stripDraftMeta(cleanProse(response.trim())), { surface: 'prose' })).text });
@@ -262,7 +262,7 @@ HARD RULES:
 - Do NOT mention looking for a job, being in market, or open to opportunities (unless the angle is explicitly "Career Stage").
 - Do NOT include emojis.
 
-Return ONLY the body of the connection note, ready to paste into LinkedIn. No quotes, no preface, no character count, no explanation.`;
+Respond with the connection note text ready to paste into LinkedIn, without quotes, a preface, a character count, or an explanation.`;
 
     const callClaude = async (targetMax) => {
       const text = await generateText(buildPrompt(targetMax), { model: draftModel(), maxTokens: 220 });
@@ -370,20 +370,23 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       buildPrompt(280), 'connect_note_influencer',
       { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true, rubricOpts: narrativeOpts },
     );
+    if (result.error) return res.status(500).json({ error: 'Could not parse connection note from model output' });
     const firstBody = result.body || '';
     if (flattenConnectNote(stripDraftMeta(cleanProse(firstBody))).length > 300) {
       result = await generateWithRubric(
         buildPrompt(250), 'connect_note_influencer',
         { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true, rubricOpts: narrativeOpts },
       );
+      if (result.error) return res.status(500).json({ error: 'Could not parse connection note from model output' });
     }
     const note = await finishDraft({
       body: result.body || result, surface: 'connect_note_influencer',
       review: result.review,
+      reviewStatus: result.reviewStatus,
       cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
       flatten: true, hardFit: 300, cadence: false,
     });
-    res.json({ response: note.body, length: note.body.length, review: note.review, recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
+    res.json({ response: note.body, length: note.body.length, review: note.review, reviewStatus: note.reviewStatus, surfaceId: 'connect_note_influencer', recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
   } catch (err) {
     console.error('Error generating connect note:', err);
     res.status(500).json({ error: err.message });
@@ -506,19 +509,24 @@ HARD RULES:
 - End with a sign-off line: "Thanks, ${idn.firstName}".
 - No emojis. No mention of being desperate or unemployed.
 
-Return ONLY the message text, ready to paste, including the "Hi ${recipientFirst}," opener and the "Thanks, ${idn.firstName}" sign-off. No preface, no quotes, no explanation.`;
+== BODY REQUIREMENTS ==
+- Begin with the "Hi ${recipientFirst}," opener.
+- End with the "Thanks, ${idn.firstName}" sign-off.
+- Omit any preface or explanation.`;
 
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'li_followup', {
       model: draftModel(), maxTokens: 500, cvMd, plainTextFallback: true,
       rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
     });
+    if (result.error) return res.status(500).json({ error: 'Could not parse follow-up message from model output' });
     const fu = await finishDraft({
       body: result.body, surface: 'li_followup',
       review: result.review,
+      reviewStatus: result.reviewStatus,
       cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
     });
-    res.json({ response: fu.body, length: fu.body.length, review: fu.review, recipient: { source: 'ta', id, name }, inmail: !connected });
+    res.json({ response: fu.body, length: fu.body.length, review: fu.review, reviewStatus: fu.reviewStatus, surfaceId: 'li_followup', recipient: { source: 'ta', id, name }, inmail: !connected });
   } catch (err) {
     console.error('Error generating follow-up message:', err);
     res.status(500).json({ error: err.message });

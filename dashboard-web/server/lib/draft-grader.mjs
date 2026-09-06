@@ -3,7 +3,9 @@ import {
   getProfile,
   weightedScore,
   buildIndependentGradePrompt,
+  buildPlainContract,
   buildRubricBlock,
+  reviewFailureReason,
 } from '../../../lib/outreach-rubric.mjs';
 import { generateText, readProjectFile } from './anthropic.mjs';
 import { getNarrative } from './profile.mjs';
@@ -83,8 +85,16 @@ export function parseAndFinishDraft(raw, surfaceId, cvMd) {
   if (!result) result = fallbackDraft(raw);
   if (!result) return { error: 'unparseable' };
 
-  const draft = { subject: result.subject, body: result.body, review: null };
-  if (!result.review) return draft;
+  if (!result.review) {
+    const reason = reviewFailureReason(raw, surfaceId);
+    console.warn('[rubric] surface=%s review=null reason=%s', surfaceId, reason);
+    return {
+      subject: result.subject,
+      body: result.body,
+      review: null,
+      reviewStatus: reason === 'rubric-off' ? 'disabled' : `missing:${reason}`,
+    };
+  }
 
   try {
     const proofPoints = getNarrative().proofPoints;
@@ -99,10 +109,35 @@ export function parseAndFinishDraft(raw, surfaceId, cvMd) {
       result.review.score = weightedScore(result.review.dimensions, getProfile(surfaceId));
       result.review.unsourcedWarning = true;
     }
-    return { subject: result.subject, body: result.body, review: result.review };
+    return { subject: result.subject, body: result.body, review: result.review, reviewStatus: 'ok' };
   } catch {
-    return draft;
+    // The unsourced-number check never ran, so the evidence dimension is
+    // unverified. Do not claim 'ok': an invented metric could pass unflagged.
+    return {
+      subject: result.subject,
+      body: result.body,
+      review: result.review,
+      reviewStatus: 'ok:unverified',
+    };
   }
+}
+
+const BANNED_OUTPUT_INSTRUCTIONS = [
+  /Output ONLY/i,
+  /Return ONLY the (message|reply|comment|post|body|note)/i,
+  /no code fences/i,
+  /^\s*\{\s*"(subject|body)"\s*:/m,
+];
+
+function contractConflict(prompt) {
+  const text = String(prompt ?? '');
+  for (const pattern of BANNED_OUTPUT_INSTRUCTIONS) {
+    const match = pattern.exec(text);
+    if (!match) continue;
+    const start = Math.max(0, match.index - 40);
+    return text.slice(start, match.index + match[0].length + 80).replace(/\s+/g, ' ').trim();
+  }
+  return null;
 }
 
 export async function generateWithRubric(prompt, surfaceId, opts = {}) {
@@ -112,16 +147,39 @@ export async function generateWithRubric(prompt, surfaceId, opts = {}) {
     ? buildRubricBlock(surfaceId, { cvExcerpt: cvMd, ...rubricOpts })
     : '';
 
-  const fullPrompt = rubricBlock ? (prompt + '\n\n' + rubricBlock) : prompt;
-  const effectiveMaxTokens = rubricBlock ? Math.max(maxTokens + 800, 1500) : maxTokens;
+  if (rubricBlock) {
+    const excerpt = contractConflict(prompt);
+    if (excerpt) {
+      console.error('[rubric] surface=%s conflicting output contract: %s', surfaceId, excerpt);
+      if (process.env.TJK_STRICT_CONTRACT === '1') {
+        throw new Error(`Conflicting output contract for ${surfaceId}`);
+      }
+    }
+  }
+
+  const contract = rubricBlock || buildPlainContract(surfaceId);
+  const fullPrompt = prompt + '\n\n' + contract;
+  const effectiveMaxTokens = rubricBlock ? Math.max(maxTokens + 1200, 2200) : maxTokens;
 
   const raw = await generateText(fullPrompt, { model, maxTokens: effectiveMaxTokens });
+  if (typeof raw === 'string' && !raw.trimEnd().endsWith('}')) {
+    console.warn('[rubric] surface=%s response-truncated missing-closing-brace', surfaceId);
+  }
 
   const result = parseAndFinishDraft(raw, surfaceId, cvMd);
   if (!result.error) return result;
 
   if (plainTextFallback) {
-    return { body: raw.trim(), subject: undefined, review: null };
+    if (typeof raw !== 'string' || /"(?:dimensions|weakest_dimension|critique)"/i.test(raw)) {
+      return { error: 'unparseable' };
+    }
+    const reason = reviewFailureReason(raw, surfaceId);
+    return {
+      body: raw.trim(),
+      subject: undefined,
+      review: null,
+      reviewStatus: reason === 'rubric-off' ? 'disabled' : `missing:${reason}`,
+    };
   }
 
   return result;

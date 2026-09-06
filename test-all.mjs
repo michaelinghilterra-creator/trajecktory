@@ -590,6 +590,7 @@ for (const suite of [
   'tests/text-hygiene.test.mjs',
   'tests/cadence.test.mjs',
   'tests/outreach-rubric.test.mjs',
+  'tests/draft-contract.test.mjs',
   'tests/draft-grader.test.mjs',
   'tests/finish-draft.test.mjs',
   'tests/profile-narrative.test.mjs',

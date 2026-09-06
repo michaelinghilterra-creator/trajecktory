@@ -12,6 +12,7 @@ import {
   SURFACE_PROFILE,
   SURFACES,
   getProfile,
+  buildPlainContract,
   buildRubricBlock,
   parseReviewed,
   weightedScore,
@@ -57,6 +58,11 @@ check(critiqueIndex < dimensionsIndex && dimensionsIndex < subjectIndex && subje
 const connectBlock = buildRubricBlock('connect_note', {});
 check(connectBlock.includes('300') && !connectBlock.includes('SUBJECT LINE'), 'connection note states the 300 character cap and omits the subject rubric');
 check(emailBlock.includes('SUBJECT LINE'), 'email includes the subject rubric');
+
+const plainEmailContract = buildPlainContract('ta_email');
+const plainDmContract = buildPlainContract('ta_dm');
+check(plainEmailContract.includes('"subject"') && plainEmailContract.includes('"body"'), 'plain contract derives a subject for email surfaces');
+check(!plainDmContract.includes('"subject"') && plainDmContract.includes('"body"'), 'plain contract omits the subject for direct-message surfaces');
 
 const proofBlock = buildRubricBlock('ta_email', { proofPoints: [{ name: 'X', heroMetric: 'Y' }] });
 check(proofBlock.includes('VERIFIABLE CLAIMS') && proofBlock.includes('X') && proofBlock.includes('Y'), 'proof points render the claims header, name, and hero metric');

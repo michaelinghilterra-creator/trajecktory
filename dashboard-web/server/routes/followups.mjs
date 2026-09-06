@@ -558,8 +558,13 @@ ${profileMd}
 - Close with ONE low-friction ask: a quick reply on timing, or being pointed to the right person for this role. Do NOT ask for a call, a chat, a quick call, an intro, or time on their calendar. A meeting ask on an unsolicited follow-up reads as tone-deaf.
 - Never invent metrics or claims not on the CV.
 
-Output ONLY a JSON object — no markdown, no code fences, no explanation:
-{"subject": "<email subject — keep tight, reference role>", "body": "<email body — plain text, no signature block, no greeting like 'Hi Name' (UI prefills salutation)>"}`;
+== SUBJECT REQUIREMENTS ==
+- Keep the email subject tight and reference the role.
+
+== BODY REQUIREMENTS ==
+- Use plain text.
+- Omit a signature block.
+- Omit a greeting such as 'Hi Name' because the UI prefills the salutation.`;
 
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'app_followup', {
@@ -570,9 +575,10 @@ Output ONLY a JSON object — no markdown, no code fences, no explanation:
     const draft = await finishDraft({
       body: result.body, subject: result.subject, surface: 'app_followup',
       review: result.review,
+      reviewStatus: result.reviewStatus,
       cleaner: 'email', stripSalutationFor: null, stripSignature: false,
     });
-    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: draft.review, touchNumber, fuCount });
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: draft.review, reviewStatus: draft.reviewStatus, surfaceId: 'app_followup', touchNumber, fuCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
