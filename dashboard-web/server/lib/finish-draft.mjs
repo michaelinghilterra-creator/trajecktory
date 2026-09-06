@@ -22,6 +22,7 @@ export async function finishDraft({
   body, subject,
   surface,
   review = null,
+  reviewStatus = review === null ? 'disabled' : 'ok',
   cleaner = 'prose',
   stripSalutationFor = null,
   stripSignature = true,
@@ -93,5 +94,5 @@ export async function finishDraft({
     ? text.length
     : (text.trim() ? text.trim().split(/\s+/).length : 0);
 
-  return { body: finishedBody, subject: finishedSubject, length, review };
+  return { body: finishedBody, subject: finishedSubject, length, review, reviewStatus };
 }

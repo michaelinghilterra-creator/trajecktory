@@ -237,9 +237,14 @@ function readProjectFile(projectRoot, relPath) {
   }
 }
 
+export function readOptionalProjectFile(projectRoot, relPath) {
+  const raw = readProjectFile(projectRoot, relPath);
+  return raw === `[${relPath} not found]` ? '' : raw;
+}
+
 function readVoiceRules(projectRoot) {
   const raw = readProjectFile(projectRoot, 'modes/_profile.md');
-  if (!raw || raw.startsWith('[')) return raw;  // file not found sentinel
+  if (!raw || raw === '[modes/_profile.md not found]') return '';
   const marker = '## Voice & Writing Rules';
   const idx = raw.indexOf(marker);
   if (idx === -1) return raw;  // no section found, fall back to full file

@@ -2,14 +2,15 @@
 // keep each module focused and under the size budget.
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
-import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { generateText, readOptionalProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
+import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { loadInfluencer, toneInstruction, flattenConnectNote, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
-import { parseTargetTalentMd, updateTTLine, readTTCorrespondence } from '../lib/target-talent.mjs';
+import { parseTargetTalentMd, updateTTLine, readTTCorrespondence, findRelatedApps } from '../lib/target-talent.mjs';
 import { parseReferralsMd } from '../lib/referrals.mjs';
 import { getLinkedInStatus } from '../lib/tt-linkedin.mjs';
 import { summarizeThread } from '../lib/correspondence-context.mjs';
@@ -18,6 +19,8 @@ import { getPersonContext } from '../lib/person-context.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
 import { getInmailBudget, decrementInmail, setInmailRemaining } from '../lib/inmail-budget.mjs';
+import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
+import { getProfile } from '../../../lib/outreach-rubric.mjs';
 
 export const router = express.Router();
 
@@ -104,8 +107,7 @@ router.post('/api/linkedin-ssi/generate-response', async (req, res) => {
 
     // Read the user's real CV for grounding
     const projectRoot = ROOT_DIR;
-    let cvMd = '';
-    try { cvMd = readProjectFile(projectRoot, 'cv.md'); } catch {}
+    const cvMd = readOptionalProjectFile(projectRoot, 'cv.md');
     const cvExcerpt = cvMd ? cvMd.slice(0, 4000) : '(CV not available)';
     const id = getIdentity();
 
@@ -136,7 +138,7 @@ HARD RULES:
 - Do NOT start with "Great post" or "Love this" or any generic opener.
 - Do NOT include a signature, name, or sign-off. UI handles that.
 
-Return ONLY the comment text, ready to paste. No quotes, no preface, no explanation.`;
+Respond with the comment text ready to paste, without quotes, a preface, or an explanation.`;
 
     const response = await generateText(prompt, { model: draftModel(), maxTokens: 300 });
     res.json({ response: (await reviseForCadence(stripDraftMeta(cleanProse(response.trim())), { surface: 'prose' })).text });
@@ -161,8 +163,7 @@ router.post('/api/linkedin-ssi/generate-reply', async (req, res) => {
     if (!influencer) return res.status(400).json({ error: 'Open this from an influencer.' });
 
     const id = getIdentity();
-    let cvMd = '';
-    try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
+    const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
     const cvExcerpt = cvMd ? cvMd.slice(0, 3000) : '(CV not available)';
 
     // The prior thread with THIS contact, oldest→newest, compact. Matched on name
@@ -204,7 +205,7 @@ HARD RULES:
 - No corporate filler ("hope this finds you well"), no "Great point", no generic openers.
 - No signature or sign-off. The UI handles that.
 
-Return ONLY the reply text, ready to paste. No quotes, no preface, no explanation.`;
+Respond with the reply text ready to paste, without quotes, a preface, or an explanation.`;
 
     const response = await generateText(prompt, { model: draftModel(), maxTokens: 400 });
     res.json({ response: (await reviseForCadence(stripDraftMeta(cleanProse(response.trim())), { surface: 'prose' })).text });
@@ -224,8 +225,7 @@ router.post('/api/linkedin-ssi/generate-connect-request', async (req, res) => {
     }
 
     const projectRoot = ROOT_DIR;
-    let cvMd = '';
-    try { cvMd = readProjectFile(projectRoot, 'cv.md'); } catch {}
+    const cvMd = readOptionalProjectFile(projectRoot, 'cv.md');
     const cvExcerpt = cvMd ? cvMd.slice(0, 3500) : '(CV not available)';
     const id = getIdentity();
 
@@ -253,7 +253,8 @@ ANGLE (${angle}): ${angleGuidance[angle] || angleGuidance['Reference Post']}
 TONE DIRECTIVE (${tone}): ${toneInstruction(tone)}
 
 HARD RULES:
-- ABSOLUTE MAXIMUM ${targetMax} characters TOTAL (including the "Thanks, ${id.firstName}" sign-off). LinkedIn caps connection notes at 300 characters and will reject anything longer. Count characters before responding. Aim for ${targetMax - 20} to leave safety margin.
+- LENGTH, the constraint most often missed: write TWO short sentences plus the sign-off, about 40 words. Counting characters is unreliable, so hit the sentence and word target and the character cap takes care of itself.
+- ABSOLUTE MAXIMUM ${targetMax} characters TOTAL (including the "Thanks, ${id.firstName}" sign-off). LinkedIn caps connection notes at 300 characters and will reject anything longer. An over-length note gets trimmed at a sentence boundary, so a third sentence is likely to be cut rather than shortened.
 - Open with their first name + comma. Example: "Hi Sangram,"
 - NO em dashes (—). Use periods, commas, semicolons, colons, or parentheses.
 - One reason to connect that is grounded in the angle above. Be specific, not generic.
@@ -262,23 +263,44 @@ HARD RULES:
 - Do NOT mention looking for a job, being in market, or open to opportunities (unless the angle is explicitly "Career Stage").
 - Do NOT include emojis.
 
-Return ONLY the body of the connection note, ready to paste into LinkedIn. No quotes, no preface, no character count, no explanation.`;
+== NOTE REQUIREMENTS ==
+- Include the connection note text ready to paste into LinkedIn, without quotes, a preface, a character count, or an explanation.`;
 
-    const callClaude = async (targetMax) => {
-      const text = await generateText(buildPrompt(targetMax), { model: draftModel(), maxTokens: 220 });
-      // Clean before the 300-char cap check so the length test sees final text.
-      return flattenConnectNote(stripDraftMeta(cleanProse(text.trim())));
-    };
+    const surfaceId = 'connect_note_influencer';
+    const profile = getProfile(surfaceId);
+    const rubricActive = process.env.TJK_RUBRIC_DISABLED !== '1';
+    const result = await generateWithRubric(buildPrompt(280), surfaceId, {
+      model: draftModel(),
+      maxTokens: rubricActive ? 800 : 220,
+      cvMd,
+      plainTextFallback: true,
+    });
+    if (result.error) return res.status(500).json({ error: 'Could not parse connection note from model output' });
 
-    // First pass: aim for 280 to leave margin
-    let response = await callClaude(280);
-    // Retry once with stricter target if over
-    if (response.length > 300) {
-      response = await callClaude(250);
-    }
-    // Fit after flattening so the cap sees the exact one-line note returned.
-    response = fitConnectNote(response, id.firstName).text;
-    res.json({ response, length: response.length });
+    const fitted = fitConnectNote(
+      flattenConnectNote(stripDraftMeta(cleanProse(result.body))),
+      id.firstName,
+      profile.hardCap,
+    );
+    const draft = await finishDraft({
+      body: fitted.text,
+      surface: surfaceId,
+      review: result.review,
+      reviewStatus: result.reviewStatus,
+      cleaner: 'prose',
+      stripSalutationFor: null,
+      stripSignature: false,
+      flatten: true,
+      hardFit: profile.hardCap,
+      cadence: false,
+    });
+    res.json({
+      response: draft.body,
+      length: draft.body.length,
+      review: draft.review,
+      reviewStatus: draft.reviewStatus,
+      surfaceId,
+    });
   } catch (err) {
     console.error('Error generating connect request:', err);
     res.status(500).json({ error: err.message });
@@ -340,10 +362,8 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       if (!decision.allowed) logOutreachOverride({ contactRef: `${src}:${resolved.id}`, channel: 'linkedin', blocks: decision.blocks });
     }
 
-    let cvMd = '';
-    try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
-    let articleDigestMd = '';
-    try { articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md'); } catch {}
+    const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
+    const articleDigestMd = readOptionalProjectFile(ROOT_DIR, 'article-digest.md');
     // Prepend portfolio artifacts (capped at 1000 chars) so the model can lead with
     // a named project/outcome rather than a generic role claim, even in 300 chars.
     const portfolioSnippet = articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 1000)}\n\nCV:\n` : '';
@@ -364,26 +384,42 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
 
     const rubricActive = process.env.TJK_RUBRIC_DISABLED !== '1';
     const narrative = getNarrative();
-    const narrativeOpts = { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers };
+    const relatedApps = findRelatedApps(recipientCompany);
+    const topApp = relatedApps.find(app => ACTIVE_STATUSES.includes(app.status)) || relatedApps[0];
+    const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
+    const narrativeOpts = {
+      proofPoints: narrative.proofPoints,
+      superpowers: narrative.superpowers,
+      ...(companyResearch ? { companyResearch } : {}),
+    };
 
-    let result = await generateWithRubric(
+    // One model call, not two. This used to redraft at a stricter target when the
+    // note overran 300 characters, which cost a second full rubric call on the
+    // plan path. fitConnectNote trims at a sentence boundary and preserves the
+    // sign-off, so an overrun is repaired deterministically instead of by asking
+    // the model again. finishDraft's own hardFit is a blunt slice that can cut
+    // mid-word, so it is left off here and fitConnectNote owns the cap.
+    const result = await generateWithRubric(
       buildPrompt(280), 'connect_note_influencer',
       { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true, rubricOpts: narrativeOpts },
     );
-    const firstBody = result.body || '';
-    if (flattenConnectNote(stripDraftMeta(cleanProse(firstBody))).length > 300) {
-      result = await generateWithRubric(
-        buildPrompt(250), 'connect_note_influencer',
-        { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true, rubricOpts: narrativeOpts },
-      );
-    }
+    if (result.error) return res.status(500).json({ error: 'Could not parse connection note from model output' });
     const note = await finishDraft({
       body: result.body || result, surface: 'connect_note_influencer',
       review: result.review,
+      reviewStatus: result.reviewStatus,
       cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
-      flatten: true, hardFit: 300, cadence: false,
+      flatten: true, hardFit: null, cadence: false,
     });
-    res.json({ response: note.body, length: note.body.length, review: note.review, recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
+    // Trimming is deterministic but not free: an overrun gets cut at the last
+    // sentence boundary, and when none is late enough it ends at a word boundary
+    // mid-thought. Say so rather than shipping a silently shortened note.
+    const truncated = note.body.length > 300;
+    const fitted = fitConnectNote(note.body, idn.firstName);
+    if (truncated) {
+      console.warn('[connect-note] trimmed %d chars to fit the 300 cap', note.body.length - fitted.length);
+    }
+    res.json({ response: fitted.text, length: fitted.length, truncated, review: note.review, reviewStatus: note.reviewStatus, surfaceId: 'connect_note_influencer', recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
   } catch (err) {
     console.error('Error generating connect note:', err);
     res.status(500).json({ error: err.message });
@@ -416,6 +452,9 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
     const recipientFirst = recipient.firstName || name.split(/\s+/)[0] || 'there';
     const recipientRole = recipient.role || '';
     const company = recipient.company || '';
+    const relatedApps = findRelatedApps(company);
+    const topApp = relatedApps.find(app => ACTIVE_STATUSES.includes(app.status)) || relatedApps[0];
+    const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
     // Prior 1:1 history with THIS PERSON, merged across whichever books they are
     // filed in, rather than one book's correspondence file. A referral has no entry
     // in the target-talent log at all, so reading that directly returned either
@@ -457,8 +496,8 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
       ? '- A LinkedIn connection request that they ACCEPTED, so you are now connected.'
       : '- A LinkedIn connection request that has not been accepted or answered.');
 
-    let cvMd = ''; try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
-    let articleDigestMd = ''; try { articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md'); } catch {}
+    const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
+    const articleDigestMd = readOptionalProjectFile(ROOT_DIR, 'article-digest.md');
     const cvExcerpt = (articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 900)}\n\nCV:\n` : '') + (cvMd ? cvMd.slice(0, 3200) : '(CV not available)');
     const idn = getIdentity();
 
@@ -506,19 +545,28 @@ HARD RULES:
 - End with a sign-off line: "Thanks, ${idn.firstName}".
 - No emojis. No mention of being desperate or unemployed.
 
-Return ONLY the message text, ready to paste, including the "Hi ${recipientFirst}," opener and the "Thanks, ${idn.firstName}" sign-off. No preface, no quotes, no explanation.`;
+== BODY REQUIREMENTS ==
+- Begin with the "Hi ${recipientFirst}," opener.
+- End with the "Thanks, ${idn.firstName}" sign-off.
+- Omit any preface or explanation.`;
 
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'li_followup', {
       model: draftModel(), maxTokens: 500, cvMd, plainTextFallback: true,
-      rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
+      rubricOpts: {
+        proofPoints: narrative.proofPoints,
+        superpowers: narrative.superpowers,
+        ...(companyResearch ? { companyResearch } : {}),
+      },
     });
+    if (result.error) return res.status(500).json({ error: 'Could not parse follow-up message from model output' });
     const fu = await finishDraft({
       body: result.body, surface: 'li_followup',
       review: result.review,
+      reviewStatus: result.reviewStatus,
       cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
     });
-    res.json({ response: fu.body, length: fu.body.length, review: fu.review, recipient: { source: 'ta', id, name }, inmail: !connected });
+    res.json({ response: fu.body, length: fu.body.length, review: fu.review, reviewStatus: fu.reviewStatus, surfaceId: 'li_followup', recipient: { source: 'ta', id, name }, inmail: !connected });
   } catch (err) {
     console.error('Error generating follow-up message:', err);
     res.status(500).json({ error: err.message });

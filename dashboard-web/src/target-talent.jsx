@@ -713,19 +713,29 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
   const [composing, setComposing] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [draftResult, setDraftResult] = useState(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [improving, setImproving] = useState(false);
+  const [proposedDraft, setProposedDraft] = useState(null);
+  const [improveSnapshot, setImproveSnapshot] = useState("");
+  const improveAbortRef = useRef(null);
   const [draftBlock, setDraftBlock] = useState(null);
   // Which surface the draft is for. Email drafts assemble a greeting + signature;
   // LinkedIn notes are short and stand alone (no signature, no "Hi Name,").
   const [outChannel, setOutChannel] = useState("Email");
   const [liTone, setLiTone] = useState("Warm");
-  // Editable assembled message, seeded from the AI draft so the user can tweak it
-  // before copying, logging, or saving it.
-  const [draftEmail, setDraftEmail] = useState("");
-  useEffect(() => {
-    if (!draftResult) { setDraftEmail(""); return; }
-    if (draftResult.linkedin) setDraftEmail((draftResult.body || "").trim());
-    else setDraftEmail(`Hi ${data?.first || "there"},\n\n${(draftResult.body || "").replace(/^\s+/, "")}\n\n${window.myEmailSignature()}`);
-  }, [draftResult]);
+  // Keep the editable body separate from the greeting and signature. Grading and
+  // improvement receive only this clean body, while copy and send use the wrapper.
+  const [draftBody, setDraftBody] = useState("");
+  const showDraft = (next) => {
+    setDraftResult(next);
+    setDraftBody(next ? (next.body || "").trim() : "");
+  };
+  const emailSignature = (window.myEmailSignature && window.myEmailSignature()) || "";
+  const draftEmail = !draftResult
+    ? ""
+    : draftResult.linkedin
+      ? draftBody
+      : `Hi ${data?.first || "there"},\n\n${draftBody}${emailSignature ? `\n\n${emailSignature}` : ""}`;
   const [draftStage, setDraftStage] = useState("general");
   const [notes, setNotes] = useState("");
   const [website, setWebsite] = useState("");
@@ -761,7 +771,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         setDraftStage(cfg.defaultStage(d));
         setLoading(false);
         setComposing(false);
-        setDraftResult(null);
+        showDraft(null);
         setDraftBlock(null);
       })
       .catch(() => setLoading(false));
@@ -772,6 +782,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     return n;
   });
   useEffect(() => { load(); }, [load]);
+  useEffect(() => () => improveAbortRef.current?.abort(), []);
 
   // ESC closes the standalone drawer. Skip in embedded mode so the host (the
   // Pipeline drawer) owns ESC and one keypress doesn't collapse both layers.
@@ -830,7 +841,11 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
       .then(() => { setEditing(false); load(); onUpdate?.(); });
   };
   const generateDraft = (override = false) => {
-    setDrafting(true); setDraftResult(null);
+    setDrafting(true); showDraft(null);
+    improveAbortRef.current?.abort();
+    improveAbortRef.current = null;
+    setImproving(false);
+    setProposedDraft(null);
     // LinkedIn: generate a short connection-style note via the shared connect-note
     // route (a different motion from email), and mark the result so the compose
     // area drops the greeting/signature and the Gmail button.
@@ -847,7 +862,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           body: JSON.stringify({ ...cfg.buildDraftBody(draftStage), channel: "linkedin", override }),
         })
           .then(r => r.json())
-          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { setDraftResult({ body: d.draft.body || "", subject: "", linkedin: true, review: d.review || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { showDraft({ body: d.draft.body || "", subject: "", linkedin: true, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
           .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
         return;
       }
@@ -856,7 +871,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         body: JSON.stringify({ source: cfg.kind, id, ...cfg.linkedIn.payload(data, liTone), override }),
       })
         .then(r => r.json())
-        .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.response) { setDraftResult({ body: d.response, subject: "", linkedin: true, review: d.review || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+        .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.response) { showDraft({ body: d.response, subject: "", linkedin: true, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
         .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
       return;
     }
@@ -870,8 +885,56 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
       body: JSON.stringify({ ...draftBody, override }),
     })
       .then(r => r.json())
-      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { setDraftResult({ ...d.draft, review: d.review || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
+      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { showDraft({ ...d.draft, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
       .catch(() => setDrafting(false));
+  };
+  const rerunReview = () => {
+    if (!draftResult?.surfaceId || reviewing) return;
+    setReviewing(true);
+    window.tjkMutate('/api/drafts/review', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: draftBody, subject: draftResult.subject || '', surfaceId: draftResult.surfaceId }),
+    }).then(r => r.json()).then(d => {
+      if (d.error) throw new Error(d.error);
+      setDraftResult(current => current ? ({ ...current, review: d.review || null, reviewOf: 'independent' }) : current);
+    }).catch(err => window.tjkToast && window.tjkToast(err.message, 'error')).finally(() => setReviewing(false));
+  };
+  const improveDraft = () => {
+    if (!draftResult?.surfaceId || improving) return;
+    const snapshot = draftBody;
+    const controller = new AbortController();
+    improveAbortRef.current?.abort();
+    improveAbortRef.current = controller;
+    setImproveSnapshot(snapshot);
+    setImproving(true);
+    setProposedDraft(null);
+    window.tjkMutate('/api/drafts/improve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        body: snapshot,
+        subject: draftResult.subject || '',
+        surfaceId: draftResult.surfaceId,
+        recipientFirst: data?.first || '',
+        ...(draftResult.relatedApp?.id != null ? { appId: draftResult.relatedApp.id } : {}),
+      }),
+      signal: controller.signal,
+    }).then(r => r.json()).then(d => {
+      if (d.error) throw new Error(d.error);
+      setProposedDraft(d.draft || null);
+      setDraftResult(current => current ? ({ ...current, review: d.review || null, reviewOf: d.reviewOf || null }) : current);
+    }).catch(err => {
+      if (err.name !== 'AbortError' && window.tjkToast) window.tjkToast(err.message, 'error');
+    }).finally(() => {
+      if (!controller.signal.aborted) setImproving(false);
+      if (improveAbortRef.current === controller) improveAbortRef.current = null;
+    });
+  };
+  const replaceWithProposed = () => {
+    if (!proposedDraft || !draftResult) return;
+    if (draftBody !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
+    setDraftBody(proposedDraft.body || '');
+    setDraftResult(current => ({ ...current, subject: proposedDraft.subject || current.subject || '' }));
+    setProposedDraft(null);
   };
   const saveCorrAndClose = msg => {
     // Cross-logging a touch onto related applications is a TA-only concept, so it
@@ -886,7 +949,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
       alsoLogChannel: msg.channel || "Email",
     };
     window.tjkMutate(`${cfg.base(id)}/correspondence`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-      .then(() => { load(); onUpdate?.(); setLogModal(null); setDraftResult(null); });
+      .then(() => {
+        improveAbortRef.current?.abort();
+        load(); onUpdate?.(); setLogModal(null); showDraft(null); setProposedDraft(null);
+      });
   };
 
   if (loading || !data) {
@@ -1186,7 +1252,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           {draftResult && (
             <div className="ai-compose">
               <div className="ai-head"><TIcon d={TI.spark} size={13} /> AI {draftResult.linkedin ? "LinkedIn note" : "draft"} <span style={{ marginLeft: 8, fontSize: 10.5, color: "var(--text-mute)", fontWeight: 400 }}>editable{draftResult.linkedin ? " · no subject, paste into LinkedIn" : ""}</span></div>
-              {window.DraftScoreBadge && <window.DraftScoreBadge review={draftResult.review} />}
+              {window.DraftScoreBadge && <window.DraftScoreBadge review={draftResult.review} reviewOf={draftResult.reviewOf} onRerun={draftResult.surfaceId ? rerunReview : null} onImprove={draftResult.surfaceId ? improveDraft : null} busy={reviewing} improving={improving} />}
               {!draftResult.linkedin && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                   <span style={{ fontSize: 11, color: "var(--text-mute)" }}>Subject</span>
@@ -1194,7 +1260,20 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
                   <CopyBtn value={draftResult.subject || ""} />
                 </div>
               )}
-              <textarea className="ta" value={draftEmail} onChange={e => setDraftEmail(e.target.value)} rows={draftResult.linkedin ? 6 : 10} aria-label="Editable message draft" style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }} />
+              {!draftResult.linkedin && <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>Hi {data?.first || "there"},</div>}
+              <textarea className="ta" value={draftBody} onChange={e => setDraftBody(e.target.value)} rows={draftResult.linkedin ? 6 : 10} aria-label="Editable message draft body" style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }} />
+              {!draftResult.linkedin && emailSignature && <div className="dim" style={{ fontSize: 12, marginTop: 4, whiteSpace: "pre-wrap" }}>{emailSignature}</div>}
+              {proposedDraft && (
+                <div style={{ marginTop: 8, padding: 10, border: "1px solid var(--accent)", borderRadius: 6, background: "var(--panel-2)" }}>
+                  <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
+                  {proposedDraft.subject && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{proposedDraft.subject}</div>}
+                  <div style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{proposedDraft.body}</div>
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    <button className="btn primary sm" onClick={replaceWithProposed}>Replace draft</button>
+                    <button className="btn ghost sm" onClick={() => setProposedDraft(null)}>Discard</button>
+                  </div>
+                </div>
+              )}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <CopyBtn value={draftEmail} />
                 <button className="btn primary sm" onClick={() => setLogModal({ direction: "Sent", channel: draftResult.linkedin ? "LinkedIn" : "Email", subject: draftResult.linkedin ? "LinkedIn note" : draftResult.subject, body: draftEmail })}><TIcon d={TI.check} size={12} /> I sent this</button>

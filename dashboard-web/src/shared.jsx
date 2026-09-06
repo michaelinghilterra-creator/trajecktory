@@ -87,19 +87,42 @@ window.ScoreChip = function ScoreChip({ score }) {
 };
 
 // ---------- Draft review badge (0-100) ----------
-window.DraftScoreBadge = function DraftScoreBadge({ review, onRerun, busy }) {
+window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, onRerun, onImprove, busy, improving }) {
   const [open, setOpen] = React.useState(false);
-  if (!review && !onRerun) return null;
+  if (!review && !onRerun && !onImprove) return null;
 
   const badgeColor = (s) =>
     s == null ? "#71717a" : s >= 80 ? "#22c55e" : s >= 60 ? "#eab308" : "#ef4444";
+  const scorePrefix = reviewOf === 'original' ? 'was ' : '';
+  const scoreProvenance = reviewOf === 'self'
+    ? 'self-scored'
+    : reviewOf === 'independent' || reviewOf === 'original' ? 'independent' : '';
+  const scoreTitle = reviewOf === 'self'
+    ? 'The model graded its own draft and tends to score about ten points high. Get independent review gives a second opinion.'
+    : reviewOf === 'independent' || reviewOf === 'original'
+      ? 'This score comes from an independent review of the draft.'
+      : 'Draft review score.';
+
+  // The fixes lead, the score follows. Calibration measured the inline score
+  // running about ten points high with only a moderate rank correlation, so it
+  // earns a triage cue and not a headline. The fixes quote the draft directly
+  // and are actionable whatever the number says.
+  const fixes = (review && review.topFixes) || [];
 
   return (
     <div style={{ marginTop: 6, fontSize: 12 }}>
+      {fixes.length > 0 && (
+        <ul style={{ margin: "0 0 6px", paddingLeft: 16, lineHeight: 1.5 }}>
+          {fixes.map((fix, i) => (
+            <li key={i} style={{ marginBottom: 2 }}>{fix}</li>
+          ))}
+        </ul>
+      )}
       {review && (
         <button
           className="btn sm"
           onClick={() => setOpen(!open)}
+          title={scoreTitle}
           style={{
             color: badgeColor(review.score),
             border: `1px solid ${badgeColor(review.score)}33`,
@@ -110,7 +133,8 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, onRerun, busy }) {
             alignItems: "center",
           }}
         >
-          {review.score}/100
+          {scorePrefix}{review.score}/100
+          {scoreProvenance && <span style={{ color: 'var(--text-mute)', fontSize: 10 }}>{scoreProvenance}</span>}
           <span style={{
             display: "inline-block",
             transform: open ? "rotate(180deg)" : "rotate(0deg)",
@@ -129,15 +153,30 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, onRerun, busy }) {
           {busy ? "Reviewing..." : "Get independent review"}
         </button>
       )}
+      {onImprove && (
+        <button
+          className="btn sm"
+          onClick={onImprove}
+          disabled={improving}
+          style={{ marginLeft: 6, fontSize: 11 }}
+        >
+          {improving ? "Improving..." : "Improve this draft"}
+        </button>
+      )}
       {open && review && (
+        // --bg-surface and --bg-card were never defined, so this fell through to
+        // literal white and rendered a glaring panel in the dark theme. Use the
+        // real tokens. Width is capped because a dimension list is two short
+        // columns and does not need the full drawer width to be readable.
         <div style={{
           marginTop: 6,
           padding: "8px 10px",
-          border: "1px solid var(--border)",
+          border: "1px solid var(--border-2)",
           borderRadius: 6,
-          background: "var(--bg-surface, var(--bg-card, #fff))",
+          background: "var(--panel-2)",
           fontSize: 11.5,
           lineHeight: 1.5,
+          maxWidth: 320,
         }}>
           {review.dimensions && review.dimensions.length > 0 && (
             <div style={{ marginBottom: 6 }}>
@@ -148,22 +187,15 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, onRerun, busy }) {
                   alignItems: "baseline",
                   padding: "2px 0",
                 }}>
-                  <span style={{ color: "var(--text-mute)" }}>{dim.id.replace(/_/g, " ")}</span>
+                  <span style={{ color: "var(--text-dim)" }}>{dim.id.replace(/_/g, " ")}</span>
                   <span style={{ fontWeight: 600, color: badgeColor(dim.score * 10) }}>{dim.score}/10</span>
                 </div>
               ))}
             </div>
           )}
-          {review.topFixes && review.topFixes.length > 0 && (
-            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 6 }}>
-              <div style={{ fontWeight: 600, marginBottom: 2, color: "var(--text-mute)" }}>Fixes</div>
-              <ul style={{ margin: 0, paddingLeft: 16 }}>
-                {review.topFixes.map((fix, i) => (
-                  <li key={i} style={{ marginBottom: 2 }}>{fix}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {/* Fixes are rendered above the pill, not here. Repeating them inside
+              the expanded panel would bury the dimension breakdown that is the
+              only thing this panel adds. */}
         </div>
       )}
     </div>

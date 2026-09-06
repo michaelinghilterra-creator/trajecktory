@@ -1,7 +1,7 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { listPosts, listQueued, createPost, updatePost, deletePost, getPost, attachBuffer, applyBufferMetrics, LANE_CHANNEL } from '../lib/posts.mjs';
-import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { generateText, readOptionalProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { getIdentity } from '../lib/profile.mjs';
@@ -235,8 +235,7 @@ router.post('/api/posts/generate', async (req, res) => {
     const useLane = lane === 'trajecktory' ? 'trajecktory' : 'professional';
     const useChannel = channel || LANE_CHANNEL[useLane];
 
-    let cvMd = '';
-    try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
+    const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
     const cvExcerpt = cvMd ? cvMd.slice(0, 3500) : '(CV not available)';
     const id = getIdentity();
     const topicLine = topic && topic.trim()
