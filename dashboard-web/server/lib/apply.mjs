@@ -8,6 +8,7 @@ import { checkUnsourcedNumbers } from './draft-grader.mjs';
 import { cleanProse, cleanAtsField } from './text-hygiene.mjs';
 import { pushObsidianNote } from './obsidian.mjs';
 import { getIdentity, getNarrative } from './profile.mjs';
+import { loadCompanyResearch } from './report-research.mjs';
 import { resolveReportPath } from './safe-path.mjs';
 import {
   buildRubricBlock,
@@ -105,6 +106,7 @@ export function buildCoverLetterPrompt(row, opts = {}) {
   const cvMd = typeof opts.cvMd === 'string' ? opts.cvMd : '';
   const profileMd = typeof opts.profileMd === 'string' ? opts.profileMd : '';
   const reportMd = typeof opts.reportMd === 'string' ? opts.reportMd : '';
+  const companyResearch = typeof opts.companyResearch === 'string' ? opts.companyResearch : '';
   const proofPoints = Array.isArray(opts.proofPoints) ? opts.proofPoints : [];
   const superpowers = Array.isArray(opts.superpowers) ? opts.superpowers : [];
   const prompt = `You are generating a tailored cover letter for a job application.
@@ -133,6 +135,7 @@ ${STYLE_RULES}`;
     cvExcerpt: cvMd,
     proofPoints,
     superpowers,
+    companyResearch,
   });
 }
 
@@ -153,6 +156,7 @@ async function runCoverLetterJob(jobId, row) {
   const cvMd      = readProjectFile(projectRoot, 'cv.md');
   const profileMd = readVoiceRules(projectRoot);
   const reportMd  = readReport(row);
+  const companyResearch = loadCompanyResearch(row.report);
   const narrative = getNarrative();
 
   const errors = [];
@@ -165,6 +169,7 @@ async function runCoverLetterJob(jobId, row) {
       cvMd,
       profileMd,
       reportMd,
+      companyResearch,
       proofPoints: narrative.proofPoints,
       superpowers: narrative.superpowers,
     });
@@ -186,6 +191,7 @@ async function runCoverLetterJob(jobId, row) {
               [coverJson.p1, coverJson.p2, coverJson.p3].join('\n\n'),
               cvMd,
               narrative.proofPoints,
+              companyResearch,
             );
             if (!numberCheck.clean) {
               const evidence = review.dimensions.find((dimension) => dimension.id === 'evidence');

@@ -20,6 +20,7 @@ import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
 import { getInmailBudget, decrementInmail, setInmailRemaining } from '../lib/inmail-budget.mjs';
 import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
+import { getProfile } from '../../../lib/outreach-rubric.mjs';
 
 export const router = express.Router();
 
@@ -261,23 +262,44 @@ HARD RULES:
 - Do NOT mention looking for a job, being in market, or open to opportunities (unless the angle is explicitly "Career Stage").
 - Do NOT include emojis.
 
-Respond with the connection note text ready to paste into LinkedIn, without quotes, a preface, a character count, or an explanation.`;
+== NOTE REQUIREMENTS ==
+- Include the connection note text ready to paste into LinkedIn, without quotes, a preface, a character count, or an explanation.`;
 
-    const callClaude = async (targetMax) => {
-      const text = await generateText(buildPrompt(targetMax), { model: draftModel(), maxTokens: 220 });
-      // Clean before the 300-char cap check so the length test sees final text.
-      return flattenConnectNote(stripDraftMeta(cleanProse(text.trim())));
-    };
+    const surfaceId = 'connect_note_influencer';
+    const profile = getProfile(surfaceId);
+    const rubricActive = process.env.TJK_RUBRIC_DISABLED !== '1';
+    const result = await generateWithRubric(buildPrompt(280), surfaceId, {
+      model: draftModel(),
+      maxTokens: rubricActive ? 800 : 220,
+      cvMd,
+      plainTextFallback: true,
+    });
+    if (result.error) return res.status(500).json({ error: 'Could not parse connection note from model output' });
 
-    // First pass: aim for 280 to leave margin
-    let response = await callClaude(280);
-    // Retry once with stricter target if over
-    if (response.length > 300) {
-      response = await callClaude(250);
-    }
-    // Fit after flattening so the cap sees the exact one-line note returned.
-    response = fitConnectNote(response, id.firstName).text;
-    res.json({ response, length: response.length });
+    const fitted = fitConnectNote(
+      flattenConnectNote(stripDraftMeta(cleanProse(result.body))),
+      id.firstName,
+      profile.hardCap,
+    );
+    const draft = await finishDraft({
+      body: fitted.text,
+      surface: surfaceId,
+      review: result.review,
+      reviewStatus: result.reviewStatus,
+      cleaner: 'prose',
+      stripSalutationFor: null,
+      stripSignature: false,
+      flatten: true,
+      hardFit: profile.hardCap,
+      cadence: false,
+    });
+    res.json({
+      response: draft.body,
+      length: draft.body.length,
+      review: draft.review,
+      reviewStatus: draft.reviewStatus,
+      surfaceId,
+    });
   } catch (err) {
     console.error('Error generating connect request:', err);
     res.status(500).json({ error: err.message });
