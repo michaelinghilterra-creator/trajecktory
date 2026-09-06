@@ -86,6 +86,90 @@ window.ScoreChip = function ScoreChip({ score }) {
   );
 };
 
+// ---------- Draft review badge (0-100) ----------
+window.DraftScoreBadge = function DraftScoreBadge({ review, onRerun, busy }) {
+  const [open, setOpen] = React.useState(false);
+  if (!review && !onRerun) return null;
+
+  const badgeColor = (s) =>
+    s == null ? "#71717a" : s >= 80 ? "#22c55e" : s >= 60 ? "#eab308" : "#ef4444";
+
+  return (
+    <div style={{ marginTop: 6, fontSize: 12 }}>
+      {review && (
+        <button
+          className="btn sm"
+          onClick={() => setOpen(!open)}
+          style={{
+            color: badgeColor(review.score),
+            border: `1px solid ${badgeColor(review.score)}33`,
+            background: `${badgeColor(review.score)}11`,
+            fontWeight: 600,
+            gap: 4,
+            display: "inline-flex",
+            alignItems: "center",
+          }}
+        >
+          {review.score}/100
+          <span style={{
+            display: "inline-block",
+            transform: open ? "rotate(180deg)" : "rotate(0deg)",
+            transition: "transform 0.15s",
+            fontSize: 10,
+          }}>&#9660;</span>
+        </button>
+      )}
+      {onRerun && (
+        <button
+          className="btn sm"
+          onClick={onRerun}
+          disabled={busy}
+          style={{ marginLeft: 6, fontSize: 11 }}
+        >
+          {busy ? "Reviewing..." : "Get independent review"}
+        </button>
+      )}
+      {open && review && (
+        <div style={{
+          marginTop: 6,
+          padding: "8px 10px",
+          border: "1px solid var(--border)",
+          borderRadius: 6,
+          background: "var(--bg-surface, var(--bg-card, #fff))",
+          fontSize: 11.5,
+          lineHeight: 1.5,
+        }}>
+          {review.dimensions && review.dimensions.length > 0 && (
+            <div style={{ marginBottom: 6 }}>
+              {review.dimensions.map((dim) => (
+                <div key={dim.id} style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  padding: "2px 0",
+                }}>
+                  <span style={{ color: "var(--text-mute)" }}>{dim.id.replace(/_/g, " ")}</span>
+                  <span style={{ fontWeight: 600, color: badgeColor(dim.score * 10) }}>{dim.score}/10</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {review.topFixes && review.topFixes.length > 0 && (
+            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 6 }}>
+              <div style={{ fontWeight: 600, marginBottom: 2, color: "var(--text-mute)" }}>Fixes</div>
+              <ul style={{ margin: 0, paddingLeft: 16 }}>
+                {review.topFixes.map((fix, i) => (
+                  <li key={i} style={{ marginBottom: 2 }}>{fix}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ---------- Where a generated file lives ----------
 // The tailored resume's path was rendered as plain text in the persistent report
 // panel, so the one durable place it appeared was the one place you could not

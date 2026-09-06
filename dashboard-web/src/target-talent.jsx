@@ -847,7 +847,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           body: JSON.stringify({ ...cfg.buildDraftBody(draftStage), channel: "linkedin", override }),
         })
           .then(r => r.json())
-          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { setDraftResult({ body: d.draft.body || "", subject: "", linkedin: true }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { setDraftResult({ body: d.draft.body || "", subject: "", linkedin: true, review: d.review || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
           .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
         return;
       }
@@ -856,7 +856,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         body: JSON.stringify({ source: cfg.kind, id, ...cfg.linkedIn.payload(data, liTone), override }),
       })
         .then(r => r.json())
-        .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.response) { setDraftResult({ body: d.response, subject: "", linkedin: true }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+        .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.response) { setDraftResult({ body: d.response, subject: "", linkedin: true, review: d.review || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
         .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
       return;
     }
@@ -870,7 +870,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
       body: JSON.stringify({ ...draftBody, override }),
     })
       .then(r => r.json())
-      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { setDraftResult(d.draft); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
+      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { setDraftResult({ ...d.draft, review: d.review || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
       .catch(() => setDrafting(false));
   };
   const saveCorrAndClose = msg => {
@@ -1186,6 +1186,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           {draftResult && (
             <div className="ai-compose">
               <div className="ai-head"><TIcon d={TI.spark} size={13} /> AI {draftResult.linkedin ? "LinkedIn note" : "draft"} <span style={{ marginLeft: 8, fontSize: 10.5, color: "var(--text-mute)", fontWeight: 400 }}>editable{draftResult.linkedin ? " · no subject, paste into LinkedIn" : ""}</span></div>
+              {window.DraftScoreBadge && <window.DraftScoreBadge review={draftResult.review} />}
               {!draftResult.linkedin && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                   <span style={{ fontSize: 11, color: "var(--text-mute)" }}>Subject</span>
