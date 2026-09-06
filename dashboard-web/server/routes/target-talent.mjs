@@ -1,7 +1,7 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
-import { pauseSequence } from '../lib/sequences.mjs';
+import { pauseSequence, getSequence, getTemplate } from '../lib/sequences.mjs';
 import { readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
@@ -21,6 +21,17 @@ import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
 import { INFLUENCE_TIERS } from '../../../lib/influence-tier.mjs';
 import { classifyInbound } from '../../../lib/inbound-classify.mjs';
+
+function sequenceTone(contactId) {
+  try {
+    const seq = getSequence('ta', contactId);
+    if (!seq || seq.completedAt || seq.paused) return '';
+    const tpl = getTemplate(seq.sequenceId);
+    if (!tpl) return '';
+    const touch = tpl.touches.find(t => t.step === seq.step + 1);
+    return touch?.tone || '';
+  } catch { return ''; }
+}
 
 export const router = express.Router();
 
@@ -362,7 +373,7 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
       const narrative = getNarrative();
       const result = await generateWithRubric(prompt, 'ta_dm', {
         model: draftModel(), maxTokens: 700, cvMd, plainTextFallback: true,
-        rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
+        rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers, toneNote: sequenceTone(id) },
       });
       const dm = await finishDraft({
         body: result.body, surface: 'ta_dm',
@@ -516,7 +527,7 @@ Output ONLY a JSON object — no markdown, no code fences, no explanation:
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'ta_email', {
       model: draftModel(), maxTokens: 1024, cvMd,
-      rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
+      rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers, toneNote: sequenceTone(id) },
     });
     if (result.error) return res.status(500).json({ error: 'Could not parse draft from model output' });
     const draft = await finishDraft({
