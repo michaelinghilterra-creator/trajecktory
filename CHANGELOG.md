@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.5.0...v3.6.0) (2026-09-06)
+
+
+### Features
+
+* add outreach rubric engine with self-critique and independent grading ([#290](https://github.com/michaelinghilterra-creator/trajecktory/issues/290)) ([d3d8564](https://github.com/michaelinghilterra-creator/trajecktory/commit/d3d85645ae165325de0b5c158b05860a96b8750c))
+
 ## [3.5.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.4.0...v3.5.0) (2026-09-05)
 
 
