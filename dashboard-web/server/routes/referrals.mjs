@@ -5,8 +5,9 @@ import { reconcile, cleanupStale, parseConnectionsCsv, saveConnections, linkedin
 import { detectAcceptances, computePendingAcceptances } from '../lib/linkedin-acceptance.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
-import { cleanEmailBody, cleanEmailSubject, cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
+import { cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
+import { finishDraft } from '../lib/finish-draft.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
@@ -430,14 +431,13 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
       const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (!jsonMatch) return res.status(500).json({ error: 'Could not parse reply draft from model output', raw });
-      const draft = JSON.parse(jsonMatch[0]);
-      draft.body = _stripLeadingSalutation(draft.body, firstName);
-      draft.body = _stripTrailingSignature(draft.body);
-      draft.body = stripDraftMeta(draft.body);
-      draft.body = cleanEmailBody(draft.body);
-      draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
-      draft.subject = cleanEmailSubject(collapseRe(draft.subject, inbound.subject));
-      return res.json({ ok: true, draft, messageType: 'reply' });
+      const parsed = JSON.parse(jsonMatch[0]);
+      const reply = await finishDraft({
+        body: parsed.body, subject: parsed.subject, surface: 'reply_email',
+        cleaner: 'email', stripSalutationFor: firstName, stripSignature: true,
+        subjectTransform: (subject) => collapseRe(subject, inbound.subject),
+      });
+      return res.json({ ok: true, draft: { subject: reply.subject, body: reply.body }, messageType: 'reply' });
     }
 
     // FOLLOW-UP-ON-LAST-SENT mode: nudge a thread built on your last sent message.
@@ -448,14 +448,13 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
       const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (!jsonMatch) return res.status(500).json({ error: 'Could not parse follow-up draft from model output', raw });
-      const draft = JSON.parse(jsonMatch[0]);
-      draft.body = _stripLeadingSalutation(draft.body, firstName);
-      draft.body = _stripTrailingSignature(draft.body);
-      draft.body = stripDraftMeta(draft.body);
-      draft.body = cleanEmailBody(draft.body);
-      draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
-      draft.subject = cleanEmailSubject(collapseRe(draft.subject, sent.subject));
-      return res.json({ ok: true, draft, messageType: 'followup-sent' });
+      const parsed = JSON.parse(jsonMatch[0]);
+      const followup = await finishDraft({
+        body: parsed.body, subject: parsed.subject, surface: 'followup_sent',
+        cleaner: 'email', stripSalutationFor: firstName, stripSignature: true,
+        subjectTransform: (subject) => collapseRe(subject, sent.subject),
+      });
+      return res.json({ ok: true, draft: { subject: followup.subject, body: followup.body }, messageType: 'followup-sent' });
     }
 
     // Fresh outreach. Topic defaults from the ladder: an already-asked contact
@@ -504,14 +503,12 @@ Output ONLY a JSON object — no markdown, no code fences, no explanation:
     const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: 'Could not parse draft from model output', raw });
-    const draft = JSON.parse(jsonMatch[0]);
-    draft.body = _stripLeadingSalutation(draft.body, firstName);
-    draft.body = _stripTrailingSignature(draft.body);
-    draft.body = stripDraftMeta(draft.body);
-    draft.body = cleanEmailBody(draft.body);
-    draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
-    draft.subject = cleanEmailSubject(draft.subject);
-    res.json({ ok: true, draft, messageType: topic, relatedApp: topApp || null });
+    const parsed = JSON.parse(jsonMatch[0]);
+    const draft = await finishDraft({
+      body: parsed.body, subject: parsed.subject, surface: 'referral_email',
+      cleaner: 'email', stripSalutationFor: firstName, stripSignature: true,
+    });
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, messageType: topic, relatedApp: topApp || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

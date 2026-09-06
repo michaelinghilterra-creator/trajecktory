@@ -2,9 +2,7 @@ import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { pauseSequence } from '../lib/sequences.mjs';
-import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
-import { cleanEmailBody, cleanEmailSubject, cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
-import { reviseForCadence } from '../lib/cadence-revise.mjs';
+import { generateText, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
@@ -360,12 +358,12 @@ ${intentGuidance}
 ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nTHREAD STATE: ${thread.stateLine}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
 Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subject line, NO signature block, NO trailing sign-off (no '${me.firstName}', no 'Best,\\n${me.firstName}'), and NO greeting or bare first-name address (the UI prefills 'Hi ${r.first},', so the first sentence MUST begin with substantive content — do NOT start with '${r.first}', 'Hi', 'Hello', or 'Hey'). No quotes, no preface, no explanation.`;
 
-      let body = _stripLeadingSalutation((await generateText(prompt, { model: draftModel(), maxTokens: 700 })).trim(), r.first);
-      body = _stripTrailingSignature(body);
-      body = stripDraftMeta(body);
-      body = cleanProse(body);
-      body = (await reviseForCadence(body, { surface: 'prose' })).text;
-      return res.json({ ok: true, draft: { subject: '', body }, messageType: mode || interviewStage, channel: 'linkedin', relatedApp: topApp || null });
+      const rawDm = (await generateText(prompt, { model: draftModel(), maxTokens: 700 })).trim();
+      const dm = await finishDraft({
+        body: rawDm, surface: 'ta_dm', cleaner: 'prose',
+        stripSalutationFor: r.first, stripSignature: true,
+      });
+      return res.json({ ok: true, draft: { subject: '', body: dm.body }, messageType: mode || interviewStage, channel: 'linkedin', relatedApp: topApp || null });
     }
 
     const isFirstTouch = prior.length === 0;
@@ -385,14 +383,13 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
       const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (!jsonMatch) return res.status(500).json({ error: 'Could not parse reply draft from model output', raw });
-      const draft = JSON.parse(jsonMatch[0]);
-      draft.body = _stripLeadingSalutation(draft.body, r.first);
-      draft.body = _stripTrailingSignature(draft.body);
-      draft.body = stripDraftMeta(draft.body);
-      draft.body = cleanEmailBody(draft.body);
-      draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
-      draft.subject = cleanEmailSubject(collapseRe(draft.subject, inbound.subject));
-      return res.json({ ok: true, draft, messageType: 'reply', relatedApp: null });
+      const parsed = JSON.parse(jsonMatch[0]);
+      const reply = await finishDraft({
+        body: parsed.body, subject: parsed.subject, surface: 'reply_email',
+        cleaner: 'email', stripSalutationFor: r.first, stripSignature: true,
+        subjectTransform: (subject) => collapseRe(subject, inbound.subject),
+      });
+      return res.json({ ok: true, draft: { subject: reply.subject, body: reply.body }, messageType: 'reply', relatedApp: null });
     }
 
     // FOLLOW-UP-ON-LAST-SENT mode: nudge a thread that went quiet, built on the
@@ -406,14 +403,13 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
       const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
       if (!jsonMatch) return res.status(500).json({ error: 'Could not parse follow-up draft from model output', raw });
-      const draft = JSON.parse(jsonMatch[0]);
-      draft.body = _stripLeadingSalutation(draft.body, r.first);
-      draft.body = _stripTrailingSignature(draft.body);
-      draft.body = stripDraftMeta(draft.body);
-      draft.body = cleanEmailBody(draft.body);
-      draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
-      draft.subject = cleanEmailSubject(collapseRe(draft.subject, sent.subject));
-      return res.json({ ok: true, draft, messageType: 'followup-sent', relatedApp: null });
+      const parsed = JSON.parse(jsonMatch[0]);
+      const followup = await finishDraft({
+        body: parsed.body, subject: parsed.subject, surface: 'followup_sent',
+        cleaner: 'email', stripSalutationFor: r.first, stripSignature: true,
+        subjectTransform: (subject) => collapseRe(subject, sent.subject),
+      });
+      return res.json({ ok: true, draft: { subject: followup.subject, body: followup.body }, messageType: 'followup-sent', relatedApp: null });
     }
 
     // Pull related applications to ground the outreach in a real role

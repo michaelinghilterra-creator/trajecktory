@@ -5,6 +5,7 @@ import { ROOT_DIR } from '../config.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
+import { finishDraft } from '../lib/finish-draft.mjs';
 import { loadInfluencer, toneInstruction, flattenConnectNote, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine, readTTCorrespondence } from '../lib/target-talent.mjs';
@@ -360,12 +361,16 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       guidance, cvExcerpt, tone, toneText: toneInstruction(tone), targetMax,
     });
 
-    let response = flattenConnectNote(stripDraftMeta(cleanProse((await generateText(buildPrompt(280), { model: draftModel(), maxTokens: 220 })).trim())));
-    if (response.length > 300) {
-      response = flattenConnectNote(stripDraftMeta(cleanProse((await generateText(buildPrompt(250), { model: draftModel(), maxTokens: 220 })).trim())));
+    let parsed = (await generateText(buildPrompt(280), { model: draftModel(), maxTokens: 220 })).trim();
+    if (flattenConnectNote(stripDraftMeta(cleanProse(parsed))).length > 300) {
+      parsed = (await generateText(buildPrompt(250), { model: draftModel(), maxTokens: 220 })).trim();
     }
-    response = fitConnectNote(response, idn.firstName).text;
-    res.json({ response, length: response.length, recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
+    const note = await finishDraft({
+      body: parsed.body || parsed, surface: 'connect_note_influencer',
+      cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
+      flatten: true, hardFit: 300, cadence: false,
+    });
+    res.json({ response: note.body, length: note.body.length, recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
   } catch (err) {
     console.error('Error generating connect note:', err);
     res.status(500).json({ error: err.message });
@@ -490,9 +495,12 @@ HARD RULES:
 
 Return ONLY the message text, ready to paste, including the "Hi ${recipientFirst}," opener and the "Thanks, ${idn.firstName}" sign-off. No preface, no quotes, no explanation.`;
 
-    let response = stripDraftMeta(cleanProse((await generateText(prompt, { model: draftModel(), maxTokens: 500 })).trim()));
-    response = (await reviseForCadence(response, { surface: 'prose' })).text;
-    res.json({ response, length: response.length, recipient: { source: 'ta', id, name }, inmail: !connected });
+    const parsed = (await generateText(prompt, { model: draftModel(), maxTokens: 500 })).trim();
+    const fu = await finishDraft({
+      body: parsed.body || parsed, surface: 'li_followup',
+      cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
+    });
+    res.json({ response: fu.body, length: fu.body.length, recipient: { source: 'ta', id, name }, inmail: !connected });
   } catch (err) {
     console.error('Error generating follow-up message:', err);
     res.status(500).json({ error: err.message });
