@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { ROOT_DIR } from '../config.mjs';
 import { resolveReportPath } from '../lib/safe-path.mjs';
+import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { parseApplicationsMd, patchRowInMd } from '../lib/applications.mjs';
 import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
@@ -520,18 +521,10 @@ router.post('/api/followups/:appNum/draft', async (req, res) => {
     const lastTouchDate = followups[0]?.date || app.date;
     const daysSinceLastTouch = _daysAgo(lastTouchDate);
 
-    let reportContext = '';
-    if (app.report) {
-      try {
-        // Contain to reports/ — the Report cell is agent-written/untrusted, so a
-        // value like [x](dashboard-web/.env) must not read a secret into this prompt.
-        const abs = resolveReportPath(app.report);
-        if (abs) {
-          const reportText = fs.readFileSync(abs, 'utf8');
-          reportContext = `\n== ROLE EVALUATION REPORT (excerpt — for grounding the follow-up) ==\n${reportText.slice(0, 3000)}\n`;
-        }
-      } catch { /* report missing, skip */ }
-    }
+    const reportResearch = loadCompanyResearch(app.report);
+    const reportContext = reportResearch
+      ? `\n== ROLE EVALUATION REPORT (excerpt, for grounding the follow-up) ==\n${reportResearch}\n`
+      : '';
 
     const id = getIdentity();
     const prompt = `You are drafting a brief, professional follow-up email from ${id.fullName}. He applied to ${app.company} for the ${app.role} role ${daysSinceApply} days ago. ${fuCount === 0 ? 'This is the FIRST follow-up — no prior touches.' : `He has already sent ${fuCount} follow-up${fuCount === 1 ? '' : 's'} (most recent ${daysSinceLastTouch} days ago). This is touch #${touchNumber}.`}
@@ -543,12 +536,12 @@ Status:   ${app.status} (since ${app.date})
 Score:    ${app.scoreRaw}
 Notes:    ${app.notes || '(none)'}
 ${reportContext}
-== ${id.firstName.toUpperCase()}'S CV (source of truth — do not invent metrics) ==
+== ${id.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics) ==
 ${cvMd}
-
-== VOICE RULES (from modes/_profile.md — must follow) ==
+${profileMd ? `
+== VOICE RULES (from modes/_profile.md, must follow) ==
 ${profileMd}
-
+` : ''}
 == STYLE REQUIREMENTS ==
 - Brief: under 100 words in the body.
 - Direct, senior operator tone. No "I hope this finds you well" or other corporate filler.
@@ -558,8 +551,13 @@ ${profileMd}
 - Close with ONE low-friction ask: a quick reply on timing, or being pointed to the right person for this role. Do NOT ask for a call, a chat, a quick call, an intro, or time on their calendar. A meeting ask on an unsolicited follow-up reads as tone-deaf.
 - Never invent metrics or claims not on the CV.
 
-Output ONLY a JSON object — no markdown, no code fences, no explanation:
-{"subject": "<email subject — keep tight, reference role>", "body": "<email body — plain text, no signature block, no greeting like 'Hi Name' (UI prefills salutation)>"}`;
+== SUBJECT REQUIREMENTS ==
+- Keep the email subject tight and reference the role.
+
+== BODY REQUIREMENTS ==
+- Use plain text.
+- Omit a signature block.
+- Omit a greeting such as 'Hi Name' because the UI prefills the salutation.`;
 
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'app_followup', {
@@ -570,9 +568,10 @@ Output ONLY a JSON object — no markdown, no code fences, no explanation:
     const draft = await finishDraft({
       body: result.body, subject: result.subject, surface: 'app_followup',
       review: result.review,
+      reviewStatus: result.reviewStatus,
       cleaner: 'email', stripSalutationFor: null, stripSignature: false,
     });
-    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: draft.review, touchNumber, fuCount });
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: draft.review, reviewStatus: draft.reviewStatus, surfaceId: 'app_followup', touchNumber, fuCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -1015,6 +1015,14 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   const [touches, setTouches] = useStateF([]);    // this app's follow-up rows
   const [drafting, setDrafting] = useStateF(false);
   const [draft, setDraft] = useStateF(null);
+  const [review, setReview] = useStateF(null);
+  const [reviewOf, setReviewOf] = useStateF(null);
+  const [surfaceId, setSurfaceId] = useStateF(null);
+  const [reviewing, setReviewing] = useStateF(false);
+  const [improving, setImproving] = useStateF(false);
+  const [proposedDraft, setProposedDraft] = useStateF(null);
+  const [improveSnapshot, setImproveSnapshot] = useStateF('');
+  const improveAbortRef = React.useRef(null);
   const [logModal, setLogModal] = useStateF(null);
   const [relatedTalent, setRelatedTalent] = useStateF([]);
   const [crossLogIds, setCrossLogIds] = useStateF(new Set());
@@ -1039,7 +1047,10 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
         .catch(() => setRelatedTalent([]));
     }
   };
-  useEffectF(() => { load(); }, [appId]);
+  useEffectF(() => {
+    load();
+    return () => improveAbortRef.current?.abort();
+  }, [appId]);
 
   const toggleCrossLog = (id) => {
     setCrossLogIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -1047,11 +1058,85 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
 
   const generateDraft = () => {
     setDrafting(true);
+    improveAbortRef.current?.abort();
+    improveAbortRef.current = null;
+    setImproving(false);
     setDraft(null);
+    setReview(null);
+    setReviewOf(null);
+    setSurfaceId(null);
+    setProposedDraft(null);
     window.tjkMutate(`/api/followups/${appId}/draft`, { method: 'POST' })
       .then(r => r.json())
-      .then(d => { setDrafting(false); if (d.draft) setDraft(d.draft); else alert(d.error || 'Draft failed'); })
+      .then(d => {
+        setDrafting(false);
+        if (d.draft) {
+          setDraft(d.draft);
+          setReview(d.review || null);
+          setReviewOf('self');
+          setSurfaceId(d.surfaceId || null);
+        } else alert(d.error || 'Draft failed');
+      })
       .catch(err => { setDrafting(false); alert(err.message); });
+  };
+
+  const rerunReview = () => {
+    if (!draft || !surfaceId || reviewing) return;
+    setReviewing(true);
+    window.tjkMutate('/api/drafts/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: draft.body || '', subject: draft.subject || '', surfaceId }),
+    }).then(r => r.json()).then(d => {
+      if (d.error) throw new Error(d.error);
+      setReview(d.review || null);
+      setReviewOf('independent');
+    }).catch(err => alert(err.message)).finally(() => setReviewing(false));
+  };
+
+  const improveDraft = () => {
+    if (!draft || !surfaceId || improving) return;
+    const snapshot = draft.body || '';
+    const controller = new AbortController();
+    improveAbortRef.current?.abort();
+    improveAbortRef.current = controller;
+    setImproveSnapshot(snapshot);
+    setImproving(true);
+    setProposedDraft(null);
+    window.tjkMutate('/api/drafts/improve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: snapshot, subject: draft.subject || '', surfaceId, recipientFirst: '', appId }),
+      signal: controller.signal,
+    }).then(r => r.json()).then(d => {
+      if (d.error) throw new Error(d.error);
+      setProposedDraft(d.draft || null);
+      setReview(d.review || null);
+      setReviewOf(d.reviewOf || null);
+    }).catch(err => {
+      if (err.name !== 'AbortError') alert(err.message);
+    }).finally(() => {
+      if (!controller.signal.aborted) setImproving(false);
+      if (improveAbortRef.current === controller) improveAbortRef.current = null;
+    });
+  };
+
+  const replaceWithProposed = () => {
+    if (!proposedDraft || !draft) return;
+    if ((draft.body || '') !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
+    setDraft({ ...draft, subject: proposedDraft.subject || draft.subject || '', body: proposedDraft.body || '' });
+    setProposedDraft(null);
+  };
+
+  const clearDraft = () => {
+    improveAbortRef.current?.abort();
+    improveAbortRef.current = null;
+    setImproving(false);
+    setDraft(null);
+    setReview(null);
+    setReviewOf(null);
+    setSurfaceId(null);
+    setProposedDraft(null);
   };
 
   const logTouch = (payload) => {
@@ -1073,7 +1158,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
         // Touch logged → no longer stale. Refresh locally, then let the host
         // react (Follow-Ups reloads the queue and closes the drawer).
         setLogModal(null);
-        setDraft(null);
+        clearDraft();
         load();
         onUpdate?.();
       })
@@ -1166,15 +1251,27 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
               <span className="mono" style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>✦ DRAFT</span>
               <div className="row" style={{ gap: 6 }}>
                 <button className="btn ghost sm" onClick={() => copyToClipboard(`Subject: ${draft.subject}\n\n${draft.body}\n\n${window.mySignoff()}`)}>Copy</button>
-                <button className="btn ghost sm" onClick={() => setDraft(null)}>Dismiss</button>
+                <button className="btn ghost sm" onClick={clearDraft}>Dismiss</button>
               </div>
             </div>
+            {window.DraftScoreBadge && <window.DraftScoreBadge review={review} reviewOf={reviewOf} onRerun={rerunReview} onImprove={improveDraft} busy={reviewing} improving={improving} />}
             <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 6 }}>
               <span className="mono dim" style={{ fontSize: 11 }}>Subject</span>
               <input className="inp" style={{ flex: 1 }} value={draft.subject || ''} onChange={e => setDraft({ ...draft, subject: e.target.value })} />
             </div>
             <textarea className="ta" aria-label="Editable follow-up draft" style={{ width: '100%', minHeight: 130, resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }}
               value={draft.body || ''} onChange={e => setDraft({ ...draft, body: e.target.value })} />
+            {proposedDraft && (
+              <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel-2)' }}>
+                <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
+                {proposedDraft.subject && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{proposedDraft.subject}</div>}
+                <div style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{proposedDraft.body}</div>
+                <div className="row" style={{ gap: 6, marginTop: 8 }}>
+                  <button className="btn primary sm" onClick={replaceWithProposed}>Replace draft</button>
+                  <button className="btn ghost sm" onClick={() => setProposedDraft(null)}>Discard</button>
+                </div>
+              </div>
+            )}
             <div className="mono dim" style={{ fontSize: 10.5, marginTop: 4 }}>Your sign-off is added automatically: {window.mySignoff()}</div>
             <div className="row" style={{ gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
               <button className="btn primary sm" onClick={() => logTouch({

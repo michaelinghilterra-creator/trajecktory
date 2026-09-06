@@ -233,10 +233,24 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   const [emailBlock, setEmailBlock] = useStateCq(null);
   const [emLoading, setEmLoading] = useStateCq(false);
   const [emSending, setEmSending] = useStateCq(false);
+  const [liReviewing, setLiReviewing] = useStateCq(false);
+  const [liImproving, setLiImproving] = useStateCq(false);
+  const [liProposed, setLiProposed] = useStateCq(null);
+  const [liImproveSnapshot, setLiImproveSnapshot] = useStateCq('');
+  const liImproveAbortRef = React.useRef(null);
+  const [emReviewing, setEmReviewing] = useStateCq(false);
+  const [emImproving, setEmImproving] = useStateCq(false);
+  const [emProposed, setEmProposed] = useStateCq(null);
+  const [emImproveSnapshot, setEmImproveSnapshot] = useStateCq('');
+  const emImproveAbortRef = React.useRef(null);
   const channels = followupChannels(c);
   const [liDone, setLiDone] = useStateCq(!!c.linkedinDone || !channels.linkedin);
   const [emDone, setEmDone] = useStateCq(!!c.emailDone || !channels.email);
   const done = (channels.linkedin || channels.email) && liDone && emDone;
+  useEffectCq(() => () => {
+    liImproveAbortRef.current?.abort();
+    emImproveAbortRef.current?.abort();
+  }, []);
   // A contact you have ALREADY sent a LinkedIn invite (or any 1:1 touch) to: the
   // invite is out, so a "follow-up" is a real MESSAGE, not another connection note.
   // Keyed off the CRM status as well as selfLastTouch (see isAlreadyInvited) so a
@@ -332,6 +346,10 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
 
   const draftNote = (override = false) => {
     setLiLoading(true);
+    liImproveAbortRef.current?.abort();
+    liImproveAbortRef.current = null;
+    setLiImproving(false);
+    setLiProposed(null);
     window.tjkMutate(alreadyInvited ? '/api/linkedin-drafts/followup-message' : '/api/linkedin-drafts/connect-note', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: c.source, id: c.id, override }),
@@ -339,6 +357,54 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
       .then(res => { if (res.error) toast && toast(res.error, 'error'); else if (res.blocked) setLiBlock(res); else { setNote(res); if (override) setLiBlock(b => ({ ...b, overridden: true })); } })
       .catch(e => toast && toast(e.message, 'error'))
       .finally(() => setLiLoading(false));
+  };
+  const setLiBody = (body) => setNote(n => n ? ({ ...n, response: body, length: body.length }) : n);
+  const rerunLiReview = () => {
+    if (!note?.surfaceId || liReviewing) return;
+    setLiReviewing(true);
+    window.tjkMutate('/api/drafts/review', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: note.response || '', subject: '', surfaceId: note.surfaceId }),
+    }).then(r => r.json()).then(res => {
+      if (res.error) throw new Error(res.error);
+      setNote(n => n ? ({ ...n, review: res.review || null, reviewOf: 'independent' }) : n);
+    }).catch(e => toast && toast(e.message, 'error')).finally(() => setLiReviewing(false));
+  };
+  const improveLiDraft = () => {
+    if (!note?.surfaceId || liImproving) return;
+    const snapshot = note.response || '';
+    const controller = new AbortController();
+    liImproveAbortRef.current?.abort();
+    liImproveAbortRef.current = controller;
+    setLiImproveSnapshot(snapshot);
+    setLiImproving(true);
+    setLiProposed(null);
+    window.tjkMutate('/api/drafts/improve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        body: snapshot,
+        subject: '',
+        surfaceId: note.surfaceId,
+        recipientFirst: firstName,
+        ...(c.appStale?.appId != null ? { appId: c.appStale.appId } : {}),
+      }),
+      signal: controller.signal,
+    }).then(r => r.json()).then(res => {
+      if (res.error) throw new Error(res.error);
+      setLiProposed(res.draft || null);
+      setNote(n => n ? ({ ...n, review: res.review || null, reviewOf: res.reviewOf || null }) : n);
+    }).catch(e => {
+      if (e.name !== 'AbortError' && toast) toast(e.message, 'error');
+    }).finally(() => {
+      if (!controller.signal.aborted) setLiImproving(false);
+      if (liImproveAbortRef.current === controller) liImproveAbortRef.current = null;
+    });
+  };
+  const replaceLiDraft = () => {
+    if (!liProposed || !note) return;
+    if ((note.response || '') !== liImproveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
+    setNote(n => ({ ...n, response: liProposed.body || '', length: (liProposed.body || '').length }));
+    setLiProposed(null);
   };
   const copy = () => {
     // navigator.clipboard is undefined on http / a LAN IP; guard so the button
@@ -350,6 +416,10 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   };
   const genEmail = (override = false) => {
     setEmLoading(true);
+    emImproveAbortRef.current?.abort();
+    emImproveAbortRef.current = null;
+    setEmImproving(false);
+    setEmProposed(null);
     if (!base) { setEmLoading(false); toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
     window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ override }) })
       .then(r => r.json())
@@ -358,17 +428,67 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
         if (res.blocked) { setEmailBlock(res); return; }
         const d = res.draft || {};
         if (!d.body) { toast && toast('The model returned an empty draft. Try Redraft.', 'warn'); return; }
-        const sig = (window.myEmailSignature && window.myEmailSignature()) || '';
-        setDraft({ subject: (d.subject || '').trim(), body: `Hi ${firstName},\n\n${(d.body || '').trim()}${sig ? `\n\n${sig}` : ''}` });
+        setDraft({ subject: (d.subject || '').trim(), body: (d.body || '').trim(), review: res.review || null, reviewOf: 'self', surfaceId: res.surfaceId || null, relatedApp: res.relatedApp || null });
         if (override) setEmailBlock(b => ({ ...b, overridden: true }));
       })
       .catch(e => toast && toast(e.message, 'error'))
       .finally(() => setEmLoading(false));
   };
   const emSubject = draft?.subject || '';
-  const emBody = draft?.body || '';
+  const emailBody = draft?.body || '';
+  const emailSignature = (window.myEmailSignature && window.myEmailSignature()) || '';
+  const emBody = draft ? `Hi ${firstName},\n\n${emailBody}${emailSignature ? `\n\n${emailSignature}` : ''}` : '';
   const setEmSubject = (v) => setDraft(d => ({ ...(d || {}), subject: v }));
-  const setEmBody = (v) => setDraft(d => ({ ...(d || {}), body: v }));
+  const setEmailBody = (v) => setDraft(d => ({ ...(d || {}), body: v }));
+  const rerunEmailReview = () => {
+    if (!draft?.surfaceId || emReviewing) return;
+    setEmReviewing(true);
+    window.tjkMutate('/api/drafts/review', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: emailBody, subject: emSubject, surfaceId: draft.surfaceId }),
+    }).then(r => r.json()).then(res => {
+      if (res.error) throw new Error(res.error);
+      setDraft(d => d ? ({ ...d, review: res.review || null, reviewOf: 'independent' }) : d);
+    }).catch(e => toast && toast(e.message, 'error')).finally(() => setEmReviewing(false));
+  };
+  const improveEmailDraft = () => {
+    if (!draft?.surfaceId || emImproving) return;
+    const snapshot = emailBody;
+    const controller = new AbortController();
+    emImproveAbortRef.current?.abort();
+    emImproveAbortRef.current = controller;
+    setEmImproveSnapshot(snapshot);
+    setEmImproving(true);
+    setEmProposed(null);
+    window.tjkMutate('/api/drafts/improve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        body: snapshot,
+        subject: emSubject,
+        surfaceId: draft.surfaceId,
+        recipientFirst: firstName,
+        ...(draft.relatedApp?.id != null
+          ? { appId: draft.relatedApp.id }
+          : c.appStale?.appId != null ? { appId: c.appStale.appId } : {}),
+      }),
+      signal: controller.signal,
+    }).then(r => r.json()).then(res => {
+      if (res.error) throw new Error(res.error);
+      setEmProposed(res.draft || null);
+      setDraft(d => d ? ({ ...d, review: res.review || null, reviewOf: res.reviewOf || null }) : d);
+    }).catch(e => {
+      if (e.name !== 'AbortError' && toast) toast(e.message, 'error');
+    }).finally(() => {
+      if (!controller.signal.aborted) setEmImproving(false);
+      if (emImproveAbortRef.current === controller) emImproveAbortRef.current = null;
+    });
+  };
+  const replaceEmailDraft = () => {
+    if (!emProposed || !draft) return;
+    if (emailBody !== emImproveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
+    setDraft(d => ({ ...d, subject: emProposed.subject || d.subject || '', body: emProposed.body || '' }));
+    setEmProposed(null);
+  };
   const copyEmail = () => {
     const cp = navigator.clipboard?.writeText(emBody);
     if (cp) cp.then(() => toast && toast('Email body copied', 'success')).catch(() => toast && toast('Copy failed. Select the text and copy it manually', 'warn'));
@@ -491,9 +611,21 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
             {liDone ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span> : <button className="btn sm" onClick={markLiSent} disabled={liSending}>{liSending ? 'Saving…' : 'Mark sent'}</button>}
           </div>
         </div>
+        {note && window.DraftScoreBadge && <window.DraftScoreBadge review={note.review} reviewOf={note.reviewOf} onRerun={note.surfaceId ? rerunLiReview : null} onImprove={note.surfaceId ? improveLiDraft : null} busy={liReviewing} improving={liImproving} />}
         <DraftBlockBanner block={liBlock} />
         {note ? <div style={{ marginTop: 8 }}>
-          <div style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px', fontSize: 13, whiteSpace: 'pre-wrap' }}>{note.response}</div>
+          <textarea value={note.response || ''} onChange={e => setLiBody(e.target.value)} rows={6} aria-label="Editable LinkedIn draft"
+            style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, lineHeight: 1.5, padding: '8px 10px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', whiteSpace: 'pre-wrap', resize: 'vertical' }} />
+          {liProposed && (
+            <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel-2)' }}>
+              <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
+              <div style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{liProposed.body}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button className="btn primary sm" onClick={replaceLiDraft}>Replace draft</button>
+                <button className="btn ghost sm" onClick={() => setLiProposed(null)}>Discard</button>
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
             <span className="dim mono" style={{ fontSize: 11 }}>{alreadyInvited ? `${note.length} chars` : `${note.length}/300 chars`}</span>
             <button className="btn sm" onClick={copy}>Copy</button>
@@ -511,12 +643,26 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
             {emDone ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span> : <button className="btn sm" onClick={markEmSent} disabled={emSending}>{emSending ? 'Saving…' : 'Mark sent'}</button>}
           </div>
         </div>
+        {draft && window.DraftScoreBadge && <window.DraftScoreBadge review={draft.review} reviewOf={draft.reviewOf} onRerun={draft.surfaceId ? rerunEmailReview : null} onImprove={draft.surfaceId ? improveEmailDraft : null} busy={emReviewing} improving={emImproving} />}
         <DraftBlockBanner block={emailBlock} />
         {draft ? <div style={{ marginTop: 8 }}>
           <input value={emSubject} onChange={e => setEmSubject(e.target.value)} placeholder="Subject"
             style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, padding: '6px 8px', marginBottom: 6, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)' }} />
-          <textarea value={emBody} onChange={e => setEmBody(e.target.value)} rows={8}
+          <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>Hi {firstName},</div>
+          <textarea value={emailBody} onChange={e => setEmailBody(e.target.value)} rows={8} aria-label="Editable email draft body"
             style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, lineHeight: 1.5, padding: '8px 10px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 6, color: 'var(--text)', whiteSpace: 'pre-wrap', resize: 'vertical' }} />
+          {emailSignature && <div className="dim" style={{ fontSize: 12, marginTop: 4, whiteSpace: 'pre-wrap' }}>{emailSignature}</div>}
+          {emProposed && (
+            <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel-2)' }}>
+              <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
+              {emProposed.subject && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{emProposed.subject}</div>}
+              <div style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{emProposed.body}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <button className="btn primary sm" onClick={replaceEmailDraft}>Replace draft</button>
+                <button className="btn ghost sm" onClick={() => setEmProposed(null)}>Discard</button>
+              </div>
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
             <button className="btn sm" onClick={copyEmail}>Copy body</button>
             {mailtoUrl ? <a className="btn ghost sm" href={mailtoUrl}>Open in mail ↗</a> : null}

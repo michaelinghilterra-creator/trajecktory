@@ -54,11 +54,23 @@ const reviewed = await finishDraft({
   body: monotone,
   surface: 'ta_email',
   review: { score: 82 },
+  reviewStatus: 'ok',
   cleaner: 'none',
   stripSignature: false,
 });
-check(reviewed.body === monotone && reviewed.review?.score === 82,
-  'a present review skips cadence revision');
+check(reviewed.body === monotone && reviewed.review?.score === 82 && reviewed.reviewStatus === 'ok',
+  'a present review skips cadence revision and carries review status');
+
+const missingReview = await finishDraft({
+  body: monotone,
+  surface: 'ta_email',
+  review: null,
+  reviewStatus: 'missing:no-dimensions',
+  cleaner: 'none',
+  stripSignature: false,
+  cadence: false,
+});
+check(missingReview.reviewStatus === 'missing:no-dimensions', 'a missing review status passes through unchanged');
 
 const cadenceOff = await finishDraft({
   body: monotone,

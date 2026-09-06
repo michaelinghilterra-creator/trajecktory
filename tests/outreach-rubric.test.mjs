@@ -12,8 +12,11 @@ import {
   SURFACE_PROFILE,
   SURFACES,
   getProfile,
+  buildPlainContract,
   buildRubricBlock,
+  buildImprovePrompt,
   parseReviewed,
+  parseReviewedFields,
   weightedScore,
   violatesHardConstraint,
 } from '../lib/outreach-rubric.mjs';
@@ -54,9 +57,65 @@ const bodyIndex = emailBlock.indexOf('"body"');
 check(critiqueIndex < dimensionsIndex && dimensionsIndex < subjectIndex && subjectIndex < bodyIndex,
   'critique and dimensions precede subject and body so revision is conditioned on named defects');
 
+const coverBlock = buildRubricBlock('cover_letter', {});
+const coverCritiqueIndex = coverBlock.indexOf('"critique"');
+const coverDimensionsIndex = coverBlock.indexOf('"dimensions"');
+const coverSalutationIndex = coverBlock.indexOf('"salutation"');
+check(coverCritiqueIndex < coverDimensionsIndex && coverDimensionsIndex < coverSalutationIndex,
+  'cover letter critique and dimensions precede the salutation');
+
 const connectBlock = buildRubricBlock('connect_note', {});
 check(connectBlock.includes('300') && !connectBlock.includes('SUBJECT LINE'), 'connection note states the 300 character cap and omits the subject rubric');
 check(emailBlock.includes('SUBJECT LINE'), 'email includes the subject rubric');
+
+check(buildImprovePrompt('li_comment', {}) === '' && buildImprovePrompt('nope', {}) === '',
+  'improve prompt is empty for rubric-off and unknown surfaces');
+const improveEmail = buildImprovePrompt('ta_email', {
+  subject: 'Original subject',
+  body: 'Original body to improve.',
+});
+const improveCritiqueIndex = improveEmail.indexOf('"critique"');
+const improveDimensionsIndex = improveEmail.indexOf('"dimensions"');
+const improveSubjectIndex = improveEmail.indexOf('"subject"');
+const improveBodyIndex = improveEmail.indexOf('"body"');
+check(improveCritiqueIndex < improveDimensionsIndex
+  && improveDimensionsIndex < improveSubjectIndex
+  && improveSubjectIndex < improveBodyIndex,
+'improve contract places critique and dimensions before subject and body');
+check(improveEmail.includes('== MESSAGE TO IMPROVE ==')
+  && improveEmail.includes('Original body to improve.'),
+'improve prompt includes the message section and supplied body');
+check(!improveEmail.includes('== COMPANY RESEARCH (verified, use for personalization) =='),
+  'improve prompt omits the company research block when no research is supplied');
+const improveWithResearch = buildImprovePrompt('ta_email', {
+  subject: 'Original subject',
+  body: 'Generic praise to improve.',
+  companyResearch: 'Northwind Data serves 12,000 organizations, including 95 of the Fortune 100.',
+});
+const researchCritiqueIndex = improveWithResearch.indexOf('"critique"');
+const researchDimensionsIndex = improveWithResearch.indexOf('"dimensions"');
+const researchSubjectIndex = improveWithResearch.indexOf('"subject"');
+const researchBodyIndex = improveWithResearch.indexOf('"body"');
+check(improveWithResearch.includes('== COMPANY RESEARCH (verified, use for personalization) ==')
+  && improveWithResearch.includes('Northwind Data serves 12,000 organizations'),
+  'improve prompt renders supplied company research');
+check(researchCritiqueIndex < researchDimensionsIndex
+  && researchDimensionsIndex < researchSubjectIndex
+  && researchSubjectIndex < researchBodyIndex,
+  'research keeps critique and dimensions ahead of subject and body');
+check(improveWithResearch.includes('DELETE the generic sentence rather than inventing a fact or keeping the vague version.'),
+  'improve prompt requires deletion when research cannot support personalization');
+const oversizedResearch = 'R'.repeat(1300);
+const cappedResearchPrompt = buildImprovePrompt('ta_email', { body: 'Draft.', companyResearch: oversizedResearch });
+check(cappedResearchPrompt.includes('R'.repeat(1200)) && !cappedResearchPrompt.includes('R'.repeat(1201)),
+  'company research is capped at 1200 characters');
+const improveDm = buildImprovePrompt('ta_dm', { subject: 'Ignored subject', body: 'Direct message.' });
+check(!improveDm.includes('Subject: Ignored subject'), 'improve prompt omits the subject line when the profile has no subject dimension');
+
+const plainEmailContract = buildPlainContract('ta_email');
+const plainDmContract = buildPlainContract('ta_dm');
+check(plainEmailContract.includes('"subject"') && plainEmailContract.includes('"body"'), 'plain contract derives a subject for email surfaces');
+check(!plainDmContract.includes('"subject"') && plainDmContract.includes('"body"'), 'plain contract omits the subject for direct-message surfaces');
 
 const proofBlock = buildRubricBlock('ta_email', { proofPoints: [{ name: 'X', heroMetric: 'Y' }] });
 check(proofBlock.includes('VERIFIABLE CLAIMS') && proofBlock.includes('X') && proofBlock.includes('Y'), 'proof points render the claims header, name, and hero metric');
@@ -84,6 +143,33 @@ check(surrounded?.body === 'Surrounded body', 'prose before and after the object
 
 const braceBody = parseReviewed('prefix {"body":"Keep this } brace."} suffix {"body":"later"}', 'ta_dm');
 check(braceBody?.body === 'Keep this } brace.', 'balanced extraction ignores a closing brace inside a string');
+
+for (const surfaceId of ['ta_email', 'ta_dm', 'reply_email', 'app_followup', 'connect_note_generic']) {
+  const actual = JSON.stringify(parseReviewed('{"subject":"Exact subject","body":"Exact body"}', surfaceId));
+  const expected = getProfile(surfaceId).dims.some((dimension) => dimension.id === 'subject')
+    ? '{"subject":"Exact subject","body":"Exact body","review":null}'
+    : '{"body":"Exact body","review":null}';
+  check(actual === expected, `${surfaceId} plain draft parsing remains byte identical`);
+}
+
+const coverFields = {
+  salutation: 'Dear Hiring Team,',
+  p1: 'Opening paragraph.',
+  p2: 'Evidence paragraph.',
+  p3: 'Closing paragraph.',
+  closing: 'Sincerely,',
+};
+const reviewedCover = parseReviewedFields(JSON.stringify({
+  critique: { weakest_dimension: 'evidence', fixes: ['Replace the general result with the sourced metric.'] },
+  dimensions: [{ id: 'evidence', score: 8, explanation: '"Evidence paragraph" uses sourced proof.' }],
+  ...coverFields,
+}), 'cover_letter');
+check(JSON.stringify(reviewedCover?.fields) === JSON.stringify(coverFields) && reviewedCover?.review?.score === 80,
+  'parseReviewedFields returns all five cover letter fields and a review');
+const partialCover = { ...coverFields };
+delete partialCover.p2;
+check(parseReviewedFields(JSON.stringify(partialCover), 'cover_letter') === null,
+  'parseReviewedFields rejects a cover letter with a missing field');
 
 const malformedReview = parseReviewed(JSON.stringify({
   body: 'The draft survives.',
