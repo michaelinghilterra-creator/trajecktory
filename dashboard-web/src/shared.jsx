@@ -87,9 +87,9 @@ window.ScoreChip = function ScoreChip({ score }) {
 };
 
 // ---------- Draft review badge (0-100) ----------
-window.DraftScoreBadge = function DraftScoreBadge({ review, onRerun, busy }) {
+window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, onRerun, onImprove, busy, improving }) {
   const [open, setOpen] = React.useState(false);
-  if (!review && !onRerun) return null;
+  if (!review && !onRerun && !onImprove) return null;
 
   const badgeColor = (s) =>
     s == null ? "#71717a" : s >= 80 ? "#22c55e" : s >= 60 ? "#eab308" : "#ef4444";
@@ -110,7 +110,7 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, onRerun, busy }) {
             alignItems: "center",
           }}
         >
-          {review.score}/100
+          {reviewOf === 'original' ? 'was ' : ''}{review.score}/100
           <span style={{
             display: "inline-block",
             transform: open ? "rotate(180deg)" : "rotate(0deg)",
@@ -127,6 +127,16 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, onRerun, busy }) {
           style={{ marginLeft: 6, fontSize: 11 }}
         >
           {busy ? "Reviewing..." : "Get independent review"}
+        </button>
+      )}
+      {onImprove && (
+        <button
+          className="btn sm"
+          onClick={onImprove}
+          disabled={improving}
+          style={{ marginLeft: 6, fontSize: 11 }}
+        >
+          {improving ? "Improving..." : "Improve this draft"}
         </button>
       )}
       {open && review && (

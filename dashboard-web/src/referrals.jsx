@@ -668,6 +668,11 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
   const [edit, setEdit] = useState({});
   const [detail, setDetail] = useState(null);
   const [compose, setCompose] = useState(null);   // { direction, subject, body } | null
+  const [reviewing, setReviewing] = useState(false);
+  const [improving, setImproving] = useState(false);
+  const [proposedDraft, setProposedDraft] = useState(null);
+  const [improveSnapshot, setImproveSnapshot] = useState('');
+  const improveAbortRef = useRef(null);
   const [saving, setSaving] = useState(false);
   const toast = window.tjkToast || (() => {});
   const FIELDS = [
@@ -695,8 +700,19 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
   useEffect(() => {
     const h = e => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
+    return () => {
+      window.removeEventListener('keydown', h);
+      improveAbortRef.current?.abort();
+    };
   }, [onClose]);
+
+  const clearCompose = () => {
+    improveAbortRef.current?.abort();
+    improveAbortRef.current = null;
+    setImproving(false);
+    setProposedDraft(null);
+    setCompose(null);
+  };
 
   const submitMessage = () => {
     if (!compose || !compose.body.trim()) { toast('Add the message text first', 'warn'); return; }
@@ -707,7 +723,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
     }).then(r => r.json()).then(d => {
       setSaving(false);
       if (!d.ok) { toast(d.error || 'Could not log', 'error'); return; }
-      setCompose(null); loadDetail(); onChanged && onChanged();
+      clearCompose(); loadDetail(); onChanged && onChanged();
       toast(d.linkedTo ? `Logged to your TA timeline for this person` : `Logged ${compose.direction.toLowerCase()}`, 'success');
     }).catch(() => { setSaving(false); toast('Could not log', 'error'); });
   };
@@ -718,6 +734,10 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
   const [generating, setGenerating] = useState(false);
   const generate = () => {
     if (!compose) return;
+    improveAbortRef.current?.abort();
+    improveAbortRef.current = null;
+    setImproving(false);
+    setProposedDraft(null);
     setGenerating(true);
     const fail = (msg) => { setGenerating(false); toast(msg || 'Draft failed', 'error'); };
     const blockedMsg = (d) => `Outreach paused${d.nextEligible ? ` until ${String(d.nextEligible).slice(0, 10)}` : ''}: ${(d.blocks || []).join('; ') || 'cooldown or cap in effect'}`;
@@ -739,7 +759,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
           body: JSON.stringify({ source: 'referral', id: row.id, name: row.name, role: row.how, company: row.where, reason: row.target || row.how, firstName: first, tone: compose.tone || 'Warm' }),
         }).then(r => r.json()).then(d => {
           if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-          if (d && d.response) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.response })); setGenerating(false); }
+          if (d && d.response) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.response, review: d.review || null, reviewOf: null, surfaceId: d.surfaceId || null })); setGenerating(false); }
           else fail(d && d.error);
         }).catch(() => fail());
       } else {
@@ -748,7 +768,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
           body: JSON.stringify({ topic: liTopic, channel: 'linkedin' }),
         }).then(r => r.json()).then(d => {
           if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-          if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.draft.body || '' })); setGenerating(false); }
+          if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.draft.body || '', review: d.review || null, reviewOf: null, surfaceId: d.surfaceId || null })); setGenerating(false); }
           else fail(d && d.error);
         }).catch(() => fail());
       }
@@ -760,10 +780,61 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
         body: JSON.stringify({ topic, mode }),
       }).then(r => r.json()).then(d => {
         if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-        if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: d.draft.subject || c.subject, body: d.draft.body || '' })); setGenerating(false); }
+        if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: d.draft.subject || c.subject, body: d.draft.body || '', review: d.review || null, reviewOf: null, surfaceId: d.surfaceId || null })); setGenerating(false); }
         else fail(d && d.error);
       }).catch(() => fail());
     }
+  };
+
+  const rerunReview = () => {
+    if (!compose?.surfaceId || reviewing) return;
+    setReviewing(true);
+    window.tjkMutate('/api/drafts/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: compose.body || '', subject: compose.subject || '', surfaceId: compose.surfaceId }),
+    }).then(r => r.json()).then(d => {
+      if (d.error) throw new Error(d.error);
+      setCompose(c => c ? ({ ...c, review: d.review || null, reviewOf: null }) : c);
+    }).catch(err => toast(err.message, 'error')).finally(() => setReviewing(false));
+  };
+
+  const improveDraft = () => {
+    if (!compose?.surfaceId || improving) return;
+    const snapshot = compose.body || '';
+    const controller = new AbortController();
+    improveAbortRef.current?.abort();
+    improveAbortRef.current = controller;
+    setImproveSnapshot(snapshot);
+    setImproving(true);
+    setProposedDraft(null);
+    window.tjkMutate('/api/drafts/improve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        body: snapshot,
+        subject: compose.subject || '',
+        surfaceId: compose.surfaceId,
+        recipientFirst: String(row.name || '').trim().split(/\s+/)[0] || '',
+      }),
+      signal: controller.signal,
+    }).then(r => r.json()).then(d => {
+      if (d.error) throw new Error(d.error);
+      setProposedDraft(d.draft || null);
+      setCompose(c => c ? ({ ...c, review: d.review || null, reviewOf: d.reviewOf || null }) : c);
+    }).catch(err => {
+      if (err.name !== 'AbortError') toast(err.message, 'error');
+    }).finally(() => {
+      if (!controller.signal.aborted) setImproving(false);
+      if (improveAbortRef.current === controller) improveAbortRef.current = null;
+    });
+  };
+
+  const replaceWithProposed = () => {
+    if (!proposedDraft || !compose) return;
+    if ((compose.body || '') !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
+    setCompose(c => ({ ...c, subject: proposedDraft.subject || c.subject || '', body: proposedDraft.body || '' }));
+    setProposedDraft(null);
   };
 
   const color = REF_STATUS_COLORS[row.status] || 'var(--text)';
@@ -911,6 +982,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
               <div style={{ fontSize: 11, fontWeight: 700, color: compose.direction === 'Sent' ? '#a78bfa' : '#22d3ee' }}>
                 {compose.ai ? 'Draft a message with AI' : compose.direction === 'Sent' ? 'Log a message you sent' : 'Log a reply you received'}
               </div>
+              {compose.ai && window.DraftScoreBadge && <window.DraftScoreBadge review={compose.review} reviewOf={compose.reviewOf} onRerun={compose.surfaceId ? rerunReview : null} onImprove={compose.surfaceId ? improveDraft : null} busy={reviewing} improving={improving} />}
 
               {/* Channel — which surface this message went out on. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -968,6 +1040,17 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
                 onChange={e => setCompose(c => ({ ...c, subject: e.target.value }))} />
               <textarea placeholder={compose.ai ? 'Generate a draft above, then edit it here…' : 'What was said…'} value={compose.body} rows={5} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
                 onChange={e => setCompose(c => ({ ...c, body: e.target.value }))} />
+              {proposedDraft && (
+                <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel)' }}>
+                  <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
+                  {proposedDraft.subject && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{proposedDraft.subject}</div>}
+                  <div style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{proposedDraft.body}</div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                    <button className="btn primary sm" onClick={replaceWithProposed}>Replace draft</button>
+                    <button className="btn ghost sm" onClick={() => setProposedDraft(null)}>Discard</button>
+                  </div>
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button className="btn primary sm" disabled={saving} onClick={submitMessage}>{saving ? 'Saving…' : (compose.direction === 'Sent' ? 'Log as sent' : 'Log as received')}</button>
                 {compose.ai && (
@@ -975,7 +1058,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
                     {compose.direction === 'Sent' ? 'Mark as received' : 'Mark as sent'}
                   </button>
                 )}
-                <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={() => setCompose(null)}>Cancel</button>
+                <button className="btn ghost sm" style={{ marginLeft: 'auto' }} onClick={clearCompose}>Cancel</button>
               </div>
             </div>
           )}
