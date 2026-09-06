@@ -17,7 +17,7 @@ import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleCont
 // (flagged, not dropped) and rotates into view on a later day.
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { parseReferralsMd } from '../lib/referrals.mjs';
-import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
+import { getIdentity, getOutreachPolicy, getNarrative } from '../lib/profile.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
 import { canContact } from '../lib/outreach-policy.mjs';
 import { getInmailBudget } from '../lib/inmail-budget.mjs';
@@ -561,8 +561,10 @@ ${profileMd}
 Output ONLY a JSON object — no markdown, no code fences, no explanation:
 {"subject": "<email subject — keep tight, reference role>", "body": "<email body — plain text, no signature block, no greeting like 'Hi Name' (UI prefills salutation)>"}`;
 
+    const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'app_followup', {
       model: draftModel(), maxTokens: 800, cvMd,
+      rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
     });
     if (result.error) return res.status(500).json({ error: 'Could not parse draft' });
     const draft = await finishDraft({

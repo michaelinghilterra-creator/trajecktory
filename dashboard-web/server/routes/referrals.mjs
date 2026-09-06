@@ -8,7 +8,7 @@ import { readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mj
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
-import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
+import { getIdentity, getOutreachPolicy, getNarrative } from '../lib/profile.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
@@ -414,8 +414,10 @@ ${topicGuidance}
 ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
 Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subject line, NO signature block, NO trailing sign-off (no '${me.firstName}', no 'Best,\\n${me.firstName}'), and NO greeting or bare first-name address (the UI prefills 'Hi ${firstName},', so the first sentence MUST begin with substantive content — do NOT start with '${firstName}', 'Hi', 'Hello', or 'Hey'). No quotes, no preface, no explanation.`;
 
+      const narrative = getNarrative();
       const result = await generateWithRubric(prompt, 'referral_dm', {
         model: draftModel(), maxTokens: 700, cvMd, plainTextFallback: true,
+        rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
       });
       const dm = await finishDraft({
         body: result.body, surface: 'referral_dm',
@@ -430,8 +432,10 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
       const inbound = lastReceived(prior);
       if (!inbound) return res.status(400).json({ error: 'No received message from this contact yet — nothing to reply to.' });
       const prompt = buildReplyPrompt({ me, cvMd, profileMd, prior, contactLabel, contactBlock, firstName });
+      const narrative = getNarrative();
       const result = await generateWithRubric(prompt, 'reply_email', {
         model: draftModel(), maxTokens: 1024, cvMd,
+        rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
       });
       if (result.error) return res.status(500).json({ error: 'Could not parse reply draft from model output' });
       const reply = await finishDraft({
@@ -448,8 +452,10 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
       const sent = lastSent(prior);
       if (!sent) return res.status(400).json({ error: 'No message sent to this contact yet — nothing to follow up on.' });
       const prompt = buildFollowupFromSentPrompt({ me, cvMd, profileMd, prior, contactLabel, contactBlock, firstName });
+      const narrative = getNarrative();
       const result = await generateWithRubric(prompt, 'followup_sent', {
         model: draftModel(), maxTokens: 1024, cvMd,
+        rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
       });
       if (result.error) return res.status(500).json({ error: 'Could not parse follow-up draft from model output' });
       const followup = await finishDraft({
@@ -504,8 +510,10 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slic
 Output ONLY a JSON object — no markdown, no code fences, no explanation:
 {"subject": "<subject line — short and human>", "body": "<message body — plain text, no signature block, NO trailing sign-off (no '${me.firstName}', no 'Best,\\n${me.firstName}'), NO greeting and NO bare first-name address. STRUCTURE: 2-4 short paragraphs separated by a LITERAL \\n\\n between paragraphs. The UI prefills 'Hi ${firstName},' so the first sentence MUST begin with substantive content — do NOT start with '${firstName}', 'Hi', 'Hello', or 'Hey'.>"}`;
 
+    const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'referral_email', {
       model: draftModel(), maxTokens: 1024, cvMd,
+      rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
     });
     if (result.error) return res.status(500).json({ error: 'Could not parse draft from model output' });
     const draft = await finishDraft({

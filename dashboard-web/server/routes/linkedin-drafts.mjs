@@ -13,7 +13,7 @@ import { parseTargetTalentMd, updateTTLine, readTTCorrespondence } from '../lib/
 import { parseReferralsMd } from '../lib/referrals.mjs';
 import { getLinkedInStatus } from '../lib/tt-linkedin.mjs';
 import { summarizeThread } from '../lib/correspondence-context.mjs';
-import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
+import { getIdentity, getOutreachPolicy, getNarrative } from '../lib/profile.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
@@ -363,16 +363,18 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     });
 
     const rubricActive = process.env.TJK_RUBRIC_DISABLED !== '1';
+    const narrative = getNarrative();
+    const narrativeOpts = { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers };
 
     let result = await generateWithRubric(
       buildPrompt(280), 'connect_note_influencer',
-      { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true },
+      { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true, rubricOpts: narrativeOpts },
     );
     const firstBody = result.body || '';
     if (flattenConnectNote(stripDraftMeta(cleanProse(firstBody))).length > 300) {
       result = await generateWithRubric(
         buildPrompt(250), 'connect_note_influencer',
-        { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true },
+        { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true, rubricOpts: narrativeOpts },
       );
     }
     const note = await finishDraft({
@@ -506,8 +508,10 @@ HARD RULES:
 
 Return ONLY the message text, ready to paste, including the "Hi ${recipientFirst}," opener and the "Thanks, ${idn.firstName}" sign-off. No preface, no quotes, no explanation.`;
 
+    const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'li_followup', {
       model: draftModel(), maxTokens: 500, cvMd, plainTextFallback: true,
+      rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
     });
     const fu = await finishDraft({
       body: result.body, surface: 'li_followup',
