@@ -7,7 +7,7 @@ import {
   buildRubricBlock,
   reviewFailureReason,
 } from '../../../lib/outreach-rubric.mjs';
-import { generateText, readProjectFile } from './anthropic.mjs';
+import { generateText, readOptionalProjectFile } from './anthropic.mjs';
 import { getNarrative } from './profile.mjs';
 
 const FIGURE_PATTERN = /\$\d[\d,]*(?:\.\d+)?(?:[KMB])?|\b\d[\d,]*(?:\.\d+)?%|\b(?:\d{1,3}(?:,\d{3})+|\d{3,})(?:\.\d+)?\b/gi;
@@ -213,8 +213,10 @@ export async function gradeIndependently(body, surfaceId, opts = {}) {
     const values = opts && typeof opts === 'object' ? opts : {};
     const promptOptions = { ...values, body: typeof body === 'string' ? body : '' };
     if (!promptOptions.cvExcerpt && typeof values.projectRoot === 'string') {
-      const cvMd = readProjectFile(values.projectRoot, 'cv.md');
-      if (!cvMd.startsWith('[')) promptOptions.cvExcerpt = cvMd;
+      // Exact sentinel match, not a leading-bracket test: a markdown CV that
+      // opens with a link line would otherwise be dropped from the prompt.
+      const cvMd = readOptionalProjectFile(values.projectRoot, 'cv.md');
+      if (cvMd) promptOptions.cvExcerpt = cvMd;
     }
     const prompt = buildIndependentGradePrompt(surfaceId, promptOptions);
     if (!prompt) return null;

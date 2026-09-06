@@ -103,6 +103,12 @@ check(badSurface.status === 400, 'independent review rejects unknown surfaceId')
 const noBody = await post('/api/drafts/review', { surfaceId: 'ta_email' });
 check(noBody.status === 400, 'independent review rejects missing body');
 
+// A short_public surface is a registered surface with rubric: false. It must be
+// refused as a bad request, not fall through to the generic 500 that reads like
+// a model failure.
+const rubricOff = await post('/api/drafts/review', { body: 'Test', surfaceId: 'li_comment' });
+check(rubricOff.status === 400, 'independent review rejects a surface the rubric does not grade');
+
 // Shut down cleanly and let the event loop DRAIN rather than process.exit() —
 // on Windows a forced exit that races a mid-close handle (the server socket or
 // undici's keep-alive fetch pool) trips a libuv assertion. Close both, then just
