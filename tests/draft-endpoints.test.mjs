@@ -109,6 +109,55 @@ check(noBody.status === 400, 'independent review rejects missing body');
 const rubricOff = await post('/api/drafts/review', { body: 'Test', surfaceId: 'li_comment' });
 check(rubricOff.status === 400, 'independent review rejects a surface the rubric does not grade');
 
+const improveNoBody = await post('/api/drafts/improve', { surfaceId: 'ta_email' });
+check(improveNoBody.status === 400, 'improve rejects missing body');
+
+const improveBadSurface = await post('/api/drafts/improve', { body: 'Test', surfaceId: 'not_a_surface' });
+check(improveBadSurface.status === 400, 'improve rejects unknown surfaceId');
+
+const improveRubricOff = await post('/api/drafts/improve', { body: 'Test', surfaceId: 'li_comment' });
+check(improveRubricOff.status === 400, 'improve rejects a surface the rubric does not grade');
+
+process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
+  critique: { weakest_dimension: 'clarity', fixes: ['Open with the result.'] },
+  score: 71,
+  dimensions: [
+    { id: 'relevance', score: 7, explanation: 'q' },
+    { id: 'clarity', score: 6, explanation: 'q' },
+  ],
+  subject: 'Stub subject',
+  body: 'Stub body for the smoke test.',
+});
+const improveOriginal = { subject: 'Original subject', body: 'Original body.' };
+const improveRes = await post('/api/drafts/improve', {
+  ...improveOriginal,
+  surfaceId: 'ta_email',
+  recipientFirst: 'Jane',
+});
+check(improveRes.status === 200
+  && improveRes.body.ok === true
+  && typeof improveRes.body.draft?.body === 'string'
+  && improveRes.body.draft.body.length > 0
+  && improveRes.body.review?.score > 0
+  && improveRes.body.reviewOf === 'original'
+  && JSON.stringify(improveRes.body.original) === JSON.stringify(improveOriginal),
+'improve returns the rewritten draft, original review label, score, and echoed input');
+
+process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
+  critique: { weakest_dimension: 'clarity', fixes: ['Shorten the note.'] },
+  dimensions: [
+    { id: 'relevance', score: 7, explanation: 'q' },
+    { id: 'clarity', score: 6, explanation: 'q' },
+  ],
+  body: 'x'.repeat(350),
+});
+const improveConnectNote = await post('/api/drafts/improve', {
+  body: 'Original connection note.',
+  surfaceId: 'connect_note_generic',
+});
+check(improveConnectNote.status === 200 && improveConnectNote.body.draft?.body.length === 300,
+  'improve hard fits character capped surfaces to the profile limit');
+
 // Shut down cleanly and let the event loop DRAIN rather than process.exit() —
 // on Windows a forced exit that races a mid-close handle (the server socket or
 // undici's keep-alive fetch pool) trips a libuv assertion. Close both, then just

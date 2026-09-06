@@ -14,6 +14,7 @@ import {
   getProfile,
   buildPlainContract,
   buildRubricBlock,
+  buildImprovePrompt,
   parseReviewed,
   weightedScore,
   violatesHardConstraint,
@@ -58,6 +59,26 @@ check(critiqueIndex < dimensionsIndex && dimensionsIndex < subjectIndex && subje
 const connectBlock = buildRubricBlock('connect_note', {});
 check(connectBlock.includes('300') && !connectBlock.includes('SUBJECT LINE'), 'connection note states the 300 character cap and omits the subject rubric');
 check(emailBlock.includes('SUBJECT LINE'), 'email includes the subject rubric');
+
+check(buildImprovePrompt('li_comment', {}) === '' && buildImprovePrompt('nope', {}) === '',
+  'improve prompt is empty for rubric-off and unknown surfaces');
+const improveEmail = buildImprovePrompt('ta_email', {
+  subject: 'Original subject',
+  body: 'Original body to improve.',
+});
+const improveCritiqueIndex = improveEmail.indexOf('"critique"');
+const improveDimensionsIndex = improveEmail.indexOf('"dimensions"');
+const improveSubjectIndex = improveEmail.indexOf('"subject"');
+const improveBodyIndex = improveEmail.indexOf('"body"');
+check(improveCritiqueIndex < improveDimensionsIndex
+  && improveDimensionsIndex < improveSubjectIndex
+  && improveSubjectIndex < improveBodyIndex,
+'improve contract places critique and dimensions before subject and body');
+check(improveEmail.includes('== MESSAGE TO IMPROVE ==')
+  && improveEmail.includes('Original body to improve.'),
+'improve prompt includes the message section and supplied body');
+const improveDm = buildImprovePrompt('ta_dm', { subject: 'Ignored subject', body: 'Direct message.' });
+check(!improveDm.includes('Subject: Ignored subject'), 'improve prompt omits the subject line when the profile has no subject dimension');
 
 const plainEmailContract = buildPlainContract('ta_email');
 const plainDmContract = buildPlainContract('ta_dm');
