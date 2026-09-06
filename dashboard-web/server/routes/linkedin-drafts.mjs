@@ -392,27 +392,33 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       ...(companyResearch ? { companyResearch } : {}),
     };
 
-    let result = await generateWithRubric(
+    // One model call, not two. This used to redraft at a stricter target when the
+    // note overran 300 characters, which cost a second full rubric call on the
+    // plan path. fitConnectNote trims at a sentence boundary and preserves the
+    // sign-off, so an overrun is repaired deterministically instead of by asking
+    // the model again. finishDraft's own hardFit is a blunt slice that can cut
+    // mid-word, so it is left off here and fitConnectNote owns the cap.
+    const result = await generateWithRubric(
       buildPrompt(280), 'connect_note_influencer',
       { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true, rubricOpts: narrativeOpts },
     );
     if (result.error) return res.status(500).json({ error: 'Could not parse connection note from model output' });
-    const firstBody = result.body || '';
-    if (flattenConnectNote(stripDraftMeta(cleanProse(firstBody))).length > 300) {
-      result = await generateWithRubric(
-        buildPrompt(250), 'connect_note_influencer',
-        { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true, rubricOpts: narrativeOpts },
-      );
-      if (result.error) return res.status(500).json({ error: 'Could not parse connection note from model output' });
-    }
     const note = await finishDraft({
       body: result.body || result, surface: 'connect_note_influencer',
       review: result.review,
       reviewStatus: result.reviewStatus,
       cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
-      flatten: true, hardFit: 300, cadence: false,
+      flatten: true, hardFit: null, cadence: false,
     });
-    res.json({ response: note.body, length: note.body.length, review: note.review, reviewStatus: note.reviewStatus, surfaceId: 'connect_note_influencer', recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
+    // Trimming is deterministic but not free: an overrun gets cut at the last
+    // sentence boundary, and when none is late enough it ends at a word boundary
+    // mid-thought. Say so rather than shipping a silently shortened note.
+    const truncated = note.body.length > 300;
+    const fitted = fitConnectNote(note.body, idn.firstName);
+    if (truncated) {
+      console.warn('[connect-note] trimmed %d chars to fit the 300 cap', note.body.length - fitted.length);
+    }
+    res.json({ response: fitted.text, length: fitted.length, truncated, review: note.review, reviewStatus: note.reviewStatus, surfaceId: 'connect_note_influencer', recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
   } catch (err) {
     console.error('Error generating connect note:', err);
     res.status(500).json({ error: err.message });
