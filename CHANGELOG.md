@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.7.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.6.0...v3.7.0) (2026-09-06)
+
+
+### Features
+
+* ground outreach generation in the rubric, company research, and enforced asks ([#292](https://github.com/michaelinghilterra-creator/trajecktory/issues/292)) ([8aa9b4e](https://github.com/michaelinghilterra-creator/trajecktory/commit/8aa9b4e9266f472d45299fa7d25dc857d3c888ea))
+
 ## [3.6.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.5.0...v3.6.0) (2026-09-06)
 
 
