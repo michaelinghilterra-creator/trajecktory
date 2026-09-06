@@ -5,13 +5,15 @@ import { ROOT_DIR } from '../config.mjs';
 import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
+import { finishDraft } from '../lib/finish-draft.mjs';
+import { generateWithRubric } from '../lib/draft-grader.mjs';
 import { loadInfluencer, toneInstruction, flattenConnectNote, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine, readTTCorrespondence } from '../lib/target-talent.mjs';
 import { parseReferralsMd } from '../lib/referrals.mjs';
 import { getLinkedInStatus } from '../lib/tt-linkedin.mjs';
 import { summarizeThread } from '../lib/correspondence-context.mjs';
-import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
+import { getIdentity, getOutreachPolicy, getNarrative } from '../lib/profile.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
@@ -360,12 +362,28 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       guidance, cvExcerpt, tone, toneText: toneInstruction(tone), targetMax,
     });
 
-    let response = flattenConnectNote(stripDraftMeta(cleanProse((await generateText(buildPrompt(280), { model: draftModel(), maxTokens: 220 })).trim())));
-    if (response.length > 300) {
-      response = flattenConnectNote(stripDraftMeta(cleanProse((await generateText(buildPrompt(250), { model: draftModel(), maxTokens: 220 })).trim())));
+    const rubricActive = process.env.TJK_RUBRIC_DISABLED !== '1';
+    const narrative = getNarrative();
+    const narrativeOpts = { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers };
+
+    let result = await generateWithRubric(
+      buildPrompt(280), 'connect_note_influencer',
+      { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true, rubricOpts: narrativeOpts },
+    );
+    const firstBody = result.body || '';
+    if (flattenConnectNote(stripDraftMeta(cleanProse(firstBody))).length > 300) {
+      result = await generateWithRubric(
+        buildPrompt(250), 'connect_note_influencer',
+        { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true, rubricOpts: narrativeOpts },
+      );
     }
-    response = fitConnectNote(response, idn.firstName).text;
-    res.json({ response, length: response.length, recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
+    const note = await finishDraft({
+      body: result.body || result, surface: 'connect_note_influencer',
+      review: result.review,
+      cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
+      flatten: true, hardFit: 300, cadence: false,
+    });
+    res.json({ response: note.body, length: note.body.length, review: note.review, recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
   } catch (err) {
     console.error('Error generating connect note:', err);
     res.status(500).json({ error: err.message });
@@ -490,9 +508,17 @@ HARD RULES:
 
 Return ONLY the message text, ready to paste, including the "Hi ${recipientFirst}," opener and the "Thanks, ${idn.firstName}" sign-off. No preface, no quotes, no explanation.`;
 
-    let response = stripDraftMeta(cleanProse((await generateText(prompt, { model: draftModel(), maxTokens: 500 })).trim()));
-    response = (await reviseForCadence(response, { surface: 'prose' })).text;
-    res.json({ response, length: response.length, recipient: { source: 'ta', id, name }, inmail: !connected });
+    const narrative = getNarrative();
+    const result = await generateWithRubric(prompt, 'li_followup', {
+      model: draftModel(), maxTokens: 500, cvMd, plainTextFallback: true,
+      rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
+    });
+    const fu = await finishDraft({
+      body: result.body, surface: 'li_followup',
+      review: result.review,
+      cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
+    });
+    res.json({ response: fu.body, length: fu.body.length, review: fu.review, recipient: { source: 'ta', id, name }, inmail: !connected });
   } catch (err) {
     console.error('Error generating follow-up message:', err);
     res.status(500).json({ error: err.message });

@@ -111,6 +111,14 @@ export const SECTIONS = [
     unitLabel: 'action', unitsPerRun: 1,
     warn: {},
   },
+  {
+    key: 'grade', label: 'Draft Review (on demand)', envKey: 'TJK_GRADE_MODEL',
+    hint: 'The independent second opinion from the Review button. Not used by normal drafting.',
+    options: ['sonnet', 'haiku'], default: 'sonnet',
+    tokensPerUnit: 6_000, split: { in: 0.75, out: 0.25 },
+    unitLabel: 'review', unitsPerRun: 1,
+    warn: { haiku: 'Measured 57s on the plan path and scores drift high. Sonnet is the calibrated setting.' },
+  },
 ];
 
 // Batch-size knobs — the throughput/cost trade for the Evaluate step. Plan path
@@ -266,6 +274,8 @@ export function modelsState({ keyPresent, evalBatch } = {}) {
   // Full-run estimate = a Triage pass + an Evaluate batch at their current models.
   const triage = sections.find((x) => x.key === 'triage');
   const evalS = sections.find((x) => x.key === 'eval');
+  // totalPerRun represents a batch pipeline run (triage + eval + scan). Drafting
+  // and grading are interactive, not part of the batch, so they are excluded.
   const totalPerRun = triage.costs[triage.current] + evalS.costs[evalS.current];
 
   return {
