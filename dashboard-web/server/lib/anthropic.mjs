@@ -40,6 +40,10 @@ export function draftModel() {
   return resolveModelId(currentModel('draft'));
 }
 
+export function gradeModel() {
+  return resolveModelId(currentModel('grade'));
+}
+
 // The SDK-based draft features (cover letters, resume tailoring, recruiter / TA
 // / LinkedIn outreach) need the user's own ANTHROPIC_API_KEY. Evaluate and Scan
 // do NOT — they run on the user's Claude Pro login via the `claude` CLI. The SDK
