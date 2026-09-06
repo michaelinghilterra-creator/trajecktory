@@ -90,14 +90,14 @@ check(!improveEmail.includes('== COMPANY RESEARCH (verified, use for personaliza
 const improveWithResearch = buildImprovePrompt('ta_email', {
   subject: 'Original subject',
   body: 'Generic praise to improve.',
-  companyResearch: 'Precisely serves 12,000 organizations, including 95 of the Fortune 100.',
+  companyResearch: 'Northwind Data serves 12,000 organizations, including 95 of the Fortune 100.',
 });
 const researchCritiqueIndex = improveWithResearch.indexOf('"critique"');
 const researchDimensionsIndex = improveWithResearch.indexOf('"dimensions"');
 const researchSubjectIndex = improveWithResearch.indexOf('"subject"');
 const researchBodyIndex = improveWithResearch.indexOf('"body"');
 check(improveWithResearch.includes('== COMPANY RESEARCH (verified, use for personalization) ==')
-  && improveWithResearch.includes('Precisely serves 12,000 organizations'),
+  && improveWithResearch.includes('Northwind Data serves 12,000 organizations'),
   'improve prompt renders supplied company research');
 check(researchCritiqueIndex < researchDimensionsIndex
   && researchDimensionsIndex < researchSubjectIndex

@@ -120,7 +120,7 @@ check(!inventedPercent.clean && JSON.stringify(inventedPercent.flagged) === JSON
   'an unsourced percentage is flagged');
 
 const companyFigureWithoutResearch = checkUnsourcedNumbers(
-  'Precisely serves 12,000 organizations.',
+  'Northwind Data serves 12,000 organizations.',
   FIXTURE_CV,
   FIXTURE_PROOF_POINTS,
 );
@@ -128,10 +128,10 @@ check(!companyFigureWithoutResearch.clean
   && JSON.stringify(companyFigureWithoutResearch.flagged) === JSON.stringify(['12,000']),
   'a company figure absent from candidate sources remains unsourced');
 const companyFigureWithResearch = checkUnsourcedNumbers(
-  'Precisely serves 12,000 organizations.',
+  'Northwind Data serves 12,000 organizations.',
   FIXTURE_CV,
   FIXTURE_PROOF_POINTS,
-  'Precisely is a data integrity leader serving 12,000 organizations.',
+  'Northwind Data is a data integrity leader serving 12,000 organizations.',
 );
 check(companyFigureWithResearch.clean && companyFigureWithResearch.flagged.length === 0,
   'a company figure present only in research is sourced when research is supplied');
@@ -192,8 +192,8 @@ const companyReviewRaw = JSON.stringify({
     { id: 'evidence', score: 8, explanation: 'The company figure is grounded.' },
     { id: 'personalization', score: 8, explanation: 'The company fact is specific.' },
   ],
-  subject: 'Precisely data integrity',
-  body: 'Precisely serves 12,000 organizations.',
+  subject: 'Northwind Data integrity',
+  body: 'Northwind Data serves 12,000 organizations.',
 });
 const parsedWithoutResearch = parseAndFinishDraft(companyReviewRaw, 'ta_email', FIXTURE_CV);
 const parsedWithoutResearchEvidence = parsedWithoutResearch.review?.dimensions
@@ -204,7 +204,7 @@ const parsedWithResearch = parseAndFinishDraft(
   companyReviewRaw,
   'ta_email',
   FIXTURE_CV,
-  'Precisely serves 12,000 organizations.',
+  'Northwind Data serves 12,000 organizations.',
 );
 const parsedWithResearchEvidence = parsedWithResearch.review?.dimensions
   .find((dimension) => dimension.id === 'evidence')?.score;
@@ -217,7 +217,7 @@ process.env.TJK_FAKE_LLM = '1';
 process.env.TJK_FAKE_LLM_TEXT = companyReviewRaw;
 const generatedWithResearch = await generateWithRubric('Draft a concise note.', 'ta_email', {
   cvMd: FIXTURE_CV,
-  rubricOpts: { companyResearch: 'Precisely serves 12,000 organizations.' },
+  rubricOpts: { companyResearch: 'Northwind Data serves 12,000 organizations.' },
 });
 const generatedWithResearchEvidence = generatedWithResearch.review?.dimensions
   .find((dimension) => dimension.id === 'evidence')?.score;
