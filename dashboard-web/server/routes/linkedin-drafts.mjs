@@ -253,7 +253,8 @@ ANGLE (${angle}): ${angleGuidance[angle] || angleGuidance['Reference Post']}
 TONE DIRECTIVE (${tone}): ${toneInstruction(tone)}
 
 HARD RULES:
-- ABSOLUTE MAXIMUM ${targetMax} characters TOTAL (including the "Thanks, ${id.firstName}" sign-off). LinkedIn caps connection notes at 300 characters and will reject anything longer. Count characters before responding. Aim for ${targetMax - 20} to leave safety margin.
+- LENGTH, the constraint most often missed: write TWO short sentences plus the sign-off, about 40 words. Counting characters is unreliable, so hit the sentence and word target and the character cap takes care of itself.
+- ABSOLUTE MAXIMUM ${targetMax} characters TOTAL (including the "Thanks, ${id.firstName}" sign-off). LinkedIn caps connection notes at 300 characters and will reject anything longer. An over-length note gets trimmed at a sentence boundary, so a third sentence is likely to be cut rather than shortened.
 - Open with their first name + comma. Example: "Hi Sangram,"
 - NO em dashes (—). Use periods, commas, semicolons, colons, or parentheses.
 - One reason to connect that is grounded in the angle above. Be specific, not generic.

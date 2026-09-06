@@ -220,7 +220,8 @@ WHY CONNECT: ${guidance || `Anchor on shared focus in the GTM / RevOps / analyti
 TONE DIRECTIVE (${tone}): ${toneText}
 
 HARD RULES:
-- The connection note text itself has an ABSOLUTE MAXIMUM of ${targetMax} characters, including the "Thanks, ${first}" sign-off. The JSON wrapper does not count toward this note-text limit. LinkedIn caps connection notes at 300 characters and will reject longer note text. Count the note text characters before responding. Aim for ${targetMax - 20} to leave a safety margin.
+- LENGTH, and this is the constraint most often missed: write TWO short sentences plus the sign-off, about 40 words of note text. Counting characters is unreliable, so hit the sentence and word target and the character cap takes care of itself.
+- The note text has an ABSOLUTE MAXIMUM of ${targetMax} characters including the "Thanks, ${first}" sign-off. The JSON wrapper does not count toward this note-text limit. LinkedIn caps connection notes at 300 characters and rejects longer note text. An over-length note gets trimmed at a sentence boundary, so a third sentence is likely to be cut rather than shortened.
 - Open with their first name + comma. Example: "Hi ${openExample},"
 - NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
 - One reason to connect that is grounded in the context above. Be specific, not generic.
