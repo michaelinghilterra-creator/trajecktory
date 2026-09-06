@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { ROOT_DIR } from '../config.mjs';
 import { resolveReportPath } from '../lib/safe-path.mjs';
+import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { parseApplicationsMd, patchRowInMd } from '../lib/applications.mjs';
 import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
@@ -520,18 +521,10 @@ router.post('/api/followups/:appNum/draft', async (req, res) => {
     const lastTouchDate = followups[0]?.date || app.date;
     const daysSinceLastTouch = _daysAgo(lastTouchDate);
 
-    let reportContext = '';
-    if (app.report) {
-      try {
-        // Contain to reports/ — the Report cell is agent-written/untrusted, so a
-        // value like [x](dashboard-web/.env) must not read a secret into this prompt.
-        const abs = resolveReportPath(app.report);
-        if (abs) {
-          const reportText = fs.readFileSync(abs, 'utf8');
-          reportContext = `\n== ROLE EVALUATION REPORT (excerpt, for grounding the follow-up) ==\n${reportText.slice(0, 3000)}\n`;
-        }
-      } catch { /* report missing, skip */ }
-    }
+    const reportResearch = loadCompanyResearch(app.report);
+    const reportContext = reportResearch
+      ? `\n== ROLE EVALUATION REPORT (excerpt, for grounding the follow-up) ==\n${reportResearch}\n`
+      : '';
 
     const id = getIdentity();
     const prompt = `You are drafting a brief, professional follow-up email from ${id.fullName}. He applied to ${app.company} for the ${app.role} role ${daysSinceApply} days ago. ${fuCount === 0 ? 'This is the FIRST follow-up — no prior touches.' : `He has already sent ${fuCount} follow-up${fuCount === 1 ? '' : 's'} (most recent ${daysSinceLastTouch} days ago). This is touch #${touchNumber}.`}

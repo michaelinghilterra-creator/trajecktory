@@ -7,9 +7,10 @@ import { cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
+import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { loadInfluencer, toneInstruction, flattenConnectNote, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
-import { parseTargetTalentMd, updateTTLine, readTTCorrespondence } from '../lib/target-talent.mjs';
+import { parseTargetTalentMd, updateTTLine, readTTCorrespondence, findRelatedApps } from '../lib/target-talent.mjs';
 import { parseReferralsMd } from '../lib/referrals.mjs';
 import { getLinkedInStatus } from '../lib/tt-linkedin.mjs';
 import { summarizeThread } from '../lib/correspondence-context.mjs';
@@ -18,6 +19,7 @@ import { getPersonContext } from '../lib/person-context.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
 import { getInmailBudget, decrementInmail, setInmailRemaining } from '../lib/inmail-budget.mjs';
+import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
 
 export const router = express.Router();
 
@@ -359,7 +361,14 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
 
     const rubricActive = process.env.TJK_RUBRIC_DISABLED !== '1';
     const narrative = getNarrative();
-    const narrativeOpts = { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers };
+    const relatedApps = findRelatedApps(recipientCompany);
+    const topApp = relatedApps.find(app => ACTIVE_STATUSES.includes(app.status)) || relatedApps[0];
+    const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
+    const narrativeOpts = {
+      proofPoints: narrative.proofPoints,
+      superpowers: narrative.superpowers,
+      ...(companyResearch ? { companyResearch } : {}),
+    };
 
     let result = await generateWithRubric(
       buildPrompt(280), 'connect_note_influencer',
@@ -414,6 +423,9 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
     const recipientFirst = recipient.firstName || name.split(/\s+/)[0] || 'there';
     const recipientRole = recipient.role || '';
     const company = recipient.company || '';
+    const relatedApps = findRelatedApps(company);
+    const topApp = relatedApps.find(app => ACTIVE_STATUSES.includes(app.status)) || relatedApps[0];
+    const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
     // Prior 1:1 history with THIS PERSON, merged across whichever books they are
     // filed in, rather than one book's correspondence file. A referral has no entry
     // in the target-talent log at all, so reading that directly returned either
@@ -512,7 +524,11 @@ HARD RULES:
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'li_followup', {
       model: draftModel(), maxTokens: 500, cvMd, plainTextFallback: true,
-      rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
+      rubricOpts: {
+        proofPoints: narrative.proofPoints,
+        superpowers: narrative.superpowers,
+        ...(companyResearch ? { companyResearch } : {}),
+      },
     });
     if (result.error) return res.status(500).json({ error: 'Could not parse follow-up message from model output' });
     const fu = await finishDraft({

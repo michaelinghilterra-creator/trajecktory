@@ -7,6 +7,7 @@ import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updat
 import { readProjectFile, readOptionalProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
+import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { getIdentity, getOutreachPolicy, getNarrative } from '../lib/profile.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
@@ -378,6 +379,7 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
       const connected = (context?.timeline || []).some(e => e.kind === 'invite-accepted');
       const relatedApps = findRelatedApps(ref.where);
       const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status)) || relatedApps[0];
+      const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
       const relatedContext = topApp
         ? `== LIVE APPLICATION AT ${String(ref.where || '').toUpperCase()} ==\nRole:   ${topApp.role}\nStatus: ${topApp.status} (applied ${topApp.date})\nWhen the intent is a referral ask, this is the specific opening to reference. Do NOT generalize.`
         : `No application currently logged at ${ref.where || 'their company'}. If the intent is an ask, frame it around the kind of roles ${me.firstName} targets (see profile) rather than a specific req.`;
@@ -419,7 +421,11 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
       const narrative = getNarrative();
       const result = await generateWithRubric(prompt, 'referral_dm', {
         model: draftModel(), maxTokens: 700, cvMd, plainTextFallback: true,
-        rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
+        rubricOpts: {
+          proofPoints: narrative.proofPoints,
+          superpowers: narrative.superpowers,
+          ...(companyResearch ? { companyResearch } : {}),
+        },
       });
       if (result.error) return res.status(500).json({ error: 'Could not parse LinkedIn draft from model output' });
       const dm = await finishDraft({
@@ -484,6 +490,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
     // Ground the ask in a live application at their company, when one exists.
     const relatedApps = findRelatedApps(ref.where);
     const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status)) || relatedApps[0];
+    const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
     const relatedContext = topApp
       ? `== LIVE APPLICATION AT ${String(ref.where || '').toUpperCase()} ==\nRole:   ${topApp.role}\nStatus: ${topApp.status} (applied ${topApp.date})\nWhen the topic is a referral ask, this is the specific opening to reference. Do NOT generalize.`
       : `No application currently logged at ${ref.where || 'their company'}. If the topic is an ask, frame it around the kind of roles ${me.firstName} targets (see profile) rather than a specific req.`;
@@ -523,7 +530,11 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slic
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'referral_email', {
       model: draftModel(), maxTokens: 1024, cvMd,
-      rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
+      rubricOpts: {
+        proofPoints: narrative.proofPoints,
+        superpowers: narrative.superpowers,
+        ...(companyResearch ? { companyResearch } : {}),
+      },
     });
     if (result.error) return res.status(500).json({ error: 'Could not parse draft from model output' });
     const draft = await finishDraft({

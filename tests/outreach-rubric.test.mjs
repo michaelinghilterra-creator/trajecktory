@@ -85,6 +85,30 @@ check(improveCritiqueIndex < improveDimensionsIndex
 check(improveEmail.includes('== MESSAGE TO IMPROVE ==')
   && improveEmail.includes('Original body to improve.'),
 'improve prompt includes the message section and supplied body');
+check(!improveEmail.includes('== COMPANY RESEARCH (verified, use for personalization) =='),
+  'improve prompt omits the company research block when no research is supplied');
+const improveWithResearch = buildImprovePrompt('ta_email', {
+  subject: 'Original subject',
+  body: 'Generic praise to improve.',
+  companyResearch: 'Precisely serves 12,000 organizations, including 95 of the Fortune 100.',
+});
+const researchCritiqueIndex = improveWithResearch.indexOf('"critique"');
+const researchDimensionsIndex = improveWithResearch.indexOf('"dimensions"');
+const researchSubjectIndex = improveWithResearch.indexOf('"subject"');
+const researchBodyIndex = improveWithResearch.indexOf('"body"');
+check(improveWithResearch.includes('== COMPANY RESEARCH (verified, use for personalization) ==')
+  && improveWithResearch.includes('Precisely serves 12,000 organizations'),
+  'improve prompt renders supplied company research');
+check(researchCritiqueIndex < researchDimensionsIndex
+  && researchDimensionsIndex < researchSubjectIndex
+  && researchSubjectIndex < researchBodyIndex,
+  'research keeps critique and dimensions ahead of subject and body');
+check(improveWithResearch.includes('DELETE the generic sentence rather than inventing a fact or keeping the vague version.'),
+  'improve prompt requires deletion when research cannot support personalization');
+const oversizedResearch = 'R'.repeat(1300);
+const cappedResearchPrompt = buildImprovePrompt('ta_email', { body: 'Draft.', companyResearch: oversizedResearch });
+check(cappedResearchPrompt.includes('R'.repeat(1200)) && !cappedResearchPrompt.includes('R'.repeat(1201)),
+  'company research is capped at 1200 characters');
 const improveDm = buildImprovePrompt('ta_dm', { subject: 'Ignored subject', body: 'Direct message.' });
 check(!improveDm.includes('Subject: Ignored subject'), 'improve prompt omits the subject line when the profile has no subject dimension');
 

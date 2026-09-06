@@ -1,7 +1,9 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
-import { gradeIndependently } from '../lib/draft-grader.mjs';
+import { checkTemplatedAsk, checkUnsourcedNumbers, gradeIndependently } from '../lib/draft-grader.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
+import { parseApplicationsMd } from '../lib/applications.mjs';
+import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { generateText, gradeModel, readOptionalProjectFile } from '../lib/anthropic.mjs';
 import {
   SURFACES,
@@ -9,10 +11,24 @@ import {
   getProfile,
   parseReviewed,
   reviewFailureReason,
+  weightedScore,
 } from '../../../lib/outreach-rubric.mjs';
 import { getNarrative } from '../lib/profile.mjs';
 
 export const router = express.Router();
+
+function researchForApplication(appId) {
+  try {
+    if (appId === undefined || appId === null || String(appId).trim() === '') return '';
+    if (typeof appId !== 'number' && typeof appId !== 'string') return '';
+    const parsedId = Number(appId);
+    if (!Number.isInteger(parsedId)) return '';
+    const app = parseApplicationsMd().find((candidate) => candidate.id === parsedId);
+    return app ? loadCompanyResearch(app.report) : '';
+  } catch {
+    return '';
+  }
+}
 
 router.post('/api/drafts/review', async (req, res) => {
   try {
@@ -56,7 +72,7 @@ router.post('/api/drafts/review', async (req, res) => {
 
 router.post('/api/drafts/improve', async (req, res) => {
   try {
-    const { body, subject, surfaceId, recipientFirst } = req.body || {};
+    const { body, subject, surfaceId, recipientFirst, appId } = req.body || {};
 
     if (!body || typeof body !== 'string' || !body.trim()) {
       return res.status(400).json({ error: 'body is required and must be a non-empty string.' });
@@ -71,12 +87,15 @@ router.post('/api/drafts/improve', async (req, res) => {
     }
 
     const narrative = getNarrative();
+    const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
+    const companyResearch = researchForApplication(appId);
     const prompt = buildImprovePrompt(surfaceId, {
       body,
       subject: typeof subject === 'string' ? subject : '',
-      cvExcerpt: readOptionalProjectFile(ROOT_DIR, 'cv.md'),
+      cvExcerpt: cvMd,
       proofPoints: narrative.proofPoints,
       superpowers: narrative.superpowers,
+      companyResearch,
     });
     const raw = await generateText(prompt, { model: gradeModel(), maxTokens: 2200 });
     const parsed = parseReviewed(raw, surfaceId);
@@ -88,7 +107,44 @@ router.post('/api/drafts/improve', async (req, res) => {
     const hasCharacterCap = profile.hardCapUnit === 'chars';
     // Use the same status vocabulary as the generation path, so a caller reads
     // one set of codes rather than a second one invented here.
-    const reviewStatus = parsed.review ? 'ok' : `missing:${reviewFailureReason(raw, surfaceId)}`;
+    let reviewStatus = parsed.review ? 'ok' : `missing:${reviewFailureReason(raw, surfaceId)}`;
+    if (parsed.review && companyResearch) {
+      try {
+        const numberCheck = checkUnsourcedNumbers(
+          parsed.body,
+          cvMd,
+          narrative.proofPoints,
+          companyResearch,
+        );
+        if (!numberCheck.clean) {
+          const evidence = parsed.review.dimensions.find((dimension) => dimension.id === 'evidence');
+          if (evidence) evidence.score = Math.min(evidence.score, 3);
+          parsed.review.topFixes = [
+            ...parsed.review.topFixes,
+            ...numberCheck.flagged.filter((figure) => !parsed.review.topFixes.includes(figure)),
+          ];
+          parsed.review.score = weightedScore(parsed.review.dimensions, profile);
+          parsed.review.unsourcedWarning = true;
+        }
+      } catch {
+        reviewStatus = 'ok:unverified';
+      }
+    }
+    if (parsed.review && profile.dims.some((dimension) => dimension.id === 'ask_strength')) {
+      try {
+        const askCheck = checkTemplatedAsk(parsed.body);
+        if (!askCheck.clean) {
+          const askStrength = parsed.review.dimensions.find((dimension) => dimension.id === 'ask_strength');
+          if (askStrength) askStrength.score = Math.min(askStrength.score, 3);
+          const fix = `Replace "${askCheck.matched}" with a specific next step tied to this message, or name the person you want to reach.`;
+          if (!parsed.review.topFixes.includes(fix)) parsed.review.topFixes.push(fix);
+          parsed.review.score = weightedScore(parsed.review.dimensions, profile);
+          parsed.review.templatedAskWarning = true;
+        }
+      } catch {
+        reviewStatus = 'ok:unverified';
+      }
+    }
 
     // Map finish behavior from the rubric profile so callers cannot weaken it.
     const finished = await finishDraft({

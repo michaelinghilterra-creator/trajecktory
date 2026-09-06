@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import {
+  checkTemplatedAsk,
   checkUnsourcedNumbers,
   generateWithRubric,
   gradeIndependently,
@@ -118,9 +119,110 @@ const inventedPercent = checkUnsourcedNumbers('Yield reached 47%.', FIXTURE_CV, 
 check(!inventedPercent.clean && JSON.stringify(inventedPercent.flagged) === JSON.stringify(['47%']),
   'an unsourced percentage is flagged');
 
+const companyFigureWithoutResearch = checkUnsourcedNumbers(
+  'Precisely serves 12,000 organizations.',
+  FIXTURE_CV,
+  FIXTURE_PROOF_POINTS,
+);
+check(!companyFigureWithoutResearch.clean
+  && JSON.stringify(companyFigureWithoutResearch.flagged) === JSON.stringify(['12,000']),
+  'a company figure absent from candidate sources remains unsourced');
+const companyFigureWithResearch = checkUnsourcedNumbers(
+  'Precisely serves 12,000 organizations.',
+  FIXTURE_CV,
+  FIXTURE_PROOF_POINTS,
+  'Precisely is a data integrity leader serving 12,000 organizations.',
+);
+check(companyFigureWithResearch.clean && companyFigureWithResearch.flagged.length === 0,
+  'a company figure present only in research is sourced when research is supplied');
+
+const templatedClosings = [
+  "would welcome a pointer to whoever owns this search if you're not the right contact",
+  "would welcome a pointer to whoever's running the search for this combined org",
+  "I'd welcome a pointer to whoever owns this role if that's not you",
+];
+for (const closing of templatedClosings) {
+  const result = checkTemplatedAsk(closing);
+  check(!result.clean && typeof result.matched === 'string' && closing.includes(result.matched),
+    `templated closing is detected: ${closing}`);
+}
+
+check(checkTemplatedAsk("I'd welcome an introduction to Dana, who owns the search.").clean,
+  'a redirect naming a real person is clean');
+check(checkTemplatedAsk("I'd like to send you a short writeup of that reporting rebuild.").clean,
+  'a specific non redirect ask is clean');
+check(checkTemplatedAsk("I can point you to whoever owns the data. The rebuild cut errors. I'd like to send you a short writeup.").clean,
+  'a mid body redirect with a clean closing is not flagged');
+
+const templatedAskRaw = JSON.stringify({
+  critique: { weakest_dimension: 'clarity', fixes: ['Make the next step specific.'] },
+  dimensions: [
+    { id: 'relevance', score: 8, explanation: 'The message is relevant.' },
+    { id: 'ask_strength', score: 9, explanation: 'The ask is concise.' },
+  ],
+  subject: 'Reporting rebuild',
+  body: `The reporting rebuild is relevant here.\n\n${templatedClosings[2]}`,
+});
+const templatedAskDraft = parseAndFinishDraft(templatedAskRaw, 'ta_email', FIXTURE_CV);
+const cappedAskStrength = templatedAskDraft.review?.dimensions
+  .find((dimension) => dimension.id === 'ask_strength')?.score;
+check(cappedAskStrength === 3
+  && templatedAskDraft.review?.score < 84
+  && templatedAskDraft.review?.templatedAskWarning
+  && templatedAskDraft.review?.topFixes.some((fix) => fix.includes('"a pointer"')),
+  'generation caps a templated ask, lowers the score, and appends a quoted fix');
+
+const coverLetterRaw = JSON.stringify({
+  critique: { weakest_dimension: 'clarity', fixes: ['Keep the close specific.'] },
+  dimensions: [
+    { id: 'evidence', score: 8, explanation: 'The evidence is grounded.' },
+    { id: 'clarity', score: 8, explanation: 'The letter is clear.' },
+  ],
+  body: templatedClosings[0],
+});
+const coverLetterDraft = parseAndFinishDraft(coverLetterRaw, 'cover_letter', FIXTURE_CV);
+check(coverLetterDraft.review?.dimensions.every((dimension) => dimension.score === 8)
+  && !coverLetterDraft.review?.templatedAskWarning
+  && !coverLetterDraft.review?.topFixes.some((fix) => fix.includes('specific next step')),
+  'cover letter review is unaffected because its profile has no ask strength dimension');
+
+const companyReviewRaw = JSON.stringify({
+  critique: { weakest_dimension: 'evidence', fixes: ['Keep the company figure grounded.'] },
+  dimensions: [
+    { id: 'evidence', score: 8, explanation: 'The company figure is grounded.' },
+    { id: 'personalization', score: 8, explanation: 'The company fact is specific.' },
+  ],
+  subject: 'Precisely data integrity',
+  body: 'Precisely serves 12,000 organizations.',
+});
+const parsedWithoutResearch = parseAndFinishDraft(companyReviewRaw, 'ta_email', FIXTURE_CV);
+const parsedWithoutResearchEvidence = parsedWithoutResearch.review?.dimensions
+  .find((dimension) => dimension.id === 'evidence')?.score;
+check(parsedWithoutResearchEvidence === 3 && parsedWithoutResearch.review?.unsourcedWarning,
+  'generation parsing flags a company figure when research is absent');
+const parsedWithResearch = parseAndFinishDraft(
+  companyReviewRaw,
+  'ta_email',
+  FIXTURE_CV,
+  'Precisely serves 12,000 organizations.',
+);
+const parsedWithResearchEvidence = parsedWithResearch.review?.dimensions
+  .find((dimension) => dimension.id === 'evidence')?.score;
+check(parsedWithResearchEvidence === 8 && !parsedWithResearch.review?.unsourcedWarning,
+  'generation parsing accepts a company figure found only in research');
+
 const priorFake = process.env.TJK_FAKE_LLM;
 const priorFakeText = process.env.TJK_FAKE_LLM_TEXT;
 process.env.TJK_FAKE_LLM = '1';
+process.env.TJK_FAKE_LLM_TEXT = companyReviewRaw;
+const generatedWithResearch = await generateWithRubric('Draft a concise note.', 'ta_email', {
+  cvMd: FIXTURE_CV,
+  rubricOpts: { companyResearch: 'Precisely serves 12,000 organizations.' },
+});
+const generatedWithResearchEvidence = generatedWithResearch.review?.dimensions
+  .find((dimension) => dimension.id === 'evidence')?.score;
+check(generatedWithResearchEvidence === 8 && !generatedWithResearch.review?.unsourcedWarning,
+  'generateWithRubric forwards company research to the evidence check');
 process.env.TJK_FAKE_LLM_TEXT = 'partial "critique": {"weakest_dimension":"clarity","dimensions": [';
 const rejectedFallback = await generateWithRubric('Draft a concise note.', 'ta_dm', { plainTextFallback: true });
 check(rejectedFallback.error === 'unparseable', 'plain text fallback rejects rubric JSON fragments');

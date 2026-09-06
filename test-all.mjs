@@ -562,6 +562,7 @@ for (const suite of [
   'tests/security.test.mjs',
   'tests/security-review.test.mjs',
   'tests/v1-loader.test.mjs',
+  'tests/report-research.test.mjs',
   'tests/report-write-gate.test.mjs',
   'tests/weekly-review.test.mjs',
   'tests/split-test.test.mjs',

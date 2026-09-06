@@ -5,6 +5,7 @@ import { pauseSequence, getSequence, getTemplate } from '../lib/sequences.mjs';
 import { readProjectFile, readOptionalProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
+import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { appendFollowupRow, parseFollowupsMd } from '../lib/followups.mjs';
@@ -321,6 +322,7 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
       const mode = req.body?.mode === 'reply' ? 'reply' : req.body?.mode === 'followup-sent' ? 'followup-sent' : null;
       const relatedApps = findRelatedApps(r.company);
       const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status)) || relatedApps[0];
+      const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
       const interviewStage = req.body?.interviewStage
         || (topApp && isInterviewStage(topApp.status) ? topApp.status : 'general');
       const stageGuidance = STAGE_GUIDANCE[interviewStage] || '';
@@ -377,7 +379,12 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
       const narrative = getNarrative();
       const result = await generateWithRubric(prompt, 'ta_dm', {
         model: draftModel(), maxTokens: 700, cvMd, plainTextFallback: true,
-        rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers, toneNote: sequenceTone(id) },
+        rubricOpts: {
+          proofPoints: narrative.proofPoints,
+          superpowers: narrative.superpowers,
+          toneNote: sequenceTone(id),
+          ...(companyResearch ? { companyResearch } : {}),
+        },
       });
       if (result.error) return res.status(500).json({ error: 'Could not parse LinkedIn draft from model output' });
       const dm = await finishDraft({
@@ -448,6 +455,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
     const relatedApps = findRelatedApps(r.company);
     const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status))
                 || relatedApps[0];
+    const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
 
     // Default the interview-stage framing from the app's own status (it now
     // carries the round), unless the drawer explicitly overrides it.
@@ -541,7 +549,12 @@ ${thread.recentPitch
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'ta_email', {
       model: draftModel(), maxTokens: 1024, cvMd,
-      rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers, toneNote: sequenceTone(id) },
+      rubricOpts: {
+        proofPoints: narrative.proofPoints,
+        superpowers: narrative.superpowers,
+        toneNote: sequenceTone(id),
+        ...(companyResearch ? { companyResearch } : {}),
+      },
     });
     if (result.error) return res.status(500).json({ error: 'Could not parse draft from model output' });
     const draft = await finishDraft({

@@ -14,18 +14,24 @@ const FIGURE_PATTERN = /\$\d[\d,]*(?:\.\d+)?(?:[KMB])?|\b\d[\d,]*(?:\.\d+)?%|\b(
 const TIME_UNIT_PATTERN = /^\s*(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?)\b/i;
 const ORDINAL_PATTERN = /^(?:st|nd|rd|th)\b/i;
 
-function sourceContains(figure, cvMd, proofPoints) {
+function sourceContains(figure, cvMd, proofPoints, additionalSources) {
   const sources = [typeof cvMd === 'string' ? cvMd : ''];
   if (Array.isArray(proofPoints)) {
     for (const point of proofPoints) {
       if (point && typeof point.heroMetric === 'string') sources.push(point.heroMetric);
     }
   }
+  if (typeof additionalSources === 'string') sources.push(additionalSources);
+  if (Array.isArray(additionalSources)) {
+    for (const source of additionalSources) {
+      if (typeof source === 'string') sources.push(source);
+    }
+  }
   const needle = figure.toLowerCase();
   return sources.some((source) => source.toLowerCase().includes(needle));
 }
 
-export function checkUnsourcedNumbers(body, cvMd, proofPoints) {
+export function checkUnsourcedNumbers(body, cvMd, proofPoints, additionalSources) {
   try {
     const text = typeof body === 'string' ? body : '';
     const flagged = [];
@@ -48,12 +54,63 @@ export function checkUnsourcedNumbers(body, cvMd, proofPoints) {
       if (seen.has(figureKey)) continue;
 
       seen.add(figureKey);
-      if (!sourceContains(figure, cvMd, proofPoints)) flagged.push(figure);
+      if (!sourceContains(figure, cvMd, proofPoints, additionalSources)) flagged.push(figure);
     }
 
     return { clean: flagged.length === 0, flagged };
   } catch {
     return { clean: true, flagged: [] };
+  }
+}
+
+const TEMPLATED_ASK_PATTERNS = [
+  /\bwhoever\b/i,
+  /\bthe right (?:person|contact|team|group)\b/i,
+  /\ba pointer\b/i,
+  /\bpoint(?:ed|ing)? (?:me )?(?:to|toward|towards)\b/i,
+  /\bif (?:that is|that's|you are|you're) not (?:you|the right)\b/i,
+];
+
+function closingText(body) {
+  const text = typeof body === 'string' ? body.trim() : '';
+  if (!text) return '';
+
+  const paragraphs = text.split(/\r?\n\s*\r?\n/).map((part) => part.trim()).filter(Boolean);
+  if (paragraphs.length > 1) return paragraphs[paragraphs.length - 1];
+
+  const sentences = text.match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g) || [];
+  return sentences.slice(-2).join(' ').trim();
+}
+
+function containsProperName(text) {
+  for (const match of text.matchAll(/\b[A-Z][a-z]+(?:['’][A-Z]?[a-z]+)?\b/g)) {
+    const before = text.slice(0, match.index).trimEnd();
+    if (!before || /[.!?]$/.test(before)) continue;
+    if (/\b(?:hi|hello|dear)\s*$/i.test(before)) continue;
+    return true;
+  }
+  return false;
+}
+
+export function checkTemplatedAsk(body) {
+  try {
+    const closing = closingText(body);
+    if (!closing) return { clean: true, matched: null };
+
+    let matched = null;
+    let matchedIndex = Number.POSITIVE_INFINITY;
+    for (const pattern of TEMPLATED_ASK_PATTERNS) {
+      const hit = pattern.exec(closing);
+      if (hit && hit.index < matchedIndex) {
+        matched = hit[0];
+        matchedIndex = hit.index;
+      }
+    }
+
+    if (!matched || containsProperName(closing)) return { clean: true, matched: null };
+    return { clean: false, matched };
+  } catch {
+    return { clean: true, matched: null };
   }
 }
 
@@ -74,7 +131,7 @@ function fallbackDraft(raw) {
   }
 }
 
-export function parseAndFinishDraft(raw, surfaceId, cvMd) {
+export function parseAndFinishDraft(raw, surfaceId, cvMd, companyResearch) {
   let result = null;
   try {
     result = parseReviewed(raw, surfaceId);
@@ -97,8 +154,9 @@ export function parseAndFinishDraft(raw, surfaceId, cvMd) {
   }
 
   try {
+    const profile = getProfile(surfaceId);
     const proofPoints = getNarrative().proofPoints;
-    const numberCheck = checkUnsourcedNumbers(result.body, cvMd, proofPoints);
+    const numberCheck = checkUnsourcedNumbers(result.body, cvMd, proofPoints, companyResearch);
     if (!numberCheck.clean) {
       const evidence = result.review.dimensions.find((dimension) => dimension.id === 'evidence');
       if (evidence) evidence.score = Math.min(evidence.score, 3);
@@ -106,8 +164,19 @@ export function parseAndFinishDraft(raw, surfaceId, cvMd) {
         ...result.review.topFixes,
         ...numberCheck.flagged.filter((figure) => !result.review.topFixes.includes(figure)),
       ];
-      result.review.score = weightedScore(result.review.dimensions, getProfile(surfaceId));
+      result.review.score = weightedScore(result.review.dimensions, profile);
       result.review.unsourcedWarning = true;
+    }
+    if (profile.dims.some((dimension) => dimension.id === 'ask_strength')) {
+      const askCheck = checkTemplatedAsk(result.body);
+      if (!askCheck.clean) {
+        const askStrength = result.review.dimensions.find((dimension) => dimension.id === 'ask_strength');
+        if (askStrength) askStrength.score = Math.min(askStrength.score, 3);
+        const fix = `Replace "${askCheck.matched}" with a specific next step tied to this message, or name the person you want to reach.`;
+        if (!result.review.topFixes.includes(fix)) result.review.topFixes.push(fix);
+        result.review.score = weightedScore(result.review.dimensions, profile);
+        result.review.templatedAskWarning = true;
+      }
     }
     return { subject: result.subject, body: result.body, review: result.review, reviewStatus: 'ok' };
   } catch {
@@ -166,7 +235,7 @@ export async function generateWithRubric(prompt, surfaceId, opts = {}) {
     console.warn('[rubric] surface=%s response-truncated missing-closing-brace', surfaceId);
   }
 
-  const result = parseAndFinishDraft(raw, surfaceId, cvMd);
+  const result = parseAndFinishDraft(raw, surfaceId, cvMd, rubricOpts.companyResearch);
   if (!result.error) return result;
 
   if (plainTextFallback) {
