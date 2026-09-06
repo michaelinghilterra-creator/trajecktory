@@ -93,13 +93,36 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, onRerun, o
 
   const badgeColor = (s) =>
     s == null ? "#71717a" : s >= 80 ? "#22c55e" : s >= 60 ? "#eab308" : "#ef4444";
+  const scorePrefix = reviewOf === 'original' ? 'was ' : '';
+  const scoreProvenance = reviewOf === 'self'
+    ? 'self-scored'
+    : reviewOf === 'independent' || reviewOf === 'original' ? 'independent' : '';
+  const scoreTitle = reviewOf === 'self'
+    ? 'The model graded its own draft and tends to score about ten points high. Get independent review gives a second opinion.'
+    : reviewOf === 'independent' || reviewOf === 'original'
+      ? 'This score comes from an independent review of the draft.'
+      : 'Draft review score.';
+
+  // The fixes lead, the score follows. Calibration measured the inline score
+  // running about ten points high with only a moderate rank correlation, so it
+  // earns a triage cue and not a headline. The fixes quote the draft directly
+  // and are actionable whatever the number says.
+  const fixes = (review && review.topFixes) || [];
 
   return (
     <div style={{ marginTop: 6, fontSize: 12 }}>
+      {fixes.length > 0 && (
+        <ul style={{ margin: "0 0 6px", paddingLeft: 16, lineHeight: 1.5 }}>
+          {fixes.map((fix, i) => (
+            <li key={i} style={{ marginBottom: 2 }}>{fix}</li>
+          ))}
+        </ul>
+      )}
       {review && (
         <button
           className="btn sm"
           onClick={() => setOpen(!open)}
+          title={scoreTitle}
           style={{
             color: badgeColor(review.score),
             border: `1px solid ${badgeColor(review.score)}33`,
@@ -110,7 +133,8 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, onRerun, o
             alignItems: "center",
           }}
         >
-          {reviewOf === 'original' ? 'was ' : ''}{review.score}/100
+          {scorePrefix}{review.score}/100
+          {scoreProvenance && <span style={{ color: 'var(--text-mute)', fontSize: 10 }}>{scoreProvenance}</span>}
           <span style={{
             display: "inline-block",
             transform: open ? "rotate(180deg)" : "rotate(0deg)",
@@ -164,16 +188,9 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, onRerun, o
               ))}
             </div>
           )}
-          {review.topFixes && review.topFixes.length > 0 && (
-            <div style={{ borderTop: "1px solid var(--border)", paddingTop: 6 }}>
-              <div style={{ fontWeight: 600, marginBottom: 2, color: "var(--text-mute)" }}>Fixes</div>
-              <ul style={{ margin: 0, paddingLeft: 16 }}>
-                {review.topFixes.map((fix, i) => (
-                  <li key={i} style={{ marginBottom: 2 }}>{fix}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {/* Fixes are rendered above the pill, not here. Repeating them inside
+              the expanded panel would bury the dimension breakdown that is the
+              only thing this panel adds. */}
         </div>
       )}
     </div>

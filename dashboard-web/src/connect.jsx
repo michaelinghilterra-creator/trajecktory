@@ -367,7 +367,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
       body: JSON.stringify({ body: note.response || '', subject: '', surfaceId: note.surfaceId }),
     }).then(r => r.json()).then(res => {
       if (res.error) throw new Error(res.error);
-      setNote(n => n ? ({ ...n, review: res.review || null, reviewOf: null }) : n);
+      setNote(n => n ? ({ ...n, review: res.review || null, reviewOf: 'independent' }) : n);
     }).catch(e => toast && toast(e.message, 'error')).finally(() => setLiReviewing(false));
   };
   const improveLiDraft = () => {
@@ -422,7 +422,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
         if (res.blocked) { setEmailBlock(res); return; }
         const d = res.draft || {};
         if (!d.body) { toast && toast('The model returned an empty draft. Try Redraft.', 'warn'); return; }
-        setDraft({ subject: (d.subject || '').trim(), body: (d.body || '').trim(), review: res.review || null, reviewOf: null, surfaceId: res.surfaceId || null });
+        setDraft({ subject: (d.subject || '').trim(), body: (d.body || '').trim(), review: res.review || null, reviewOf: 'self', surfaceId: res.surfaceId || null });
         if (override) setEmailBlock(b => ({ ...b, overridden: true }));
       })
       .catch(e => toast && toast(e.message, 'error'))
@@ -442,7 +442,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
       body: JSON.stringify({ body: emailBody, subject: emSubject, surfaceId: draft.surfaceId }),
     }).then(r => r.json()).then(res => {
       if (res.error) throw new Error(res.error);
-      setDraft(d => d ? ({ ...d, review: res.review || null, reviewOf: null }) : d);
+      setDraft(d => d ? ({ ...d, review: res.review || null, reviewOf: 'independent' }) : d);
     }).catch(e => toast && toast(e.message, 'error')).finally(() => setEmReviewing(false));
   };
   const improveEmailDraft = () => {

@@ -1073,7 +1073,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
         if (d.draft) {
           setDraft(d.draft);
           setReview(d.review || null);
-          setReviewOf(null);
+          setReviewOf('self');
           setSurfaceId(d.surfaceId || null);
         } else alert(d.error || 'Draft failed');
       })
@@ -1090,7 +1090,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
     }).then(r => r.json()).then(d => {
       if (d.error) throw new Error(d.error);
       setReview(d.review || null);
-      setReviewOf(null);
+      setReviewOf('independent');
     }).catch(err => alert(err.message)).finally(() => setReviewing(false));
   };
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { transform } from '../dashboard-web/node_modules/esbuild/lib/main.js';
@@ -29,6 +29,8 @@ for (const name of surfaces) {
   check(source.includes('surfaceId'), `${name} uses the server surfaceId`);
   check(/(?:setProposedDraft|setLiProposed|setEmProposed)\((?:d|res)\.draft \|\| null\)/.test(source), `${name} stores improve output as a proposal`);
   check(source.includes('new AbortController()') && source.includes('signal: controller.signal'), `${name} makes improvement cancellable`);
+  check(source.includes("reviewOf: 'self'") || source.includes("setReviewOf('self')"), `${name} labels generated reviews as self-scored`);
+  check(source.includes("reviewOf: 'independent'") || source.includes("setReviewOf('independent')"), `${name} labels rerun reviews as independent`);
 }
 
 const shared = read('shared.jsx');
@@ -36,8 +38,13 @@ check(
   shared.includes('function DraftScoreBadge({ review, reviewOf, onRerun, onImprove, busy, improving })'),
   'DraftScoreBadge accepts reviewOf, onImprove, and improving',
 );
-check(shared.includes("reviewOf === 'original' ? 'was ' : ''"), 'DraftScoreBadge labels an original score with was');
+check(shared.includes('self-scored'), 'DraftScoreBadge labels a self score');
+check(shared.includes('independent'), 'DraftScoreBadge labels an independent score');
+check(shared.includes("reviewOf === 'original' ? 'was ' : ''"), 'DraftScoreBadge keeps the was prefix for an original score');
 check(shared.includes('onImprove &&') && shared.includes('Improve this draft'), 'DraftScoreBadge gates and labels the improve button');
+
+const jsxFiles = readdirSync(SRC).filter(name => name.endsWith('.jsx'));
+check(jsxFiles.every(name => !read(name).includes('reviewOf: null')), 'no JSX file sets reviewOf to null');
 
 for (const name of ['posts.jsx', 'linkedin-ssi.jsx']) {
   check(!read(name).includes('DraftScoreBadge'), `${name} has no draft score badge`);
@@ -55,4 +62,3 @@ for (const name of ['shared.jsx', ...surfaces]) {
 }
 
 console.log(`\n draft badge wiring: ${passed} checks passed`);
-

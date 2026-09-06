@@ -759,7 +759,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
           body: JSON.stringify({ source: 'referral', id: row.id, name: row.name, role: row.how, company: row.where, reason: row.target || row.how, firstName: first, tone: compose.tone || 'Warm' }),
         }).then(r => r.json()).then(d => {
           if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-          if (d && d.response) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.response, review: d.review || null, reviewOf: null, surfaceId: d.surfaceId || null })); setGenerating(false); }
+          if (d && d.response) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.response, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null })); setGenerating(false); }
           else fail(d && d.error);
         }).catch(() => fail());
       } else {
@@ -768,7 +768,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
           body: JSON.stringify({ topic: liTopic, channel: 'linkedin' }),
         }).then(r => r.json()).then(d => {
           if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-          if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.draft.body || '', review: d.review || null, reviewOf: null, surfaceId: d.surfaceId || null })); setGenerating(false); }
+          if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.draft.body || '', review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null })); setGenerating(false); }
           else fail(d && d.error);
         }).catch(() => fail());
       }
@@ -780,7 +780,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
         body: JSON.stringify({ topic, mode }),
       }).then(r => r.json()).then(d => {
         if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-        if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: d.draft.subject || c.subject, body: d.draft.body || '', review: d.review || null, reviewOf: null, surfaceId: d.surfaceId || null })); setGenerating(false); }
+        if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: d.draft.subject || c.subject, body: d.draft.body || '', review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null })); setGenerating(false); }
         else fail(d && d.error);
       }).catch(() => fail());
     }
@@ -795,7 +795,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
       body: JSON.stringify({ body: compose.body || '', subject: compose.subject || '', surfaceId: compose.surfaceId }),
     }).then(r => r.json()).then(d => {
       if (d.error) throw new Error(d.error);
-      setCompose(c => c ? ({ ...c, review: d.review || null, reviewOf: null }) : c);
+      setCompose(c => c ? ({ ...c, review: d.review || null, reviewOf: 'independent' }) : c);
     }).catch(err => toast(err.message, 'error')).finally(() => setReviewing(false));
   };
 

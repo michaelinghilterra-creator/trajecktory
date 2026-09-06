@@ -862,7 +862,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           body: JSON.stringify({ ...cfg.buildDraftBody(draftStage), channel: "linkedin", override }),
         })
           .then(r => r.json())
-          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { showDraft({ body: d.draft.body || "", subject: "", linkedin: true, review: d.review || null, reviewOf: null, surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { showDraft({ body: d.draft.body || "", subject: "", linkedin: true, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
           .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
         return;
       }
@@ -871,7 +871,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         body: JSON.stringify({ source: cfg.kind, id, ...cfg.linkedIn.payload(data, liTone), override }),
       })
         .then(r => r.json())
-        .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.response) { showDraft({ body: d.response, subject: "", linkedin: true, review: d.review || null, reviewOf: null, surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+        .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.response) { showDraft({ body: d.response, subject: "", linkedin: true, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
         .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
       return;
     }
@@ -885,7 +885,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
       body: JSON.stringify({ ...draftBody, override }),
     })
       .then(r => r.json())
-      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { showDraft({ ...d.draft, review: d.review || null, reviewOf: null, surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
+      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { showDraft({ ...d.draft, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
       .catch(() => setDrafting(false));
   };
   const rerunReview = () => {
@@ -896,7 +896,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
       body: JSON.stringify({ body: draftBody, subject: draftResult.subject || '', surfaceId: draftResult.surfaceId }),
     }).then(r => r.json()).then(d => {
       if (d.error) throw new Error(d.error);
-      setDraftResult(current => current ? ({ ...current, review: d.review || null, reviewOf: null }) : current);
+      setDraftResult(current => current ? ({ ...current, review: d.review || null, reviewOf: 'independent' }) : current);
     }).catch(err => window.tjkToast && window.tjkToast(err.message, 'error')).finally(() => setReviewing(false));
   };
   const improveDraft = () => {
