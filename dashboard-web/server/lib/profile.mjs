@@ -285,6 +285,75 @@ export function getOutreachPolicy() {
   return policy;
 }
 
+function getProofPoints(text) {
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex(l => /^\s*proof_points:\s*$/.test(l));
+  if (start === -1) return [];
+  const baseIndent = lines[start].match(/^\s*/)[0].length;
+  const unquote = (v) => v.replace(/^["']|["']$/g, '');
+  const entries = [];
+  let cur = null;
+  for (let i = start + 1; i < lines.length; i++) {
+    const l = lines[i];
+    if (l.trim() === '') continue;
+    if (l.match(/^\s*/)[0].length <= baseIndent) break;
+    const isItem = /^\s*-\s/.test(l);
+    const kv = l.match(/^\s*-?\s*([A-Za-z_]+):\s*(.*?)\s*$/);
+    if (!kv) continue;
+    if (isItem) { if (cur) entries.push(cur); cur = {}; }
+    if (!cur) cur = {};
+    const [, key, rawVal] = kv;
+    if (rawVal !== '') cur[key] = unquote(rawVal);
+  }
+  if (cur) entries.push(cur);
+  return entries.filter(e => e.name && e.hero_metric);
+}
+
+function getSuperpowers(text) {
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex(l => /^\s*superpowers:\s*$/.test(l));
+  if (start === -1) return [];
+  const baseIndent = lines[start].match(/^\s*/)[0].length;
+  const result = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    const l = lines[i];
+    if (l.trim() === '') continue;
+    if (l.match(/^\s*/)[0].length <= baseIndent) break;
+    const m = l.match(/^\s*-\s*(.+)$/);
+    if (!m) continue;
+    let val = m[1].trim();
+    if ((val.startsWith('"') || val.startsWith("'")) && val.length >= 2) {
+      const q = val[0];
+      const end = val.lastIndexOf(q);
+      if (end > 0) val = val.slice(1, end);
+    }
+    if (val) result.push(val);
+  }
+  return result;
+}
+
+let _narrativeCache = null;
+
+export function getNarrative() {
+  let mtimeMs = 0;
+  try { mtimeMs = fs.statSync(PROFILE_YML).mtimeMs; } catch { /* missing profile */ }
+  if (_narrativeCache && _narrativeCache.mtimeMs === mtimeMs) return _narrativeCache.narrative;
+  let text = '';
+  try { text = fs.readFileSync(PROFILE_YML, 'utf8'); } catch { /* fresh user */ }
+  const narrative = {
+    headline: getScalar(text, 'narrative', 'headline'),
+    superpowers: getSuperpowers(text),
+    proofPoints: getProofPoints(text).map(point => ({
+      name: point.name,
+      heroMetric: point.hero_metric,
+    })),
+  };
+  _narrativeCache = { mtimeMs, narrative };
+  return narrative;
+}
+
 // Returns the user's identity, cached and invalidated by profile.yml mtime.
 // All fields default to '' when profile.yml is absent (fresh, pre-onboarding
 // user) so callers degrade gracefully instead of leaking a placeholder name.

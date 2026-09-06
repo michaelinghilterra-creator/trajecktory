@@ -36,6 +36,7 @@ const express = (await import('express')).default;
 const { router: linkedinDrafts } = await import('../dashboard-web/server/routes/linkedin-drafts.mjs');
 const { router: targetTalent } = await import('../dashboard-web/server/routes/target-talent.mjs');
 const { router: referrals } = await import('../dashboard-web/server/routes/referrals.mjs');
+const { router: draftsRouter } = await import('../dashboard-web/server/routes/drafts.mjs');
 const { appendReferralRows } = await import('../dashboard-web/server/lib/referrals.mjs');
 const { setLinkedInStatus } = await import('../dashboard-web/server/lib/tt-linkedin.mjs');
 
@@ -46,7 +47,7 @@ const [refRow] = appendReferralRows([{ name: 'Rob Roe', how: '1st-degree LinkedI
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
-app.use(linkedinDrafts); app.use(targetTalent); app.use(referrals);
+app.use(linkedinDrafts); app.use(targetTalent); app.use(referrals); app.use(draftsRouter);
 const server = app.listen(0);
 await new Promise(r => server.once('listening', r));
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -70,6 +71,19 @@ for (const [name, p, body] of cases) {
   const res = await post(p, body);
   check(res.status === 200 && !res.body.error, `${name} → 200 (${res.body.error || 'ok'})`);
 }
+
+// Independent review endpoint
+const reviewRes = await post('/api/drafts/review', {
+  body: 'Test draft body for independent review.',
+  surfaceId: 'ta_email',
+});
+check(reviewRes.status === 500, 'independent review returns 500 when model output is unparseable (fake LLM)');
+
+const badSurface = await post('/api/drafts/review', { body: 'Test', surfaceId: 'not_a_surface' });
+check(badSurface.status === 400, 'independent review rejects unknown surfaceId');
+
+const noBody = await post('/api/drafts/review', { surfaceId: 'ta_email' });
+check(noBody.status === 400, 'independent review rejects missing body');
 
 // Shut down cleanly and let the event loop DRAIN rather than process.exit() —
 // on Windows a forced exit that races a mid-close handle (the server socket or

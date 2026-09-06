@@ -7,7 +7,10 @@
  * Run: node tests/model-versions.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { currentModelVersion, resolveModelId, validateSetting, MODEL_VERSIONS } from '../dashboard-web/server/lib/pricing.mjs';
+import {
+  currentModel, currentModelVersion, resolveModelId, validateSetting, MODEL_VERSIONS, SECTIONS,
+} from '../dashboard-web/server/lib/pricing.mjs';
+import { gradeModel } from '../dashboard-web/server/lib/anthropic.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -36,6 +39,15 @@ check(resolveModelId('opus') === OPUS_ALT, 'resolveModelId("opus") → pinned id
 delete process.env.TJK_OPUS_VERSION;
 check(resolveModelId('claude-sonnet-4-6') === 'claude-sonnet-4-6', 'a full id passes through unchanged');
 check(resolveModelId('inherit') === 'inherit', 'an unknown value passes through unchanged');
+
+// Grade model defaults and override.
+delete process.env.TJK_GRADE_MODEL;
+check(gradeModel().includes('sonnet'), 'gradeModel() returns the default Sonnet model id');
+check(currentModel('grade') === 'sonnet', 'grade section defaults to sonnet');
+process.env.TJK_GRADE_MODEL = 'haiku';
+check(currentModel('grade') === 'haiku', 'TJK_GRADE_MODEL selects haiku');
+delete process.env.TJK_GRADE_MODEL;
+check(SECTIONS.some((section) => section.key === 'grade'), 'grade section exists');
 
 // ── validateSetting for version settings ────────────────────────────────────
 {
