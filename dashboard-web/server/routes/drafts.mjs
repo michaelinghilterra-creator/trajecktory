@@ -3,7 +3,7 @@ import { ROOT_DIR } from '../config.mjs';
 import { gradeIndependently } from '../lib/draft-grader.mjs';
 import { gradeModel } from '../lib/anthropic.mjs';
 import { SURFACES } from '../../../lib/outreach-rubric.mjs';
-import { readProjectFile } from '../lib/anthropic.mjs';
+import { readOptionalProjectFile } from '../lib/anthropic.mjs';
 
 export const router = express.Router();
 
@@ -18,8 +18,8 @@ router.post('/api/drafts/review', async (req, res) => {
       return res.status(400).json({ error: `surfaceId must be one of: ${SURFACES.join(', ')}` });
     }
 
-    let cvExcerpt = '';
-    try { cvExcerpt = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
+    const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
+    const cvExcerpt = cvMd ? cvMd : '';
 
     const review = await gradeIndependently(body, surfaceId, {
       model: gradeModel(),

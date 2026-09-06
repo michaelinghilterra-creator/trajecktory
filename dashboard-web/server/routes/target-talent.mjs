@@ -2,7 +2,7 @@ import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { pauseSequence, getSequence, getTemplate } from '../lib/sequences.mjs';
-import { readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
+import { readProjectFile, readOptionalProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
@@ -302,7 +302,7 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
     const projectRoot = ROOT_DIR;
     const cvMd           = readProjectFile(projectRoot, 'cv.md');
     const profileMd      = readVoiceRules(projectRoot);
-    const articleDigestMd = readProjectFile(projectRoot, 'article-digest.md');
+    const articleDigestMd = readOptionalProjectFile(projectRoot, 'article-digest.md');
     const prior = readTTCorrespondence(id);
     const context = getPersonContext('ta', id);
     const channel = req.body?.channel === 'linkedin' ? 'linkedin' : 'email';
@@ -336,9 +336,9 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
           ? 'FOLLOW UP ON YOUR LAST MESSAGE. Your last note is unanswered. Send one light, no-guilt bump that names what the earlier note was about, adds one small new thing, and never uses needy filler like "just following up" or "circling back".'
           : (stageGuidance || 'FIRST / FRESH TOUCH. Surface yourself as a strong candidate: specific interest in the company, that you applied (or are about to), and one reason you are worth a reply.');
 
-      let cvMd = ''; try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
-      let articleDigestMd = ''; try { articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md'); } catch {}
-      let profileMd = ''; try { profileMd = readVoiceRules(ROOT_DIR); } catch {}
+      const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
+      const articleDigestMd = readOptionalProjectFile(ROOT_DIR, 'article-digest.md');
+      const profileMd = readVoiceRules(ROOT_DIR);
       const cvExcerpt = (articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 900)}\n\nCV:\n` : '') + (cvMd ? cvMd.slice(0, 3200) : '(CV not available)');
 
       const prompt = `You are drafting a brief LinkedIn DIRECT MESSAGE from ${me.fullName} to an internal Talent Acquisition / People-team contact at ${r.company}, a company he is actively pursuing. This is a private 1:1 message to paste into LinkedIn, NOT an email and NOT a connection request.
@@ -354,9 +354,9 @@ Company: ${r.company || '(unknown)'}
 
 ${relatedContext}
 
-== ${me.firstName.toUpperCase()}'S CV (source of truth — do not invent metrics or experience) ==
+== ${me.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics or experience) ==
 ${cvExcerpt}
-${profileMd ? `\n== VOICE RULES (from modes/_profile.md — must follow) ==\n${profileMd}\n` : ''}
+${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
 == MESSAGE INTENT ==
 ${intentGuidance}
 
@@ -496,13 +496,11 @@ LinkedIn: ${r.linkedin || '(not provided)'}
 
 ${relatedContext}
 
-== ${me.firstName.toUpperCase()}'S CV (source of truth — do not invent metrics or experience) ==
+== ${me.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics or experience) ==
 ${cvMd}
-${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md — use for the artifact-led opener) ==\n${articleDigestMd}\n` : ''}
-== VOICE RULES (from modes/_profile.md — must follow) ==
-${profileMd}
-
-== STYLE REQUIREMENTS (internal-TA outreach — different from recruiter outreach) ==
+${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md, use for the artifact-led opener) ==\n${articleDigestMd.slice(0, 1200)}\n` : ''}
+${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
+== STYLE REQUIREMENTS (internal-TA outreach, different from recruiter outreach) ==
 - This is warm, NOT cold. You are introducing a candidate who already engaged with the company (applied / evaluated), or who is on a deliberate target list.
 - Direct, senior operator tone. No "I hope this finds you well" or other corporate filler.
 - Maximum 140 words in body.

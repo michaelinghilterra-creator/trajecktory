@@ -4,7 +4,7 @@ import { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferra
 import { reconcile, cleanupStale, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
 import { detectAcceptances, computePendingAcceptances } from '../lib/linkedin-acceptance.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
-import { readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
+import { readProjectFile, readOptionalProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
@@ -350,7 +350,7 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
 
     const cvMd            = readProjectFile(ROOT_DIR, 'cv.md');
     const profileMd       = readVoiceRules(ROOT_DIR);
-    const articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md');
+    const articleDigestMd = readOptionalProjectFile(ROOT_DIR, 'article-digest.md');
 
     const contactLabel = `someone in ${me.firstName}'s own professional network (a warm personal contact, NOT a cold recruiter lead)`;
     const contactBlock = `Name:            ${ref.name}\nHow you know them: ${ref.how || '(unspecified)'}\nWhere now / reach: ${ref.where || '(unspecified)'}\nTarget through them: ${ref.target || '(unspecified)'}`;
@@ -393,12 +393,10 @@ ${contactBlock}
 
 ${relatedContext}
 
-== ${me.firstName.toUpperCase()}'S CV (source of truth — do not invent metrics or experience) ==
+== ${me.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics or experience) ==
 ${cvMd}
-${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md) ==\n${articleDigestMd}\n` : ''}
-== VOICE RULES (from modes/_profile.md — must follow) ==
-${profileMd}
-
+${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md) ==\n${articleDigestMd.slice(0, 1200)}\n` : ''}
+${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
 == MESSAGE INTENT ==
 ${topicGuidance}
 
@@ -497,12 +495,10 @@ ${contactBlock}
 
 ${relatedContext}
 
-== ${me.firstName.toUpperCase()}'S CV (source of truth — do not invent metrics or experience) ==
+== ${me.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics or experience) ==
 ${cvMd}
-${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md) ==\n${articleDigestMd}\n` : ''}
-== VOICE RULES (from modes/_profile.md — must follow) ==
-${profileMd}
-
+${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md) ==\n${articleDigestMd.slice(0, 1200)}\n` : ''}
+${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
 == MESSAGE INTENT ==
 ${topicGuidance}
 

@@ -67,7 +67,7 @@ export function buildFollowupFromSentPrompt({ me, cvMd, profileMd, prior, contac
 == WHO YOU ARE FOLLOWING UP WITH ==
 ${contactBlock}
 
-== YOUR LAST EMAIL TO THEM (this is what went unanswered — build the nudge on THIS) ==
+== YOUR LAST EMAIL TO THEM (this is what went unanswered, build the nudge on THIS) ==
 Subject: ${sent.subject}
 Sent:    ${sent.timestamp}
 TIMING LANGUAGE: ${timingLine}
@@ -76,12 +76,12 @@ ${thread ? `
 == EARLIER IN THE THREAD (context only, most recent first) ==
 ${thread}
 ` : ''}
-== ${me.firstName.toUpperCase()}'S CV (source of truth — never invent metrics or experience) ==
+== ${me.firstName.toUpperCase()}'S CV (source of truth, never invent metrics or experience) ==
 ${cvMd}
-
-== VOICE RULES (from modes/_profile.md — must follow) ==
+${profileMd ? `
+== VOICE RULES (from modes/_profile.md, must follow) ==
 ${profileMd}
-
+` : ''}
 == HOW TO FOLLOW UP ==
 - Reference the earlier email lightly ("following up on my note from last week about…"), using the exact phrasing from the TIMING LANGUAGE line above. Do NOT invent a different gap.
 - Keep it SHORT — this is a bump, not a re-send. Maximum 90 words.
@@ -125,12 +125,12 @@ ${thread ? `
 == EARLIER IN THE THREAD (context only, most recent first) ==
 ${thread}
 ` : ''}
-== ${me.firstName.toUpperCase()}'S CV (source of truth — never invent metrics or experience) ==
+== ${me.firstName.toUpperCase()}'S CV (source of truth, never invent metrics or experience) ==
 ${cvMd}
-
-== VOICE RULES (from modes/_profile.md — must follow) ==
+${profileMd ? `
+== VOICE RULES (from modes/_profile.md, must follow) ==
 ${profileMd}
-
+` : ''}
 == HOW TO REPLY ==
 - Answer the SPECIFIC content of their email. If they asked a question, answer it. If they shared news (a role put on hold, a decline, an introduction, a scheduling request), address that news directly.
 - If they declined or put a role on hold: be gracious, thank them, keep the door open for future roles. Do NOT push back, re-pitch hard, or sound disappointed.

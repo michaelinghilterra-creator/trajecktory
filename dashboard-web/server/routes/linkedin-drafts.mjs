@@ -2,7 +2,7 @@
 // keep each module focused and under the size budget.
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
-import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { generateText, readOptionalProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
@@ -104,8 +104,7 @@ router.post('/api/linkedin-ssi/generate-response', async (req, res) => {
 
     // Read the user's real CV for grounding
     const projectRoot = ROOT_DIR;
-    let cvMd = '';
-    try { cvMd = readProjectFile(projectRoot, 'cv.md'); } catch {}
+    const cvMd = readOptionalProjectFile(projectRoot, 'cv.md');
     const cvExcerpt = cvMd ? cvMd.slice(0, 4000) : '(CV not available)';
     const id = getIdentity();
 
@@ -161,8 +160,7 @@ router.post('/api/linkedin-ssi/generate-reply', async (req, res) => {
     if (!influencer) return res.status(400).json({ error: 'Open this from an influencer.' });
 
     const id = getIdentity();
-    let cvMd = '';
-    try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
+    const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
     const cvExcerpt = cvMd ? cvMd.slice(0, 3000) : '(CV not available)';
 
     // The prior thread with THIS contact, oldest→newest, compact. Matched on name
@@ -224,8 +222,7 @@ router.post('/api/linkedin-ssi/generate-connect-request', async (req, res) => {
     }
 
     const projectRoot = ROOT_DIR;
-    let cvMd = '';
-    try { cvMd = readProjectFile(projectRoot, 'cv.md'); } catch {}
+    const cvMd = readOptionalProjectFile(projectRoot, 'cv.md');
     const cvExcerpt = cvMd ? cvMd.slice(0, 3500) : '(CV not available)';
     const id = getIdentity();
 
@@ -340,10 +337,8 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       if (!decision.allowed) logOutreachOverride({ contactRef: `${src}:${resolved.id}`, channel: 'linkedin', blocks: decision.blocks });
     }
 
-    let cvMd = '';
-    try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
-    let articleDigestMd = '';
-    try { articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md'); } catch {}
+    const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
+    const articleDigestMd = readOptionalProjectFile(ROOT_DIR, 'article-digest.md');
     // Prepend portfolio artifacts (capped at 1000 chars) so the model can lead with
     // a named project/outcome rather than a generic role claim, even in 300 chars.
     const portfolioSnippet = articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 1000)}\n\nCV:\n` : '';
@@ -460,8 +455,8 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
       ? '- A LinkedIn connection request that they ACCEPTED, so you are now connected.'
       : '- A LinkedIn connection request that has not been accepted or answered.');
 
-    let cvMd = ''; try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
-    let articleDigestMd = ''; try { articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md'); } catch {}
+    const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
+    const articleDigestMd = readOptionalProjectFile(ROOT_DIR, 'article-digest.md');
     const cvExcerpt = (articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 900)}\n\nCV:\n` : '') + (cvMd ? cvMd.slice(0, 3200) : '(CV not available)');
     const idn = getIdentity();
 

@@ -528,7 +528,7 @@ router.post('/api/followups/:appNum/draft', async (req, res) => {
         const abs = resolveReportPath(app.report);
         if (abs) {
           const reportText = fs.readFileSync(abs, 'utf8');
-          reportContext = `\n== ROLE EVALUATION REPORT (excerpt — for grounding the follow-up) ==\n${reportText.slice(0, 3000)}\n`;
+          reportContext = `\n== ROLE EVALUATION REPORT (excerpt, for grounding the follow-up) ==\n${reportText.slice(0, 3000)}\n`;
         }
       } catch { /* report missing, skip */ }
     }
@@ -543,12 +543,12 @@ Status:   ${app.status} (since ${app.date})
 Score:    ${app.scoreRaw}
 Notes:    ${app.notes || '(none)'}
 ${reportContext}
-== ${id.firstName.toUpperCase()}'S CV (source of truth — do not invent metrics) ==
+== ${id.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics) ==
 ${cvMd}
-
-== VOICE RULES (from modes/_profile.md — must follow) ==
+${profileMd ? `
+== VOICE RULES (from modes/_profile.md, must follow) ==
 ${profileMd}
-
+` : ''}
 == STYLE REQUIREMENTS ==
 - Brief: under 100 words in the body.
 - Direct, senior operator tone. No "I hope this finds you well" or other corporate filler.
