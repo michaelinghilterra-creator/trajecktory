@@ -5,6 +5,7 @@ import { pauseSequence } from '../lib/sequences.mjs';
 import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject, cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
+import { finishDraft } from '../lib/finish-draft.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { appendFollowupRow, parseFollowupsMd } from '../lib/followups.mjs';
@@ -506,14 +507,16 @@ Output ONLY a JSON object — no markdown, no code fences, no explanation:
     const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: 'Could not parse draft from model output', raw });
-    const draft = JSON.parse(jsonMatch[0]);
-    draft.body = _stripLeadingSalutation(draft.body, r.first);
-    draft.body = _stripTrailingSignature(draft.body);
-    draft.body = stripDraftMeta(draft.body);
-    draft.body = cleanEmailBody(draft.body);
-    draft.body = (await reviseForCadence(draft.body, { surface: 'email' })).text;
-    draft.subject = cleanEmailSubject(draft.subject);
-    res.json({ ok: true, draft, messageType, relatedApp: topApp || null });
+    const parsed = JSON.parse(jsonMatch[0]);
+    const draft = await finishDraft({
+      body: parsed.body,
+      subject: parsed.subject,
+      surface: 'ta_email',
+      cleaner: 'email',
+      stripSalutationFor: r.first,
+      stripSignature: true,
+    });
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, messageType, relatedApp: topApp || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -591,6 +591,7 @@ for (const suite of [
   'tests/cadence.test.mjs',
   'tests/outreach-rubric.test.mjs',
   'tests/draft-grader.test.mjs',
+  'tests/finish-draft.test.mjs',
   'tests/profile-narrative.test.mjs',
   'tests/obsidian-prep.test.mjs',
   'tests/obsidian-postfix.test.mjs',
