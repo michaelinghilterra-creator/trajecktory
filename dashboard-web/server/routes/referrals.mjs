@@ -4,10 +4,9 @@ import { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferra
 import { reconcile, cleanupStale, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
 import { detectAcceptances, computePendingAcceptances } from '../lib/linkedin-acceptance.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
-import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
-import { cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
-import { reviseForCadence } from '../lib/cadence-revise.mjs';
+import { readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
+import { generateWithRubric } from '../lib/draft-grader.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
@@ -415,12 +414,15 @@ ${topicGuidance}
 ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
 Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subject line, NO signature block, NO trailing sign-off (no '${me.firstName}', no 'Best,\\n${me.firstName}'), and NO greeting or bare first-name address (the UI prefills 'Hi ${firstName},', so the first sentence MUST begin with substantive content — do NOT start with '${firstName}', 'Hi', 'Hello', or 'Hey'). No quotes, no preface, no explanation.`;
 
-      let body = _stripLeadingSalutation((await generateText(prompt, { model: draftModel(), maxTokens: 700 })).trim(), firstName);
-      body = _stripTrailingSignature(body);
-      body = stripDraftMeta(body);
-      body = cleanProse(body);
-      body = (await reviseForCadence(body, { surface: 'prose' })).text;
-      return res.json({ ok: true, draft: { subject: '', body }, messageType: topic, channel: 'linkedin', relatedApp: topApp || null });
+      const result = await generateWithRubric(prompt, 'referral_dm', {
+        model: draftModel(), maxTokens: 700, cvMd, plainTextFallback: true,
+      });
+      const dm = await finishDraft({
+        body: result.body, surface: 'referral_dm',
+        review: result.review,
+        cleaner: 'prose', stripSalutationFor: firstName, stripSignature: true,
+      });
+      return res.json({ ok: true, draft: { subject: '', body: dm.body }, review: dm.review, messageType: topic, channel: 'linkedin', relatedApp: topApp || null });
     }
 
     // REPLY mode: respond to their most recent inbound message.
@@ -428,16 +430,17 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
       const inbound = lastReceived(prior);
       if (!inbound) return res.status(400).json({ error: 'No received message from this contact yet — nothing to reply to.' });
       const prompt = buildReplyPrompt({ me, cvMd, profileMd, prior, contactLabel, contactBlock, firstName });
-      const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
-      const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return res.status(500).json({ error: 'Could not parse reply draft from model output', raw });
-      const parsed = JSON.parse(jsonMatch[0]);
+      const result = await generateWithRubric(prompt, 'reply_email', {
+        model: draftModel(), maxTokens: 1024, cvMd,
+      });
+      if (result.error) return res.status(500).json({ error: 'Could not parse reply draft from model output' });
       const reply = await finishDraft({
-        body: parsed.body, subject: parsed.subject, surface: 'reply_email',
+        body: result.body, subject: result.subject, surface: 'reply_email',
+        review: result.review,
         cleaner: 'email', stripSalutationFor: firstName, stripSignature: true,
         subjectTransform: (subject) => collapseRe(subject, inbound.subject),
       });
-      return res.json({ ok: true, draft: { subject: reply.subject, body: reply.body }, messageType: 'reply' });
+      return res.json({ ok: true, draft: { subject: reply.subject, body: reply.body }, review: reply.review, messageType: 'reply' });
     }
 
     // FOLLOW-UP-ON-LAST-SENT mode: nudge a thread built on your last sent message.
@@ -445,16 +448,17 @@ Output ONLY the message body, ready to paste into LinkedIn. Plain text. NO subje
       const sent = lastSent(prior);
       if (!sent) return res.status(400).json({ error: 'No message sent to this contact yet — nothing to follow up on.' });
       const prompt = buildFollowupFromSentPrompt({ me, cvMd, profileMd, prior, contactLabel, contactBlock, firstName });
-      const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
-      const jsonMatch = raw.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return res.status(500).json({ error: 'Could not parse follow-up draft from model output', raw });
-      const parsed = JSON.parse(jsonMatch[0]);
+      const result = await generateWithRubric(prompt, 'followup_sent', {
+        model: draftModel(), maxTokens: 1024, cvMd,
+      });
+      if (result.error) return res.status(500).json({ error: 'Could not parse follow-up draft from model output' });
       const followup = await finishDraft({
-        body: parsed.body, subject: parsed.subject, surface: 'followup_sent',
+        body: result.body, subject: result.subject, surface: 'followup_sent',
+        review: result.review,
         cleaner: 'email', stripSalutationFor: firstName, stripSignature: true,
         subjectTransform: (subject) => collapseRe(subject, sent.subject),
       });
-      return res.json({ ok: true, draft: { subject: followup.subject, body: followup.body }, messageType: 'followup-sent' });
+      return res.json({ ok: true, draft: { subject: followup.subject, body: followup.body }, review: followup.review, messageType: 'followup-sent' });
     }
 
     // Fresh outreach. Topic defaults from the ladder: an already-asked contact
@@ -500,15 +504,16 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slic
 Output ONLY a JSON object — no markdown, no code fences, no explanation:
 {"subject": "<subject line — short and human>", "body": "<message body — plain text, no signature block, NO trailing sign-off (no '${me.firstName}', no 'Best,\\n${me.firstName}'), NO greeting and NO bare first-name address. STRUCTURE: 2-4 short paragraphs separated by a LITERAL \\n\\n between paragraphs. The UI prefills 'Hi ${firstName},' so the first sentence MUST begin with substantive content — do NOT start with '${firstName}', 'Hi', 'Hello', or 'Hey'.>"}`;
 
-    const raw = await generateText(prompt, { model: draftModel(), maxTokens: 1024 });
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return res.status(500).json({ error: 'Could not parse draft from model output', raw });
-    const parsed = JSON.parse(jsonMatch[0]);
+    const result = await generateWithRubric(prompt, 'referral_email', {
+      model: draftModel(), maxTokens: 1024, cvMd,
+    });
+    if (result.error) return res.status(500).json({ error: 'Could not parse draft from model output' });
     const draft = await finishDraft({
-      body: parsed.body, subject: parsed.subject, surface: 'referral_email',
+      body: result.body, subject: result.subject, surface: 'referral_email',
+      review: result.review,
       cleaner: 'email', stripSalutationFor: firstName, stripSignature: true,
     });
-    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, messageType: topic, relatedApp: topApp || null });
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: draft.review, messageType: topic, relatedApp: topApp || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

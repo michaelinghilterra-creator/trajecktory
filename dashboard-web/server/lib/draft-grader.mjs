@@ -3,6 +3,7 @@ import {
   getProfile,
   weightedScore,
   buildIndependentGradePrompt,
+  buildRubricBlock,
 } from '../../../lib/outreach-rubric.mjs';
 import { generateText, readProjectFile } from './anthropic.mjs';
 import { getNarrative } from './profile.mjs';
@@ -102,6 +103,28 @@ export function parseAndFinishDraft(raw, surfaceId, cvMd) {
   } catch {
     return draft;
   }
+}
+
+export async function generateWithRubric(prompt, surfaceId, opts = {}) {
+  const { model, maxTokens = 1024, cvMd = '', rubricOpts = {}, plainTextFallback = false } = opts;
+
+  const rubricBlock = (process.env.TJK_RUBRIC_DISABLED !== '1')
+    ? buildRubricBlock(surfaceId, { cvExcerpt: cvMd, ...rubricOpts })
+    : '';
+
+  const fullPrompt = rubricBlock ? (prompt + '\n\n' + rubricBlock) : prompt;
+  const effectiveMaxTokens = rubricBlock ? Math.max(maxTokens + 800, 1500) : maxTokens;
+
+  const raw = await generateText(fullPrompt, { model, maxTokens: effectiveMaxTokens });
+
+  const result = parseAndFinishDraft(raw, surfaceId, cvMd);
+  if (!result.error) return result;
+
+  if (plainTextFallback) {
+    return { body: raw.trim(), subject: undefined, review: null };
+  }
+
+  return result;
 }
 
 function parseIndependentReview(raw, body, surfaceId) {
