@@ -862,7 +862,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           body: JSON.stringify({ ...cfg.buildDraftBody(draftStage), channel: "linkedin", override }),
         })
           .then(r => r.json())
-          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { showDraft({ body: d.draft.body || "", subject: "", linkedin: true, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { showDraft({ body: d.draft.body || "", subject: "", linkedin: true, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
           .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
         return;
       }
@@ -885,7 +885,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
       body: JSON.stringify({ ...draftBody, override }),
     })
       .then(r => r.json())
-      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { showDraft({ ...d.draft, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
+      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { showDraft({ ...d.draft, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
       .catch(() => setDrafting(false));
   };
   const rerunReview = () => {
@@ -910,7 +910,13 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     setProposedDraft(null);
     window.tjkMutate('/api/drafts/improve', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: snapshot, subject: draftResult.subject || '', surfaceId: draftResult.surfaceId, recipientFirst: data?.first || '' }),
+      body: JSON.stringify({
+        body: snapshot,
+        subject: draftResult.subject || '',
+        surfaceId: draftResult.surfaceId,
+        recipientFirst: data?.first || '',
+        ...(draftResult.relatedApp?.id != null ? { appId: draftResult.relatedApp.id } : {}),
+      }),
       signal: controller.signal,
     }).then(r => r.json()).then(d => {
       if (d.error) throw new Error(d.error);

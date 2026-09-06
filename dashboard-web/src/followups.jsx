@@ -1106,7 +1106,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
     window.tjkMutate('/api/drafts/improve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: snapshot, subject: draft.subject || '', surfaceId, recipientFirst: '' }),
+      body: JSON.stringify({ body: snapshot, subject: draft.subject || '', surfaceId, recipientFirst: '', appId }),
       signal: controller.signal,
     }).then(r => r.json()).then(d => {
       if (d.error) throw new Error(d.error);

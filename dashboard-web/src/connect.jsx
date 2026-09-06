@@ -381,7 +381,13 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
     setLiProposed(null);
     window.tjkMutate('/api/drafts/improve', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: snapshot, subject: '', surfaceId: note.surfaceId, recipientFirst: firstName }),
+      body: JSON.stringify({
+        body: snapshot,
+        subject: '',
+        surfaceId: note.surfaceId,
+        recipientFirst: firstName,
+        ...(c.appStale?.appId != null ? { appId: c.appStale.appId } : {}),
+      }),
       signal: controller.signal,
     }).then(r => r.json()).then(res => {
       if (res.error) throw new Error(res.error);
@@ -422,7 +428,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
         if (res.blocked) { setEmailBlock(res); return; }
         const d = res.draft || {};
         if (!d.body) { toast && toast('The model returned an empty draft. Try Redraft.', 'warn'); return; }
-        setDraft({ subject: (d.subject || '').trim(), body: (d.body || '').trim(), review: res.review || null, reviewOf: 'self', surfaceId: res.surfaceId || null });
+        setDraft({ subject: (d.subject || '').trim(), body: (d.body || '').trim(), review: res.review || null, reviewOf: 'self', surfaceId: res.surfaceId || null, relatedApp: res.relatedApp || null });
         if (override) setEmailBlock(b => ({ ...b, overridden: true }));
       })
       .catch(e => toast && toast(e.message, 'error'))
@@ -456,7 +462,15 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
     setEmProposed(null);
     window.tjkMutate('/api/drafts/improve', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: snapshot, subject: emSubject, surfaceId: draft.surfaceId, recipientFirst: firstName }),
+      body: JSON.stringify({
+        body: snapshot,
+        subject: emSubject,
+        surfaceId: draft.surfaceId,
+        recipientFirst: firstName,
+        ...(draft.relatedApp?.id != null
+          ? { appId: draft.relatedApp.id }
+          : c.appStale?.appId != null ? { appId: c.appStale.appId } : {}),
+      }),
       signal: controller.signal,
     }).then(r => r.json()).then(res => {
       if (res.error) throw new Error(res.error);

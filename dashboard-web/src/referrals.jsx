@@ -768,7 +768,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
           body: JSON.stringify({ topic: liTopic, channel: 'linkedin' }),
         }).then(r => r.json()).then(d => {
           if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-          if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.draft.body || '', review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null })); setGenerating(false); }
+          if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.draft.body || '', review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null })); setGenerating(false); }
           else fail(d && d.error);
         }).catch(() => fail());
       }
@@ -780,7 +780,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
         body: JSON.stringify({ topic, mode }),
       }).then(r => r.json()).then(d => {
         if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-        if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: d.draft.subject || c.subject, body: d.draft.body || '', review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null })); setGenerating(false); }
+        if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: d.draft.subject || c.subject, body: d.draft.body || '', review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null })); setGenerating(false); }
         else fail(d && d.error);
       }).catch(() => fail());
     }
@@ -816,6 +816,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
         subject: compose.subject || '',
         surfaceId: compose.surfaceId,
         recipientFirst: String(row.name || '').trim().split(/\s+/)[0] || '',
+        ...(compose.relatedApp?.id != null ? { appId: compose.relatedApp.id } : {}),
       }),
       signal: controller.signal,
     }).then(r => r.json()).then(d => {

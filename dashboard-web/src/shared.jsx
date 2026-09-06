@@ -164,14 +164,19 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, onRerun, o
         </button>
       )}
       {open && review && (
+        // --bg-surface and --bg-card were never defined, so this fell through to
+        // literal white and rendered a glaring panel in the dark theme. Use the
+        // real tokens. Width is capped because a dimension list is two short
+        // columns and does not need the full drawer width to be readable.
         <div style={{
           marginTop: 6,
           padding: "8px 10px",
-          border: "1px solid var(--border)",
+          border: "1px solid var(--border-2)",
           borderRadius: 6,
-          background: "var(--bg-surface, var(--bg-card, #fff))",
+          background: "var(--panel-2)",
           fontSize: 11.5,
           lineHeight: 1.5,
+          maxWidth: 320,
         }}>
           {review.dimensions && review.dimensions.length > 0 && (
             <div style={{ marginBottom: 6 }}>
@@ -182,7 +187,7 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, onRerun, o
                   alignItems: "baseline",
                   padding: "2px 0",
                 }}>
-                  <span style={{ color: "var(--text-mute)" }}>{dim.id.replace(/_/g, " ")}</span>
+                  <span style={{ color: "var(--text-dim)" }}>{dim.id.replace(/_/g, " ")}</span>
                   <span style={{ fontWeight: 600, color: badgeColor(dim.score * 10) }}>{dim.score}/10</span>
                 </div>
               ))}
