@@ -233,5 +233,14 @@ function readProjectFile(projectRoot, relPath) {
   }
 }
 
-export { _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile };
+function readVoiceRules(projectRoot) {
+  const raw = readProjectFile(projectRoot, 'modes/_profile.md');
+  if (!raw || raw.startsWith('[')) return raw;  // file not found sentinel
+  const marker = '## Voice & Writing Rules';
+  const idx = raw.indexOf(marker);
+  if (idx === -1) return raw;  // no section found, fall back to full file
+  return raw.slice(idx);
+}
+
+export { _stripLeadingSalutation, _stripTrailingSignature, _replaceEmDashes, readProjectFile, readVoiceRules };
 

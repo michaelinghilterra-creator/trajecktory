@@ -7,7 +7,7 @@ import { parseApplicationsMd, patchRowInMd } from '../lib/applications.mjs';
 import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute, isMuted, readMute } from '../lib/sidecars.mjs';
-import { generateText, readProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { generateText, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, canInfluenceHire, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
@@ -511,7 +511,7 @@ router.post('/api/followups/:appNum/draft', async (req, res) => {
 
     const projectRoot = ROOT_DIR;
     const cvMd = readProjectFile(projectRoot, 'cv.md');
-    const profileMd = readProjectFile(projectRoot, 'modes/_profile.md');
+    const profileMd = readVoiceRules(projectRoot);
     const followups = parseFollowupsMd().filter(f => f.appNum === appNum)
                                         .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const fuCount = followups.length;

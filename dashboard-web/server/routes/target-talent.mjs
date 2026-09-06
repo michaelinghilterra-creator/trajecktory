@@ -2,7 +2,7 @@ import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { pauseSequence } from '../lib/sequences.mjs';
-import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject, cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
@@ -290,7 +290,7 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
 
     const projectRoot = ROOT_DIR;
     const cvMd           = readProjectFile(projectRoot, 'cv.md');
-    const profileMd      = readProjectFile(projectRoot, 'modes/_profile.md');
+    const profileMd      = readVoiceRules(projectRoot);
     const articleDigestMd = readProjectFile(projectRoot, 'article-digest.md');
     const prior = readTTCorrespondence(id);
     const context = getPersonContext('ta', id);
@@ -327,7 +327,7 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
 
       let cvMd = ''; try { cvMd = readProjectFile(ROOT_DIR, 'cv.md'); } catch {}
       let articleDigestMd = ''; try { articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md'); } catch {}
-      let profileMd = ''; try { profileMd = readProjectFile(ROOT_DIR, 'modes/_profile.md'); } catch {}
+      let profileMd = ''; try { profileMd = readVoiceRules(ROOT_DIR); } catch {}
       const cvExcerpt = (articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 900)}\n\nCV:\n` : '') + (cvMd ? cvMd.slice(0, 3200) : '(CV not available)');
 
       const prompt = `You are drafting a brief LinkedIn DIRECT MESSAGE from ${me.fullName} to an internal Talent Acquisition / People-team contact at ${r.company}, a company he is actively pursuing. This is a private 1:1 message to paste into LinkedIn, NOT an email and NOT a connection request.

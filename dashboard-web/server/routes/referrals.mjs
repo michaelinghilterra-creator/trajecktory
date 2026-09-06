@@ -4,7 +4,7 @@ import { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferra
 import { reconcile, cleanupStale, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
 import { detectAcceptances, computePendingAcceptances } from '../lib/linkedin-acceptance.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
-import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { generateText, _stripLeadingSalutation, _stripTrailingSignature, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { cleanEmailBody, cleanEmailSubject, cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
@@ -349,7 +349,7 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
     if (!decision.allowed) logOutreachOverride({ contactRef: `referral:${id}`, channel, blocks: decision.blocks });
 
     const cvMd            = readProjectFile(ROOT_DIR, 'cv.md');
-    const profileMd       = readProjectFile(ROOT_DIR, 'modes/_profile.md');
+    const profileMd       = readVoiceRules(ROOT_DIR);
     const articleDigestMd = readProjectFile(ROOT_DIR, 'article-digest.md');
 
     const contactLabel = `someone in ${me.firstName}'s own professional network (a warm personal contact, NOT a cold recruiter lead)`;

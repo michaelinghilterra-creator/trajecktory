@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import { execFile } from 'child_process';
 import { ROOT_DIR } from '../config.mjs';
-import { generateText, readProjectFile, draftModel } from './anthropic.mjs';
+import { generateText, readProjectFile, readVoiceRules, draftModel } from './anthropic.mjs';
 import { cleanProse, cleanAtsField } from './text-hygiene.mjs';
 import { pushObsidianNote } from './obsidian.mjs';
 import { getIdentity } from './profile.mjs';
@@ -108,7 +108,7 @@ async function runCoverLetterJob(jobId, row) {
 
   // Pre-load files in Node.js — subprocess gets content inline, no file I/O needed
   const cvMd      = readProjectFile(projectRoot, 'cv.md');
-  const profileMd = readProjectFile(projectRoot, 'modes/_profile.md');
+  const profileMd = readVoiceRules(projectRoot);
   const reportMd  = readReport(row);
 
   const errors = [];
@@ -232,7 +232,7 @@ async function runApplyJob(jobId, row, mode) {
 
   // Pre-load files in Node.js — subprocess gets content inline, no file I/O needed
   const cvMd       = readProjectFile(projectRoot, 'cv.md');
-  const profileMd  = readProjectFile(projectRoot, 'modes/_profile.md');
+  const profileMd  = readVoiceRules(projectRoot);
   const reportMd   = readReport(row);
 
   // ── Step 2: Tailored resume DOCX (template-swap approach) ────────────────────
