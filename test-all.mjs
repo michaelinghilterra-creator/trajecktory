@@ -591,6 +591,7 @@ for (const suite of [
   'tests/cadence.test.mjs',
   'tests/outreach-rubric.test.mjs',
   'tests/draft-contract.test.mjs',
+  'tests/cover-letter-rubric.test.mjs',
   'tests/draft-grader.test.mjs',
   'tests/draft-badge-wiring.test.mjs',
   'tests/project-file-sentinel.test.mjs',

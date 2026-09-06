@@ -16,6 +16,7 @@ import {
   buildRubricBlock,
   buildImprovePrompt,
   parseReviewed,
+  parseReviewedFields,
   weightedScore,
   violatesHardConstraint,
 } from '../lib/outreach-rubric.mjs';
@@ -55,6 +56,13 @@ const subjectIndex = emailBlock.indexOf('"subject"');
 const bodyIndex = emailBlock.indexOf('"body"');
 check(critiqueIndex < dimensionsIndex && dimensionsIndex < subjectIndex && subjectIndex < bodyIndex,
   'critique and dimensions precede subject and body so revision is conditioned on named defects');
+
+const coverBlock = buildRubricBlock('cover_letter', {});
+const coverCritiqueIndex = coverBlock.indexOf('"critique"');
+const coverDimensionsIndex = coverBlock.indexOf('"dimensions"');
+const coverSalutationIndex = coverBlock.indexOf('"salutation"');
+check(coverCritiqueIndex < coverDimensionsIndex && coverDimensionsIndex < coverSalutationIndex,
+  'cover letter critique and dimensions precede the salutation');
 
 const connectBlock = buildRubricBlock('connect_note', {});
 check(connectBlock.includes('300') && !connectBlock.includes('SUBJECT LINE'), 'connection note states the 300 character cap and omits the subject rubric');
@@ -111,6 +119,33 @@ check(surrounded?.body === 'Surrounded body', 'prose before and after the object
 
 const braceBody = parseReviewed('prefix {"body":"Keep this } brace."} suffix {"body":"later"}', 'ta_dm');
 check(braceBody?.body === 'Keep this } brace.', 'balanced extraction ignores a closing brace inside a string');
+
+for (const surfaceId of ['ta_email', 'ta_dm', 'reply_email', 'app_followup', 'connect_note_generic']) {
+  const actual = JSON.stringify(parseReviewed('{"subject":"Exact subject","body":"Exact body"}', surfaceId));
+  const expected = getProfile(surfaceId).dims.some((dimension) => dimension.id === 'subject')
+    ? '{"subject":"Exact subject","body":"Exact body","review":null}'
+    : '{"body":"Exact body","review":null}';
+  check(actual === expected, `${surfaceId} plain draft parsing remains byte identical`);
+}
+
+const coverFields = {
+  salutation: 'Dear Hiring Team,',
+  p1: 'Opening paragraph.',
+  p2: 'Evidence paragraph.',
+  p3: 'Closing paragraph.',
+  closing: 'Sincerely,',
+};
+const reviewedCover = parseReviewedFields(JSON.stringify({
+  critique: { weakest_dimension: 'evidence', fixes: ['Replace the general result with the sourced metric.'] },
+  dimensions: [{ id: 'evidence', score: 8, explanation: '"Evidence paragraph" uses sourced proof.' }],
+  ...coverFields,
+}), 'cover_letter');
+check(JSON.stringify(reviewedCover?.fields) === JSON.stringify(coverFields) && reviewedCover?.review?.score === 80,
+  'parseReviewedFields returns all five cover letter fields and a review');
+const partialCover = { ...coverFields };
+delete partialCover.p2;
+check(parseReviewedFields(JSON.stringify(partialCover), 'cover_letter') === null,
+  'parseReviewedFields rejects a cover letter with a missing field');
 
 const malformedReview = parseReviewed(JSON.stringify({
   body: 'The draft survives.',

@@ -32,9 +32,15 @@ function listModules(dir) {
 }
 
 const serverRoot = path.join(ROOT, 'dashboard-web', 'server');
-const callerFiles = listModules(serverRoot)
-  .filter((file) => /\bawait\s+generateWithRubric\s*\(/.test(fs.readFileSync(file, 'utf8')))
-  .map((file) => path.relative(ROOT, file).replace(/\\/g, '/'));
+const graderPath = path.join(serverRoot, 'lib', 'draft-grader.mjs');
+const moduleSources = listModules(serverRoot).map((file) => ({ file, source: fs.readFileSync(file, 'utf8') }));
+const generatedCallerFiles = moduleSources
+  .filter(({ source }) => /\bawait\s+generateWithRubric\s*\(/.test(source))
+  .map(({ file }) => path.relative(ROOT, file).replace(/\\/g, '/'));
+const directCallerFiles = moduleSources
+  .filter(({ file, source }) => file !== graderPath && /\bbuildRubricBlock\s*\(/.test(source))
+  .map(({ file }) => path.relative(ROOT, file).replace(/\\/g, '/'));
+const callerFiles = [...new Set([...generatedCallerFiles, ...directCallerFiles])];
 const promptFiles = [...new Set([
   ...callerFiles,
   'dashboard-web/server/lib/reply-draft.mjs',
@@ -47,13 +53,40 @@ const bannedSources = [
   '^\\s*\\{\\s*"(subject|body)"\\s*:',
 ];
 const conflicts = [];
+const scannedRegions = new Map();
 for (const file of promptFiles) {
-  const source = fs.readFileSync(path.join(ROOT, file), 'utf8');
+  const fullSource = fs.readFileSync(path.join(ROOT, file), 'utf8');
+  let source = fullSource;
+  // A file may hold both rubric-graded and deliberately ungraded prompts, so
+  // scanning it whole would false-positive on the ungraded ones (apply.mjs keeps
+  // a length-locked CV-slot prompt that must retain its own output instruction).
+  // Narrow to the function enclosing each rubric call. Scan EVERY call, not just
+  // the first: checking only one is the same blind spot this test exists to
+  // close, and it would silently skip a second rubric prompt added later.
+  if (directCallerFiles.includes(file) && !generatedCallerFiles.includes(file)) {
+    const regions = [];
+    for (const call of fullSource.matchAll(/\bbuildRubricBlock\s*\(/g)) {
+      const callIndex = call.index;
+      const functionStarts = [...fullSource.slice(0, callIndex).matchAll(/(?:export\s+)?(?:async\s+)?function\s+\w+\s*\([^)]*\)\s*\{/g)];
+      const start = functionStarts.length ? functionStarts[functionStarts.length - 1].index : 0;
+      const end = fullSource.indexOf('\n}', callIndex);
+      regions.push(fullSource.slice(start, end < 0 ? fullSource.length : end + 2));
+    }
+    scannedRegions.set(file, regions.length);
+    source = regions.join('\n');
+  }
   for (const pattern of bannedSources) {
     if (new RegExp(pattern, 'im').test(source)) conflicts.push(`${file}: ${pattern}`);
   }
 }
 check(callerFiles.length >= 4, `source scan discovered ${callerFiles.length} rubric caller files`);
+// Every rubric call in a mixed file must contribute a scanned region. A zero here
+// would mean the narrowing silently scanned nothing and the conflict check below
+// is vacuously passing.
+for (const [file, count] of scannedRegions) {
+  check(count > 0, `${file}: narrowed scan covered ${count} rubric call site(s)`);
+}
+check(callerFiles.includes('dashboard-web/server/lib/apply.mjs'), 'source scan covers the direct cover letter rubric caller');
 check(conflicts.length === 0, `rubric prompt sources contain no competing output contract${conflicts.length ? ` (${conflicts.join(', ')})` : ''}`);
 
 const emailContract = buildPlainContract('ta_email');
