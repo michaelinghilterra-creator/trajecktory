@@ -283,14 +283,15 @@ function GmailPanel({ toast }) {
   const connect = () => { window.location.href = '/api/google/auth-start'; };
 
   const checkEmail = () => {
+    const prev = sweep;
     setBusy(true); setSweep(null);
     Promise.all([
       fetch('/api/google/scan-bounces', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dryRun: true, since: GMAIL_SINCE }) }).then(r => r.json()),
       fetch(`/api/google/replies?since=${GMAIL_SINCE}`).then(r => r.json()),
     ]).then(([bounces, replies]) => {
-      if (bounces.error || replies.error) { toast && toast(bounces.error || replies.error, 'error'); return; }
+      if (bounces.error || replies.error) { toast && toast(bounces.error || replies.error, 'error'); setSweep(prev); return; }
       setSweep({ bounces, replies });
-    }).catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(false));
+    }).catch(e => { toast && toast(e.message, 'error'); setSweep(prev); }).finally(() => setBusy(false));
   };
 
   const applyBounces = (confirm = []) => {
