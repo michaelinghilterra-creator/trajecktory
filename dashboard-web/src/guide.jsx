@@ -212,20 +212,20 @@ const CHAPTERS = [
     id: 'network', mk: '08', label: 'Network', title: 'Network: the relationships that compound',
     body: (
       <>
-        <p className="dg-lead">The <b>Network</b> tab is where you manage relationship follow-ups, because the people around a role
-        matter as much as the role. The Follow-ups, Referrals, TA Outreach and Influencers subtabs each keep their own tools. Every message here is AI-drafted
-        in your voice and fully editable before it goes.</p>
-        <Shot src="network-referrals.png" alt="Network: Referrals and TA Outreach"
-          caption="Network brings follow-ups and three relationship books together: warm intros, internal contacts and influencers." />
+        <p className="dg-lead">The <b>Network</b> tab is where you manage the relationships that compound.
+        It has five subtabs: <b>Follow-ups</b>, <b>Referrals</b>, <b>Decision Makers</b>,
+        <b> TA Outreach</b>, and <b>Influencers</b>. Every message here is AI-drafted in
+        your voice and fully editable before it goes anywhere.</p>
+        <Shot src="network-referrals.png" alt="Network: Referrals tab showing Stage 1 and Stage 2 warm contacts"
+          caption="Referrals is your warm intro channel, built from LinkedIn connections. Decision Makers and TA Outreach are the direct paths to the people who decide." />
         <ul>
-          <li><b>Referrals</b> is your warm channel, built from your LinkedIn connections. It splits into
-          <b> Stage 1</b> (people already inside a company you are pursuing) and <b>Stage 2</b> (your wider
-          referrer pool). A warm intro beats a cold application every time.</li>
-          <li><b>TA Outreach</b> is the in-network talent-acquisition contacts: a real person at the company,
-          reached warmly, not a portal.</li>
+          <li><b>Follow-ups</b> (covered in full in the Follow-Ups chapter) is the ranked queue of threads in play across the whole search.</li>
+          <li><b>Referrals</b> is your warm channel, built from LinkedIn connections. It splits into <b> Stage 1</b> (people already inside a company you are pursuing) and <b>Stage 2</b> (your referrer pool). A warm intro beats a cold application every time.</li>
+          <li><b>Decision Makers</b> is the contact book for the people who can say yes to a hire at each company. Track their outreach status (Not Contacted through Connected), reconcile duplicates against your LinkedIn connections, and let trajecktory surface suggested contacts for companies where you have no one yet.</li>
+          <li><b>TA Outreach</b> reaches the talent-acquisition contacts at your target companies: a real person, reached warmly, not a portal. Open a contact's drawer to see their sequence stage, log a message, and review AI-drafted outreach.</li>
+          <li><b>Influencers</b> is the list of people in your professional space worth engaging with on LinkedIn, to build visibility rather than to apply. Each influencer's drawer gives you an AI Response to their latest post, an AI Connect note, and an AI Reply to a comment thread. All drafts, all editable, none sent automatically.</li>
         </ul>
-        <Tip>Import your LinkedIn connections once and trajecktory reconciles them into the Referrals channel,
-        flagging who sits inside a company you already track. That is where Stage 1 comes from.</Tip>
+        <Tip>Import your LinkedIn connections once and trajecktory reconciles them into the Referrals channel, flagging who sits inside a company you already track. That is where Stage 1 comes from. The Reconcile button in Decision Makers runs the same deduplication so you never reach out to someone you are already connected to.</Tip>
       </>
     ),
   },
@@ -361,7 +361,23 @@ const CHAPTERS = [
     ),
   },
   {
-    id: 'summary', mk: '15', label: 'The whole thing, on one page', title: 'The whole thing, on one page',
+    id: 'palette', mk: '15', label: 'Command Palette', title: 'Command Palette: everything, one keystroke away',
+    body: (
+      <>
+        <p className="dg-lead">Press <b>Cmd+K</b> (Mac) or <b>Ctrl+K</b> (Windows) anywhere in the app and
+        the command palette opens. It is the fastest way to jump to any tab, trigger any action, or search
+        for a company without using the mouse.</p>
+        <ul>
+          <li><b>Navigate</b> directly to Today, Pipeline, Network, any Setup section, or any report in your history.</li>
+          <li><b>Run actions</b> like starting a scan, opening the Coach, or jumping to a specific role.</li>
+          <li><b>Search</b> for a company name to jump straight to its pipeline row or report.</li>
+        </ul>
+        <Tip>You do not need to remember where anything lives. Type the first two or three letters of what you want and the palette finds it. It is faster than the left nav for anything more than one level deep.</Tip>
+      </>
+    ),
+  },
+  {
+    id: 'summary', mk: '16', label: 'The whole thing, on one page', title: 'The whole thing, on one page',
     body: (
       <>
         <p className="dg-lead">If you remember nothing else, remember this.</p>
