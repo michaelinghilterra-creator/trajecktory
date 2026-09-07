@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.8.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.7.0...v3.8.0) (2026-09-07)
+
+
+### Features
+
+* ship 16-chapter Day-to-day guide with Command Palette chapter and expanded Network coverage ([#295](https://github.com/michaelinghilterra-creator/trajecktory/issues/295)) ([18cbec7](https://github.com/michaelinghilterra-creator/trajecktory/commit/18cbec739e2a290cd42b8de23bfc2891d64066f4))
+
 ## [3.7.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.6.0...v3.7.0) (2026-09-06)
 
 
