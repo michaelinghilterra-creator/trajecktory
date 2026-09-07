@@ -373,6 +373,7 @@ const CHAPTERS = [
           <li><b>Search</b> for a company name to jump straight to its pipeline row or report.</li>
         </ul>
         <Tip>You do not need to remember where anything lives. Type the first two or three letters of what you want and the palette finds it. It is faster than the left nav for anything more than one level deep.</Tip>
+        <Why>trajecktory has nine places to navigate and dozens of actions. A mouse-driven workflow means three to five clicks for anything non-obvious. The palette collapses that to one keystroke and two characters.</Why>
       </>
     ),
   },
