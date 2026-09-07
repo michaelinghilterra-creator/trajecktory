@@ -3,7 +3,7 @@
 // logger. Reads the same numbers weekly-review.mjs reviews (GET
 // /api/metrics/weekly and /api/review/status), so the screen and the CLI can
 // never disagree. A blank source shows "not logged", never a fake zero.
-const { useState: useStateRv, useEffect: useEffectRv, useCallback: useCallbackRv } = React;
+const { useState: useStateRv, useEffect: useEffectRv, useCallback: useCallbackRv, useRef: useRefRv } = React;
 
 function floorTone(r) {
   if (!r.available) return { color: 'var(--text-mute)', label: 'not logged' };
@@ -269,6 +269,7 @@ function lastCheckedLabel(days) {
 function GmailPanel({ toast }) {
   const [st, setSt] = useStateRv(undefined);   // undefined = loading; null = error; object = health
   const [sweep, setSweep] = useStateRv(null);
+  const sweepRef = useRefRv(null); sweepRef.current = sweep;
   const [busy, setBusy] = useStateRv(false);
   const [howTo, setHowTo] = useStateRv(false);
 
@@ -283,7 +284,7 @@ function GmailPanel({ toast }) {
   const connect = () => { window.location.href = '/api/google/auth-start'; };
 
   const checkEmail = () => {
-    const prev = sweep;
+    const prev = sweepRef.current;
     setBusy(true); setSweep(null);
     Promise.all([
       fetch('/api/google/scan-bounces', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dryRun: true, since: GMAIL_SINCE }) }).then(r => r.json()),
