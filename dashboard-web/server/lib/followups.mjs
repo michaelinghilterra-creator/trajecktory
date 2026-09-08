@@ -14,6 +14,7 @@ import { parseReferralsMd, readReferralCorrespondence } from './referrals.mjs';
 import { resolvePeople } from './contact-identity.mjs';
 import { readPins } from './contact-links.mjs';
 import { buildTimeline } from './contact-timeline.mjs';
+import { parseConnectedOn } from './linkedin-acceptance.mjs';
 import { INFLUENCE_RANK, DEFAULT_TIER } from '../../../lib/influence-tier.mjs';
 import { getOutreachPolicy } from './profile.mjs';
 
@@ -716,6 +717,8 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
   const status = row.status || '';
   const selfKey = `${source}:${row.id}`;
   const companyOutreach = _companyOutreachFor(selfKey, companyTouches, today, { rowLastTouch: row.lastTouch });
+  const connectedMatch = String(row.notes || '').match(/connected\s+(\d{1,2}\s+\w+\s+\d{4}|\w+\s+\d{1,2},?\s+\d{4}|\d{1,2}-\w{3}-\d{2,4})/i);
+  const connectedOn = connectedMatch ? (parseConnectedOn(connectedMatch[1]) || '') : '';
   return {
     source,
     id: row.id,
@@ -728,6 +731,7 @@ function _queueRow(row, source, baselineId = null, companyTouches = null, today 
     status,
     hasEmail: !!(row.email || '').trim(),
     emailState: row.verified?.state || 'unverified',
+    connectedOn,
     reason: (row.notes || '').replace(/\s+/g, ' ').trim().slice(0, 160),
     isNew: baselineId != null && Number.isFinite(row.id) && row.id > baselineId,
     notContacted: !status.trim() || /^\s*not\s*contacted\s*$/i.test(status),
