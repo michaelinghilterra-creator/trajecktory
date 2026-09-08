@@ -1021,6 +1021,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   const [reviewing, setReviewing] = useStateF(false);
   const [improving, setImproving] = useStateF(false);
   const [proposedDraft, setProposedDraft] = useStateF(null);
+  const [improveMessage, setImproveMessage] = useStateF(null);
   const [improveSnapshot, setImproveSnapshot] = useStateF('');
   const improveAbortRef = React.useRef(null);
   const [logModal, setLogModal] = useStateF(null);
@@ -1066,6 +1067,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
     setReviewOf(null);
     setSurfaceId(null);
     setProposedDraft(null);
+    setImproveMessage(null);
     window.tjkMutate(`/api/followups/${appId}/draft`, { method: 'POST' })
       .then(r => r.json())
       .then(d => {
@@ -1103,16 +1105,31 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
     setImproveSnapshot(snapshot);
     setImproving(true);
     setProposedDraft(null);
+    setImproveMessage(null);
     window.tjkMutate('/api/drafts/improve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: snapshot, subject: draft.subject || '', surfaceId, recipientFirst: '', appId }),
+      body: JSON.stringify({
+        body: snapshot,
+        subject: draft.subject || '',
+        surfaceId,
+        recipientFirst: '',
+        appId,
+        originalScore: reviewOf === 'independent' && review ? review.score : null,
+      }),
       signal: controller.signal,
     }).then(r => r.json()).then(d => {
       if (d.error) throw new Error(d.error);
+      if (!d.improved) {
+        setImproveMessage(
+          `Rewrite scored ${d.newScore !== null ? Math.round(d.newScore) : '?'}/100 vs your current ${d.originalScore !== null ? Math.round(d.originalScore) : '?'}/100 — no improvement. Your draft is unchanged.`
+        );
+        return;
+      }
       setProposedDraft(d.draft || null);
       setReview(d.review || null);
       setReviewOf(d.reviewOf || null);
+      setImproveMessage(null);
     }).catch(err => {
       if (err.name !== 'AbortError') alert(err.message);
     }).finally(() => {
@@ -1126,6 +1143,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
     if ((draft.body || '') !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
     setDraft({ ...draft, subject: proposedDraft.subject || draft.subject || '', body: proposedDraft.body || '' });
     setProposedDraft(null);
+    setImproveMessage(null);
   };
 
   const clearDraft = () => {
@@ -1137,6 +1155,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
     setReviewOf(null);
     setSurfaceId(null);
     setProposedDraft(null);
+    setImproveMessage(null);
   };
 
   const logTouch = (payload) => {
@@ -1260,7 +1279,17 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
               <input className="inp" style={{ flex: 1 }} value={draft.subject || ''} onChange={e => setDraft({ ...draft, subject: e.target.value })} />
             </div>
             <textarea className="ta" aria-label="Editable follow-up draft" style={{ width: '100%', minHeight: 130, resize: 'vertical', fontFamily: 'inherit', fontSize: 12 }}
-              value={draft.body || ''} onChange={e => setDraft({ ...draft, body: e.target.value })} />
+              value={draft.body || ''} onChange={e => {
+                setDraft({ ...draft, body: e.target.value });
+                setProposedDraft(null);
+                setImproveMessage(null);
+              }} />
+            {improveMessage && (
+              <div className="improve-no-gain" style={{ marginTop: 8, padding: 10, border: '1px solid rgba(245,158,11,0.35)', borderRadius: 6, background: 'rgba(245,158,11,0.08)', color: 'var(--text-mute)', fontSize: 12 }}>
+                {improveMessage}
+                <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={() => setImproveMessage(null)}>Dismiss</button>
+              </div>
+            )}
             {proposedDraft && (
               <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel-2)' }}>
                 <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
@@ -1268,7 +1297,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
                 <div style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{proposedDraft.body}</div>
                 <div className="row" style={{ gap: 6, marginTop: 8 }}>
                   <button className="btn primary sm" onClick={replaceWithProposed}>Replace draft</button>
-                  <button className="btn ghost sm" onClick={() => setProposedDraft(null)}>Discard</button>
+                  <button className="btn ghost sm" onClick={() => { setProposedDraft(null); setImproveMessage(null); }}>Discard</button>
                 </div>
               </div>
             )}
