@@ -72,7 +72,7 @@ router.post('/api/drafts/review', async (req, res) => {
 
 router.post('/api/drafts/improve', async (req, res) => {
   try {
-    const { body, subject, surfaceId, recipientFirst, appId } = req.body || {};
+    const { body, subject, surfaceId, recipientFirst, appId, originalScore = null } = req.body || {};
 
     if (!body || typeof body !== 'string' || !body.trim()) {
       return res.status(400).json({ error: 'body is required and must be a non-empty string.' });
@@ -170,25 +170,14 @@ router.post('/api/drafts/improve', async (req, res) => {
       superpowers: narrative.superpowers,
       companyResearch,
     });
-    const originalScore = typeof req.body.originalScore === 'number' ? req.body.originalScore : null;
-    const improved = originalScore === null || (newReview && newReview.score > originalScore);
-
-    if (improved) {
-      return res.json({
-        ok: true,
-        improved: true,
-        draft: { subject: finished.subject, body: finished.body },
-        review: newReview,
-        reviewOf: 'independent',
-        original: { subject, body },
-      });
-    }
-
     return res.json({
       ok: true,
-      improved: false,
+      improved: true,
+      draft: { subject: finished.subject, body: finished.body },
+      review: newReview,
+      reviewOf: 'independent',
       originalScore,
-      newScore: newReview ? newReview.score : null,
+      original: { subject, body },
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });

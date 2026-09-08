@@ -354,7 +354,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: c.source, id: c.id, override }),
     }).then(r => r.json())
-      .then(res => { if (res.error) toast && toast(res.error, 'error'); else if (res.blocked) setLiBlock(res); else { setNote(res); if (override) setLiBlock(b => ({ ...b, overridden: true })); } })
+      .then(res => { if (res.error) toast && toast(res.error, 'error'); else if (res.blocked) setLiBlock(res); else { setNote({ ...res, reviewOf: 'independent' }); if (override) setLiBlock(b => ({ ...b, overridden: true })); } })
       .catch(e => toast && toast(e.message, 'error'))
       .finally(() => setLiLoading(false));
   };
@@ -386,13 +386,19 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
         subject: '',
         surfaceId: note.surfaceId,
         recipientFirst: firstName,
+        originalScore: typeof note.review?.score === 'number' ? note.review.score : null,
         ...(c.appStale?.appId != null ? { appId: c.appStale.appId } : {}),
       }),
       signal: controller.signal,
     }).then(r => r.json()).then(res => {
       if (res.error) throw new Error(res.error);
-      setLiProposed(res.draft || null);
-      setNote(n => n ? ({ ...n, review: res.review || null, reviewOf: res.reviewOf || null }) : n);
+      setLiProposed(res.draft ? {
+        ...res.draft,
+        originalScore: res.originalScore,
+        newScore: res.review?.score ?? null,
+        review: res.review || null,
+        reviewOf: res.reviewOf || 'independent',
+      } : null);
     }).catch(e => {
       if (e.name !== 'AbortError' && toast) toast(e.message, 'error');
     }).finally(() => {
@@ -403,7 +409,13 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   const replaceLiDraft = () => {
     if (!liProposed || !note) return;
     if ((note.response || '') !== liImproveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
-    setNote(n => ({ ...n, response: liProposed.body || '', length: (liProposed.body || '').length }));
+    setNote(n => ({
+      ...n,
+      response: liProposed.body || '',
+      length: (liProposed.body || '').length,
+      review: liProposed.review || null,
+      reviewOf: liProposed.reviewOf || 'independent',
+    }));
     setLiProposed(null);
   };
   const copy = () => {
@@ -428,7 +440,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
         if (res.blocked) { setEmailBlock(res); return; }
         const d = res.draft || {};
         if (!d.body) { toast && toast('The model returned an empty draft. Try Redraft.', 'warn'); return; }
-        setDraft({ subject: (d.subject || '').trim(), body: (d.body || '').trim(), review: res.review || null, reviewOf: 'self', surfaceId: res.surfaceId || null, relatedApp: res.relatedApp || null });
+        setDraft({ subject: (d.subject || '').trim(), body: (d.body || '').trim(), review: res.review || null, reviewOf: 'independent', surfaceId: res.surfaceId || null, relatedApp: res.relatedApp || null });
         if (override) setEmailBlock(b => ({ ...b, overridden: true }));
       })
       .catch(e => toast && toast(e.message, 'error'))
@@ -467,6 +479,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
         subject: emSubject,
         surfaceId: draft.surfaceId,
         recipientFirst: firstName,
+        originalScore: typeof draft.review?.score === 'number' ? draft.review.score : null,
         ...(draft.relatedApp?.id != null
           ? { appId: draft.relatedApp.id }
           : c.appStale?.appId != null ? { appId: c.appStale.appId } : {}),
@@ -474,8 +487,13 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
       signal: controller.signal,
     }).then(r => r.json()).then(res => {
       if (res.error) throw new Error(res.error);
-      setEmProposed(res.draft || null);
-      setDraft(d => d ? ({ ...d, review: res.review || null, reviewOf: res.reviewOf || null }) : d);
+      setEmProposed(res.draft ? {
+        ...res.draft,
+        originalScore: res.originalScore,
+        newScore: res.review?.score ?? null,
+        review: res.review || null,
+        reviewOf: res.reviewOf || 'independent',
+      } : null);
     }).catch(e => {
       if (e.name !== 'AbortError' && toast) toast(e.message, 'error');
     }).finally(() => {
@@ -486,7 +504,13 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   const replaceEmailDraft = () => {
     if (!emProposed || !draft) return;
     if (emailBody !== emImproveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
-    setDraft(d => ({ ...d, subject: emProposed.subject || d.subject || '', body: emProposed.body || '' }));
+    setDraft(d => ({
+      ...d,
+      subject: emProposed.subject || d.subject || '',
+      body: emProposed.body || '',
+      review: emProposed.review || null,
+      reviewOf: emProposed.reviewOf || 'independent',
+    }));
     setEmProposed(null);
   };
   const copyEmail = () => {
@@ -619,6 +643,9 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
           {liProposed && (
             <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel-2)' }}>
               <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
+              <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: typeof liProposed.originalScore === 'number' && typeof liProposed.newScore === 'number' ? (liProposed.newScore > liProposed.originalScore ? 'var(--green)' : liProposed.newScore < liProposed.originalScore ? 'var(--red)' : 'var(--text-mute)') : 'var(--text-mute)' }}>
+                Current: {typeof liProposed.originalScore === 'number' ? Math.round(liProposed.originalScore) : '?'}/100 · Improved: {typeof liProposed.newScore === 'number' ? Math.round(liProposed.newScore) : '?'}/100
+              </div>
               <div style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{liProposed.body}</div>
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                 <button className="btn primary sm" onClick={replaceLiDraft}>Replace draft</button>
@@ -655,6 +682,9 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
           {emProposed && (
             <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel-2)' }}>
               <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
+              <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: typeof emProposed.originalScore === 'number' && typeof emProposed.newScore === 'number' ? (emProposed.newScore > emProposed.originalScore ? 'var(--green)' : emProposed.newScore < emProposed.originalScore ? 'var(--red)' : 'var(--text-mute)') : 'var(--text-mute)' }}>
+                Current: {typeof emProposed.originalScore === 'number' ? Math.round(emProposed.originalScore) : '?'}/100 · Improved: {typeof emProposed.newScore === 'number' ? Math.round(emProposed.newScore) : '?'}/100
+              </div>
               {emProposed.subject && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{emProposed.subject}</div>}
               <div style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{emProposed.body}</div>
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>

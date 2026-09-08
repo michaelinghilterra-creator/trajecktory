@@ -27,10 +27,13 @@ for (const name of surfaces) {
   check(source.includes('DraftScoreBadge'), `${name} renders DraftScoreBadge`);
   check(source.includes('/api/drafts/improve') || source.includes('onImprove'), `${name} wires draft improvement`);
   check(source.includes('surfaceId'), `${name} uses the server surfaceId`);
-  check(/(?:setProposedDraft|setLiProposed|setEmProposed)\((?:d|res)\.draft \|\| null\)/.test(source), `${name} stores improve output as a proposal`);
+  check(/(?:setProposedDraft|setLiProposed|setEmProposed)\((?:d|res)\.draft \? \{/.test(source), `${name} stores improve output and both scores as a proposal`);
   check(source.includes('new AbortController()') && source.includes('signal: controller.signal'), `${name} makes improvement cancellable`);
-  check(source.includes("reviewOf: 'self'") || source.includes("setReviewOf('self')"), `${name} labels generated reviews as self-scored`);
-  check(source.includes("reviewOf: 'independent'") || source.includes("setReviewOf('independent')"), `${name} labels rerun reviews as independent`);
+  check(!source.includes("reviewOf: 'self'") && !source.includes("setReviewOf('self')"), `${name} never labels generated reviews as self-scored`);
+  check((source.includes("reviewOf: 'independent'") || source.includes("setReviewOf('independent')"))
+    && source.includes('originalScore:') && source.includes('newScore:')
+    && source.includes('Current:') && source.includes('Improved:'),
+  `${name} labels reviews independently and compares current and improved scores`);
 }
 
 const shared = read('shared.jsx');
@@ -38,7 +41,7 @@ check(
   shared.includes('function DraftScoreBadge({ review, reviewOf, onRerun, onImprove, busy, improving })'),
   'DraftScoreBadge accepts reviewOf, onImprove, and improving',
 );
-check(shared.includes('self-scored'), 'DraftScoreBadge labels a self score');
+check(!shared.includes('Get independent review'), 'DraftScoreBadge removes the redundant independent-review button');
 check(shared.includes('independent'), 'DraftScoreBadge labels an independent score');
 check(shared.includes("reviewOf === 'original' ? 'was ' : ''"), 'DraftScoreBadge keeps the was prefix for an original score');
 check(shared.includes('onImprove &&') && shared.includes('Improve this draft'), 'DraftScoreBadge gates and labels the improve button');

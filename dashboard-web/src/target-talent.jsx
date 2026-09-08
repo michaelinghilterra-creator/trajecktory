@@ -862,7 +862,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           body: JSON.stringify({ ...cfg.buildDraftBody(draftStage), channel: "linkedin", override }),
         })
           .then(r => r.json())
-          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { showDraft({ body: d.draft.body || "", subject: "", linkedin: true, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { showDraft({ body: d.draft.body || "", subject: "", linkedin: true, review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
           .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
         return;
       }
@@ -871,7 +871,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         body: JSON.stringify({ source: cfg.kind, id, ...cfg.linkedIn.payload(data, liTone), override }),
       })
         .then(r => r.json())
-        .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.response) { showDraft({ body: d.response, subject: "", linkedin: true, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+        .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.response) { showDraft({ body: d.response, subject: "", linkedin: true, review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
         .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
       return;
     }
@@ -885,7 +885,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
       body: JSON.stringify({ ...draftBody, override }),
     })
       .then(r => r.json())
-      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { showDraft({ ...d.draft, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
+      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { showDraft({ ...d.draft, review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
       .catch(() => setDrafting(false));
   };
   const rerunReview = () => {
@@ -915,13 +915,19 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         subject: draftResult.subject || '',
         surfaceId: draftResult.surfaceId,
         recipientFirst: data?.first || '',
+        originalScore: typeof draftResult.review?.score === 'number' ? draftResult.review.score : null,
         ...(draftResult.relatedApp?.id != null ? { appId: draftResult.relatedApp.id } : {}),
       }),
       signal: controller.signal,
     }).then(r => r.json()).then(d => {
       if (d.error) throw new Error(d.error);
-      setProposedDraft(d.draft || null);
-      setDraftResult(current => current ? ({ ...current, review: d.review || null, reviewOf: d.reviewOf || null }) : current);
+      setProposedDraft(d.draft ? {
+        ...d.draft,
+        originalScore: d.originalScore,
+        newScore: d.review?.score ?? null,
+        review: d.review || null,
+        reviewOf: d.reviewOf || 'independent',
+      } : null);
     }).catch(err => {
       if (err.name !== 'AbortError' && window.tjkToast) window.tjkToast(err.message, 'error');
     }).finally(() => {
@@ -933,7 +939,12 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     if (!proposedDraft || !draftResult) return;
     if (draftBody !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
     setDraftBody(proposedDraft.body || '');
-    setDraftResult(current => ({ ...current, subject: proposedDraft.subject || current.subject || '' }));
+    setDraftResult(current => ({
+      ...current,
+      subject: proposedDraft.subject || current.subject || '',
+      review: proposedDraft.review || null,
+      reviewOf: proposedDraft.reviewOf || 'independent',
+    }));
     setProposedDraft(null);
   };
   const saveCorrAndClose = msg => {
@@ -1266,6 +1277,9 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
               {proposedDraft && (
                 <div style={{ marginTop: 8, padding: 10, border: "1px solid var(--accent)", borderRadius: 6, background: "var(--panel-2)" }}>
                   <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
+                  <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: typeof proposedDraft.originalScore === "number" && typeof proposedDraft.newScore === "number" ? (proposedDraft.newScore > proposedDraft.originalScore ? "var(--green)" : proposedDraft.newScore < proposedDraft.originalScore ? "var(--red)" : "var(--text-mute)") : "var(--text-mute)" }}>
+                    Current: {typeof proposedDraft.originalScore === "number" ? Math.round(proposedDraft.originalScore) : "?"}/100 · Improved: {typeof proposedDraft.newScore === "number" ? Math.round(proposedDraft.newScore) : "?"}/100
+                  </div>
                   {proposedDraft.subject && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{proposedDraft.subject}</div>}
                   <div style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{proposedDraft.body}</div>
                   <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
