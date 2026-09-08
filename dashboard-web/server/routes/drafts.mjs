@@ -162,13 +162,33 @@ router.post('/api/drafts/improve', async (req, res) => {
       reviewStatus,
     });
 
+    const newReview = await gradeIndependently(finished.body, surfaceId, {
+      model: gradeModel(),
+      subject: finished.subject,
+      cvExcerpt: cvMd,
+      proofPoints: narrative.proofPoints,
+      superpowers: narrative.superpowers,
+      companyResearch,
+    });
+    const originalScore = typeof req.body.originalScore === 'number' ? req.body.originalScore : null;
+    const improved = originalScore === null || (newReview && newReview.score > originalScore);
+
+    if (improved) {
+      return res.json({
+        ok: true,
+        improved: true,
+        draft: { subject: finished.subject, body: finished.body },
+        review: newReview,
+        reviewOf: 'independent',
+        original: { subject, body },
+      });
+    }
+
     return res.json({
       ok: true,
-      draft: { subject: finished.subject, body: finished.body },
-      review: finished.review,
-      reviewStatus: finished.reviewStatus,
-      reviewOf: 'original',
-      original: { subject, body },
+      improved: false,
+      originalScore,
+      newScore: newReview ? newReview.score : null,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });

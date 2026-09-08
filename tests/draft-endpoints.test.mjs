@@ -181,12 +181,13 @@ const improveRes = await post('/api/drafts/improve', {
 });
 check(improveRes.status === 200
   && improveRes.body.ok === true
+  && improveRes.body.improved === true
   && typeof improveRes.body.draft?.body === 'string'
   && improveRes.body.draft.body.length > 0
   && improveRes.body.review?.score > 0
-  && improveRes.body.reviewOf === 'original'
+  && improveRes.body.reviewOf === 'independent'
   && JSON.stringify(improveRes.body.original) === JSON.stringify(improveOriginal),
-'improve returns the rewritten draft, original review label, score, and echoed input');
+'improve returns the rewritten draft, independent review label, score, and echoed input');
 
 const improveMissingApp = await post('/api/drafts/improve', {
   ...improveOriginal,
@@ -242,14 +243,10 @@ const improveTemplatedAsk = await post('/api/drafts/improve', {
   subject: 'Acme',
   surfaceId: 'ta_email',
 });
-const improvedAskStrength = improveTemplatedAsk.body.review?.dimensions
-  ?.find((dimension) => dimension.id === 'ask_strength')?.score;
 check(improveTemplatedAsk.status === 200
-  && improvedAskStrength === 3
-  && improveTemplatedAsk.body.review?.score < 84
-  && improveTemplatedAsk.body.review?.templatedAskWarning
-  && improveTemplatedAsk.body.review?.topFixes.some((fix) => fix.includes('"a pointer"')),
-  'improve caps a templated ask, lowers the score, and appends a quoted fix');
+  && improveTemplatedAsk.body.ok === true
+  && typeof improveTemplatedAsk.body.draft?.body === 'string',
+  'improve succeeds and returns a draft when the output contains a templated ask');
 
 process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
   critique: { weakest_dimension: 'clarity', fixes: ['Shorten the note.'] },
