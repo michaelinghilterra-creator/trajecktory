@@ -643,9 +643,23 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
           {liProposed && (
             <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel-2)' }}>
               <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
-              <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: typeof liProposed.originalScore === 'number' && typeof liProposed.newScore === 'number' ? (liProposed.newScore > liProposed.originalScore ? 'var(--green)' : liProposed.newScore < liProposed.originalScore ? 'var(--red)' : 'var(--text-mute)') : 'var(--text-mute)' }}>
-                Current: {typeof liProposed.originalScore === 'number' ? Math.round(liProposed.originalScore) : '?'}/100 · Improved: {typeof liProposed.newScore === 'number' ? Math.round(liProposed.newScore) : '?'}/100
+              <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>
+                Improved: {typeof liProposed.newScore === 'number' ? Math.round(liProposed.newScore) : '?'}/100
+                {typeof liProposed.originalScore === 'number' && typeof liProposed.newScore === 'number' && (() => {
+                  const delta = Math.round(liProposed.newScore - liProposed.originalScore);
+                  return <span style={{ color: delta > 0 ? 'var(--green)' : delta < 0 ? 'var(--red)' : 'var(--text-mute)' }}> ({delta > 0 ? '+' : ''}{delta})</span>;
+                })()}
               </div>
+              {Array.isArray(liProposed.review?.dimensions) && liProposed.review.dimensions.length > 0 && (
+                <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>
+                  {liProposed.review.dimensions.map(dimension => (
+                    <div key={dimension.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{dimension.label}</span>
+                      <span>{dimension.score}/10</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{liProposed.body}</div>
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                 <button className="btn primary sm" onClick={replaceLiDraft}>Replace draft</button>
@@ -682,9 +696,23 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
           {emProposed && (
             <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel-2)' }}>
               <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
-              <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: typeof emProposed.originalScore === 'number' && typeof emProposed.newScore === 'number' ? (emProposed.newScore > emProposed.originalScore ? 'var(--green)' : emProposed.newScore < emProposed.originalScore ? 'var(--red)' : 'var(--text-mute)') : 'var(--text-mute)' }}>
-                Current: {typeof emProposed.originalScore === 'number' ? Math.round(emProposed.originalScore) : '?'}/100 · Improved: {typeof emProposed.newScore === 'number' ? Math.round(emProposed.newScore) : '?'}/100
+              <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>
+                Improved: {typeof emProposed.newScore === 'number' ? Math.round(emProposed.newScore) : '?'}/100
+                {typeof emProposed.originalScore === 'number' && typeof emProposed.newScore === 'number' && (() => {
+                  const delta = Math.round(emProposed.newScore - emProposed.originalScore);
+                  return <span style={{ color: delta > 0 ? 'var(--green)' : delta < 0 ? 'var(--red)' : 'var(--text-mute)' }}> ({delta > 0 ? '+' : ''}{delta})</span>;
+                })()}
               </div>
+              {Array.isArray(emProposed.review?.dimensions) && emProposed.review.dimensions.length > 0 && (
+                <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>
+                  {emProposed.review.dimensions.map(dimension => (
+                    <div key={dimension.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{dimension.label}</span>
+                      <span>{dimension.score}/10</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {emProposed.subject && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{emProposed.subject}</div>}
               <div style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{emProposed.body}</div>
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>

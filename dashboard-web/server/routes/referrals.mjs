@@ -414,9 +414,8 @@ ${topicGuidance}
 ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
 == BODY REQUIREMENTS ==
 - Omit a subject line.
-- Omit a signature block and any trailing sign-off, including '${me.firstName}' or 'Best,\\n${me.firstName}'.
-- Omit a greeting and any bare first-name address.
-- The UI prefills 'Hi ${firstName},', so the first sentence must begin with substantive content. Do not start with '${firstName}', 'Hi', 'Hello', or 'Hey'.`;
+- Begin with 'Hi ${firstName},' on its own line, followed by a blank line before the first paragraph.
+- End with a blank line, then 'Best,' on its own line, then '${me.firstName}' on the next line.`;
 
       const narrative = getNarrative();
       const result = await generateWithRubric(prompt, 'referral_dm', {
@@ -432,7 +431,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
         body: result.body, surface: 'referral_dm',
         review: result.review,
         reviewStatus: result.reviewStatus,
-        cleaner: 'prose', stripSalutationFor: firstName, stripSignature: true,
+        cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
       });
       const independentReview = await gradeIndependently(dm.body, 'referral_dm', {
         model: gradeModel(), subject: '', cvExcerpt: cvMd,
@@ -456,7 +455,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
         body: result.body, subject: result.subject, surface: 'reply_email',
         review: result.review,
         reviewStatus: result.reviewStatus,
-        cleaner: 'email', stripSalutationFor: firstName, stripSignature: true,
+        cleaner: 'email', stripSalutationFor: null, stripSignature: false,
         subjectTransform: (subject) => collapseRe(subject, inbound.subject),
       });
       const independentReview = await gradeIndependently(reply.body, 'reply_email', {
@@ -481,7 +480,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
         body: result.body, subject: result.subject, surface: 'followup_sent',
         review: result.review,
         reviewStatus: result.reviewStatus,
-        cleaner: 'email', stripSalutationFor: firstName, stripSignature: true,
+        cleaner: 'email', stripSalutationFor: null, stripSignature: false,
         subjectTransform: (subject) => collapseRe(subject, sent.subject),
       });
       const independentReview = await gradeIndependently(followup.body, 'followup_sent', {
@@ -534,10 +533,10 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slic
 - Keep the subject line short and human.
 
 == BODY REQUIREMENTS ==
-- Use plain text and omit a signature block and every trailing sign-off, including '${me.firstName}' or 'Best,\\n${me.firstName}'.
-- Omit a greeting and any bare first-name address.
+- Use plain text.
+- Begin with 'Hi ${firstName},' on its own line, followed by a blank line before the first paragraph.
 - Write 2 to 4 short paragraphs separated by a literal \\n\\n between paragraphs.
-- The UI prefills 'Hi ${firstName},', so the first sentence must begin with substantive content. Do not start with '${firstName}', 'Hi', 'Hello', or 'Hey'.`;
+- End with a blank line, then 'Best,' on its own line, then '${me.firstName}' on the next line.`;
 
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'referral_email', {
@@ -553,7 +552,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slic
       body: result.body, subject: result.subject, surface: 'referral_email',
       review: result.review,
       reviewStatus: result.reviewStatus,
-      cleaner: 'email', stripSalutationFor: firstName, stripSignature: true,
+      cleaner: 'email', stripSalutationFor: null, stripSignature: false,
     });
     const independentReview = await gradeIndependently(draft.body, 'referral_email', {
       model: gradeModel(), subject: draft.subject || '', cvExcerpt: cvMd,

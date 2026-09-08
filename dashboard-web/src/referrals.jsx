@@ -1062,9 +1062,23 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
               {proposedDraft && (
                 <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel)' }}>
                   <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
-                  <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: typeof proposedDraft.originalScore === 'number' && typeof proposedDraft.newScore === 'number' ? (proposedDraft.newScore > proposedDraft.originalScore ? 'var(--green)' : proposedDraft.newScore < proposedDraft.originalScore ? 'var(--red)' : 'var(--text-mute)') : 'var(--text-mute)' }}>
-                    Current: {typeof proposedDraft.originalScore === 'number' ? Math.round(proposedDraft.originalScore) : '?'}/100 · Improved: {typeof proposedDraft.newScore === 'number' ? Math.round(proposedDraft.newScore) : '?'}/100
+                  <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>
+                    Improved: {typeof proposedDraft.newScore === 'number' ? Math.round(proposedDraft.newScore) : '?'}/100
+                    {typeof proposedDraft.originalScore === 'number' && typeof proposedDraft.newScore === 'number' && (() => {
+                      const delta = Math.round(proposedDraft.newScore - proposedDraft.originalScore);
+                      return <span style={{ color: delta > 0 ? 'var(--green)' : delta < 0 ? 'var(--red)' : 'var(--text-mute)' }}> ({delta > 0 ? '+' : ''}{delta})</span>;
+                    })()}
                   </div>
+                  {Array.isArray(proposedDraft.review?.dimensions) && proposedDraft.review.dimensions.length > 0 && (
+                    <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>
+                      {proposedDraft.review.dimensions.map(dimension => (
+                        <div key={dimension.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>{dimension.label}</span>
+                          <span>{dimension.score}/10</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {proposedDraft.subject && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{proposedDraft.subject}</div>}
                   <div style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{proposedDraft.body}</div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>

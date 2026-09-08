@@ -32,8 +32,9 @@ for (const name of surfaces) {
   check(!source.includes("reviewOf: 'self'") && !source.includes("setReviewOf('self')"), `${name} never labels generated reviews as self-scored`);
   check((source.includes("reviewOf: 'independent'") || source.includes("setReviewOf('independent')"))
     && source.includes('originalScore:') && source.includes('newScore:')
-    && source.includes('Current:') && source.includes('Improved:'),
-  `${name} labels reviews independently and compares current and improved scores`);
+    && !source.includes('Current:') && source.includes('Improved:')
+    && source.includes('newScore -') && source.includes('review?.dimensions'),
+  `${name} labels reviews independently and shows the proposed score delta and dimensions`);
 }
 
 const shared = read('shared.jsx');
