@@ -807,7 +807,7 @@ select option, .inp option, .sel option { background: var(--panel); color: var(-
   transition: transform 0.18s cubic-bezier(0.2,0.8,0.2,1);
   display: flex; flex-direction: column;
 }
-.drawer.wide { width: var(--drawer-w); max-width: 96vw; }
+.drawer.wide { width: max(700px, min(80vw, 1300px)); max-width: 96vw; }
 .drawer.open { transform: translateX(0); }
 .drawer-head {
   padding: 16px 20px;

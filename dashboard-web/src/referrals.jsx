@@ -633,7 +633,7 @@ function ReferralDrawer({ row, statuses, onClose, onPatch, onLogToday, onFindEma
     <>
       <div className={"drawer-backdrop" + (open ? " open" : "")} onClick={onClose}
         style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }} />
-      <div className={"drawer" + (open ? " open" : "")} style={{ transform: open ? "translateX(0)" : "translateX(100%)" }}>
+      <div className={"drawer wide" + (open ? " open" : "")} style={{ transform: open ? "translateX(0)" : "translateX(100%)" }}>
         {open && (Shared && refCfg
           ? <Shared id={row.id} cfg={refCfg} onClose={onClose} onUpdate={onChanged} />
           : <ReferralPanel row={row} statuses={statuses} onClose={onClose} onPatch={onPatch} onLogToday={onLogToday} onFindEmail={onFindEmail} finding={finding} onChanged={onChanged} onRemove={onRemove} />)}

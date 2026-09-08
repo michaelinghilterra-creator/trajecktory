@@ -409,7 +409,7 @@ ${topicGuidance}
 - Direct, human, no corporate filler ("I hope this finds you well", "reaching out to touch base").
 - NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
 - Never invent metrics, claims, or a shared history not supported above or on the CV.
-- If (and only if) the intent is a referral ask, make it specific and direct: flag the application or intro to the right person. Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches.
+- If (and only if) the intent is a referral ask, make it specific and direct: flag the application or intro to the right person. Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches. Use "Would you" not "Could you" for the ask — it is a direct request, not a question about capability.
 - Close with one low-friction next step or a genuine sign-off matching the intent. Do NOT ask for a call or a specific block of time.
 ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
 == BODY REQUIREMENTS ==
@@ -526,7 +526,7 @@ ${topicGuidance}
 - Maximum 130 words in body.
 - NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
 - Never invent metrics, claims, or a shared history not supported above or on the CV.
-- If (and only if) the intent is a referral ask, make it specific and direct: flag the application or intro to the right person. Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches.
+- If (and only if) the intent is a referral ask, make it specific and direct: flag the application or intro to the right person. Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches. Use "Would you" not "Could you" for the ask — it is a direct request, not a question about capability.
 - Close with a low-friction next step or a genuine sign-off, matching the intent.
 ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slice().reverse().slice(0, 3).map(m => `--- ${m.direction} on ${m.timestamp} | Subject: ${m.subject}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold.\n` : ''}
 == SUBJECT REQUIREMENTS ==
