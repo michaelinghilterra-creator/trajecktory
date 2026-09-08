@@ -1075,7 +1075,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
         if (d.draft) {
           setDraft(d.draft);
           setReview(d.review || null);
-          setReviewOf('self');
+          setReviewOf('independent');
           setSurfaceId(d.surfaceId || null);
         } else alert(d.error || 'Draft failed');
       })
@@ -1115,7 +1115,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
         surfaceId,
         recipientFirst: '',
         appId,
-        originalScore: reviewOf === 'independent' && review ? review.score : null,
+        originalScore: typeof review?.score === 'number' ? review.score : null,
       }),
       signal: controller.signal,
     }).then(r => r.json()).then(d => {
@@ -1126,9 +1126,13 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
         );
         return;
       }
-      setProposedDraft(d.draft || null);
-      setReview(d.review || null);
-      setReviewOf(d.reviewOf || null);
+      setProposedDraft(d.draft ? {
+        ...d.draft,
+        originalScore: d.originalScore,
+        newScore: d.review?.score ?? null,
+        review: d.review || null,
+        reviewOf: d.reviewOf || 'independent',
+      } : null);
       setImproveMessage(null);
     }).catch(err => {
       if (err.name !== 'AbortError') alert(err.message);
@@ -1142,6 +1146,8 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
     if (!proposedDraft || !draft) return;
     if ((draft.body || '') !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
     setDraft({ ...draft, subject: proposedDraft.subject || draft.subject || '', body: proposedDraft.body || '' });
+    setReview(proposedDraft.review || null);
+    setReviewOf(proposedDraft.reviewOf || 'independent');
     setProposedDraft(null);
     setImproveMessage(null);
   };
@@ -1293,6 +1299,23 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
             {proposedDraft && (
               <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel-2)' }}>
                 <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
+                <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>
+                  Improved: {typeof proposedDraft.newScore === 'number' ? Math.round(proposedDraft.newScore) : '?'}/100
+                  {typeof proposedDraft.originalScore === 'number' && typeof proposedDraft.newScore === 'number' && (() => {
+                    const delta = Math.round(proposedDraft.newScore - proposedDraft.originalScore);
+                    return <span style={{ color: delta > 0 ? 'var(--green)' : delta < 0 ? 'var(--red)' : 'var(--text-mute)' }}> ({delta > 0 ? '+' : ''}{delta})</span>;
+                  })()}
+                </div>
+                {Array.isArray(proposedDraft.review?.dimensions) && proposedDraft.review.dimensions.length > 0 && (
+                  <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>
+                    {proposedDraft.review.dimensions.map(dimension => (
+                      <div key={dimension.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>{dimension.name || dimension.id}</span>
+                        <span>{dimension.score}/10</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {proposedDraft.subject && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{proposedDraft.subject}</div>}
                 <div style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{proposedDraft.body}</div>
                 <div className="row" style={{ gap: 6, marginTop: 8 }}>

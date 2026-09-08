@@ -716,8 +716,11 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
   const [reviewing, setReviewing] = useState(false);
   const [improving, setImproving] = useState(false);
   const [proposedDraft, setProposedDraft] = useState(null);
+  const [showProposedDims, setShowProposedDims] = useState(false);
+  const [showOrigDims, setShowOrigDims] = useState(false);
   const [improveSnapshot, setImproveSnapshot] = useState("");
   const improveAbortRef = useRef(null);
+  const sideBySideTaRef = useRef(null);
   const [draftBlock, setDraftBlock] = useState(null);
   // Which surface the draft is for. Email drafts assemble a greeting + signature;
   // LinkedIn notes are short and stand alone (no signature, no "Hi Name,").
@@ -726,6 +729,12 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
   // Keep the editable body separate from the greeting and signature. Grading and
   // improvement receive only this clean body, while copy and send use the wrapper.
   const [draftBody, setDraftBody] = useState("");
+  useEffect(() => {
+    if (!sideBySideTaRef.current || !proposedDraft) return;
+    const el = sideBySideTaRef.current;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }, [draftBody, proposedDraft]);
   const showDraft = (next) => {
     setDraftResult(next);
     setDraftBody(next ? (next.body || "").trim() : "");
@@ -862,7 +871,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           body: JSON.stringify({ ...cfg.buildDraftBody(draftStage), channel: "linkedin", override }),
         })
           .then(r => r.json())
-          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { showDraft({ body: d.draft.body || "", subject: "", linkedin: true, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { showDraft({ body: d.draft.body || "", subject: "", linkedin: true, review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
           .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
         return;
       }
@@ -871,7 +880,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         body: JSON.stringify({ source: cfg.kind, id, ...cfg.linkedIn.payload(data, liTone), override }),
       })
         .then(r => r.json())
-        .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.response) { showDraft({ body: d.response, subject: "", linkedin: true, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+        .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.response) { showDraft({ body: d.response, subject: "", linkedin: true, review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
         .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
       return;
     }
@@ -885,7 +894,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
       body: JSON.stringify({ ...draftBody, override }),
     })
       .then(r => r.json())
-      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { showDraft({ ...d.draft, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
+      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { showDraft({ ...d.draft, review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
       .catch(() => setDrafting(false));
   };
   const rerunReview = () => {
@@ -915,13 +924,20 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         subject: draftResult.subject || '',
         surfaceId: draftResult.surfaceId,
         recipientFirst: data?.first || '',
+        originalScore: typeof draftResult.review?.score === 'number' ? draftResult.review.score : null,
         ...(draftResult.relatedApp?.id != null ? { appId: draftResult.relatedApp.id } : {}),
       }),
       signal: controller.signal,
     }).then(r => r.json()).then(d => {
       if (d.error) throw new Error(d.error);
-      setProposedDraft(d.draft || null);
-      setDraftResult(current => current ? ({ ...current, review: d.review || null, reviewOf: d.reviewOf || null }) : current);
+      setShowProposedDims(false);
+      setProposedDraft(d.draft ? {
+        ...d.draft,
+        originalScore: d.originalScore,
+        newScore: d.review?.score ?? null,
+        review: d.review || null,
+        reviewOf: d.reviewOf || 'independent',
+      } : null);
     }).catch(err => {
       if (err.name !== 'AbortError' && window.tjkToast) window.tjkToast(err.message, 'error');
     }).finally(() => {
@@ -933,7 +949,12 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     if (!proposedDraft || !draftResult) return;
     if (draftBody !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
     setDraftBody(proposedDraft.body || '');
-    setDraftResult(current => ({ ...current, subject: proposedDraft.subject || current.subject || '' }));
+    setDraftResult(current => ({
+      ...current,
+      subject: proposedDraft.subject || current.subject || '',
+      review: proposedDraft.review || null,
+      reviewOf: proposedDraft.reviewOf || 'independent',
+    }));
     setProposedDraft(null);
   };
   const saveCorrAndClose = msg => {
@@ -1252,27 +1273,94 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           {draftResult && (
             <div className="ai-compose">
               <div className="ai-head"><TIcon d={TI.spark} size={13} /> AI {draftResult.linkedin ? "LinkedIn note" : "draft"} <span style={{ marginLeft: 8, fontSize: 10.5, color: "var(--text-mute)", fontWeight: 400 }}>editable{draftResult.linkedin ? " · no subject, paste into LinkedIn" : ""}</span></div>
-              {window.DraftScoreBadge && <window.DraftScoreBadge review={draftResult.review} reviewOf={draftResult.reviewOf} onRerun={draftResult.surfaceId ? rerunReview : null} onImprove={draftResult.surfaceId ? improveDraft : null} busy={reviewing} improving={improving} />}
-              {!draftResult.linkedin && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontSize: 11, color: "var(--text-mute)" }}>Subject</span>
-                  <input className="inp" value={draftResult.subject || ""} onChange={e => setDraftResult({ ...draftResult, subject: e.target.value })} style={{ flex: 1 }} />
-                  <CopyBtn value={draftResult.subject || ""} />
-                </div>
+              {!proposedDraft && window.DraftScoreBadge && <window.DraftScoreBadge review={draftResult.review} reviewOf={draftResult.reviewOf} onRerun={draftResult.surfaceId ? rerunReview : null} onImprove={draftResult.surfaceId ? improveDraft : null} busy={reviewing} improving={improving} />}
+              {proposedDraft && Array.isArray(draftResult.review?.topFixes) && draftResult.review.topFixes.length > 0 && (
+                <ul style={{ margin: "0 0 10px", paddingLeft: 16, fontSize: 12, lineHeight: 1.5 }}>
+                  {draftResult.review.topFixes.map((fix, i) => <li key={i} style={{ marginBottom: 2 }}>{fix}</li>)}
+                </ul>
               )}
-              {!draftResult.linkedin && <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>Hi {data?.first || "there"},</div>}
-              <textarea className="ta" value={draftBody} onChange={e => setDraftBody(e.target.value)} rows={draftResult.linkedin ? 6 : 10} aria-label="Editable message draft body" style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }} />
-              {!draftResult.linkedin && emailSignature && <div className="dim" style={{ fontSize: 12, marginTop: 4, whiteSpace: "pre-wrap" }}>{emailSignature}</div>}
-              {proposedDraft && (
-                <div style={{ marginTop: 8, padding: 10, border: "1px solid var(--accent)", borderRadius: 6, background: "var(--panel-2)" }}>
-                  <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
-                  {proposedDraft.subject && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{proposedDraft.subject}</div>}
-                  <div style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{proposedDraft.body}</div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                    <button className="btn primary sm" onClick={replaceWithProposed}>Replace draft</button>
-                    <button className="btn ghost sm" onClick={() => setProposedDraft(null)}>Discard</button>
+              {proposedDraft ? (
+                <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 4, color: "var(--text-mute)" }}>Current draft</div>
+                    {draftResult.review?.score != null && (
+                      <div>
+                        <div className="mono" style={{ fontSize: 11, marginBottom: 4, color: "var(--text-mute)", cursor: "pointer", userSelect: "none", display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => setShowOrigDims(s => !s)}>
+                          {draftResult.review.score}/100 <span style={{ fontSize: 10 }}>{showOrigDims ? "▲" : "▼"}</span>
+                        </div>
+                        {showOrigDims && Array.isArray(draftResult.review.dimensions) && draftResult.review.dimensions.length > 0 && (
+                          <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: "var(--text-mute)" }}>
+                            {draftResult.review.dimensions.map(d => (
+                              <div key={d.id} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                                <span>{d.name || d.id}</span><span>{d.score}/10</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {!draftResult.linkedin && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, color: "var(--text-mute)" }}>Subject</span>
+                        <input className="inp" value={draftResult.subject || ""} onChange={e => setDraftResult({ ...draftResult, subject: e.target.value })} style={{ flex: 1 }} />
+                        <CopyBtn value={draftResult.subject || ""} />
+                      </div>
+                    )}
+                    {!draftResult.linkedin && <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>Hi {data?.first || "there"},</div>}
+                    <textarea ref={sideBySideTaRef} className="ta" value={draftBody} onChange={e => setDraftBody(e.target.value)} aria-label="Editable message draft body" style={{ width: "100%", resize: "none", overflow: "hidden", fontFamily: "inherit" }} />
+                    {!draftResult.linkedin && emailSignature && <div className="dim" style={{ fontSize: 12, marginTop: 4, whiteSpace: "pre-wrap" }}>{emailSignature}</div>}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 4, color: "var(--text-mute)" }}>Proposed rewrite</div>
+                    {typeof proposedDraft.newScore === "number" && (
+                      <div>
+                        <div className="mono" style={{ fontSize: 11, marginBottom: 4, color: "var(--text-mute)", cursor: "pointer", userSelect: "none", display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => setShowProposedDims(s => !s)}>
+                          Improved: {Math.round(proposedDraft.newScore)}/100
+                          {typeof proposedDraft.originalScore === "number" && (() => {
+                            const delta = Math.round(proposedDraft.newScore - proposedDraft.originalScore);
+                            return <span style={{ color: delta > 0 ? "var(--green)" : delta < 0 ? "var(--red)" : "inherit" }}> ({delta > 0 ? "+" : ""}{delta})</span>;
+                          })()}
+                          <span style={{ fontSize: 10 }}>{showProposedDims ? "▲" : "▼"}</span>
+                        </div>
+                        {showProposedDims && Array.isArray(proposedDraft.review?.dimensions) && proposedDraft.review.dimensions.length > 0 && (
+                          <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: "var(--text-mute)" }}>
+                            {proposedDraft.review.dimensions.map(d => (
+                              <div key={d.id} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                                <span>{d.name || d.id}</span><span>{d.score}/10</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {!draftResult.linkedin && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, color: "var(--text-mute)" }}>Subject</span>
+                        <span style={{ fontSize: 12 }}>{proposedDraft.subject || draftResult.subject || ""}</span>
+                      </div>
+                    )}
+                    {!draftResult.linkedin && <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>Hi {data?.first || "there"},</div>}
+                    <div style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>{proposedDraft.body}</div>
+                    {!draftResult.linkedin && emailSignature && <div className="dim" style={{ fontSize: 12, marginTop: 4, whiteSpace: "pre-wrap" }}>{emailSignature}</div>}
+                    <div style={{ marginTop: 8, display: "flex", gap: 6 }}>
+                      <button className="btn primary sm" onClick={replaceWithProposed}>Replace draft</button>
+                      <button className="btn ghost sm" onClick={() => setProposedDraft(null)}>Discard</button>
+                    </div>
                   </div>
                 </div>
+              ) : (
+                <>
+                  {!draftResult.linkedin && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, color: "var(--text-mute)" }}>Subject</span>
+                      <input className="inp" value={draftResult.subject || ""} onChange={e => setDraftResult({ ...draftResult, subject: e.target.value })} style={{ flex: 1 }} />
+                      <CopyBtn value={draftResult.subject || ""} />
+                    </div>
+                  )}
+                  {!draftResult.linkedin && <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>Hi {data?.first || "there"},</div>}
+                  <textarea className="ta" value={draftBody} onChange={e => setDraftBody(e.target.value)} rows={draftResult.linkedin ? 6 : 10} aria-label="Editable message draft body" style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }} />
+                  {!draftResult.linkedin && emailSignature && <div className="dim" style={{ fontSize: 12, marginTop: 4, whiteSpace: "pre-wrap" }}>{emailSignature}</div>}
+                </>
               )}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <CopyBtn value={draftEmail} />

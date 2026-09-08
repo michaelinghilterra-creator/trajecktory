@@ -633,7 +633,7 @@ function ReferralDrawer({ row, statuses, onClose, onPatch, onLogToday, onFindEma
     <>
       <div className={"drawer-backdrop" + (open ? " open" : "")} onClick={onClose}
         style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }} />
-      <div className={"drawer" + (open ? " open" : "")} style={{ transform: open ? "translateX(0)" : "translateX(100%)" }}>
+      <div className={"drawer wide" + (open ? " open" : "")} style={{ transform: open ? "translateX(0)" : "translateX(100%)" }}>
         {open && (Shared && refCfg
           ? <Shared id={row.id} cfg={refCfg} onClose={onClose} onUpdate={onChanged} />
           : <ReferralPanel row={row} statuses={statuses} onClose={onClose} onPatch={onPatch} onLogToday={onLogToday} onFindEmail={onFindEmail} finding={finding} onChanged={onChanged} onRemove={onRemove} />)}
@@ -765,7 +765,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
           body: JSON.stringify({ source: 'referral', id: row.id, name: row.name, role: row.how, company: row.where, reason: row.target || row.how, firstName: first, tone: compose.tone || 'Warm' }),
         }).then(r => r.json()).then(d => {
           if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-          if (d && d.response) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.response, review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null })); setGenerating(false); }
+          if (d && d.response) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.response, review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null })); setGenerating(false); }
           else fail(d && d.error);
         }).catch(() => fail());
       } else {
@@ -774,7 +774,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
           body: JSON.stringify({ topic: liTopic, channel: 'linkedin' }),
         }).then(r => r.json()).then(d => {
           if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-          if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.draft.body || '', review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null })); setGenerating(false); }
+          if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.draft.body || '', review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null })); setGenerating(false); }
           else fail(d && d.error);
         }).catch(() => fail());
       }
@@ -786,7 +786,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
         body: JSON.stringify({ topic, mode }),
       }).then(r => r.json()).then(d => {
         if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-        if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: d.draft.subject || c.subject, body: d.draft.body || '', review: d.review || null, reviewOf: 'self', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null })); setGenerating(false); }
+        if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: d.draft.subject || c.subject, body: d.draft.body || '', review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null })); setGenerating(false); }
         else fail(d && d.error);
       }).catch(() => fail());
     }
@@ -822,13 +822,19 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
         subject: compose.subject || '',
         surfaceId: compose.surfaceId,
         recipientFirst: String(row.name || '').trim().split(/\s+/)[0] || '',
+        originalScore: typeof compose.review?.score === 'number' ? compose.review.score : null,
         ...(compose.relatedApp?.id != null ? { appId: compose.relatedApp.id } : {}),
       }),
       signal: controller.signal,
     }).then(r => r.json()).then(d => {
       if (d.error) throw new Error(d.error);
-      setProposedDraft(d.draft || null);
-      setCompose(c => c ? ({ ...c, review: d.review || null, reviewOf: d.reviewOf || null }) : c);
+      setProposedDraft(d.draft ? {
+        ...d.draft,
+        originalScore: d.originalScore,
+        newScore: d.review?.score ?? null,
+        review: d.review || null,
+        reviewOf: d.reviewOf || 'independent',
+      } : null);
     }).catch(err => {
       if (err.name !== 'AbortError') toast(err.message, 'error');
     }).finally(() => {
@@ -840,7 +846,13 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
   const replaceWithProposed = () => {
     if (!proposedDraft || !compose) return;
     if ((compose.body || '') !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
-    setCompose(c => ({ ...c, subject: proposedDraft.subject || c.subject || '', body: proposedDraft.body || '' }));
+    setCompose(c => ({
+      ...c,
+      subject: proposedDraft.subject || c.subject || '',
+      body: proposedDraft.body || '',
+      review: proposedDraft.review || null,
+      reviewOf: proposedDraft.reviewOf || 'independent',
+    }));
     setProposedDraft(null);
   };
 
@@ -1050,6 +1062,23 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
               {proposedDraft && (
                 <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel)' }}>
                   <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
+                  <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>
+                    Improved: {typeof proposedDraft.newScore === 'number' ? Math.round(proposedDraft.newScore) : '?'}/100
+                    {typeof proposedDraft.originalScore === 'number' && typeof proposedDraft.newScore === 'number' && (() => {
+                      const delta = Math.round(proposedDraft.newScore - proposedDraft.originalScore);
+                      return <span style={{ color: delta > 0 ? 'var(--green)' : delta < 0 ? 'var(--red)' : 'var(--text-mute)' }}> ({delta > 0 ? '+' : ''}{delta})</span>;
+                    })()}
+                  </div>
+                  {Array.isArray(proposedDraft.review?.dimensions) && proposedDraft.review.dimensions.length > 0 && (
+                    <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>
+                      {proposedDraft.review.dimensions.map(dimension => (
+                        <div key={dimension.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>{dimension.name || dimension.id}</span>
+                          <span>{dimension.score}/10</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {proposedDraft.subject && <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{proposedDraft.subject}</div>}
                   <div style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{proposedDraft.body}</div>
                   <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>

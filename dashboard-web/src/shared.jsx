@@ -98,7 +98,7 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, onRerun, o
     ? 'self-scored'
     : reviewOf === 'independent' || reviewOf === 'original' ? 'independent' : '';
   const scoreTitle = reviewOf === 'self'
-    ? 'The model graded its own draft and tends to score about ten points high. Get independent review gives a second opinion.'
+    ? 'The model graded its own draft and tends to score about ten points high.'
     : reviewOf === 'independent' || reviewOf === 'original'
       ? 'This score comes from an independent review of the draft.'
       : 'Draft review score.';
@@ -141,16 +141,6 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, onRerun, o
             transition: "transform 0.15s",
             fontSize: 10,
           }}>&#9660;</span>
-        </button>
-      )}
-      {onRerun && (
-        <button
-          className="btn sm"
-          onClick={onRerun}
-          disabled={busy}
-          style={{ marginLeft: 6, fontSize: 11 }}
-        >
-          {busy ? "Reviewing..." : "Get independent review"}
         </button>
       )}
       {onImprove && (

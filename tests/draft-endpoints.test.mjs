@@ -178,6 +178,7 @@ const improveRes = await post('/api/drafts/improve', {
   ...improveOriginal,
   surfaceId: 'ta_email',
   recipientFirst: 'Jane',
+  originalScore: 100,
 });
 check(improveRes.status === 200
   && improveRes.body.ok === true
@@ -186,8 +187,9 @@ check(improveRes.status === 200
   && improveRes.body.draft.body.length > 0
   && improveRes.body.review?.score > 0
   && improveRes.body.reviewOf === 'independent'
+  && improveRes.body.originalScore === 100
   && JSON.stringify(improveRes.body.original) === JSON.stringify(improveOriginal),
-'improve returns the rewritten draft, independent review label, score, and echoed input');
+'improve returns even a lower-scoring rewrite with both scores and the echoed input');
 
 const improveMissingApp = await post('/api/drafts/improve', {
   ...improveOriginal,

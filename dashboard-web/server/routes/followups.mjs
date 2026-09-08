@@ -8,9 +8,9 @@ import { parseApplicationsMd, patchRowInMd } from '../lib/applications.mjs';
 import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute, isMuted, readMute } from '../lib/sidecars.mjs';
-import { readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
+import { readProjectFile, readVoiceRules, draftModel, gradeModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
-import { generateWithRubric } from '../lib/draft-grader.mjs';
+import { generateWithRubric, gradeIndependently } from '../lib/draft-grader.mjs';
 import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, canInfluenceHire, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 
 // Different contacts per COMPANY the queue surfaces as actionable per day. Reaching
@@ -571,7 +571,11 @@ ${profileMd}
       reviewStatus: result.reviewStatus,
       cleaner: 'email', stripSalutationFor: null, stripSignature: false,
     });
-    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: draft.review, reviewStatus: draft.reviewStatus, surfaceId: 'app_followup', touchNumber, fuCount });
+    const independentReview = await gradeIndependently(draft.body, 'app_followup', {
+      model: gradeModel(), subject: draft.subject || '', cvExcerpt: cvMd,
+      proofPoints: narrative.proofPoints, superpowers: narrative.superpowers,
+    });
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: independentReview, reviewStatus: independentReview ? 'ok' : 'missing:independent-review', surfaceId: 'app_followup', touchNumber, fuCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
