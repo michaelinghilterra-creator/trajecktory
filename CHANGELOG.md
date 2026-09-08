@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.10.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.9.0...v3.10.0) (2026-09-08)
+
+
+### Features
+
+* add sortable Connected date column and fix improve-draft scoring ([#301](https://github.com/michaelinghilterra-creator/trajecktory/issues/301)) ([e77bec0](https://github.com/michaelinghilterra-creator/trajecktory/commit/e77bec00165b872cda92298370ce0d74b89737c2))
+
 ## [3.9.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.8.1...v3.9.0) (2026-09-08)
 
 
