@@ -387,7 +387,9 @@ router.get('/api/google/replies', async (req, res) => {
       unmatched: other.length,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[replies]', err.message);
+    const rateLimited = /quota exceeded/i.test(err.message);
+    res.status(rateLimited ? 429 : 500).json({ error: err.message, rateLimited });
   }
 });
 
