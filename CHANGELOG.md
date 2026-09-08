@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.9.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.8.1...v3.9.0) (2026-09-08)
+
+
+### Features
+
+* add sortable Connected date column to referrals follow-up queue ([#299](https://github.com/michaelinghilterra-creator/trajecktory/issues/299)) ([f8a9fbc](https://github.com/michaelinghilterra-creator/trajecktory/commit/f8a9fbc04c60b85b721adca7787d0fb60a07ce67))
+
 ## [3.8.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.8.0...v3.8.1) (2026-09-08)
 
 
