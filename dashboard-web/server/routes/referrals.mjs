@@ -324,9 +324,9 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
 // go through /api/linkedin-drafts/connect-note; this path is the real message.
 const REF_TOPIC_GUIDANCE = {
   reconnect: 'RECONNECT (no ask yet). The goal is purely to reopen the relationship after time apart. Reference how you know each other warmly and specifically, share a light line on what you are up to now, and invite a catch-up. Do NOT make a referral ask in this message — the ask comes after they reply.',
-  ask: 'THE REFERRAL ASK. You are back in touch (or already close). Make one specific, easy-to-decline ask: a quick intro to the right person, or flagging your application internally at their company. Name the role/company you are targeting. Offer to send a short blurb and resume to make it a two-minute forward. Keep it low-pressure and gracious about a no.',
+  ask: 'THE REFERRAL ASK. You are back in touch (or already close). Make one specific, confident ask: flag the application with the right person at their company, or make a direct intro to whoever is hiring. Name the role. Offer a short blurb or resume as context if they need it. The ask is direct and peer-to-peer — no pre-emptive apologies, no explicit permission to say no, no escape hatches. Write as an executive asking a peer for a reasonable professional favor, not as a candidate hoping not to be a burden.',
   'intro-thanks': 'THANK-YOU FOR AN INTRODUCTION. They made an intro or flagged your application. Thank them warmly and specifically, tell them briefly how it is going or what your next step is, and make clear there is no further ask. Close the loop so they feel the intro was worth making.',
-  nudge: 'GENTLE NUDGE. An earlier ask has gone unanswered. Follow up once, lightly and without guilt-tripping. Re-state the ask in one line, make it even easier to say yes or no, and give them an explicit out so the relationship is protected either way.',
+  nudge: 'GENTLE NUDGE. An earlier ask has gone unanswered. Follow up once, briefly. Re-state the ask in one line and move on. No guilt, no groveling, no explicit outs. The tone is a peer checking in, not someone apologizing for existing.',
 };
 
 router.post('/api/referrals/:id/draft', async (req, res) => {
@@ -409,7 +409,7 @@ ${topicGuidance}
 - Direct, human, no corporate filler ("I hope this finds you well", "reaching out to touch base").
 - NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
 - Never invent metrics, claims, or a shared history not supported above or on the CV.
-- If (and only if) the intent is a referral ask, make it specific and trivially easy to decline (e.g. flagging the application internally to the right person / TA), and offer to send a short blurb + resume.
+- If (and only if) the intent is a referral ask, make it specific and direct: flag the application or intro to the right person. Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches.
 - Close with one low-friction next step or a genuine sign-off matching the intent. Do NOT ask for a call or a specific block of time.
 ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
 == BODY REQUIREMENTS ==
@@ -527,7 +527,7 @@ ${topicGuidance}
 - Maximum 130 words in body.
 - NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
 - Never invent metrics, claims, or a shared history not supported above or on the CV.
-- If (and only if) the intent is a referral ask, make it specific and trivially easy to decline, and offer to send a short blurb + resume.
+- If (and only if) the intent is a referral ask, make it specific and direct: flag the application or intro to the right person. Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches.
 - Close with a low-friction next step or a genuine sign-off, matching the intent.
 ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slice().reverse().slice(0, 3).map(m => `--- ${m.direction} on ${m.timestamp} | Subject: ${m.subject}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold.\n` : ''}
 == SUBJECT REQUIREMENTS ==
