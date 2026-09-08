@@ -107,7 +107,7 @@ export function cleanupStale() {
   const { set: activeSet } = activeFormIndex(activeCompanies());
   let archived = 0;
   for (const row of parseReferralsMd()) {
-    if (['Archived', 'No', 'Applied w/ Referral'].includes(row.status)) continue;
+    if (['Archived', 'No', 'Dormant', 'Applied w/ Referral'].includes(row.status)) continue;
     if (companyForms(row.where).some(f => activeSet.has(f))) continue;
     if (updateReferralLine(row.id, { status: 'Archived' })) archived++;
   }

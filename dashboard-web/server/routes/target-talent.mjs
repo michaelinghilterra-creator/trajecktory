@@ -2,9 +2,9 @@ import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { pauseSequence, getSequence, getTemplate } from '../lib/sequences.mjs';
-import { readProjectFile, readOptionalProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
+import { readProjectFile, readOptionalProjectFile, readVoiceRules, draftModel, gradeModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
-import { generateWithRubric } from '../lib/draft-grader.mjs';
+import { generateWithRubric, gradeIndependently } from '../lib/draft-grader.mjs';
 import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
@@ -394,7 +394,11 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
         cleaner: 'prose',
         stripSalutationFor: r.first, stripSignature: true,
       });
-      return res.json({ ok: true, draft: { subject: '', body: dm.body }, review: dm.review, reviewStatus: dm.reviewStatus, surfaceId: 'ta_dm', messageType: mode || interviewStage, channel: 'linkedin', relatedApp: topApp || null });
+      const independentReview = await gradeIndependently(dm.body, 'ta_dm', {
+        model: gradeModel(), subject: '', cvExcerpt: cvMd,
+        proofPoints: narrative.proofPoints, superpowers: narrative.superpowers,
+      });
+      return res.json({ ok: true, draft: { subject: '', body: dm.body }, review: independentReview, reviewStatus: independentReview ? 'ok' : 'missing:independent-review', surfaceId: 'ta_dm', messageType: mode || interviewStage, channel: 'linkedin', relatedApp: topApp || null });
     }
 
     const isFirstTouch = prior.length === 0;
@@ -424,7 +428,11 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
         cleaner: 'email', stripSalutationFor: r.first, stripSignature: true,
         subjectTransform: (subject) => collapseRe(subject, inbound.subject),
       });
-      return res.json({ ok: true, draft: { subject: reply.subject, body: reply.body }, review: reply.review, reviewStatus: reply.reviewStatus, surfaceId: 'reply_email', messageType: 'reply', relatedApp: null });
+      const independentReview = await gradeIndependently(reply.body, 'reply_email', {
+        model: gradeModel(), subject: reply.subject || '', cvExcerpt: cvMd,
+        proofPoints: narrative.proofPoints, superpowers: narrative.superpowers,
+      });
+      return res.json({ ok: true, draft: { subject: reply.subject, body: reply.body }, review: independentReview, reviewStatus: independentReview ? 'ok' : 'missing:independent-review', surfaceId: 'reply_email', messageType: 'reply', relatedApp: null });
     }
 
     // FOLLOW-UP-ON-LAST-SENT mode: nudge a thread that went quiet, built on the
@@ -448,7 +456,11 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
         cleaner: 'email', stripSalutationFor: r.first, stripSignature: true,
         subjectTransform: (subject) => collapseRe(subject, sent.subject),
       });
-      return res.json({ ok: true, draft: { subject: followup.subject, body: followup.body }, review: followup.review, reviewStatus: followup.reviewStatus, surfaceId: 'followup_sent', messageType: 'followup-sent', relatedApp: null });
+      const independentReview = await gradeIndependently(followup.body, 'followup_sent', {
+        model: gradeModel(), subject: followup.subject || '', cvExcerpt: cvMd,
+        proofPoints: narrative.proofPoints, superpowers: narrative.superpowers,
+      });
+      return res.json({ ok: true, draft: { subject: followup.subject, body: followup.body }, review: independentReview, reviewStatus: independentReview ? 'ok' : 'missing:independent-review', surfaceId: 'followup_sent', messageType: 'followup-sent', relatedApp: null });
     }
 
     // Pull related applications to ground the outreach in a real role
@@ -565,7 +577,11 @@ ${thread.recentPitch
       stripSalutationFor: r.first,
       stripSignature: true,
     });
-    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: draft.review, reviewStatus: draft.reviewStatus, surfaceId: 'ta_email', messageType, relatedApp: topApp || null });
+    const independentReview = await gradeIndependently(draft.body, 'ta_email', {
+      model: gradeModel(), subject: draft.subject || '', cvExcerpt: cvMd,
+      proofPoints: narrative.proofPoints, superpowers: narrative.superpowers,
+    });
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: independentReview, reviewStatus: independentReview ? 'ok' : 'missing:independent-review', surfaceId: 'ta_email', messageType, relatedApp: topApp || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
