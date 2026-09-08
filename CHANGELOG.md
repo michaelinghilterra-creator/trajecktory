@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.8.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.8.0...v3.8.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* quota error handling, sweep ref, and case-study fixture correctness ([#297](https://github.com/michaelinghilterra-creator/trajecktory/issues/297)) ([dc3c2a3](https://github.com/michaelinghilterra-creator/trajecktory/commit/dc3c2a306d452fd1a9418ee8fa1636b4bf15b969))
+
 ## [3.8.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.7.0...v3.8.0) (2026-09-07)
 
 
