@@ -1315,7 +1315,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
                     {typeof proposedDraft.newScore === "number" && (
                       <div>
                         <div className="mono" style={{ fontSize: 11, marginBottom: 4, color: "var(--text-mute)", cursor: "pointer", userSelect: "none", display: "inline-flex", alignItems: "center", gap: 4 }} onClick={() => setShowProposedDims(s => !s)}>
-                          {Math.round(proposedDraft.newScore)}/100
+                          Improved: {Math.round(proposedDraft.newScore)}/100
                           {typeof proposedDraft.originalScore === "number" && (() => {
                             const delta = Math.round(proposedDraft.newScore - proposedDraft.originalScore);
                             return <span style={{ color: delta > 0 ? "var(--green)" : delta < 0 ? "var(--red)" : "inherit" }}> ({delta > 0 ? "+" : ""}{delta})</span>;
