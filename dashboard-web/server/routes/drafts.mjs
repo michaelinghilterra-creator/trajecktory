@@ -153,10 +153,8 @@ router.post('/api/drafts/improve', async (req, res) => {
       cleaner: hasSubject ? 'email' : 'prose',
       flatten: hasCharacterCap,
       hardFit: hasCharacterCap ? profile.hardCap : null,
-      stripSalutationFor: typeof recipientFirst === 'string' && recipientFirst.trim()
-        ? recipientFirst.trim()
-        : null,
-      stripSignature: true,
+      stripSalutationFor: null,
+      stripSignature: false,
       surface: surfaceId,
       review: parsed.review,
       reviewStatus,

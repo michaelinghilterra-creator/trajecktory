@@ -1073,7 +1073,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
                     <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>
                       {proposedDraft.review.dimensions.map(dimension => (
                         <div key={dimension.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>{dimension.label}</span>
+                          <span>{dimension.name || dimension.id}</span>
                           <span>{dimension.score}/10</span>
                         </div>
                       ))}

@@ -654,7 +654,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
                 <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>
                   {liProposed.review.dimensions.map(dimension => (
                     <div key={dimension.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>{dimension.label}</span>
+                      <span>{dimension.name || dimension.id}</span>
                       <span>{dimension.score}/10</span>
                     </div>
                   ))}
@@ -707,7 +707,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
                 <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>
                   {emProposed.review.dimensions.map(dimension => (
                     <div key={dimension.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>{dimension.label}</span>
+                      <span>{dimension.name || dimension.id}</span>
                       <span>{dimension.score}/10</span>
                     </div>
                   ))}
