@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.11.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.10.0...v3.11.0) (2026-09-08)
+
+
+### Features
+
+* independent draft grading and side-by-side rewrite panel ([483e936](https://github.com/michaelinghilterra-creator/trajecktory/commit/483e936bf05267e5a73ba8037f2b18b73274deff))
+
 ## [3.10.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.9.0...v3.10.0) (2026-09-08)
 
 
