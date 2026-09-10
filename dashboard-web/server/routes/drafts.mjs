@@ -97,7 +97,7 @@ router.post('/api/drafts/improve', async (req, res) => {
       superpowers: narrative.superpowers,
       companyResearch,
     });
-    const raw = await generateText(prompt, { model: gradeModel(), maxTokens: 2200 });
+    const raw = await generateText(prompt, { model: gradeModel(), maxTokens: 2200, label: `improve:${surfaceId}` });
     const parsed = parseReviewed(raw, surfaceId);
     if (!parsed || typeof parsed.body !== 'string' || !parsed.body.trim()) {
       return res.status(500).json({ error: 'Could not parse an improved draft with a usable body from model output.' });

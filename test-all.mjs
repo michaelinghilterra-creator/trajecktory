@@ -547,6 +547,7 @@ for (const suite of [
   'tests/draft-recipient.test.mjs',
   'tests/api-key-error.test.mjs',
   'tests/model-versions.test.mjs',
+  'tests/claude-cli-args.test.mjs',
   'tests/correspondence-context.test.mjs',
   'tests/correspondence-format.test.mjs',
   'tests/debrief.test.mjs',

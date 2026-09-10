@@ -230,7 +230,7 @@ export async function generateWithRubric(prompt, surfaceId, opts = {}) {
   const fullPrompt = prompt + '\n\n' + contract;
   const effectiveMaxTokens = rubricBlock ? Math.max(maxTokens + 1200, 2200) : maxTokens;
 
-  const raw = await generateText(fullPrompt, { model, maxTokens: effectiveMaxTokens });
+  const raw = await generateText(fullPrompt, { model, maxTokens: effectiveMaxTokens, label: `draft:${surfaceId}` });
   if (typeof raw === 'string' && !raw.trimEnd().endsWith('}')) {
     console.warn('[rubric] surface=%s response-truncated missing-closing-brace', surfaceId);
   }
@@ -289,7 +289,7 @@ export async function gradeIndependently(body, surfaceId, opts = {}) {
     }
     const prompt = buildIndependentGradePrompt(surfaceId, promptOptions);
     if (!prompt) return null;
-    const response = await generateText(prompt, { model: values.model, maxTokens: 2048 });
+    const response = await generateText(prompt, { model: values.model, maxTokens: 2048, label: `grade:${surfaceId}` });
     return parseIndependentReview(response, promptOptions.body, surfaceId);
   } catch {
     return null;

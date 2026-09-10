@@ -35,7 +35,7 @@ export async function reviseForCadence(text, opts = {}) {
 
   let out;
   try {
-    out = clean((await generateText(REVISE_PROMPT(base), { model: model || draftModel(), maxTokens: 900 })).trim());
+    out = clean((await generateText(REVISE_PROMPT(base), { model: model || draftModel(), maxTokens: 900, label: 'cadence' })).trim());
   } catch (err) {
     return { text: base, revised: base !== text, reason: 'error:' + err.message, before };
   }

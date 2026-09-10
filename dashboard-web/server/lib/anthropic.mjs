@@ -100,39 +100,50 @@ export async function generateText(prompt, opts = {}) {
   if (process.env.TJK_FAKE_LLM) {
     return process.env.TJK_FAKE_LLM_TEXT || '{"subject":"Stub subject","body":"Stub body."}';
   }
-  const { system, model, maxTokens = 1024, tools, ...rest } = opts;
-  if (apiKeyActive()) {
-    // Single-rail: billing is set to the key, so a capped/failing key does NOT
-    // silently fall back to the plan (that would bill a rail the user did not
-    // choose). Surface a clear, actionable message and let the user decide —
-    // raise the console cap, or switch Setup -> Models & cost billing to the plan.
-    let msg;
-    try {
-      msg = await anthropicClient().messages.create({
-        // Callers may pass a bare alias (haiku/sonnet/opus) or a full id; the SDK
-        // needs a full id, so resolve. Falls back to Haiku when unset.
-        model: resolveModelId(model) || 'claude-haiku-4-5',
-        max_tokens: maxTokens,
-        ...(system ? { system } : {}),
-        ...(tools ? { tools } : {}),
-        ...rest, // e.g. thinking / output_config for insights
-        messages: [{ role: 'user', content: prompt }],
+  const { system, model, maxTokens = 1024, tools, label, ...rest } = opts;
+  const path = apiKeyActive() ? 'api' : 'plan';
+  const startedAt = Date.now();
+  let result = '';
+  let ok = false;
+  try {
+    if (path === 'api') {
+      // Single-rail: billing is set to the key, so a capped/failing key does NOT
+      // silently fall back to the plan (that would bill a rail the user did not
+      // choose). Surface a clear, actionable message and let the user decide —
+      // raise the console cap, or switch Setup -> Models & cost billing to the plan.
+      let msg;
+      try {
+        msg = await anthropicClient().messages.create({
+          // Callers may pass a bare alias (haiku/sonnet/opus) or a full id; the SDK
+          // needs a full id, so resolve. Falls back to Haiku when unset.
+          model: resolveModelId(model) || 'claude-haiku-4-5',
+          max_tokens: maxTokens,
+          ...(system ? { system } : {}),
+          ...(tools ? { tools } : {}),
+          ...rest, // e.g. thinking / output_config for insights
+          messages: [{ role: 'user', content: prompt }],
+        });
+      } catch (err) {
+        throw new Error(apiKeyErrorMessage(err), { cause: err });
+      }
+      result = (msg.content || [])
+        .filter((b) => b.type === 'text')
+        .map((b) => b.text)
+        .join('\n')
+        .trim();
+    } else {
+      // Keyless: run on the Claude plan. `tools` maps to the CLI's WebSearch tool.
+      result = await runClaudePrompt(prompt, {
+        model,
+        system,
+        allowedTools: tools ? 'WebSearch' : undefined,
       });
-    } catch (err) {
-      throw new Error(apiKeyErrorMessage(err), { cause: err });
     }
-    return (msg.content || [])
-      .filter((b) => b.type === 'text')
-      .map((b) => b.text)
-      .join('\n')
-      .trim();
+    ok = true;
+    return result;
+  } finally {
+    console.log(`[llm] label=${label || 'generate'} path=${path} model=${model || 'default'} ms=${Date.now() - startedAt} promptChars=${prompt.length} outChars=${ok ? result.length : 0} ok=${ok}`);
   }
-  // Keyless: run on the Claude plan. `tools` maps to the CLI's WebSearch tool.
-  return runClaudePrompt(prompt, {
-    model,
-    system,
-    allowedTools: tools ? 'WebSearch' : undefined,
-  });
 }
 
 // Strip a leading salutation line ("Hi Emmi,", "Hello Emmi,", "Dear Emmi,",
