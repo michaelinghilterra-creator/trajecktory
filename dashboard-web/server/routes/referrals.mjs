@@ -1,6 +1,6 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
-import { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence, resolveReferralLink } from '../lib/referrals.mjs';
+import { parseReferralsMd, referralTitle, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence, resolveReferralLink } from '../lib/referrals.mjs';
 import { reconcile, cleanupStale, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
 import { detectAcceptances, computePendingAcceptances } from '../lib/linkedin-acceptance.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
@@ -11,15 +11,21 @@ import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { getIdentity, getOutreachPolicy, getNarrative } from '../lib/profile.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
-import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
+import { ACTIVE_STATUSES, findSubmittedApplication } from '../lib/statuses.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
 import { findAndVerify, hunterSearchesLeft } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { computeReferralFollowups } from '../lib/followups.mjs';
 import { snoozeToday, readSnooze, writeSnooze, pruneSnooze, isMuted } from '../lib/sidecars.mjs';
+import { resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
 
 export const router = express.Router();
+
+function referralAsk(appliedRole) {
+  if (!appliedRole) return 'Ask for a brief reply about whether the team is hiring for the kind of role he is targeting.';
+  return `Ask them to flag his application for the ${appliedRole} role to the hiring manager.`;
+}
 
 // Split a referral's single Name field into first / last for the email finder,
 // which keys on (company, first, last). First token is the first name, the rest
@@ -324,7 +330,7 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
 // go through /api/linkedin-drafts/connect-note; this path is the real message.
 const REF_TOPIC_GUIDANCE = {
   reconnect: 'RECONNECT (no ask yet). The goal is purely to reopen the relationship after time apart. Reference how you know each other warmly and specifically, share a light line on what you are up to now, and invite a catch-up. Do NOT make a referral ask in this message — the ask comes after they reply.',
-  ask: 'THE REFERRAL ASK. You are back in touch (or already close). Make one specific, confident ask: flag the application with the right person at their company, or make a direct intro to whoever is hiring. Name the role. Offer a short blurb or resume as context if they need it. The ask is direct and peer-to-peer — no pre-emptive apologies, no explicit permission to say no, no escape hatches. Write as an executive asking a peer for a reasonable professional favor, not as a candidate hoping not to be a burden.',
+  ask: 'THE REFERRAL ASK. You are back in touch (or already close). Make one specific, confident ask using the role context below. Offer a short blurb or resume as context if they need it. The ask is direct and peer-to-peer — no pre-emptive apologies, no explicit permission to say no, no escape hatches. Write as an executive asking a peer for a reasonable professional favor, not as a candidate hoping not to be a burden.',
   'intro-thanks': 'THANK-YOU FOR AN INTRODUCTION. They made an intro or flagged your application. Thank them warmly and specifically, tell them briefly how it is going or what your next step is, and make clear there is no further ask. Close the loop so they feel the intro was worth making.',
   nudge: 'GENTLE NUDGE. An earlier ask has gone unanswered. Follow up once, briefly. Re-state the ask in one line and move on. No guilt, no groveling, no explicit outs. The tone is a peer checking in, not someone apologizing for existing.',
 };
@@ -334,6 +340,8 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
     const id = parseInt(req.params.id, 10);
     const ref = parseReferralsMd().find(r => r.id === id);
     if (!ref) return res.status(404).json({ error: 'Referral not found' });
+    const recipientRole = referralTitle(ref.notes);
+    const recipientTier = resolveInfluenceTier({ notes: ref.notes, title: recipientRole }).tier;
 
     const firstName = splitName(ref.name).first || (ref.name || 'there').trim();
     const me = getIdentity();
@@ -380,9 +388,12 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
       const relatedApps = findRelatedApps(ref.where);
       const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status)) || relatedApps[0];
       const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
-      const relatedContext = topApp
-        ? `== LIVE APPLICATION AT ${String(ref.where || '').toUpperCase()} ==\nRole:   ${topApp.role}\nStatus: ${topApp.status} (applied ${topApp.date})\nWhen the intent is a referral ask, this is the specific opening to reference. Do NOT generalize.`
-        : `No application currently logged at ${ref.where || 'their company'}. If the intent is an ask, frame it around the kind of roles ${me.firstName} targets (see profile) rather than a specific req.`;
+      const submittedApp = findSubmittedApplication(relatedApps);
+      const appliedRole = submittedApp?.role || '';
+      const appliedDate = submittedApp?.date || '';
+      const relatedContext = submittedApp
+        ? `== LIVE APPLICATION AT ${String(ref.where || '').toUpperCase()} ==\nRole:   ${submittedApp.role}\nStatus: ${submittedApp.status} (applied ${submittedApp.date})\nWhen the intent is a referral ask, this is the specific opening to reference. Do NOT generalize.`
+        : `No submitted application currently logged at ${ref.where || 'their company'}. If the intent is an ask, frame it around the kind of roles ${me.firstName} targets (see profile) rather than a specific req.`;
 
       const prompt = `You are drafting a warm, personal LinkedIn DIRECT MESSAGE from ${me.fullName} to ${contactLabel}. This is a private 1:1 message to paste into LinkedIn, NOT an email and NOT a connection request.
 
@@ -395,8 +406,6 @@ ${contactBlock}
 
 ${relatedContext}
 
-== ${me.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics or experience) ==
-${cvMd}
 ${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md) ==\n${articleDigestMd.slice(0, 1200)}\n` : ''}
 ${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
 == MESSAGE INTENT ==
@@ -409,7 +418,7 @@ ${topicGuidance}
 - Direct, human, no corporate filler ("I hope this finds you well", "reaching out to touch base").
 - NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
 - Never invent metrics, claims, or a shared history not supported above or on the CV.
-- If (and only if) the intent is a referral ask, make it specific and direct: flag the application or intro to the right person. Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches. Use "Would you" not "Could you" for the ask — it is a direct request, not a question about capability.
+- If (and only if) the intent is a referral ask, make it specific and direct. ${referralAsk(appliedRole)} Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches. Use "Would you" not "Could you" for the ask — it is a direct request, not a question about capability.
 - Close with one low-friction next step or a genuine sign-off matching the intent. Do NOT ask for a call or a specific block of time.
 ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
 == BODY REQUIREMENTS ==
@@ -424,6 +433,10 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
         rubricOpts: {
           proofPoints: narrative.proofPoints,
           superpowers: narrative.superpowers,
+          recipientRole,
+          recipientTier,
+          appliedRole,
+          appliedDate,
           ...(companyResearch ? { companyResearch } : {}),
         },
       });
@@ -434,7 +447,10 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
         reviewStatus: result.reviewStatus,
         cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
       });
-      return res.json({ ok: true, draft: { subject: '', body: dm.body }, review: null, reviewStatus: 'pending', surfaceId: 'referral_dm', gradeContext: { surfaceId: 'referral_dm', source: 'referral', id, appId: topApp?.id ?? null }, messageType: topic, channel: 'linkedin', relatedApp: topApp || null });
+      return res.json({ ok: true, draft: { subject: '', body: dm.body }, review: null, reviewStatus: 'pending', surfaceId: 'referral_dm', gradeContext: {
+        surfaceId: 'referral_dm', source: 'referral', id, appId: topApp?.id ?? null,
+        recipientRole, recipientTier, appliedRole, appliedDate,
+      }, messageType: topic, channel: 'linkedin', relatedApp: topApp || null });
     }
 
     // REPLY mode: respond to their most recent inbound message.
@@ -493,9 +509,12 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
     const relatedApps = findRelatedApps(ref.where);
     const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status)) || relatedApps[0];
     const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
-    const relatedContext = topApp
-      ? `== LIVE APPLICATION AT ${String(ref.where || '').toUpperCase()} ==\nRole:   ${topApp.role}\nStatus: ${topApp.status} (applied ${topApp.date})\nWhen the topic is a referral ask, this is the specific opening to reference. Do NOT generalize.`
-      : `No application currently logged at ${ref.where || 'their company'}. If the topic is an ask, frame it around the kind of roles ${me.firstName} targets (see profile) rather than a specific req.`;
+    const submittedApp = findSubmittedApplication(relatedApps);
+    const appliedRole = submittedApp?.role || '';
+    const appliedDate = submittedApp?.date || '';
+    const relatedContext = submittedApp
+      ? `== LIVE APPLICATION AT ${String(ref.where || '').toUpperCase()} ==\nRole:   ${submittedApp.role}\nStatus: ${submittedApp.status} (applied ${submittedApp.date})\nWhen the topic is a referral ask, this is the specific opening to reference. Do NOT generalize.`
+      : `No submitted application currently logged at ${ref.where || 'their company'}. If the topic is an ask, frame it around the kind of roles ${me.firstName} targets (see profile) rather than a specific req.`;
 
     const prompt = `You are drafting a warm, personal message from ${me.fullName} to ${contactLabel}. This is a real relationship, not a cold outreach: the tone is that of one person reaching out to another they genuinely know.
 
@@ -504,8 +523,6 @@ ${contactBlock}
 
 ${relatedContext}
 
-== ${me.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics or experience) ==
-${cvMd}
 ${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md) ==\n${articleDigestMd.slice(0, 1200)}\n` : ''}
 ${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
 == MESSAGE INTENT ==
@@ -517,7 +534,7 @@ ${topicGuidance}
 - Maximum 130 words in body.
 - NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
 - Never invent metrics, claims, or a shared history not supported above or on the CV.
-- If (and only if) the intent is a referral ask, make it specific and direct: flag the application or intro to the right person. Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches. Use "Would you" not "Could you" for the ask — it is a direct request, not a question about capability.
+- If (and only if) the intent is a referral ask, make it specific and direct. ${referralAsk(appliedRole)} Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches. Use "Would you" not "Could you" for the ask — it is a direct request, not a question about capability.
 - Close with a low-friction next step or a genuine sign-off, matching the intent.
 ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slice().reverse().slice(0, 3).map(m => `--- ${m.direction} on ${m.timestamp} | Subject: ${m.subject}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold.\n` : ''}
 == SUBJECT REQUIREMENTS ==
@@ -536,6 +553,10 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slic
       rubricOpts: {
         proofPoints: narrative.proofPoints,
         superpowers: narrative.superpowers,
+        recipientRole,
+        recipientTier,
+        appliedRole,
+        appliedDate,
         ...(companyResearch ? { companyResearch } : {}),
       },
     });
@@ -546,7 +567,10 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slic
       reviewStatus: result.reviewStatus,
       cleaner: 'email', stripSalutationFor: null, stripSignature: false,
     });
-    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: null, reviewStatus: 'pending', surfaceId: 'referral_email', gradeContext: { surfaceId: 'referral_email', source: 'referral', id, appId: topApp?.id ?? null }, messageType: topic, relatedApp: topApp || null });
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: null, reviewStatus: 'pending', surfaceId: 'referral_email', gradeContext: {
+      surfaceId: 'referral_email', source: 'referral', id, appId: topApp?.id ?? null,
+      recipientRole, recipientTier, appliedRole, appliedDate,
+    }, messageType: topic, relatedApp: topApp || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

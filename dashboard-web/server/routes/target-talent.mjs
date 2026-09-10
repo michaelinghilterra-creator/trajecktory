@@ -18,9 +18,9 @@ import { linkedinKey } from '../lib/contact-identity.mjs';
 import { summarizeThread } from '../lib/correspondence-context.mjs';
 import { getIdentity, getOutreachPolicy, getNarrative } from '../lib/profile.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
-import { ACTIVE_STATUSES, isInterviewStage } from '../lib/statuses.mjs';
+import { ACTIVE_STATUSES, findSubmittedApplication, isInterviewStage } from '../lib/statuses.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
-import { INFLUENCE_TIERS } from '../../../lib/influence-tier.mjs';
+import { INFLUENCE_TIERS, resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
 import { classifyInbound } from '../../../lib/inbound-classify.mjs';
 
 function sequenceTone(contactId) {
@@ -32,6 +32,16 @@ function sequenceTone(contactId) {
     const touch = tpl.touches.find(t => t.step === seq.step + 1);
     return touch?.tone || '';
   } catch { return ''; }
+}
+
+function tierAsk(recipientTier, appliedRole) {
+  const directQuestionRule = 'Phrase it as a direct question. Do not use the words point me, pointer, whoever, or the right person.';
+  if (!appliedRole) return `Ask for a brief reply about whether the team is hiring for the kind of role he is targeting. ${directQuestionRule}`;
+  if (recipientTier === 'exec') return `Ask who is leading the hiring for the ${appliedRole} role. ${directQuestionRule}`;
+  if (recipientTier === 'hm' || recipientTier === 'peer') {
+    return `Ask whether they would take a look at his application for the ${appliedRole} role. ${directQuestionRule}`;
+  }
+  return `Ask them to flag his application for the ${appliedRole} role to the hiring manager. ${directQuestionRule}`;
 }
 
 export const router = express.Router();
@@ -299,6 +309,8 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
     const rows = parseTargetTalentMd();
     const r = rows.find(x => x.id === id);
     if (!r) return res.status(404).json({ error: 'Contact not found' });
+    const recipientRole = r.title || '';
+    const recipientTier = resolveInfluenceTier({ notes: r.notes, title: recipientRole }).tier;
 
     const projectRoot = ROOT_DIR;
     const cvMd           = readProjectFile(projectRoot, 'cv.md');
@@ -323,31 +335,31 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
       const relatedApps = findRelatedApps(r.company);
       const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status)) || relatedApps[0];
       const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
+      const submittedApp = findSubmittedApplication(relatedApps);
+      const appliedRole = submittedApp?.role || '';
+      const appliedDate = submittedApp?.date || '';
       const interviewStage = req.body?.interviewStage
-        || (topApp && isInterviewStage(topApp.status) ? topApp.status : 'general');
+        || (submittedApp && isInterviewStage(submittedApp.status) ? submittedApp.status : 'general');
       const stageGuidance = STAGE_GUIDANCE[interviewStage] || '';
       const connected = (context?.timeline || []).some(e => e.kind === 'invite-accepted')
         || getLinkedInStatus(Number(id)) === 'Connected';
       const thread = summarizeThread(prior);
-      const relatedContext = topApp
-        ? `== RELATED APPLICATION AT ${String(r.company || '').toUpperCase()} ==\nRole:   ${topApp.role}\nStatus: ${topApp.status} (applied ${topApp.date})\nReference this role specifically. Do NOT generalize.`
-        : `No application currently logged for ${r.company}. Signal genuine interest in their team and the kind of roles ${me.firstName} targets (see profile).`;
+      const relatedContext = submittedApp
+        ? `== RELATED APPLICATION AT ${String(r.company || '').toUpperCase()} ==\nRole:   ${submittedApp.role}\nStatus: ${submittedApp.status} (applied ${submittedApp.date})\nReference this role specifically. Do NOT generalize.`
+        : `No submitted application currently logged for ${r.company}. Signal genuine interest in their team and the kind of roles ${me.firstName} targets (see profile).`;
       const intentGuidance = mode === 'reply'
         ? 'REPLY. Respond directly and specifically to their most recent message in the thread below. Pick up what they said and advance it. Do not restart the conversation.'
         : mode === 'followup-sent'
           ? 'FOLLOW UP ON YOUR LAST MESSAGE. Your last note is unanswered. Send one light, no-guilt bump that names what the earlier note was about, adds one small new thing, and never uses needy filler like "just following up" or "circling back".'
-          : (stageGuidance || 'FIRST / FRESH TOUCH. Surface yourself as a strong candidate: specific interest in the company, that you applied (or are about to), and one reason you are worth a reply.');
-
-      const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
-      const articleDigestMd = readOptionalProjectFile(ROOT_DIR, 'article-digest.md');
-      const profileMd = readVoiceRules(ROOT_DIR);
-      const cvExcerpt = (articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 900)}\n\nCV:\n` : '') + (cvMd ? cvMd.slice(0, 3200) : '(CV not available)');
+          : (stageGuidance || (submittedApp
+            ? 'FIRST / FRESH TOUCH. Surface yourself as a strong candidate: specific interest in the company, that you applied, and one reason you are worth a reply.'
+            : 'FIRST / FRESH TOUCH. Surface yourself as a strong candidate: specific interest in the company and one reason you are worth a reply. Do not imply that an application was submitted.'));
 
       const prompt = `You are drafting a brief LinkedIn DIRECT MESSAGE from ${me.fullName} to an internal Talent Acquisition / People-team contact at ${r.company}, a company he is actively pursuing. This is a private 1:1 message to paste into LinkedIn, NOT an email and NOT a connection request.
 
 ${connected
   ? 'YOU ARE ALREADY CONNECTED (they accepted the invite). Do NOT say you sent a connection request, do NOT ask whether it arrived, and do NOT imply the connection is pending.'
-  : 'Write a real, purposeful message. Do NOT write "I would like to connect" — this is a message, not a new invite.'}
+  : 'Write a real, purposeful message. Do NOT write "I would like to connect" — this is a message, not a new invite. You are not connected on LinkedIn yet. Do not say you connected, since connecting, or good to reconnect.'}
 
 == THE CONTACT ==
 Name:    ${r.salute || ''} ${r.first} ${r.last}
@@ -356,8 +368,7 @@ Company: ${r.company || '(unknown)'}
 
 ${relatedContext}
 
-== ${me.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics or experience) ==
-${cvExcerpt}
+${articleDigestMd ? `== PORTFOLIO / PROOF POINTS (article-digest.md) ==\n${articleDigestMd.slice(0, 900)}\n` : ''}
 ${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
 == MESSAGE INTENT ==
 ${intentGuidance}
@@ -365,10 +376,10 @@ ${intentGuidance}
 == STYLE REQUIREMENTS ==
 - LinkedIn DM voice: warm, direct, senior-operator. 40 to 110 words. Never a wall of text.
 - 2 to 3 short paragraphs separated by a LITERAL \\n\\n between paragraphs, so it scans on a phone.
-- Open with specific interest in ${r.company} and that ${me.firstName} applied (or is about to), then ONE concrete proof point from the CV or portfolio that makes him worth a reply.
+- Open with specific interest in ${r.company}${submittedApp ? ` and that ${me.firstName} applied for the ${appliedRole} role` : ', without implying that an application was submitted'}, then ONE concrete proof point from the CV or portfolio that makes him worth a reply.
 - No corporate filler ("I hope this finds you well", "reaching out to touch base"). No em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
 - Never invent metrics or claims not on the CV.
-- Close with ONE low-friction ask: a quick reply, or a pointer to the right person for the role. Do NOT ask for a call, a chat, a meeting, or any amount of their time.
+- Close with ONE low-friction ask. ${tierAsk(recipientTier, appliedRole)} Do NOT ask for a call, a chat, a meeting, or any amount of their time.
 ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nTHREAD STATE: ${thread.stateLine}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
 == BODY REQUIREMENTS ==
 - Omit a subject line.
@@ -384,6 +395,10 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
           proofPoints: narrative.proofPoints,
           superpowers: narrative.superpowers,
           toneNote: sequenceTone(id),
+          recipientRole,
+          recipientTier,
+          appliedRole,
+          appliedDate,
           ...(companyResearch ? { companyResearch } : {}),
         },
       });
@@ -395,7 +410,10 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
         cleaner: 'prose',
         stripSalutationFor: r.first, stripSignature: true,
       });
-      return res.json({ ok: true, draft: { subject: '', body: dm.body }, review: null, reviewStatus: 'pending', surfaceId: 'ta_dm', gradeContext: { surfaceId: 'ta_dm', source: 'ta', id, appId: topApp?.id ?? null }, messageType: mode || interviewStage, channel: 'linkedin', relatedApp: topApp || null });
+      return res.json({ ok: true, draft: { subject: '', body: dm.body }, review: null, reviewStatus: 'pending', surfaceId: 'ta_dm', gradeContext: {
+        surfaceId: 'ta_dm', source: 'ta', id, appId: topApp?.id ?? null,
+        recipientRole, recipientTier, appliedRole, appliedDate,
+      }, messageType: mode || interviewStage, channel: 'linkedin', relatedApp: topApp || null });
     }
 
     const isFirstTouch = prior.length === 0;
@@ -459,11 +477,14 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
     const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status))
                 || relatedApps[0];
     const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
+    const submittedApp = findSubmittedApplication(relatedApps);
+    const appliedRole = submittedApp?.role || '';
+    const appliedDate = submittedApp?.date || '';
 
     // Default the interview-stage framing from the app's own status (it now
     // carries the round), unless the drawer explicitly overrides it.
     const interviewStage = req.body?.interviewStage
-      || (topApp && isInterviewStage(topApp.status) ? topApp.status : 'general');
+      || (submittedApp && isInterviewStage(submittedApp.status) ? submittedApp.status : 'general');
     const stageGuidance = STAGE_GUIDANCE[interviewStage] || '';
 
     // Compute days since application so the model uses correct timing
@@ -471,8 +492,8 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
     // (the example in the TIMING bullet) even for 30+ day-old applications.
     let timingPhrase = '';
     let daysSinceApply = null;
-    if (topApp && topApp.date) {
-      const applyMs = Date.parse(topApp.date);
+    if (submittedApp && submittedApp.date) {
+      const applyMs = Date.parse(submittedApp.date);
       if (!isNaN(applyMs)) {
         daysSinceApply = Math.floor((Date.now() - applyMs) / 86400000);
         if (daysSinceApply <= 0)      timingPhrase = 'today (do NOT send same-day — flag this in the email as "submitted earlier today")';
@@ -485,14 +506,14 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
       }
     }
 
-    const relatedContext = topApp
+    const relatedContext = submittedApp
       ? `== RELATED APPLICATION AT ${r.company.toUpperCase()} ==
-Role:   ${topApp.role}
-Status: ${topApp.status} (applied ${topApp.date}${daysSinceApply != null ? `, ${daysSinceApply} days ago` : ''})
-Score:  ${topApp.score}
+Role:   ${submittedApp.role}
+Status: ${submittedApp.status} (applied ${submittedApp.date}${daysSinceApply != null ? `, ${daysSinceApply} days ago` : ''})
+Score:  ${submittedApp.score}
 TIMING LANGUAGE: ${timingPhrase || '(no application date available — avoid specific timing claims)'}
 Reference this role specifically in the outreach. Do NOT generalize. Do NOT claim the application was submitted at a different time than what's stated above.`
-      : `No application currently logged for ${r.company}. Write a forward-looking introduction expressing interest in their team and the kind of roles you target (Director/VP RevOps, Analytics, BizDev — see profile).`;
+      : `No submitted application currently logged for ${r.company}. Write a forward-looking introduction expressing interest in their team and the kind of roles you target (Director/VP RevOps, Analytics, BizDev — see profile).`;
 
     const me = getIdentity();
     const prompt = `You are drafting a warm in-network email from ${me.fullName} to an Internal Talent Acquisition / People-team employee at a TARGET COMPANY he is actively pursuing. This is NOT a blind recruiter pitch — this is a candidate making direct contact to surface himself for a role at a company he's already engaging with.
@@ -507,8 +528,6 @@ LinkedIn: ${r.linkedin || '(not provided)'}
 
 ${relatedContext}
 
-== ${me.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics or experience) ==
-${cvMd}
 ${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md, use for the artifact-led opener) ==\n${articleDigestMd.slice(0, 1200)}\n` : ''}
 ${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
 == STYLE REQUIREMENTS (internal-TA outreach, different from recruiter outreach) ==
@@ -517,12 +536,12 @@ ${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${prof
 - Maximum 140 words in body.
 - NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
 - Never invent metrics or claims not on the CV.
-- Open with a specific reason for contacting this person at THIS company (role applied to, recent funding/news/leadership change, specific team context).
+- Open with a specific reason for contacting this person at THIS company${submittedApp ? ' (the role applied to, recent funding/news/leadership change, or specific team context)' : ' (recent funding/news/leadership change or specific team context). Do not claim an application was submitted'}.
 - Lead with the most specific named artifact from the PORTFOLIO block above (a named project, initiative, or concrete outcome). If no PORTFOLIO block is present, use the most relevant quantified CV proof point. A named artifact hooks the reader far better than a generic role claim.
-- Make the ask low-friction and time-respecting. Do NOT ask for a call, a chat, a conversation, a meeting, or any amount of their time (no "20-minute call", no "quick chat", no "would welcome a conversation"). Everyone is busy, and asking for their time reads as tone-deaf and needy. Instead signal genuine interest and, if anything, invite a reply or a pointer to the right person for the role.
+- Make the ask low-friction and time-respecting. ${tierAsk(recipientTier, appliedRole)} Do NOT ask for a call, a chat, a conversation, a meeting, or any amount of their time (no "20-minute call", no "quick chat", no "would welcome a conversation"). Everyone is busy, and asking for their time reads as tone-deaf and needy.
 - Close with a clear, low-friction next step that does NOT request their time.
 - Do NOT ask them to forward your resume or do recruiting work for you. Frame as peer-to-peer candidate introduction.
-- TIMING: Use the exact phrasing from the TIMING LANGUAGE line in the RELATED APPLICATION block above. Do NOT invent your own gap — the server has computed days-since-application against today's date. If TIMING LANGUAGE says "31 days ago (use 'last month')", say "last month" — never "yesterday" or "this morning". Misreporting the timing reads as careless to the recipient.
+${submittedApp ? '- TIMING: Use the exact phrasing from the TIMING LANGUAGE line in the RELATED APPLICATION block above. Do NOT invent your own gap — the server has computed days-since-application against today\'s date. If TIMING LANGUAGE says "31 days ago (use \'last month\')", say "last month" — never "yesterday" or "this morning". Misreporting the timing reads as careless to the recipient.' : '- Do not state or imply that an application was submitted.'}
 ${stageGuidance ? `- ${stageGuidance}` : ''}
 ${isFirstTouch ? `
 - FOR FIRST-TOUCH TA OUTREACH: Consider naturally referencing ${me.firstName}'s strategic approach (${me.trajecktoryUrl}) when it makes sense — shows he thinks systemically about process and understands RevOps methodology. This works especially well if the role is RevOps/Analytics/Strategy-focused. Example: "I've documented my approach to strategic hiring at ${me.trajecktoryUrl}, and I think the [specific role/team] aligns well with that framework."
@@ -546,8 +565,8 @@ ${thread.recentPitch
 - Omit a greeting and any bare first-name address.
 - Write 3 to 4 short paragraphs separated by a literal \\n\\n between paragraphs. Do not write one giant block.
 - Write 1 to 2 sentences per paragraph, about 30 to 50 words.
-- Follow this paragraph pattern: (1) a why-now opener referencing the application, (2) one quantified proof point, (3) a why-here link to their team, and (4) a brief interest-signaling close that does not ask for a call, meeting, or any of their time.
-- The UI prefills 'Hi ${r.first},', so the first sentence must begin with substantive content, such as 'I submitted my application…' or 'Following up on…'. Do not start with '${r.first}', 'Hi', 'Hello', 'Hey', or any form of address.`;
+- Follow this paragraph pattern: (1) a why-now opener ${submittedApp ? 'referencing the application' : 'grounded in company or team context without claiming an application'}, (2) one quantified proof point, (3) a why-here link to their team, and (4) a brief interest-signaling close that does not ask for a call, meeting, or any of their time.
+- The UI prefills 'Hi ${r.first},', so the first sentence must begin with substantive content${submittedApp ? ", such as 'I submitted my application…' or 'Following up on…'" : ', and must not imply that an application was submitted'}. Do not start with '${r.first}', 'Hi', 'Hello', 'Hey', or any form of address.`;
 
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'ta_email', {
@@ -557,6 +576,10 @@ ${thread.recentPitch
         proofPoints: narrative.proofPoints,
         superpowers: narrative.superpowers,
         toneNote: sequenceTone(id),
+        recipientRole,
+        recipientTier,
+        appliedRole,
+        appliedDate,
         ...(companyResearch ? { companyResearch } : {}),
       },
     });
@@ -569,7 +592,10 @@ ${thread.recentPitch
       stripSalutationFor: r.first,
       stripSignature: true,
     });
-    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: null, reviewStatus: 'pending', surfaceId: 'ta_email', gradeContext: { surfaceId: 'ta_email', source: 'ta', id, appId: topApp?.id ?? null }, messageType, relatedApp: topApp || null });
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: null, reviewStatus: 'pending', surfaceId: 'ta_email', gradeContext: {
+      surfaceId: 'ta_email', source: 'ta', id, appId: topApp?.id ?? null,
+      recipientRole, recipientTier, appliedRole, appliedDate,
+    }, messageType, relatedApp: topApp || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -202,7 +202,7 @@ function fitConnectNote(text, firstName, limit = 300) {
 function buildConnectPrompt({
   senderName, senderFirst, senderHeadline = '',
   recipientName, recipientFirst = '', recipientRole = '', recipientCompany = '',
-  guidance = '', cvExcerpt = '', tone = 'Warm', toneText = '', targetMax = 280,
+  guidance = '', cvExcerpt = '', appliedRole = '', tone = 'Warm', toneText = '', targetMax = 280,
 } = {}) {
   const first = String(senderFirst ?? '').trim();
   const openExample = String(recipientFirst || 'Alex').trim();
@@ -212,10 +212,9 @@ THE RECIPIENT:
 - Name: ${recipientName}
 - Role: ${recipientRole || '(unknown)'}${recipientCompany ? `\n- Company: ${recipientCompany}` : ''}
 
-ABOUT ${first.toUpperCase()} (for grounding, do not copy verbatim):
-${cvExcerpt || '(CV not available)'}
-
+${cvExcerpt ? `ABOUT ${first.toUpperCase()} (for grounding, do not copy verbatim):\n${cvExcerpt}\n\n` : ''}
 WHY CONNECT: ${guidance || `Anchor on shared focus in the GTM / RevOps / analytics space. Signal ${first} is a fellow operator, not a job seeker.`}
+${appliedRole ? `Mention in one clause that ${first} applied for the ${appliedRole} role.\n` : ''}
 
 TONE DIRECTIVE (${tone}): ${toneText}
 

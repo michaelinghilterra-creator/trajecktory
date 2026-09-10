@@ -148,6 +148,11 @@ A talent partner screening a req and a VP who owns the team need different first
 8-9:  Clearly written for this person's seat, and references the opening or team correctly.
 10:   The recipient would think this person understands what my week actually looks like.
 
+== RECIPIENT AND OPENING ==
+Recipient's title: Chief People Officer
+Recipient's influence on the hire: senior executive, not the recruiter
+Role the sender applied for: VP Revenue Operations (applied 2026-01-01)
+
 == CV EXCERPT ==
 CV fact.
 
@@ -210,15 +215,19 @@ const capturedOpts = {
   companyResearch: 'Acme serves 7,500 teams.',
   superpowers: ['Systems'],
   toneNote: 'Direct.',
+  recipientRole: 'Chief People Officer',
+  recipientTier: 'exec',
+  appliedRole: 'VP Revenue Operations',
+  appliedDate: '2026-01-01',
   subject: 'Ignored',
   body: 'Draft body.',
 };
 check(buildRubricBlock('li_comment', capturedOpts) === capturedRubric,
-  'buildRubricBlock stays byte-identical after context extraction');
+  'buildRubricBlock matches the updated recipient-context byte fixture');
 check(buildIndependentGradePrompt('li_comment', capturedOpts) === capturedGrade,
-  'buildIndependentGradePrompt stays byte-identical after context extraction');
+  'buildIndependentGradePrompt matches the updated recipient-context byte fixture');
 check(buildImprovePrompt('li_comment', capturedOpts) === capturedImprove,
-  'buildImprovePrompt stays byte-identical after context extraction');
+  'buildImprovePrompt matches the updated recipient-context byte fixture');
 Object.assign(RUBRIC_PROFILES.short_public, savedShortPublic);
 
 const sourcedDollars = checkUnsourcedNumbers('Saved $2.3M annually.', '', FIXTURE_PROOF_POINTS);

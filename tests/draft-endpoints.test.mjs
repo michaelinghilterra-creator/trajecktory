@@ -34,7 +34,9 @@ fs.writeFileSync(reportAbsolute, `${fence}\n${JSON.stringify({
   summary: { companyBrief: 'Acme serves 12,000 organizations and supports 87,654 deployments, including 95 of the Fortune 100.' },
 }, null, 2)}\n${fence}\n# Report body\nBody fallback should not win.\n`, 'utf8');
 fs.writeFileSync(path.join(sandbox, 'applications.md'),
-  `| 77 | 2026-01-01 | Acme | Engineer | 4.5/5 | Applied | | | [77](${reportRelative}) | | https://jobs.example.com/acme/77 |\n`,
+  `| 77 | 2026-01-01 | Acme | Engineer | 4.5/5 | Applied | | | [77](${reportRelative}) | | https://jobs.example.com/acme/77 |\n` +
+  '| 78 | 2026-02-01 | EvalCo | Platform Lead | 4.0/5 | Evaluated | | | | | https://jobs.example.com/evalco/78 |\n' +
+  '| 79 | 2026-03-01 | NoFitCo | Data Lead | 3.0/5 | Not a Fit | | | | | https://jobs.example.com/nofitco/79 |\n',
   'utf8');
 
 // Minimal target-talent.md so parseTargetTalentMd finds a contact (appendTTRows does
@@ -52,17 +54,19 @@ const { router: linkedinDrafts } = await import('../dashboard-web/server/routes/
 const { router: targetTalent } = await import('../dashboard-web/server/routes/target-talent.mjs');
 const { router: referrals } = await import('../dashboard-web/server/routes/referrals.mjs');
 const { router: draftsRouter } = await import('../dashboard-web/server/routes/drafts.mjs');
+const { router: followups } = await import('../dashboard-web/server/routes/followups.mjs');
+const { buildConnectPrompt } = await import('../dashboard-web/server/lib/linkedin-ssi.mjs');
 const { appendReferralRows } = await import('../dashboard-web/server/lib/referrals.mjs');
 const { setLinkedInStatus } = await import('../dashboard-web/server/lib/tt-linkedin.mjs');
 
 // Contact 1 accepted the invite (exercises the free-DM followup-message path); one
 // referral for the referral drafter.
 setLinkedInStatus(1, 'Connected', '2023-06-01');
-const [refRow] = appendReferralRows([{ name: 'Rob Roe', how: '1st-degree LinkedIn connection', where: 'Acme', target: '', status: 'Not Asked', lastTouch: '', linkedin: 'linkedin.com/in/rob-roe-ex', email: '', notes: '' }]);
+const [refRow] = appendReferralRows([{ name: 'Rob Roe', how: '1st-degree LinkedIn connection', where: 'Acme', target: '', status: 'Not Asked', lastTouch: '', linkedin: 'linkedin.com/in/rob-roe-ex', email: '', notes: 'Chief People Officer · connected 29 Jul 2026' }]);
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
-app.use(linkedinDrafts); app.use(targetTalent); app.use(referrals); app.use(draftsRouter);
+app.use(linkedinDrafts); app.use(targetTalent); app.use(referrals); app.use(followups); app.use(draftsRouter);
 const server = app.listen(0);
 await new Promise(r => server.once('listening', r));
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -75,12 +79,13 @@ const post = (p, body) => fetch(base + p, { method: 'POST', headers: { 'Content-
   .then(async r => ({ status: r.status, body: await r.json().catch(() => ({})) }));
 
 const cases = [
-  ['connect-note (first-touch, ad-hoc)',             '/api/linkedin-drafts/connect-note',     { name: 'Test Person', firstName: 'Test', role: 'Recruiter', company: 'No Report Co' }, { source: 'ta', id: null, appId: null }],
-  ['followup-message (already-invited / connected)', '/api/linkedin-drafts/followup-message', { source: 'ta', id: 1 }, { source: 'ta', id: 1, appId: 77 }],
-  ['target-talent email draft',                      '/api/target-talent/1/draft',            {}, { source: 'ta', id: 1, appId: 77 }],
-  ['referral draft',                                 `/api/referrals/${refRow.id}/draft`,      {}, { source: 'referral', id: refRow.id, appId: 77 }],
-  ['referral LinkedIn draft (real DM)',              `/api/referrals/${refRow.id}/draft`,      { channel: 'linkedin', topic: 'ask' }, { source: 'referral', id: refRow.id, appId: 77 }],
-  ['target-talent LinkedIn draft (real DM)',         '/api/target-talent/1/draft',             { channel: 'linkedin', interviewStage: 'general' }, { source: 'ta', id: 1, appId: 77 }],
+  ['connect-note (first-touch, ad-hoc)',             '/api/linkedin-drafts/connect-note',     { name: 'Test Person', firstName: 'Test', role: 'Recruiter', company: 'No Report Co' }, { source: 'ta', id: null, appId: null, recipientRole: 'Recruiter', recipientTier: 'ta', appliedRole: '', appliedDate: '' }],
+  ['followup-message (already-invited / connected)', '/api/linkedin-drafts/followup-message', { source: 'ta', id: 1 }, { source: 'ta', id: 1, appId: 77, recipientRole: 'Recruiter', recipientTier: 'ta', appliedRole: 'Engineer', appliedDate: '2026-01-01' }],
+  ['target-talent email draft',                      '/api/target-talent/1/draft',            {}, { source: 'ta', id: 1, appId: 77, recipientRole: 'Recruiter', recipientTier: 'ta', appliedRole: 'Engineer', appliedDate: '2026-01-01' }],
+  ['referral draft',                                 `/api/referrals/${refRow.id}/draft`,      {}, { source: 'referral', id: refRow.id, appId: 77, recipientRole: 'Chief People Officer', recipientTier: 'exec', appliedRole: 'Engineer', appliedDate: '2026-01-01' }],
+  ['referral LinkedIn draft (real DM)',              `/api/referrals/${refRow.id}/draft`,      { channel: 'linkedin', topic: 'ask' }, { source: 'referral', id: refRow.id, appId: 77, recipientRole: 'Chief People Officer', recipientTier: 'exec', appliedRole: 'Engineer', appliedDate: '2026-01-01' }],
+  ['target-talent LinkedIn draft (real DM)',         '/api/target-talent/1/draft',             { channel: 'linkedin', interviewStage: 'general' }, { source: 'ta', id: 1, appId: 77, recipientRole: 'Recruiter', recipientTier: 'ta', appliedRole: 'Engineer', appliedDate: '2026-01-01' }],
+  ['application follow-up email',                    '/api/followups/77/draft',                {}, { source: undefined, id: undefined, appId: 77, recipientRole: '', recipientTier: '', appliedRole: 'Engineer', appliedDate: '2026-01-01' }],
 ];
 for (const [name, p, body, expectedContext] of cases) {
   const res = await post(p, body);
@@ -91,7 +96,11 @@ for (const [name, p, body, expectedContext] of cases) {
     && res.body.gradeContext?.surfaceId === res.body.surfaceId
     && res.body.gradeContext?.source === expectedContext.source
     && res.body.gradeContext?.id === expectedContext.id
-    && res.body.gradeContext?.appId === expectedContext.appId,
+    && res.body.gradeContext?.appId === expectedContext.appId
+    && res.body.gradeContext?.recipientRole === expectedContext.recipientRole
+    && res.body.gradeContext?.recipientTier === expectedContext.recipientTier
+    && res.body.gradeContext?.appliedRole === expectedContext.appliedRole
+    && res.body.gradeContext?.appliedDate === expectedContext.appliedDate,
   `${name} returns a pending review and its grade context`);
 }
 
@@ -119,6 +128,16 @@ check(noReportSmoke.status === 200
   && noReportSmoke.body.reviewStatus === 'pending'
   && noReportSmoke.body.gradeContext?.appId === null,
   'generation succeeds with a pending review when no company report resolves');
+
+for (const company of ['EvalCo', 'NoFitCo']) {
+  const res = await post('/api/linkedin-drafts/connect-note', {
+    name: `${company} Contact`, firstName: company, role: 'Recruiter', company,
+  });
+  check(res.status === 200
+    && res.body.gradeContext?.appliedRole === ''
+    && res.body.gradeContext?.appliedDate === '',
+  `${company} non-submitted application leaves applied role and date empty`);
+}
 
 process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
   critique: { weakest_dimension: 'personalization', fixes: ['Keep the company figure grounded.'] },
@@ -166,7 +185,11 @@ const reviewWithResearch = await post('/api/drafts/review', {
   body: 'Acme serves 12,000 organizations.',
   subject: 'Acme data integrity',
   surfaceId: 'ta_email',
-  gradeContext: { surfaceId: 'ta_email', source: 'ta', id: 1, appId: 77 },
+  gradeContext: {
+    surfaceId: 'ta_email', source: 'ta', id: 1, appId: 77,
+    recipientRole: 'Chief People Officer', recipientTier: 'exec',
+    appliedRole: 'Engineer', appliedDate: '2026-01-01',
+  },
 });
 const reviewedEvidence = reviewWithResearch.body.review?.dimensions
   ?.find((dimension) => dimension.id === 'evidence')?.score;
@@ -211,6 +234,10 @@ const improveRes = await post('/api/drafts/improve', {
   ...improveOriginal,
   surfaceId: 'ta_email',
   recipientFirst: 'Jane',
+  gradeContext: {
+    appId: 77, recipientRole: 'Chief People Officer', recipientTier: 'exec',
+    appliedRole: 'Engineer', appliedDate: '2026-01-01',
+  },
   originalScore: 100,
 });
 check(improveRes.status === 200
@@ -297,6 +324,60 @@ const improveConnectNote = await post('/api/drafts/improve', {
 });
 check(improveConnectNote.status === 200 && improveConnectNote.body.draft?.body.length === 300,
   'improve hard fits character capped surfaces to the profile limit');
+
+const connectPrompt = buildConnectPrompt({
+  senderName: 'Jordan Example', senderFirst: 'Jordan', recipientName: 'Avery Example',
+  recipientRole: 'Recruiter', recipientCompany: 'Acme', appliedRole: 'Engineer',
+});
+check(connectPrompt.includes('Jordan applied for the Engineer role'),
+  'connection-note prompt mentions the applied role in one clause');
+const connectPromptWithoutDigest = buildConnectPrompt({
+  senderName: 'Jordan Example', senderFirst: 'Jordan', recipientName: 'Avery Example',
+  recipientRole: 'Recruiter', recipientCompany: 'Acme', cvExcerpt: '',
+});
+check(!connectPromptWithoutDigest.includes('(CV not available)')
+  && !connectPromptWithoutDigest.includes('ABOUT JORDAN'),
+  'connection-note prompt omits the digest section when the digest is absent');
+
+const outreachRouteFiles = [
+  'dashboard-web/server/routes/linkedin-drafts.mjs',
+  'dashboard-web/server/routes/target-talent.mjs',
+  'dashboard-web/server/routes/referrals.mjs',
+  'dashboard-web/server/routes/followups.mjs',
+];
+const outreachRouteSource = outreachRouteFiles.map((file) => fs.readFileSync(path.join(root, file), 'utf8')).join('\n');
+check(!/pointed to the right person|a pointer to the right person/i.test(outreachRouteSource),
+  'outreach route prompts contain no deprecated redirect ask');
+const liFollowupSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/linkedin-drafts.mjs'), 'utf8');
+const targetTalentSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/target-talent.mjs'), 'utf8');
+const liFollowupBlock = liFollowupSource.slice(
+  liFollowupSource.indexOf("router.post('/api/linkedin-drafts/followup-message'"),
+  liFollowupSource.indexOf("router.post('/api/linkedin-drafts/archive-contact'"),
+);
+check(liFollowupBlock.includes('applied for the ${appliedRole} role')
+  && liFollowupBlock.includes('tierAsk(recipientTier, appliedRole)'),
+  'LinkedIn follow-up prompt names the applied role and uses the tier-specific ask');
+check(!liFollowupBlock.includes('${cvExcerpt}') && !liFollowupBlock.includes('${cvMd}')
+  && /generateWithRubric\(prompt, 'li_followup',[\s\S]*?\bcvMd\b/.test(liFollowupBlock),
+  'LinkedIn follow-up supplies the CV exactly once through the writing guide');
+const directQuestionRule = 'Phrase it as a direct question. Do not use the words point me, pointer, whoever, or the right person.';
+check(liFollowupSource.includes(directQuestionRule) && targetTalentSource.includes(directQuestionRule),
+  'LinkedIn and target-talent tier asks require a direct question and ban templated redirect wording');
+const notConnectedRule = 'You are not connected on LinkedIn yet. Do not say you connected, since connecting, or good to reconnect.';
+check(liFollowupBlock.includes(notConnectedRule) && targetTalentSource.includes(notConnectedRule),
+  'both not-connected LinkedIn DM prompts prohibit accepted-connection wording');
+const referralSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/referrals.mjs'), 'utf8');
+check((referralSource.match(/\$\{referralAsk\(appliedRole\)\}/g) || []).length === 2
+  && !referralSource.includes('tierAsk(')
+  && referralSource.includes('flag his application for the ${appliedRole} role to the hiring manager'),
+  'referral email and DM use the referral ask independently of recipient tier');
+
+const draftsSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/drafts.mjs'), 'utf8');
+check(/gradeIndependently\(body, surfaceId,[\s\S]*?\.\.\.recipientContext/.test(draftsSource),
+  '/api/drafts/review forwards validated recipient context to the independent grader');
+check(/buildImprovePrompt\(surfaceId,[\s\S]*?\.\.\.recipientContext/.test(draftsSource)
+  && /gradeIndependently\(finished\.body, surfaceId,[\s\S]*?\.\.\.recipientContext/.test(draftsSource),
+  '/api/drafts/improve forwards recipient context to improvement and re-grade prompts');
 
 // Shut down cleanly and let the event loop DRAIN rather than process.exit() —
 // on Windows a forced exit that races a mid-close handle (the server socket or

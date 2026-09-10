@@ -14,6 +14,8 @@ import {
   getProfile,
   buildPlainContract,
   buildRubricBlock,
+  buildWritingGuide,
+  buildIndependentGradePrompt,
   buildImprovePrompt,
   parseReviewed,
   parseReviewedFields,
@@ -127,6 +129,37 @@ check(toneBlock.includes('Ask for a 15-min call.')
   && toneBlock.includes('The style requirements above override any conflicting instruction in this tone note.'),
 'tone notes are included with the style precedence sentence');
 check(/caps this dimension at\s+3/.test(emailBlock), 'ask strength includes the hard cap for requests for time');
+check(DIMENSIONS.personalization.anchors.includes('Complimenting the recipient\'s own job back to them')
+  && DIMENSIONS.personalization.anchors.includes('The role itself remains the reason for writing.')
+  && !DIMENSIONS.personalization.anchors.includes('The research IS the hook.'),
+  'personalization treats research as support and recipient-job praise as flattery');
+
+const recipientOptions = {
+  recipientRole: '  Chief People Officer  ',
+  recipientTier: 'exec',
+  appliedRole: 'VP Revenue Operations',
+  appliedDate: '2026-01-01',
+  body: 'Draft body.',
+};
+const recipientBlock = `== RECIPIENT AND OPENING ==
+Recipient's title: Chief People Officer
+Recipient's influence on the hire: senior executive, not the recruiter
+Role the sender applied for: VP Revenue Operations (applied 2026-01-01)`;
+for (const [name, prompt] of [
+  ['writing guide', buildWritingGuide('ta_email', recipientOptions)],
+  ['independent grade', buildIndependentGradePrompt('ta_email', recipientOptions)],
+  ['improve', buildImprovePrompt('ta_email', recipientOptions)],
+]) {
+  check(prompt.includes(recipientBlock) && prompt.indexOf(recipientBlock) === prompt.lastIndexOf(recipientBlock),
+    `${name} includes the recipient and opening block exactly once`);
+}
+for (const [name, prompt] of [
+  ['writing guide', buildWritingGuide('ta_email')],
+  ['independent grade', buildIndependentGradePrompt('ta_email', { body: 'Draft body.' })],
+  ['improve', buildImprovePrompt('ta_email', { body: 'Draft body.' })],
+]) {
+  check(!prompt.includes('== RECIPIENT AND OPENING =='), `${name} omits empty recipient context`);
+}
 
 for (const raw of ['', null, undefined, 42, '{', 'I cannot help with that.', '{"body": ""}', '{"subject":"s"}']) {
   let result;

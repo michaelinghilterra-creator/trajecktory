@@ -2,7 +2,7 @@
 // keep each module focused and under the size budget.
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
-import { generateText, readOptionalProjectFile, draftModel } from '../lib/anthropic.mjs';
+import { generateText, readOptionalProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
@@ -11,7 +11,7 @@ import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { loadInfluencer, toneInstruction, flattenConnectNote, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine, readTTCorrespondence, findRelatedApps } from '../lib/target-talent.mjs';
-import { parseReferralsMd } from '../lib/referrals.mjs';
+import { parseReferralsMd, referralTitle } from '../lib/referrals.mjs';
 import { getLinkedInStatus } from '../lib/tt-linkedin.mjs';
 import { summarizeThread } from '../lib/correspondence-context.mjs';
 import { getIdentity, getOutreachPolicy, getNarrative } from '../lib/profile.mjs';
@@ -19,8 +19,9 @@ import { getPersonContext } from '../lib/person-context.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
 import { getInmailBudget, decrementInmail, setInmailRemaining } from '../lib/inmail-budget.mjs';
-import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
+import { ACTIVE_STATUSES, findSubmittedApplication } from '../lib/statuses.mjs';
 import { getProfile } from '../../../lib/outreach-rubric.mjs';
+import { resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
 
 export const router = express.Router();
 
@@ -48,7 +49,7 @@ function resolveRecipient(source, id) {
       source: 'ta', id: row.id,
       name: `${row.first || ''} ${row.last || ''}`.trim(),
       firstName: row.first || '',
-      role: row.title || '', company: row.company || '', reason: '',
+      role: row.title || '', company: row.company || '', reason: '', notes: row.notes || '',
     };
   }
   if (key === 'referral') {
@@ -59,9 +60,9 @@ function resolveRecipient(source, id) {
       source: 'referral', id: row.id,
       name: String(row.name || '').trim(),
       firstName: parts[0] || '',
-      // A referral has no title column; "how you know them" is the closest thing
-      // to context, and `where` is where they actually work now.
-      role: row.how || '', company: row.where || '', reason: row.target || '',
+      // Referral titles are stored as the first segment of Notes; `where` is
+      // where the person actually works now.
+      role: referralTitle(row.notes), company: row.where || '', reason: row.target || '', notes: row.notes || '',
     };
   }
   if (key === 'influencer') {
@@ -72,10 +73,20 @@ function resolveRecipient(source, id) {
       source: 'influencer', id: row.id,
       name: String(row.name || '').trim(),
       firstName: parts[0] || '',
-      role: row.role || '', company: '', reason: row.whyFollow || '',
+      role: row.role || '', company: '', reason: row.whyFollow || '', notes: row.notes || '',
     };
   }
   return null;
+}
+
+function tierAsk(recipientTier, appliedRole) {
+  const directQuestionRule = 'Phrase it as a direct question. Do not use the words point me, pointer, whoever, or the right person.';
+  if (!appliedRole) return `Ask for a brief reply about whether the team is hiring for the kind of role he is targeting. ${directQuestionRule}`;
+  if (recipientTier === 'exec') return `Ask who is leading the hiring for the ${appliedRole} role. ${directQuestionRule}`;
+  if (recipientTier === 'hm' || recipientTier === 'peer') {
+    return `Ask whether they would take a look at his application for the ${appliedRole} role. ${directQuestionRule}`;
+  }
+  return `Ask them to flag his application for the ${appliedRole} role to the hiring manager. ${directQuestionRule}`;
 }
 
 // GET /api/linkedin-drafts/inmail-budget — remaining monthly InMail credits.
@@ -226,8 +237,9 @@ router.post('/api/linkedin-ssi/generate-connect-request', async (req, res) => {
 
     const projectRoot = ROOT_DIR;
     const cvMd = readOptionalProjectFile(projectRoot, 'cv.md');
-    const cvExcerpt = cvMd ? cvMd.slice(0, 3500) : '(CV not available)';
     const id = getIdentity();
+    const recipientRole = influencer.role || theirRole || '';
+    const recipientTier = resolveInfluenceTier({ notes: influencer.notes, title: recipientRole }).tier;
 
     const angleGuidance = {
       'Reference Post': priorEngagement
@@ -244,9 +256,6 @@ THE RECIPIENT:
 - Name: ${influencer.name}
 - Role: ${influencer.role || theirRole || '(unknown)'}
 - Why ${id.firstName} wants to connect: ${influencer.engagementTip || influencer.track || '(general professional interest)'}
-
-ABOUT ${id.firstName.toUpperCase()} (for grounding, do not copy):
-${cvExcerpt}
 
 ANGLE (${angle}): ${angleGuidance[angle] || angleGuidance['Reference Post']}
 
@@ -275,6 +284,7 @@ HARD RULES:
       cvMd,
       plainTextFallback: true,
       mode: 'write',
+      rubricOpts: { recipientRole, recipientTier },
     });
     if (result.error) return res.status(500).json({ error: 'Could not parse connection note from model output' });
 
@@ -301,7 +311,10 @@ HARD RULES:
       review: null,
       reviewStatus: 'pending',
       surfaceId,
-      gradeContext: { surfaceId, source: 'influencer', id: influencer.id, appId: null },
+      gradeContext: {
+        surfaceId, source: 'influencer', id: influencer.id, appId: null,
+        recipientRole, recipientTier, appliedRole: '', appliedDate: '',
+      },
     });
   } catch (err) {
     console.error('Error generating connect request:', err);
@@ -354,6 +367,10 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     const reason          = (body.reason  || resolved?.reason  || '').trim();
     const recipientFirst  = (body.firstName || resolved?.firstName || name.split(/\s+/)[0] || '').trim();
     const src             = source || resolved?.source || 'ta';
+    const recipientTier   = resolveInfluenceTier({
+      notes: body.notes || resolved?.notes || '',
+      title: recipientRole,
+    }).tier;
     if (!name) {
       return res.status(400).json({ error: 'Provide a recipient: source+id from the connect queue, or a name.' });
     }
@@ -368,9 +385,15 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     const articleDigestMd = readOptionalProjectFile(ROOT_DIR, 'article-digest.md');
     // Prepend portfolio artifacts (capped at 1000 chars) so the model can lead with
     // a named project/outcome rather than a generic role claim, even in 300 chars.
-    const portfolioSnippet = articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 1000)}\n\nCV:\n` : '';
-    const cvExcerpt = portfolioSnippet + (cvMd ? cvMd.slice(0, 3500) : '(CV not available)');
+    const portfolioSnippet = articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 1000)}` : '';
     const idn = getIdentity();
+
+    const relatedApps = findRelatedApps(recipientCompany);
+    const topApp = relatedApps.find(app => ACTIVE_STATUSES.includes(app.status)) || relatedApps[0];
+    const submittedApp = findSubmittedApplication(relatedApps);
+    const appliedRole = submittedApp?.role || '';
+    const appliedDate = submittedApp?.date || '';
+    const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
 
     // "Why connect" anchor for a TA / gatekeeper contact: a fellow-operator framing.
     const angleHint = angle ? ` (${angle})` : '';
@@ -381,17 +404,19 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     const buildPrompt = (targetMax) => buildConnectPrompt({
       senderName: idn.fullName, senderFirst: idn.firstName, senderHeadline: idn.headline,
       recipientName: name, recipientFirst, recipientRole, recipientCompany,
-      guidance, cvExcerpt, tone, toneText: toneInstruction(tone), targetMax,
+      guidance, cvExcerpt: portfolioSnippet, appliedRole,
+      tone, toneText: toneInstruction(tone), targetMax,
     });
 
     const rubricActive = process.env.TJK_RUBRIC_DISABLED !== '1';
     const narrative = getNarrative();
-    const relatedApps = findRelatedApps(recipientCompany);
-    const topApp = relatedApps.find(app => ACTIVE_STATUSES.includes(app.status)) || relatedApps[0];
-    const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
     const narrativeOpts = {
       proofPoints: narrative.proofPoints,
       superpowers: narrative.superpowers,
+      recipientRole,
+      recipientTier,
+      appliedRole,
+      appliedDate,
       ...(companyResearch ? { companyResearch } : {}),
     };
 
@@ -422,7 +447,10 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       console.warn('[connect-note] trimmed %d chars to fit the 300 cap', note.body.length - fitted.length);
     }
     const gradeId = id ?? resolved?.id ?? null;
-    res.json({ response: fitted.text, length: fitted.length, truncated, review: null, reviewStatus: 'pending', surfaceId: 'connect_note_influencer', gradeContext: { surfaceId: 'connect_note_influencer', source: src, id: gradeId, appId: topApp?.id ?? null }, recipient: { source: src, id: gradeId, name } });
+    res.json({ response: fitted.text, length: fitted.length, truncated, review: null, reviewStatus: 'pending', surfaceId: 'connect_note_influencer', gradeContext: {
+      surfaceId: 'connect_note_influencer', source: src, id: gradeId, appId: topApp?.id ?? null,
+      recipientRole, recipientTier, appliedRole, appliedDate,
+    }, recipient: { source: src, id: gradeId, name } });
   } catch (err) {
     console.error('Error generating connect note:', err);
     res.status(500).json({ error: err.message });
@@ -458,6 +486,10 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
     const relatedApps = findRelatedApps(company);
     const topApp = relatedApps.find(app => ACTIVE_STATUSES.includes(app.status)) || relatedApps[0];
     const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
+    const submittedApp = findSubmittedApplication(relatedApps);
+    const appliedRole = submittedApp?.role || '';
+    const appliedDate = submittedApp?.date || '';
+    const recipientTier = resolveInfluenceTier({ notes: recipient.notes, title: recipientRole }).tier;
     // Prior 1:1 history with THIS PERSON, merged across whichever books they are
     // filed in, rather than one book's correspondence file. A referral has no entry
     // in the target-talent log at all, so reading that directly returned either
@@ -501,10 +533,21 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
 
     const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
     const articleDigestMd = readOptionalProjectFile(ROOT_DIR, 'article-digest.md');
-    const cvExcerpt = (articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 900)}\n\nCV:\n` : '') + (cvMd ? cvMd.slice(0, 3200) : '(CV not available)');
+    const profileMd = readVoiceRules(ROOT_DIR);
     const idn = getIdentity();
 
-    const purpose = `${name} works in Talent Acquisition or recruiting${company ? ` at ${company}` : ''}. ${idn.firstName} is genuinely interested in ${company || 'their company'} and has applied there (or is about to). The goal is candidacy: get on ${recipientFirst}'s radar as a strong fit and a name worth a reply.`;
+    const goal = !appliedRole
+      ? `The goal is a brief reply about whether the team is hiring for the kind of role ${idn.firstName} is targeting.`
+      : recipientTier === 'exec'
+        ? `The goal is to learn who is leading the hiring for the ${appliedRole} role.`
+        : recipientTier === 'hm' || recipientTier === 'peer'
+          ? `The goal is to get a look at ${idn.firstName}'s application for the ${appliedRole} role.`
+          : `The goal is to get ${idn.firstName}'s application for the ${appliedRole} role in front of the hiring manager.`;
+    const purpose = recipientTier === 'exec'
+      ? `${name} is a senior leader${company ? ` at ${company}` : ''} who does not screen applications. Write peer to peer, 60 to 100 words, with no description or praise of ${recipientFirst}'s own job. ${goal}`
+      : recipientTier === 'hm' || recipientTier === 'peer'
+        ? `${name} likely owns or sits near the hire${company ? ` at ${company}` : ''}. ${goal}`
+        : `${name} works in recruiting${company ? ` at ${company}` : ''}. ${goal}`;
 
     const prompt = `You are drafting a brief LinkedIn ${connected ? 'DIRECT MESSAGE (a free DM)' : 'FOLLOW-UP MESSAGE (an InMail)'} from ${idn.fullName} to ${connected
       ? `a contact he is now CONNECTED with on LinkedIn: they ACCEPTED his connection request${firstTouchDate ? ` (invite sent ${firstTouchDate})` : ''}, so this is the first real message in a brand-new 1st-degree connection.`
@@ -512,7 +555,7 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
 
 ${connected
   ? 'YOU ARE ALREADY CONNECTED. The invite was accepted, so do NOT say you sent a request, do NOT ask whether it arrived, and do NOT imply the connection is still pending. A short, warm nod to having just connected is fine; then go to the real reason for writing.'
-  : 'THIS IS NOT A NEW CONNECTION REQUEST. The invite is already out, so do not write "I would like to connect" or restate it. Write the NEXT message: a real, purposeful note that moves things forward.'}
+  : 'THIS IS NOT A NEW CONNECTION REQUEST. The invite is already out, so do not write "I would like to connect" or restate it. Write the NEXT message: a real, purposeful note that moves things forward. You are not connected on LinkedIn yet. Do not say you connected, since connecting, or good to reconnect.'}
 
 THE RECIPIENT:
 - Name: ${name}
@@ -531,17 +574,17 @@ NUDGE MODE (a substantive message already went out recently and is unanswered):
 THE PURPOSE:
 ${purpose}
 
-ABOUT ${idn.firstName.toUpperCase()} (ground the message in this, never copy verbatim):
-${cvExcerpt}
+${articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 900)}\n` : ''}
+${profileMd ? `== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
 
 HARD RULES:
-- Open with "Hi ${recipientFirst}," then ${connected ? 'optionally one short warm clause about having just connected, then ' : ''}go to the real reason for writing: specific interest in ${company || 'their company'} and that ${idn.firstName} applied there. Lead with intent and value, in a confident tone.
+ - Open with "Hi ${recipientFirst}," then ${connected ? 'optionally one short warm clause about having just connected, then ' : ''}go to the real reason for writing: specific interest in ${company || 'their company'}${appliedRole ? ` and that ${idn.firstName} applied for the ${appliedRole} role` : ', without claiming that an application was submitted'}. Lead with intent and value, in a confident tone.
 - ${connected
     ? 'You are ALREADY connected, so NEVER say you "sent a connection request", "wanted to make sure this reached you", "reach you directly", or reference a pending or unanswered invite in any way. Treat the connection as established.'
     : 'Do NOT open by mentioning the earlier message, and NEVER say you "have not heard back" or that the silence is "fine". Being ignored is not the story; the candidacy is. If you reference the prior connection request at all, make it a brief, confident half-clause in the MIDDLE (for example, "I also sent a connection request recently, but wanted to reach you directly"), never an apology and never an opener.'}
 - ${thread.recentPitch ? 'Do NOT dump a full proof point the thread already covered; at most add ONE new specific detail not previously mentioned.' : `Then give one concrete proof point about ${idn.firstName} from the CV or portfolio that makes him worth a reply.`}
-- Close with ONE clear, low-friction ask: a quick reply, or being pointed to the right person for the relevant role. Do NOT ask for a call, a chat, a quick call, time on their calendar, or "15/20/30 minutes" — everyone is busy and a meeting ask reads as tone-deaf. Not a hard pitch.
-- Length: ${thread.recentPitch ? '40 to 70 words. A nudge is short by design.' : '90 to 150 words. Longer than a connection note but still tight.'} Never a wall of text.
+ - Close with ONE clear, low-friction ask. ${tierAsk(recipientTier, appliedRole)} Do NOT ask for a call, a chat, a quick call, time on their calendar, or "15/20/30 minutes" — everyone is busy and a meeting ask reads as tone-deaf. Not a hard pitch.
+ - Length: ${thread.recentPitch ? '40 to 70 words. A nudge is short by design.' : recipientTier === 'exec' ? '60 to 100 words.' : '90 to 150 words. Longer than a connection note but still tight.'} Never a wall of text.
 - STRUCTURE: write the body as ${thread.recentPitch ? '1 to 2 very short paragraphs' : '2 or 3 short paragraphs'} separated by a BLANK LINE (a literal double newline, \\n\\n, between paragraphs). It must be easy to scan on a phone. Do NOT return one dense block of text.
 - NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
 - BANNED phrasings, they read as needy and get the message deleted: "haven't heard back", "never heard back", "which is fine", "I know you are busy", "just following up", "circling back", "wanted to reconnect", "sorry to bother", "I hope this finds you well", "quick question", "pick your brain", and any apology for writing.
@@ -560,6 +603,10 @@ HARD RULES:
       rubricOpts: {
         proofPoints: narrative.proofPoints,
         superpowers: narrative.superpowers,
+        recipientRole,
+        recipientTier,
+        appliedRole,
+        appliedDate,
         ...(companyResearch ? { companyResearch } : {}),
       },
     });
@@ -570,7 +617,10 @@ HARD RULES:
       reviewStatus: result.reviewStatus,
       cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
     });
-    res.json({ response: fu.body, length: fu.body.length, review: null, reviewStatus: 'pending', surfaceId: 'li_followup', gradeContext: { surfaceId: 'li_followup', source, id, appId: topApp?.id ?? null }, recipient: { source: 'ta', id, name }, inmail: !connected });
+    res.json({ response: fu.body, length: fu.body.length, review: null, reviewStatus: 'pending', surfaceId: 'li_followup', gradeContext: {
+      surfaceId: 'li_followup', source, id, appId: topApp?.id ?? null,
+      recipientRole, recipientTier, appliedRole, appliedDate,
+    }, recipient: { source: 'ta', id, name }, inmail: !connected });
   } catch (err) {
     console.error('Error generating follow-up message:', err);
     res.status(500).json({ error: err.message });

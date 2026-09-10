@@ -27,6 +27,7 @@ import { markInvitePending } from '../lib/tt-linkedin.mjs';
 import { isLinkedInInvite, LINKEDIN_INVITE_SUBJECT } from '../lib/channels.mjs';
 import { logConnect } from '../lib/connects.mjs';
 import { reconcileInviteStatus } from '../lib/invite-status-reconcile.mjs';
+import { findSubmittedApplication } from '../lib/statuses.mjs';
 
 export const router = express.Router();
 
@@ -509,6 +510,9 @@ router.post('/api/followups/:appNum/draft', async (req, res) => {
     const apps = parseApplicationsMd();
     const app = apps.find(a => a.id === appNum);
     if (!app) return res.status(404).json({ error: `Application #${appNum} not found` });
+    const submittedApp = findSubmittedApplication([app]);
+    const appliedRole = submittedApp?.role || '';
+    const appliedDate = submittedApp?.date || '';
 
     const projectRoot = ROOT_DIR;
     const cvMd = readProjectFile(projectRoot, 'cv.md');
@@ -527,17 +531,15 @@ router.post('/api/followups/:appNum/draft', async (req, res) => {
       : '';
 
     const id = getIdentity();
-    const prompt = `You are drafting a brief, professional follow-up email from ${id.fullName}. He applied to ${app.company} for the ${app.role} role ${daysSinceApply} days ago. ${fuCount === 0 ? 'This is the FIRST follow-up — no prior touches.' : `He has already sent ${fuCount} follow-up${fuCount === 1 ? '' : 's'} (most recent ${daysSinceLastTouch} days ago). This is touch #${touchNumber}.`}
+    const prompt = `You are drafting a brief, professional follow-up email from ${id.fullName}. ${submittedApp ? `He applied to ${app.company} for the ${app.role} role ${daysSinceApply} days ago.` : `He is interested in opportunities at ${app.company}; do not claim that he applied for this role.`} ${fuCount === 0 ? 'This is the FIRST follow-up — no prior touches.' : `He has already sent ${fuCount} follow-up${fuCount === 1 ? '' : 's'} (most recent ${daysSinceLastTouch} days ago). This is touch #${touchNumber}.`}
 
 == APPLICATION CONTEXT ==
 Company:  ${app.company}
 Role:     ${app.role}
-Status:   ${app.status} (since ${app.date})
+Status:   ${app.status}${submittedApp ? ` (applied ${app.date})` : ''}
 Score:    ${app.scoreRaw}
 Notes:    ${app.notes || '(none)'}
 ${reportContext}
-== ${id.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics) ==
-${cvMd}
 ${profileMd ? `
 == VOICE RULES (from modes/_profile.md, must follow) ==
 ${profileMd}
@@ -548,7 +550,7 @@ ${profileMd}
 - NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
 - Reference the specific role + company by name.
 - ${fuCount === 0 ? 'Lead with one specific reason this role matters to you (drawn from the report). Add one NEW data point or framing that wasn\'t in the original application (a recent thought, a relevant proof point, a question).' : 'Acknowledge this is a follow-up. Add genuinely new value — do not just repeat the original pitch. Reference a recent insight, market shift, or a specific question about the role.'}
-- Close with ONE low-friction ask: a quick reply on timing, or being pointed to the right person for this role. Do NOT ask for a call, a chat, a quick call, an intro, or time on their calendar. A meeting ask on an unsolicited follow-up reads as tone-deaf.
+- Close with ONE low-friction ask: a quick reply on timing. Do NOT ask for a call, a chat, a quick call, an intro, or time on their calendar. A meeting ask on an unsolicited follow-up reads as tone-deaf.
 - Never invent metrics or claims not on the CV.
 
 == SUBJECT REQUIREMENTS ==
@@ -563,7 +565,12 @@ ${profileMd}
     const result = await generateWithRubric(prompt, 'app_followup', {
       model: draftModel(), maxTokens: 800, cvMd,
       mode: 'write',
-      rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
+      rubricOpts: {
+        proofPoints: narrative.proofPoints,
+        superpowers: narrative.superpowers,
+        appliedRole,
+        appliedDate,
+      },
     });
     if (result.error) return res.status(500).json({ error: 'Could not parse draft' });
     const draft = await finishDraft({
@@ -572,7 +579,10 @@ ${profileMd}
       reviewStatus: result.reviewStatus,
       cleaner: 'email', stripSalutationFor: null, stripSignature: false,
     });
-    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: null, reviewStatus: 'pending', surfaceId: 'app_followup', gradeContext: { surfaceId: 'app_followup', appId: app.id }, touchNumber, fuCount });
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: null, reviewStatus: 'pending', surfaceId: 'app_followup', gradeContext: {
+      surfaceId: 'app_followup', appId: app.id,
+      recipientRole: '', recipientTier: '', appliedRole, appliedDate,
+    }, touchNumber, fuCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

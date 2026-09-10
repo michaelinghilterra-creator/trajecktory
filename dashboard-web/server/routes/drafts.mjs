@@ -30,6 +30,17 @@ function researchForApplication(appId) {
   }
 }
 
+function gradeContextFields(value) {
+  const context = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const clean = (field) => typeof context[field] === 'string' ? context[field].trim().slice(0, 200) : '';
+  return {
+    recipientRole: clean('recipientRole'),
+    recipientTier: clean('recipientTier'),
+    appliedRole: clean('appliedRole'),
+    appliedDate: clean('appliedDate'),
+  };
+}
+
 router.post('/api/drafts/review', async (req, res) => {
   try {
     const { body, subject, surfaceId, gradeContext } = req.body || {};
@@ -60,6 +71,7 @@ router.post('/api/drafts/review', async (req, res) => {
       ? context.appId
       : undefined;
     const companyResearch = researchForApplication(contextAppId);
+    const recipientContext = gradeContextFields(context);
     const review = await gradeIndependently(body, surfaceId, {
       model: gradeModel(),
       subject: typeof subject === 'string' ? subject : '',
@@ -67,6 +79,7 @@ router.post('/api/drafts/review', async (req, res) => {
       proofPoints: narrative.proofPoints,
       superpowers: narrative.superpowers,
       companyResearch,
+      ...recipientContext,
     });
 
     if (!review) {
@@ -81,7 +94,7 @@ router.post('/api/drafts/review', async (req, res) => {
 
 router.post('/api/drafts/improve', async (req, res) => {
   try {
-    const { body, subject, surfaceId, recipientFirst, appId, originalScore = null } = req.body || {};
+    const { body, subject, surfaceId, recipientFirst, appId, gradeContext, originalScore = null } = req.body || {};
 
     if (!body || typeof body !== 'string' || !body.trim()) {
       return res.status(400).json({ error: 'body is required and must be a non-empty string.' });
@@ -97,7 +110,15 @@ router.post('/api/drafts/improve', async (req, res) => {
 
     const narrative = getNarrative();
     const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
-    const companyResearch = researchForApplication(appId);
+    const context = gradeContext && typeof gradeContext === 'object' && !Array.isArray(gradeContext)
+      ? gradeContext
+      : null;
+    const contextAppId = context
+      && (typeof context.appId === 'number' || typeof context.appId === 'string')
+      ? context.appId
+      : appId;
+    const companyResearch = researchForApplication(contextAppId);
+    const recipientContext = gradeContextFields(context);
     const prompt = buildImprovePrompt(surfaceId, {
       body,
       subject: typeof subject === 'string' ? subject : '',
@@ -105,6 +126,7 @@ router.post('/api/drafts/improve', async (req, res) => {
       proofPoints: narrative.proofPoints,
       superpowers: narrative.superpowers,
       companyResearch,
+      ...recipientContext,
     });
     const raw = await generateText(prompt, { model: gradeModel(), maxTokens: 2200, label: `improve:${surfaceId}` });
     const parsed = parseReviewed(raw, surfaceId);
@@ -176,6 +198,7 @@ router.post('/api/drafts/improve', async (req, res) => {
       proofPoints: narrative.proofPoints,
       superpowers: narrative.superpowers,
       companyResearch,
+      ...recipientContext,
     });
     return res.json({
       ok: true,

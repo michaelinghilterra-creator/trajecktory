@@ -68,6 +68,15 @@ function parseReferralsMd() {
   return rows;
 }
 
+// Referral imports keep the contact's current job title as the first Notes
+// segment, before the connection metadata: "Talent Recruiter · connected ...".
+// A legacy row may contain only the connection metadata, which is not a title.
+function referralTitle(notes) {
+  const firstSegment = String(notes || '').split(' · ')[0].trim();
+  if (!firstSegment || /^connected\b/i.test(firstSegment)) return '';
+  return firstSegment;
+}
+
 const esc = s => (s || '').toString().replace(/[|\r\n]+/g, ' ').trim();
 
 // The Email cell for a row spec: accept either a ready-made cell (already tag-
@@ -192,4 +201,4 @@ export function resolveReferralLink(refRow, taRows = []) {
   return null;
 }
 
-export { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence };
+export { parseReferralsMd, referralTitle, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence };
