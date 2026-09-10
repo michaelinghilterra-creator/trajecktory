@@ -236,14 +236,16 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   const [liReviewing, setLiReviewing] = useStateCq(false);
   const [liImproving, setLiImproving] = useStateCq(false);
   const [liProposed, setLiProposed] = useStateCq(null);
-  const [liImproveSnapshot, setLiImproveSnapshot] = useStateCq('');
+  const [liImproveMessage, setLiImproveMessage] = useStateCq(null);
+  const [liImproveSnapshot, setLiImproveSnapshot] = useStateCq({ body: '', subject: '' });
   const liImproveAbortRef = React.useRef(null);
   const liGradeAbortRef = React.useRef(null);
   const liGradeGenerationRef = React.useRef(0);
   const [emReviewing, setEmReviewing] = useStateCq(false);
   const [emImproving, setEmImproving] = useStateCq(false);
   const [emProposed, setEmProposed] = useStateCq(null);
-  const [emImproveSnapshot, setEmImproveSnapshot] = useStateCq('');
+  const [emImproveMessage, setEmImproveMessage] = useStateCq(null);
+  const [emImproveSnapshot, setEmImproveSnapshot] = useStateCq({ body: '', subject: '' });
   const emImproveAbortRef = React.useRef(null);
   const emGradeAbortRef = React.useRef(null);
   const emGradeGenerationRef = React.useRef(0);
@@ -414,6 +416,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
     liImproveAbortRef.current = null;
     setLiImproving(false);
     setLiProposed(null);
+    setLiImproveMessage(null);
     window.tjkMutate(alreadyInvited ? '/api/linkedin-drafts/followup-message' : '/api/linkedin-drafts/connect-note', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: c.source, id: c.id, override }),
@@ -441,20 +444,23 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   };
   const improveLiDraft = () => {
     if (!note?.surfaceId || liImproving) return;
-    const snapshot = note.response || '';
+    const snapshot = { body: note.response || '', subject: note.subject || '' };
     const controller = new AbortController();
     liImproveAbortRef.current?.abort();
     liImproveAbortRef.current = controller;
     setLiImproveSnapshot(snapshot);
     setLiImproving(true);
     setLiProposed(null);
+    setLiImproveMessage(null);
     window.tjkMutate('/api/drafts/improve', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        body: snapshot,
-        subject: '',
+        body: snapshot.body,
+        subject: snapshot.subject,
         surfaceId: note.surfaceId,
         recipientFirst: firstName,
+        fixes: note.review?.topFixes || [],
+        gradeContext: note.gradeContext,
         originalScore: typeof note.review?.score === 'number' ? note.review.score : null,
         ...(note.gradeContext?.appId != null
           ? { appId: note.gradeContext.appId }
@@ -465,13 +471,31 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
       signal: controller.signal,
     }).then(r => r.json()).then(res => {
       if (res.error) throw new Error(res.error);
+      setNote(current => {
+        if (!current) return current;
+        const unchanged = (current.response || '') === snapshot.body
+          && (current.subject || '') === snapshot.subject;
+        return {
+          ...current,
+          review: res.originalReview || current.review,
+          reviewOf: res.originalReview ? (unchanged ? 'independent' : 'original') : current.reviewOf,
+          reviewPending: false,
+        };
+      });
+      if (!res.improved) {
+        setLiImproveMessage(['grade-failed', 'grade-incomplete'].includes(res.reason)
+          ? 'Could not compare versions. Try again.'
+          : 'No better version found. Keep yours.');
+        return;
+      }
       setLiProposed(res.draft ? {
         ...res.draft,
-        originalScore: res.originalScore,
+        originalScore: res.originalReview?.score ?? null,
         newScore: res.review?.score ?? null,
         review: res.review || null,
         reviewOf: res.reviewOf || 'independent',
       } : null);
+      setLiImproveMessage(null);
     }).catch(e => {
       if (e.name !== 'AbortError' && toast) toast(e.message, 'error');
     }).finally(() => {
@@ -481,7 +505,8 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   };
   const replaceLiDraft = () => {
     if (!liProposed || !note) return;
-    if ((note.response || '') !== liImproveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
+    if (((note.response || '') !== liImproveSnapshot.body || (note.subject || '') !== liImproveSnapshot.subject)
+      && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
     liGradeAbortRef.current?.abort();
     liGradeGenerationRef.current++;
     setNote(n => ({
@@ -511,6 +536,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
     emImproveAbortRef.current = null;
     setEmImproving(false);
     setEmProposed(null);
+    setEmImproveMessage(null);
     if (!base) { setEmLoading(false); toast && toast('Log this from the Social tab: influencers have no correspondence store.', 'warn'); return; }
     window.tjkMutate(`${base}/draft`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ override }) })
       .then(r => r.json())
@@ -542,20 +568,23 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   };
   const improveEmailDraft = () => {
     if (!draft?.surfaceId || emImproving) return;
-    const snapshot = emailBody;
+    const snapshot = { body: emailBody, subject: emSubject };
     const controller = new AbortController();
     emImproveAbortRef.current?.abort();
     emImproveAbortRef.current = controller;
     setEmImproveSnapshot(snapshot);
     setEmImproving(true);
     setEmProposed(null);
+    setEmImproveMessage(null);
     window.tjkMutate('/api/drafts/improve', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        body: snapshot,
-        subject: emSubject,
+        body: snapshot.body,
+        subject: snapshot.subject,
         surfaceId: draft.surfaceId,
         recipientFirst: firstName,
+        fixes: draft.review?.topFixes || [],
+        gradeContext: draft.gradeContext,
         originalScore: typeof draft.review?.score === 'number' ? draft.review.score : null,
         ...(draft.gradeContext?.appId != null
           ? { appId: draft.gradeContext.appId }
@@ -566,13 +595,31 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
       signal: controller.signal,
     }).then(r => r.json()).then(res => {
       if (res.error) throw new Error(res.error);
+      setDraft(current => {
+        if (!current) return current;
+        const unchanged = (current.body || '') === snapshot.body
+          && (current.subject || '') === snapshot.subject;
+        return {
+          ...current,
+          review: res.originalReview || current.review,
+          reviewOf: res.originalReview ? (unchanged ? 'independent' : 'original') : current.reviewOf,
+          reviewPending: false,
+        };
+      });
+      if (!res.improved) {
+        setEmImproveMessage(['grade-failed', 'grade-incomplete'].includes(res.reason)
+          ? 'Could not compare versions. Try again.'
+          : 'No better version found. Keep yours.');
+        return;
+      }
       setEmProposed(res.draft ? {
         ...res.draft,
-        originalScore: res.originalScore,
+        originalScore: res.originalReview?.score ?? null,
         newScore: res.review?.score ?? null,
         review: res.review || null,
         reviewOf: res.reviewOf || 'independent',
       } : null);
+      setEmImproveMessage(null);
     }).catch(e => {
       if (e.name !== 'AbortError' && toast) toast(e.message, 'error');
     }).finally(() => {
@@ -582,7 +629,8 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   };
   const replaceEmailDraft = () => {
     if (!emProposed || !draft) return;
-    if (emailBody !== emImproveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
+    if ((emailBody !== emImproveSnapshot.body || emSubject !== emImproveSnapshot.subject)
+      && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
     emGradeAbortRef.current?.abort();
     emGradeGenerationRef.current++;
     setDraft(d => ({
@@ -718,6 +766,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
           </div>
         </div>
         {note && window.DraftScoreBadge && <window.DraftScoreBadge review={note.review} reviewOf={note.reviewOf} pending={note.reviewPending} onRerun={note.surfaceId ? rerunLiReview : null} onImprove={note.surfaceId ? improveLiDraft : null} busy={liReviewing} improving={liImproving} />}
+        {liImproveMessage && <div className="mono" style={{ marginTop: 4, fontSize: 11, color: 'var(--text-mute)' }}>{liImproveMessage}</div>}
         <DraftBlockBanner block={liBlock} />
         {note ? <div style={{ marginTop: 8 }}>
           <textarea value={note.response || ''} onChange={e => setLiBody(e.target.value)} rows={6} aria-label="Editable LinkedIn draft"
@@ -767,6 +816,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
           </div>
         </div>
         {draft && window.DraftScoreBadge && <window.DraftScoreBadge review={draft.review} reviewOf={draft.reviewOf} pending={draft.reviewPending} onRerun={draft.surfaceId ? rerunEmailReview : null} onImprove={draft.surfaceId ? improveEmailDraft : null} busy={emReviewing} improving={emImproving} />}
+        {emImproveMessage && <div className="mono" style={{ marginTop: 4, fontSize: 11, color: 'var(--text-mute)' }}>{emImproveMessage}</div>}
         <DraftBlockBanner block={emailBlock} />
         {draft ? <div style={{ marginTop: 8 }}>
           <input value={emSubject} onChange={e => setEmSubject(e.target.value)} placeholder="Subject"

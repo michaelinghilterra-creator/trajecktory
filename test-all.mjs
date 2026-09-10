@@ -543,6 +543,7 @@ for (const suite of [
   'tests/stale-contacts.test.mjs',
   'tests/linkedin-acceptance.test.mjs',
   'tests/draft-endpoints.test.mjs',
+  'tests/draft-improve.test.mjs',
   'tests/draft-guardrail.test.mjs',
   'tests/draft-recipient.test.mjs',
   'tests/api-key-error.test.mjs',

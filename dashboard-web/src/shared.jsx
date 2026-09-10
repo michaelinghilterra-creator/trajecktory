@@ -146,7 +146,7 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, pending, o
             alignItems: "center",
           }}
         >
-          {scorePrefix}{review.score}/100
+          {scorePrefix}{review.score}/100{review.incomplete ? ' (partial)' : ''}
           {scoreProvenance && <span style={{ color: 'var(--text-mute)', fontSize: 10 }}>{scoreProvenance}</span>}
           <span style={{
             display: "inline-block",

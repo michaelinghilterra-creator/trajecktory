@@ -242,14 +242,28 @@ const improveRes = await post('/api/drafts/improve', {
 });
 check(improveRes.status === 200
   && improveRes.body.ok === true
-  && improveRes.body.improved === true
-  && typeof improveRes.body.draft?.body === 'string'
-  && improveRes.body.draft.body.length > 0
+  && improveRes.body.improved === false
+  && improveRes.body.draft === null
   && improveRes.body.review?.score > 0
+  && improveRes.body.originalReview?.score === improveRes.body.review?.score
   && improveRes.body.reviewOf === 'independent'
-  && improveRes.body.originalScore === 100
+  && !Object.hasOwn(improveRes.body, 'originalScore')
   && JSON.stringify(improveRes.body.original) === JSON.stringify(improveOriginal),
-'improve returns even a lower-scoring rewrite with both scores and the echoed input');
+'improve withholds a rewrite that does not beat the freshly regraded original by three points');
+
+const improveTooManyFixes = await post('/api/drafts/improve', {
+  ...improveOriginal,
+  surfaceId: 'ta_email',
+  fixes: Array.from({ length: 9 }, (_, index) => `Fix ${index + 1}`),
+});
+check(improveTooManyFixes.status === 400, 'improve rejects more than eight supplied fixes');
+
+const improveOversizedFix = await post('/api/drafts/improve', {
+  ...improveOriginal,
+  surfaceId: 'ta_email',
+  fixes: ['x'.repeat(501)],
+});
+check(improveOversizedFix.status === 400, 'improve rejects a supplied fix longer than 500 characters');
 
 const improveMissingApp = await post('/api/drafts/improve', {
   ...improveOriginal,
@@ -307,8 +321,9 @@ const improveTemplatedAsk = await post('/api/drafts/improve', {
 });
 check(improveTemplatedAsk.status === 200
   && improveTemplatedAsk.body.ok === true
-  && typeof improveTemplatedAsk.body.draft?.body === 'string',
-  'improve succeeds and returns a draft when the output contains a templated ask');
+  && improveTemplatedAsk.body.draft === null
+  && improveTemplatedAsk.body.review?.templatedAskWarning === true,
+  'improve comparison grades still cap a templated ask and withhold a non-improving rewrite');
 
 process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
   critique: { weakest_dimension: 'clarity', fixes: ['Shorten the note.'] },
@@ -318,10 +333,21 @@ process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
   ],
   body: 'x'.repeat(350),
 });
+const connectGrade = (score, explanation) => JSON.stringify({
+  dimensions: ['personalization', 'relevance', 'ask_strength', 'clarity', 'authenticity']
+    .map((id) => ({ id, score, explanation })),
+  top_fixes: ['Keep the relevant opening.'],
+});
+process.env.TJK_FAKE_LLM_SEQ = JSON.stringify([
+  JSON.stringify({ body: 'x'.repeat(350) }),
+  connectGrade(5, 'The original is generic.'),
+  connectGrade(8, 'The rewrite is relevant.'),
+]);
 const improveConnectNote = await post('/api/drafts/improve', {
   body: 'Original connection note.',
   surfaceId: 'connect_note_generic',
 });
+delete process.env.TJK_FAKE_LLM_SEQ;
 check(improveConnectNote.status === 200 && improveConnectNote.body.draft?.body.length === 300,
   'improve hard fits character capped surfaces to the profile limit');
 
@@ -363,9 +389,9 @@ check(!liFollowupBlock.includes('${cvExcerpt}') && !liFollowupBlock.includes('${
 const directQuestionRule = 'Phrase it as a direct question. Do not use the words point me, pointer, whoever, or the right person.';
 check(liFollowupSource.includes(directQuestionRule) && targetTalentSource.includes(directQuestionRule),
   'LinkedIn and target-talent tier asks require a direct question and ban templated redirect wording');
-const notConnectedRule = 'You are not connected on LinkedIn yet. Do not say you connected, since connecting, or good to reconnect.';
+const notConnectedRule = 'You are not connected on LinkedIn yet. Do not say you connected, since connecting, since we last connected, since we connected, or good to reconnect.';
 check(liFollowupBlock.includes(notConnectedRule) && targetTalentSource.includes(notConnectedRule),
-  'both not-connected LinkedIn DM prompts prohibit accepted-connection wording');
+  'both not-connected LinkedIn DM prompts prohibit every accepted-connection phrase');
 const referralSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/referrals.mjs'), 'utf8');
 check((referralSource.match(/\$\{referralAsk\(appliedRole\)\}/g) || []).length === 2
   && !referralSource.includes('tierAsk(')
@@ -373,11 +399,14 @@ check((referralSource.match(/\$\{referralAsk\(appliedRole\)\}/g) || []).length =
   'referral email and DM use the referral ask independently of recipient tier');
 
 const draftsSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/drafts.mjs'), 'utf8');
-check(/gradeIndependently\(body, surfaceId,[\s\S]*?\.\.\.recipientContext/.test(draftsSource),
-  '/api/drafts/review forwards validated recipient context to the independent grader');
-check(/buildImprovePrompt\(surfaceId,[\s\S]*?\.\.\.recipientContext/.test(draftsSource)
-  && /gradeIndependently\(finished\.body, surfaceId,[\s\S]*?\.\.\.recipientContext/.test(draftsSource),
-  '/api/drafts/improve forwards recipient context to improvement and re-grade prompts');
+check(/const contextOptions = draftGradeContext\(gradeContext\)/.test(draftsSource)
+  && /gradeIndependently\(body, surfaceId,[\s\S]*?\.\.\.contextOptions/.test(draftsSource),
+  '/api/drafts/review uses the shared validated grading context');
+check(/const contextOptions = draftGradeContext\(gradeContext, appId\)/.test(draftsSource)
+  && /buildImprovePrompt\(surfaceId,[\s\S]*?\.\.\.contextOptions/.test(draftsSource)
+  && /const gradeOptions = \{[\s\S]*?\.\.\.contextOptions/.test(draftsSource)
+  && /Promise\.all\(\[[\s\S]*?gradeIndependently\(body[\s\S]*?gradeIndependently\(finished\.body/.test(draftsSource),
+  '/api/drafts/improve uses one shared context for its rewrite and parallel comparison grades');
 
 // Shut down cleanly and let the event loop DRAIN rather than process.exit() —
 // on Windows a forced exit that races a mid-close handle (the server socket or

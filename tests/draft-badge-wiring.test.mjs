@@ -35,6 +35,11 @@ for (const name of surfaces) {
     && editAwareGrades >= (name === 'connect.jsx' ? 2 : 1),
   `${name} labels every completed grade as original when the graded body or subject was edited`);
   check(/gradeContext\?\.appId/.test(source), `${name} prefers gradeContext appId for draft improvement`);
+  const fixPayloads = (source.match(/fixes: .*review\?\.topFixes \|\| \[\]/g) || []).length;
+  const contextPayloads = (source.match(/gradeContext: .*\.gradeContext/g) || []).length;
+  check(fixPayloads >= (name === 'connect.jsx' ? 2 : 1)
+    && contextPayloads >= (name === 'connect.jsx' ? 4 : 2),
+  `${name} sends the visible fixes and stored grade context when improving`);
   check(/(?:setProposedDraft|setLiProposed|setEmProposed)\((?:d|res)\.draft \? \{/.test(source), `${name} stores improve output and both scores as a proposal`);
   check(source.includes('new AbortController()') && source.includes('signal: controller.signal'), `${name} makes improvement cancellable`);
   check(!source.includes("reviewOf: 'self'") && !source.includes("setReviewOf('self')"), `${name} never labels generated reviews as self-scored`);
@@ -44,6 +49,15 @@ for (const name of surfaces) {
     && !source.includes('Current:') && source.includes('Improved:')
     && source.includes('newScore -') && source.includes('review?.dimensions'),
   `${name} labels reviews independently and shows the proposed score delta and dimensions`);
+  check(source.includes("'No better version found. Keep yours.'")
+    && source.includes("'Could not compare versions. Try again.'")
+    && source.includes("'grade-incomplete'")
+    && source.includes('originalReview'),
+  `${name} withholds failed or incomplete comparisons, explains why, and refreshes the original badge`);
+  const improveEditAwareGrades = (source.match(/originalReview \? \(unchanged \? 'independent' : 'original'\)/g) || []).length;
+  check(source.includes('snapshot.body') && source.includes('snapshot.subject')
+    && improveEditAwareGrades >= (name === 'connect.jsx' ? 2 : 1),
+  `${name} labels the comparison grade as original when body or subject changed in flight`);
 }
 
 const shared = read('shared.jsx');
@@ -61,6 +75,7 @@ check(!shared.includes('Get independent review'), 'DraftScoreBadge removes the r
 check(shared.includes('independent'), 'DraftScoreBadge labels an independent score');
 check(shared.includes("reviewOf === 'original' ? 'was ' : ''"), 'DraftScoreBadge keeps the was prefix for an original score');
 check(shared.includes('onImprove &&') && shared.includes('Improve this draft'), 'DraftScoreBadge gates and labels the improve button');
+check(shared.includes("review.incomplete ? ' (partial)' : ''"), 'DraftScoreBadge labels incomplete review scores as partial');
 
 const jsxFiles = readdirSync(SRC).filter(name => name.endsWith('.jsx'));
 check(jsxFiles.every(name => !read(name).includes('reviewOf: null')), 'no JSX file sets reviewOf to null');

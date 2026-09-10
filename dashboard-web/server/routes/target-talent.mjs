@@ -359,7 +359,7 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
 
 ${connected
   ? 'YOU ARE ALREADY CONNECTED (they accepted the invite). Do NOT say you sent a connection request, do NOT ask whether it arrived, and do NOT imply the connection is pending.'
-  : 'Write a real, purposeful message. Do NOT write "I would like to connect" — this is a message, not a new invite. You are not connected on LinkedIn yet. Do not say you connected, since connecting, or good to reconnect.'}
+  : 'Write a real, purposeful message. Do NOT write "I would like to connect" — this is a message, not a new invite. You are not connected on LinkedIn yet. Do not say you connected, since connecting, since we last connected, since we connected, or good to reconnect.'}
 
 == THE CONTACT ==
 Name:    ${r.salute || ''} ${r.first} ${r.last}

@@ -1,6 +1,6 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
-import { checkTemplatedAsk, checkUnsourcedNumbers, gradeIndependently } from '../lib/draft-grader.mjs';
+import { gradeIndependently } from '../lib/draft-grader.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { loadCompanyResearch } from '../lib/report-research.mjs';
@@ -10,8 +10,6 @@ import {
   buildImprovePrompt,
   getProfile,
   parseReviewed,
-  reviewFailureReason,
-  weightedScore,
 } from '../../../lib/outreach-rubric.mjs';
 import { getNarrative } from '../lib/profile.mjs';
 
@@ -41,6 +39,24 @@ function gradeContextFields(value) {
   };
 }
 
+function draftGradeContext(gradeContext, fallbackAppId) {
+  const context = gradeContext && typeof gradeContext === 'object' && !Array.isArray(gradeContext)
+    ? gradeContext
+    : null;
+  const contextAppId = context
+    && (typeof context.appId === 'number' || typeof context.appId === 'string')
+    ? context.appId
+    : fallbackAppId;
+  const narrative = getNarrative();
+  return {
+    cvExcerpt: readOptionalProjectFile(ROOT_DIR, 'cv.md'),
+    proofPoints: narrative.proofPoints,
+    superpowers: narrative.superpowers,
+    companyResearch: researchForApplication(contextAppId),
+    ...gradeContextFields(context),
+  };
+}
+
 router.post('/api/drafts/review', async (req, res) => {
   try {
     const { body, subject, surfaceId, gradeContext } = req.body || {};
@@ -62,24 +78,11 @@ router.post('/api/drafts/review', async (req, res) => {
     // Generation grades evidence against the CV plus the narrative proof points.
     // Feed the independent grader the same sources, or the two disagree on the
     // evidence dimension by construction and the calibration gap is meaningless.
-    const narrative = getNarrative();
-    const context = gradeContext && typeof gradeContext === 'object' && !Array.isArray(gradeContext)
-      ? gradeContext
-      : null;
-    const contextAppId = context
-      && (typeof context.appId === 'number' || typeof context.appId === 'string')
-      ? context.appId
-      : undefined;
-    const companyResearch = researchForApplication(contextAppId);
-    const recipientContext = gradeContextFields(context);
+    const contextOptions = draftGradeContext(gradeContext);
     const review = await gradeIndependently(body, surfaceId, {
       model: gradeModel(),
       subject: typeof subject === 'string' ? subject : '',
-      cvExcerpt: readOptionalProjectFile(ROOT_DIR, 'cv.md'),
-      proofPoints: narrative.proofPoints,
-      superpowers: narrative.superpowers,
-      companyResearch,
-      ...recipientContext,
+      ...contextOptions,
     });
 
     if (!review) {
@@ -94,7 +97,12 @@ router.post('/api/drafts/review', async (req, res) => {
 
 router.post('/api/drafts/improve', async (req, res) => {
   try {
-    const { body, subject, surfaceId, recipientFirst, appId, gradeContext, originalScore = null } = req.body || {};
+    const {
+      body, subject, surfaceId, fixes = [], gradeContext, appId,
+      recipientFirst: _recipientFirst, originalScore: _originalScore,
+    } = req.body || {};
+    void _recipientFirst;
+    void _originalScore;
 
     if (!body || typeof body !== 'string' || !body.trim()) {
       return res.status(400).json({ error: 'body is required and must be a non-empty string.' });
@@ -102,31 +110,22 @@ router.post('/api/drafts/improve', async (req, res) => {
     if (!surfaceId || !SURFACES.includes(surfaceId)) {
       return res.status(400).json({ error: `surfaceId must be one of: ${SURFACES.join(', ')}` });
     }
+    if (!Array.isArray(fixes) || fixes.length > 8
+      || fixes.some((fix) => typeof fix !== 'string' || fix.length > 500)) {
+      return res.status(400).json({ error: 'fixes must be an array of up to 8 strings, each no longer than 500 characters.' });
+    }
 
     const profile = getProfile(surfaceId);
     if (!profile?.rubric) {
       return res.status(400).json({ error: `surfaceId ${surfaceId} is not graded by the rubric.` });
     }
 
-    const narrative = getNarrative();
-    const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
-    const context = gradeContext && typeof gradeContext === 'object' && !Array.isArray(gradeContext)
-      ? gradeContext
-      : null;
-    const contextAppId = context
-      && (typeof context.appId === 'number' || typeof context.appId === 'string')
-      ? context.appId
-      : appId;
-    const companyResearch = researchForApplication(contextAppId);
-    const recipientContext = gradeContextFields(context);
+    const contextOptions = draftGradeContext(gradeContext, appId);
     const prompt = buildImprovePrompt(surfaceId, {
       body,
       subject: typeof subject === 'string' ? subject : '',
-      cvExcerpt: cvMd,
-      proofPoints: narrative.proofPoints,
-      superpowers: narrative.superpowers,
-      companyResearch,
-      ...recipientContext,
+      fixes,
+      ...contextOptions,
     });
     const raw = await generateText(prompt, { model: gradeModel(), maxTokens: 2200, label: `improve:${surfaceId}` });
     const parsed = parseReviewed(raw, surfaceId);
@@ -136,46 +135,6 @@ router.post('/api/drafts/improve', async (req, res) => {
 
     const hasSubject = profile.dims.some((dimension) => dimension.id === 'subject');
     const hasCharacterCap = profile.hardCapUnit === 'chars';
-    // Use the same status vocabulary as the generation path, so a caller reads
-    // one set of codes rather than a second one invented here.
-    let reviewStatus = parsed.review ? 'ok' : `missing:${reviewFailureReason(raw, surfaceId)}`;
-    if (parsed.review && companyResearch) {
-      try {
-        const numberCheck = checkUnsourcedNumbers(
-          parsed.body,
-          cvMd,
-          narrative.proofPoints,
-          companyResearch,
-        );
-        if (!numberCheck.clean) {
-          const evidence = parsed.review.dimensions.find((dimension) => dimension.id === 'evidence');
-          if (evidence) evidence.score = Math.min(evidence.score, 3);
-          parsed.review.topFixes = [
-            ...parsed.review.topFixes,
-            ...numberCheck.flagged.filter((figure) => !parsed.review.topFixes.includes(figure)),
-          ];
-          parsed.review.score = weightedScore(parsed.review.dimensions, profile);
-          parsed.review.unsourcedWarning = true;
-        }
-      } catch {
-        reviewStatus = 'ok:unverified';
-      }
-    }
-    if (parsed.review && profile.dims.some((dimension) => dimension.id === 'ask_strength')) {
-      try {
-        const askCheck = checkTemplatedAsk(parsed.body);
-        if (!askCheck.clean) {
-          const askStrength = parsed.review.dimensions.find((dimension) => dimension.id === 'ask_strength');
-          if (askStrength) askStrength.score = Math.min(askStrength.score, 3);
-          const fix = `Replace "${askCheck.matched}" with a specific next step tied to this message, or name the person you want to reach.`;
-          if (!parsed.review.topFixes.includes(fix)) parsed.review.topFixes.push(fix);
-          parsed.review.score = weightedScore(parsed.review.dimensions, profile);
-          parsed.review.templatedAskWarning = true;
-        }
-      } catch {
-        reviewStatus = 'ok:unverified';
-      }
-    }
 
     // Map finish behavior from the rubric profile so callers cannot weaken it.
     const finished = await finishDraft({
@@ -187,27 +146,39 @@ router.post('/api/drafts/improve', async (req, res) => {
       stripSalutationFor: null,
       stripSignature: false,
       surface: surfaceId,
-      review: parsed.review,
-      reviewStatus,
+      review: null,
+      reviewStatus: 'pending',
     });
 
-    const newReview = await gradeIndependently(finished.body, surfaceId, {
+    const gradeOptions = {
       model: gradeModel(),
-      subject: finished.subject,
-      cvExcerpt: cvMd,
-      proofPoints: narrative.proofPoints,
-      superpowers: narrative.superpowers,
-      companyResearch,
-      ...recipientContext,
-    });
+      ...contextOptions,
+    };
+    const [originalReview, rewriteReview] = await Promise.all([
+      gradeIndependently(body, surfaceId, {
+        ...gradeOptions,
+        subject: typeof subject === 'string' ? subject : '',
+      }),
+      gradeIndependently(finished.body, surfaceId, {
+        ...gradeOptions,
+        subject: finished.subject,
+      }),
+    ]);
+    const gradesExist = Boolean(originalReview && rewriteReview);
+    const gradesComplete = gradesExist && !originalReview.incomplete && !rewriteReview.incomplete;
+    const improved = gradesComplete && rewriteReview.score >= originalReview.score + 3;
+    const reason = !gradesExist
+      ? 'grade-failed'
+      : !gradesComplete ? 'grade-incomplete' : null;
     return res.json({
       ok: true,
-      improved: true,
-      draft: { subject: finished.subject, body: finished.body },
-      review: newReview,
+      improved,
+      draft: improved ? { subject: finished.subject, body: finished.body } : null,
+      review: rewriteReview,
+      originalReview,
       reviewOf: 'independent',
-      originalScore,
       original: { subject, body },
+      ...(reason ? { reason } : {}),
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });

@@ -87,6 +87,30 @@ export function apiKeyErrorMessage(err) {
     + `dashboard-web/.env, or switch Setup -> Models & cost billing to your Claude plan.`;
 }
 
+let fakeLlmSequence = null;
+let fakeLlmSequenceIndex = 0;
+let fakeLlmSequenceSource = null;
+
+function nextFakeLlmResponse() {
+  const source = process.env.TJK_FAKE_LLM_SEQ;
+  if (source && source !== fakeLlmSequenceSource) {
+    fakeLlmSequenceSource = source;
+    fakeLlmSequenceIndex = 0;
+    try {
+      const parsed = JSON.parse(source);
+      fakeLlmSequence = Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')
+        ? parsed
+        : [];
+    } catch {
+      fakeLlmSequence = [];
+    }
+  }
+  if (source && fakeLlmSequenceIndex < (fakeLlmSequence?.length || 0)) {
+    return fakeLlmSequence[fakeLlmSequenceIndex++];
+  }
+  return process.env.TJK_FAKE_LLM_TEXT || '{"subject":"Stub subject","body":"Stub body."}';
+}
+
 // Unified text generation. When an ANTHROPIC_API_KEY is present we use the API
 // directly (fast, model-pinned, supports tools/thinking). Otherwise we run the
 // prompt on the user's Claude PLAN via the bundled `claude` CLI — no key needed.
@@ -97,8 +121,10 @@ export async function generateText(prompt, opts = {}) {
   // so route smoke-tests can exercise a handler's full path (including its response
   // assembly) and fail on a dangling variable the way a real click would. Default
   // is a JSON object string because most draft handlers JSON.parse the output.
-  if (process.env.TJK_FAKE_LLM) {
-    return process.env.TJK_FAKE_LLM_TEXT || '{"subject":"Stub subject","body":"Stub body."}';
+  // TJK_FAKE_LLM_SEQ accepts a JSON array of strings and returns them in call order;
+  // once exhausted it falls back to TJK_FAKE_LLM_TEXT. Sequence state resets per process.
+  if (process.env.TJK_FAKE_LLM || process.env.TJK_FAKE_LLM_SEQ) {
+    return nextFakeLlmResponse();
   }
   const { system, model, maxTokens = 1024, tools, label, ...rest } = opts;
   const path = apiKeyActive() ? 'api' : 'plan';

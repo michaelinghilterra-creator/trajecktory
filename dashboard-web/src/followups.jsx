@@ -1019,7 +1019,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   const [improving, setImproving] = useStateF(false);
   const [proposedDraft, setProposedDraft] = useStateF(null);
   const [improveMessage, setImproveMessage] = useStateF(null);
-  const [improveSnapshot, setImproveSnapshot] = useStateF('');
+  const [improveSnapshot, setImproveSnapshot] = useStateF({ body: '', subject: '' });
   const improveAbortRef = React.useRef(null);
   const gradeAbortRef = React.useRef(null);
   const gradeGenerationRef = React.useRef(0);
@@ -1121,7 +1121,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
 
   const improveDraft = () => {
     if (!draft?.surfaceId || improving) return;
-    const snapshot = draft.body || '';
+    const snapshot = { body: draft.body || '', subject: draft.subject || '' };
     const controller = new AbortController();
     improveAbortRef.current?.abort();
     improveAbortRef.current = controller;
@@ -1133,25 +1133,38 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        body: snapshot,
-        subject: draft.subject || '',
+        body: snapshot.body,
+        subject: snapshot.subject,
         surfaceId: draft.surfaceId,
         recipientFirst: '',
         appId: draft.gradeContext?.appId != null ? draft.gradeContext.appId : appId,
+        fixes: draft.review?.topFixes || [],
+        gradeContext: draft.gradeContext,
         originalScore: typeof draft.review?.score === 'number' ? draft.review.score : null,
       }),
       signal: controller.signal,
     }).then(r => r.json()).then(d => {
       if (d.error) throw new Error(d.error);
+      setDraft(current => {
+        if (!current) return current;
+        const unchanged = (current.body || '') === snapshot.body
+          && (current.subject || '') === snapshot.subject;
+        return {
+          ...current,
+          review: d.originalReview || current.review,
+          reviewOf: d.originalReview ? (unchanged ? 'independent' : 'original') : current.reviewOf,
+          reviewPending: false,
+        };
+      });
       if (!d.improved) {
-        setImproveMessage(
-          `Rewrite scored ${d.newScore !== null ? Math.round(d.newScore) : '?'}/100 vs your current ${d.originalScore !== null ? Math.round(d.originalScore) : '?'}/100 — no improvement. Your draft is unchanged.`
-        );
+        setImproveMessage(['grade-failed', 'grade-incomplete'].includes(d.reason)
+          ? 'Could not compare versions. Try again.'
+          : 'No better version found. Keep yours.');
         return;
       }
       setProposedDraft(d.draft ? {
         ...d.draft,
-        originalScore: d.originalScore,
+        originalScore: d.originalReview?.score ?? null,
         newScore: d.review?.score ?? null,
         review: d.review || null,
         reviewOf: d.reviewOf || 'independent',
@@ -1167,7 +1180,8 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
 
   const replaceWithProposed = () => {
     if (!proposedDraft || !draft) return;
-    if ((draft.body || '') !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
+    if (((draft.body || '') !== improveSnapshot.body || (draft.subject || '') !== improveSnapshot.subject)
+      && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
     gradeAbortRef.current?.abort();
     gradeGenerationRef.current++;
     setDraft({ ...draft, subject: proposedDraft.subject || draft.subject || '', body: proposedDraft.body || '', review: proposedDraft.review || null, reviewOf: proposedDraft.reviewOf || 'independent', reviewPending: false });
@@ -1303,6 +1317,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
               </div>
             </div>
             {window.DraftScoreBadge && <window.DraftScoreBadge review={draft.review} reviewOf={draft.reviewOf} pending={draft.reviewPending} onRerun={rerunReview} onImprove={improveDraft} busy={reviewing} improving={improving} />}
+            {improveMessage && <div className="mono" style={{ marginTop: 4, fontSize: 11, color: 'var(--text-mute)' }}>{improveMessage}</div>}
             <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 6 }}>
               <span className="mono dim" style={{ fontSize: 11 }}>Subject</span>
               <input className="inp" style={{ flex: 1 }} value={draft.subject || ''} onChange={e => setDraft({ ...draft, subject: e.target.value })} />
@@ -1313,12 +1328,6 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
                 setProposedDraft(null);
                 setImproveMessage(null);
               }} />
-            {improveMessage && (
-              <div className="improve-no-gain" style={{ marginTop: 8, padding: 10, border: '1px solid rgba(245,158,11,0.35)', borderRadius: 6, background: 'rgba(245,158,11,0.08)', color: 'var(--text-mute)', fontSize: 12 }}>
-                {improveMessage}
-                <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={() => setImproveMessage(null)}>Dismiss</button>
-              </div>
-            )}
             {proposedDraft && (
               <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel-2)' }}>
                 <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>

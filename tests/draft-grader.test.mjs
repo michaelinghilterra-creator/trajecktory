@@ -194,11 +194,23 @@ Every top fix must be a concrete rewrite instruction that names the replacement,
 Score harshly. Reserve 8 or above for a message that would actually get a reply.`,
 ].join('\n\n');
 const capturedImprove = [
-  "Grade the message below against the rubric. Then rewrite the message, applying ONLY the specific fixes you named and nothing else. Do not rephrase, restructure, consolidate, or rewrite any sentence not directly targeted by a named fix. Every sentence not covered by a fix must appear in the rewrite verbatim or nearly verbatim. Preserve the greeting, sign-off, every named person, every specific company detail, every metric, and the original sentence order wherever no fix applies. Introduce no claim not grounded in the supplied sources.",
-  'Use a named, checkable fact from the company research to replace any generic praise. If the research contains nothing specific enough, DELETE the generic sentence rather than inventing a fact or keeping the vague version.',
-  capturedRubricBody,
+  'Rewrite the message below, applying ONLY the fixes listed. Keep every sentence no fix targets verbatim or nearly verbatim. Keep the greeting, sign-off, named people, metrics, the role named, and sentence order wherever no fix applies.',
+  'Never remove a company-specific fact that appears in the company research. If a fix needs a fact that is not in the sources below, skip that fix. Never add placeholders or blanks such as ___, [role], or req #. Keep the closing ask a direct question; never introduce the words point me, pointer, whoever, or the right person.',
+  '== FIXES TO APPLY ==\n- Replace "Draft" with "Specific draft".',
+  `Length norm: 10 words.
+Hard cap: 12 chars.
+Required body paragraphs: exactly 2.`,
+  `== HOW TO WRITE IT ==
+${expectedWritingBullets[0]}
+${expectedWritingBullets[4]}
+${expectedWritingBullets[5]}
+${expectedWritingBullets[6]}
+${expectedWritingBullets[7]}`,
+  capturedRubricBody.slice(capturedRubricBody.indexOf('== RECIPIENT AND OPENING ==')),
   '== MESSAGE TO IMPROVE ==\nDraft body.',
-  capturedGenerationContract,
+  `== OUTPUT CONTRACT ==
+Return exactly one JSON object.
+{"body": "<...>"}`,
 ].join('\n\n');
 const savedShortPublic = { ...RUBRIC_PROFILES.short_public, dims: [...RUBRIC_PROFILES.short_public.dims] };
 Object.assign(RUBRIC_PROFILES.short_public, {
@@ -221,6 +233,7 @@ const capturedOpts = {
   appliedDate: '2026-01-01',
   subject: 'Ignored',
   body: 'Draft body.',
+  fixes: ['Replace "Draft" with "Specific draft".'],
 };
 check(buildRubricBlock('li_comment', capturedOpts) === capturedRubric,
   'buildRubricBlock matches the updated recipient-context byte fixture');

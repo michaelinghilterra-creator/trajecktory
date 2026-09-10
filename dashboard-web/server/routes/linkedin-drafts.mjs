@@ -555,7 +555,7 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
 
 ${connected
   ? 'YOU ARE ALREADY CONNECTED. The invite was accepted, so do NOT say you sent a request, do NOT ask whether it arrived, and do NOT imply the connection is still pending. A short, warm nod to having just connected is fine; then go to the real reason for writing.'
-  : 'THIS IS NOT A NEW CONNECTION REQUEST. The invite is already out, so do not write "I would like to connect" or restate it. Write the NEXT message: a real, purposeful note that moves things forward. You are not connected on LinkedIn yet. Do not say you connected, since connecting, or good to reconnect.'}
+  : 'THIS IS NOT A NEW CONNECTION REQUEST. The invite is already out, so do not write "I would like to connect" or restate it. Write the NEXT message: a real, purposeful note that moves things forward. You are not connected on LinkedIn yet. Do not say you connected, since connecting, since we last connected, since we connected, or good to reconnect.'}
 
 THE RECIPIENT:
 - Name: ${name}
