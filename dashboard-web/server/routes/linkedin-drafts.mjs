@@ -2,11 +2,11 @@
 // keep each module focused and under the size budget.
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
-import { generateText, readOptionalProjectFile, draftModel, gradeModel } from '../lib/anthropic.mjs';
+import { generateText, readOptionalProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
-import { generateWithRubric, gradeIndependently } from '../lib/draft-grader.mjs';
+import { generateWithRubric } from '../lib/draft-grader.mjs';
 import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { loadInfluencer, toneInstruction, flattenConnectNote, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
@@ -274,6 +274,7 @@ HARD RULES:
       maxTokens: rubricActive ? 800 : 220,
       cvMd,
       plainTextFallback: true,
+      mode: 'write',
     });
     if (result.error) return res.status(500).json({ error: 'Could not parse connection note from model output' });
 
@@ -294,17 +295,13 @@ HARD RULES:
       hardFit: profile.hardCap,
       cadence: false,
     });
-    const narrative = getNarrative();
-    const independentReview = await gradeIndependently(draft.body, surfaceId, {
-      model: gradeModel(), subject: '', cvExcerpt: cvMd,
-      proofPoints: narrative.proofPoints, superpowers: narrative.superpowers,
-    });
     res.json({
       response: draft.body,
       length: draft.body.length,
-      review: independentReview,
-      reviewStatus: independentReview ? 'ok' : 'missing:independent-review',
+      review: null,
+      reviewStatus: 'pending',
       surfaceId,
+      gradeContext: { surfaceId, source: 'influencer', id: influencer.id, appId: null },
     });
   } catch (err) {
     console.error('Error generating connect request:', err);
@@ -406,7 +403,7 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     // mid-word, so it is left off here and fitConnectNote owns the cap.
     const result = await generateWithRubric(
       buildPrompt(280), 'connect_note_influencer',
-      { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true, rubricOpts: narrativeOpts },
+      { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true, rubricOpts: narrativeOpts, mode: 'write' },
     );
     if (result.error) return res.status(500).json({ error: 'Could not parse connection note from model output' });
     const note = await finishDraft({
@@ -424,11 +421,8 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     if (truncated) {
       console.warn('[connect-note] trimmed %d chars to fit the 300 cap', note.body.length - fitted.length);
     }
-    const independentReview = await gradeIndependently(fitted.text, 'connect_note_influencer', {
-      model: gradeModel(), subject: '', cvExcerpt: cvMd,
-      proofPoints: narrative.proofPoints, superpowers: narrative.superpowers,
-    });
-    res.json({ response: fitted.text, length: fitted.length, truncated, review: independentReview, reviewStatus: independentReview ? 'ok' : 'missing:independent-review', surfaceId: 'connect_note_influencer', recipient: { source: src, id: id ?? resolved?.id ?? null, name } });
+    const gradeId = id ?? resolved?.id ?? null;
+    res.json({ response: fitted.text, length: fitted.length, truncated, review: null, reviewStatus: 'pending', surfaceId: 'connect_note_influencer', gradeContext: { surfaceId: 'connect_note_influencer', source: src, id: gradeId, appId: topApp?.id ?? null }, recipient: { source: src, id: gradeId, name } });
   } catch (err) {
     console.error('Error generating connect note:', err);
     res.status(500).json({ error: err.message });
@@ -562,6 +556,7 @@ HARD RULES:
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'li_followup', {
       model: draftModel(), maxTokens: 500, cvMd, plainTextFallback: true,
+      mode: 'write',
       rubricOpts: {
         proofPoints: narrative.proofPoints,
         superpowers: narrative.superpowers,
@@ -575,11 +570,7 @@ HARD RULES:
       reviewStatus: result.reviewStatus,
       cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
     });
-    const independentReview = await gradeIndependently(fu.body, 'li_followup', {
-      model: gradeModel(), subject: '', cvExcerpt: cvMd,
-      proofPoints: narrative.proofPoints, superpowers: narrative.superpowers,
-    });
-    res.json({ response: fu.body, length: fu.body.length, review: independentReview, reviewStatus: independentReview ? 'ok' : 'missing:independent-review', surfaceId: 'li_followup', recipient: { source: 'ta', id, name }, inmail: !connected });
+    res.json({ response: fu.body, length: fu.body.length, review: null, reviewStatus: 'pending', surfaceId: 'li_followup', gradeContext: { surfaceId: 'li_followup', source, id, appId: topApp?.id ?? null }, recipient: { source: 'ta', id, name }, inmail: !connected });
   } catch (err) {
     console.error('Error generating follow-up message:', err);
     res.status(500).json({ error: err.message });
