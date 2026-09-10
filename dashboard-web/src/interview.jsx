@@ -70,7 +70,11 @@ function splitColumns(sections) {
   const col1 = [], col2 = [];
   let run = 0;
   for (const s of secs) {
-    (run < total / 2 ? col1 : col2).push(s);
+    if (s.forceRight) {
+      col2.push(s);
+    } else {
+      (run < total / 2 ? col1 : col2).push(s);
+    }
     run += (s.cues || []).length;
   }
   return [col1, col2];
