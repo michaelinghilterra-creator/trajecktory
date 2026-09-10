@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.12.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.11.0...v3.12.0) (2026-09-10)
+
+
+### Features
+
+* honor forceRight on runsheet sections to pin to right column ([#305](https://github.com/michaelinghilterra-creator/trajecktory/issues/305)) ([48df70f](https://github.com/michaelinghilterra-creator/trajecktory/commit/48df70fb7c00496269e834c5e8cc11e9fe5b500c))
+
 ## [3.11.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.10.0...v3.11.0) (2026-09-08)
 
 
