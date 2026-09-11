@@ -7,6 +7,7 @@ process.env.TJK_FAKE_LLM = '1';
 process.env.TJK_FAKE_LLM_TEXT = '{"subject":"Fixture subject","body":"Fixture body."}';
 
 const { buildPlainContract } = await import('../lib/outreach-rubric.mjs');
+const { buildPacketFromFields } = await import('../lib/outreach-packet.mjs');
 const { AUGUST_PLUS_RULE, armInstructions, buildPrompt } = await import('../scripts/outreach-ab-v2/arms.mjs');
 const { renderFactBlock } = await import('../scripts/outreach-ab-v2/packet.mjs');
 const { renderPanel } = await import('../scripts/outreach-ab-v2/panel.mjs');
@@ -110,6 +111,29 @@ test('fact block makes no-application and pending-connection states explicit', (
   const fact = renderFactBlock(packetFixture({ application: null }));
   assert.match(fact, /He has not submitted an application at this company; do not claim he applied\./);
   assert.match(fact, /Your connection request from 2026-08-20 has not been accepted; you are not connected\./);
+});
+
+test('packet notes stay compatible and resist polynomial scans', () => {
+  const packetForNotes = notes => buildPacketFromFields({
+    kind: 'li_followup',
+    name: 'Taylor Ng',
+    company: 'Example Co',
+    notes,
+    tier: 'exec',
+    relatedApps: [],
+    application: null,
+    research: '',
+    sender: { fullName: 'Morgan Lee', firstName: 'Morgan', cv: '# Morgan Lee', articleDigest: '', proofPoints: [] },
+  });
+
+  const ordinary = packetForNotes('Owns revenue systems [tier:exec] · [src:agent:x] · met at a summit');
+  assert.equal(ordinary.recipient.notesExcerpt, 'Owns revenue systems · met at a summit');
+
+  for (const notes of ['['.repeat(100000), `a${' '.repeat(100000)}·x`]) {
+    const startedAt = performance.now();
+    packetForNotes(notes);
+    assert.ok(performance.now() - startedAt < 500);
+  }
 });
 
 test('panel is blind, escaped, script-free, and has two named pill groups', () => {
