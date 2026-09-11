@@ -113,7 +113,7 @@ export const SECTIONS = [
   },
   {
     key: 'grade', label: 'Draft Review (on demand)', envKey: 'TJK_GRADE_MODEL',
-    hint: 'Grades each draft in the background after it appears, and powers Improve this draft.',
+    hint: "Off by default (TJK_DRAFT_GRADING=on to enable): in a blind test the score matched the user's picks 1 time in 10.",
     options: ['sonnet', 'haiku'], default: 'sonnet',
     tokensPerUnit: 6_000, split: { in: 0.75, out: 0.25 },
     unitLabel: 'review', unitsPerRun: 1,
@@ -280,6 +280,7 @@ export function modelsState({ keyPresent, evalBatch } = {}) {
 
   return {
     hasKey,
+    draftGrading: String(process.env.TJK_DRAFT_GRADING || 'off').trim().toLowerCase() === 'on',
     keyPresent: !!keyPresent,
     billingMode,
     sections,

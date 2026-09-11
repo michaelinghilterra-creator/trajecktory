@@ -1,25 +1,32 @@
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
-import { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence, resolveReferralLink } from '../lib/referrals.mjs';
+import { parseReferralsMd, referralTitle, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence, resolveReferralLink } from '../lib/referrals.mjs';
 import { reconcile, cleanupStale, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
 import { detectAcceptances, computePendingAcceptances } from '../lib/linkedin-acceptance.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
-import { readProjectFile, readOptionalProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
+import { generateText, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
-import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { getIdentity, getOutreachPolicy, getNarrative } from '../lib/profile.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
-import { ACTIVE_STATUSES } from '../lib/statuses.mjs';
+import { ACTIVE_STATUSES, findSubmittedApplication } from '../lib/statuses.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
 import { loadEnvKey } from '../../../verify-contacts.mjs';
 import { findAndVerify, hunterSearchesLeft } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { computeReferralFollowups } from '../lib/followups.mjs';
 import { snoozeToday, readSnooze, writeSnooze, pruneSnooze, isMuted } from '../lib/sidecars.mjs';
+import { resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
+import { buildPacket } from '../../../lib/outreach-packet.mjs';
+import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finishOptionsFor, wrapReferralDraft } from '../../../lib/outreach-voice.mjs';
 
 export const router = express.Router();
+
+function referralAsk(appliedRole) {
+  if (!appliedRole) return 'A good ask here is whether the team is hiring for the kind of role he is targeting.';
+  return `A good ask here is to flag his application for the ${appliedRole} role to the hiring manager.`;
+}
 
 // Split a referral's single Name field into first / last for the email finder,
 // which keys on (company, first, last). First token is the first name, the rest
@@ -324,16 +331,31 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
 // go through /api/linkedin-drafts/connect-note; this path is the real message.
 const REF_TOPIC_GUIDANCE = {
   reconnect: 'RECONNECT (no ask yet). The goal is purely to reopen the relationship after time apart. Reference how you know each other warmly and specifically, share a light line on what you are up to now, and invite a catch-up. Do NOT make a referral ask in this message — the ask comes after they reply.',
-  ask: 'THE REFERRAL ASK. You are back in touch (or already close). Make one specific, confident ask: flag the application with the right person at their company, or make a direct intro to whoever is hiring. Name the role. Offer a short blurb or resume as context if they need it. The ask is direct and peer-to-peer — no pre-emptive apologies, no explicit permission to say no, no escape hatches. Write as an executive asking a peer for a reasonable professional favor, not as a candidate hoping not to be a burden.',
+  ask: 'THE REFERRAL ASK. You are back in touch (or already close). Make one specific, confident ask using the role context below. Offer a short blurb or resume as context if they need it. The ask is direct and peer-to-peer — no pre-emptive apologies, no explicit permission to say no, no escape hatches. Write as an executive asking a peer for a reasonable professional favor, not as a candidate hoping not to be a burden.',
   'intro-thanks': 'THANK-YOU FOR AN INTRODUCTION. They made an intro or flagged your application. Thank them warmly and specifically, tell them briefly how it is going or what your next step is, and make clear there is no further ask. Close the loop so they feel the intro was worth making.',
   nudge: 'GENTLE NUDGE. An earlier ask has gone unanswered. Follow up once, briefly. Re-state the ask in one line and move on. No guilt, no groveling, no explicit outs. The tone is a peer checking in, not someone apologizing for existing.',
 };
+
+const REF_LI_MODE_GUIDANCE = {
+  reply: 'REPLY. Respond directly and specifically to their most recent message in the thread below. Pick up what they actually said, answer or advance it, and keep it warm. Do not restart the conversation or re-introduce yourself.',
+  'followup-sent': 'FOLLOW UP ON YOUR LAST MESSAGE. Your last note has gone unanswered. Send one light, no-guilt bump that references the earlier note specifically (name what it was about), adds one small new thing or an easy out, and never uses needy filler like "just following up" or "circling back".',
+};
+
+export function buildReferralAugustPrompt(packet, { topic = '', topicGuidance = '', referralAskLine = '' } = {}) {
+  if (!topic || topic === 'reconnect') return buildAugustPrompt(packet);
+  return buildAugustPromptWithGuidance({ ...packet, goal: topicGuidance || packet.goal }, {
+    messageIntent: topicGuidance,
+    guidance: topic === 'ask' ? [referralAskLine] : [],
+  });
+}
 
 router.post('/api/referrals/:id/draft', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const ref = parseReferralsMd().find(r => r.id === id);
     if (!ref) return res.status(404).json({ error: 'Referral not found' });
+    const recipientRole = referralTitle(ref.notes);
+    const recipientTier = resolveInfluenceTier({ notes: ref.notes, title: recipientRole }).tier;
 
     const firstName = splitName(ref.name).first || (ref.name || 'there').trim();
     const me = getIdentity();
@@ -351,7 +373,6 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
 
     const cvMd            = readProjectFile(ROOT_DIR, 'cv.md');
     const profileMd       = readVoiceRules(ROOT_DIR);
-    const articleDigestMd = readOptionalProjectFile(ROOT_DIR, 'article-digest.md');
 
     const contactLabel = `someone in ${me.firstName}'s own professional network (a warm personal contact, NOT a cold recruiter lead)`;
     const contactBlock = `Name:            ${ref.name}\nHow you know them: ${ref.how || '(unspecified)'}\nWhere now / reach: ${ref.where || '(unspecified)'}\nTarget through them: ${ref.target || '(unspecified)'}`;
@@ -370,71 +391,30 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
         || (ref.status === 'Intro Made' ? 'intro-thanks'
           : ref.status === 'Asked' ? 'nudge'
           : 'reconnect');
-      const LI_MODE_GUIDANCE = {
-        reply: 'REPLY. Respond directly and specifically to their most recent message in the thread below. Pick up what they actually said, answer or advance it, and keep it warm. Do not restart the conversation or re-introduce yourself.',
-        'followup-sent': 'FOLLOW UP ON YOUR LAST MESSAGE. Your last note has gone unanswered. Send one light, no-guilt bump that references the earlier note specifically (name what it was about), adds one small new thing or an easy out, and never uses needy filler like "just following up" or "circling back".',
-      };
-      const topicGuidance = LI_MODE_GUIDANCE[topic] || REF_TOPIC_GUIDANCE[topic] || REF_TOPIC_GUIDANCE.reconnect;
+      const topicGuidance = REF_LI_MODE_GUIDANCE[topic] || REF_TOPIC_GUIDANCE[topic] || REF_TOPIC_GUIDANCE.reconnect;
 
-      const connected = (context?.timeline || []).some(e => e.kind === 'invite-accepted');
       const relatedApps = findRelatedApps(ref.where);
       const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status)) || relatedApps[0];
-      const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
-      const relatedContext = topApp
-        ? `== LIVE APPLICATION AT ${String(ref.where || '').toUpperCase()} ==\nRole:   ${topApp.role}\nStatus: ${topApp.status} (applied ${topApp.date})\nWhen the intent is a referral ask, this is the specific opening to reference. Do NOT generalize.`
-        : `No application currently logged at ${ref.where || 'their company'}. If the intent is an ask, frame it around the kind of roles ${me.firstName} targets (see profile) rather than a specific req.`;
+      const submittedApp = findSubmittedApplication(relatedApps);
+      const appliedRole = submittedApp?.role || '';
+      const appliedDate = submittedApp?.date || '';
 
-      const prompt = `You are drafting a warm, personal LinkedIn DIRECT MESSAGE from ${me.fullName} to ${contactLabel}. This is a private 1:1 message to paste into LinkedIn, NOT an email and NOT a connection request.
-
-${connected
-  ? 'YOU ARE ALREADY CONNECTED (they accepted the invite). Do NOT say you sent a connection request, do NOT ask whether it arrived, and do NOT imply the connection is pending. This is a real message to an established connection.'
-  : 'Write a real, purposeful message. Do NOT write "I would like to connect" — this is a message, not a new invite.'}
-
-== THE CONTACT ==
-${contactBlock}
-
-${relatedContext}
-
-== ${me.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics or experience) ==
-${cvMd}
-${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md) ==\n${articleDigestMd.slice(0, 1200)}\n` : ''}
-${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
-== MESSAGE INTENT ==
-${topicGuidance}
-
-== STYLE REQUIREMENTS ==
-- Warm and personal, grounded in HOW YOU KNOW THEM above. Reference the shared history naturally.
-- LinkedIn DM voice: conversational and tight. 40 to 110 words. Never a wall of text.
-- 2 to 3 short paragraphs separated by a LITERAL \\n\\n between paragraphs, so it scans on a phone.
-- Direct, human, no corporate filler ("I hope this finds you well", "reaching out to touch base").
-- NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
-- Never invent metrics, claims, or a shared history not supported above or on the CV.
-- If (and only if) the intent is a referral ask, make it specific and direct: flag the application or intro to the right person. Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches. Use "Would you" not "Could you" for the ask — it is a direct request, not a question about capability.
-- Close with one low-friction next step or a genuine sign-off matching the intent. Do NOT ask for a call or a specific block of time.
-${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
-== BODY REQUIREMENTS ==
-- Omit a subject line.
-- Begin with 'Hi ${firstName},' on its own line, followed by a blank line before the first paragraph.
-- End with a blank line, then 'Best,' on its own line, then '${me.firstName}' on the next line.`;
-
-      const narrative = getNarrative();
-      const result = await generateWithRubric(prompt, 'referral_dm', {
-        model: draftModel(), maxTokens: 700, cvMd, plainTextFallback: true,
-        mode: 'write',
-        rubricOpts: {
-          proofPoints: narrative.proofPoints,
-          superpowers: narrative.superpowers,
-          ...(companyResearch ? { companyResearch } : {}),
-        },
-      });
-      if (result.error) return res.status(500).json({ error: 'Could not parse LinkedIn draft from model output' });
+      const packet = buildPacket({ source: 'referral', id, kind: 'referral_dm' });
+      const referralAskLine = `If (and only if) the intent is a referral ask, make it specific and trivially easy to decline. ${referralAsk(appliedRole)} A soft redirect ask is allowed. Offer to send a short blurb and resume.`;
+      const prompt = buildReferralAugustPrompt(packet, { topic, topicGuidance, referralAskLine });
+      const result = parseDraftText(await generateText(prompt, {
+        model: draftModel(), maxTokens: 900, label: `draft:${packet.surfaceId}`,
+      }));
+      if (!result?.body) return res.status(500).json({ error: 'Could not parse LinkedIn draft from model output' });
       const dm = await finishDraft({
         body: result.body, surface: 'referral_dm',
-        review: result.review,
-        reviewStatus: result.reviewStatus,
-        cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
+        cadence: false,
+        ...finishOptionsFor(packet),
       });
-      return res.json({ ok: true, draft: { subject: '', body: dm.body }, review: null, reviewStatus: 'pending', surfaceId: 'referral_dm', gradeContext: { surfaceId: 'referral_dm', source: 'referral', id, appId: topApp?.id ?? null }, messageType: topic, channel: 'linkedin', relatedApp: topApp || null });
+      return res.json({ ok: true, draft: { subject: '', body: wrapReferralDraft(dm.body, packet) }, review: null, reviewStatus: 'pending', surfaceId: 'referral_dm', gradeContext: {
+        surfaceId: 'referral_dm', source: 'referral', id, appId: topApp?.id ?? null,
+        recipientRole, recipientTier, appliedRole, appliedDate,
+      }, messageType: topic, channel: 'linkedin', relatedApp: topApp || null });
     }
 
     // REPLY mode: respond to their most recent inbound message.
@@ -492,61 +472,26 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
     // Ground the ask in a live application at their company, when one exists.
     const relatedApps = findRelatedApps(ref.where);
     const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status)) || relatedApps[0];
-    const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
-    const relatedContext = topApp
-      ? `== LIVE APPLICATION AT ${String(ref.where || '').toUpperCase()} ==\nRole:   ${topApp.role}\nStatus: ${topApp.status} (applied ${topApp.date})\nWhen the topic is a referral ask, this is the specific opening to reference. Do NOT generalize.`
-      : `No application currently logged at ${ref.where || 'their company'}. If the topic is an ask, frame it around the kind of roles ${me.firstName} targets (see profile) rather than a specific req.`;
+    const submittedApp = findSubmittedApplication(relatedApps);
+    const appliedRole = submittedApp?.role || '';
+    const appliedDate = submittedApp?.date || '';
 
-    const prompt = `You are drafting a warm, personal message from ${me.fullName} to ${contactLabel}. This is a real relationship, not a cold outreach: the tone is that of one person reaching out to another they genuinely know.
-
-== THE CONTACT ==
-${contactBlock}
-
-${relatedContext}
-
-== ${me.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics or experience) ==
-${cvMd}
-${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md) ==\n${articleDigestMd.slice(0, 1200)}\n` : ''}
-${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
-== MESSAGE INTENT ==
-${topicGuidance}
-
-== STYLE REQUIREMENTS ==
-- Warm and personal, grounded in HOW YOU KNOW THEM above. This is the single most important cue — reference the shared history naturally.
-- Direct, human, no corporate filler ("I hope this finds you well", "reaching out to touch base").
-- Maximum 130 words in body.
-- NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
-- Never invent metrics, claims, or a shared history not supported above or on the CV.
-- If (and only if) the intent is a referral ask, make it specific and direct: flag the application or intro to the right person. Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches. Use "Would you" not "Could you" for the ask — it is a direct request, not a question about capability.
-- Close with a low-friction next step or a genuine sign-off, matching the intent.
-${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slice().reverse().slice(0, 3).map(m => `--- ${m.direction} on ${m.timestamp} | Subject: ${m.subject}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold.\n` : ''}
-== SUBJECT REQUIREMENTS ==
-- Keep the subject line short and human.
-
-== BODY REQUIREMENTS ==
-- Use plain text.
-- Begin with 'Hi ${firstName},' on its own line, followed by a blank line before the first paragraph.
-- Write 2 to 4 short paragraphs separated by a literal \\n\\n between paragraphs.
-- End with a blank line, then 'Best,' on its own line, then '${me.firstName}' on the next line.`;
-
-    const narrative = getNarrative();
-    const result = await generateWithRubric(prompt, 'referral_email', {
-      model: draftModel(), maxTokens: 1024, cvMd,
-      mode: 'write',
-      rubricOpts: {
-        proofPoints: narrative.proofPoints,
-        superpowers: narrative.superpowers,
-        ...(companyResearch ? { companyResearch } : {}),
-      },
-    });
-    if (result.error) return res.status(500).json({ error: 'Could not parse draft from model output' });
+    const packet = buildPacket({ source: 'referral', id, kind: 'referral_email' });
+    const referralAskLine = `If (and only if) the intent is a referral ask, make it specific and trivially easy to decline. ${referralAsk(appliedRole)} A soft redirect ask is allowed. Offer to send a short blurb and resume.`;
+    const prompt = buildReferralAugustPrompt(packet, { topic, topicGuidance, referralAskLine });
+    const result = parseDraftText(await generateText(prompt, {
+      model: draftModel(), maxTokens: 900, label: `draft:${packet.surfaceId}`,
+    }));
+    if (!result?.body) return res.status(500).json({ error: 'Could not parse draft from model output' });
     const draft = await finishDraft({
       body: result.body, subject: result.subject, surface: 'referral_email',
-      review: result.review,
-      reviewStatus: result.reviewStatus,
-      cleaner: 'email', stripSalutationFor: null, stripSignature: false,
+      cadence: false,
+      ...finishOptionsFor(packet),
     });
-    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: null, reviewStatus: 'pending', surfaceId: 'referral_email', gradeContext: { surfaceId: 'referral_email', source: 'referral', id, appId: topApp?.id ?? null }, messageType: topic, relatedApp: topApp || null });
+    res.json({ ok: true, draft: { subject: draft.subject, body: wrapReferralDraft(draft.body, packet) }, review: null, reviewStatus: 'pending', surfaceId: 'referral_email', gradeContext: {
+      surfaceId: 'referral_email', source: 'referral', id, appId: topApp?.id ?? null,
+      recipientRole, recipientTier, appliedRole, appliedDate,
+    }, messageType: topic, relatedApp: topApp || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

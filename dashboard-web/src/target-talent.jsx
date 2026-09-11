@@ -716,9 +716,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
   const [reviewing, setReviewing] = useState(false);
   const [improving, setImproving] = useState(false);
   const [proposedDraft, setProposedDraft] = useState(null);
+  const [improveMessage, setImproveMessage] = useState(null);
   const [showProposedDims, setShowProposedDims] = useState(false);
   const [showOrigDims, setShowOrigDims] = useState(false);
-  const [improveSnapshot, setImproveSnapshot] = useState("");
+  const [improveSnapshot, setImproveSnapshot] = useState({ body: "", subject: "" });
   const improveAbortRef = useRef(null);
   const gradeAbortRef = useRef(null);
   const gradeGenerationRef = useRef(0);
@@ -747,6 +748,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     setCurrentDraftBody(next ? (next.body || "").trim() : "");
   };
   const gradeDraft = (next, generation) => {
+    if (window.tjkDraftGrading !== true) return Promise.resolve(null);
     const controller = new AbortController();
     const gradedBody = (next.body || '').trim();
     const gradedSubject = next.subject || '';
@@ -895,6 +897,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     improveAbortRef.current = null;
     setImproving(false);
     setProposedDraft(null);
+    setImproveMessage(null);
     // LinkedIn: generate a short connection-style note via the shared connect-note
     // route (a different motion from email), and mark the result so the compose
     // area drops the greeting/signature and the Gmail button.
@@ -915,8 +918,8 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
             setDrafting(false);
             if (d.blocked) { setDraftBlock(d); setComposing(false); }
             else if (d && d.draft) {
-              const next = { body: d.draft.body || "", subject: "", linkedin: true, review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null, relatedApp: d.relatedApp || null };
-              showDraft(next); gradeDraft(next, generation);
+              const next = { body: d.draft.body || "", subject: "", linkedin: true, review: null, reviewPending: window.tjkDraftGrading === true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null, relatedApp: d.relatedApp || null };
+              showDraft(next); if (window.tjkDraftGrading === true) gradeDraft(next, generation);
               if (override) setDraftBlock(b => ({ ...b, overridden: true }));
             } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error");
           })
@@ -932,8 +935,8 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           setDrafting(false);
           if (d.blocked) { setDraftBlock(d); setComposing(false); }
           else if (d && d.response) {
-            const next = { body: d.response, subject: "", linkedin: true, review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null };
-            showDraft(next); gradeDraft(next, generation);
+            const next = { body: d.response, subject: "", linkedin: true, review: null, reviewPending: window.tjkDraftGrading === true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null };
+            showDraft(next); if (window.tjkDraftGrading === true) gradeDraft(next, generation);
             if (override) setDraftBlock(b => ({ ...b, overridden: true }));
           } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error");
         })
@@ -954,36 +957,39 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         setDrafting(false);
         if (d.blocked) { setDraftBlock(d); setComposing(false); }
         else if (d.draft) {
-          const next = { ...d.draft, review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null, relatedApp: d.relatedApp || null };
-          showDraft(next); gradeDraft(next, generation);
+          const next = { ...d.draft, review: null, reviewPending: window.tjkDraftGrading === true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null, relatedApp: d.relatedApp || null };
+          showDraft(next); if (window.tjkDraftGrading === true) gradeDraft(next, generation);
           if (override) setDraftBlock(b => ({ ...b, overridden: true }));
         }
       })
       .catch(() => setDrafting(false));
   };
   const rerunReview = () => {
-    if (!draftResult?.surfaceId || reviewing) return;
+    if (window.tjkDraftGrading !== true || !draftResult?.surfaceId || reviewing) return;
     const generation = ++gradeGenerationRef.current;
     setReviewing(true);
     setDraftResult(current => current ? ({ ...current, reviewPending: true }) : current);
     gradeDraft({ ...draftResult, body: draftBody }, generation).finally(() => setReviewing(false));
   };
   const improveDraft = () => {
-    if (!draftResult?.surfaceId || improving) return;
-    const snapshot = draftBody;
+    if (window.tjkDraftGrading !== true || !draftResult?.surfaceId || improving) return;
+    const snapshot = { body: draftBody, subject: draftResult.subject || '' };
     const controller = new AbortController();
     improveAbortRef.current?.abort();
     improveAbortRef.current = controller;
     setImproveSnapshot(snapshot);
     setImproving(true);
     setProposedDraft(null);
+    setImproveMessage(null);
     window.tjkMutate('/api/drafts/improve', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        body: snapshot,
-        subject: draftResult.subject || '',
+        body: snapshot.body,
+        subject: snapshot.subject,
         surfaceId: draftResult.surfaceId,
         recipientFirst: data?.first || '',
+        fixes: draftResult.review?.topFixes || [],
+        gradeContext: draftResult.gradeContext,
         originalScore: typeof draftResult.review?.score === 'number' ? draftResult.review.score : null,
         ...(draftResult.gradeContext?.appId != null
           ? { appId: draftResult.gradeContext.appId }
@@ -993,13 +999,31 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     }).then(r => r.json()).then(d => {
       if (d.error) throw new Error(d.error);
       setShowProposedDims(false);
+      setDraftResult(current => {
+        if (!current) return current;
+        const unchanged = draftBodyRef.current === snapshot.body
+          && (current.subject || '') === snapshot.subject;
+        return {
+          ...current,
+          review: d.originalReview || current.review,
+          reviewOf: d.originalReview ? (unchanged ? 'independent' : 'original') : current.reviewOf,
+          reviewPending: false,
+        };
+      });
+      if (!d.improved) {
+        setImproveMessage(['grade-failed', 'grade-incomplete'].includes(d.reason)
+          ? 'Could not compare versions. Try again.'
+          : 'No better version found. Keep yours.');
+        return;
+      }
       setProposedDraft(d.draft ? {
         ...d.draft,
-        originalScore: d.originalScore,
+        originalScore: d.originalReview?.score ?? null,
         newScore: d.review?.score ?? null,
         review: d.review || null,
         reviewOf: d.reviewOf || 'independent',
       } : null);
+      setImproveMessage(null);
     }).catch(err => {
       if (err.name !== 'AbortError' && window.tjkToast) window.tjkToast(err.message, 'error');
     }).finally(() => {
@@ -1009,7 +1033,8 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
   };
   const replaceWithProposed = () => {
     if (!proposedDraft || !draftResult) return;
-    if (draftBody !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
+    if ((draftBody !== improveSnapshot.body || (draftResult.subject || '') !== improveSnapshot.subject)
+      && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
     gradeAbortRef.current?.abort();
     gradeGenerationRef.current++;
     setCurrentDraftBody(proposedDraft.body || '');
@@ -1340,13 +1365,14 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           {draftResult && (
             <div className="ai-compose">
               <div className="ai-head"><TIcon d={TI.spark} size={13} /> AI {draftResult.linkedin ? "LinkedIn note" : "draft"} <span style={{ marginLeft: 8, fontSize: 10.5, color: "var(--text-mute)", fontWeight: 400 }}>editable{draftResult.linkedin ? " · no subject, paste into LinkedIn" : ""}</span></div>
-              {!proposedDraft && window.DraftScoreBadge && <window.DraftScoreBadge review={draftResult.review} reviewOf={draftResult.reviewOf} pending={draftResult.reviewPending} onRerun={draftResult.surfaceId ? rerunReview : null} onImprove={draftResult.surfaceId ? improveDraft : null} busy={reviewing} improving={improving} />}
-              {proposedDraft && Array.isArray(draftResult.review?.topFixes) && draftResult.review.topFixes.length > 0 && (
+              {window.tjkDraftGrading === true && !proposedDraft && window.DraftScoreBadge && <window.DraftScoreBadge review={draftResult.review} reviewOf={draftResult.reviewOf} pending={draftResult.reviewPending} onRerun={draftResult.surfaceId ? rerunReview : null} onImprove={draftResult.surfaceId ? improveDraft : null} busy={reviewing} improving={improving} />}
+              {window.tjkDraftGrading === true && !proposedDraft && improveMessage && <div className="mono" style={{ marginTop: 4, fontSize: 11, color: 'var(--text-mute)' }}>{improveMessage}</div>}
+              {window.tjkDraftGrading === true && proposedDraft && Array.isArray(draftResult.review?.topFixes) && draftResult.review.topFixes.length > 0 && (
                 <ul style={{ margin: "0 0 10px", paddingLeft: 16, fontSize: 12, lineHeight: 1.5 }}>
                   {draftResult.review.topFixes.map((fix, i) => <li key={i} style={{ marginBottom: 2 }}>{fix}</li>)}
                 </ul>
               )}
-              {proposedDraft ? (
+              {window.tjkDraftGrading === true && proposedDraft ? (
                 <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 4, color: "var(--text-mute)" }}>Current draft</div>

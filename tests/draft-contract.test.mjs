@@ -79,7 +79,7 @@ for (const file of promptFiles) {
     if (new RegExp(pattern, 'im').test(source)) conflicts.push(`${file}: ${pattern}`);
   }
 }
-check(callerFiles.length >= 4, `source scan discovered ${callerFiles.length} rubric caller files`);
+check(callerFiles.length >= 3, `source scan discovered ${callerFiles.length} rubric caller files`);
 // Every rubric call in a mixed file must contribute a scanned region. A zero here
 // would mean the narrowing silently scanned nothing and the conflict check below
 // is vacuously passing.

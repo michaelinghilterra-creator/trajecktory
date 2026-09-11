@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { LINKEDIN_SSI_DIR } from '../config.mjs';
 import { parseCsvLine } from './csv.mjs';
+import { buildPacketFromFields } from '../../../lib/outreach-packet.mjs';
+import { buildAugustPrompt } from '../../../lib/outreach-voice.mjs';
 
 function ensureLikedinSsiDir() {
   if (!fs.existsSync(LINKEDIN_SSI_DIR)) {
@@ -202,36 +204,18 @@ function fitConnectNote(text, firstName, limit = 300) {
 function buildConnectPrompt({
   senderName, senderFirst, senderHeadline = '',
   recipientName, recipientFirst = '', recipientRole = '', recipientCompany = '',
-  guidance = '', cvExcerpt = '', tone = 'Warm', toneText = '', targetMax = 280,
+  guidance = '', cvExcerpt = '', appliedRole = '', tone = 'Warm', toneText = '',
 } = {}) {
-  const first = String(senderFirst ?? '').trim();
-  const openExample = String(recipientFirst || 'Alex').trim();
-  return `You are drafting a LinkedIn CONNECTION REQUEST note from ${senderName}${senderHeadline ? ` (${senderHeadline})` : ''} to a contact.
-
-THE RECIPIENT:
-- Name: ${recipientName}
-- Role: ${recipientRole || '(unknown)'}${recipientCompany ? `\n- Company: ${recipientCompany}` : ''}
-
-ABOUT ${first.toUpperCase()} (for grounding, do not copy verbatim):
-${cvExcerpt || '(CV not available)'}
-
-WHY CONNECT: ${guidance || `Anchor on shared focus in the GTM / RevOps / analytics space. Signal ${first} is a fellow operator, not a job seeker.`}
-
-TONE DIRECTIVE (${tone}): ${toneText}
-
-HARD RULES:
-- LENGTH, and this is the constraint most often missed: write TWO short sentences plus the sign-off, about 40 words of note text. Counting characters is unreliable, so hit the sentence and word target and the character cap takes care of itself.
-- The note text has an ABSOLUTE MAXIMUM of ${targetMax} characters including the "Thanks, ${first}" sign-off. The JSON wrapper does not count toward this note-text limit. LinkedIn caps connection notes at 300 characters and rejects longer note text. An over-length note gets trimmed at a sentence boundary, so a third sentence is likely to be cut rather than shortened.
-- Open with their first name + comma. Example: "Hi ${openExample},"
-- NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
-- One reason to connect that is grounded in the context above. Be specific, not generic.
-- Keep the whole note as ONE paragraph on a single line with no line breaks, and end that same line with the sign-off: "Thanks, ${first}" (with the comma). This is a short note in a small box, not an email.
-- No "I'd love to pick your brain". No "I hope this finds you well". No "Quick question for you".
-- Do NOT sound desperate and do NOT lead with being in market or looking for a job.
-- Do NOT include emojis.
-
-== BODY REQUIREMENTS ==
-- Include the connection note text with no preface, character count, or explanation.`;
+  const packet = buildPacketFromFields({
+    kind: 'connect_note',
+    name: recipientName || recipientFirst,
+    role: recipientRole,
+    company: recipientCompany,
+    notes: [guidance, toneText || tone, senderHeadline].filter(Boolean).join(' · '),
+    application: appliedRole ? { submitted: true, role: appliedRole, date: '', status: '' } : null,
+    sender: { fullName: senderName, firstName: senderFirst, articleDigest: cvExcerpt },
+  });
+  return buildAugustPrompt(packet);
 }
 
 export {

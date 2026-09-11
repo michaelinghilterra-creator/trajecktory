@@ -99,6 +99,14 @@ window.tjkGradeDraft = async function tjkGradeDraft({ body, subject, surfaceId, 
   return result.review || null;
 };
 
+// Draft grading is deliberately opt-in. Keep the synchronous default false so
+// no draft surface can start a review before the startup setting arrives.
+window.tjkDraftGrading = false;
+fetch('/api/setup/models')
+  .then(response => response.json())
+  .then(state => { window.tjkDraftGrading = state.draftGrading === true; })
+  .catch(() => { window.tjkDraftGrading = false; });
+
 // ---------- Draft review badge (0-100) ----------
 window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, pending, onRerun, onImprove, busy, improving }) {
   const [open, setOpen] = React.useState(false);
@@ -146,7 +154,7 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, pending, o
             alignItems: "center",
           }}
         >
-          {scorePrefix}{review.score}/100
+          {scorePrefix}{review.score}/100{review.incomplete ? ' (partial)' : ''}
           {scoreProvenance && <span style={{ color: 'var(--text-mute)', fontSize: 10 }}>{scoreProvenance}</span>}
           <span style={{
             display: "inline-block",
