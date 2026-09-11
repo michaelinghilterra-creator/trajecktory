@@ -114,21 +114,28 @@ check(writingGuide.includes('== HOW TO WRITE IT ==')
 'the writing guide includes instructions, grounding, and the plain contract without review keys');
 
 const expectedWritingBullets = [
-  '- The first sentence says plainly why you are writing to this person. If a role you applied for is named in the instructions above, name it.',
-  '- Use one proof point, the one that best fits this reader, with any figure copied exactly from the CV excerpt or the verifiable claims. Never invent, round, or combine numbers.',
-  '- Use at most one company-specific detail, taken only from the company research, as a short supporting clause. No praise or flattery.',
-  '- End with exactly one ask, stated directly in plain words. Do not start the closing sentence with "If". Do not ask for a call, chat, meeting, or an amount of their time. Do not ask to be redirected to an unnamed person.',
-  '- No sentence longer than 25 words. Mix short and longer sentences. Keep paragraphs short.',
+  '- Name the role when known.',
+  '- Lead with genuine interest in the company or the work.',
+  '- Use one or two proof points with figures copied exactly from the CV excerpt or the verifiable claims. Never invent or round numbers.',
+  '- Use at most one company detail and never use market-size, funding, valuation, or hiring-volume statistics.',
+  '- No sentence longer than 40 words.',
   '- Banned openers: "I hope this finds you well", "just following up", "just checking in", "touching base", "circling back", "reaching out", "I wanted to reach out", "I am writing to express my interest".',
   '- Banned words: delve, leverage, robust, seamless, spearhead, foster, elevate, unlock, tapestry, pivotal, testament, synergy, game-changer, passionate, results-driven, dynamic, proven track record.',
   '- No em dashes and no double hyphens.',
 ];
 const connectWritingGuide = buildWritingGuide('connect_note_generic');
-check(!connectWritingGuide.includes(expectedWritingBullets[1])
-  && connectWritingGuide.includes(expectedWritingBullets[2])
+check(!connectWritingGuide.includes(expectedWritingBullets[2])
   && connectWritingGuide.includes(expectedWritingBullets[3])
   && expectedWritingBullets.every((bullet) => writingGuide.includes(bullet)),
-'connection notes omit the proof-point bullet while TA email includes every writing bullet');
+'connection notes omit the proof-points bullet while TA email includes every writing bullet');
+for (const surfaceId of ['reply_email', 'followup_sent']) {
+  const threadGuide = buildWritingGuide(surfaceId);
+  check(expectedWritingBullets.slice(0, 4).every((bullet) => !threadGuide.includes(bullet))
+    && expectedWritingBullets.slice(4).every((bullet) => threadGuide.includes(bullet)),
+  `${surfaceId} writing guide contains only thread-safe style bullets`);
+}
+check(expectedWritingBullets.every((bullet) => buildWritingGuide('ta_email').includes(bullet)),
+  'ta_email writing guide retains every first-touch and style bullet');
 
 // Captured from the pre-extraction builders. A deliberately tiny temporary
 // profile keeps the fixtures readable while covering every context section,
@@ -147,6 +154,11 @@ A talent partner screening a req and a VP who owns the team need different first
 6-7:  Appropriate for the role but says nothing only this recipient would care about.
 8-9:  Clearly written for this person's seat, and references the opening or team correctly.
 10:   The recipient would think this person understands what my week actually looks like.
+
+== RECIPIENT AND OPENING ==
+Recipient's title: Chief People Officer
+Recipient's influence on the hire: senior executive, not the recruiter
+Role the sender applied for: VP Revenue Operations (applied 2026-01-01)
 
 == CV EXCERPT ==
 CV fact.
@@ -189,11 +201,22 @@ Every top fix must be a concrete rewrite instruction that names the replacement,
 Score harshly. Reserve 8 or above for a message that would actually get a reply.`,
 ].join('\n\n');
 const capturedImprove = [
-  "Grade the message below against the rubric. Then rewrite the message, applying ONLY the specific fixes you named and nothing else. Do not rephrase, restructure, consolidate, or rewrite any sentence not directly targeted by a named fix. Every sentence not covered by a fix must appear in the rewrite verbatim or nearly verbatim. Preserve the greeting, sign-off, every named person, every specific company detail, every metric, and the original sentence order wherever no fix applies. Introduce no claim not grounded in the supplied sources.",
-  'Use a named, checkable fact from the company research to replace any generic praise. If the research contains nothing specific enough, DELETE the generic sentence rather than inventing a fact or keeping the vague version.',
-  capturedRubricBody,
+  'Rewrite the message below, applying ONLY the fixes listed. Keep every sentence no fix targets verbatim or nearly verbatim. Keep the greeting, sign-off, named people, metrics, the role named, and sentence order wherever no fix applies.',
+  'Never remove a company-specific fact that appears in the company research. If a fix needs a fact that is not in the sources below, skip that fix. Never add placeholders or blanks such as ___, [role], or req #.',
+  '== FIXES TO APPLY ==\n- Replace "Draft" with "Specific draft".',
+  `Length norm: 10 words.
+Hard cap: 12 chars.
+Required body paragraphs: exactly 2.`,
+  `== HOW TO WRITE IT ==
+${expectedWritingBullets[4]}
+${expectedWritingBullets[5]}
+${expectedWritingBullets[6]}
+${expectedWritingBullets[7]}`,
+  capturedRubricBody.slice(capturedRubricBody.indexOf('== RECIPIENT AND OPENING ==')),
   '== MESSAGE TO IMPROVE ==\nDraft body.',
-  capturedGenerationContract,
+  `== OUTPUT CONTRACT ==
+Return exactly one JSON object.
+{"body": "<...>"}`,
 ].join('\n\n');
 const savedShortPublic = { ...RUBRIC_PROFILES.short_public, dims: [...RUBRIC_PROFILES.short_public.dims] };
 Object.assign(RUBRIC_PROFILES.short_public, {
@@ -210,15 +233,20 @@ const capturedOpts = {
   companyResearch: 'Acme serves 7,500 teams.',
   superpowers: ['Systems'],
   toneNote: 'Direct.',
+  recipientRole: 'Chief People Officer',
+  recipientTier: 'exec',
+  appliedRole: 'VP Revenue Operations',
+  appliedDate: '2026-01-01',
   subject: 'Ignored',
   body: 'Draft body.',
+  fixes: ['Replace "Draft" with "Specific draft".'],
 };
 check(buildRubricBlock('li_comment', capturedOpts) === capturedRubric,
-  'buildRubricBlock stays byte-identical after context extraction');
+  'buildRubricBlock matches the updated recipient-context byte fixture');
 check(buildIndependentGradePrompt('li_comment', capturedOpts) === capturedGrade,
-  'buildIndependentGradePrompt stays byte-identical after context extraction');
+  'buildIndependentGradePrompt matches the updated recipient-context byte fixture');
 check(buildImprovePrompt('li_comment', capturedOpts) === capturedImprove,
-  'buildImprovePrompt stays byte-identical after context extraction');
+  'buildImprovePrompt matches the updated recipient-context byte fixture');
 Object.assign(RUBRIC_PROFILES.short_public, savedShortPublic);
 
 const sourcedDollars = checkUnsourcedNumbers('Saved $2.3M annually.', '', FIXTURE_PROOF_POINTS);

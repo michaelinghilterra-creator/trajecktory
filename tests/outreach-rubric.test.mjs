@@ -14,6 +14,8 @@ import {
   getProfile,
   buildPlainContract,
   buildRubricBlock,
+  buildWritingGuide,
+  buildIndependentGradePrompt,
   buildImprovePrompt,
   parseReviewed,
   parseReviewedFields,
@@ -73,38 +75,45 @@ check(buildImprovePrompt('li_comment', {}) === '' && buildImprovePrompt('nope', 
 const improveEmail = buildImprovePrompt('ta_email', {
   subject: 'Original subject',
   body: 'Original body to improve.',
+  fixes: ['Replace "Original body" with "Specific result".'],
 });
-const improveCritiqueIndex = improveEmail.indexOf('"critique"');
-const improveDimensionsIndex = improveEmail.indexOf('"dimensions"');
 const improveSubjectIndex = improveEmail.indexOf('"subject"');
 const improveBodyIndex = improveEmail.indexOf('"body"');
-check(improveCritiqueIndex < improveDimensionsIndex
-  && improveDimensionsIndex < improveSubjectIndex
+check(!improveEmail.includes('"critique"')
+  && !improveEmail.includes('"dimensions"')
   && improveSubjectIndex < improveBodyIndex,
-'improve contract places critique and dimensions before subject and body');
+'improve uses the plain subject/body contract with no critique or dimensions');
 check(improveEmail.includes('== MESSAGE TO IMPROVE ==')
-  && improveEmail.includes('Original body to improve.'),
-'improve prompt includes the message section and supplied body');
+  && improveEmail.includes('Original body to improve.')
+  && improveEmail.includes('- Replace "Original body" with "Specific result".'),
+'improve prompt includes the supplied message and independent-review fix');
+check(improveEmail.indexOf('== FIXES TO APPLY ==') < improveEmail.indexOf('Length norm:')
+  && improveEmail.indexOf('Length norm:') < improveEmail.indexOf('== HOW TO WRITE IT ==')
+  && improveEmail.indexOf('== HOW TO WRITE IT ==') < improveEmail.indexOf('== MESSAGE TO IMPROVE ==')
+  && improveEmail.indexOf('== MESSAGE TO IMPROVE ==') < improveEmail.indexOf('== OUTPUT CONTRACT =='),
+'improve prompt keeps fixes, length, writing guide, message, and plain contract in order');
 check(!improveEmail.includes('== COMPANY RESEARCH (verified, use for personalization) =='),
   'improve prompt omits the company research block when no research is supplied');
 const improveWithResearch = buildImprovePrompt('ta_email', {
   subject: 'Original subject',
   body: 'Generic praise to improve.',
+  fixes: ['Replace generic praise with the verified deployment fact.'],
   companyResearch: 'Northwind Data serves 12,000 organizations, including 95 of the Fortune 100.',
+  recipientRole: 'Chief People Officer',
+  recipientTier: 'exec',
 });
-const researchCritiqueIndex = improveWithResearch.indexOf('"critique"');
-const researchDimensionsIndex = improveWithResearch.indexOf('"dimensions"');
-const researchSubjectIndex = improveWithResearch.indexOf('"subject"');
-const researchBodyIndex = improveWithResearch.indexOf('"body"');
 check(improveWithResearch.includes('== COMPANY RESEARCH (verified, use for personalization) ==')
-  && improveWithResearch.includes('Northwind Data serves 12,000 organizations'),
-  'improve prompt renders supplied company research');
-check(researchCritiqueIndex < researchDimensionsIndex
-  && researchDimensionsIndex < researchSubjectIndex
-  && researchSubjectIndex < researchBodyIndex,
-  'research keeps critique and dimensions ahead of subject and body');
-check(improveWithResearch.includes('DELETE the generic sentence rather than inventing a fact or keeping the vague version.'),
-  'improve prompt requires deletion when research cannot support personalization');
+  && improveWithResearch.includes('Northwind Data serves 12,000 organizations')
+  && improveWithResearch.includes('== RECIPIENT AND OPENING ==')
+  && improveWithResearch.includes("Recipient's title: Chief People Officer"),
+'improve prompt renders supplied company research and recipient context');
+check(improveWithResearch.includes('Never remove a company-specific fact that appears in the company research.')
+  && !improveWithResearch.includes('DELETE')
+  && !improveWithResearch.includes('Grade the message below'),
+  'improve preserves researched facts and contains no destructive or self-grading instruction');
+const improveWithoutFixes = buildImprovePrompt('ta_email', { body: 'Draft.' });
+check(improveWithoutFixes.includes('- Tighten the weakest sentence without removing any fact.'),
+  'improve prompt uses the safe fallback fix when no review fixes are supplied');
 const oversizedResearch = 'R'.repeat(1300);
 const cappedResearchPrompt = buildImprovePrompt('ta_email', { body: 'Draft.', companyResearch: oversizedResearch });
 check(cappedResearchPrompt.includes('R'.repeat(1200)) && !cappedResearchPrompt.includes('R'.repeat(1201)),
@@ -127,6 +136,49 @@ check(toneBlock.includes('Ask for a 15-min call.')
   && toneBlock.includes('The style requirements above override any conflicting instruction in this tone note.'),
 'tone notes are included with the style precedence sentence');
 check(/caps this dimension at\s+3/.test(emailBlock), 'ask strength includes the hard cap for requests for time');
+const personalizationAnchorsFixture = `Named, checkable references: the requisition, a product, a named team, or a
+leadership change. Merge-tag output and vague praise are not personalization.
+Complimenting the recipient's own job back to them ("since you lead People strategy") is flattery, not personalization.
+Market-size, funding, valuation, or hiring-volume statistics are not personalization; score 4 or below and name the figure in the fixes.
+1-3:  Zero research signal, or empty flattery ("your innovative culture", "your impressive growth").
+4-5:  Names the company but nothing that required looking anything up.
+6-7:  Surface facts anyone could get in ten seconds (headcount, industry, city).
+8-9:  References something that took real reading, and ties it to why the sender is writing.
+10:   One checkable company detail, used as a short supporting clause, that could only apply to this company. The role itself remains the reason for writing.`;
+check(DIMENSIONS.personalization.anchors === personalizationAnchorsFixture,
+  'personalization anchors remain byte-identical to the independent-grader fixture');
+check(DIMENSIONS.personalization.anchors.includes('Complimenting the recipient\'s own job back to them')
+  && DIMENSIONS.personalization.anchors.includes('score 4 or below and name the figure in the fixes')
+  && DIMENSIONS.personalization.anchors.includes('The role itself remains the reason for writing.')
+  && !DIMENSIONS.personalization.anchors.includes('The research IS the hook.'),
+  'personalization treats research as support and recipient-job praise as flattery');
+
+const recipientOptions = {
+  recipientRole: '  Chief People Officer  ',
+  recipientTier: 'exec',
+  appliedRole: 'VP Revenue Operations',
+  appliedDate: '2026-01-01',
+  body: 'Draft body.',
+};
+const recipientBlock = `== RECIPIENT AND OPENING ==
+Recipient's title: Chief People Officer
+Recipient's influence on the hire: senior executive, not the recruiter
+Role the sender applied for: VP Revenue Operations (applied 2026-01-01)`;
+for (const [name, prompt] of [
+  ['writing guide', buildWritingGuide('ta_email', recipientOptions)],
+  ['independent grade', buildIndependentGradePrompt('ta_email', recipientOptions)],
+  ['improve', buildImprovePrompt('ta_email', recipientOptions)],
+]) {
+  check(prompt.includes(recipientBlock) && prompt.indexOf(recipientBlock) === prompt.lastIndexOf(recipientBlock),
+    `${name} includes the recipient and opening block exactly once`);
+}
+for (const [name, prompt] of [
+  ['writing guide', buildWritingGuide('ta_email')],
+  ['independent grade', buildIndependentGradePrompt('ta_email', { body: 'Draft body.' })],
+  ['improve', buildImprovePrompt('ta_email', { body: 'Draft body.' })],
+]) {
+  check(!prompt.includes('== RECIPIENT AND OPENING =='), `${name} omits empty recipient context`);
+}
 
 for (const raw of ['', null, undefined, 42, '{', 'I cannot help with that.', '{"body": ""}', '{"subject":"s"}']) {
   let result;
@@ -211,6 +263,16 @@ const allEightsExceptOne = RUBRIC_PROFILES.outreach_email.dims
   .slice(0, -1)
   .map((dimension) => ({ id: dimension.id, score: 8 }));
 check(weightedScore(allEightsExceptOne, RUBRIC_PROFILES.outreach_email) === 80, 'a missing profile dimension renormalizes and keeps uniform eights at 80');
+
+const incompleteReview = parseReviewed(JSON.stringify({
+  body: 'A partial review still has a score.',
+  dimensions: [{ id: 'relevance', score: 8, explanation: '"partial review" states the audience.' }],
+  critique: { weakest_dimension: 'relevance', fixes: ['Name the applied role.'] },
+}), 'ta_email')?.review;
+check(incompleteReview?.incomplete === true
+  && incompleteReview.missingDimensions.includes('subject')
+  && incompleteReview.missingDimensions.length === getProfile('ta_email').dims.length - 1,
+  'a parsed review lists every missing expected dimension and marks the score partial');
 
 const overCap = violatesHardConstraint('x'.repeat(301), getProfile('connect_note_generic'));
 check(overCap?.kind === 'chars' && overCap.actual === 301 && overCap.limit === 300, '301 characters violates the connection note character cap');

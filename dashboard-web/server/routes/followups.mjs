@@ -3,14 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import { ROOT_DIR } from '../config.mjs';
 import { resolveReportPath } from '../lib/safe-path.mjs';
-import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { parseApplicationsMd, patchRowInMd } from '../lib/applications.mjs';
 import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute, isMuted, readMute } from '../lib/sidecars.mjs';
-import { readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
+import { generateText, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
-import { generateWithRubric } from '../lib/draft-grader.mjs';
 import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, canInfluenceHire, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
 
 // Different contacts per COMPANY the queue surfaces as actionable per day. Reaching
@@ -18,7 +16,7 @@ import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleCont
 // (flagged, not dropped) and rotates into view on a later day.
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from '../lib/target-talent.mjs';
 import { parseReferralsMd } from '../lib/referrals.mjs';
-import { getIdentity, getOutreachPolicy, getNarrative } from '../lib/profile.mjs';
+import { getOutreachPolicy } from '../lib/profile.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
 import { canContact } from '../lib/outreach-policy.mjs';
 import { getInmailBudget } from '../lib/inmail-budget.mjs';
@@ -27,6 +25,9 @@ import { markInvitePending } from '../lib/tt-linkedin.mjs';
 import { isLinkedInInvite, LINKEDIN_INVITE_SUBJECT } from '../lib/channels.mjs';
 import { logConnect } from '../lib/connects.mjs';
 import { reconcileInviteStatus } from '../lib/invite-status-reconcile.mjs';
+import { findSubmittedApplication } from '../lib/statuses.mjs';
+import { buildPacket } from '../../../lib/outreach-packet.mjs';
+import { buildAugustPrompt, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
 
 export const router = express.Router();
 
@@ -509,70 +510,29 @@ router.post('/api/followups/:appNum/draft', async (req, res) => {
     const apps = parseApplicationsMd();
     const app = apps.find(a => a.id === appNum);
     if (!app) return res.status(404).json({ error: `Application #${appNum} not found` });
+    const submittedApp = findSubmittedApplication([app]);
+    const appliedRole = submittedApp?.role || '';
+    const appliedDate = submittedApp?.date || '';
 
-    const projectRoot = ROOT_DIR;
-    const cvMd = readProjectFile(projectRoot, 'cv.md');
-    const profileMd = readVoiceRules(projectRoot);
-    const followups = parseFollowupsMd().filter(f => f.appNum === appNum)
-                                        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const followups = parseFollowupsMd().filter(f => f.appNum === appNum);
     const fuCount = followups.length;
     const touchNumber = fuCount + 1; // this would be the Nth touch
-    const daysSinceApply = _daysAgo(app.date);
-    const lastTouchDate = followups[0]?.date || app.date;
-    const daysSinceLastTouch = _daysAgo(lastTouchDate);
 
-    const reportResearch = loadCompanyResearch(app.report);
-    const reportContext = reportResearch
-      ? `\n== ROLE EVALUATION REPORT (excerpt, for grounding the follow-up) ==\n${reportResearch}\n`
-      : '';
-
-    const id = getIdentity();
-    const prompt = `You are drafting a brief, professional follow-up email from ${id.fullName}. He applied to ${app.company} for the ${app.role} role ${daysSinceApply} days ago. ${fuCount === 0 ? 'This is the FIRST follow-up — no prior touches.' : `He has already sent ${fuCount} follow-up${fuCount === 1 ? '' : 's'} (most recent ${daysSinceLastTouch} days ago). This is touch #${touchNumber}.`}
-
-== APPLICATION CONTEXT ==
-Company:  ${app.company}
-Role:     ${app.role}
-Status:   ${app.status} (since ${app.date})
-Score:    ${app.scoreRaw}
-Notes:    ${app.notes || '(none)'}
-${reportContext}
-== ${id.firstName.toUpperCase()}'S CV (source of truth, do not invent metrics) ==
-${cvMd}
-${profileMd ? `
-== VOICE RULES (from modes/_profile.md, must follow) ==
-${profileMd}
-` : ''}
-== STYLE REQUIREMENTS ==
-- Brief: under 100 words in the body.
-- Direct, senior operator tone. No "I hope this finds you well" or other corporate filler.
-- NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
-- Reference the specific role + company by name.
-- ${fuCount === 0 ? 'Lead with one specific reason this role matters to you (drawn from the report). Add one NEW data point or framing that wasn\'t in the original application (a recent thought, a relevant proof point, a question).' : 'Acknowledge this is a follow-up. Add genuinely new value — do not just repeat the original pitch. Reference a recent insight, market shift, or a specific question about the role.'}
-- Close with ONE low-friction ask: a quick reply on timing, or being pointed to the right person for this role. Do NOT ask for a call, a chat, a quick call, an intro, or time on their calendar. A meeting ask on an unsolicited follow-up reads as tone-deaf.
-- Never invent metrics or claims not on the CV.
-
-== SUBJECT REQUIREMENTS ==
-- Keep the email subject tight and reference the role.
-
-== BODY REQUIREMENTS ==
-- Use plain text.
-- Omit a signature block.
-- Omit a greeting such as 'Hi Name' because the UI prefills the salutation.`;
-
-    const narrative = getNarrative();
-    const result = await generateWithRubric(prompt, 'app_followup', {
-      model: draftModel(), maxTokens: 800, cvMd,
-      mode: 'write',
-      rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
-    });
-    if (result.error) return res.status(500).json({ error: 'Could not parse draft' });
+    const packet = buildPacket({ source: 'application', id: appNum, kind: 'app_followup' });
+    const prompt = buildAugustPrompt(packet);
+    const result = parseDraftText(await generateText(prompt, {
+      model: draftModel(), maxTokens: 900, label: `draft:${packet.surfaceId}`,
+    }));
+    if (!result?.body) return res.status(500).json({ error: 'Could not parse draft' });
     const draft = await finishDraft({
       body: result.body, subject: result.subject, surface: 'app_followup',
-      review: result.review,
-      reviewStatus: result.reviewStatus,
-      cleaner: 'email', stripSalutationFor: null, stripSignature: false,
+      cadence: false,
+      ...finishOptionsFor(packet),
     });
-    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: null, reviewStatus: 'pending', surfaceId: 'app_followup', gradeContext: { surfaceId: 'app_followup', appId: app.id }, touchNumber, fuCount });
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: null, reviewStatus: 'pending', surfaceId: 'app_followup', gradeContext: {
+      surfaceId: 'app_followup', appId: app.id,
+      recipientRole: '', recipientTier: '', appliedRole, appliedDate,
+    }, touchNumber, fuCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -677,7 +677,8 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
   const [reviewing, setReviewing] = useState(false);
   const [improving, setImproving] = useState(false);
   const [proposedDraft, setProposedDraft] = useState(null);
-  const [improveSnapshot, setImproveSnapshot] = useState('');
+  const [improveMessage, setImproveMessage] = useState(null);
+  const [improveSnapshot, setImproveSnapshot] = useState({ body: '', subject: '' });
   const improveAbortRef = useRef(null);
   const gradeAbortRef = useRef(null);
   const gradeGenerationRef = useRef(0);
@@ -745,6 +746,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
   // topic (or reply / follow-up when a thread exists). The user edits then logs.
   const [generating, setGenerating] = useState(false);
   const gradeDraft = (next, generation) => {
+    if (window.tjkDraftGrading !== true) return Promise.resolve(null);
     const controller = new AbortController();
     const gradedBody = next.body || '';
     const gradedSubject = next.subject || '';
@@ -802,8 +804,8 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
         }).then(r => r.json()).then(d => {
           if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
           if (d && d.response) {
-            const next = { ...compose, subject: compose.subject || 'LinkedIn note', body: d.response, review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null };
-            setCompose(next); setGenerating(false); gradeDraft(next, generation);
+            const next = { ...compose, subject: compose.subject || 'LinkedIn note', body: d.response, review: null, reviewPending: window.tjkDraftGrading === true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null };
+            setCompose(next); setGenerating(false); if (window.tjkDraftGrading === true) gradeDraft(next, generation);
           }
           else fail(d && d.error);
         }).catch(() => fail());
@@ -814,8 +816,8 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
         }).then(r => r.json()).then(d => {
           if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
           if (d && d.ok && d.draft) {
-            const next = { ...compose, subject: compose.subject || 'LinkedIn note', body: d.draft.body || '', review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null, relatedApp: d.relatedApp || null };
-            setCompose(next); setGenerating(false); gradeDraft(next, generation);
+            const next = { ...compose, subject: compose.subject || 'LinkedIn note', body: d.draft.body || '', review: null, reviewPending: window.tjkDraftGrading === true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null, relatedApp: d.relatedApp || null };
+            setCompose(next); setGenerating(false); if (window.tjkDraftGrading === true) gradeDraft(next, generation);
           }
           else fail(d && d.error);
         }).catch(() => fail());
@@ -829,8 +831,8 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
       }).then(r => r.json()).then(d => {
         if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
         if (d && d.ok && d.draft) {
-          const next = { ...compose, subject: d.draft.subject || compose.subject, body: d.draft.body || '', review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null, relatedApp: d.relatedApp || null };
-          setCompose(next); setGenerating(false); gradeDraft(next, generation);
+          const next = { ...compose, subject: d.draft.subject || compose.subject, body: d.draft.body || '', review: null, reviewPending: window.tjkDraftGrading === true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null, relatedApp: d.relatedApp || null };
+          setCompose(next); setGenerating(false); if (window.tjkDraftGrading === true) gradeDraft(next, generation);
         }
         else fail(d && d.error);
       }).catch(() => fail());
@@ -838,7 +840,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
   };
 
   const rerunReview = () => {
-    if (!compose?.surfaceId || reviewing) return;
+    if (window.tjkDraftGrading !== true || !compose?.surfaceId || reviewing) return;
     const generation = ++gradeGenerationRef.current;
     setReviewing(true);
     setCompose(current => current ? ({ ...current, reviewPending: true }) : current);
@@ -846,22 +848,25 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
   };
 
   const improveDraft = () => {
-    if (!compose?.surfaceId || improving) return;
-    const snapshot = compose.body || '';
+    if (window.tjkDraftGrading !== true || !compose?.surfaceId || improving) return;
+    const snapshot = { body: compose.body || '', subject: compose.subject || '' };
     const controller = new AbortController();
     improveAbortRef.current?.abort();
     improveAbortRef.current = controller;
     setImproveSnapshot(snapshot);
     setImproving(true);
     setProposedDraft(null);
+    setImproveMessage(null);
     window.tjkMutate('/api/drafts/improve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        body: snapshot,
-        subject: compose.subject || '',
+        body: snapshot.body,
+        subject: snapshot.subject,
         surfaceId: compose.surfaceId,
         recipientFirst: String(row.name || '').trim().split(/\s+/)[0] || '',
+        fixes: compose.review?.topFixes || [],
+        gradeContext: compose.gradeContext,
         originalScore: typeof compose.review?.score === 'number' ? compose.review.score : null,
         ...(compose.gradeContext?.appId != null
           ? { appId: compose.gradeContext.appId }
@@ -870,13 +875,31 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
       signal: controller.signal,
     }).then(r => r.json()).then(d => {
       if (d.error) throw new Error(d.error);
+      setCompose(current => {
+        if (!current) return current;
+        const unchanged = (current.body || '') === snapshot.body
+          && (current.subject || '') === snapshot.subject;
+        return {
+          ...current,
+          review: d.originalReview || current.review,
+          reviewOf: d.originalReview ? (unchanged ? 'independent' : 'original') : current.reviewOf,
+          reviewPending: false,
+        };
+      });
+      if (!d.improved) {
+        setImproveMessage(['grade-failed', 'grade-incomplete'].includes(d.reason)
+          ? 'Could not compare versions. Try again.'
+          : 'No better version found. Keep yours.');
+        return;
+      }
       setProposedDraft(d.draft ? {
         ...d.draft,
-        originalScore: d.originalScore,
+        originalScore: d.originalReview?.score ?? null,
         newScore: d.review?.score ?? null,
         review: d.review || null,
         reviewOf: d.reviewOf || 'independent',
       } : null);
+      setImproveMessage(null);
     }).catch(err => {
       if (err.name !== 'AbortError') toast(err.message, 'error');
     }).finally(() => {
@@ -887,7 +910,8 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
 
   const replaceWithProposed = () => {
     if (!proposedDraft || !compose) return;
-    if ((compose.body || '') !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
+    if (((compose.body || '') !== improveSnapshot.body || (compose.subject || '') !== improveSnapshot.subject)
+      && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
     gradeAbortRef.current?.abort();
     gradeGenerationRef.current++;
     setCompose(c => ({
@@ -1046,7 +1070,8 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
               <div style={{ fontSize: 11, fontWeight: 700, color: compose.direction === 'Sent' ? '#a78bfa' : '#22d3ee' }}>
                 {compose.ai ? 'Draft a message with AI' : compose.direction === 'Sent' ? 'Log a message you sent' : 'Log a reply you received'}
               </div>
-              {compose.ai && window.DraftScoreBadge && <window.DraftScoreBadge review={compose.review} reviewOf={compose.reviewOf} pending={compose.reviewPending} onRerun={compose.surfaceId ? rerunReview : null} onImprove={compose.surfaceId ? improveDraft : null} busy={reviewing} improving={improving} />}
+              {window.tjkDraftGrading === true && compose.ai && window.DraftScoreBadge && <window.DraftScoreBadge review={compose.review} reviewOf={compose.reviewOf} pending={compose.reviewPending} onRerun={compose.surfaceId ? rerunReview : null} onImprove={compose.surfaceId ? improveDraft : null} busy={reviewing} improving={improving} />}
+              {window.tjkDraftGrading === true && improveMessage && <div className="mono" style={{ fontSize: 11, color: 'var(--text-mute)' }}>{improveMessage}</div>}
 
               {/* Channel — which surface this message went out on. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1104,7 +1129,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
                 onChange={e => setCompose(c => ({ ...c, subject: e.target.value }))} />
               <textarea placeholder={compose.ai ? 'Generate a draft above, then edit it here…' : 'What was said…'} value={compose.body} rows={5} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
                 onChange={e => setCompose(c => ({ ...c, body: e.target.value }))} />
-              {proposedDraft && (
+              {window.tjkDraftGrading === true && proposedDraft && (
                 <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel)' }}>
                   <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
                   <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>

@@ -15,7 +15,10 @@
  *
  * Run: node tests/funnel-entry.test.mjs   (exit 0 = pass, 1 = fail)
  */
-import { enteredFunnel, FUNNEL_ORDER, appReached, isInbound, isOutbound } from '../dashboard-web/server/lib/statuses.mjs';
+import {
+  enteredFunnel, FUNNEL_ORDER, SUBMITTED_STATUSES, findSubmittedApplication,
+  appReached, isInbound, isOutbound,
+} from '../dashboard-web/server/lib/statuses.mjs';
 
 let passed = 0, failed = 0;
 const check = (c, m) => { if (c) { console.log(`  ✅ ${m}`); passed++; } else { console.log(`  ❌ ${m}`); failed++; } };
@@ -78,6 +81,22 @@ check(isOutbound('[inbound] note') === false, 'an inbound row is not read as out
 check(isInbound('[self-sourced] Recruiter-inbound — exempt from auto-discard') === false,
   'the word "inbound" in prose is not a tag (only the bracketed form counts)');
 check(isOutbound('') === false && isInbound(undefined) === false, 'empty and undefined notes are not warm');
+
+// ── Submitted-role claims ────────────────────────────────────────────────────
+// Outreach may use Evaluated and terminal rows for company research, but those
+// rows cannot support the claim that the candidate applied for a role.
+check(JSON.stringify(SUBMITTED_STATUSES) === JSON.stringify(FUNNEL_ORDER.slice(FUNNEL_ORDER.indexOf('Applied'))),
+  'submitted statuses derive from the canonical ladder at Applied and later');
+check(findSubmittedApplication([
+  { status: 'Evaluated', role: 'Platform Lead' },
+  { status: 'Not a Fit', role: 'Data Lead' },
+]) === null, 'Evaluated-only and Not a Fit applications yield no submitted application');
+const submitted = findSubmittedApplication([
+  { status: 'Evaluated', role: 'Platform Lead' },
+  { status: '2nd Interview', role: 'Applied AI Lead', date: '2026-08-01' },
+]);
+check(submitted?.role === 'Applied AI Lead' && submitted?.date === '2026-08-01',
+  'a canonical interview stage supplies the submitted role and date');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

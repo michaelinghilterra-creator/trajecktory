@@ -14,7 +14,7 @@ const tmp = makeSandbox("referrals");
 process.env.TJK_DATA_DIR = tmp;
 
 // Import AFTER setting the env so config.mjs resolves REFERRALS_MD into the temp dir.
-const { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES,
+const { parseReferralsMd, referralTitle, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES,
   readReferralCorrespondence, writeReferralCorrespondence } =
   await import('../dashboard-web/server/lib/referrals.mjs');
 
@@ -25,6 +25,12 @@ const ok = (m) => { n++; console.log('  ok ' + m); };
 assert.ok(REFERRAL_STATUSES.includes('Not Asked'));
 assert.ok(REFERRAL_STATUSES.includes('Applied w/ Referral'));
 ok('statuses derive from states.yml (Not Asked .. Applied w/ Referral)');
+
+assert.equal(referralTitle('Talent Recruiter · connected 29 Jul 2026'), 'Talent Recruiter');
+assert.equal(referralTitle('Chief People Officer'), 'Chief People Officer');
+assert.equal(referralTitle('connected 29 Jul 2026'), '');
+assert.equal(referralTitle(''), '');
+ok('referral title comes from the first Notes segment and ignores connected metadata');
 
 // The "Responded" rung (a positive reply, before an intro is made) sits between
 // Asked and Intro Made — the correspondence route auto-advances Asked → Responded

@@ -17,7 +17,7 @@ import { cleanProse, cleanEmailBody, analyzeCadence, stripRedundantFiller } from
 import { toUnits, wordCount } from '../../../lib/cadence-core.mjs';
 
 const REVISE_PROMPT = (text) =>
-  `Rewrite the text below so it reads like a person wrote it, not a machine.\n1. Vary the SENTENCE RHYTHM: mix short and long sentences, and vary how consecutive lines open (do not start several the same way). Split any sentence longer than 25 words.\n2. Use PLAIN words: avoid AI-flavored vocabulary (for example delve, leverage, robust, seamless, spearhead, foster, elevate, unlock, tapestry, pivotal, testament), cut filler and hedges, and do not open with a cliche or flattering line.\nDo not over-bullet prose. Keep EVERY fact, number, name, metric and claim exactly as given. Do not add or remove information. Keep roughly the same overall length. No em dashes. Output ONLY the rewritten text, nothing else.\n\n---\n${text}`;
+  `Rewrite the text below so it reads like a person wrote it, not a machine.\n1. Vary the SENTENCE RHYTHM: mix short and long sentences, and vary how consecutive lines open (do not start several the same way). Split any sentence longer than 40 words.\n2. Use PLAIN words: avoid AI-flavored vocabulary (for example delve, leverage, robust, seamless, spearhead, foster, elevate, unlock, tapestry, pivotal, testament), cut filler and hedges, and do not open with a cliche or flattering line.\nDo not over-bullet prose. Keep EVERY fact, number, name, metric and claim exactly as given. Do not add or remove information. Keep roughly the same overall length. No em dashes. Output ONLY the rewritten text, nothing else.\n\n---\n${text}`;
 
 // reviseForCadence(text, opts) -> { text, revised, reason, before, after }
 //   opts.surface : 'email' | 'prose' (default) -- selects the cleaner for output
@@ -33,11 +33,11 @@ export async function reviseForCadence(text, opts = {}) {
   const before = analyzeCadence(base);
   const longestUnitWords = Math.max(0, ...toUnits(base).map(wordCount));
   // Too few lines to have a rhythm (a short connect note): keep the swapped text.
-  if (before.insufficient && longestUnitWords <= 30) {
+  if (before.insufficient && longestUnitWords <= 40) {
     return { text: base, revised: base !== text, reason: 'too-short', before };
   }
   const needsRhythmPass = before.flags.some((flag) => flag.severity === 'medium' || flag.severity === 'high')
-    || longestUnitWords > 30;
+    || longestUnitWords > 40;
   if (!needsRhythmPass) {
     return { text: base, revised: base !== text, reason: 'rhythm-ok', before };
   }

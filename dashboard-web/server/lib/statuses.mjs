@@ -39,6 +39,18 @@ export const FUNNEL_ORDER = _states
   .sort((a, b) => a.funnel_order - b.funnel_order)
   .map(s => s.label);
 
+// A role may be described as "applied for" only once it has reached the Applied
+// rung. This deliberately excludes Evaluated and every off-ladder terminal state;
+// the canonical interview stages and Offer remain included through FUNNEL_ORDER.
+export const SUBMITTED_STATUSES = Object.freeze(
+  FUNNEL_ORDER.slice(FUNNEL_ORDER.indexOf('Applied')),
+);
+
+export function findSubmittedApplication(applications) {
+  if (!Array.isArray(applications)) return null;
+  return applications.find(app => SUBMITTED_STATUSES.includes(app?.status)) || null;
+}
+
 // Active = anything still on the funnel (Evaluated .. Offer). Closed/terminal =
 // everything else (Rejected, Discarded, SKIP, Closed, Not a Fit, No Response).
 export const ACTIVE_STATUSES = FUNNEL_ORDER.slice();

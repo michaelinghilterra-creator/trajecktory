@@ -159,7 +159,7 @@ check(prompt.includes('Robin Achebe'), 'prompt names the recipient');
 check(prompt.includes('Halcyon Partners'), 'prompt includes recipient company when provided');
 check(prompt.includes('places GTM / RevOps leaders'), 'prompt carries the caller-composed guidance');
 check(prompt.includes('280 characters'), 'prompt states the target character cap');
-check(prompt.includes('NO em dashes'), 'prompt keeps the no-em-dash hard rule');
+check(prompt.includes('No em dashes.'), 'prompt keeps the August no-em-dash hard rule');
 check(prompt.includes('Thanks, Jordan'), 'prompt instructs the "Thanks, <sender first>" sign-off');
 
 console.log(`\n${passed} passed, ${failed} failed`);
