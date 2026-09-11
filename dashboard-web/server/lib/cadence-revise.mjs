@@ -14,9 +14,10 @@
 // stand (they are always safe), so this can run on every draft without harming one.
 import { generateText, draftModel } from './anthropic.mjs';
 import { cleanProse, cleanEmailBody, analyzeCadence, stripRedundantFiller } from './text-hygiene.mjs';
+import { toUnits, wordCount } from '../../../lib/cadence-core.mjs';
 
 const REVISE_PROMPT = (text) =>
-  `Rewrite the text below so it reads like a person wrote it, not a machine.\n1. Vary the SENTENCE RHYTHM: mix short and long sentences, and vary how consecutive lines open (do not start several the same way).\n2. Use PLAIN words: avoid AI-flavored vocabulary (for example delve, leverage, robust, seamless, spearhead, foster, elevate, unlock, tapestry, pivotal, testament), cut filler and hedges, and do not open with a cliche or flattering line.\nDo not over-bullet prose. Keep EVERY fact, number, name, metric and claim exactly as given. Do not add or remove information. Keep roughly the same overall length. No em dashes. Output ONLY the rewritten text, nothing else.\n\n---\n${text}`;
+  `Rewrite the text below so it reads like a person wrote it, not a machine.\n1. Vary the SENTENCE RHYTHM: mix short and long sentences, and vary how consecutive lines open (do not start several the same way). Split any sentence longer than 25 words.\n2. Use PLAIN words: avoid AI-flavored vocabulary (for example delve, leverage, robust, seamless, spearhead, foster, elevate, unlock, tapestry, pivotal, testament), cut filler and hedges, and do not open with a cliche or flattering line.\nDo not over-bullet prose. Keep EVERY fact, number, name, metric and claim exactly as given. Do not add or remove information. Keep roughly the same overall length. No em dashes. Output ONLY the rewritten text, nothing else.\n\n---\n${text}`;
 
 // reviseForCadence(text, opts) -> { text, revised, reason, before, after }
 //   opts.surface : 'email' | 'prose' (default) -- selects the cleaner for output
@@ -30,12 +31,20 @@ export async function reviseForCadence(text, opts = {}) {
   // fallback we keep if the LLM revision is skipped or rejected.
   const base = stripRedundantFiller(String(text));
   const before = analyzeCadence(base);
+  const longestUnitWords = Math.max(0, ...toUnits(base).map(wordCount));
   // Too few lines to have a rhythm (a short connect note): keep the swapped text.
-  if (before.insufficient) return { text: base, revised: base !== text, reason: 'too-short', before };
+  if (before.insufficient && longestUnitWords <= 30) {
+    return { text: base, revised: base !== text, reason: 'too-short', before };
+  }
+  const needsRhythmPass = before.flags.some((flag) => flag.severity === 'medium' || flag.severity === 'high')
+    || longestUnitWords > 30;
+  if (!needsRhythmPass) {
+    return { text: base, revised: base !== text, reason: 'rhythm-ok', before };
+  }
 
   let out;
   try {
-    out = clean((await generateText(REVISE_PROMPT(base), { model: model || draftModel(), maxTokens: 900 })).trim());
+    out = clean((await generateText(REVISE_PROMPT(base), { model: model || draftModel(), maxTokens: 900, label: 'cadence' })).trim());
   } catch (err) {
     return { text: base, revised: base !== text, reason: 'error:' + err.message, before };
   }

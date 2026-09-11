@@ -32,7 +32,7 @@ function researchForApplication(appId) {
 
 router.post('/api/drafts/review', async (req, res) => {
   try {
-    const { body, subject, surfaceId } = req.body || {};
+    const { body, subject, surfaceId, gradeContext } = req.body || {};
 
     if (!body || typeof body !== 'string' || !body.trim()) {
       return res.status(400).json({ error: 'body is required and must be a non-empty string.' });
@@ -52,12 +52,21 @@ router.post('/api/drafts/review', async (req, res) => {
     // Feed the independent grader the same sources, or the two disagree on the
     // evidence dimension by construction and the calibration gap is meaningless.
     const narrative = getNarrative();
+    const context = gradeContext && typeof gradeContext === 'object' && !Array.isArray(gradeContext)
+      ? gradeContext
+      : null;
+    const contextAppId = context
+      && (typeof context.appId === 'number' || typeof context.appId === 'string')
+      ? context.appId
+      : undefined;
+    const companyResearch = researchForApplication(contextAppId);
     const review = await gradeIndependently(body, surfaceId, {
       model: gradeModel(),
       subject: typeof subject === 'string' ? subject : '',
       cvExcerpt: readOptionalProjectFile(ROOT_DIR, 'cv.md'),
       proofPoints: narrative.proofPoints,
       superpowers: narrative.superpowers,
+      companyResearch,
     });
 
     if (!review) {
@@ -97,7 +106,7 @@ router.post('/api/drafts/improve', async (req, res) => {
       superpowers: narrative.superpowers,
       companyResearch,
     });
-    const raw = await generateText(prompt, { model: gradeModel(), maxTokens: 2200 });
+    const raw = await generateText(prompt, { model: gradeModel(), maxTokens: 2200, label: `improve:${surfaceId}` });
     const parsed = parseReviewed(raw, surfaceId);
     if (!parsed || typeof parsed.body !== 'string' || !parsed.body.trim()) {
       return res.status(500).json({ error: 'Could not parse an improved draft with a usable body from model output.' });

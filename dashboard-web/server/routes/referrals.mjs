@@ -4,9 +4,9 @@ import { parseReferralsMd, appendReferralRows, updateReferralLine, deleteReferra
 import { reconcile, cleanupStale, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
 import { detectAcceptances, computePendingAcceptances } from '../lib/linkedin-acceptance.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps } from '../lib/target-talent.mjs';
-import { readProjectFile, readOptionalProjectFile, readVoiceRules, draftModel, gradeModel } from '../lib/anthropic.mjs';
+import { readProjectFile, readOptionalProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
-import { generateWithRubric, gradeIndependently } from '../lib/draft-grader.mjs';
+import { generateWithRubric } from '../lib/draft-grader.mjs';
 import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { getIdentity, getOutreachPolicy, getNarrative } from '../lib/profile.mjs';
@@ -420,6 +420,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
       const narrative = getNarrative();
       const result = await generateWithRubric(prompt, 'referral_dm', {
         model: draftModel(), maxTokens: 700, cvMd, plainTextFallback: true,
+        mode: 'write',
         rubricOpts: {
           proofPoints: narrative.proofPoints,
           superpowers: narrative.superpowers,
@@ -433,11 +434,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
         reviewStatus: result.reviewStatus,
         cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
       });
-      const independentReview = await gradeIndependently(dm.body, 'referral_dm', {
-        model: gradeModel(), subject: '', cvExcerpt: cvMd,
-        proofPoints: narrative.proofPoints, superpowers: narrative.superpowers,
-      });
-      return res.json({ ok: true, draft: { subject: '', body: dm.body }, review: independentReview, reviewStatus: independentReview ? 'ok' : 'missing:independent-review', surfaceId: 'referral_dm', messageType: topic, channel: 'linkedin', relatedApp: topApp || null });
+      return res.json({ ok: true, draft: { subject: '', body: dm.body }, review: null, reviewStatus: 'pending', surfaceId: 'referral_dm', gradeContext: { surfaceId: 'referral_dm', source: 'referral', id, appId: topApp?.id ?? null }, messageType: topic, channel: 'linkedin', relatedApp: topApp || null });
     }
 
     // REPLY mode: respond to their most recent inbound message.
@@ -448,6 +445,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
       const narrative = getNarrative();
       const result = await generateWithRubric(prompt, 'reply_email', {
         model: draftModel(), maxTokens: 1024, cvMd,
+        mode: 'write',
         rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
       });
       if (result.error) return res.status(500).json({ error: 'Could not parse reply draft from model output' });
@@ -458,11 +456,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
         cleaner: 'email', stripSalutationFor: null, stripSignature: false,
         subjectTransform: (subject) => collapseRe(subject, inbound.subject),
       });
-      const independentReview = await gradeIndependently(reply.body, 'reply_email', {
-        model: gradeModel(), subject: reply.subject || '', cvExcerpt: cvMd,
-        proofPoints: narrative.proofPoints, superpowers: narrative.superpowers,
-      });
-      return res.json({ ok: true, draft: { subject: reply.subject, body: reply.body }, review: independentReview, reviewStatus: independentReview ? 'ok' : 'missing:independent-review', surfaceId: 'reply_email', messageType: 'reply' });
+      return res.json({ ok: true, draft: { subject: reply.subject, body: reply.body }, review: null, reviewStatus: 'pending', surfaceId: 'reply_email', gradeContext: { surfaceId: 'reply_email', source: 'referral', id, appId: null }, messageType: 'reply' });
     }
 
     // FOLLOW-UP-ON-LAST-SENT mode: nudge a thread built on your last sent message.
@@ -473,6 +467,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
       const narrative = getNarrative();
       const result = await generateWithRubric(prompt, 'followup_sent', {
         model: draftModel(), maxTokens: 1024, cvMd,
+        mode: 'write',
         rubricOpts: { proofPoints: narrative.proofPoints, superpowers: narrative.superpowers },
       });
       if (result.error) return res.status(500).json({ error: 'Could not parse follow-up draft from model output' });
@@ -483,11 +478,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
         cleaner: 'email', stripSalutationFor: null, stripSignature: false,
         subjectTransform: (subject) => collapseRe(subject, sent.subject),
       });
-      const independentReview = await gradeIndependently(followup.body, 'followup_sent', {
-        model: gradeModel(), subject: followup.subject || '', cvExcerpt: cvMd,
-        proofPoints: narrative.proofPoints, superpowers: narrative.superpowers,
-      });
-      return res.json({ ok: true, draft: { subject: followup.subject, body: followup.body }, review: independentReview, reviewStatus: independentReview ? 'ok' : 'missing:independent-review', surfaceId: 'followup_sent', messageType: 'followup-sent' });
+      return res.json({ ok: true, draft: { subject: followup.subject, body: followup.body }, review: null, reviewStatus: 'pending', surfaceId: 'followup_sent', gradeContext: { surfaceId: 'followup_sent', source: 'referral', id, appId: null }, messageType: 'followup-sent' });
     }
 
     // Fresh outreach. Topic defaults from the ladder: an already-asked contact
@@ -541,6 +532,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slic
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'referral_email', {
       model: draftModel(), maxTokens: 1024, cvMd,
+      mode: 'write',
       rubricOpts: {
         proofPoints: narrative.proofPoints,
         superpowers: narrative.superpowers,
@@ -554,11 +546,7 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slic
       reviewStatus: result.reviewStatus,
       cleaner: 'email', stripSalutationFor: null, stripSignature: false,
     });
-    const independentReview = await gradeIndependently(draft.body, 'referral_email', {
-      model: gradeModel(), subject: draft.subject || '', cvExcerpt: cvMd,
-      proofPoints: narrative.proofPoints, superpowers: narrative.superpowers,
-    });
-    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: independentReview, reviewStatus: independentReview ? 'ok' : 'missing:independent-review', surfaceId: 'referral_email', messageType: topic, relatedApp: topApp || null });
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: null, reviewStatus: 'pending', surfaceId: 'referral_email', gradeContext: { surfaceId: 'referral_email', source: 'referral', id, appId: topApp?.id ?? null }, messageType: topic, relatedApp: topApp || null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

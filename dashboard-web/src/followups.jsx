@@ -1015,15 +1015,14 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   const [touches, setTouches] = useStateF([]);    // this app's follow-up rows
   const [drafting, setDrafting] = useStateF(false);
   const [draft, setDraft] = useStateF(null);
-  const [review, setReview] = useStateF(null);
-  const [reviewOf, setReviewOf] = useStateF(null);
-  const [surfaceId, setSurfaceId] = useStateF(null);
   const [reviewing, setReviewing] = useStateF(false);
   const [improving, setImproving] = useStateF(false);
   const [proposedDraft, setProposedDraft] = useStateF(null);
   const [improveMessage, setImproveMessage] = useStateF(null);
   const [improveSnapshot, setImproveSnapshot] = useStateF('');
   const improveAbortRef = React.useRef(null);
+  const gradeAbortRef = React.useRef(null);
+  const gradeGenerationRef = React.useRef(0);
   const [logModal, setLogModal] = useStateF(null);
   const [relatedTalent, setRelatedTalent] = useStateF([]);
   const [crossLogIds, setCrossLogIds] = useStateF(new Set());
@@ -1050,22 +1049,53 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   };
   useEffectF(() => {
     load();
-    return () => improveAbortRef.current?.abort();
+    return () => {
+      improveAbortRef.current?.abort();
+      gradeAbortRef.current?.abort();
+    };
   }, [appId]);
 
   const toggleCrossLog = (id) => {
     setCrossLogIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
 
+  const gradeDraft = (next, generation) => {
+    const controller = new AbortController();
+    const gradedBody = next.body || '';
+    const gradedSubject = next.subject || '';
+    gradeAbortRef.current?.abort();
+    gradeAbortRef.current = controller;
+    return window.tjkGradeDraft({
+      body: gradedBody,
+      subject: gradedSubject,
+      surfaceId: next.surfaceId,
+      gradeContext: next.gradeContext,
+      signal: controller.signal,
+    }).then(review => {
+      if (gradeGenerationRef.current !== generation) return;
+      setDraft(current => {
+        if (!current) return current;
+        const unchanged = (current.body || '') === gradedBody && (current.subject || '') === gradedSubject;
+        return { ...current, review, reviewOf: unchanged ? 'independent' : 'original', reviewPending: false };
+      });
+    }).catch(err => {
+      if (err.name === 'AbortError' || gradeGenerationRef.current !== generation) return;
+      setDraft(current => current ? ({ ...current, reviewPending: false }) : current);
+      window.tjkToast?.(err.message, 'error');
+    }).finally(() => {
+      if (gradeAbortRef.current === controller) gradeAbortRef.current = null;
+    });
+  };
+
   const generateDraft = () => {
+    const generation = ++gradeGenerationRef.current;
+    gradeAbortRef.current?.abort();
+    gradeAbortRef.current = null;
     setDrafting(true);
     improveAbortRef.current?.abort();
     improveAbortRef.current = null;
     setImproving(false);
     setDraft(null);
-    setReview(null);
-    setReviewOf(null);
-    setSurfaceId(null);
     setProposedDraft(null);
     setImproveMessage(null);
     window.tjkMutate(`/api/followups/${appId}/draft`, { method: 'POST' })
@@ -1073,31 +1103,24 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
       .then(d => {
         setDrafting(false);
         if (d.draft) {
-          setDraft(d.draft);
-          setReview(d.review || null);
-          setReviewOf('independent');
-          setSurfaceId(d.surfaceId || null);
+          const next = { ...d.draft, review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null };
+          setDraft(next);
+          gradeDraft(next, generation);
         } else alert(d.error || 'Draft failed');
       })
       .catch(err => { setDrafting(false); alert(err.message); });
   };
 
   const rerunReview = () => {
-    if (!draft || !surfaceId || reviewing) return;
+    if (!draft?.surfaceId || reviewing) return;
+    const generation = ++gradeGenerationRef.current;
     setReviewing(true);
-    window.tjkMutate('/api/drafts/review', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: draft.body || '', subject: draft.subject || '', surfaceId }),
-    }).then(r => r.json()).then(d => {
-      if (d.error) throw new Error(d.error);
-      setReview(d.review || null);
-      setReviewOf('independent');
-    }).catch(err => alert(err.message)).finally(() => setReviewing(false));
+    setDraft(current => current ? ({ ...current, reviewPending: true }) : current);
+    gradeDraft(draft, generation).finally(() => setReviewing(false));
   };
 
   const improveDraft = () => {
-    if (!draft || !surfaceId || improving) return;
+    if (!draft?.surfaceId || improving) return;
     const snapshot = draft.body || '';
     const controller = new AbortController();
     improveAbortRef.current?.abort();
@@ -1112,10 +1135,10 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
       body: JSON.stringify({
         body: snapshot,
         subject: draft.subject || '',
-        surfaceId,
+        surfaceId: draft.surfaceId,
         recipientFirst: '',
-        appId,
-        originalScore: typeof review?.score === 'number' ? review.score : null,
+        appId: draft.gradeContext?.appId != null ? draft.gradeContext.appId : appId,
+        originalScore: typeof draft.review?.score === 'number' ? draft.review.score : null,
       }),
       signal: controller.signal,
     }).then(r => r.json()).then(d => {
@@ -1145,9 +1168,9 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   const replaceWithProposed = () => {
     if (!proposedDraft || !draft) return;
     if ((draft.body || '') !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
-    setDraft({ ...draft, subject: proposedDraft.subject || draft.subject || '', body: proposedDraft.body || '' });
-    setReview(proposedDraft.review || null);
-    setReviewOf(proposedDraft.reviewOf || 'independent');
+    gradeAbortRef.current?.abort();
+    gradeGenerationRef.current++;
+    setDraft({ ...draft, subject: proposedDraft.subject || draft.subject || '', body: proposedDraft.body || '', review: proposedDraft.review || null, reviewOf: proposedDraft.reviewOf || 'independent', reviewPending: false });
     setProposedDraft(null);
     setImproveMessage(null);
   };
@@ -1155,11 +1178,11 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   const clearDraft = () => {
     improveAbortRef.current?.abort();
     improveAbortRef.current = null;
+    gradeAbortRef.current?.abort();
+    gradeAbortRef.current = null;
+    gradeGenerationRef.current++;
     setImproving(false);
     setDraft(null);
-    setReview(null);
-    setReviewOf(null);
-    setSurfaceId(null);
     setProposedDraft(null);
     setImproveMessage(null);
   };
@@ -1279,7 +1302,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
                 <button className="btn ghost sm" onClick={clearDraft}>Dismiss</button>
               </div>
             </div>
-            {window.DraftScoreBadge && <window.DraftScoreBadge review={review} reviewOf={reviewOf} onRerun={rerunReview} onImprove={improveDraft} busy={reviewing} improving={improving} />}
+            {window.DraftScoreBadge && <window.DraftScoreBadge review={draft.review} reviewOf={draft.reviewOf} pending={draft.reviewPending} onRerun={rerunReview} onImprove={improveDraft} busy={reviewing} improving={improving} />}
             <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 6 }}>
               <span className="mono dim" style={{ fontSize: 11 }}>Subject</span>
               <input className="inp" style={{ flex: 1 }} value={draft.subject || ''} onChange={e => setDraft({ ...draft, subject: e.target.value })} />
