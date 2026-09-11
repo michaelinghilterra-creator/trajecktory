@@ -2,16 +2,15 @@ import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { pauseSequence, getSequence, getTemplate } from '../lib/sequences.mjs';
-import { readProjectFile, readOptionalProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
+import { generateText, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
-import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
 import { appendFollowupRow, parseFollowupsMd } from '../lib/followups.mjs';
 import { logConnect } from '../lib/connects.mjs';
 import { isLinkedInInvite } from '../lib/channels.mjs';
-import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES, getLinkedInStatus } from '../lib/tt-linkedin.mjs';
+import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES } from '../lib/tt-linkedin.mjs';
 import { isHighValueContact } from '../lib/followups.mjs';
 import { appendReferralRows, parseReferralsMd } from '../lib/referrals.mjs';
 import { linkedinKey } from '../lib/contact-identity.mjs';
@@ -22,6 +21,8 @@ import { ACTIVE_STATUSES, findSubmittedApplication, isInterviewStage } from '../
 import { getPersonContext } from '../lib/person-context.mjs';
 import { INFLUENCE_TIERS, resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
 import { classifyInbound } from '../../../lib/inbound-classify.mjs';
+import { buildPacket } from '../../../lib/outreach-packet.mjs';
+import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
 
 function sequenceTone(contactId) {
   try {
@@ -32,15 +33,6 @@ function sequenceTone(contactId) {
     const touch = tpl.touches.find(t => t.step === seq.step + 1);
     return touch?.tone || '';
   } catch { return ''; }
-}
-
-function tierAsk(recipientTier, appliedRole) {
-  if (!appliedRole) return 'A good ask here is whether the team is hiring for the kind of role he is targeting.';
-  if (recipientTier === 'exec') return `A good ask here is who is leading the hiring for the ${appliedRole} role.`;
-  if (recipientTier === 'hm' || recipientTier === 'peer') {
-    return `A good ask here is whether they would take a look at his application for the ${appliedRole} role.`;
-  }
-  return `A good ask here is to flag his application for the ${appliedRole} role to the hiring manager.`;
 }
 
 export const router = express.Router();
@@ -294,6 +286,28 @@ const STAGE_GUIDANCE = {
   '3rd Interview': 'THIRD / LATE INTERVIEW STAGE. You are late in the process, likely near a decision. Tone is confident and concise: reaffirm strong fit, address any likely open question proactively, and make it easy to move to next steps. Do not sound impatient.',
 };
 
+export function buildTargetTalentAugustPrompt(packet, {
+  channel = 'linkedin', mode = '', interviewStage = '', intentGuidance = '',
+  stageGuidance = '', sequenceTone: tone = '', threadState = '',
+} = {}) {
+  const staged = !!interviewStage && interviewStage !== 'general';
+  if (channel === 'email') {
+    return staged
+      ? buildAugustPromptWithGuidance(packet, { guidance: [stageGuidance] })
+      : buildAugustPrompt(packet);
+  }
+  const threaded = mode === 'reply' || mode === 'followup-sent';
+  if (!threaded && !staged) return buildAugustPrompt(packet);
+  return buildAugustPromptWithGuidance(packet, {
+    messageIntent: threaded ? intentGuidance : '',
+    guidance: [
+      staged ? stageGuidance : '',
+      tone ? `SEQUENCE TONE: ${tone}` : '',
+      threadState ? `THREAD STATE: ${threadState}` : '',
+    ],
+  });
+}
+
 // POST /api/target-talent/:id/draft — Claude-draft outreach
 //   Internal-TA voice: references the specific role(s) you applied to at this
 //   company. Different framing from the recruiter draft — this is warm
@@ -314,7 +328,6 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
     const projectRoot = ROOT_DIR;
     const cvMd           = readProjectFile(projectRoot, 'cv.md');
     const profileMd      = readVoiceRules(projectRoot);
-    const articleDigestMd = readOptionalProjectFile(projectRoot, 'article-digest.md');
     const prior = readTTCorrespondence(id);
     const context = getPersonContext('ta', id);
     const channel = req.body?.channel === 'linkedin' ? 'linkedin' : 'email';
@@ -329,23 +342,16 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
     // every other stage is fresh, interview-stage-framed outreach. First-touch
     // connect notes go through /api/linkedin-drafts/connect-note.
     if (channel === 'linkedin') {
-      const me = getIdentity();
       const mode = req.body?.mode === 'reply' ? 'reply' : req.body?.mode === 'followup-sent' ? 'followup-sent' : null;
       const relatedApps = findRelatedApps(r.company);
       const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status)) || relatedApps[0];
-      const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
       const submittedApp = findSubmittedApplication(relatedApps);
       const appliedRole = submittedApp?.role || '';
       const appliedDate = submittedApp?.date || '';
       const interviewStage = req.body?.interviewStage
         || (submittedApp && isInterviewStage(submittedApp.status) ? submittedApp.status : 'general');
       const stageGuidance = STAGE_GUIDANCE[interviewStage] || '';
-      const connected = (context?.timeline || []).some(e => e.kind === 'invite-accepted')
-        || getLinkedInStatus(Number(id)) === 'Connected';
       const thread = summarizeThread(prior);
-      const relatedContext = submittedApp
-        ? `== RELATED APPLICATION AT ${String(r.company || '').toUpperCase()} ==\nRole:   ${submittedApp.role}\nStatus: ${submittedApp.status} (applied ${submittedApp.date})\nReference this role specifically. Do NOT generalize.`
-        : `No submitted application currently logged for ${r.company}. Signal genuine interest in their team and the kind of roles ${me.firstName} targets (see profile).`;
       const intentGuidance = mode === 'reply'
         ? 'REPLY. Respond directly and specifically to their most recent message in the thread below. Pick up what they said and advance it. Do not restart the conversation.'
         : mode === 'followup-sent'
@@ -354,62 +360,19 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
             ? 'FIRST / FRESH TOUCH. Surface yourself as a strong candidate: specific interest in the company, that you applied, and one reason you are worth a reply.'
             : 'FIRST / FRESH TOUCH. Surface yourself as a strong candidate: specific interest in the company and one reason you are worth a reply. Do not imply that an application was submitted.'));
 
-      const prompt = `You are drafting a brief LinkedIn DIRECT MESSAGE from ${me.fullName} to an internal Talent Acquisition / People-team contact at ${r.company}, a company he is actively pursuing. This is a private 1:1 message to paste into LinkedIn, NOT an email and NOT a connection request.
-
-${connected
-  ? 'YOU ARE ALREADY CONNECTED (they accepted the invite). Do NOT say you sent a connection request, do NOT ask whether it arrived, and do NOT imply the connection is pending.'
-  : 'Write a real, purposeful message. Do NOT write "I would like to connect" — this is a message, not a new invite. You are not connected on LinkedIn yet. Do not say you connected, since connecting, since we last connected, since we connected, or good to reconnect.'}
-
-== THE CONTACT ==
-Name:    ${r.salute || ''} ${r.first} ${r.last}
-Title:   ${r.title || '(unknown)'}
-Company: ${r.company || '(unknown)'}
-
-${relatedContext}
-
-${articleDigestMd ? `== PORTFOLIO / PROOF POINTS (article-digest.md) ==\n${articleDigestMd.slice(0, 900)}\n` : ''}
-${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
-== MESSAGE INTENT ==
-${intentGuidance}
-
-== STYLE REQUIREMENTS ==
-- LinkedIn DM voice: warm, direct, senior-operator. 40 to 110 words. Never a wall of text.
-- 2 to 3 short paragraphs separated by a LITERAL \\n\\n between paragraphs, so it scans on a phone.
-- Open with genuine interest in ${r.company} or its work. ${submittedApp ? `Name the ${appliedRole} role after that opener.` : 'Do not imply that an application was submitted.'} Then give one or two concrete proof points from the CV or portfolio that make him worth a reply.
-- No corporate filler ("I hope this finds you well", "reaching out to touch base"). No em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
-- Never invent metrics or claims not on the CV.
-- Close with ONE low-friction ask. ${tierAsk(recipientTier, appliedRole)} A soft redirect ask is allowed. Do NOT ask for a call, a chat, a meeting, or any amount of their time.
-- Do NOT pitch a job-search tool or job-search article.
-- Do not write "without a reply", "haven't heard back", "never heard back", or any apology for writing.
-${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nTHREAD STATE: ${thread.stateLine}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
-== BODY REQUIREMENTS ==
-- Omit a subject line.
-- Omit a signature block and any trailing sign-off, including '${me.firstName}' or 'Best,\\n${me.firstName}'.
-- Omit a greeting and any bare first-name address.
-- The UI prefills 'Hi ${r.first},', so the first sentence must begin with substantive content. Do not start with '${r.first}', 'Hi', 'Hello', or 'Hey'.`;
-
-      const narrative = getNarrative();
-      const result = await generateWithRubric(prompt, 'ta_dm', {
-        model: draftModel(), maxTokens: 700, cvMd, plainTextFallback: true,
-        mode: 'write',
-        rubricOpts: {
-          proofPoints: narrative.proofPoints,
-          superpowers: narrative.superpowers,
-          toneNote: sequenceTone(id),
-          recipientRole,
-          recipientTier,
-          appliedRole,
-          appliedDate,
-          ...(companyResearch ? { companyResearch } : {}),
-        },
+      const packet = buildPacket({ source: 'ta', id, kind: 'ta_dm' });
+      const prompt = buildTargetTalentAugustPrompt(packet, {
+        channel: 'linkedin', mode, interviewStage, intentGuidance, stageGuidance,
+        sequenceTone: sequenceTone(id), threadState: thread.stateLine,
       });
-      if (result.error) return res.status(500).json({ error: 'Could not parse LinkedIn draft from model output' });
+      const result = parseDraftText(await generateText(prompt, {
+        model: draftModel(), maxTokens: 900, label: `draft:${packet.surfaceId}`,
+      }));
+      if (!result?.body) return res.status(500).json({ error: 'Could not parse LinkedIn draft from model output' });
       const dm = await finishDraft({
         body: result.body, surface: 'ta_dm',
-        review: result.review,
-        reviewStatus: result.reviewStatus,
-        cleaner: 'prose',
-        stripSalutationFor: r.first, stripSignature: true,
+        cadence: false,
+        ...finishOptionsFor(packet),
       });
       return res.json({ ok: true, draft: { subject: '', body: dm.body }, review: null, reviewStatus: 'pending', surfaceId: 'ta_dm', gradeContext: {
         surfaceId: 'ta_dm', source: 'ta', id, appId: topApp?.id ?? null,
@@ -419,10 +382,6 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
 
     const isFirstTouch = prior.length === 0;
     const messageType = req.body?.messageType || (isFirstTouch ? 'first-touch' : 'follow-up');
-    // Full-thread state so a follow-up nudges rather than re-pitching a message
-    // that already went out a few days ago (see correspondence-context.mjs).
-    const thread = summarizeThread(prior);
-
     // REPLY mode: respond to the contact's most recent received email instead of
     // drafting fresh outreach. Requires an inbound message to reply to.
     if (req.body?.mode === 'reply' || req.body?.interviewStage === 'reply') {
@@ -477,7 +436,6 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
     const relatedApps = findRelatedApps(r.company);
     const topApp = relatedApps.find(a => ACTIVE_STATUSES.includes(a.status))
                 || relatedApps[0];
-    const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
     const submittedApp = findSubmittedApplication(relatedApps);
     const appliedRole = submittedApp?.role || '';
     const appliedDate = submittedApp?.date || '';
@@ -488,109 +446,18 @@ ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent fir
       || (submittedApp && isInterviewStage(submittedApp.status) ? submittedApp.status : 'general');
     const stageGuidance = STAGE_GUIDANCE[interviewStage] || '';
 
-    // Compute days since application so the model uses correct timing
-    // language. Without this, the model defaults to "yesterday/this morning"
-    // (the example in the TIMING bullet) even for 30+ day-old applications.
-    let timingPhrase = '';
-    let daysSinceApply = null;
-    if (submittedApp && submittedApp.date) {
-      const applyMs = Date.parse(submittedApp.date);
-      if (!isNaN(applyMs)) {
-        daysSinceApply = Math.floor((Date.now() - applyMs) / 86400000);
-        if (daysSinceApply <= 0)      timingPhrase = 'today (do NOT send same-day — flag this in the email as "submitted earlier today")';
-        else if (daysSinceApply === 1) timingPhrase = 'yesterday';
-        else if (daysSinceApply <= 3)  timingPhrase = `${daysSinceApply} days ago (use "a few days ago" or "earlier this week")`;
-        else if (daysSinceApply <= 10) timingPhrase = `${daysSinceApply} days ago (use "last week" or "about a week ago")`;
-        else if (daysSinceApply <= 21) timingPhrase = `${daysSinceApply} days ago (use "a couple of weeks ago")`;
-        else if (daysSinceApply <= 45) timingPhrase = `${daysSinceApply} days ago (use "last month" or "a few weeks back")`;
-        else                            timingPhrase = `${daysSinceApply} days ago (use "earlier this spring/summer/etc." or just reference the role without timing language)`;
-      }
-    }
-
-    const relatedContext = submittedApp
-      ? `== RELATED APPLICATION AT ${r.company.toUpperCase()} ==
-Role:   ${submittedApp.role}
-Status: ${submittedApp.status} (applied ${submittedApp.date}${daysSinceApply != null ? `, ${daysSinceApply} days ago` : ''})
-Score:  ${submittedApp.score}
-TIMING LANGUAGE: ${timingPhrase || '(no application date available — avoid specific timing claims)'}
-Reference this role specifically in the outreach. Do NOT generalize. Do NOT claim the application was submitted at a different time than what's stated above.`
-      : `No submitted application currently logged for ${r.company}. Write a forward-looking introduction expressing interest in their team and the kind of roles you target (Director/VP RevOps, Analytics, BizDev — see profile).`;
-
-    const me = getIdentity();
-    const prompt = `You are drafting a warm in-network email from ${me.fullName} to an Internal Talent Acquisition / People-team employee at a TARGET COMPANY he is actively pursuing. This is NOT a blind recruiter pitch — this is a candidate making direct contact to surface himself for a role at a company he's already engaging with.
-
-== INTERNAL TA CONTACT ==
-Company:  ${r.company}
-Name:     ${r.salute || ''} ${r.first} ${r.last}
-Title:    ${r.title}
-Location: ${r.city}, ${r.state}
-Email:    ${r.email}
-LinkedIn: ${r.linkedin || '(not provided)'}
-
-${relatedContext}
-
-${articleDigestMd ? `\n== PORTFOLIO / PROOF POINTS (article-digest.md, use for the artifact-led opener) ==\n${articleDigestMd.slice(0, 1200)}\n` : ''}
-${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
-== STYLE REQUIREMENTS (internal-TA outreach, different from recruiter outreach) ==
-- This is warm, NOT cold. You are introducing a candidate who already engaged with the company (applied / evaluated), or who is on a deliberate target list.
-- Direct, senior operator tone. No "I hope this finds you well" or other corporate filler.
-- Maximum 140 words in body.
-- NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
-- Never invent metrics or claims not on the CV.
-- Open with genuine interest in this company or its work, not with the fact of applying. ${submittedApp ? `Name the ${appliedRole} role after that opener.` : 'Do not claim an application was submitted.'}
-- Use one or two relevant proof points. Prefer a named artifact from the PORTFOLIO block when available; otherwise use quantified CV proof points.
-- Make the ask low-friction and time-respecting. ${tierAsk(recipientTier, appliedRole)} A soft redirect ask is allowed. Do NOT ask for a call, a chat, a conversation, a meeting, or any amount of their time (no "20-minute call", no "quick chat", no "would welcome a conversation"). Everyone is busy, and asking for their time reads as tone-deaf and needy.
-- Close with a clear, low-friction next step that does NOT request their time.
-- Do NOT ask them to forward your resume or do recruiting work for you. Frame as peer-to-peer candidate introduction.
-${submittedApp ? '- TIMING: Use the exact phrasing from the TIMING LANGUAGE line in the RELATED APPLICATION block above. Do NOT invent your own gap — the server has computed days-since-application against today\'s date. If TIMING LANGUAGE says "31 days ago (use \'last month\')", say "last month" — never "yesterday" or "this morning". Misreporting the timing reads as careless to the recipient.' : '- Do not state or imply that an application was submitted.'}
-${stageGuidance ? `- ${stageGuidance}` : ''}
-- Do NOT pitch a job-search tool or job-search article.
-- Do not write "without a reply", "haven't heard back", "never heard back", or any apology for writing.
-
-${isFirstTouch ? '' : `
-== PRIOR CORRESPONDENCE (most recent first) ==
-${prior.slice().reverse().slice(0, 3).map(m => `--- ${m.direction} on ${m.timestamp} | Subject: ${m.subject}\n${m.body}`).join('\n\n')}
-
-THREAD STATE: ${thread.stateLine}
-${thread.recentPitch
-  ? 'A substantive message already went out recently and is UNANSWERED. Write a SHORT nudge, not a fresh pitch: acknowledge the prior note briefly, add exactly ONE new thing (a recent update, an artifact, a specific role development), and do NOT restate the proof points or re-issue the same ask verbatim. Keep the body to 2 or 3 short sentences.'
-  : 'Since prior messages exist, this should be a follow-up — acknowledge the prior thread, add new value (e.g., recent thinking, an artifact, a specific role update), and re-issue the ask without repeating what was already said.'}
-`}
-
-== SUBJECT REQUIREMENTS ==
-- Use a concise email subject.
-
-== BODY REQUIREMENTS ==
-- Use plain text and omit a signature block, contact information, and every trailing sign-off, including '${me.firstName}' or 'Best,\\n${me.firstName}'.
-- Omit a greeting and any bare first-name address.
-- Write 3 to 4 short paragraphs separated by a literal \\n\\n between paragraphs. Do not write one giant block.
-- Write 1 to 2 sentences per paragraph, about 30 to 50 words.
-- Follow this paragraph pattern: (1) genuine interest in the company or the work, (2) one or two proof points, (3) a why-here link to their team, and (4) a brief interest-signaling close that does not ask for a call, meeting, or any of their time.
-- The UI prefills 'Hi ${r.first},', so the first sentence must begin with substantive interest in the company or the work${submittedApp ? `; name the ${appliedRole} role after that opener` : ', without implying that an application was submitted'}. Do not start with '${r.first}', 'Hi', 'Hello', 'Hey', or any form of address.`;
-
-    const narrative = getNarrative();
-    const result = await generateWithRubric(prompt, 'ta_email', {
-      model: draftModel(), maxTokens: 1024, cvMd,
-      mode: 'write',
-      rubricOpts: {
-        proofPoints: narrative.proofPoints,
-        superpowers: narrative.superpowers,
-        toneNote: sequenceTone(id),
-        recipientRole,
-        recipientTier,
-        appliedRole,
-        appliedDate,
-        ...(companyResearch ? { companyResearch } : {}),
-      },
+    const packet = buildPacket({ source: 'ta', id, kind: 'ta_email' });
+    const prompt = buildTargetTalentAugustPrompt(packet, {
+      channel: 'email', interviewStage, stageGuidance,
     });
-    if (result.error) return res.status(500).json({ error: 'Could not parse draft from model output' });
+    const result = parseDraftText(await generateText(prompt, {
+      model: draftModel(), maxTokens: 900, label: `draft:${packet.surfaceId}`,
+    }));
+    if (!result?.body) return res.status(500).json({ error: 'Could not parse draft from model output' });
     const draft = await finishDraft({
       body: result.body, subject: result.subject, surface: 'ta_email',
-      review: result.review,
-      reviewStatus: result.reviewStatus,
-      cleaner: 'email',
-      stripSalutationFor: r.first,
-      stripSignature: true,
+      cadence: false,
+      ...finishOptionsFor(packet),
     });
     res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: null, reviewStatus: 'pending', surfaceId: 'ta_email', gradeContext: {
       surfaceId: 'ta_email', source: 'ta', id, appId: topApp?.id ?? null,

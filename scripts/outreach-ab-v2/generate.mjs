@@ -4,6 +4,9 @@ import { loadHarnessModules } from './bootstrap.mjs';
 import { ARMS, buildPrompt } from './arms.mjs';
 import { buildPacket, renderKit } from './packet.mjs';
 import { buildPanelKey, renderPanel } from './panel.mjs';
+import { parseDraftText, finishOptionsFor } from '../../lib/outreach-voice.mjs';
+
+export { parseDraftText, finishOptionsFor } from '../../lib/outreach-voice.mjs';
 
 const { generateText, draftModel, gradeModel } = await loadHarnessModules();
 const { gradeIndependently } = await import('../../dashboard-web/server/lib/draft-grader.mjs');
@@ -47,42 +50,6 @@ async function withRetry(call, limitedCall, valid = value => value !== null && v
     }
   }
   throw lastError;
-}
-
-export function parseDraftText(raw) {
-  const text = typeof raw === 'string' ? raw.trim() : '';
-  if (!text) return null;
-  try {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) {
-      const value = JSON.parse(match[0]);
-      if (typeof value?.body === 'string' && value.body.trim()) {
-        return {
-          subject: typeof value.subject === 'string' ? value.subject : undefined,
-          body: value.body,
-        };
-      }
-    }
-  } catch { /* fall through to the plain-text route fallback */ }
-  return { subject: undefined, body: text };
-}
-
-const FINISH_OPTIONS = Object.freeze({
-  li_followup: { cleaner: 'prose', stripSalutationFor: null, stripSignature: false },
-  connect_note: { cleaner: 'prose', stripSalutationFor: null, stripSignature: false, flatten: true, hardFit: null },
-  ta_dm: { cleaner: 'prose', stripSignature: true },
-  ta_email: { cleaner: 'email', stripSignature: true },
-  referral_dm: { cleaner: 'prose', stripSignature: true },
-  referral_email: { cleaner: 'email', stripSignature: true },
-  app_followup: { cleaner: 'email', stripSignature: true },
-});
-const FIXED_GREETING_KINDS = new Set(['ta_dm', 'ta_email', 'referral_dm', 'referral_email', 'app_followup']);
-
-export function finishOptionsFor(packet) {
-  const options = FINISH_OPTIONS[packet.kind];
-  return FIXED_GREETING_KINDS.has(packet.kind)
-    ? { ...options, stripSalutationFor: packet.recipient.first, stripSignature: true }
-    : { ...options };
 }
 
 async function generateDraft(arm, packet, limitedCall) {

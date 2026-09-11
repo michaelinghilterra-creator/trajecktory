@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { LINKEDIN_SSI_DIR } from '../config.mjs';
 import { parseCsvLine } from './csv.mjs';
+import { buildPacketFromFields } from '../../../lib/outreach-packet.mjs';
+import { buildAugustPrompt } from '../../../lib/outreach-voice.mjs';
 
 function ensureLikedinSsiDir() {
   if (!fs.existsSync(LINKEDIN_SSI_DIR)) {
@@ -202,36 +204,18 @@ function fitConnectNote(text, firstName, limit = 300) {
 function buildConnectPrompt({
   senderName, senderFirst, senderHeadline = '',
   recipientName, recipientFirst = '', recipientRole = '', recipientCompany = '',
-  guidance = '', cvExcerpt = '', appliedRole = '', tone = 'Warm', toneText = '', targetMax = 280,
+  guidance = '', cvExcerpt = '', appliedRole = '', tone = 'Warm', toneText = '',
 } = {}) {
-  const first = String(senderFirst ?? '').trim();
-  const openExample = String(recipientFirst || 'Alex').trim();
-  return `You are drafting a LinkedIn CONNECTION REQUEST note from ${senderName}${senderHeadline ? ` (${senderHeadline})` : ''} to a contact.
-
-THE RECIPIENT:
-- Name: ${recipientName}
-- Role: ${recipientRole || '(unknown)'}${recipientCompany ? `\n- Company: ${recipientCompany}` : ''}
-
-${cvExcerpt ? `ABOUT ${first.toUpperCase()} (for grounding, do not copy verbatim):\n${cvExcerpt}\n\n` : ''}
-WHY CONNECT: ${guidance || `Anchor on shared focus in the GTM / RevOps / analytics space. Signal ${first} is a fellow operator, not a job seeker.`}
-
-TONE DIRECTIVE (${tone}): ${toneText}
-
-HARD RULES:
-- ABSOLUTE MAXIMUM ${targetMax} characters TOTAL (including the "Thanks, ${first}" sign-off). LinkedIn caps connection notes at 300 characters and will reject anything longer. Count characters before responding. Aim for ${targetMax - 20} to leave safety margin.
-- Open with their first name + comma. Example: "Hi ${openExample},"
-- NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
-- Open with genuine interest in the company or the work. Give one reason to connect that is grounded in the context above. Be specific, not generic.
-${appliedRole ? `- Name the ${appliedRole} role after the genuine-interest opener.` : '- Do not claim that an application was submitted.'}
-- Keep the whole note as ONE paragraph on a single line with no line breaks, and end that same line with the sign-off: "Thanks, ${first}" (with the comma). This is a short note in a small box, not an email.
-- No "I'd love to pick your brain". No "I hope this finds you well". No "Quick question for you".
-- Do NOT sound desperate and do NOT lead with being in market or looking for a job.
-- Do NOT pitch a job-search tool or job-search article.
-- Do NOT ask for a call, chat, meeting, calendar time, or a named amount of their time.
-- Do NOT include emojis.
-
-== BODY REQUIREMENTS ==
-- Include the connection note text with no preface, character count, or explanation.`;
+  const packet = buildPacketFromFields({
+    kind: 'connect_note',
+    name: recipientName || recipientFirst,
+    role: recipientRole,
+    company: recipientCompany,
+    notes: [guidance, toneText || tone, senderHeadline].filter(Boolean).join(' · '),
+    application: appliedRole ? { submitted: true, role: appliedRole, date: '', status: '' } : null,
+    sender: { fullName: senderName, firstName: senderFirst, articleDigest: cvExcerpt },
+  });
+  return buildAugustPrompt(packet);
 }
 
 export {

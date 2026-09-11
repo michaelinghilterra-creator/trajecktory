@@ -2,19 +2,17 @@
 // keep each module focused and under the size budget.
 import express from 'express';
 import { ROOT_DIR } from '../config.mjs';
-import { generateText, readOptionalProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
+import { generateText, readOptionalProjectFile, draftModel } from '../lib/anthropic.mjs';
 import { cleanProse, stripDraftMeta } from '../lib/text-hygiene.mjs';
 import { reviseForCadence } from '../lib/cadence-revise.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
-import { generateWithRubric } from '../lib/draft-grader.mjs';
 import { loadCompanyResearch } from '../lib/report-research.mjs';
-import { loadInfluencer, toneInstruction, flattenConnectNote, fitConnectNote, buildConnectPrompt } from '../lib/linkedin-ssi.mjs';
+import { loadInfluencer, toneInstruction, fitConnectNote } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
 import { parseTargetTalentMd, updateTTLine, readTTCorrespondence, findRelatedApps } from '../lib/target-talent.mjs';
 import { parseReferralsMd, referralTitle } from '../lib/referrals.mjs';
 import { getLinkedInStatus } from '../lib/tt-linkedin.mjs';
-import { summarizeThread } from '../lib/correspondence-context.mjs';
-import { getIdentity, getOutreachPolicy, getNarrative } from '../lib/profile.mjs';
+import { getIdentity, getOutreachPolicy } from '../lib/profile.mjs';
 import { getPersonContext } from '../lib/person-context.mjs';
 import { canContact, logOutreachOverride } from '../lib/outreach-policy.mjs';
 import { readEngagementLog } from '../lib/engagement-log.mjs';
@@ -22,6 +20,8 @@ import { getInmailBudget, decrementInmail, setInmailRemaining } from '../lib/inm
 import { ACTIVE_STATUSES, findSubmittedApplication } from '../lib/statuses.mjs';
 import { getProfile } from '../../../lib/outreach-rubric.mjs';
 import { resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
+import { buildPacket, buildPacketFromFields } from '../../../lib/outreach-packet.mjs';
+import { buildAugustPrompt, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
 
 export const router = express.Router();
 
@@ -79,13 +79,21 @@ function resolveRecipient(source, id) {
   return null;
 }
 
-function tierAsk(recipientTier, appliedRole) {
-  if (!appliedRole) return 'A good ask here is whether the team is hiring for the kind of role he is targeting.';
-  if (recipientTier === 'exec') return `A good ask here is who is leading the hiring for the ${appliedRole} role.`;
-  if (recipientTier === 'hm' || recipientTier === 'peer') {
-    return `A good ask here is whether they would take a look at his application for the ${appliedRole} role.`;
-  }
-  return `A good ask here is to flag his application for the ${appliedRole} role to the hiring manager.`;
+export function mergeConnectPacketContext(packet, { tone = '', reason = '', angleGuidance = '', referralTarget = '' } = {}) {
+  const additions = [
+    reason ? `Reason: ${reason}` : '',
+    angleGuidance ? `Angle guidance: ${angleGuidance}` : '',
+    referralTarget ? `Referral target: ${referralTarget}` : '',
+    tone ? `Tone guidance: ${toneInstruction(tone)}` : '',
+  ].filter(Boolean);
+  if (!additions.length) return packet;
+  return {
+    ...packet,
+    recipient: {
+      ...packet.recipient,
+      notesExcerpt: [packet.recipient?.notesExcerpt, ...additions].filter(Boolean).join(' · '),
+    },
+  };
 }
 
 // GET /api/linkedin-drafts/inmail-budget — remaining monthly InMail credits.
@@ -234,8 +242,6 @@ router.post('/api/linkedin-ssi/generate-connect-request', async (req, res) => {
       return res.status(400).json({ error: 'Pick an influencer from the dropdown.' });
     }
 
-    const projectRoot = ROOT_DIR;
-    const cvMd = readOptionalProjectFile(projectRoot, 'cv.md');
     const id = getIdentity();
     const recipientRole = influencer.role || theirRole || '';
     const recipientTier = resolveInfluenceTier({ notes: influencer.notes, title: recipientRole }).tier;
@@ -249,65 +255,31 @@ router.post('/api/linkedin-ssi/generate-connect-request', async (req, res) => {
       'Career Stage': 'Briefly anchor on ${id.firstName} being a Director-level BI / RevOps leader exploring the next chapter. Keep it dignified, not desperate.',
     };
 
-    const buildPrompt = (targetMax) => `You are drafting a LinkedIn CONNECTION REQUEST note from ${id.fullName} to a contact.
-
-THE RECIPIENT:
-- Name: ${influencer.name}
-- Role: ${influencer.role || theirRole || '(unknown)'}
-- Why ${id.firstName} wants to connect: ${influencer.engagementTip || influencer.track || '(general professional interest)'}
-
-ANGLE (${angle}): ${angleGuidance[angle] || angleGuidance['Reference Post']}
-
-TONE DIRECTIVE (${tone}): ${toneInstruction(tone)}
-
-HARD RULES:
-- ABSOLUTE MAXIMUM ${targetMax} characters TOTAL (including the "Thanks, ${id.firstName}" sign-off). LinkedIn caps connection notes at 300 characters and will reject anything longer. Count characters before responding. Aim for ${targetMax - 20} to leave safety margin.
-- Open with their first name + comma. Example: "Hi Sangram,"
-- NO em dashes (—). Use periods, commas, semicolons, colons, or parentheses.
-- Open with genuine interest in the company or the work. Give one reason to connect that is grounded in the angle above. Be specific, not generic.
-- End with a sign-off: "Thanks, ${id.firstName}" (with the comma).
-- No "I'd love to pick your brain". No "I hope this finds you well". No "Quick question for you".
-- Do NOT mention looking for a job, being in market, or open to opportunities (unless the angle is explicitly "Career Stage").
-- Do NOT pitch a job-search tool or job-search article.
-- Do NOT ask for a call, chat, meeting, calendar time, or a named amount of their time.
-- Do NOT include emojis.
-
-== NOTE REQUIREMENTS ==
-- Include the connection note text ready to paste into LinkedIn, without quotes, a preface, a character count, or an explanation.`;
-
     const surfaceId = 'connect_note_influencer';
     const profile = getProfile(surfaceId);
-    const rubricActive = process.env.TJK_RUBRIC_DISABLED !== '1';
-    const result = await generateWithRubric(buildPrompt(280), surfaceId, {
-      model: draftModel(),
-      maxTokens: rubricActive ? 800 : 220,
-      cvMd,
-      plainTextFallback: true,
-      mode: 'write',
-      rubricOpts: { recipientRole, recipientTier },
+    const packet = buildPacketFromFields({
+      kind: 'connect_note',
+      name: influencer.name,
+      role: recipientRole,
+      company: influencer.company || '',
+      notes: [influencer.engagementTip || influencer.track || '', angleGuidance[angle] || angleGuidance['Reference Post'], toneInstruction(tone)].filter(Boolean).join(' · '),
+      tier: recipientTier,
     });
-    if (result.error) return res.status(500).json({ error: 'Could not parse connection note from model output' });
-
-    const fitted = fitConnectNote(
-      flattenConnectNote(stripDraftMeta(cleanProse(result.body))),
-      id.firstName,
-      profile.hardCap,
-    );
+    const prompt = buildAugustPrompt(packet);
+    const result = parseDraftText(await generateText(prompt, {
+      model: draftModel(), maxTokens: 900, label: `draft:${packet.surfaceId}`,
+    }));
+    if (!result?.body) return res.status(500).json({ error: 'Could not parse connection note from model output' });
     const draft = await finishDraft({
-      body: fitted.text,
+      body: result.body,
       surface: surfaceId,
-      review: result.review,
-      reviewStatus: result.reviewStatus,
-      cleaner: 'prose',
-      stripSalutationFor: null,
-      stripSignature: false,
-      flatten: true,
-      hardFit: profile.hardCap,
       cadence: false,
+      ...finishOptionsFor(packet),
     });
+    const fitted = fitConnectNote(draft.body, id.firstName, profile.hardCap);
     res.json({
-      response: draft.body,
-      length: draft.body.length,
+      response: fitted.text,
+      length: fitted.length,
       review: null,
       reviewStatus: 'pending',
       surfaceId,
@@ -342,7 +314,8 @@ router.get('/api/linkedin-drafts/connect-queue', (req, res) => {
 router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
   try {
     const body = req.body || {};
-    const { source, id, tone = 'Warm', angle = '' } = body;
+    const { source, id, angle = '' } = body;
+    const tone = String(body.tone || '').trim();
 
     // Resolve from the queue when given a source+id, so we reuse the same
     // normalization and never draft for someone who has a live email channel.
@@ -364,8 +337,8 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     const name            = (body.name    || resolved?.name    || '').trim();
     const recipientRole   = (body.role    || resolved?.role    || '').trim();
     const recipientCompany= (body.company || resolved?.company || '').trim();
-    const reason          = (body.reason  || resolved?.reason  || '').trim();
-    const recipientFirst  = (body.firstName || resolved?.firstName || name.split(/\s+/)[0] || '').trim();
+    const suppliedReason  = String(body.reason || '').trim();
+    const reason          = (suppliedReason || resolved?.reason || '').trim();
     const src             = source || resolved?.source || 'ta';
     const recipientTier   = resolveInfluenceTier({
       notes: body.notes || resolved?.notes || '',
@@ -381,11 +354,6 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       if (!decision.allowed) logOutreachOverride({ contactRef: `${src}:${resolved.id}`, channel: 'linkedin', blocks: decision.blocks });
     }
 
-    const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
-    const articleDigestMd = readOptionalProjectFile(ROOT_DIR, 'article-digest.md');
-    // Prepend portfolio artifacts (capped at 1000 chars) so the model can lead with
-    // a named project/outcome rather than a generic role claim, even in 300 chars.
-    const portfolioSnippet = articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 1000)}` : '';
     const idn = getIdentity();
 
     const relatedApps = findRelatedApps(recipientCompany);
@@ -401,42 +369,36 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
       ? `Anchor on this specific context${angleHint}: ${reason}`
       : `Anchor on ${name}'s work${recipientRole ? ` as ${recipientRole}` : ''}${recipientCompany ? ` at ${recipientCompany}` : ''} and on ${idn.firstName} being a fellow operator in the GTM / RevOps / analytics space, not a job seeker${angleHint}.`;
 
-    const buildPrompt = (targetMax) => buildConnectPrompt({
-      senderName: idn.fullName, senderFirst: idn.firstName, senderHeadline: idn.headline,
-      recipientName: name, recipientFirst, recipientRole, recipientCompany,
-      guidance, cvExcerpt: portfolioSnippet, appliedRole,
-      tone, toneText: toneInstruction(tone), targetMax,
-    });
-
-    const rubricActive = process.env.TJK_RUBRIC_DISABLED !== '1';
-    const narrative = getNarrative();
-    const narrativeOpts = {
-      proofPoints: narrative.proofPoints,
-      superpowers: narrative.superpowers,
-      recipientRole,
-      recipientTier,
-      appliedRole,
-      appliedDate,
-      ...(companyResearch ? { companyResearch } : {}),
-    };
-
     // One model call, not two. This used to redraft at a stricter target when the
     // note overran 300 characters, which cost a second full rubric call on the
     // plan path. fitConnectNote trims at a sentence boundary and preserves the
     // sign-off, so an overrun is repaired deterministically instead of by asking
     // the model again. finishDraft's own hardFit is a blunt slice that can cut
     // mid-word, so it is left off here and fitConnectNote owns the cap.
-    const result = await generateWithRubric(
-      buildPrompt(280), 'connect_note_influencer',
-      { model: draftModel(), maxTokens: rubricActive ? 800 : 220, cvMd, plainTextFallback: true, rubricOpts: narrativeOpts, mode: 'write' },
-    );
-    if (result.error) return res.status(500).json({ error: 'Could not parse connection note from model output' });
+    const basePacket = resolved?.id != null && ['ta', 'referral'].includes(src)
+      ? buildPacket({ source: src, id: resolved.id, kind: 'connect_note' })
+      : buildPacketFromFields({
+        kind: 'connect_note', name, role: recipientRole, company: recipientCompany,
+        notes: [guidance, tone ? toneInstruction(tone) : ''].filter(Boolean).join(' · '),
+        tier: recipientTier, relatedApps,
+        research: companyResearch,
+      });
+    const packet = resolved?.id != null && ['ta', 'referral'].includes(src)
+      ? mergeConnectPacketContext(basePacket, {
+        tone,
+        reason: suppliedReason,
+        angleGuidance: angle ? guidance : '',
+        referralTarget: src === 'referral' ? resolved?.reason || '' : '',
+      })
+      : basePacket;
+    const prompt = buildAugustPrompt(packet);
+    const result = parseDraftText(await generateText(prompt, {
+      model: draftModel(), maxTokens: 900, label: `draft:${packet.surfaceId}`,
+    }));
+    if (!result?.body) return res.status(500).json({ error: 'Could not parse connection note from model output' });
     const note = await finishDraft({
-      body: result.body || result, surface: 'connect_note_influencer',
-      review: result.review,
-      reviewStatus: result.reviewStatus,
-      cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
-      flatten: true, hardFit: null, cadence: false,
+      body: result.body, surface: 'connect_note_influencer', cadence: false,
+      ...finishOptionsFor(packet),
     });
     // Trimming is deterministic but not free: an overrun gets cut at the last
     // sentence boundary, and when none is late enough it ends at a word boundary
@@ -475,17 +437,11 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
     const source = body.source || 'ta';
     const recipient = resolveRecipient(source, id);
     if (!recipient) return res.status(404).json({ error: 'Contact not found.' });
-    const row = source === 'ta'
-      ? parseTargetTalentMd().find(r => String(r.id) === String(id))
-      : null;
-
     const name = recipient.name || (body.name || '').trim();
-    const recipientFirst = recipient.firstName || name.split(/\s+/)[0] || 'there';
     const recipientRole = recipient.role || '';
     const company = recipient.company || '';
     const relatedApps = findRelatedApps(company);
     const topApp = relatedApps.find(app => ACTIVE_STATUSES.includes(app.status)) || relatedApps[0];
-    const companyResearch = topApp ? loadCompanyResearch(topApp.report) : '';
     const submittedApp = findSubmittedApplication(relatedApps);
     const appliedRole = submittedApp?.role || '';
     const appliedDate = submittedApp?.date || '';
@@ -522,101 +478,16 @@ router.post('/api/linkedin-drafts/followup-message', async (req, res) => {
     });
     if (!decision.allowed && !body.override) return res.json({ blocked: true, blocks: decision.blocks, nextEligible: decision.nextEligible });
     if (!decision.allowed) logOutreachOverride({ contactRef: `${source}:${id}`, channel: 'linkedin', blocks: decision.blocks });
-    const sent = corr.filter(m => m.direction === 'Sent');
-    const firstTouchDate = (sent[0]?.timestamp || sent[0]?.at || row?.lastTouch || '').slice(0, 10);
-    // Full-thread state: whether a substantive message already went out recently
-    // and is unanswered, so the prompt writes a nudge instead of re-pitching.
-    const thread = summarizeThread(corr);
-    const history = thread.threadBlock || (connected
-      ? '- A LinkedIn connection request that they ACCEPTED, so you are now connected.'
-      : '- A LinkedIn connection request that has not been accepted or answered.');
-
-    const cvMd = readOptionalProjectFile(ROOT_DIR, 'cv.md');
-    const articleDigestMd = readOptionalProjectFile(ROOT_DIR, 'article-digest.md');
-    const profileMd = readVoiceRules(ROOT_DIR);
-    const idn = getIdentity();
-
-    const goal = !appliedRole
-      ? `The goal is a brief reply about whether the team is hiring for the kind of role ${idn.firstName} is targeting.`
-      : recipientTier === 'exec'
-        ? `The goal is to learn who is leading the hiring for the ${appliedRole} role.`
-        : recipientTier === 'hm' || recipientTier === 'peer'
-          ? `The goal is to get a look at ${idn.firstName}'s application for the ${appliedRole} role.`
-          : `The goal is to get ${idn.firstName}'s application for the ${appliedRole} role in front of the hiring manager.`;
-    const purpose = recipientTier === 'exec'
-      ? `${name} is a senior leader${company ? ` at ${company}` : ''} who does not screen applications. Write peer to peer, 60 to 100 words, with no description or praise of ${recipientFirst}'s own job. ${goal}`
-      : recipientTier === 'hm' || recipientTier === 'peer'
-        ? `${name} likely owns or sits near the hire${company ? ` at ${company}` : ''}. ${goal}`
-        : `${name} works in recruiting${company ? ` at ${company}` : ''}. ${goal}`;
-
-    const prompt = `You are drafting a brief LinkedIn ${connected ? 'DIRECT MESSAGE (a free DM)' : 'FOLLOW-UP MESSAGE (an InMail)'} from ${idn.fullName} to ${connected
-      ? `a contact he is now CONNECTED with on LinkedIn: they ACCEPTED his connection request${firstTouchDate ? ` (invite sent ${firstTouchDate})` : ''}, so this is the first real message in a brand-new 1st-degree connection.`
-      : `a contact he ALREADY sent a connection request to${firstTouchDate ? ` on ${firstTouchDate}` : ''}. That request has not been accepted or answered.`}
-
-${connected
-  ? 'YOU ARE ALREADY CONNECTED. The invite was accepted, so do NOT say you sent a request, do NOT ask whether it arrived, and do NOT imply the connection is still pending. A short, warm nod to having just connected is fine; then go to the real reason for writing.'
-  : 'THIS IS NOT A NEW CONNECTION REQUEST. The invite is already out, so do not write "I would like to connect" or restate it. Write the NEXT message: a real, purposeful note that moves things forward. You are not connected on LinkedIn yet. Do not say you connected, since connecting, since we last connected, since we connected, or good to reconnect.'}
-
-THE RECIPIENT:
-- Name: ${name}
-- Their role: ${recipientRole || '(unknown)'}
-- Company: ${company || '(unknown)'}
-
-THE THREAD SO FAR (most recent last). Read it: never repeat a point, proof, or ask already made here, and do NOT open by narrating it or dwelling on the lack of a reply:
-${history}
-
-THREAD STATE: ${thread.stateLine}
-${thread.recentPitch ? `
-NUDGE MODE (a substantive message already went out recently and is unanswered):
-- Write a SHORT nudge, not a new pitch. Do NOT reintroduce ${idn.firstName}, do NOT restate proof points already in the thread, and do NOT repeat the earlier ask word for word.
-- Reference the earlier note lightly and specifically, naming what it was about using the role/company from the thread above (e.g. "following up on my note from ${thread.lastSub ? String(thread.lastSub.timestamp).slice(0, 10) : 'the other day'} about the role at ${company || 'their company'}"). Do NOT use the bare, needy "just following up"; the reference must name the prior topic. Then add exactly ONE new, specific thing: a fresh detail, a relevant update, or a lighter, human touch. If there is genuinely nothing new to add, keep it to a one or two sentence friendly bump.
-` : ''}
-THE PURPOSE:
-${purpose}
-
-${articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 900)}\n` : ''}
-${profileMd ? `== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
-
-HARD RULES:
- - Open with "Hi ${recipientFirst}," then ${connected ? 'optionally one short warm clause about having just connected, then ' : ''}genuine interest in ${company || 'their company'} or its work. ${appliedRole ? `Name the ${appliedRole} role after that opener.` : 'Do not claim that an application was submitted.'} Lead with warmth, intent, and value in a confident tone.
-- ${connected
-    ? 'You are ALREADY connected, so NEVER say you "sent a connection request", "wanted to make sure this reached you", "reach you directly", or reference a pending or unanswered invite in any way. Treat the connection as established.'
-    : 'Do NOT open by mentioning the earlier message, and NEVER say you "have not heard back" or that the silence is "fine". Being ignored is not the story; the candidacy is. If you reference the prior connection request at all, make it a brief, confident half-clause in the MIDDLE (for example, "I also sent a connection request recently, but wanted to reach you directly"), never an apology and never an opener.'}
-- ${thread.recentPitch ? 'Do NOT dump a full proof point the thread already covered; at most add ONE new specific detail not previously mentioned.' : `Then give one concrete proof point about ${idn.firstName} from the CV or portfolio that makes him worth a reply.`}
- - Close with ONE clear, low-friction ask. ${tierAsk(recipientTier, appliedRole)} A soft redirect ask is allowed. Do NOT ask for a call, a chat, a quick call, time on their calendar, or "15/20/30 minutes" — everyone is busy and a meeting ask reads as tone-deaf. Not a hard pitch.
- - Length: ${thread.recentPitch ? '40 to 70 words. A nudge is short by design.' : recipientTier === 'exec' ? '60 to 100 words.' : '90 to 150 words. Longer than a connection note but still tight.'} Never a wall of text.
-- STRUCTURE: write the body as ${thread.recentPitch ? '1 to 2 very short paragraphs' : '2 or 3 short paragraphs'} separated by a BLANK LINE (a literal double newline, \\n\\n, between paragraphs). It must be easy to scan on a phone. Do NOT return one dense block of text.
-- NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
- - BANNED phrasings, they read as needy and get the message deleted: "without a reply", "haven't heard back", "never heard back", "which is fine", "I know you are busy", "just following up", "circling back", "wanted to reconnect", "sorry to bother", "I hope this finds you well", "quick question", "pick your brain", and any apology for writing.
- - Do NOT pitch a job-search tool or job-search article.
-- End with a sign-off line: "Thanks, ${idn.firstName}".
-- No emojis. No mention of being desperate or unemployed.
-
-== BODY REQUIREMENTS ==
-- Begin with the "Hi ${recipientFirst}," opener.
-- End with the "Thanks, ${idn.firstName}" sign-off.
-- Omit any preface or explanation.`;
-
-    const narrative = getNarrative();
-    const result = await generateWithRubric(prompt, 'li_followup', {
-      model: draftModel(), maxTokens: 500, cvMd, plainTextFallback: true,
-      mode: 'write',
-      rubricOpts: {
-        proofPoints: narrative.proofPoints,
-        superpowers: narrative.superpowers,
-        recipientRole,
-        recipientTier,
-        appliedRole,
-        appliedDate,
-        ...(companyResearch ? { companyResearch } : {}),
-      },
-    });
-    if (result.error) return res.status(500).json({ error: 'Could not parse follow-up message from model output' });
+    const packet = buildPacket({ source, id, kind: 'li_followup' });
+    const prompt = buildAugustPrompt(packet);
+    const result = parseDraftText(await generateText(prompt, {
+      model: draftModel(), maxTokens: 900, label: `draft:${packet.surfaceId}`,
+    }));
+    if (!result?.body) return res.status(500).json({ error: 'Could not parse follow-up message from model output' });
     const fu = await finishDraft({
       body: result.body, surface: 'li_followup',
-      review: result.review,
-      reviewStatus: result.reviewStatus,
-      cleaner: 'prose', stripSalutationFor: null, stripSignature: false,
+      cadence: false,
+      ...finishOptionsFor(packet),
     });
     res.json({ response: fu.body, length: fu.body.length, review: null, reviewStatus: 'pending', surfaceId: 'li_followup', gradeContext: {
       surfaceId: 'li_followup', source, id, appId: topApp?.id ?? null,

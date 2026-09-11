@@ -600,6 +600,7 @@ for (const suite of [
   'tests/draft-grading-flag.test.mjs',
   'tests/outreach-ab.test.mjs',
   'tests/outreach-ab-v2.test.mjs',
+  'tests/outreach-august-parity.test.mjs',
   'tests/project-file-sentinel.test.mjs',
   'tests/finish-draft.test.mjs',
   'tests/profile-narrative.test.mjs',

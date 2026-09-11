@@ -38,6 +38,12 @@ fs.writeFileSync(path.join(sandbox, 'applications.md'),
   '| 78 | 2026-02-01 | EvalCo | Platform Lead | 4.0/5 | Evaluated | | | | | https://jobs.example.com/evalco/78 |\n' +
   '| 79 | 2026-03-01 | NoFitCo | Data Lead | 3.0/5 | Not a Fit | | | | | https://jobs.example.com/nofitco/79 |\n',
   'utf8');
+fs.writeFileSync(path.join(sandbox, 'follow-ups.md'),
+  '# Follow-Ups\n\n| # | app# | date | company | role | channel | contact | notes |\n' +
+  '|---|------|------|---------|------|---------|---------|-------|\n' +
+  '| 1 | 77 | 2026-01-08 | Acme | Engineer | Email | Hiring team | First follow-up |\n' +
+  '| 2 | 77 | 2026-01-15 | Acme | Engineer | LinkedIn | Jane Doe | Second follow-up |\n',
+  'utf8');
 
 // Minimal target-talent.md so parseTargetTalentMd finds a contact (appendTTRows does
 // not create the file). Columns per the parser: id|company|last|first|salute|title|
@@ -50,12 +56,14 @@ fs.writeFileSync(path.join(sandbox, 'target-talent.md'),
   'utf8');
 
 const express = (await import('express')).default;
-const { router: linkedinDrafts } = await import('../dashboard-web/server/routes/linkedin-drafts.mjs');
-const { router: targetTalent } = await import('../dashboard-web/server/routes/target-talent.mjs');
-const { router: referrals } = await import('../dashboard-web/server/routes/referrals.mjs');
+const { router: linkedinDrafts, mergeConnectPacketContext } = await import('../dashboard-web/server/routes/linkedin-drafts.mjs');
+const { router: targetTalent, buildTargetTalentAugustPrompt } = await import('../dashboard-web/server/routes/target-talent.mjs');
+const { router: referrals, buildReferralAugustPrompt } = await import('../dashboard-web/server/routes/referrals.mjs');
 const { router: draftsRouter } = await import('../dashboard-web/server/routes/drafts.mjs');
 const { router: followups } = await import('../dashboard-web/server/routes/followups.mjs');
 const { buildConnectPrompt } = await import('../dashboard-web/server/lib/linkedin-ssi.mjs');
+const { buildPacket, buildPacketFromFields, renderFactBlock } = await import('../lib/outreach-packet.mjs');
+const { buildAugustPrompt, wrapReferralDraft } = await import('../lib/outreach-voice.mjs');
 const { appendReferralRows } = await import('../dashboard-web/server/lib/referrals.mjs');
 const { setLinkedInStatus } = await import('../dashboard-web/server/lib/tt-linkedin.mjs');
 
@@ -77,6 +85,67 @@ console.log('draft-endpoints.test.mjs');
 
 const post = (p, body) => fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
   .then(async r => ({ status: r.status, body: await r.json().catch(() => ({})) }));
+
+const routePacket = buildPacketFromFields({
+  kind: 'ta_dm', name: 'Avery Example', role: 'Recruiter', company: 'Acme',
+  sender: { fullName: 'Jordan Example', firstName: 'Jordan', cv: 'Fixture CV.', voiceRules: 'Be precise.' },
+});
+check(buildTargetTalentAugustPrompt(routePacket, { interviewStage: 'general' }) === buildAugustPrompt(routePacket),
+  'target-talent fresh/general prompt stays byte-identical to buildAugustPrompt');
+const replyIntent = 'REPLY. Respond directly and specifically to their most recent message in the thread below. Pick up what they said and advance it. Do not restart the conversation.';
+const taReplyPrompt = buildTargetTalentAugustPrompt(routePacket, {
+  mode: 'reply', interviewStage: 'general', intentGuidance: replyIntent,
+});
+check(taReplyPrompt.includes(replyIntent) && !taReplyPrompt.includes('FIRST / FRESH TOUCH'),
+  'target-talent reply replaces the August first-touch intent without contradiction');
+const firstInterviewGuidance = 'FIRST INTERVIEW STAGE. You are early in the interview loop. Reference momentum ("enjoyed the conversation", "following the process") without naming details you may not have. Reinforce one differentiated strength and signal continued interest.';
+check(buildTargetTalentAugustPrompt(routePacket, {
+  interviewStage: '1st Interview', stageGuidance: firstInterviewGuidance,
+}).includes(firstInterviewGuidance),
+  'target-talent LinkedIn prompt includes first-interview stage guidance');
+const taEmailPacket = { ...routePacket, kind: 'ta_email', surfaceId: 'ta_email' };
+check(buildTargetTalentAugustPrompt(taEmailPacket, {
+  channel: 'email', interviewStage: 'general',
+}) === buildAugustPrompt(taEmailPacket),
+  'target-talent email general prompt stays byte-identical to buildAugustPrompt');
+check(buildTargetTalentAugustPrompt(taEmailPacket, {
+  channel: 'email', interviewStage: '1st Interview', stageGuidance: firstInterviewGuidance,
+}).includes(firstInterviewGuidance),
+  'target-talent email prompt includes first-interview stage guidance');
+
+const referralPacket = { ...routePacket, kind: 'referral_dm', surfaceId: 'referral_dm' };
+check(buildReferralAugustPrompt(referralPacket, { topic: 'reconnect' }) === buildAugustPrompt(referralPacket),
+  'referral reconnect prompt stays byte-identical to buildAugustPrompt');
+const askGuidance = 'THE REFERRAL ASK. Make one specific ask.';
+const askLine = 'A good ask here is to flag his application for the Engineer role to the hiring manager.';
+const referralAskPrompt = buildReferralAugustPrompt(referralPacket, {
+  topic: 'ask', topicGuidance: askGuidance, referralAskLine: askLine,
+});
+check(referralAskPrompt.includes(askGuidance)
+  && referralAskPrompt.includes(`GOAL: ${askGuidance}`)
+  && referralAskPrompt.includes(askLine)
+  && !referralAskPrompt.includes('Reconnect with no ask.'),
+  'referral non-reconnect topic replaces both August intent and packet goal and keeps the ask line');
+
+const connectPacket = { ...routePacket, kind: 'connect_note', surfaceId: 'connect_note_influencer' };
+const unchangedPacket = mergeConnectPacketContext(connectPacket);
+check(unchangedPacket === connectPacket && buildAugustPrompt(unchangedPacket) === buildAugustPrompt(connectPacket),
+  'stored connection-note packet stays identical when no request context is supplied');
+const contextualPacket = mergeConnectPacketContext(connectPacket, {
+  tone: 'Warm', reason: 'Met at the summit', angleGuidance: 'Reference Post', referralTarget: 'Engineer opening',
+});
+check(contextualPacket.recipient.notesExcerpt.includes('Reason: Met at the summit')
+  && contextualPacket.recipient.notesExcerpt.includes('Angle guidance: Reference Post')
+  && contextualPacket.recipient.notesExcerpt.includes('Referral target: Engineer opening')
+  && contextualPacket.recipient.notesExcerpt.includes('Tone guidance:'),
+  'stored connection-note packet merges tone, reason, angle, and referral target');
+check(wrapReferralDraft('Body text.', referralPacket) === 'Hi Avery,\n\nBody text.\n\nBest,\nJordan',
+  'referral drafts receive the deterministic greeting and sign-off wrapper');
+const applicationPacket = buildPacket({ source: 'application', id: 77, kind: 'app_followup' });
+check(applicationPacket.applicationFollowups?.count === 2
+  && applicationPacket.applicationFollowups?.lastDate === '2026-01-15'
+  && /That was \d+ days ago\./.test(renderFactBlock(applicationPacket)),
+  'application packets read prior follow-up count, last date, and application timing into shared facts');
 
 const cases = [
   ['connect-note (first-touch, ad-hoc)',             '/api/linkedin-drafts/connect-note',     { name: 'Test Person', firstName: 'Test', role: 'Recruiter', company: 'No Report Co' }, { source: 'ta', id: null, appId: null, recipientRole: 'Recruiter', recipientTier: 'ta', appliedRole: '', appliedDate: '' }],
@@ -102,6 +171,12 @@ for (const [name, p, body, expectedContext] of cases) {
     && res.body.gradeContext?.appliedRole === expectedContext.appliedRole
     && res.body.gradeContext?.appliedDate === expectedContext.appliedDate,
   `${name} returns a pending review and its grade context`);
+}
+
+for (const [channel, body] of [['email', {}], ['LinkedIn', { channel: 'linkedin', topic: 'reconnect' }]]) {
+  const res = await post(`/api/referrals/${refRow.id}/draft`, body);
+  check(/^Hi Rob,\n\nStub body for the smoke test\.\n\nBest,\n\S+$/u.test(res.body.draft?.body || ''),
+    `referral ${channel} response includes deterministic greeting and sender sign-off`);
 }
 
 process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
@@ -355,8 +430,9 @@ const connectPrompt = buildConnectPrompt({
   senderName: 'Jordan Example', senderFirst: 'Jordan', recipientName: 'Avery Example',
   recipientRole: 'Recruiter', recipientCompany: 'Acme', appliedRole: 'Engineer',
 });
-check(connectPrompt.includes('Name the Engineer role after the genuine-interest opener'),
-  'connection-note prompt names the applied role after a genuine-interest opener');
+check(connectPrompt.includes('He submitted an application for the Engineer role')
+  && connectPrompt.includes('Give one specific, grounded reason to connect.'),
+  'connection-note prompt carries the applied role in the shared facts and uses the August instruction');
 const connectPromptWithoutDigest = buildConnectPrompt({
   senderName: 'Jordan Example', senderFirst: 'Jordan', recipientName: 'Avery Example',
   recipientRole: 'Recruiter', recipientCompany: 'Acme', cvExcerpt: '',
@@ -372,28 +448,30 @@ const outreachRouteFiles = [
   'dashboard-web/server/routes/followups.mjs',
 ];
 const outreachRouteSource = outreachRouteFiles.map((file) => fs.readFileSync(path.join(root, file), 'utf8')).join('\n');
-check(outreachRouteSource.includes('A soft redirect ask is allowed')
-  && !outreachRouteSource.includes('Do not ask to be redirected'),
-  'outreach route prompts allow a soft redirect ask');
+check((outreachRouteSource.match(/generateText\(prompt, \{\s*model: draftModel\(\), maxTokens: 900, label: `draft:\$\{packet\.surfaceId\}`/g) || []).length === 8,
+  'all eight outreach draft paths use the rated August model-call envelope');
 const liFollowupSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/linkedin-drafts.mjs'), 'utf8');
 const targetTalentSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/target-talent.mjs'), 'utf8');
 const liFollowupBlock = liFollowupSource.slice(
   liFollowupSource.indexOf("router.post('/api/linkedin-drafts/followup-message'"),
   liFollowupSource.indexOf("router.post('/api/linkedin-drafts/archive-contact'"),
 );
-check(liFollowupBlock.includes('Name the ${appliedRole} role after that opener')
-  && liFollowupBlock.includes('tierAsk(recipientTier, appliedRole)'),
-  'LinkedIn follow-up prompt names the applied role after genuine interest and uses the tier-specific ask');
-check(!liFollowupBlock.includes('${cvExcerpt}') && !liFollowupBlock.includes('${cvMd}')
-  && /generateWithRubric\(prompt, 'li_followup',[\s\S]*?\bcvMd\b/.test(liFollowupBlock),
-  'LinkedIn follow-up supplies the CV exactly once through the writing guide');
-check(liFollowupSource.includes('A good ask here is') && targetTalentSource.includes('A good ask here is')
-  && !liFollowupSource.includes('Phrase it as a direct question')
-  && !targetTalentSource.includes('Phrase it as a direct question'),
-  'LinkedIn and target-talent tier asks are suggestions rather than direct-question rules');
-const notConnectedRule = 'You are not connected on LinkedIn yet. Do not say you connected, since connecting, since we last connected, since we connected, or good to reconnect.';
-check(liFollowupBlock.includes(notConnectedRule) && targetTalentSource.includes(notConnectedRule),
-  'both not-connected LinkedIn DM prompts prohibit every accepted-connection phrase');
+check(liFollowupBlock.includes("buildPacket({ source, id, kind: 'li_followup' })")
+  && liFollowupBlock.includes('buildAugustPrompt(packet)'),
+  'LinkedIn follow-up builds the August prompt from the shared stored-contact packet');
+const augustFixturePrompt = buildAugustPrompt(buildPacketFromFields({
+  kind: 'li_followup', name: 'Avery Example', role: 'Recruiter', company: 'Acme',
+  sender: { fullName: 'Jordan Example', firstName: 'Jordan', cv: 'Fixture CV.' },
+}));
+check((augustFixturePrompt.match(/CV:\nFixture CV\./g) || []).length === 1,
+  'LinkedIn follow-up supplies the CV exactly once through the shared fact packet');
+const augustVoiceSource = fs.readFileSync(path.join(root, 'lib/outreach-voice.mjs'), 'utf8');
+check(!augustVoiceSource.includes('A soft redirect ask is allowed')
+  && !augustVoiceSource.includes('Name the ${role(packet)} role after that opener'),
+  'shared August instructions contain no Lap 7 tier-ask or applied-role additions');
+check(augustVoiceSource.includes('THIS IS NOT A NEW CONNECTION REQUEST. The invite is already out.')
+  && augustVoiceSource.includes('Write a purposeful message. Do not write "I would like to connect".'),
+  'both not-connected LinkedIn DM surfaces use the tested August state instructions');
 const referralSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/referrals.mjs'), 'utf8');
 check((referralSource.match(/\$\{referralAsk\(appliedRole\)\}/g) || []).length === 2
   && !referralSource.includes('tierAsk(')
@@ -406,15 +484,19 @@ const nonReferralPromptSources = [
   targetTalentSource,
   fs.readFileSync(path.join(root, 'dashboard-web/server/routes/followups.mjs'), 'utf8'),
 ];
-check(nonReferralPromptSources.every((source) => source.includes('Do NOT pitch a job-search tool or job-search article')),
-  'every non-referral outreach prompt bans job-search-tool and job-search-article pitches');
-check(!referralSource.includes('Do NOT pitch a job-search tool or job-search article'),
-  'referral reconnect prompts continue to allow job-search-tool context');
-const writingGuideSource = fs.readFileSync(path.join(root, 'lib/outreach-rubric.mjs'), 'utf8');
-check(writingGuideSource.includes('never use market-size, funding, valuation, or hiring-volume statistics')
-  && !outreachRouteSource.includes('recent funding/news')
-  && !outreachRouteSource.includes('recent funding'),
-  'outreach prompts prohibit market-size, funding, valuation, and hiring-volume statistics');
+check(nonReferralPromptSources.every((source) => source.includes('buildAugustPrompt'))
+  && !augustVoiceSource.includes('Do NOT pitch a job-search tool or job-search article'),
+  'every non-referral outreach surface uses the tested August prompt without Lap 7 additions');
+const referralReconnectPrompt = buildAugustPrompt(buildPacketFromFields({
+  kind: 'referral_email', name: 'Avery Example', role: 'Peer', company: 'Acme',
+  sender: { fullName: 'Jordan Example', firstName: 'Jordan', cv: 'Fixture CV.' },
+}));
+check(!referralReconnectPrompt.includes('A good ask here is')
+  && referralReconnectPrompt.includes('Reconnect with no ask.'),
+  'referral reconnect keeps the tested August no-ask instruction unchanged');
+check(augustFixturePrompt.includes('Use only these facts. Do not invent or infer missing details.')
+  && !outreachRouteSource.includes('recent funding/news'),
+  'outreach grounding comes from the shared tested fact-packet guardrail');
 
 const draftsSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/drafts.mjs'), 'utf8');
 check(/const contextOptions = draftGradeContext\(gradeContext\)/.test(draftsSource)
