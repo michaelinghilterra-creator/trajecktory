@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.13.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.12.0...v3.13.0) (2026-09-11)
+
+
+### Features
+
+* add an outreach A/B harness with blind rating and grader stability ([#311](https://github.com/michaelinghilterra-creator/trajecktory/issues/311)) ([393811f](https://github.com/michaelinghilterra-creator/trajecktory/commit/393811f6143de13871c80c816f4edac0d8b4fe9f))
+* ground outreach in the applied role and ship the rated August voice on shared facts ([#312](https://github.com/michaelinghilterra-creator/trajecktory/issues/312)) ([d180d83](https://github.com/michaelinghilterra-creator/trajecktory/commit/d180d836def9eef8ff88c87943a20c466b1d7841))
+* write outreach drafts in one call and grade them in the background ([#307](https://github.com/michaelinghilterra-creator/trajecktory/issues/307)) ([c8a7888](https://github.com/michaelinghilterra-creator/trajecktory/commit/c8a7888b3fd204f8653849a03d4e5289c7f02b91))
+
+
+### Bug Fixes
+
+* enlarge interview board detail text ([#309](https://github.com/michaelinghilterra-creator/trajecktory/issues/309)) ([9dc656c](https://github.com/michaelinghilterra-creator/trajecktory/commit/9dc656c95a2c2f415576fd313275351799f65539))
+* record Agent Scan discovery results in the run log ([#308](https://github.com/michaelinghilterra-creator/trajecktory/issues/308)) ([cac9b12](https://github.com/michaelinghilterra-creator/trajecktory/commit/cac9b125a80f2057914aab904d3883564a130435))
+
 ## [3.12.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.11.0...v3.12.0) (2026-09-10)
 
 
