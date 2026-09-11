@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.13.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.13.0...v3.13.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* auto-restart dev server on unexpected exit ([0fc386d](https://github.com/michaelinghilterra-creator/trajecktory/commit/0fc386dace7fd6302ee27c7775e0556a9c438b24))
+
 ## [3.13.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.12.0...v3.13.0) (2026-09-11)
 
 
