@@ -141,6 +141,8 @@ check(contextualPacket.recipient.notesExcerpt.includes('Reason: Met at the summi
   'stored connection-note packet merges tone, reason, angle, and referral target');
 check(wrapReferralDraft('Body text.', referralPacket) === 'Hi Avery,\n\nBody text.\n\nBest,\nJordan',
   'referral drafts receive the deterministic greeting and sign-off wrapper');
+check(wrapReferralDraft('Body text.', { recipient: { first: 'Avery' }, sender: {} }) === 'Hi Avery,\n\nBody text.\n\nBest,',
+  'referral drafts omit the sender sign-off when the sender name is empty');
 const applicationPacket = buildPacket({ source: 'application', id: 77, kind: 'app_followup' });
 check(applicationPacket.applicationFollowups?.count === 2
   && applicationPacket.applicationFollowups?.lastDate === '2026-01-15'
@@ -175,7 +177,9 @@ for (const [name, p, body, expectedContext] of cases) {
 
 for (const [channel, body] of [['email', {}], ['LinkedIn', { channel: 'linkedin', topic: 'reconnect' }]]) {
   const res = await post(`/api/referrals/${refRow.id}/draft`, body);
-  check(/^Hi Rob,\n\nStub body for the smoke test\.\n\nBest,\n\S+$/u.test(res.body.draft?.body || ''),
+  const expectedSender = buildPacket({ source: 'referral', id: refRow.id, kind: 'referral_email' }).sender.firstName;
+  const expectedBody = `Hi Rob,\n\nStub body for the smoke test.\n\nBest,${expectedSender ? `\n${expectedSender}` : ''}`;
+  check(res.body.draft?.body === expectedBody,
     `referral ${channel} response includes deterministic greeting and sender sign-off`);
 }
 
