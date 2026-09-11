@@ -2986,7 +2986,7 @@ mark.dx-mark { background: rgba(167,139,250,0.22); color: var(--accent-2); paddi
 .ib .detail.on{display:flex;}
 .ib .detail .dhead{display:flex;justify-content:space-between;align-items:baseline;gap:14px;
                margin-bottom:9px; padding-bottom: 6px;border-bottom:1px solid var(--line);}
-.ib .detail h3{margin:0;font-size:21px;color:var(--accent);}
+.ib .detail h3{margin:0;font-size:23px;color:var(--accent);}
 /* Namespacing under .ib stops OUTBOUND leaks; nothing defends inbound. The global
    .tag (styles.css) paints a bordered, padded, mono chip — and it lands on the one
    element carrying the USE ONCE signal. Reset the box, then restyle. */
@@ -2999,14 +2999,14 @@ mark.dx-mark { background: rgba(167,139,250,0.22); color: var(--accent-2); paddi
 .ib .detail .close:hover{color:var(--danger);}
 .ib .dbody{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:26px;overflow-y:auto;}
 @media (max-width:1100px){ .ib .dbody{grid-template-columns:1fr;} }
-.ib .spoken p{font-size:17.5px;line-height:1.56;margin:0 0 11px;}
+.ib .spoken p{font-size:19.5px;line-height:1.56;margin:0 0 11px;}
 .ib .spoken p:last-child{margin-bottom:0;}
 .ib .spoken b{color:var(--accent);}
 .ib .dnotes{border-left:2px solid var(--line);padding-left:18px;}
-.ib .dnotes h4{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--hero);
+.ib .dnotes h4{font-size:12.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--hero);
            margin:0 0 7px;font-weight:800;}
 .ib .dnotes ul{margin:0;padding-left:16px;}
-.ib .dnotes li{font-size:14px;color:var(--muted);margin:5px 0;}
+.ib .dnotes li{font-size:15.5px;color:var(--muted);margin:5px 0;}
 .ib .dnotes li b{color:var(--danger);}
 
 /* ===== panels ===== */
