@@ -40,6 +40,19 @@ export function joinPicks(parsed, key) {
   return out;
 }
 
+export function recordPicks(runDir, tranche, answers, { force = false } = {}) {
+  const dir = path.resolve(runDir || '');
+  const trancheNumber = Number(tranche);
+  const target = path.join(dir, `tranche-${trancheNumber}`, 'picks.json');
+  if (!runDir || ![1, 2, 3].includes(trancheNumber)) throw new Error('record requires a run directory and tranche 1, 2, or 3');
+  if (fs.existsSync(target) && !force) throw new Error(`${target} already exists; pass --force to replace it`);
+  const key = JSON.parse(fs.readFileSync(path.join(dir, 'key.json'), 'utf8'));
+  const picks = joinPicks(answers, key);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, JSON.stringify(picks, null, 2) + '\n', 'utf8');
+  return { target, picks };
+}
+
 export function recordAnswers({ runDir, tranche, lineFile, force = false } = {}) {
   const dir = path.resolve(runDir || '');
   const trancheNumber = Number(tranche);
@@ -47,11 +60,7 @@ export function recordAnswers({ runDir, tranche, lineFile, force = false } = {})
   if (!runDir || ![1, 2, 3].includes(trancheNumber)) throw new Error('record requires a run directory and tranche 1, 2, or 3');
   if (fs.existsSync(target) && !force) throw new Error(`${target} already exists; pass --force to replace it`);
   const line = fs.readFileSync(path.resolve(lineFile), 'utf8');
-  const key = JSON.parse(fs.readFileSync(path.join(dir, 'key.json'), 'utf8'));
-  const picks = joinPicks(parseAnswerLine(line), key);
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(target, JSON.stringify(picks, null, 2) + '\n', 'utf8');
-  return { target, picks };
+  return recordPicks(runDir, tranche, parseAnswerLine(line), { force });
 }
 
 function gradeScore(draft) {

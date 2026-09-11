@@ -13,7 +13,7 @@ function fail(message) {
 export function parseArgs(argv) {
   const args = [...argv];
   const command = args.shift();
-  if (!['sample', 'generate', 'panel', 'record', 'score'].includes(command)) fail('Expected subcommand: sample, generate, panel, record, or score');
+  if (!['sample', 'generate', 'panel', 'record', 'score', 'serve'].includes(command)) fail('Expected subcommand: sample, generate, panel, record, score, or serve');
   const options = { command, seed: 1, concurrency: 2, force: false };
   while (args.length) {
     const flag = args.shift();
@@ -29,9 +29,11 @@ export function parseArgs(argv) {
     else if (flag === '--concurrency') options.concurrency = Number(value);
     else if (flag === '--line-file') options.lineFile = value;
     else if (flag === '--exclude') options.exclude = value;
+    else if (flag === '--port') options.port = Number(value);
     else fail(`Unknown option: ${flag}`);
   }
   if (!Number.isFinite(options.seed)) fail('--seed must be numeric');
+  if (options.port !== undefined && (!Number.isInteger(options.port) || options.port < 0 || options.port > 65535)) fail('--port must be an integer from 0 to 65535');
   if (command !== 'sample' && !options.run) fail(`${command} requires --run DIR`);
   if (['generate', 'panel', 'record'].includes(command) && ![1, 2, 3].includes(options.tranche)) fail(`${command} requires --tranche 1, 2, or 3`);
   if (command === 'record' && !options.lineFile) fail('record requires --line-file F');
@@ -80,6 +82,15 @@ async function run(options) {
     const { recordAnswers } = await import('./outreach-ab-v2/score.mjs');
     const result = recordAnswers({ runDir: options.run, tranche: options.tranche, lineFile: options.lineFile, force: options.force });
     process.stdout.write(`Wrote ${Object.keys(result.picks).length} case ratings to ${result.target}\n`);
+    return;
+  }
+  if (options.command === 'serve') {
+    const { startRatingServer } = await import('./outreach-ab-v2/serve.mjs');
+    const server = startRatingServer({ runDir: options.run, port: options.port ?? (process.env.PORT || 4110) });
+    server.on('listening', () => {
+      const address = server.address();
+      process.stdout.write(`Outreach ratings: http://127.0.0.1:${address.port}\n`);
+    });
     return;
   }
   const { scoreRun } = await import('./outreach-ab-v2/score.mjs');

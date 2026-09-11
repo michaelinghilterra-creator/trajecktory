@@ -13,7 +13,16 @@ const { renderPanel } = await import('../scripts/outreach-ab-v2/panel.mjs');
 const { finishOptionsFor, prepareTrancheGeneration } = await import('../scripts/outreach-ab-v2/generate.mjs');
 const { allocateQuotas, isAlreadyContactedTa, isExcludedContact, measureMix, normalizeExclusions, renderMixMd } = await import('../scripts/outreach-ab-v2/sample.mjs');
 const { parseArgs } = await import('../scripts/outreach-ab-v2.mjs');
-const { parseAnswerLine, scoreResults, signTestPValue } = await import('../scripts/outreach-ab-v2/score.mjs');
+const { parseAnswerLine, recordAnswers, scoreResults, signTestPValue } = await import('../scripts/outreach-ab-v2/score.mjs');
+const { handleRequest, handleSubmit, loadRatingData, renderRatingPage } = await import('../scripts/outreach-ab-v2/serve.mjs');
+
+const RATE_TOKEN = 'fixture-rate-token';
+const POST_HEADERS = {
+  host: '127.0.0.1:4110',
+  origin: 'http://127.0.0.1:4110',
+  'content-type': 'application/json; charset=utf-8',
+  'x-rate-token': RATE_TOKEN,
+};
 
 let passed = 0;
 function test(name, fn) {
@@ -39,6 +48,46 @@ function packetFixture(overrides = {}) {
     surfaceId: 'li_followup',
     ...overrides,
   };
+}
+
+function writeRatingFixture(dir, { picks = null } = {}) {
+  const cases = [
+    {
+      number: 1,
+      id: 'hidden-case-id',
+      kind: 'ta_email',
+      packet: { recipient: { first: '<Taylor>' } },
+      drafts: [
+        { arm: 'august', status: 'ok', subject: '<Subject A>', body: 'Mapped B body\nSecond line', grade: { score: 99 } },
+        { arm: 'lap7', status: 'ok', subject: '', body: 'Mapped A body', timing: 123 },
+        { arm: 'august_plus', status: 'ok', subject: '', body: 'Mapped C body' },
+      ],
+    },
+    {
+      number: 2,
+      kind: 'li_followup',
+      drafts: [
+        { arm: 'august', status: 'ok', subject: '', body: 'Second case A' },
+        { arm: 'lap7', status: 'ok', subject: '', body: 'Second case B' },
+        { arm: 'august_plus', status: 'ok', subject: '', body: 'Second case C' },
+      ],
+    },
+  ];
+  const kits = [
+    { number: 1, kit: { who: '<Taylor & Co>', whatTheyDo: 'Builds > systems', history: 'Met <once>', application: 'Applied & waiting', goal: 'Get a reply', channel: 'Email' } },
+    { number: 2, kit: { who: 'Jordan', whatTheyDo: 'Leads operations', history: 'No history', application: 'Applied', goal: 'Get routed', channel: 'LinkedIn' } },
+  ];
+  const key = {
+    '01': { A: 'lap7', B: 'august', C: 'august_plus' },
+    '02': { A: 'august_plus', B: 'lap7', C: 'august' },
+  };
+  const trancheDir = path.join(dir, 'tranche-1');
+  fs.mkdirSync(trancheDir, { recursive: true });
+  fs.writeFileSync(path.join(trancheDir, 'drafts.json'), JSON.stringify(cases, null, 2) + '\n');
+  fs.writeFileSync(path.join(trancheDir, 'kits.json'), JSON.stringify(kits, null, 2) + '\n');
+  fs.writeFileSync(path.join(dir, 'key.json'), JSON.stringify(key, null, 2) + '\n');
+  if (picks) fs.writeFileSync(path.join(trancheDir, 'picks.json'), JSON.stringify(picks, null, 2) + '\n');
+  return { cases, kits, key, trancheDir };
 }
 
 test('all arms share byte-identical fact block and output contract', () => {
@@ -235,6 +284,160 @@ test('five body-only kinds strip greetings and signatures and panel supplies one
     const packet = packetFixture({ kind });
     assert.equal(finishOptionsFor(packet).stripSalutationFor, null);
     assert.equal(finishOptionsFor(packet).stripSignature, false);
+  }
+});
+
+test('rating page contains blind escaped kits, versions, and both radio groups for every case', () => {
+  const dir = makeSandbox('outreach-ab-v2-rating-page');
+  try {
+    writeRatingFixture(dir);
+    const html = renderRatingPage({ ...loadRatingData(dir, 1), rateToken: RATE_TOKEN });
+    assert.match(html, /Case 01[\s\S]*Case 02/);
+    for (const value of ['Who:', 'What they do:', 'History:', 'Application:', 'Goal:', 'Channel:']) assert.match(html, new RegExp(value));
+    for (const letter of ['A', 'B', 'C']) assert.equal((html.match(new RegExp(`Version ${letter}`, 'g')) || []).length, 2);
+    assert.equal((html.match(/Which one would you send\?/g) || []).length, 2);
+    assert.equal((html.match(/Any close second\?/g) || []).length, 2);
+    assert.match(html, /&lt;Taylor &amp; Co&gt;/);
+    assert.match(html, /&lt;Subject A&gt;/);
+    assert.match(html, /Mapped B body<br>Second line/);
+    assert.match(html, /Hi &lt;Taylor&gt;,/);
+    assert.match(html, /const rateToken="fixture-rate-token"/);
+    assert.match(html, /'x-rate-token':rateToken/);
+    assert.match(html, /input\.disabled=favorite==='None'\|\|input\.value===favorite/);
+    assert.doesNotMatch(html, /august|lap7|hidden-case-id|score|timing/i);
+    assert.deepEqual(parseArgs(['serve', '--run', dir, '--port', '4111']).port, 4111);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('submit validates complete tranche answers, conflicts, and matches record output', () => {
+  const serverDir = makeSandbox('outreach-ab-v2-server-record');
+  const recordDir = makeSandbox('outreach-ab-v2-cli-record');
+  const answers = {
+    '01': { favorite: 'B', second: 'A' },
+    '02': { favorite: null, second: null },
+  };
+  try {
+    const serverFixture = writeRatingFixture(serverDir);
+    writeRatingFixture(recordDir);
+
+    const missing = handleRequest({ runDir: serverDir, rateToken: RATE_TOKEN, method: 'POST', url: '/t/1/submit', headers: POST_HEADERS, body: JSON.stringify({ '01': answers['01'] }) });
+    assert.equal(missing.status, 400);
+    assert.match(JSON.parse(missing.body).error, /missing a favorite/i);
+
+    const unknown = handleRequest({ runDir: serverDir, rateToken: RATE_TOKEN, method: 'POST', url: '/t/1/submit', headers: POST_HEADERS, body: JSON.stringify({ ...answers, '99': { favorite: 'A', second: null } }) });
+    assert.equal(unknown.status, 400);
+    assert.match(JSON.parse(unknown.body).error, /unknown case/i);
+
+    const result = handleSubmit({ runDir: serverDir, tranche: 1, answers });
+    assert.equal(result.recorded, 2);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(serverFixture.trancheDir, 'picks.json'), 'utf8')), {
+      '01': { favorite: 'august', second: 'lap7' },
+      '02': { favorite: null, second: null },
+    });
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(serverFixture.trancheDir, 'submission.json'), 'utf8')), answers);
+
+    const conflict = handleRequest({ runDir: serverDir, rateToken: RATE_TOKEN, method: 'POST', url: '/t/1/submit?force=1', headers: POST_HEADERS, body: JSON.stringify({
+      '01': { favorite: 'C', second: null },
+      '02': { favorite: 'A', second: null },
+    }) });
+    assert.equal(conflict.status, 409);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(serverFixture.trancheDir, 'picks.json'), 'utf8')), result.picks);
+
+    const lineFile = path.join(recordDir, 'answers.txt');
+    fs.writeFileSync(lineFile, 'C01 favorite: B · C01 second: A · C02 favorite: None · C02 second: None\n');
+    recordAnswers({ runDir: recordDir, tranche: 1, lineFile });
+    assert.deepEqual(
+      JSON.parse(fs.readFileSync(path.join(recordDir, 'tranche-1', 'picks.json'), 'utf8')),
+      JSON.parse(fs.readFileSync(path.join(serverDir, 'tranche-1', 'picks.json'), 'utf8')),
+    );
+  } finally {
+    fs.rmSync(serverDir, { recursive: true, force: true });
+    fs.rmSync(recordDir, { recursive: true, force: true });
+  }
+});
+
+test('rating server rejects non-loopback requests and invalid CSRF metadata', () => {
+  const dir = makeSandbox('outreach-ab-v2-security');
+  try {
+    writeRatingFixture(dir);
+    const evilHost = handleRequest({ runDir: dir, rateToken: RATE_TOKEN, method: 'GET', url: '/', headers: { host: 'ratings.example.com' } });
+    assert.equal(evilHost.status, 403);
+
+    const loopbackPage = handleRequest({ runDir: dir, rateToken: RATE_TOKEN, method: 'GET', url: '/t/1', headers: { host: '[::1]:4110' } });
+    assert.equal(loopbackPage.status, 200);
+    assert.match(loopbackPage.body, /const rateToken="fixture-rate-token"/);
+
+    const missingToken = handleRequest({
+      runDir: dir, rateToken: RATE_TOKEN, method: 'POST', url: '/t/1/submit',
+      headers: { ...POST_HEADERS, 'x-rate-token': undefined }, body: '{}',
+    });
+    assert.equal(missingToken.status, 403);
+
+    const wrongToken = handleRequest({
+      runDir: dir, rateToken: RATE_TOKEN, method: 'POST', url: '/t/1/submit',
+      headers: { ...POST_HEADERS, 'x-rate-token': 'wrong-token' }, body: '{}',
+    });
+    assert.equal(wrongToken.status, 403);
+
+    const plainText = handleRequest({
+      runDir: dir, rateToken: RATE_TOKEN, method: 'POST', url: '/t/1/submit',
+      headers: { ...POST_HEADERS, 'content-type': 'text/plain' }, body: '{}',
+    });
+    assert.equal(plainText.status, 415);
+
+    const foreignOrigin = handleRequest({
+      runDir: dir, rateToken: RATE_TOKEN, method: 'POST', url: '/t/1/submit',
+      headers: { ...POST_HEADERS, origin: 'https://ratings.example.com' }, body: '{}',
+    });
+    assert.equal(foreignOrigin.status, 403);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('submission rejects duplicate choices and a close second after None', () => {
+  const dir = makeSandbox('outreach-ab-v2-choice-validation');
+  try {
+    writeRatingFixture(dir);
+    const response = handleRequest({
+      runDir: dir,
+      rateToken: RATE_TOKEN,
+      method: 'POST',
+      url: '/t/1/submit',
+      headers: POST_HEADERS,
+      body: JSON.stringify({
+        '01': { favorite: 'B', second: 'B' },
+        '02': { favorite: null, second: 'C' },
+      }),
+    });
+    assert.equal(response.status, 400);
+    const error = JSON.parse(response.body).error;
+    assert.match(error, /Case 01: close second cannot equal favorite/);
+    assert.match(error, /Case 02: close second must be None when favorite is None/);
+    assert.equal(fs.existsSync(path.join(dir, 'tranche-1', 'picks.json')), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('rating page is read-only and shows recorded choices when picks exist', () => {
+  const dir = makeSandbox('outreach-ab-v2-read-only');
+  try {
+    writeRatingFixture(dir, { picks: {
+      '01': { favorite: 'august', second: 'lap7' },
+      '02': { favorite: null, second: 'august' },
+    } });
+    const html = renderRatingPage(loadRatingData(dir, 1));
+    assert.match(html, /already been recorded/i);
+    assert.match(html, /name="c01_favorite" value="B" checked disabled/);
+    assert.match(html, /name="c01_second" value="A" checked disabled/);
+    assert.match(html, /name="c02_favorite" value="None" checked disabled/);
+    assert.doesNotMatch(html, /<button\b[^>]*>Submit<\/button>/i);
+    assert.doesNotMatch(html, /<script\b/i);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 

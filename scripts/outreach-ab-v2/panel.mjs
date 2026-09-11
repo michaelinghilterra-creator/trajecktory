@@ -2,7 +2,7 @@ import { seededShuffle } from './sample.mjs';
 
 const ICON = '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M11.586 2a1.5 1.5 0 0 1 1.06.44l2.914 2.914a1.5 1.5 0 0 1 .44 1.06V16.5a1.5 1.5 0 0 1-1.5 1.5h-9a1.5 1.5 0 0 1-1.492-1.347L4 16.5v-13A1.5 1.5 0 0 1 5.5 2zM5.5 3a.5.5 0 0 0-.5.5v13a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5V7h-2.5A1.5 1.5 0 0 1 11 5.5V3zm7.04 10.304a.5.5 0 0 1 .92.392c-.295.69-.871 1.304-1.66 1.304-.487 0-.892-.234-1.2-.574-.309.34-.713.574-1.2.574-.486 0-.892-.233-1.2-.574-.31.34-.714.574-1.2.574a.5.5 0 0 1 0-1c.212 0 .52-.18.74-.696l.034-.067a.5.5 0 0 1 .886.067c.221.516.528.696.74.696.213 0 .52-.18.74-.696l.035-.067a.5.5 0 0 1 .885.067c.22.516.527.696.74.696s.519-.18.74-.696m0-4a.5.5 0 0 1 .92.392c-.295.69-.871 1.304-1.66 1.304-.487 0-.892-.234-1.2-.574-.309.34-.713.574-1.2.574-.486 0-.892-.233-1.2-.574-.31.34-.714.574-1.2.574a.5.5 0 0 1 0-1c.212 0 .52-.18.74-.696l.034-.067a.5.5 0 0 1 .886.067c.221.516.528.696.74.696.213 0 .52-.18.74-.696l.035-.067a.5.5 0 0 1 .885.067c.22.516.527.696.74.696s.519-.18.74-.696M12 5.5a.5.5 0 0 0 .5.5h2.293L12 3.207z"/></svg>';
 const LETTERS = ['A', 'B', 'C'];
-const FIXED_GREETING_KINDS = new Set(['ta_dm', 'ta_email', 'referral_dm', 'referral_email', 'app_followup']);
+export const FIXED_GREETING_KINDS = new Set(['ta_dm', 'ta_email', 'referral_dm', 'referral_email', 'app_followup']);
 
 export function escapeHtml(value) {
   return String(value ?? '')
@@ -13,9 +13,14 @@ export function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function caseNumber(item, index) {
+export function caseNumber(item, index) {
   const raw = item?.number ?? String(item?.label || '').replace(/^C/i, '') ?? index + 1;
   return String(raw || index + 1).padStart(2, '0');
+}
+
+export function fixedGreeting(item) {
+  if (!FIXED_GREETING_KINDS.has(item?.kind)) return '';
+  return `Hi ${item?.packet?.recipient?.first || item?.recipient?.first || ''},`;
 }
 
 export function buildPanelKey(cases, seed = 1) {
@@ -49,8 +54,9 @@ function versionHtml(letter, draft, item) {
   const label = `<div class="elicit-version-label">Version ${letter}</div>`;
   if (!draft || draft.status !== 'ok') return `<div class="elicit-version" style="${blockStyle}">${label}<div class="elicit-version-body" style="font-size:14px;line-height:1.6;font-weight:400;color:var(--text-primary)">Draft unavailable.</div></div>`;
   const subject = draft.subject ? `<div class="elicit-subject" style="font-size:13px;font-weight:400;margin-bottom:6px;color:var(--text-primary)">Subject: ${escapeHtml(draft.subject)}</div>` : '';
-  const greeting = FIXED_GREETING_KINDS.has(item.kind)
-    ? `<div class="elicit-version-body" style="font-size:14px;line-height:1.6;font-weight:400;color:var(--text-primary)">Hi ${escapeHtml(item.packet?.recipient?.first || item.recipient?.first || '')},</div>`
+  const fixed = fixedGreeting(item);
+  const greeting = fixed
+    ? `<div class="elicit-version-body" style="font-size:14px;line-height:1.6;font-weight:400;color:var(--text-primary)">${escapeHtml(fixed)}</div>`
     : '';
   return `<div class="elicit-version" style="${blockStyle}">${label}${subject}${greeting}<div class="elicit-version-body" style="font-size:14px;line-height:1.6;font-weight:400;color:var(--text-primary)">${lines(draft.body || '')}</div></div>`;
 }
