@@ -9,7 +9,7 @@ import { reconcileTriageResults } from '../../../lib/reconcile-triage.mjs';
 import { parseTriageOutput, appendTriageResults, START_MARKER, END_MARKER } from '../../../lib/triage-results.mjs';
 import { parsePortalAdditions, mergePortalAdditions, START_MARKER as PORTAL_START, END_MARKER as PORTAL_END } from '../../../lib/portal-additions.mjs';
 import { scanDiscoveryStalled } from '../../../lib/scan-stall.mjs';
-import { logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
+import { buildScanDiscoverySummary, logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
 import { apiKeyActive } from '../lib/anthropic.mjs';
 import { resolveModelId, currentBatch } from '../lib/pricing.mjs';
 import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
@@ -950,8 +950,9 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
       persistJobs();
       // Rotating diagnostic log: one record per run, captures tool-calls (incl.
       // any `Subagent:` fan-out) + pressure warning. Best-effort, never throws.
-      logAgentRun({
+      const logRecord = {
         ts: new Date().toISOString(),
+        jobId,
         mode,
         status: ok ? 'done' : 'error',
         turns: job.turns,
@@ -966,9 +967,14 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
         toolCount: job.toolCount || 0,
         tools: (job.toolCalls || []).slice(-50),
         error: ok ? null : (err ? String(err).slice(0, 300) : null),
-        outputTail: (job.output || '').slice(-2000),
-      });
-      resolve({ ok, result: resultText, error: err });
+        outputTail: (resultText || job.output || '').slice(-2000),
+      };
+      if (opts.deferLog) {
+        resolve({ ok, result: resultText, error: err, logRecord });
+      } else {
+        logAgentRun(logRecord);
+        resolve({ ok, result: resultText, error: err });
+      }
     });
   });
 }
@@ -1042,7 +1048,9 @@ async function runAgent(jobId, mode, target) {
   // hit / Stop. res becomes the LAST batch's result so the post-run block reports
   // on the whole chain. Non-pipeline modes run exactly one batch as before.
   if (mode === 'pipeline') rollingStop = false;
-  let res = await runClaudeAgent(jobId, mode, target);
+  const scanLogRecords = [];
+  let res = await runClaudeAgent(jobId, mode, target, mode === 'scan' ? { deferLog: true } : {});
+  if (res.logRecord) scanLogRecords.push(res.logRecord);
   if (mode === 'pipeline') res = await rollPipeline(jobId, target, res);
 
   // TRIAGE: the agent never touches triage-results.tsv itself (see
@@ -1073,29 +1081,33 @@ async function runAgent(jobId, mode, target) {
   // merges them deterministically — then scans those new boards for real live
   // roles. Same agent-emits-structured-output / server-writes pattern as triage.
   let portalMerge = null;
-  if (mode === 'scan' && res.ok) {
-    // runClaudeAgent already flipped this job to 'done'. Hold it at 'running'
-    // through the server-side merge + per-company scans (the live-board checks and
-    // up to a dozen scan.mjs spawns take tens of seconds): the single-flight guard
-    // keys on status==='running', so a premature 'done' would let a second agent
-    // run start and race this one's portals.yml/pipeline.md writes. Flipped back to
-    // 'done' in the scan-summary block below. Same reasoning as deep mode's merge.
-    const j0 = agentJobs.get(jobId) || {};
-    agentJobs.set(jobId, { ...j0, status: 'running', activity: 'Adding discovered companies to your scan list…' });
-    // Parse the agent's PORTAL_ADDITIONS block, merge validated companies into
-    // portals.yml, then scan their real boards. Reused verbatim for the retry.
-    const mergeDiscovery = async (resultText) => {
-      try {
-        const { companies, errors } = parsePortalAdditions(resultText || '');
-        const m = await mergePortalAdditions(path.join(ROOT_DIR, 'portals.yml'), companies, { today: new Date().toISOString().slice(0, 10) });
-        m.parseErrors = errors;
-        m.rolesAdded = m.entries.length ? await scanNewCompanies(m.entries) : 0;
-        return m;
-      } catch (e) {
-        return { added: 0, entries: [], skippedDuplicate: 0, skippedDead: 0, collisions: [], rolesAdded: 0, error: (e && e.message) || String(e) };
-      }
-    };
-    portalMerge = await mergeDiscovery(res.result || '');
+  let scanRetried = false;
+  let scanStalled = false;
+  if (mode === 'scan') {
+    try {
+      if (res.ok) {
+        // runClaudeAgent already flipped this job to 'done'. Hold it at 'running'
+        // through the server-side merge + per-company scans (the live-board checks and
+        // up to a dozen scan.mjs spawns take tens of seconds): the single-flight guard
+        // keys on status==='running', so a premature 'done' would let a second agent
+        // run start and race this one's portals.yml/pipeline.md writes. Flipped back to
+        // 'done' in the scan-summary block below. Same reasoning as deep mode's merge.
+        const j0 = agentJobs.get(jobId) || {};
+        agentJobs.set(jobId, { ...j0, status: 'running', activity: 'Adding discovered companies to your scan list…' });
+        // Parse the agent's PORTAL_ADDITIONS block, merge validated companies into
+        // portals.yml, then scan their real boards. Reused verbatim for the retry.
+        const mergeDiscovery = async (resultText) => {
+          try {
+            const { companies, errors } = parsePortalAdditions(resultText || '');
+            const m = await mergePortalAdditions(path.join(ROOT_DIR, 'portals.yml'), companies, { today: new Date().toISOString().slice(0, 10) });
+            m.parseErrors = errors;
+            m.rolesAdded = m.entries.length ? await scanNewCompanies(m.entries) : 0;
+            return m;
+          } catch (e) {
+            return { added: 0, entries: [], skippedDuplicate: 0, skippedDead: 0, collisions: [], rolesAdded: 0, error: (e && e.message) || String(e) };
+          }
+        };
+        portalMerge = await mergeDiscovery(res.result || '');
 
     // STALL GUARD (the enforced half of the fix; the prompt lines are advisory).
     // A small model sometimes narrates the open-ended discovery step and ends the
@@ -1105,24 +1117,35 @@ async function runAgent(jobId, mode, target) {
     // re-run the whole scan ONCE on Sonnet (which does not narrate-and-quit here).
     // scan.mjs is idempotent (re-dedups to 0 new), so re-running the full prompt
     // is safe; the extra API-tier pass is cheap next to a wasted widen.
-    const searches1 = (agentJobs.get(jobId) || {}).webSearchCount || 0;
-    if (scanDiscoveryStalled({ webSearchCount: searches1, added: portalMerge.added, rolesAdded: portalMerge.rolesAdded })) {
-      const j1 = agentJobs.get(jobId) || {};
-      agentJobs.set(jobId, { ...j1, status: 'running', scanStalled: true, scanRetried: true, activity: 'Discovery stalled — retrying on a stronger model…', warning: SCAN_STALL_RETRY_WHY });
-      const retry = await runClaudeAgent(jobId, mode, target, { forceModel: 'sonnet' });
-      if (retry.ok) {
-        const j2 = agentJobs.get(jobId) || {};
-        agentJobs.set(jobId, { ...j2, status: 'running', activity: 'Adding discovered companies to your scan list…' });
-        portalMerge = await mergeDiscovery(retry.result || '');
+        const searches1 = (agentJobs.get(jobId) || {}).webSearchCount || 0;
+        if (scanDiscoveryStalled({ webSearchCount: searches1, added: portalMerge.added, rolesAdded: portalMerge.rolesAdded })) {
+          scanStalled = true;
+          scanRetried = true;
+          const j1 = agentJobs.get(jobId) || {};
+          agentJobs.set(jobId, { ...j1, status: 'running', scanStalled: true, scanRetried: true, activity: 'Discovery stalled — retrying on a stronger model…', warning: SCAN_STALL_RETRY_WHY });
+          const retry = await runClaudeAgent(jobId, mode, target, { forceModel: 'sonnet', deferLog: true });
+          if (retry.logRecord) scanLogRecords.push(retry.logRecord);
+          if (retry.ok) {
+            const j2 = agentJobs.get(jobId) || {};
+            agentJobs.set(jobId, { ...j2, status: 'running', activity: 'Adding discovered companies to your scan list…' });
+            portalMerge = await mergeDiscovery(retry.result || '');
+          }
+          // Did the retry break the stall? webSearchCount is cumulative across both
+          // runClaudeAgent calls on this job, so a non-zero total means the retry did
+          // search. Clear the interim warning on success; name the failure on a
+          // second stall so the UI stops sending the user hunting.
+          const searches2 = (agentJobs.get(jobId) || {}).webSearchCount || 0;
+          const stillStalled = scanDiscoveryStalled({ webSearchCount: searches2, added: portalMerge.added, rolesAdded: portalMerge.rolesAdded });
+          const j3 = agentJobs.get(jobId) || {};
+          agentJobs.set(jobId, { ...j3, warning: stillStalled ? SCAN_STALL_FAILED_WHY : undefined });
+        }
       }
-      // Did the retry break the stall? webSearchCount is cumulative across both
-      // runClaudeAgent calls on this job, so a non-zero total means the retry did
-      // search. Clear the interim warning on success; name the failure on a
-      // second stall so the UI stops sending the user hunting.
-      const searches2 = (agentJobs.get(jobId) || {}).webSearchCount || 0;
-      const stillStalled = scanDiscoveryStalled({ webSearchCount: searches2, added: portalMerge.added, rolesAdded: portalMerge.rolesAdded });
-      const j3 = agentJobs.get(jobId) || {};
-      agentJobs.set(jobId, { ...j3, warning: stillStalled ? SCAN_STALL_FAILED_WHY : undefined });
+    } finally {
+      const lastRecord = scanLogRecords[scanLogRecords.length - 1];
+      if (lastRecord) {
+        lastRecord.discovery = buildScanDiscoverySummary(portalMerge, { retried: scanRetried, stalled: scanStalled });
+      }
+      for (const record of scanLogRecords) logAgentRun(record);
     }
   }
 

@@ -14,7 +14,7 @@
  * Run: node tests/agent-cost-rollup.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { rollupByDay, sumRollup } from '../dashboard-web/server/lib/agent-log.mjs';
+import { buildScanDiscoverySummary, rollupByDay, sumRollup } from '../dashboard-web/server/lib/agent-log.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -31,6 +31,41 @@ const records = [
   { ts: '2026-07-28T11:00:00.000Z', mode: 'pipeline', cost: 0.05, durationMs: 60000,  durationApiMs: 45000 },
   { ts: '2026-08-03T08:00:00.000Z', mode: 'scan',     cost: 0.99, durationMs: 10000,  durationApiMs: 5000 },
 ];
+
+// ── scan discovery summary ────────────────────────────────────────────────────
+const discovery = buildScanDiscoverySummary({
+  added: 3,
+  skippedDuplicate: 2,
+  skippedDead: 1,
+  collisions: [{}, {}],
+  parseErrors: ['bad row'],
+  rolesAdded: 7,
+}, { retried: true, stalled: true });
+check(JSON.stringify(discovery) === JSON.stringify({
+  merged: true, mergeErrors: 0, mergeError: null,
+  accepted: 3, skippedDuplicate: 2, skippedDead: 1, collisions: 2,
+  parseErrors: 1, rolesAdded: 7, retried: true, stalled: true,
+}), 'scan discovery summary reports merge and retry counts');
+
+const sparseDiscovery = buildScanDiscoverySummary({ added: 1 });
+check(sparseDiscovery.collisions === 0 && sparseDiscovery.parseErrors === 0 && sparseDiscovery.rolesAdded === 0,
+  'scan discovery summary defaults missing arrays and counts to zero');
+
+const noMerge = buildScanDiscoverySummary(null);
+check(JSON.stringify(noMerge) === JSON.stringify({
+  merged: false, mergeErrors: 0, mergeError: null,
+  accepted: 0, skippedDuplicate: 0, skippedDead: 0, collisions: 0,
+  parseErrors: 0, rolesAdded: 0, retried: false, stalled: false,
+}), 'scan discovery summary reports when the merge never ran');
+
+const missingPortals = buildScanDiscoverySummary({ errors: ['portals.yml is missing'] });
+check(missingPortals.merged === true && missingPortals.mergeErrors === 1 && missingPortals.mergeError === 'portals.yml is missing',
+  'scan discovery summary surfaces an errors array from missing portals.yml');
+
+const thrownMessage = `merge threw: ${'x'.repeat(250)}`;
+const thrownMerge = buildScanDiscoverySummary({ error: thrownMessage });
+check(thrownMerge.merged === true && thrownMerge.mergeErrors === 1 && thrownMerge.mergeError === thrownMessage.slice(0, 200),
+  'scan discovery summary surfaces and truncates a thrown merge error');
 
 // ── bucketing + ordering ──────────────────────────────────────────────────────
 const all = rollupByDay(records);
@@ -50,6 +85,12 @@ check(mon.cost === 0.3, 'cost sum is rounded clean (=== 0.3, not float noise)');
 check(mon.byMode.scan.runs === 1 && mon.byMode.pipeline.runs === 1, 'Monday splits scan vs pipeline runs');
 check(mon.byMode.scan.cost === 0.1 && mon.byMode.pipeline.cost === 0.2, 'Monday splits cost by mode');
 check(mon.byMode.pipeline.machineTimeMs === 120000, 'Monday pipeline machine time isolated');
+
+const recordsWithDiscovery = records.map((record, i) => i === 0 ? { ...record, discovery } : record);
+check(JSON.stringify(rollupByDay(recordsWithDiscovery)) === JSON.stringify(all),
+  'scan discovery metadata does not change run counts or costs');
+check(JSON.stringify(sumRollup(rollupByDay(recordsWithDiscovery))) === JSON.stringify(sumRollup(all)),
+  'scan discovery metadata does not change summed rollups');
 
 // ── inclusive from/to filtering (the "for a given week" query) ────────────────
 const week = rollupByDay(records, { from: '2026-07-27', to: '2026-08-02' });

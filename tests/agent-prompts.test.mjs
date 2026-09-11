@@ -90,6 +90,19 @@ check(/forceModel:\s*'sonnet'/.test(src),
 check(/webSearchCount/.test(src),
   'scan route counts WebSearch calls (the stall discriminator)');
 
+// Agent Scan logging is deferred until the deterministic company merge and any
+// stall retry finish, so one record can carry the complete discovery outcome.
+check(/mode === 'scan' \? \{ deferLog: true \} : \{\}/.test(src),
+  'scan mode defers its first agent-run log record');
+check(/forceModel:\s*'sonnet',\s*deferLog:\s*true/.test(src),
+  'scan stall retry also defers its agent-run log record');
+check(/finally\s*\{[\s\S]*buildScanDiscoverySummary[\s\S]*logAgentRun/.test(src),
+  'scan records are enriched and written in a finally block');
+check(/outputTail:\s*\(resultText \|\| job\.output \|\| ''\)\.slice\(-2000\)/.test(src),
+  'agent-run outputTail prefers the final result text');
+check(/jobId,\s*\n\s*mode,/.test(src),
+  'agent-run records include the job id');
+
 const triage = branch('triage');
 check(triage.length > 0, 'triage-mode prompt branch exists');
 check(/SKIP any URL that already appears in data\/applications\.md/.test(triage),

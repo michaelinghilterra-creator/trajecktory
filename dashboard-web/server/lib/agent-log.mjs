@@ -54,6 +54,30 @@ export function logAgentRun(record) {
   } catch { /* logging is best-effort — never throw into a run */ }
 }
 
+// PURE: attach the deterministic, server-side outcome of Agent Scan discovery
+// to the final Claude run record. Arrays are counted here (rather than stored in
+// the diagnostic log) and absent merge fields safely become zero.
+export function buildScanDiscoverySummary(portalMerge, { retried = false, stalled = false } = {}) {
+  const merged = portalMerge !== null && typeof portalMerge === 'object';
+  const merge = merged ? portalMerge : {};
+  const errors = Array.isArray(merge.errors) ? merge.errors : [];
+  const hasSingularError = merge.error != null;
+  const firstMergeError = hasSingularError ? merge.error : errors[0];
+  return {
+    merged,
+    mergeErrors: errors.length + (hasSingularError ? 1 : 0),
+    mergeError: firstMergeError == null ? null : String(firstMergeError).slice(0, 200),
+    accepted: Number.isFinite(merge.added) ? merge.added : 0,
+    skippedDuplicate: Number.isFinite(merge.skippedDuplicate) ? merge.skippedDuplicate : 0,
+    skippedDead: Number.isFinite(merge.skippedDead) ? merge.skippedDead : 0,
+    collisions: Array.isArray(merge.collisions) ? merge.collisions.length : 0,
+    parseErrors: Array.isArray(merge.parseErrors) ? merge.parseErrors.length : 0,
+    rolesAdded: Number.isFinite(merge.rolesAdded) ? merge.rolesAdded : 0,
+    retried: !!retried,
+    stalled: !!stalled,
+  };
+}
+
 // ── Reading the logs back ─────────────────────────────────────────────────────
 
 // Every run record across the rotating log files, newest `ts` first. Torn lines
