@@ -214,19 +214,20 @@ THE RECIPIENT:
 
 ${cvExcerpt ? `ABOUT ${first.toUpperCase()} (for grounding, do not copy verbatim):\n${cvExcerpt}\n\n` : ''}
 WHY CONNECT: ${guidance || `Anchor on shared focus in the GTM / RevOps / analytics space. Signal ${first} is a fellow operator, not a job seeker.`}
-${appliedRole ? `Mention in one clause that ${first} applied for the ${appliedRole} role.\n` : ''}
 
 TONE DIRECTIVE (${tone}): ${toneText}
 
 HARD RULES:
-- LENGTH, and this is the constraint most often missed: write TWO short sentences plus the sign-off, about 40 words of note text. Counting characters is unreliable, so hit the sentence and word target and the character cap takes care of itself.
-- The note text has an ABSOLUTE MAXIMUM of ${targetMax} characters including the "Thanks, ${first}" sign-off. The JSON wrapper does not count toward this note-text limit. LinkedIn caps connection notes at 300 characters and rejects longer note text. An over-length note gets trimmed at a sentence boundary, so a third sentence is likely to be cut rather than shortened.
+- ABSOLUTE MAXIMUM ${targetMax} characters TOTAL (including the "Thanks, ${first}" sign-off). LinkedIn caps connection notes at 300 characters and will reject anything longer. Count characters before responding. Aim for ${targetMax - 20} to leave safety margin.
 - Open with their first name + comma. Example: "Hi ${openExample},"
 - NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
-- One reason to connect that is grounded in the context above. Be specific, not generic.
+- Open with genuine interest in the company or the work. Give one reason to connect that is grounded in the context above. Be specific, not generic.
+${appliedRole ? `- Name the ${appliedRole} role after the genuine-interest opener.` : '- Do not claim that an application was submitted.'}
 - Keep the whole note as ONE paragraph on a single line with no line breaks, and end that same line with the sign-off: "Thanks, ${first}" (with the comma). This is a short note in a small box, not an email.
 - No "I'd love to pick your brain". No "I hope this finds you well". No "Quick question for you".
 - Do NOT sound desperate and do NOT lead with being in market or looking for a job.
+- Do NOT pitch a job-search tool or job-search article.
+- Do NOT ask for a call, chat, meeting, calendar time, or a named amount of their time.
 - Do NOT include emojis.
 
 == BODY REQUIREMENTS ==

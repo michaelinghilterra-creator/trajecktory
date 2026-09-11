@@ -23,8 +23,8 @@ import { resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
 export const router = express.Router();
 
 function referralAsk(appliedRole) {
-  if (!appliedRole) return 'Ask for a brief reply about whether the team is hiring for the kind of role he is targeting.';
-  return `Ask them to flag his application for the ${appliedRole} role to the hiring manager.`;
+  if (!appliedRole) return 'A good ask here is whether the team is hiring for the kind of role he is targeting.';
+  return `A good ask here is to flag his application for the ${appliedRole} role to the hiring manager.`;
 }
 
 // Split a referral's single Name field into first / last for the email finder,
@@ -399,7 +399,7 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
 
 ${connected
   ? 'YOU ARE ALREADY CONNECTED (they accepted the invite). Do NOT say you sent a connection request, do NOT ask whether it arrived, and do NOT imply the connection is pending. This is a real message to an established connection.'
-  : 'Write a real, purposeful message. Do NOT write "I would like to connect" — this is a message, not a new invite.'}
+  : 'Write a real, purposeful message. Do NOT write "I would like to connect" — this is a message, not a new invite. You are not connected on LinkedIn yet. Do not say you connected, since connecting, since we last connected, since we connected, or good to reconnect.'}
 
 == THE CONTACT ==
 ${contactBlock}
@@ -418,8 +418,9 @@ ${topicGuidance}
 - Direct, human, no corporate filler ("I hope this finds you well", "reaching out to touch base").
 - NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
 - Never invent metrics, claims, or a shared history not supported above or on the CV.
-- If (and only if) the intent is a referral ask, make it specific and direct. ${referralAsk(appliedRole)} Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches. Use "Would you" not "Could you" for the ask — it is a direct request, not a question about capability.
+- If (and only if) the intent is a referral ask, make it specific and trivially easy to decline. ${referralAsk(appliedRole)} A soft redirect ask is allowed. Offer to send a short blurb and resume.
 - Close with one low-friction next step or a genuine sign-off matching the intent. Do NOT ask for a call or a specific block of time.
+- Do not write "without a reply", "haven't heard back", "never heard back", or any apology for writing.
 ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
 == BODY REQUIREMENTS ==
 - Omit a subject line.
@@ -534,8 +535,9 @@ ${topicGuidance}
 - Maximum 130 words in body.
 - NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
 - Never invent metrics, claims, or a shared history not supported above or on the CV.
-- If (and only if) the intent is a referral ask, make it specific and direct. ${referralAsk(appliedRole)} Offer a short blurb or resume as context. No pre-emptive apologies or escape hatches. Use "Would you" not "Could you" for the ask — it is a direct request, not a question about capability.
+- If (and only if) the intent is a referral ask, make it specific and trivially easy to decline. ${referralAsk(appliedRole)} A soft redirect ask is allowed. Offer to send a short blurb and resume.
 - Close with a low-friction next step or a genuine sign-off, matching the intent.
+- Do not write "without a reply", "haven't heard back", "never heard back", or any apology for writing.
 ${prior.length ? `\n== PRIOR CORRESPONDENCE (most recent first) ==\n${prior.slice().reverse().slice(0, 3).map(m => `--- ${m.direction} on ${m.timestamp} | Subject: ${m.subject}\n${m.body}`).join('\n\n')}\nAcknowledge the prior thread naturally rather than starting cold.\n` : ''}
 == SUBJECT REQUIREMENTS ==
 - Keep the subject line short and human.

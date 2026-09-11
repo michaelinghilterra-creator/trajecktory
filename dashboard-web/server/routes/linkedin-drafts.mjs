@@ -80,13 +80,12 @@ function resolveRecipient(source, id) {
 }
 
 function tierAsk(recipientTier, appliedRole) {
-  const directQuestionRule = 'Phrase it as a direct question. Do not use the words point me, pointer, whoever, or the right person.';
-  if (!appliedRole) return `Ask for a brief reply about whether the team is hiring for the kind of role he is targeting. ${directQuestionRule}`;
-  if (recipientTier === 'exec') return `Ask who is leading the hiring for the ${appliedRole} role. ${directQuestionRule}`;
+  if (!appliedRole) return 'A good ask here is whether the team is hiring for the kind of role he is targeting.';
+  if (recipientTier === 'exec') return `A good ask here is who is leading the hiring for the ${appliedRole} role.`;
   if (recipientTier === 'hm' || recipientTier === 'peer') {
-    return `Ask whether they would take a look at his application for the ${appliedRole} role. ${directQuestionRule}`;
+    return `A good ask here is whether they would take a look at his application for the ${appliedRole} role.`;
   }
-  return `Ask them to flag his application for the ${appliedRole} role to the hiring manager. ${directQuestionRule}`;
+  return `A good ask here is to flag his application for the ${appliedRole} role to the hiring manager.`;
 }
 
 // GET /api/linkedin-drafts/inmail-budget — remaining monthly InMail credits.
@@ -262,14 +261,15 @@ ANGLE (${angle}): ${angleGuidance[angle] || angleGuidance['Reference Post']}
 TONE DIRECTIVE (${tone}): ${toneInstruction(tone)}
 
 HARD RULES:
-- LENGTH, the constraint most often missed: write TWO short sentences plus the sign-off, about 40 words. Counting characters is unreliable, so hit the sentence and word target and the character cap takes care of itself.
-- ABSOLUTE MAXIMUM ${targetMax} characters TOTAL (including the "Thanks, ${id.firstName}" sign-off). LinkedIn caps connection notes at 300 characters and will reject anything longer. An over-length note gets trimmed at a sentence boundary, so a third sentence is likely to be cut rather than shortened.
+- ABSOLUTE MAXIMUM ${targetMax} characters TOTAL (including the "Thanks, ${id.firstName}" sign-off). LinkedIn caps connection notes at 300 characters and will reject anything longer. Count characters before responding. Aim for ${targetMax - 20} to leave safety margin.
 - Open with their first name + comma. Example: "Hi Sangram,"
 - NO em dashes (—). Use periods, commas, semicolons, colons, or parentheses.
-- One reason to connect that is grounded in the angle above. Be specific, not generic.
+- Open with genuine interest in the company or the work. Give one reason to connect that is grounded in the angle above. Be specific, not generic.
 - End with a sign-off: "Thanks, ${id.firstName}" (with the comma).
 - No "I'd love to pick your brain". No "I hope this finds you well". No "Quick question for you".
 - Do NOT mention looking for a job, being in market, or open to opportunities (unless the angle is explicitly "Career Stage").
+- Do NOT pitch a job-search tool or job-search article.
+- Do NOT ask for a call, chat, meeting, calendar time, or a named amount of their time.
 - Do NOT include emojis.
 
 == NOTE REQUIREMENTS ==
@@ -578,16 +578,17 @@ ${articleDigestMd ? `PORTFOLIO / PROOF POINTS:\n${articleDigestMd.slice(0, 900)}
 ${profileMd ? `== VOICE RULES (from modes/_profile.md, must follow) ==\n${profileMd}\n` : ''}
 
 HARD RULES:
- - Open with "Hi ${recipientFirst}," then ${connected ? 'optionally one short warm clause about having just connected, then ' : ''}go to the real reason for writing: specific interest in ${company || 'their company'}${appliedRole ? ` and that ${idn.firstName} applied for the ${appliedRole} role` : ', without claiming that an application was submitted'}. Lead with intent and value, in a confident tone.
+ - Open with "Hi ${recipientFirst}," then ${connected ? 'optionally one short warm clause about having just connected, then ' : ''}genuine interest in ${company || 'their company'} or its work. ${appliedRole ? `Name the ${appliedRole} role after that opener.` : 'Do not claim that an application was submitted.'} Lead with warmth, intent, and value in a confident tone.
 - ${connected
     ? 'You are ALREADY connected, so NEVER say you "sent a connection request", "wanted to make sure this reached you", "reach you directly", or reference a pending or unanswered invite in any way. Treat the connection as established.'
     : 'Do NOT open by mentioning the earlier message, and NEVER say you "have not heard back" or that the silence is "fine". Being ignored is not the story; the candidacy is. If you reference the prior connection request at all, make it a brief, confident half-clause in the MIDDLE (for example, "I also sent a connection request recently, but wanted to reach you directly"), never an apology and never an opener.'}
 - ${thread.recentPitch ? 'Do NOT dump a full proof point the thread already covered; at most add ONE new specific detail not previously mentioned.' : `Then give one concrete proof point about ${idn.firstName} from the CV or portfolio that makes him worth a reply.`}
- - Close with ONE clear, low-friction ask. ${tierAsk(recipientTier, appliedRole)} Do NOT ask for a call, a chat, a quick call, time on their calendar, or "15/20/30 minutes" — everyone is busy and a meeting ask reads as tone-deaf. Not a hard pitch.
+ - Close with ONE clear, low-friction ask. ${tierAsk(recipientTier, appliedRole)} A soft redirect ask is allowed. Do NOT ask for a call, a chat, a quick call, time on their calendar, or "15/20/30 minutes" — everyone is busy and a meeting ask reads as tone-deaf. Not a hard pitch.
  - Length: ${thread.recentPitch ? '40 to 70 words. A nudge is short by design.' : recipientTier === 'exec' ? '60 to 100 words.' : '90 to 150 words. Longer than a connection note but still tight.'} Never a wall of text.
 - STRUCTURE: write the body as ${thread.recentPitch ? '1 to 2 very short paragraphs' : '2 or 3 short paragraphs'} separated by a BLANK LINE (a literal double newline, \\n\\n, between paragraphs). It must be easy to scan on a phone. Do NOT return one dense block of text.
 - NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
-- BANNED phrasings, they read as needy and get the message deleted: "haven't heard back", "never heard back", "which is fine", "I know you are busy", "just following up", "circling back", "wanted to reconnect", "sorry to bother", "I hope this finds you well", "quick question", "pick your brain", and any apology for writing.
+ - BANNED phrasings, they read as needy and get the message deleted: "without a reply", "haven't heard back", "never heard back", "which is fine", "I know you are busy", "just following up", "circling back", "wanted to reconnect", "sorry to bother", "I hope this finds you well", "quick question", "pick your brain", and any apology for writing.
+ - Do NOT pitch a job-search tool or job-search article.
 - End with a sign-off line: "Thanks, ${idn.firstName}".
 - No emojis. No mention of being desperate or unemployed.
 

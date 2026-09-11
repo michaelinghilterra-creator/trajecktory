@@ -95,9 +95,9 @@ const twentyEightWordResult = await reviseForCadence(variedTwentyEight, { surfac
 check(twentyEightWordResult.text === variedTwentyEight && twentyEightWordResult.reason === 'rhythm-ok',
   'varied text whose longest sentence is 28 words returns rhythm-ok');
 
-const fortyWords = Array.from({ length: 40 }, (_, index) => `word${index + 1}`).join(' ') + '.';
+const fortyOneWords = Array.from({ length: 41 }, (_, index) => `word${index + 1}`).join(' ') + '.';
 const longUnitText = [
-  fortyWords,
+  fortyOneWords,
   'A short second line.',
   'Another concise line follows.',
   'The final sentence closes it.',
@@ -105,7 +105,7 @@ const longUnitText = [
 process.env.TJK_FAKE_LLM_TEXT = longUnitText;
 const longUnitRevision = await reviseForCadence(longUnitText, { surface: 'prose' });
 check(longUnitRevision.reason === 'ok',
-  'a four-unit text with one 40-word sentence calls the cadence model');
+  'a four-unit text with one 41-word sentence calls the cadence model');
 
 const missingReview = await finishDraft({
   body: monotone,

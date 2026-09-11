@@ -136,7 +136,19 @@ check(toneBlock.includes('Ask for a 15-min call.')
   && toneBlock.includes('The style requirements above override any conflicting instruction in this tone note.'),
 'tone notes are included with the style precedence sentence');
 check(/caps this dimension at\s+3/.test(emailBlock), 'ask strength includes the hard cap for requests for time');
+const personalizationAnchorsFixture = `Named, checkable references: the requisition, a product, a named team, or a
+leadership change. Merge-tag output and vague praise are not personalization.
+Complimenting the recipient's own job back to them ("since you lead People strategy") is flattery, not personalization.
+Market-size, funding, valuation, or hiring-volume statistics are not personalization; score 4 or below and name the figure in the fixes.
+1-3:  Zero research signal, or empty flattery ("your innovative culture", "your impressive growth").
+4-5:  Names the company but nothing that required looking anything up.
+6-7:  Surface facts anyone could get in ten seconds (headcount, industry, city).
+8-9:  References something that took real reading, and ties it to why the sender is writing.
+10:   One checkable company detail, used as a short supporting clause, that could only apply to this company. The role itself remains the reason for writing.`;
+check(DIMENSIONS.personalization.anchors === personalizationAnchorsFixture,
+  'personalization anchors remain byte-identical to the independent-grader fixture');
 check(DIMENSIONS.personalization.anchors.includes('Complimenting the recipient\'s own job back to them')
+  && DIMENSIONS.personalization.anchors.includes('score 4 or below and name the figure in the fixes')
   && DIMENSIONS.personalization.anchors.includes('The role itself remains the reason for writing.')
   && !DIMENSIONS.personalization.anchors.includes('The research IS the hook.'),
   'personalization treats research as support and recipient-job praise as flattery');

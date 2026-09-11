@@ -548,10 +548,12 @@ ${profileMd}
 - Brief: under 100 words in the body.
 - Direct, senior operator tone. No "I hope this finds you well" or other corporate filler.
 - NO em dashes. Use periods, commas, semicolons, colons, or parentheses.
-- Reference the specific role + company by name.
+- Open with genuine interest in the company or the work, not with the fact of applying. Reference the specific role and company by name.
 - ${fuCount === 0 ? 'Lead with one specific reason this role matters to you (drawn from the report). Add one NEW data point or framing that wasn\'t in the original application (a recent thought, a relevant proof point, a question).' : 'Acknowledge this is a follow-up. Add genuinely new value — do not just repeat the original pitch. Reference a recent insight, market shift, or a specific question about the role.'}
-- Close with ONE low-friction ask: a quick reply on timing. Do NOT ask for a call, a chat, a quick call, an intro, or time on their calendar. A meeting ask on an unsolicited follow-up reads as tone-deaf.
+- Close with ONE low-friction ask: a quick reply on timing, or a soft redirect to the person handling this role. Do NOT ask for a call, a chat, a quick call, an intro, or time on their calendar. A meeting ask on an unsolicited follow-up reads as tone-deaf.
 - Never invent metrics or claims not on the CV.
+- Do NOT pitch a job-search tool or job-search article.
+- Do not write "without a reply", "haven't heard back", "never heard back", or any apology for writing.
 
 == SUBJECT REQUIREMENTS ==
 - Keep the email subject tight and reference the role.

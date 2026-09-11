@@ -35,13 +35,12 @@ function sequenceTone(contactId) {
 }
 
 function tierAsk(recipientTier, appliedRole) {
-  const directQuestionRule = 'Phrase it as a direct question. Do not use the words point me, pointer, whoever, or the right person.';
-  if (!appliedRole) return `Ask for a brief reply about whether the team is hiring for the kind of role he is targeting. ${directQuestionRule}`;
-  if (recipientTier === 'exec') return `Ask who is leading the hiring for the ${appliedRole} role. ${directQuestionRule}`;
+  if (!appliedRole) return 'A good ask here is whether the team is hiring for the kind of role he is targeting.';
+  if (recipientTier === 'exec') return `A good ask here is who is leading the hiring for the ${appliedRole} role.`;
   if (recipientTier === 'hm' || recipientTier === 'peer') {
-    return `Ask whether they would take a look at his application for the ${appliedRole} role. ${directQuestionRule}`;
+    return `A good ask here is whether they would take a look at his application for the ${appliedRole} role.`;
   }
-  return `Ask them to flag his application for the ${appliedRole} role to the hiring manager. ${directQuestionRule}`;
+  return `A good ask here is to flag his application for the ${appliedRole} role to the hiring manager.`;
 }
 
 export const router = express.Router();
@@ -376,10 +375,12 @@ ${intentGuidance}
 == STYLE REQUIREMENTS ==
 - LinkedIn DM voice: warm, direct, senior-operator. 40 to 110 words. Never a wall of text.
 - 2 to 3 short paragraphs separated by a LITERAL \\n\\n between paragraphs, so it scans on a phone.
-- Open with specific interest in ${r.company}${submittedApp ? ` and that ${me.firstName} applied for the ${appliedRole} role` : ', without implying that an application was submitted'}, then ONE concrete proof point from the CV or portfolio that makes him worth a reply.
+- Open with genuine interest in ${r.company} or its work. ${submittedApp ? `Name the ${appliedRole} role after that opener.` : 'Do not imply that an application was submitted.'} Then give one or two concrete proof points from the CV or portfolio that make him worth a reply.
 - No corporate filler ("I hope this finds you well", "reaching out to touch base"). No em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
 - Never invent metrics or claims not on the CV.
-- Close with ONE low-friction ask. ${tierAsk(recipientTier, appliedRole)} Do NOT ask for a call, a chat, a meeting, or any amount of their time.
+- Close with ONE low-friction ask. ${tierAsk(recipientTier, appliedRole)} A soft redirect ask is allowed. Do NOT ask for a call, a chat, a meeting, or any amount of their time.
+- Do NOT pitch a job-search tool or job-search article.
+- Do not write "without a reply", "haven't heard back", "never heard back", or any apology for writing.
 ${prior.length ? `\n== PRIOR CORRESPONDENCE, EMAIL AND LINKEDIN (most recent first) ==\n${prior.slice().reverse().slice(0, 4).map(m => `--- ${m.direction}${m.channel ? ` (${m.channel})` : ''} on ${m.timestamp}${m.subject ? ` | ${m.subject}` : ''}\n${m.body}`).join('\n\n')}\nTHREAD STATE: ${thread.stateLine}\nAcknowledge the prior thread naturally rather than starting cold, and never repeat a point, proof, or ask already made above.\n` : ''}
 == BODY REQUIREMENTS ==
 - Omit a subject line.
@@ -536,16 +537,15 @@ ${profileMd ? `\n== VOICE RULES (from modes/_profile.md, must follow) ==\n${prof
 - Maximum 140 words in body.
 - NO em dashes anywhere. Use periods, commas, semicolons, colons, or parentheses.
 - Never invent metrics or claims not on the CV.
-- Open with a specific reason for contacting this person at THIS company${submittedApp ? ' (the role applied to, recent funding/news/leadership change, or specific team context)' : ' (recent funding/news/leadership change or specific team context). Do not claim an application was submitted'}.
-- Lead with the most specific named artifact from the PORTFOLIO block above (a named project, initiative, or concrete outcome). If no PORTFOLIO block is present, use the most relevant quantified CV proof point. A named artifact hooks the reader far better than a generic role claim.
-- Make the ask low-friction and time-respecting. ${tierAsk(recipientTier, appliedRole)} Do NOT ask for a call, a chat, a conversation, a meeting, or any amount of their time (no "20-minute call", no "quick chat", no "would welcome a conversation"). Everyone is busy, and asking for their time reads as tone-deaf and needy.
+- Open with genuine interest in this company or its work, not with the fact of applying. ${submittedApp ? `Name the ${appliedRole} role after that opener.` : 'Do not claim an application was submitted.'}
+- Use one or two relevant proof points. Prefer a named artifact from the PORTFOLIO block when available; otherwise use quantified CV proof points.
+- Make the ask low-friction and time-respecting. ${tierAsk(recipientTier, appliedRole)} A soft redirect ask is allowed. Do NOT ask for a call, a chat, a conversation, a meeting, or any amount of their time (no "20-minute call", no "quick chat", no "would welcome a conversation"). Everyone is busy, and asking for their time reads as tone-deaf and needy.
 - Close with a clear, low-friction next step that does NOT request their time.
 - Do NOT ask them to forward your resume or do recruiting work for you. Frame as peer-to-peer candidate introduction.
 ${submittedApp ? '- TIMING: Use the exact phrasing from the TIMING LANGUAGE line in the RELATED APPLICATION block above. Do NOT invent your own gap — the server has computed days-since-application against today\'s date. If TIMING LANGUAGE says "31 days ago (use \'last month\')", say "last month" — never "yesterday" or "this morning". Misreporting the timing reads as careless to the recipient.' : '- Do not state or imply that an application was submitted.'}
 ${stageGuidance ? `- ${stageGuidance}` : ''}
-${isFirstTouch ? `
-- FOR FIRST-TOUCH TA OUTREACH: Consider naturally referencing ${me.firstName}'s strategic approach (${me.trajecktoryUrl}) when it makes sense — shows he thinks systemically about process and understands RevOps methodology. This works especially well if the role is RevOps/Analytics/Strategy-focused. Example: "I've documented my approach to strategic hiring at ${me.trajecktoryUrl}, and I think the [specific role/team] aligns well with that framework."
-` : ''}
+- Do NOT pitch a job-search tool or job-search article.
+- Do not write "without a reply", "haven't heard back", "never heard back", or any apology for writing.
 
 ${isFirstTouch ? '' : `
 == PRIOR CORRESPONDENCE (most recent first) ==
@@ -565,8 +565,8 @@ ${thread.recentPitch
 - Omit a greeting and any bare first-name address.
 - Write 3 to 4 short paragraphs separated by a literal \\n\\n between paragraphs. Do not write one giant block.
 - Write 1 to 2 sentences per paragraph, about 30 to 50 words.
-- Follow this paragraph pattern: (1) a why-now opener ${submittedApp ? 'referencing the application' : 'grounded in company or team context without claiming an application'}, (2) one quantified proof point, (3) a why-here link to their team, and (4) a brief interest-signaling close that does not ask for a call, meeting, or any of their time.
-- The UI prefills 'Hi ${r.first},', so the first sentence must begin with substantive content${submittedApp ? ", such as 'I submitted my application…' or 'Following up on…'" : ', and must not imply that an application was submitted'}. Do not start with '${r.first}', 'Hi', 'Hello', 'Hey', or any form of address.`;
+- Follow this paragraph pattern: (1) genuine interest in the company or the work, (2) one or two proof points, (3) a why-here link to their team, and (4) a brief interest-signaling close that does not ask for a call, meeting, or any of their time.
+- The UI prefills 'Hi ${r.first},', so the first sentence must begin with substantive interest in the company or the work${submittedApp ? `; name the ${appliedRole} role after that opener` : ', without implying that an application was submitted'}. Do not start with '${r.first}', 'Hi', 'Hello', 'Hey', or any form of address.`;
 
     const narrative = getNarrative();
     const result = await generateWithRubric(prompt, 'ta_email', {

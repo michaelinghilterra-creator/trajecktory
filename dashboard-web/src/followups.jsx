@@ -1060,6 +1060,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   };
 
   const gradeDraft = (next, generation) => {
+    if (window.tjkDraftGrading !== true) return Promise.resolve(null);
     const controller = new AbortController();
     const gradedBody = next.body || '';
     const gradedSubject = next.subject || '';
@@ -1103,16 +1104,16 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
       .then(d => {
         setDrafting(false);
         if (d.draft) {
-          const next = { ...d.draft, review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null };
+          const next = { ...d.draft, review: null, reviewPending: window.tjkDraftGrading === true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null };
           setDraft(next);
-          gradeDraft(next, generation);
+          if (window.tjkDraftGrading === true) gradeDraft(next, generation);
         } else alert(d.error || 'Draft failed');
       })
       .catch(err => { setDrafting(false); alert(err.message); });
   };
 
   const rerunReview = () => {
-    if (!draft?.surfaceId || reviewing) return;
+    if (window.tjkDraftGrading !== true || !draft?.surfaceId || reviewing) return;
     const generation = ++gradeGenerationRef.current;
     setReviewing(true);
     setDraft(current => current ? ({ ...current, reviewPending: true }) : current);
@@ -1120,7 +1121,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
   };
 
   const improveDraft = () => {
-    if (!draft?.surfaceId || improving) return;
+    if (window.tjkDraftGrading !== true || !draft?.surfaceId || improving) return;
     const snapshot = { body: draft.body || '', subject: draft.subject || '' };
     const controller = new AbortController();
     improveAbortRef.current?.abort();
@@ -1316,8 +1317,8 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
                 <button className="btn ghost sm" onClick={clearDraft}>Dismiss</button>
               </div>
             </div>
-            {window.DraftScoreBadge && <window.DraftScoreBadge review={draft.review} reviewOf={draft.reviewOf} pending={draft.reviewPending} onRerun={rerunReview} onImprove={improveDraft} busy={reviewing} improving={improving} />}
-            {improveMessage && <div className="mono" style={{ marginTop: 4, fontSize: 11, color: 'var(--text-mute)' }}>{improveMessage}</div>}
+            {window.tjkDraftGrading === true && window.DraftScoreBadge && <window.DraftScoreBadge review={draft.review} reviewOf={draft.reviewOf} pending={draft.reviewPending} onRerun={rerunReview} onImprove={improveDraft} busy={reviewing} improving={improving} />}
+            {window.tjkDraftGrading === true && improveMessage && <div className="mono" style={{ marginTop: 4, fontSize: 11, color: 'var(--text-mute)' }}>{improveMessage}</div>}
             <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 6 }}>
               <span className="mono dim" style={{ fontSize: 11 }}>Subject</span>
               <input className="inp" style={{ flex: 1 }} value={draft.subject || ''} onChange={e => setDraft({ ...draft, subject: e.target.value })} />
@@ -1328,7 +1329,7 @@ window.FollowupPanel = function FollowupPanel({ app, onUpdate }) {
                 setProposedDraft(null);
                 setImproveMessage(null);
               }} />
-            {proposedDraft && (
+            {window.tjkDraftGrading === true && proposedDraft && (
               <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--accent)', borderRadius: 6, background: 'var(--panel-2)' }}>
                 <div className="mono" style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Proposed rewrite</div>
                 <div className="mono" style={{ fontSize: 11, marginBottom: 6, color: 'var(--text-mute)' }}>

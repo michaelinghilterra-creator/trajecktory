@@ -355,8 +355,8 @@ const connectPrompt = buildConnectPrompt({
   senderName: 'Jordan Example', senderFirst: 'Jordan', recipientName: 'Avery Example',
   recipientRole: 'Recruiter', recipientCompany: 'Acme', appliedRole: 'Engineer',
 });
-check(connectPrompt.includes('Jordan applied for the Engineer role'),
-  'connection-note prompt mentions the applied role in one clause');
+check(connectPrompt.includes('Name the Engineer role after the genuine-interest opener'),
+  'connection-note prompt names the applied role after a genuine-interest opener');
 const connectPromptWithoutDigest = buildConnectPrompt({
   senderName: 'Jordan Example', senderFirst: 'Jordan', recipientName: 'Avery Example',
   recipientRole: 'Recruiter', recipientCompany: 'Acme', cvExcerpt: '',
@@ -372,31 +372,49 @@ const outreachRouteFiles = [
   'dashboard-web/server/routes/followups.mjs',
 ];
 const outreachRouteSource = outreachRouteFiles.map((file) => fs.readFileSync(path.join(root, file), 'utf8')).join('\n');
-check(!/pointed to the right person|a pointer to the right person/i.test(outreachRouteSource),
-  'outreach route prompts contain no deprecated redirect ask');
+check(outreachRouteSource.includes('A soft redirect ask is allowed')
+  && !outreachRouteSource.includes('Do not ask to be redirected'),
+  'outreach route prompts allow a soft redirect ask');
 const liFollowupSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/linkedin-drafts.mjs'), 'utf8');
 const targetTalentSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/target-talent.mjs'), 'utf8');
 const liFollowupBlock = liFollowupSource.slice(
   liFollowupSource.indexOf("router.post('/api/linkedin-drafts/followup-message'"),
   liFollowupSource.indexOf("router.post('/api/linkedin-drafts/archive-contact'"),
 );
-check(liFollowupBlock.includes('applied for the ${appliedRole} role')
+check(liFollowupBlock.includes('Name the ${appliedRole} role after that opener')
   && liFollowupBlock.includes('tierAsk(recipientTier, appliedRole)'),
-  'LinkedIn follow-up prompt names the applied role and uses the tier-specific ask');
+  'LinkedIn follow-up prompt names the applied role after genuine interest and uses the tier-specific ask');
 check(!liFollowupBlock.includes('${cvExcerpt}') && !liFollowupBlock.includes('${cvMd}')
   && /generateWithRubric\(prompt, 'li_followup',[\s\S]*?\bcvMd\b/.test(liFollowupBlock),
   'LinkedIn follow-up supplies the CV exactly once through the writing guide');
-const directQuestionRule = 'Phrase it as a direct question. Do not use the words point me, pointer, whoever, or the right person.';
-check(liFollowupSource.includes(directQuestionRule) && targetTalentSource.includes(directQuestionRule),
-  'LinkedIn and target-talent tier asks require a direct question and ban templated redirect wording');
+check(liFollowupSource.includes('A good ask here is') && targetTalentSource.includes('A good ask here is')
+  && !liFollowupSource.includes('Phrase it as a direct question')
+  && !targetTalentSource.includes('Phrase it as a direct question'),
+  'LinkedIn and target-talent tier asks are suggestions rather than direct-question rules');
 const notConnectedRule = 'You are not connected on LinkedIn yet. Do not say you connected, since connecting, since we last connected, since we connected, or good to reconnect.';
 check(liFollowupBlock.includes(notConnectedRule) && targetTalentSource.includes(notConnectedRule),
   'both not-connected LinkedIn DM prompts prohibit every accepted-connection phrase');
 const referralSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/referrals.mjs'), 'utf8');
 check((referralSource.match(/\$\{referralAsk\(appliedRole\)\}/g) || []).length === 2
   && !referralSource.includes('tierAsk(')
-  && referralSource.includes('flag his application for the ${appliedRole} role to the hiring manager'),
-  'referral email and DM use the referral ask independently of recipient tier');
+  && referralSource.includes('A good ask here is to flag his application for the ${appliedRole} role to the hiring manager'),
+  'referral email and DM use the suggested referral ask independently of recipient tier');
+
+const nonReferralPromptSources = [
+  liFollowupSource,
+  fs.readFileSync(path.join(root, 'dashboard-web/server/lib/linkedin-ssi.mjs'), 'utf8'),
+  targetTalentSource,
+  fs.readFileSync(path.join(root, 'dashboard-web/server/routes/followups.mjs'), 'utf8'),
+];
+check(nonReferralPromptSources.every((source) => source.includes('Do NOT pitch a job-search tool or job-search article')),
+  'every non-referral outreach prompt bans job-search-tool and job-search-article pitches');
+check(!referralSource.includes('Do NOT pitch a job-search tool or job-search article'),
+  'referral reconnect prompts continue to allow job-search-tool context');
+const writingGuideSource = fs.readFileSync(path.join(root, 'lib/outreach-rubric.mjs'), 'utf8');
+check(writingGuideSource.includes('never use market-size, funding, valuation, or hiring-volume statistics')
+  && !outreachRouteSource.includes('recent funding/news')
+  && !outreachRouteSource.includes('recent funding'),
+  'outreach prompts prohibit market-size, funding, valuation, and hiring-volume statistics');
 
 const draftsSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/drafts.mjs'), 'utf8');
 check(/const contextOptions = draftGradeContext\(gradeContext\)/.test(draftsSource)

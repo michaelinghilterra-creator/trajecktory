@@ -23,13 +23,16 @@ console.log('draft-badge-wiring.test.mjs');
 const surfaces = ['followups.jsx', 'referrals.jsx', 'connect.jsx', 'target-talent.jsx'];
 for (const name of surfaces) {
   const source = read(name);
-  check(source.includes('review: null') && source.includes('reviewPending: true'), `${name} shows the draft before its background review finishes`);
+  check(source.includes('review: null') && source.includes('reviewPending: window.tjkDraftGrading === true'), `${name} only marks a draft review pending when grading is enabled`);
   check(source.includes('DraftScoreBadge'), `${name} renders DraftScoreBadge`);
   check(source.includes('/api/drafts/improve') || source.includes('onImprove'), `${name} wires draft improvement`);
   check(source.includes('surfaceId'), `${name} uses the server surfaceId`);
   check(source.includes('window.tjkGradeDraft'), `${name} starts review through the shared background grader`);
+  check(/if \(window\.tjkDraftGrading !== true\) return Promise\.resolve\(null\);[\s\S]*?window\.tjkGradeDraft/.test(source),
+    `${name} exits before calling tjkGradeDraft when grading is off`);
   check(source.includes('gradeContext: next.gradeContext'), `${name} passes the stored gradeContext to the grader`);
   check(source.includes('pending={') && source.includes('.reviewPending}'), `${name} passes pending state to DraftScoreBadge`);
+  check(/window\.tjkDraftGrading === true && [^\n]*DraftScoreBadge/.test(source), `${name} hides DraftScoreBadge when grading is off`);
   const editAwareGrades = (source.match(/reviewOf: unchanged \? 'independent' : 'original'/g) || []).length;
   check(source.includes('=== gradedBody') && source.includes('=== gradedSubject')
     && editAwareGrades >= (name === 'connect.jsx' ? 2 : 1),
@@ -41,6 +44,8 @@ for (const name of surfaces) {
     && contextPayloads >= (name === 'connect.jsx' ? 4 : 2),
   `${name} sends the visible fixes and stored grade context when improving`);
   check(/(?:setProposedDraft|setLiProposed|setEmProposed)\((?:d|res)\.draft \? \{/.test(source), `${name} stores improve output and both scores as a proposal`);
+  const gatedProposals = (source.match(/window\.tjkDraftGrading === true && (?:liProposed|emProposed|proposedDraft)/g) || []).length;
+  check(gatedProposals >= (name === 'connect.jsx' ? 2 : 1), `${name} hides proposal panels when grading is off`);
   check(source.includes('new AbortController()') && source.includes('signal: controller.signal'), `${name} makes improvement cancellable`);
   check(!source.includes("reviewOf: 'self'") && !source.includes("setReviewOf('self')"), `${name} never labels generated reviews as self-scored`);
   check((source.includes("reviewOf: 'independent'") || source.includes("setReviewOf('independent')")
