@@ -79,7 +79,7 @@ function closingText(body) {
   const paragraphs = text.split(/\r?\n\s*\r?\n/).map((part) => part.trim()).filter(Boolean);
   if (paragraphs.length > 1) return paragraphs[paragraphs.length - 1];
 
-  const sentences = text.match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g) || [];
+  const sentences = text.split(/(?<=[.!?])\s+/);
   return sentences.slice(-2).join(' ').trim();
 }
 

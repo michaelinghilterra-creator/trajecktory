@@ -280,6 +280,25 @@ check(checkTemplatedAsk("I'd like to send you a short writeup of that reporting 
 check(checkTemplatedAsk("I can point you to whoever owns the data. The rebuild cut errors. I'd like to send you a short writeup.").clean,
   'a mid body redirect with a clean closing is not flagged');
 
+const longClosingStart = performance.now();
+checkTemplatedAsk('a' + ' '.repeat(100000) + '!x');
+const longClosingElapsed = performance.now() - longClosingStart;
+check(longClosingElapsed < 500,
+  `a long adversarial closing completes in under 500 ms (${longClosingElapsed.toFixed(1)} ms)`);
+
+const repeatedClosingStart = performance.now();
+checkTemplatedAsk('a' + (' '.repeat(20000) + '!x').repeat(5));
+const repeatedClosingElapsed = performance.now() - repeatedClosingStart;
+check(repeatedClosingElapsed < 500,
+  `a repeated adversarial closing completes in under 500 ms (${repeatedClosingElapsed.toFixed(1)} ms)`);
+
+check(checkTemplatedAsk('Whoever owns the data can help. The rebuild cut errors. I can send a short writeup.').clean,
+  'a templated phrase in the first of three sentences is outside the closing');
+check(!checkTemplatedAsk('The rebuild cut errors. I can send a short writeup. Whoever owns the data can help.').clean,
+  'a templated phrase in the last of three sentences is flagged');
+check(!checkTemplatedAsk('Whoever uses v3.5 can help. I can send a short writeup.').clean,
+  'a decimal or version number does not split a sentence');
+
 const templatedAskRaw = JSON.stringify({
   critique: { weakest_dimension: 'clarity', fixes: ['Make the next step specific.'] },
   dimensions: [
