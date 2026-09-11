@@ -679,6 +679,8 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
   const [proposedDraft, setProposedDraft] = useState(null);
   const [improveSnapshot, setImproveSnapshot] = useState('');
   const improveAbortRef = useRef(null);
+  const gradeAbortRef = useRef(null);
+  const gradeGenerationRef = useRef(0);
   const [saving, setSaving] = useState(false);
   const toast = window.tjkToast || (() => {});
   const FIELDS = [
@@ -709,12 +711,16 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
     return () => {
       window.removeEventListener('keydown', h);
       improveAbortRef.current?.abort();
+      gradeAbortRef.current?.abort();
     };
   }, [onClose]);
 
   const clearCompose = () => {
     improveAbortRef.current?.abort();
     improveAbortRef.current = null;
+    gradeAbortRef.current?.abort();
+    gradeAbortRef.current = null;
+    gradeGenerationRef.current++;
     setImproving(false);
     setProposedDraft(null);
     setCompose(null);
@@ -738,8 +744,38 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
   // route (raw fields, no twin needed); Email → the referral /draft route with a
   // topic (or reply / follow-up when a thread exists). The user edits then logs.
   const [generating, setGenerating] = useState(false);
+  const gradeDraft = (next, generation) => {
+    const controller = new AbortController();
+    const gradedBody = next.body || '';
+    const gradedSubject = next.subject || '';
+    gradeAbortRef.current?.abort();
+    gradeAbortRef.current = controller;
+    return window.tjkGradeDraft({
+      body: gradedBody,
+      subject: gradedSubject,
+      surfaceId: next.surfaceId,
+      gradeContext: next.gradeContext,
+      signal: controller.signal,
+    }).then(review => {
+      if (gradeGenerationRef.current !== generation) return;
+      setCompose(current => {
+        if (!current) return current;
+        const unchanged = (current.body || '') === gradedBody && (current.subject || '') === gradedSubject;
+        return { ...current, review, reviewOf: unchanged ? 'independent' : 'original', reviewPending: false };
+      });
+    }).catch(err => {
+      if (err.name === 'AbortError' || gradeGenerationRef.current !== generation) return;
+      setCompose(current => current ? ({ ...current, reviewPending: false }) : current);
+      toast(err.message, 'error');
+    }).finally(() => {
+      if (gradeAbortRef.current === controller) gradeAbortRef.current = null;
+    });
+  };
   const generate = () => {
     if (!compose) return;
+    const generation = ++gradeGenerationRef.current;
+    gradeAbortRef.current?.abort();
+    gradeAbortRef.current = null;
     improveAbortRef.current?.abort();
     improveAbortRef.current = null;
     setImproving(false);
@@ -765,7 +801,10 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
           body: JSON.stringify({ source: 'referral', id: row.id, name: row.name, role: row.how, company: row.where, reason: row.target || row.how, firstName: first, tone: compose.tone || 'Warm' }),
         }).then(r => r.json()).then(d => {
           if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-          if (d && d.response) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.response, review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null })); setGenerating(false); }
+          if (d && d.response) {
+            const next = { ...compose, subject: compose.subject || 'LinkedIn note', body: d.response, review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null };
+            setCompose(next); setGenerating(false); gradeDraft(next, generation);
+          }
           else fail(d && d.error);
         }).catch(() => fail());
       } else {
@@ -774,7 +813,10 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
           body: JSON.stringify({ topic: liTopic, channel: 'linkedin' }),
         }).then(r => r.json()).then(d => {
           if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-          if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: c.subject || 'LinkedIn note', body: d.draft.body || '', review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null })); setGenerating(false); }
+          if (d && d.ok && d.draft) {
+            const next = { ...compose, subject: compose.subject || 'LinkedIn note', body: d.draft.body || '', review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null, relatedApp: d.relatedApp || null };
+            setCompose(next); setGenerating(false); gradeDraft(next, generation);
+          }
           else fail(d && d.error);
         }).catch(() => fail());
       }
@@ -786,7 +828,10 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
         body: JSON.stringify({ topic, mode }),
       }).then(r => r.json()).then(d => {
         if (d && d.blocked) { setGenerating(false); toast(blockedMsg(d), 'warn'); return; }
-        if (d && d.ok && d.draft) { setCompose(c => ({ ...c, subject: d.draft.subject || c.subject, body: d.draft.body || '', review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null })); setGenerating(false); }
+        if (d && d.ok && d.draft) {
+          const next = { ...compose, subject: d.draft.subject || compose.subject, body: d.draft.body || '', review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null, relatedApp: d.relatedApp || null };
+          setCompose(next); setGenerating(false); gradeDraft(next, generation);
+        }
         else fail(d && d.error);
       }).catch(() => fail());
     }
@@ -794,15 +839,10 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
 
   const rerunReview = () => {
     if (!compose?.surfaceId || reviewing) return;
+    const generation = ++gradeGenerationRef.current;
     setReviewing(true);
-    window.tjkMutate('/api/drafts/review', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: compose.body || '', subject: compose.subject || '', surfaceId: compose.surfaceId }),
-    }).then(r => r.json()).then(d => {
-      if (d.error) throw new Error(d.error);
-      setCompose(c => c ? ({ ...c, review: d.review || null, reviewOf: 'independent' }) : c);
-    }).catch(err => toast(err.message, 'error')).finally(() => setReviewing(false));
+    setCompose(current => current ? ({ ...current, reviewPending: true }) : current);
+    gradeDraft(compose, generation).finally(() => setReviewing(false));
   };
 
   const improveDraft = () => {
@@ -823,7 +863,9 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
         surfaceId: compose.surfaceId,
         recipientFirst: String(row.name || '').trim().split(/\s+/)[0] || '',
         originalScore: typeof compose.review?.score === 'number' ? compose.review.score : null,
-        ...(compose.relatedApp?.id != null ? { appId: compose.relatedApp.id } : {}),
+        ...(compose.gradeContext?.appId != null
+          ? { appId: compose.gradeContext.appId }
+          : compose.relatedApp?.id != null ? { appId: compose.relatedApp.id } : {}),
       }),
       signal: controller.signal,
     }).then(r => r.json()).then(d => {
@@ -846,12 +888,15 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
   const replaceWithProposed = () => {
     if (!proposedDraft || !compose) return;
     if ((compose.body || '') !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
+    gradeAbortRef.current?.abort();
+    gradeGenerationRef.current++;
     setCompose(c => ({
       ...c,
       subject: proposedDraft.subject || c.subject || '',
       body: proposedDraft.body || '',
       review: proposedDraft.review || null,
       reviewOf: proposedDraft.reviewOf || 'independent',
+      reviewPending: false,
     }));
     setProposedDraft(null);
   };
@@ -1001,7 +1046,7 @@ function ReferralPanel({ row, statuses, onClose, onPatch, onLogToday, onFindEmai
               <div style={{ fontSize: 11, fontWeight: 700, color: compose.direction === 'Sent' ? '#a78bfa' : '#22d3ee' }}>
                 {compose.ai ? 'Draft a message with AI' : compose.direction === 'Sent' ? 'Log a message you sent' : 'Log a reply you received'}
               </div>
-              {compose.ai && window.DraftScoreBadge && <window.DraftScoreBadge review={compose.review} reviewOf={compose.reviewOf} onRerun={compose.surfaceId ? rerunReview : null} onImprove={compose.surfaceId ? improveDraft : null} busy={reviewing} improving={improving} />}
+              {compose.ai && window.DraftScoreBadge && <window.DraftScoreBadge review={compose.review} reviewOf={compose.reviewOf} pending={compose.reviewPending} onRerun={compose.surfaceId ? rerunReview : null} onImprove={compose.surfaceId ? improveDraft : null} busy={reviewing} improving={improving} />}
 
               {/* Channel — which surface this message went out on. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

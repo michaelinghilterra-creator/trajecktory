@@ -61,7 +61,7 @@ export async function finishDraft({
     console.error(`[finishDraft:${surface}] unknown cleaner: ${cleaner}`);
   }
 
-  if (cadence === 'auto' && review === null) {
+  if (cadence === 'auto') {
     try {
       finishedBody = (await reviseForCadence(finishedBody, { surface: cleaner })).text;
     } catch (err) {

@@ -113,7 +113,7 @@ export const SECTIONS = [
   },
   {
     key: 'grade', label: 'Draft Review (on demand)', envKey: 'TJK_GRADE_MODEL',
-    hint: 'The independent second opinion from the Review button. Not used by normal drafting.',
+    hint: 'Grades each draft in the background after it appears, and powers Improve this draft.',
     options: ['sonnet', 'haiku'], default: 'sonnet',
     tokensPerUnit: 6_000, split: { in: 0.75, out: 0.25 },
     unitLabel: 'review', unitsPerRun: 1,

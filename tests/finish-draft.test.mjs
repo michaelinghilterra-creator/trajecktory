@@ -21,7 +21,7 @@ function check(condition, message) {
   }
 }
 
-const FIXTURE_RAW = `Hi Sarah,\n\nI submitted my application for the Data Engineering Lead role last month and wanted to connect directly.\n\nIn order to give you context, at my previous company I built a logistics platform that compressed order fulfillment from 5 days to 8 hours -- supporting $320M in annual throughput across 3 warehouses.\n\nI believe my background in automating supply chains at scale aligns well with what your team is building.\n\nBest regards,\nJane Doe\njane@example.com\n555-0199`;
+const FIXTURE_RAW = `Hi Sarah,\n\nI submitted my application for the Data Engineering Lead role last month and wanted to connect directly.\n\nIn order to give you context, at my previous company I built a logistics platform that compressed order fulfillment from 5 days to 8 hours. It supported $320M in annual throughput across 3 warehouses.\n\nI believe my background in automating supply chains at scale aligns well with what your team is building.\n\nBest regards,\nJane Doe\njane@example.com\n555-0199`;
 
 console.log('finish-draft.test.mjs');
 
@@ -48,7 +48,17 @@ const monotone = Array.from({ length: 8 }, (_, index) =>
 const priorFake = process.env.TJK_FAKE_LLM;
 const priorFakeText = process.env.TJK_FAKE_LLM_TEXT;
 process.env.TJK_FAKE_LLM = '1';
-process.env.TJK_FAKE_LLM_TEXT = 'Cadence revision should not replace this reviewed draft.';
+const cadenceRevision = [
+  'Logged the package.',
+  'Before dispatch, I checked item one against the printed manifest and resolved every mismatch before the evening window closed.',
+  'The next label matched immediately.',
+  'For item three, I compared the packing slip, warehouse record, and carrier manifest before clearing it for the scheduled truck.',
+  'No escalation was needed.',
+  'Item five required a second scan, but the printed manifest matched once I corrected the misplaced tracking label.',
+  'Then I closed the completed batch and notified dispatch.',
+  'The final package matched every recorded field, cleared the dock check, and left with the carrier before the window closed.',
+].join('\n');
+process.env.TJK_FAKE_LLM_TEXT = cadenceRevision;
 
 const reviewed = await finishDraft({
   body: monotone,
@@ -58,8 +68,44 @@ const reviewed = await finishDraft({
   cleaner: 'none',
   stripSignature: false,
 });
-check(reviewed.body === monotone && reviewed.review?.score === 82 && reviewed.reviewStatus === 'ok',
-  'a present review skips cadence revision and carries review status');
+check(reviewed.body === cadenceRevision && reviewed.review?.score === 82 && reviewed.reviewStatus === 'ok',
+  'a present review no longer skips a needed cadence revision and still carries review status');
+
+const varied = [
+  'Done.',
+  'I built the pipeline quickly.',
+  'Teams adopted it across three regions without extra training.',
+  'The release cut manual review while keeping every existing control in place.',
+  'Managers used the saved time to coach analysts on harder judgment calls each week.',
+].join('\n');
+process.env.TJK_FAKE_LLM_TEXT = 'The model must not replace rhythm that is already sound.';
+const rhythmOk = await reviseForCadence(varied, { surface: 'prose' });
+check(rhythmOk.text === varied && rhythmOk.reason === 'rhythm-ok',
+  'varied short-sentence text returns rhythm-ok without calling the model');
+
+const variedTwentyEight = [
+  'Done.',
+  'I built the pipeline quickly.',
+  'Teams adopted it across three regions without extra training.',
+  'The release cut manual review while keeping every existing control in place.',
+  'Managers then used the saved time to coach analysts on harder judgment calls, document edge cases, and improve the next release without adding another approval step or meeting.',
+].join('\n');
+process.env.TJK_FAKE_LLM_TEXT = 'The model must not replace a varied draft whose longest sentence has 28 words.';
+const twentyEightWordResult = await reviseForCadence(variedTwentyEight, { surface: 'prose' });
+check(twentyEightWordResult.text === variedTwentyEight && twentyEightWordResult.reason === 'rhythm-ok',
+  'varied text whose longest sentence is 28 words returns rhythm-ok');
+
+const fortyWords = Array.from({ length: 40 }, (_, index) => `word${index + 1}`).join(' ') + '.';
+const longUnitText = [
+  fortyWords,
+  'A short second line.',
+  'Another concise line follows.',
+  'The final sentence closes it.',
+].join('\n');
+process.env.TJK_FAKE_LLM_TEXT = longUnitText;
+const longUnitRevision = await reviseForCadence(longUnitText, { surface: 'prose' });
+check(longUnitRevision.reason === 'ok',
+  'a four-unit text with one 40-word sentence calls the cadence model');
 
 const missingReview = await finishDraft({
   body: monotone,

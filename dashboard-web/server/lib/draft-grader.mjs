@@ -5,6 +5,7 @@ import {
   buildIndependentGradePrompt,
   buildPlainContract,
   buildRubricBlock,
+  buildWritingGuide,
   reviewFailureReason,
 } from '../../../lib/outreach-rubric.mjs';
 import { generateText, readOptionalProjectFile } from './anthropic.mjs';
@@ -78,7 +79,7 @@ function closingText(body) {
   const paragraphs = text.split(/\r?\n\s*\r?\n/).map((part) => part.trim()).filter(Boolean);
   if (paragraphs.length > 1) return paragraphs[paragraphs.length - 1];
 
-  const sentences = text.match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)/g) || [];
+  const sentences = text.split(/(?<=[.!?])\s+/);
   return sentences.slice(-2).join(' ').trim();
 }
 
@@ -114,6 +115,37 @@ export function checkTemplatedAsk(body) {
   }
 }
 
+export function applyDeterministicCaps(review, body, surfaceId, {
+  cvMd = '', proofPoints = [], companyResearch = '',
+} = {}) {
+  if (!review) return review;
+
+  const profile = getProfile(surfaceId);
+  const numberCheck = checkUnsourcedNumbers(body, cvMd, proofPoints, companyResearch);
+  if (!numberCheck.clean) {
+    const evidence = review.dimensions.find((dimension) => dimension.id === 'evidence');
+    if (evidence) evidence.score = Math.min(evidence.score, 3);
+    review.topFixes = [
+      ...review.topFixes,
+      ...numberCheck.flagged.filter((figure) => !review.topFixes.includes(figure)),
+    ];
+    review.score = weightedScore(review.dimensions, profile);
+    review.unsourcedWarning = true;
+  }
+  if (profile.dims.some((dimension) => dimension.id === 'ask_strength')) {
+    const askCheck = checkTemplatedAsk(body);
+    if (!askCheck.clean) {
+      const askStrength = review.dimensions.find((dimension) => dimension.id === 'ask_strength');
+      if (askStrength) askStrength.score = Math.min(askStrength.score, 3);
+      const fix = `Replace "${askCheck.matched}" with a specific next step tied to this message, or name the person you want to reach.`;
+      if (!review.topFixes.includes(fix)) review.topFixes.push(fix);
+      review.score = weightedScore(review.dimensions, profile);
+      review.templatedAskWarning = true;
+    }
+  }
+  return review;
+}
+
 function fallbackDraft(raw) {
   try {
     if (typeof raw !== 'string' || !raw.trim()) return null;
@@ -132,7 +164,7 @@ function fallbackDraft(raw) {
 }
 
 export function parseAndFinishDraft(raw, surfaceId, cvMd, companyResearch) {
-  let result = null;
+  let result;
   try {
     result = parseReviewed(raw, surfaceId);
   } catch {
@@ -154,30 +186,10 @@ export function parseAndFinishDraft(raw, surfaceId, cvMd, companyResearch) {
   }
 
   try {
-    const profile = getProfile(surfaceId);
     const proofPoints = getNarrative().proofPoints;
-    const numberCheck = checkUnsourcedNumbers(result.body, cvMd, proofPoints, companyResearch);
-    if (!numberCheck.clean) {
-      const evidence = result.review.dimensions.find((dimension) => dimension.id === 'evidence');
-      if (evidence) evidence.score = Math.min(evidence.score, 3);
-      result.review.topFixes = [
-        ...result.review.topFixes,
-        ...numberCheck.flagged.filter((figure) => !result.review.topFixes.includes(figure)),
-      ];
-      result.review.score = weightedScore(result.review.dimensions, profile);
-      result.review.unsourcedWarning = true;
-    }
-    if (profile.dims.some((dimension) => dimension.id === 'ask_strength')) {
-      const askCheck = checkTemplatedAsk(result.body);
-      if (!askCheck.clean) {
-        const askStrength = result.review.dimensions.find((dimension) => dimension.id === 'ask_strength');
-        if (askStrength) askStrength.score = Math.min(askStrength.score, 3);
-        const fix = `Replace "${askCheck.matched}" with a specific next step tied to this message, or name the person you want to reach.`;
-        if (!result.review.topFixes.includes(fix)) result.review.topFixes.push(fix);
-        result.review.score = weightedScore(result.review.dimensions, profile);
-        result.review.templatedAskWarning = true;
-      }
-    }
+    applyDeterministicCaps(result.review, result.body, surfaceId, {
+      cvMd, proofPoints, companyResearch,
+    });
     return { subject: result.subject, body: result.body, review: result.review, reviewStatus: 'ok' };
   } catch {
     // The unsourced-number check never ran, so the evidence dimension is
@@ -210,13 +222,18 @@ function contractConflict(prompt) {
 }
 
 export async function generateWithRubric(prompt, surfaceId, opts = {}) {
-  const { model, maxTokens = 1024, cvMd = '', rubricOpts = {}, plainTextFallback = false } = opts;
+  const {
+    model, maxTokens = 1024, cvMd = '', rubricOpts = {}, plainTextFallback = false,
+    mode = 'critique',
+  } = opts;
 
-  const rubricBlock = (process.env.TJK_RUBRIC_DISABLED !== '1')
-    ? buildRubricBlock(surfaceId, { cvExcerpt: cvMd, ...rubricOpts })
+  const guidedBlock = (process.env.TJK_RUBRIC_DISABLED !== '1')
+    ? (mode === 'write'
+      ? buildWritingGuide(surfaceId, { cvExcerpt: cvMd, ...rubricOpts })
+      : buildRubricBlock(surfaceId, { cvExcerpt: cvMd, ...rubricOpts }))
     : '';
 
-  if (rubricBlock) {
+  if (guidedBlock) {
     const excerpt = contractConflict(prompt);
     if (excerpt) {
       console.error('[rubric] surface=%s conflicting output contract: %s', surfaceId, excerpt);
@@ -226,17 +243,29 @@ export async function generateWithRubric(prompt, surfaceId, opts = {}) {
     }
   }
 
-  const contract = rubricBlock || buildPlainContract(surfaceId);
+  const contract = guidedBlock || buildPlainContract(surfaceId);
   const fullPrompt = prompt + '\n\n' + contract;
-  const effectiveMaxTokens = rubricBlock ? Math.max(maxTokens + 1200, 2200) : maxTokens;
+  const effectiveMaxTokens = mode === 'write'
+    ? maxTokens
+    : (guidedBlock ? Math.max(maxTokens + 1200, 2200) : maxTokens);
 
-  const raw = await generateText(fullPrompt, { model, maxTokens: effectiveMaxTokens });
+  const raw = await generateText(fullPrompt, { model, maxTokens: effectiveMaxTokens, label: `draft:${surfaceId}` });
   if (typeof raw === 'string' && !raw.trimEnd().endsWith('}')) {
     console.warn('[rubric] surface=%s response-truncated missing-closing-brace', surfaceId);
   }
 
-  const result = parseAndFinishDraft(raw, surfaceId, cvMd, rubricOpts.companyResearch);
-  if (!result.error) return result;
+  const result = mode === 'write'
+    ? fallbackDraft(raw)
+    : parseAndFinishDraft(raw, surfaceId, cvMd, rubricOpts.companyResearch);
+  if (mode === 'write' && result) {
+    return {
+      subject: result.subject,
+      body: result.body,
+      review: null,
+      reviewStatus: 'pending',
+    };
+  }
+  if (result && !result.error) return result;
 
   if (plainTextFallback) {
     if (typeof raw !== 'string' || /"(?:dimensions|weakest_dimension|critique)"/i.test(raw)) {
@@ -247,11 +276,13 @@ export async function generateWithRubric(prompt, surfaceId, opts = {}) {
       body: raw.trim(),
       subject: undefined,
       review: null,
-      reviewStatus: reason === 'rubric-off' ? 'disabled' : `missing:${reason}`,
+      reviewStatus: mode === 'write'
+        ? 'pending'
+        : (reason === 'rubric-off' ? 'disabled' : `missing:${reason}`),
     };
   }
 
-  return result;
+  return result || { error: 'unparseable' };
 }
 
 function parseIndependentReview(raw, body, surfaceId) {
@@ -289,8 +320,18 @@ export async function gradeIndependently(body, surfaceId, opts = {}) {
     }
     const prompt = buildIndependentGradePrompt(surfaceId, promptOptions);
     if (!prompt) return null;
-    const response = await generateText(prompt, { model: values.model, maxTokens: 2048 });
-    return parseIndependentReview(response, promptOptions.body, surfaceId);
+    const response = await generateText(prompt, { model: values.model, maxTokens: 2048, label: `grade:${surfaceId}` });
+    const review = parseIndependentReview(response, promptOptions.body, surfaceId);
+    if (!review) return null;
+    try {
+      return applyDeterministicCaps(review, promptOptions.body, surfaceId, {
+        cvMd: promptOptions.cvExcerpt,
+        proofPoints: values.proofPoints,
+        companyResearch: values.companyResearch,
+      });
+    } catch {
+      return { ...review, unverified: true };
+    }
   } catch {
     return null;
   }

@@ -86,10 +86,23 @@ window.ScoreChip = function ScoreChip({ score }) {
   );
 };
 
+// ---------- Independent draft grading ----------
+window.tjkGradeDraft = async function tjkGradeDraft({ body, subject, surfaceId, gradeContext, signal }) {
+  const response = await window.tjkMutate('/api/drafts/review', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body, subject, surfaceId, gradeContext }),
+    signal,
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result.error) throw new Error(result.error || `Draft review failed (${response.status})`);
+  return result.review || null;
+};
+
 // ---------- Draft review badge (0-100) ----------
-window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, onRerun, onImprove, busy, improving }) {
+window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, pending, onRerun, onImprove, busy, improving }) {
   const [open, setOpen] = React.useState(false);
-  if (!review && !onRerun && !onImprove) return null;
+  if (!review && !pending && !onRerun && !onImprove) return null;
 
   const badgeColor = (s) =>
     s == null ? "#71717a" : s >= 80 ? "#22c55e" : s >= 60 ? "#eab308" : "#ef4444";
@@ -143,6 +156,23 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, onRerun, o
           }}>&#9660;</span>
         </button>
       )}
+      {pending && !review && (
+        <span
+          className="btn sm"
+          style={{
+            color: badgeColor(null),
+            border: `1px solid ${badgeColor(null)}33`,
+            background: `${badgeColor(null)}11`,
+            fontWeight: 600,
+            gap: 4,
+            display: "inline-flex",
+            alignItems: "center",
+            cursor: "default",
+          }}
+        >
+          grading...
+        </span>
+      )}
       {onImprove && (
         <button
           className="btn sm"
@@ -177,7 +207,7 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, onRerun, o
                   alignItems: "baseline",
                   padding: "2px 0",
                 }}>
-                  <span style={{ color: "var(--text-dim)" }}>{dim.id.replace(/_/g, " ")}</span>
+                  <span style={{ color: "var(--text-dim)" }}>{dim.name || dim.id.replace(/_/g, " ")}</span>
                   <span style={{ fontWeight: 600, color: badgeColor(dim.score * 10) }}>{dim.score}/10</span>
                 </div>
               ))}

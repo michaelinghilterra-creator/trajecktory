@@ -720,6 +720,8 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
   const [showOrigDims, setShowOrigDims] = useState(false);
   const [improveSnapshot, setImproveSnapshot] = useState("");
   const improveAbortRef = useRef(null);
+  const gradeAbortRef = useRef(null);
+  const gradeGenerationRef = useRef(0);
   const sideBySideTaRef = useRef(null);
   const [draftBlock, setDraftBlock] = useState(null);
   // Which surface the draft is for. Email drafts assemble a greeting + signature;
@@ -729,6 +731,11 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
   // Keep the editable body separate from the greeting and signature. Grading and
   // improvement receive only this clean body, while copy and send use the wrapper.
   const [draftBody, setDraftBody] = useState("");
+  const draftBodyRef = useRef("");
+  const setCurrentDraftBody = (body) => {
+    draftBodyRef.current = body;
+    setDraftBody(body);
+  };
   useEffect(() => {
     if (!sideBySideTaRef.current || !proposedDraft) return;
     const el = sideBySideTaRef.current;
@@ -737,7 +744,34 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
   }, [draftBody, proposedDraft]);
   const showDraft = (next) => {
     setDraftResult(next);
-    setDraftBody(next ? (next.body || "").trim() : "");
+    setCurrentDraftBody(next ? (next.body || "").trim() : "");
+  };
+  const gradeDraft = (next, generation) => {
+    const controller = new AbortController();
+    const gradedBody = (next.body || '').trim();
+    const gradedSubject = next.subject || '';
+    gradeAbortRef.current?.abort();
+    gradeAbortRef.current = controller;
+    return window.tjkGradeDraft({
+      body: gradedBody,
+      subject: gradedSubject,
+      surfaceId: next.surfaceId,
+      gradeContext: next.gradeContext,
+      signal: controller.signal,
+    }).then(review => {
+      if (gradeGenerationRef.current !== generation) return;
+      setDraftResult(current => {
+        if (!current) return current;
+        const unchanged = draftBodyRef.current === gradedBody && (current.subject || '') === gradedSubject;
+        return { ...current, review, reviewOf: unchanged ? 'independent' : 'original', reviewPending: false };
+      });
+    }).catch(err => {
+      if (err.name === 'AbortError' || gradeGenerationRef.current !== generation) return;
+      setDraftResult(current => current ? ({ ...current, reviewPending: false }) : current);
+      if (window.tjkToast) window.tjkToast(err.message, 'error');
+    }).finally(() => {
+      if (gradeAbortRef.current === controller) gradeAbortRef.current = null;
+    });
   };
   const emailSignature = (window.myEmailSignature && window.myEmailSignature()) || "";
   const draftEmail = !draftResult
@@ -791,7 +825,10 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     return n;
   });
   useEffect(() => { load(); }, [load]);
-  useEffect(() => () => improveAbortRef.current?.abort(), []);
+  useEffect(() => () => {
+    improveAbortRef.current?.abort();
+    gradeAbortRef.current?.abort();
+  }, []);
 
   // ESC closes the standalone drawer. Skip in embedded mode so the host (the
   // Pipeline drawer) owns ESC and one keypress doesn't collapse both layers.
@@ -850,6 +887,9 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
       .then(() => { setEditing(false); load(); onUpdate?.(); });
   };
   const generateDraft = (override = false) => {
+    const generation = ++gradeGenerationRef.current;
+    gradeAbortRef.current?.abort();
+    gradeAbortRef.current = null;
     setDrafting(true); showDraft(null);
     improveAbortRef.current?.abort();
     improveAbortRef.current = null;
@@ -871,7 +911,15 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           body: JSON.stringify({ ...cfg.buildDraftBody(draftStage), channel: "linkedin", override }),
         })
           .then(r => r.json())
-          .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.draft) { showDraft({ body: d.draft.body || "", subject: "", linkedin: true, review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+          .then(d => {
+            setDrafting(false);
+            if (d.blocked) { setDraftBlock(d); setComposing(false); }
+            else if (d && d.draft) {
+              const next = { body: d.draft.body || "", subject: "", linkedin: true, review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null, relatedApp: d.relatedApp || null };
+              showDraft(next); gradeDraft(next, generation);
+              if (override) setDraftBlock(b => ({ ...b, overridden: true }));
+            } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error");
+          })
           .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
         return;
       }
@@ -880,7 +928,15 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         body: JSON.stringify({ source: cfg.kind, id, ...cfg.linkedIn.payload(data, liTone), override }),
       })
         .then(r => r.json())
-        .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d && d.response) { showDraft({ body: d.response, subject: "", linkedin: true, review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error"); })
+        .then(d => {
+          setDrafting(false);
+          if (d.blocked) { setDraftBlock(d); setComposing(false); }
+          else if (d && d.response) {
+            const next = { body: d.response, subject: "", linkedin: true, review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null };
+            showDraft(next); gradeDraft(next, generation);
+            if (override) setDraftBlock(b => ({ ...b, overridden: true }));
+          } else window.tjkToast && window.tjkToast((d && d.error) || "Draft failed", "error");
+        })
         .catch(() => { setDrafting(false); window.tjkToast && window.tjkToast("Draft failed", "error"); });
       return;
     }
@@ -894,19 +950,23 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
       body: JSON.stringify({ ...draftBody, override }),
     })
       .then(r => r.json())
-      .then(d => { setDrafting(false); if (d.blocked) { setDraftBlock(d); setComposing(false); } else if (d.draft) { showDraft({ ...d.draft, review: d.review || null, reviewOf: 'independent', surfaceId: d.surfaceId || null, relatedApp: d.relatedApp || null }); if (override) setDraftBlock(b => ({ ...b, overridden: true })); } })
+      .then(d => {
+        setDrafting(false);
+        if (d.blocked) { setDraftBlock(d); setComposing(false); }
+        else if (d.draft) {
+          const next = { ...d.draft, review: null, reviewPending: true, surfaceId: d.surfaceId || null, gradeContext: d.gradeContext || null, relatedApp: d.relatedApp || null };
+          showDraft(next); gradeDraft(next, generation);
+          if (override) setDraftBlock(b => ({ ...b, overridden: true }));
+        }
+      })
       .catch(() => setDrafting(false));
   };
   const rerunReview = () => {
     if (!draftResult?.surfaceId || reviewing) return;
+    const generation = ++gradeGenerationRef.current;
     setReviewing(true);
-    window.tjkMutate('/api/drafts/review', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: draftBody, subject: draftResult.subject || '', surfaceId: draftResult.surfaceId }),
-    }).then(r => r.json()).then(d => {
-      if (d.error) throw new Error(d.error);
-      setDraftResult(current => current ? ({ ...current, review: d.review || null, reviewOf: 'independent' }) : current);
-    }).catch(err => window.tjkToast && window.tjkToast(err.message, 'error')).finally(() => setReviewing(false));
+    setDraftResult(current => current ? ({ ...current, reviewPending: true }) : current);
+    gradeDraft({ ...draftResult, body: draftBody }, generation).finally(() => setReviewing(false));
   };
   const improveDraft = () => {
     if (!draftResult?.surfaceId || improving) return;
@@ -925,7 +985,9 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         surfaceId: draftResult.surfaceId,
         recipientFirst: data?.first || '',
         originalScore: typeof draftResult.review?.score === 'number' ? draftResult.review.score : null,
-        ...(draftResult.relatedApp?.id != null ? { appId: draftResult.relatedApp.id } : {}),
+        ...(draftResult.gradeContext?.appId != null
+          ? { appId: draftResult.gradeContext.appId }
+          : draftResult.relatedApp?.id != null ? { appId: draftResult.relatedApp.id } : {}),
       }),
       signal: controller.signal,
     }).then(r => r.json()).then(d => {
@@ -948,12 +1010,15 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
   const replaceWithProposed = () => {
     if (!proposedDraft || !draftResult) return;
     if (draftBody !== improveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
-    setDraftBody(proposedDraft.body || '');
+    gradeAbortRef.current?.abort();
+    gradeGenerationRef.current++;
+    setCurrentDraftBody(proposedDraft.body || '');
     setDraftResult(current => ({
       ...current,
       subject: proposedDraft.subject || current.subject || '',
       review: proposedDraft.review || null,
       reviewOf: proposedDraft.reviewOf || 'independent',
+      reviewPending: false,
     }));
     setProposedDraft(null);
   };
@@ -972,6 +1037,8 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
     window.tjkMutate(`${cfg.base(id)}/correspondence`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       .then(() => {
         improveAbortRef.current?.abort();
+        gradeAbortRef.current?.abort();
+        gradeGenerationRef.current++;
         load(); onUpdate?.(); setLogModal(null); showDraft(null); setProposedDraft(null);
       });
   };
@@ -1273,7 +1340,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
           {draftResult && (
             <div className="ai-compose">
               <div className="ai-head"><TIcon d={TI.spark} size={13} /> AI {draftResult.linkedin ? "LinkedIn note" : "draft"} <span style={{ marginLeft: 8, fontSize: 10.5, color: "var(--text-mute)", fontWeight: 400 }}>editable{draftResult.linkedin ? " · no subject, paste into LinkedIn" : ""}</span></div>
-              {!proposedDraft && window.DraftScoreBadge && <window.DraftScoreBadge review={draftResult.review} reviewOf={draftResult.reviewOf} onRerun={draftResult.surfaceId ? rerunReview : null} onImprove={draftResult.surfaceId ? improveDraft : null} busy={reviewing} improving={improving} />}
+              {!proposedDraft && window.DraftScoreBadge && <window.DraftScoreBadge review={draftResult.review} reviewOf={draftResult.reviewOf} pending={draftResult.reviewPending} onRerun={draftResult.surfaceId ? rerunReview : null} onImprove={draftResult.surfaceId ? improveDraft : null} busy={reviewing} improving={improving} />}
               {proposedDraft && Array.isArray(draftResult.review?.topFixes) && draftResult.review.topFixes.length > 0 && (
                 <ul style={{ margin: "0 0 10px", paddingLeft: 16, fontSize: 12, lineHeight: 1.5 }}>
                   {draftResult.review.topFixes.map((fix, i) => <li key={i} style={{ marginBottom: 2 }}>{fix}</li>)}
@@ -1307,7 +1374,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
                       </div>
                     )}
                     {!draftResult.linkedin && <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>Hi {data?.first || "there"},</div>}
-                    <textarea ref={sideBySideTaRef} className="ta" value={draftBody} onChange={e => setDraftBody(e.target.value)} aria-label="Editable message draft body" style={{ width: "100%", resize: "none", overflow: "hidden", fontFamily: "inherit" }} />
+                    <textarea ref={sideBySideTaRef} className="ta" value={draftBody} onChange={e => setCurrentDraftBody(e.target.value)} aria-label="Editable message draft body" style={{ width: "100%", resize: "none", overflow: "hidden", fontFamily: "inherit" }} />
                     {!draftResult.linkedin && emailSignature && <div className="dim" style={{ fontSize: 12, marginTop: 4, whiteSpace: "pre-wrap" }}>{emailSignature}</div>}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -1358,7 +1425,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
                     </div>
                   )}
                   {!draftResult.linkedin && <div className="dim" style={{ fontSize: 12, marginBottom: 4 }}>Hi {data?.first || "there"},</div>}
-                  <textarea className="ta" value={draftBody} onChange={e => setDraftBody(e.target.value)} rows={draftResult.linkedin ? 6 : 10} aria-label="Editable message draft body" style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }} />
+                  <textarea className="ta" value={draftBody} onChange={e => setCurrentDraftBody(e.target.value)} rows={draftResult.linkedin ? 6 : 10} aria-label="Editable message draft body" style={{ width: "100%", resize: "vertical", fontFamily: "inherit" }} />
                   {!draftResult.linkedin && emailSignature && <div className="dim" style={{ fontSize: 12, marginTop: 4, whiteSpace: "pre-wrap" }}>{emailSignature}</div>}
                 </>
               )}

@@ -75,17 +75,24 @@ const post = (p, body) => fetch(base + p, { method: 'POST', headers: { 'Content-
   .then(async r => ({ status: r.status, body: await r.json().catch(() => ({})) }));
 
 const cases = [
-  ['connect-note (first-touch, ad-hoc)',            '/api/linkedin-drafts/connect-note',    { name: 'Test Person', firstName: 'Test', role: 'Recruiter', company: 'No Report Co' }],
-  ['followup-message (already-invited / connected)', '/api/linkedin-drafts/followup-message', { source: 'ta', id: 1 }],
-  ['target-talent email draft',                     '/api/target-talent/1/draft',           {}],
-  ['referral draft',                                `/api/referrals/${refRow.id}/draft`,     {}],
-  ['referral LinkedIn draft (real DM)',             `/api/referrals/${refRow.id}/draft`,     { channel: 'linkedin', topic: 'ask' }],
-  ['target-talent LinkedIn draft (real DM)',        '/api/target-talent/1/draft',            { channel: 'linkedin', interviewStage: 'general' }],
+  ['connect-note (first-touch, ad-hoc)',             '/api/linkedin-drafts/connect-note',     { name: 'Test Person', firstName: 'Test', role: 'Recruiter', company: 'No Report Co' }, { source: 'ta', id: null, appId: null }],
+  ['followup-message (already-invited / connected)', '/api/linkedin-drafts/followup-message', { source: 'ta', id: 1 }, { source: 'ta', id: 1, appId: 77 }],
+  ['target-talent email draft',                      '/api/target-talent/1/draft',            {}, { source: 'ta', id: 1, appId: 77 }],
+  ['referral draft',                                 `/api/referrals/${refRow.id}/draft`,      {}, { source: 'referral', id: refRow.id, appId: 77 }],
+  ['referral LinkedIn draft (real DM)',              `/api/referrals/${refRow.id}/draft`,      { channel: 'linkedin', topic: 'ask' }, { source: 'referral', id: refRow.id, appId: 77 }],
+  ['target-talent LinkedIn draft (real DM)',         '/api/target-talent/1/draft',             { channel: 'linkedin', interviewStage: 'general' }, { source: 'ta', id: 1, appId: 77 }],
 ];
-for (const [name, p, body] of cases) {
+for (const [name, p, body, expectedContext] of cases) {
   const res = await post(p, body);
   check(res.status === 200 && !res.body.error, `${name} → 200 (${res.body.error || 'ok'})`);
-  check(typeof res.body.surfaceId === 'string' && typeof res.body.reviewStatus === 'string', `${name} returns surface and review status`);
+  check(typeof res.body.surfaceId === 'string'
+    && res.body.review === null
+    && res.body.reviewStatus === 'pending'
+    && res.body.gradeContext?.surfaceId === res.body.surfaceId
+    && res.body.gradeContext?.source === expectedContext.source
+    && res.body.gradeContext?.id === expectedContext.id
+    && res.body.gradeContext?.appId === expectedContext.appId,
+  `${name} returns a pending review and its grade context`);
 }
 
 process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
@@ -100,14 +107,18 @@ process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
 });
 for (const [name, p, body] of cases) {
   const res = await post(p, body);
-  check(res.status === 200 && res.body.review?.score > 0 && res.body.reviewStatus === 'ok', `${name} returns a successful rubric review`);
+  check(res.status === 200 && res.body.review === null && res.body.reviewStatus === 'pending',
+    `${name} does not await a rubric review even when the model returns one`);
 }
 
 const noReportSmoke = await post('/api/linkedin-drafts/connect-note', {
   name: 'No Report Contact', firstName: 'No', role: 'Recruiter', company: 'No Report Co',
 });
-check(noReportSmoke.status === 200 && noReportSmoke.body.reviewStatus === 'ok',
-  'generation succeeds with an ok review when no company report resolves');
+check(noReportSmoke.status === 200
+  && noReportSmoke.body.review === null
+  && noReportSmoke.body.reviewStatus === 'pending'
+  && noReportSmoke.body.gradeContext?.appId === null,
+  'generation succeeds with a pending review when no company report resolves');
 
 process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
   critique: { weakest_dimension: 'personalization', fixes: ['Keep the company figure grounded.'] },
@@ -128,9 +139,11 @@ const researchCases = [
 ];
 for (const [name, p, body] of researchCases) {
   const res = await post(p, body);
-  check(res.status === 200 && res.body.reviewStatus === 'ok'
-    && res.body.review?.score > 0 && !res.body.review?.unsourcedWarning,
-  `${name} accepts a company figure sourced only by the related report`);
+  check(res.status === 200
+    && res.body.review === null
+    && res.body.reviewStatus === 'pending'
+    && res.body.gradeContext?.appId === 77,
+  `${name} returns the application research id for background grading`);
 }
 
 process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({ subject: 'Stub subject', body: 'Stub body for the smoke test.' });
@@ -141,6 +154,26 @@ const reviewRes = await post('/api/drafts/review', {
   surfaceId: 'ta_email',
 });
 check(reviewRes.status === 500, 'independent review returns 500 when model output is unparseable (fake LLM)');
+
+process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
+  dimensions: [
+    { id: 'evidence', score: 8, explanation: 'The company figure is grounded.' },
+    { id: 'personalization', score: 8, explanation: 'The company fact is specific.' },
+  ],
+  top_fixes: ['Keep the company figure grounded.'],
+});
+const reviewWithResearch = await post('/api/drafts/review', {
+  body: 'Acme serves 12,000 organizations.',
+  subject: 'Acme data integrity',
+  surfaceId: 'ta_email',
+  gradeContext: { surfaceId: 'ta_email', source: 'ta', id: 1, appId: 77 },
+});
+const reviewedEvidence = reviewWithResearch.body.review?.dimensions
+  ?.find((dimension) => dimension.id === 'evidence')?.score;
+check(reviewWithResearch.status === 200
+  && reviewedEvidence === 8
+  && !reviewWithResearch.body.review?.unsourcedWarning,
+  'independent review uses gradeContext application research for evidence grounding');
 
 const badSurface = await post('/api/drafts/review', { body: 'Test', surfaceId: 'not_a_surface' });
 check(badSurface.status === 400, 'independent review rejects unknown surfaceId');
@@ -227,9 +260,9 @@ const improveWithoutResearch = await post('/api/drafts/improve', {
 });
 const unsourcedEvidence = improveWithoutResearch.body.review?.dimensions
   ?.find((dimension) => dimension.id === 'evidence')?.score;
-check(improveWithoutResearch.status === 200 && unsourcedEvidence === 8
-  && !improveWithoutResearch.body.review?.unsourcedWarning,
-  'improve without application research preserves its prior scoring behavior');
+check(improveWithoutResearch.status === 200 && unsourcedEvidence === 3
+  && improveWithoutResearch.body.review?.unsourcedWarning,
+  'improve independent grading caps a company figure when no application research is supplied');
 
 process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
   critique: { weakest_dimension: 'ask_strength', fixes: ['Make the next step specific.'] },

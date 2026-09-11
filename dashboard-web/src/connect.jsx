@@ -238,11 +238,15 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   const [liProposed, setLiProposed] = useStateCq(null);
   const [liImproveSnapshot, setLiImproveSnapshot] = useStateCq('');
   const liImproveAbortRef = React.useRef(null);
+  const liGradeAbortRef = React.useRef(null);
+  const liGradeGenerationRef = React.useRef(0);
   const [emReviewing, setEmReviewing] = useStateCq(false);
   const [emImproving, setEmImproving] = useStateCq(false);
   const [emProposed, setEmProposed] = useStateCq(null);
   const [emImproveSnapshot, setEmImproveSnapshot] = useStateCq('');
   const emImproveAbortRef = React.useRef(null);
+  const emGradeAbortRef = React.useRef(null);
+  const emGradeGenerationRef = React.useRef(0);
   const channels = followupChannels(c);
   const [liDone, setLiDone] = useStateCq(!!c.linkedinDone || !channels.linkedin);
   const [emDone, setEmDone] = useStateCq(!!c.emailDone || !channels.email);
@@ -250,6 +254,8 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   useEffectCq(() => () => {
     liImproveAbortRef.current?.abort();
     emImproveAbortRef.current?.abort();
+    liGradeAbortRef.current?.abort();
+    emGradeAbortRef.current?.abort();
   }, []);
   // A contact you have ALREADY sent a LinkedIn invite (or any 1:1 touch) to: the
   // invite is out, so a "follow-up" is a real MESSAGE, not another connection note.
@@ -344,7 +350,65 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
       .catch(e => toast && toast(e.message, 'error'));
   };
 
+  const gradeLiDraft = (next, generation) => {
+    const controller = new AbortController();
+    const gradedBody = next.response || '';
+    const gradedSubject = next.subject || '';
+    liGradeAbortRef.current?.abort();
+    liGradeAbortRef.current = controller;
+    return window.tjkGradeDraft({
+      body: gradedBody,
+      subject: gradedSubject,
+      surfaceId: next.surfaceId,
+      gradeContext: next.gradeContext,
+      signal: controller.signal,
+    }).then(review => {
+      if (liGradeGenerationRef.current !== generation) return;
+      setNote(current => {
+        if (!current) return current;
+        const unchanged = (current.response || '') === gradedBody && (current.subject || '') === gradedSubject;
+        return { ...current, review, reviewOf: unchanged ? 'independent' : 'original', reviewPending: false };
+      });
+    }).catch(e => {
+      if (e.name === 'AbortError' || liGradeGenerationRef.current !== generation) return;
+      setNote(current => current ? ({ ...current, reviewPending: false }) : current);
+      if (toast) toast(e.message, 'error');
+    }).finally(() => {
+      if (liGradeAbortRef.current === controller) liGradeAbortRef.current = null;
+    });
+  };
+  const gradeEmailDraft = (next, generation) => {
+    const controller = new AbortController();
+    const gradedBody = next.body || '';
+    const gradedSubject = next.subject || '';
+    emGradeAbortRef.current?.abort();
+    emGradeAbortRef.current = controller;
+    return window.tjkGradeDraft({
+      body: gradedBody,
+      subject: gradedSubject,
+      surfaceId: next.surfaceId,
+      gradeContext: next.gradeContext,
+      signal: controller.signal,
+    }).then(review => {
+      if (emGradeGenerationRef.current !== generation) return;
+      setDraft(current => {
+        if (!current) return current;
+        const unchanged = (current.body || '') === gradedBody && (current.subject || '') === gradedSubject;
+        return { ...current, review, reviewOf: unchanged ? 'independent' : 'original', reviewPending: false };
+      });
+    }).catch(e => {
+      if (e.name === 'AbortError' || emGradeGenerationRef.current !== generation) return;
+      setDraft(current => current ? ({ ...current, reviewPending: false }) : current);
+      if (toast) toast(e.message, 'error');
+    }).finally(() => {
+      if (emGradeAbortRef.current === controller) emGradeAbortRef.current = null;
+    });
+  };
+
   const draftNote = (override = false) => {
+    const generation = ++liGradeGenerationRef.current;
+    liGradeAbortRef.current?.abort();
+    liGradeAbortRef.current = null;
     setLiLoading(true);
     liImproveAbortRef.current?.abort();
     liImproveAbortRef.current = null;
@@ -354,21 +418,26 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: c.source, id: c.id, override }),
     }).then(r => r.json())
-      .then(res => { if (res.error) toast && toast(res.error, 'error'); else if (res.blocked) setLiBlock(res); else { setNote({ ...res, reviewOf: 'independent' }); if (override) setLiBlock(b => ({ ...b, overridden: true })); } })
+      .then(res => {
+        if (res.error) toast && toast(res.error, 'error');
+        else if (res.blocked) setLiBlock(res);
+        else {
+          const next = { ...res, review: null, reviewPending: true, gradeContext: res.gradeContext || null };
+          setNote(next);
+          gradeLiDraft(next, generation);
+          if (override) setLiBlock(b => ({ ...b, overridden: true }));
+        }
+      })
       .catch(e => toast && toast(e.message, 'error'))
       .finally(() => setLiLoading(false));
   };
   const setLiBody = (body) => setNote(n => n ? ({ ...n, response: body, length: body.length }) : n);
   const rerunLiReview = () => {
     if (!note?.surfaceId || liReviewing) return;
+    const generation = ++liGradeGenerationRef.current;
     setLiReviewing(true);
-    window.tjkMutate('/api/drafts/review', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: note.response || '', subject: '', surfaceId: note.surfaceId }),
-    }).then(r => r.json()).then(res => {
-      if (res.error) throw new Error(res.error);
-      setNote(n => n ? ({ ...n, review: res.review || null, reviewOf: 'independent' }) : n);
-    }).catch(e => toast && toast(e.message, 'error')).finally(() => setLiReviewing(false));
+    setNote(current => current ? ({ ...current, reviewPending: true }) : current);
+    gradeLiDraft(note, generation).finally(() => setLiReviewing(false));
   };
   const improveLiDraft = () => {
     if (!note?.surfaceId || liImproving) return;
@@ -387,7 +456,11 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
         surfaceId: note.surfaceId,
         recipientFirst: firstName,
         originalScore: typeof note.review?.score === 'number' ? note.review.score : null,
-        ...(c.appStale?.appId != null ? { appId: c.appStale.appId } : {}),
+        ...(note.gradeContext?.appId != null
+          ? { appId: note.gradeContext.appId }
+          : note.relatedApp?.id != null
+            ? { appId: note.relatedApp.id }
+            : c.appStale?.appId != null ? { appId: c.appStale.appId } : {}),
       }),
       signal: controller.signal,
     }).then(r => r.json()).then(res => {
@@ -409,12 +482,15 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   const replaceLiDraft = () => {
     if (!liProposed || !note) return;
     if ((note.response || '') !== liImproveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
+    liGradeAbortRef.current?.abort();
+    liGradeGenerationRef.current++;
     setNote(n => ({
       ...n,
       response: liProposed.body || '',
       length: (liProposed.body || '').length,
       review: liProposed.review || null,
       reviewOf: liProposed.reviewOf || 'independent',
+      reviewPending: false,
     }));
     setLiProposed(null);
   };
@@ -427,6 +503,9 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
     else toast && toast('Copy not available here. Select the text and copy it manually', 'warn');
   };
   const genEmail = (override = false) => {
+    const generation = ++emGradeGenerationRef.current;
+    emGradeAbortRef.current?.abort();
+    emGradeAbortRef.current = null;
     setEmLoading(true);
     emImproveAbortRef.current?.abort();
     emImproveAbortRef.current = null;
@@ -440,7 +519,9 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
         if (res.blocked) { setEmailBlock(res); return; }
         const d = res.draft || {};
         if (!d.body) { toast && toast('The model returned an empty draft. Try Redraft.', 'warn'); return; }
-        setDraft({ subject: (d.subject || '').trim(), body: (d.body || '').trim(), review: res.review || null, reviewOf: 'independent', surfaceId: res.surfaceId || null, relatedApp: res.relatedApp || null });
+        const next = { subject: (d.subject || '').trim(), body: (d.body || '').trim(), review: null, reviewPending: true, surfaceId: res.surfaceId || null, gradeContext: res.gradeContext || null, relatedApp: res.relatedApp || null };
+        setDraft(next);
+        gradeEmailDraft(next, generation);
         if (override) setEmailBlock(b => ({ ...b, overridden: true }));
       })
       .catch(e => toast && toast(e.message, 'error'))
@@ -454,14 +535,10 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   const setEmailBody = (v) => setDraft(d => ({ ...(d || {}), body: v }));
   const rerunEmailReview = () => {
     if (!draft?.surfaceId || emReviewing) return;
+    const generation = ++emGradeGenerationRef.current;
     setEmReviewing(true);
-    window.tjkMutate('/api/drafts/review', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: emailBody, subject: emSubject, surfaceId: draft.surfaceId }),
-    }).then(r => r.json()).then(res => {
-      if (res.error) throw new Error(res.error);
-      setDraft(d => d ? ({ ...d, review: res.review || null, reviewOf: 'independent' }) : d);
-    }).catch(e => toast && toast(e.message, 'error')).finally(() => setEmReviewing(false));
+    setDraft(current => current ? ({ ...current, reviewPending: true }) : current);
+    gradeEmailDraft({ ...draft, body: emailBody, subject: emSubject }, generation).finally(() => setEmReviewing(false));
   };
   const improveEmailDraft = () => {
     if (!draft?.surfaceId || emImproving) return;
@@ -480,9 +557,11 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
         surfaceId: draft.surfaceId,
         recipientFirst: firstName,
         originalScore: typeof draft.review?.score === 'number' ? draft.review.score : null,
-        ...(draft.relatedApp?.id != null
-          ? { appId: draft.relatedApp.id }
-          : c.appStale?.appId != null ? { appId: c.appStale.appId } : {}),
+        ...(draft.gradeContext?.appId != null
+          ? { appId: draft.gradeContext.appId }
+          : draft.relatedApp?.id != null
+            ? { appId: draft.relatedApp.id }
+            : c.appStale?.appId != null ? { appId: c.appStale.appId } : {}),
       }),
       signal: controller.signal,
     }).then(r => r.json()).then(res => {
@@ -504,12 +583,15 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   const replaceEmailDraft = () => {
     if (!emProposed || !draft) return;
     if (emailBody !== emImproveSnapshot && !window.confirm('You edited the draft after requesting the rewrite. Replace those edits?')) return;
+    emGradeAbortRef.current?.abort();
+    emGradeGenerationRef.current++;
     setDraft(d => ({
       ...d,
       subject: emProposed.subject || d.subject || '',
       body: emProposed.body || '',
       review: emProposed.review || null,
       reviewOf: emProposed.reviewOf || 'independent',
+      reviewPending: false,
     }));
     setEmProposed(null);
   };
@@ -635,7 +717,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
             {liDone ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span> : <button className="btn sm" onClick={markLiSent} disabled={liSending}>{liSending ? 'Saving…' : 'Mark sent'}</button>}
           </div>
         </div>
-        {note && window.DraftScoreBadge && <window.DraftScoreBadge review={note.review} reviewOf={note.reviewOf} onRerun={note.surfaceId ? rerunLiReview : null} onImprove={note.surfaceId ? improveLiDraft : null} busy={liReviewing} improving={liImproving} />}
+        {note && window.DraftScoreBadge && <window.DraftScoreBadge review={note.review} reviewOf={note.reviewOf} pending={note.reviewPending} onRerun={note.surfaceId ? rerunLiReview : null} onImprove={note.surfaceId ? improveLiDraft : null} busy={liReviewing} improving={liImproving} />}
         <DraftBlockBanner block={liBlock} />
         {note ? <div style={{ marginTop: 8 }}>
           <textarea value={note.response || ''} onChange={e => setLiBody(e.target.value)} rows={6} aria-label="Editable LinkedIn draft"
@@ -684,7 +766,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
             {emDone ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span> : <button className="btn sm" onClick={markEmSent} disabled={emSending}>{emSending ? 'Saving…' : 'Mark sent'}</button>}
           </div>
         </div>
-        {draft && window.DraftScoreBadge && <window.DraftScoreBadge review={draft.review} reviewOf={draft.reviewOf} onRerun={draft.surfaceId ? rerunEmailReview : null} onImprove={draft.surfaceId ? improveEmailDraft : null} busy={emReviewing} improving={emImproving} />}
+        {draft && window.DraftScoreBadge && <window.DraftScoreBadge review={draft.review} reviewOf={draft.reviewOf} pending={draft.reviewPending} onRerun={draft.surfaceId ? rerunEmailReview : null} onImprove={draft.surfaceId ? improveEmailDraft : null} busy={emReviewing} improving={emImproving} />}
         <DraftBlockBanner block={emailBlock} />
         {draft ? <div style={{ marginTop: 8 }}>
           <input value={emSubject} onChange={e => setEmSubject(e.target.value)} placeholder="Subject"

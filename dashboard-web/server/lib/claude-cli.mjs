@@ -7,6 +7,8 @@
 import { spawn } from 'child_process';
 import os from 'os';
 
+export const LEAN_SYSTEM_PROMPT = 'You write and evaluate short professional messages. Follow the instructions in the user message exactly and output only what is asked.';
+
 // Map an Anthropic model id to a CLI alias the `claude` CLI understands.
 function modelAlias(model) {
   if (!model) return null;
@@ -18,6 +20,29 @@ function modelAlias(model) {
   // shell-injectable argv element (spawn uses shell:true on Windows). A value
   // that is not opus/sonnet/haiku or a claude-* id yields no --model flag.
   return /^claude-[a-z0-9.-]+$/i.test(m) ? model : null;
+}
+
+export function shellArg(value, isWin) {
+  if (!isWin) return value;
+  if (/["%^&|<>!]/.test(value)) {
+    throw new Error('Unsafe Windows shell argument.');
+  }
+  return `"${value}"`;
+}
+
+export function buildClaudeArgs({ model, allowedTools, isWin }) {
+  const unsafeModel = /["%^&|<>!]/.test(String(model || ''));
+  const alias = unsafeModel ? null : modelAlias(model);
+  const args = ['-p', '--output-format', 'json', '--no-session-persistence'];
+  if (alias) args.push('--model', alias);
+  if (allowedTools) args.push('--allowedTools', allowedTools);
+  args.push(
+    '--strict-mcp-config',
+    '--setting-sources', shellArg('', isWin),
+    '--tools', shellArg(allowedTools || '', isWin),
+    '--system-prompt', shellArg(LEAN_SYSTEM_PROMPT, isWin),
+  );
+  return args;
 }
 
 function startErr(e) {
@@ -44,10 +69,7 @@ function planErr(msg, stderr) {
 export function runClaudePrompt(prompt, { model, system, allowedTools, timeoutMs = 180000 } = {}) {
   return new Promise((resolve, reject) => {
     const isWin = process.platform === 'win32';
-    const alias = modelAlias(model);
-    const args = ['-p', '--output-format', 'json', '--no-session-persistence'];
-    if (alias) args.push('--model', alias);
-    if (allowedTools) args.push('--allowedTools', allowedTools);
+    const args = buildClaudeArgs({ model, allowedTools, isWin });
 
     // Run on the Claude subscription, not the API key: Claude Code bills
     // ANTHROPIC_API_KEY whenever it sees it, so strip it from the child env.
