@@ -65,6 +65,21 @@ const rankedReferral = referral(8, 'Ranked Warm', 'Not Asked', { where: 'Live Co
 queue = computeFollowupQueue({ taRows: [rankedTa], referralRows: [rankedReferral], influencers: [], apps: [{ company: 'Live Co', status: 'Applied' }], pins: {} });
 check(queue.findIndex(row => row.source === 'referral') < queue.findIndex(row => row.source === 'ta'), 'warm referral outranks cold TA at equal staleness');
 
+fs.writeFileSync(path.join(tmp, 'tt-linkedin.json'), JSON.stringify({
+  30: { state: 'Invite Pending', updated: '2026-09-12' },
+}));
+const pendingTa = ta(30, 'Pending', 'Invite', 'Live Co');
+const unknownTa = ta(31, 'Unknown', 'State', 'Live Co');
+queue = computeContactFollowups({
+  taRows: [pendingTa, unknownTa], referralRows: [], influencers: [],
+  apps: [{ company: 'Live Co', status: 'Applied' }], pins: {},
+});
+const pendingRow = queue.find(row => row.source === 'ta' && row.id === 30);
+const unknownRow = queue.find(row => row.source === 'ta' && row.id === 31);
+check(pendingRow?.linkedinStatus === 'Invite Pending', 'contact follow-ups attach authoritative pending-invite state');
+check(pendingRow?.linkedinStatusUpdated === '2026-09-12', 'contact follow-ups attach the LinkedIn status timestamp');
+check(unknownRow && !Object.hasOwn(unknownRow, 'linkedinStatus'), 'contacts absent from the LinkedIn sidecar stay unchanged');
+
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
 // ── a connected contact is never treated as a first touch ────────────────────
 // Both halves of this reached the screen: a row badged "Just connected" also

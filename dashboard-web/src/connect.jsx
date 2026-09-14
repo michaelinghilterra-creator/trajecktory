@@ -198,7 +198,7 @@ function isAlreadyInvited(c) {
   // 'email', skip the status fallback: the 'Sent' status was set by email, not
   // LinkedIn. When there is no selfLastTouch at all (the correspondence-log gap),
   // fall through to CONTACTED_STATUSES which trusts the TA status.
-  if (c.linkedinStatus === 'Connected' || c.freeDm) return true;
+  if (c.linkedinStatus === 'Connected' || c.linkedinStatus === 'Invite Pending' || c.freeDm) return true;
   const slt = c.companyOutreach && c.companyOutreach.selfLastTouch;
   if (slt && slt.channel === 'linkedin') return true;
   if (slt && slt.channel === 'email') return false;
@@ -207,9 +207,13 @@ function isAlreadyInvited(c) {
 
 function followupChannels(c) {
   const channel = c && c.stickyChannel ? 'linkedin' : c && c.channel;
+  const invitePending = c && c.linkedinStatus === 'Invite Pending';
   return {
     linkedin: !!(c && c.linkedin && (channel === 'linkedin' || channel === 'both')),
-    email: !!(c && c.email && (channel === 'email' || channel === 'both')),
+    // Once a LinkedIn invite is pending, email is the actionable lane. Surface it
+    // whenever the contact has an address, even if this row originally entered
+    // the queue through its LinkedIn-only classification.
+    email: !!(c && c.email && (invitePending || channel === 'email' || channel === 'both')),
   };
 }
 
@@ -249,10 +253,12 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   const emImproveAbortRef = React.useRef(null);
   const emGradeAbortRef = React.useRef(null);
   const emGradeGenerationRef = React.useRef(0);
+  const invitePending = c.linkedinStatus === 'Invite Pending';
   const channels = followupChannels(c);
   const [liDone, setLiDone] = useStateCq(!!c.linkedinDone || !channels.linkedin);
   const [emDone, setEmDone] = useStateCq(!!c.emailDone || !channels.email);
-  const done = (channels.linkedin || channels.email) && liDone && emDone;
+  const linkedinDone = invitePending || liDone;
+  const done = (channels.linkedin || channels.email) && linkedinDone && emDone;
   useEffectCq(() => () => {
     liImproveAbortRef.current?.abort();
     emImproveAbortRef.current?.abort();
@@ -285,7 +291,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
   const href = channels.linkedin ? (/^https?:/.test(c.linkedin) ? c.linkedin : `https://${c.linkedin}`) : null;
   const finishChannel = (channel) => {
     const state = {
-      linkedinDone: channel === 'linkedin' ? true : liDone,
+      linkedinDone: channel === 'linkedin' ? true : linkedinDone,
       emailDone: channel === 'email' ? true : emDone,
     };
     if (onChannelDone) onChannelDone(c.source, c.id, state);
@@ -704,7 +710,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
             {c.company}{c.email ? <> · <span className="mono">{c.email}</span>{c.emailState === 'risky' ? <span title="Catch-all domain: usually deliverable."> · risky</span> : null}</> : null}
           </div>
           <CompanyOutreach c={c} />
-          {channels.linkedin && alreadyInvited && !done && (
+          {channels.linkedin && alreadyInvited && !invitePending && !done && (
             <div className="dim" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.4 }}>
               {freeDm
                 ? <>They accepted your invite, so you're connected. This message is a free DM (no InMail credit). Strike while it's warm.</>
@@ -739,7 +745,12 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {/* This tracks the message the card asks you to send now, not whether this person was ever contacted. Calling it "not sent" caused intact contact history to look lost. */}
-          {channels.linkedin ? <span style={chipStyle(liDone)}>LinkedIn {liDone ? '✓ sent' : 'to send'}</span> : null}
+          {invitePending ? <span style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '.3px', padding: '2px 7px', borderRadius: 4, verticalAlign: 'middle',
+            background: 'color-mix(in srgb, var(--yellow) 18%, transparent)', color: 'var(--yellow)',
+            border: '1px solid color-mix(in srgb, var(--yellow) 45%, transparent)',
+          }}>Invite pending</span> : null}
+          {channels.linkedin ? <span style={chipStyle(linkedinDone)}>LinkedIn {linkedinDone ? '✓ sent' : 'to send'}</span> : null}
           {channels.email ? <span style={chipStyle(emDone)}>Email {emDone ? '✓ sent' : 'to send'}</span> : null}
           {onSnooze && !done ? <button className="btn ghost sm" title="Snooze this contact for 14 days (defers it without logging a touch)" onClick={() => onSnooze(c)} disabled={liSending || emSending}>💤 14d</button> : null}
           {onMute && !done ? <button className="btn ghost sm" title="Done for now. Removes them from the queue indefinitely without changing their status or logging a touch." onClick={() => onMute(c)} disabled={liSending || emSending}>Done for now</button> : null}
@@ -761,12 +772,17 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
       {(channels.linkedin || channels.email) ? <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 16, alignItems: 'flex-start' }}>
       {channels.linkedin ? <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>{alreadyInvited ? 'LinkedIn message' : 'LinkedIn invite'}</span>
+          <span style={{ fontSize: 12, fontWeight: 600 }}>{invitePending ? 'LinkedIn invite' : alreadyInvited ? 'LinkedIn message' : 'LinkedIn invite'}</span>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button className={liBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => draftNote(!!liBlock)} disabled={liLoading || liDone}>{liLoading ? 'Drafting…' : liBlock ? 'Draft anyway' : (note ? (alreadyInvited ? 'Redraft message' : 'Redraft') : (alreadyInvited ? 'Draft message' : 'Draft note'))}</button>
-            {liDone ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span> : <button className="btn sm" onClick={markLiSent} disabled={liSending}>{liSending ? 'Saving…' : 'Mark sent'}</button>}
+            {invitePending
+              ? <button className="btn ghost sm" disabled style={{ opacity: 0.6, cursor: 'default' }}>Awaiting acceptance</button>
+              : <>
+                  <button className={liBlock ? "btn ghost sm" : "btn accent sm"} onClick={() => draftNote(!!liBlock)} disabled={liLoading || liDone}>{liLoading ? 'Drafting…' : liBlock ? 'Draft anyway' : (note ? (alreadyInvited ? 'Redraft message' : 'Redraft') : (alreadyInvited ? 'Draft message' : 'Draft note'))}</button>
+                  {liDone ? <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Sent</span> : <button className="btn sm" onClick={markLiSent} disabled={liSending}>{liSending ? 'Saving…' : 'Mark sent'}</button>}
+                </>}
           </div>
         </div>
+        {!invitePending && <>
         {window.tjkDraftGrading === true && note && window.DraftScoreBadge && <window.DraftScoreBadge review={note.review} reviewOf={note.reviewOf} pending={note.reviewPending} onRerun={note.surfaceId ? rerunLiReview : null} onImprove={note.surfaceId ? improveLiDraft : null} busy={liReviewing} improving={liImproving} />}
         {window.tjkDraftGrading === true && liImproveMessage && <div className="mono" style={{ marginTop: 4, fontSize: 11, color: 'var(--text-mute)' }}>{liImproveMessage}</div>}
         <DraftBlockBanner block={liBlock} />
@@ -805,6 +821,7 @@ function FollowupCard({ c, toast, onDone, onChannelDone, onSnooze, onMute, inmai
             <button className="btn sm" onClick={copy}>Copy</button>
           </div>
         </div> : null}
+        </>}
       </div> : null}
 
       {!channels.linkedin ? <div /> : null}

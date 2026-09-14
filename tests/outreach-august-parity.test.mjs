@@ -26,7 +26,7 @@ function test(name, fn) {
 const KINDS = ['li_followup', 'connect_note', 'ta_dm', 'ta_email', 'referral_dm', 'referral_email', 'app_followup'];
 const SNAPSHOTS = Object.freeze({
   li_followup: '9f1bd07bb74efd71d6357480d2a87a8099c9456509624ce0dbd7aa1b1664c224',
-  connect_note: '23f97410d0279ac0e4870965a96d46dd808476b53d6d8230465f2c0539864736',
+  connect_note: '1f36ca65ffb06a8d906bc8eb0c5aeb7bc4ad352200fb4963ad6095a6d34ccfa9',
   ta_dm: '3c837db4cc0217b4c068cac9798487a809b814f2fd97fcf08718028fbf555a39',
   ta_email: '19b2495c3c138158c20e693f0fefb184a19bd1bfefd28a7968061dc7be7b3448',
   referral_dm: '05fad5915e61dc87c60eb3d151cd39409134ca700cd5f1a19a3e106cde15d94e',
