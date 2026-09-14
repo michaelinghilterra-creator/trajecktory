@@ -775,6 +775,7 @@ function computeConnectQueue({ taRows, referralRows, influencers, apps } = {}) {
   const touchIdx = buildCompanyTouchIndex({ ta, referrals, influencers: influencerRows });
   const today = _localToday();
   const out = [];
+  const liMap = readLinkedInMap() ?? {};
   const consider = (row, source) => {
     if (!_hasLinkedIn(row)) return;              // no LinkedIn handle → not reachable here
     // LinkedIn-ONLY bucket. A contact who ALSO has a sendable email is high-value
@@ -782,9 +783,16 @@ function computeConnectQueue({ taRows, referralRows, influencers, apps } = {}) {
     // worked in parallel — not here. This keeps the three buckets mutually exclusive.
     if (isSendable(row)) return;
     if (CONNECT_QUEUE_EXCLUDE_STATUS.has(row.status)) return;
+    if (liMap[String(row.id)]?.state === 'Invite Pending') return;
     const company = row.company;
     if (!_passesCompanyGate(source, company, applied)) return;
     out.push(_queueRow(row, source, baselineId, touchIdx.get(normalizeCompany(company)), today));
+    const item = out[out.length - 1];
+    const liEntry = liMap[String(row.id)];
+    if (liEntry) {
+      item.linkedinStatus = liEntry.state;
+      item.linkedinStatusUpdated = liEntry.updated;
+    }
   };
   for (const r of ta)  consider(r, 'ta');  return _sortByCompanyName(out);
 }
