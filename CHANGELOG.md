@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.14.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.14.1...v3.14.2) (2026-09-14)
+
+
+### Bug Fixes
+
+* eliminate polynomial-redos in normalizeForMatch and TIER_TAG_RE ([#320](https://github.com/michaelinghilterra-creator/trajecktory/issues/320)) ([1bc49d6](https://github.com/michaelinghilterra-creator/trajecktory/commit/1bc49d6d8946dfffd7fc5a2eb9f43faad5ec56e7))
+
 ## [3.14.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.14.0...v3.14.1) (2026-09-14)
 
 
