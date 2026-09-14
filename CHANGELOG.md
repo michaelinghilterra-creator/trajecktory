@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.14.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.14.0...v3.14.1) (2026-09-14)
+
+
+### Bug Fixes
+
+* hide invite-pending contacts from all outreach queues ([c812790](https://github.com/michaelinghilterra-creator/trajecktory/commit/c8127900a0235aa11650db6579ef11b043a8960c))
+
 ## [3.14.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.13.1...v3.14.0) (2026-09-14)
 
 
