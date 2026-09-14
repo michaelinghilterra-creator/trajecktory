@@ -7,7 +7,7 @@ import { makeSandbox } from './helpers/sandbox.mjs';
 const tmp = makeSandbox("fuq-books");
 process.env.TJK_DATA_DIR = tmp;
 
-const { computeFollowupQueue, computeContactFollowups } = await import('../dashboard-web/server/lib/followups.mjs');
+const { computeConnectQueue, computeFollowupQueue, computeContactFollowups } = await import('../dashboard-web/server/lib/followups.mjs');
 
 let passed = 0;
 let failed = 0;
@@ -67,18 +67,39 @@ check(queue.findIndex(row => row.source === 'referral') < queue.findIndex(row =>
 
 fs.writeFileSync(path.join(tmp, 'tt-linkedin.json'), JSON.stringify({
   30: { state: 'Invite Pending', updated: '2026-09-12' },
+  31: { state: 'Connected', updated: '2026-09-13' },
 }));
 const pendingTa = ta(30, 'Pending', 'Invite', 'Live Co');
-const unknownTa = ta(31, 'Unknown', 'State', 'Live Co');
-queue = computeContactFollowups({
-  taRows: [pendingTa, unknownTa], referralRows: [], influencers: [],
+const connectedTa = ta(31, 'Connected', 'State', 'Live Co');
+const unknownTa = ta(32, 'Unknown', 'State', 'Live Co');
+queue = computeConnectQueue({
+  taRows: [pendingTa, connectedTa, unknownTa], referralRows: [], influencers: [],
   apps: [{ company: 'Live Co', status: 'Applied' }], pins: {},
 });
 const pendingRow = queue.find(row => row.source === 'ta' && row.id === 30);
-const unknownRow = queue.find(row => row.source === 'ta' && row.id === 31);
-check(pendingRow?.linkedinStatus === 'Invite Pending', 'contact follow-ups attach authoritative pending-invite state');
-check(pendingRow?.linkedinStatusUpdated === '2026-09-12', 'contact follow-ups attach the LinkedIn status timestamp');
+const connectedRow = queue.find(row => row.source === 'ta' && row.id === 31);
+const unknownRow = queue.find(row => row.source === 'ta' && row.id === 32);
+check(!pendingRow, 'connect queue hides contacts whose invite is pending');
+check(connectedRow?.linkedinStatus === 'Connected' && connectedRow?.linkedinStatusUpdated === '2026-09-13',
+  'remaining contacts receive authoritative LinkedIn state and timestamp');
 check(unknownRow && !Object.hasOwn(unknownRow, 'linkedinStatus'), 'contacts absent from the LinkedIn sidecar stay unchanged');
+
+fs.writeFileSync(path.join(tmp, 'target-talent.md'), [
+  '| 30 | Live Co | Invite | Pending |  | Recruiter |  |  |  |  |  | https://linkedin.com/in/pending-invite | Sent | 2020-01-02 |  |  |',
+  '| 32 | Live Co | State | Unknown |  | Recruiter |  |  |  |  |  | https://linkedin.com/in/unknown-state | Sent | 2020-01-02 |  |  |',
+].join('\n'));
+queue = computeContactFollowups({
+  taRows: [
+    { ...pendingTa, status: 'Sent', lastTouch: old },
+    { ...unknownTa, status: 'Sent', lastTouch: old },
+  ],
+  referralRows: [], influencers: [],
+  apps: [{ company: 'Live Co', status: 'Applied' }], pins: {}, staleApps: [],
+});
+check(!queue.some(row => row.source === 'ta' && row.id === 30 && row.queueReason === 'Went quiet'),
+  'went-quiet queue hides contacts whose LinkedIn invite is pending');
+check(queue.some(row => row.source === 'ta' && row.id === 32 && row.queueReason === 'Went quiet'),
+  'went-quiet queue still includes equivalent contacts without a pending invite');
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
 // ── a connected contact is never treated as a first touch ────────────────────
