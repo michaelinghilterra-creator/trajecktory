@@ -374,8 +374,10 @@ function computeStaleContacts({ apps } = {}) {
   try { taContacts = parseTargetTalentMd(); } catch { /* */ }
 
   const stale = [];
+  const liMap = readLinkedInMap() ?? {};
 
   const processContact = (c, source) => {
+    if (liMap[String(c.id)]?.state === 'Invite Pending') return;
     const company = c.company;
     if (!CONTACT_TRACKED_STATUSES.has(c.status)) return;
     if (!c.lastTouch) return;
@@ -855,12 +857,16 @@ function computeBothQueue({ taRows, referralRows, influencers, apps } = {}) {
   const touchIdx = buildCompanyTouchIndex({ ta, referrals, influencers: influencerRows });
   const today = _localToday();
   const out = [];
+  const liMap = readLinkedInMap() ?? {};
   const consider = (row, source) => {
     if (!(_hasLinkedIn(row) && isSendable(row))) return;   // must have BOTH channels
     if (BOTH_QUEUE_EXCLUDE_STATUS.has(row.status)) return; // a reply/acceptance pauses the multithread
     const company = row.company;
     if (!_passesCompanyGate(source, company, applied)) return;
-    const { linkedinDone, emailDone } = _channelsDone(source, row.id);
+    let { linkedinDone, emailDone } = _channelsDone(source, row.id);
+    // The correspondence log may not reflect a LinkedIn invite marked sent via the
+    // dashboard's sidecar path. Trust the sidecar as authoritative for invite state.
+    if (liMap[String(row.id)]?.state === 'Invite Pending') linkedinDone = true;
     if (linkedinDone && emailDone) return;                 // both channels already touched → done
     out.push({ ..._queueRow(row, source, baselineId, touchIdx.get(normalizeCompany(company)), today), linkedinDone, emailDone });
   };

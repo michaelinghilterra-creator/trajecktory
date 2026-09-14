@@ -84,6 +84,23 @@ check(connectedRow?.linkedinStatus === 'Connected' && connectedRow?.linkedinStat
   'remaining contacts receive authoritative LinkedIn state and timestamp');
 check(unknownRow && !Object.hasOwn(unknownRow, 'linkedinStatus'), 'contacts absent from the LinkedIn sidecar stay unchanged');
 
+fs.writeFileSync(path.join(tmp, 'target-talent.md'), [
+  '| 30 | Live Co | Invite | Pending |  | Recruiter |  |  |  |  |  | https://linkedin.com/in/pending-invite | Sent | 2020-01-02 |  |  |',
+  '| 32 | Live Co | State | Unknown |  | Recruiter |  |  |  |  |  | https://linkedin.com/in/unknown-state | Sent | 2020-01-02 |  |  |',
+].join('\n'));
+queue = computeContactFollowups({
+  taRows: [
+    { ...pendingTa, status: 'Sent', lastTouch: old },
+    { ...unknownTa, status: 'Sent', lastTouch: old },
+  ],
+  referralRows: [], influencers: [],
+  apps: [{ company: 'Live Co', status: 'Applied' }], pins: {}, staleApps: [],
+});
+check(!queue.some(row => row.source === 'ta' && row.id === 30 && row.queueReason === 'Went quiet'),
+  'went-quiet queue hides contacts whose LinkedIn invite is pending');
+check(queue.some(row => row.source === 'ta' && row.id === 32 && row.queueReason === 'Went quiet'),
+  'went-quiet queue still includes equivalent contacts without a pending invite');
+
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
 // ── a connected contact is never treated as a first touch ────────────────────
 // Both halves of this reached the screen: a row badged "Just connected" also
