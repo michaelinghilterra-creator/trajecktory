@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.14.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.13.1...v3.14.0) (2026-09-14)
+
+
+### Features
+
+* surface LinkedIn invite-pending state on follow-up cards ([28fc49a](https://github.com/michaelinghilterra-creator/trajecktory/commit/28fc49afae8813fa7bb4192e6e762447bc1f72fc))
+
 ## [3.13.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.13.0...v3.13.1) (2026-09-11)
 
 
