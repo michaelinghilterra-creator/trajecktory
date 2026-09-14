@@ -36,6 +36,7 @@ check(contactBase({ source: 'influencer', id: 7012 }) === null, 'influencers hav
 check(contactBase(null) === null, 'missing contacts have no mutation base');
 
 check(isAlreadyInvited({ linkedinStatus: 'Connected' }), 'connected contacts count as already invited');
+check(isAlreadyInvited({ linkedinStatus: 'Invite Pending' }), 'pending invites count as already invited');
 check(isAlreadyInvited({ status: 'Sent', companyOutreach: {} }), 'sent status counts as already invited');
 check(!isAlreadyInvited({ status: 'Not Contacted', companyOutreach: {} }), 'untouched contacts are not already invited');
 check(!isAlreadyInvited({ status: 'Not Contacted', companyOutreach: { selfLastTouch: { channel: 'email', date: '2026-08-01', direction: 'Sent' } } }), 'email-only touch is not a LinkedIn invite');
@@ -48,9 +49,13 @@ check(JSON.stringify(followupChannels({ channel: 'linkedin', linkedin: 'linkedin
 check(JSON.stringify(followupChannels({ channel: 'email', linkedin: 'linkedin.com/in/a', email: 'a@example.com' })) === JSON.stringify({ linkedin: false, email: true }), 'email only omits LinkedIn');
 check(JSON.stringify(followupChannels({ channel: 'both', linkedin: 'linkedin.com/in/a', email: 'a@example.com' })) === JSON.stringify({ linkedin: true, email: true }), 'both renders both channels');
 check(JSON.stringify(followupChannels({ channel: 'both', stickyChannel: true, linkedin: 'linkedin.com/in/a', email: 'a@example.com' })) === JSON.stringify({ linkedin: true, email: false }), 'sticky just connected rows remain LinkedIn only');
+check(JSON.stringify(followupChannels({ channel: 'linkedin', linkedinStatus: 'Invite Pending', linkedin: 'linkedin.com/in/a', email: 'a@example.com' })) === JSON.stringify({ linkedin: true, email: true }), 'pending invites promote an available email into the actionable lane');
+check(JSON.stringify(followupChannels({ channel: 'linkedin', linkedinStatus: 'Invite Pending', linkedin: 'linkedin.com/in/a', email: '' })) === JSON.stringify({ linkedin: true, email: false }), 'pending invites without email keep only the waiting LinkedIn lane');
 check(JSON.stringify(followupChannels({ channel: 'both' })) === JSON.stringify({ linkedin: false, email: false }), 'a contact with neither channel remains renderable');
 
 check((source.match(/function FollowupCard\s*\(/g) || []).length === 1, 'one FollowupCard implementation exists');
+check(source.includes('Awaiting acceptance'), 'pending invite card renders the awaiting-acceptance control');
+check(source.includes('>Invite pending</span>'), 'pending invite card renders the amber status badge');
 check(!/function (ConnectRow|EmailRow|BothRow)\s*\(/.test(source), 'legacy row components are removed');
 check((source.match(/`\/api\/target-talent\/\$\{c\.id\}`/g) || []).length === 1, 'the target talent contact URL exists only in contactBase');
 

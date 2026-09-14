@@ -1346,10 +1346,27 @@ function computeContactFollowups(opts = {}) {
   // Rank desc (outreach rows carry a real rank; stale rows lean on staleDays so
   // the most overdue rise), then company/name so equal rows don't shuffle.
   const weight = (x) => (x.rank ?? 0) + (x.staleDays ?? 0);
-  return [...byKey.values()].sort((a, b) =>
+  const out = [...byKey.values()].sort((a, b) =>
     (weight(b) - weight(a)) ||
     (a.company || '').localeCompare(b.company || '') ||
     (a.name || '').localeCompare(b.name || ''));
+
+  // LinkedIn connection state lives in the TA sidecar, not in the contact row.
+  // Attach it only after every population has been normalized and merged: stale
+  // app and gone-quiet rows pass through intermediate shapes that intentionally
+  // discard fields they do not know about. Referral ids belong to a different
+  // book and can collide with TA ids, so they must never read this sidecar.
+  const linkedinMap = readLinkedInMap();
+  for (const item of out) {
+    if (item.source === 'referral') continue;
+    const entry = linkedinMap instanceof Map
+      ? (linkedinMap.get(item.id) ?? linkedinMap.get(String(item.id)))
+      : linkedinMap?.[String(item.id)];
+    if (!entry) continue;
+    item.linkedinStatus = entry.state;
+    item.linkedinStatusUpdated = entry.updated;
+  }
+  return out;
 }
 
 // How many contacts are being held back purely because their address could not be
