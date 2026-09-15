@@ -494,6 +494,7 @@ for (const suite of [
   'tests/onboarding-copy.test.mjs',
   'tests/preflight-failure.test.mjs',
   'tests/verify-no-pii.test.mjs',
+  'tests/verify-no-pii-comp.test.mjs',
   'tests/pii-blindspots.test.mjs',
   'tests/interview-sessions.test.mjs',
   'tests/activation.test.mjs',
