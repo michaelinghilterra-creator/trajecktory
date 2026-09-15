@@ -32,7 +32,7 @@ const rows = [
   r({ id: 1, status: 'Applied', reached: 'Applied', company: 'Kestrel' }),                 // 25d → eligible
   r({ id: 2, status: 'Applied', reached: 'Applied', company: 'Northwind' }),               // 10d → too fresh
   r({ id: 3, status: 'Applied', reached: 'Phone Screen', company: 'Bexad' }),               // warm (reached a screen) → never
-  r({ id: 4, status: '1st Interview', reached: '1st Interview', company: 'Cobalt' }),        // not Applied → skip
+  r({ id: 4, status: '1st Interview', reached: '1st Interview', company: 'Corvane' }),        // not Applied → skip
   r({ id: 5, status: 'No Response', reached: 'Applied', company: 'Vela' }),                  // already closed → skip
   r({ id: 6, status: 'Applied', reached: 'Applied', company: 'Meridian', date: '2026-06-29' }), // no apply-date → tracker-date fallback, 25d → eligible
   r({ id: 7, status: 'Applied', reached: '1st Interview', company: 'Aster' }),               // warm (HM interview) → never

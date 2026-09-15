@@ -699,7 +699,7 @@ function matchBySubject(subject, apps = [], options = {}) {
 // open roles, so this surfaces the candidates for the user to choose rather than
 // auto-attaching a reply to a guessed one. Match is on the tracker's canonical
 // normalizeCompany (lib/identity.mjs): case- and punctuation-insensitive, so
-// "Cobalt Systems" and "cobalt systems" match. It does NOT strip legal suffixes,
+// "Corvane Systems" and "corvane systems" match. It does NOT strip legal suffixes,
 // so a contact company that differs only by ", Inc." will not collapse — a
 // deliberate miss, since under-matching just shows the reply for manual handling
 // while over-matching would attach it to the wrong company. Pure; unit-tested.

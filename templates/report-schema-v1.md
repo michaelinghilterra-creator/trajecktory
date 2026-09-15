@@ -56,7 +56,7 @@ converter for the Full Report tab. The structured tabs read **only** from frontm
   "seniority": "VP (reports to President)",
   "remote": "On-site required — SF Bay Area",
   "teamSize": "Cross-functional across Sales, Marketing, CS",
-  "compStated": "$250,000–$350,000 total compensation",
+  "compStated": "$241,500–$337,000 total compensation",
   "tldr": "VP-level RevOps leader to own KPIs...",
   "companyBrief": "Series C, $135M+ funded. 150+ enterprise customers..."
 }
@@ -192,7 +192,7 @@ the model emits the keyed `globalScore` dimensions (with evidence) and an option
 ### Comp
 ```json
 "comp": {
-  "stated": "$250,000–$350,000",
+  "stated": "$241,500–$337,000",
   "sources": [
     { "src": "Salary.com (SF, 2026)", "data": "VP RevOps ~$346K avg", "note": "SF premium baked in" }
   ],

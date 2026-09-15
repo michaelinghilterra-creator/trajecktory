@@ -45,7 +45,7 @@ const ta = (o) => ({
 });
 const apps = [
   { company: 'Brightwave Labs',   status: 'Applied'      },
-  { company: 'Cobalt Systems',    status: 'Phone Screen' },
+  { company: 'Corvane Systems',    status: 'Phone Screen' },
   { company: 'Northwind Robotics', status: 'No Response' }, // No Response is eligible
   { company: 'Vela Analytics',    status: 'Rejected'     }, // dead → gate should block
   { company: 'Nimbus Health',     status: 'Evaluated'    }, // pre-application → gate should block
@@ -55,7 +55,7 @@ const taRows = [
   // stale Sent at a live company → SHOULD surface
   ta({ id: 1, company: 'Brightwave Labs', status: 'Sent', lastTouch: STALE_DATE }),
   // stale Replied at a live company → SHOULD surface
-  ta({ id: 2, company: 'Cobalt Systems', status: 'Replied', lastTouch: STALE_DATE }),
+  ta({ id: 2, company: 'Corvane Systems', status: 'Replied', lastTouch: STALE_DATE }),
   // stale Meeting Scheduled at No-Response company → SHOULD surface (No Response is eligible)
   ta({ id: 3, company: 'Northwind Robotics', status: 'Meeting Scheduled', lastTouch: STALE_DATE }),
   // fresh Sent at a live company → NOT stale, should not surface
