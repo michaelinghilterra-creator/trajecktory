@@ -590,6 +590,7 @@ for (const suite of [
   'tests/rolling-floor.test.mjs',
   'tests/twc-events.test.mjs',
   'tests/twc.test.mjs',
+  'tests/repair-twc-data.test.mjs',
   'tests/connects.test.mjs',
   'tests/text-hygiene.test.mjs',
   'tests/cadence.test.mjs',
