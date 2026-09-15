@@ -46,8 +46,8 @@ const taRows = [
   ta({ id: 1, first: 'Ada', last: 'Reyes', title: 'Recruiter', company: 'Northwind Robotics',
        email: 'ada.reyes@northwind.example', state: 'ok' }),
   // email-only, sendable, PRINCIPAL → channel 'email', ranks highest (+50)
-  ta({ id: 2, first: 'Ben', last: 'Okafor', title: 'VP Revenue', company: 'Cobalt Systems',
-       email: 'ben.okafor@cobalt.example', state: 'ok', isPrincipal: true }),
+  ta({ id: 2, first: 'Ben', last: 'Okafor', title: 'VP Revenue', company: 'Corvane Systems',
+       email: 'ben.okafor@corvane.example', state: 'ok', isPrincipal: true }),
   // LinkedIn-only (no email) → channel 'linkedin'
   ta({ id: 3, first: 'Cleo', last: 'Nash', title: 'Head of TA', company: 'Aster Grid',
        linkedin: 'linkedin.com/in/cleo-nash-ex' }),
@@ -58,7 +58,7 @@ const taRows = [
 
 const apps = [
   { company: 'Northwind Robotics', status: 'Applied' },
-  { company: 'Cobalt Systems',     status: 'Applied' },
+  { company: 'Corvane Systems',     status: 'Applied' },
   { company: 'Aster Grid',         status: 'Applied' },
   { company: 'Meridian AI',        status: 'Applied' },
 ];

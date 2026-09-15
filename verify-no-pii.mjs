@@ -194,6 +194,65 @@ if (profile) {
   }
 }
 
+const COMP_PROFILE_WORDS = new Set(['salary', 'compensation', 'comp', 'base', 'target', 'minimum', 'floor', 'ote', 'bonus', 'equity']);
+const compFigures = new Set();
+let compBlockHasDigits = false;
+
+function isCompProfileKey(key) {
+  if (key.replace(/[^A-Za-z]/g, '').toLowerCase().includes('walkaway')) return true;
+  const words = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z]+/);
+  return words.some((word) => COMP_PROFILE_WORDS.has(word));
+}
+
+function deriveCompFigures(line) {
+  const tokens = [...line.matchAll(/(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)([kK])?/g)];
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    let thousands = Boolean(token[2]);
+    if (!thousands && tokens[i + 1]?.[2]) {
+      const between = line.slice(token.index + token[0].length, tokens[i + 1].index);
+      if (/^\s*(?:-|\u2013|\u2014|to)\s*$/i.test(between)) thousands = true;
+    }
+    const parsed = Number(token[1].replace(/,/g, '')) * (thousands ? 1000 : 1);
+    if (Number.isInteger(parsed) && parsed >= 20000 && parsed <= 9999999) compFigures.add(parsed);
+  }
+}
+
+if (profile) {
+  let compIndent = null;
+  for (const line of profile.split('\n')) {
+    const indent = (line.match(/^\s*/) || [''])[0].length;
+    if (compIndent !== null) {
+      const belongs = /^\s*$/.test(line) || indent > compIndent;
+      if (belongs) {
+        if (/\d/.test(line)) compBlockHasDigits = true;
+        deriveCompFigures(line);
+      } else {
+        compIndent = null;
+      }
+    }
+
+    const block = line.match(/^(\s*)["']?compensation["']?\s*:\s*(?:#.*)?$/i);
+    if (block) {
+      compIndent = block[1].length;
+      continue;
+    }
+
+    const yaml = line.match(/^\s*["']?([^:"']+)["']?\s*:\s*(.*)$/);
+    if (yaml && isCompProfileKey(yaml[1])) deriveCompFigures(line);
+  }
+}
+
+const compFigureSpellings = new Set();
+for (const figure of compFigures) {
+  compFigureSpellings.add(String(figure));
+  compFigureSpellings.add(figure.toLocaleString('en-US'));
+  if (figure % 100 === 0) {
+    compFigureSpellings.add(`${figure / 1000}k`);
+    compFigureSpellings.add(`${figure / 1000}K`);
+  }
+}
+
 // Customized profile SCALARS beyond the three identity keys. The gate read only
 // full_name/email/phone, so a real gitignored profile value hardcoded as a default
 // in shipped code was invisible — that shipped the owner's private Obsidian vault
@@ -473,6 +532,63 @@ function commitMessages() {
 // layout comment is a false positive that would train someone to ignore this gate.
 const COMP_WORD = /\b(walk[- ]?away|OTE|target(Low|High)?|comp|compensation|salary|base pay|floor|ceiling|band)\b/i;
 const COMP_PROSE = /\b[1-9]\d{2}\s*\/\s*[1-9]\d{2}(?:\s*\/\s*[1-9]\d{2})?\b/;
+const COMP_FIGURE_CONTEXT = /(?:^|[^A-Za-z])(?:salary|compensation|comp|base|target|minimum|floor|walk|ote|bonus|equity|pay|range|band|offer|package|annual)(?=$|[^A-Za-z])|(?:^|[^A-Za-z])per\s+year(?=$|[^A-Za-z])|\/yr\b/i;
+const COMP_FIGURE_RX = compFigureSpellings.size
+  ? new RegExp(`((?:\\$|€|£|(?:USD|EUR|GBP|CAD|AUD)\\s*)?)(${[...compFigureSpellings].sort((a, b) => b.length - a.length).map(rx).join('|')})`, 'gi')
+  : null;
+
+function hasCompFigureContext(line) {
+  const words = line.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ');
+  return COMP_FIGURE_CONTEXT.test(words);
+}
+
+function scanCompFigures(text, where) {
+  if (!COMP_FIGURE_RX) return;
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    COMP_FIGURE_RX.lastIndex = 0;
+    for (const match of line.matchAll(COMP_FIGURE_RX)) {
+      const start = match.index;
+      const figureEnd = start + match[0].length;
+      const zeroSuffix = (line.slice(figureEnd).match(/^\.(?:0|00)(?!\d)/) || [''])[0];
+      const end = figureEnd + zeroSuffix.length;
+      const before = line[start - 1] || '';
+      const after = line[end] || '';
+      if (/[A-Za-z0-9.,]/.test(before) || /[A-Za-z0-9]/.test(after)) continue;
+      if ((after === '.' || after === ',') && /\d/.test(line[end + 1] || '')) continue;
+
+      const figureStart = start + match[1].length;
+      const figureTokenEnd = figureStart + match[2].length;
+      const prefixed = /^(?:[$€£]|(?:USD|EUR|GBP|CAD|AUD)\s*)/i.test(match[1]);
+      if (!prefixed && /^\d+$/.test(match[2])) {
+        let hexStart = figureStart;
+        let hexEnd = figureTokenEnd;
+        while (hexStart > 0 && /[A-Fa-f0-9]/.test(line[hexStart - 1])) hexStart--;
+        while (hexEnd < line.length && /[A-Fa-f0-9]/.test(line[hexEnd])) hexEnd++;
+        const hexToken = line.slice(hexStart, hexEnd);
+        if (hexToken.length >= 8 && /[A-Fa-f]/.test(hexToken)) continue;
+      }
+
+      let dottedVersion = false;
+      for (const version of line.matchAll(/\d+\.\d+\.\d+/g)) {
+        const versionEnd = version.index + version[0].length;
+        if (version.index <= figureStart && versionEnd >= figureTokenEnd) dottedVersion = true;
+      }
+      if (dottedVersion) continue;
+
+      const hasContext = lines.slice(Math.max(0, i - 2), i + 1).some(hasCompFigureContext);
+      if (!prefixed && !hasContext) continue;
+
+      let keptDigit = false;
+      const masked = `${match[0]}${zeroSuffix}`.replace(/\d/g, (digit) => {
+        if (!keptDigit) { keptDigit = true; return digit; }
+        return '*';
+      });
+      leak(`${where}:${i + 1}`, 'COMP FIGURE', `${masked} is a real compensation figure from the gitignored config/profile.yml; examples must use invented figures.`);
+    }
+  }
+}
 
 // Secret / credential patterns — mirrors installer/build-bundle.ps1 §7. A tracked
 // file OR a commit message must carry NO real key: the repo is public and the
@@ -520,6 +636,7 @@ function scanMessages() {
     for (const m of body.matchAll(COMP_KEYS)) {
       if (!COMP_NEUTRAL.has(m[2])) leak(where, 'COMP LITERAL', `${m[1]} = ${m[2]}`);
     }
+    scanCompFigures(body, where);
     if (COMP_WORD.test(body) && COMP_PROSE.test(body)) {
       leak(where, 'COMP IN PROSE',
         `${(body.match(COMP_PROSE) || [''])[0]} next to a compensation word. A real band or walk-away does not belong in a published message; describe the shape, not the numbers.`);
@@ -529,24 +646,6 @@ function scanMessages() {
     for (const [re, label] of SECRET_PATTERNS) if (re.test(body)) leak(where, 'SECRET', `${label} in a commit message`);
   }
   return msgs.length;
-}
-
-// ── message mode: scan messages and report, never touching the file sweep ───
-if (MESSAGES || MSG_FILE) {
-  const n = scanMessages();
-  const scope = MSG_FILE ? 'the message being committed' : `${n} unpushed commit message(s)`;
-  if (JSON_OUT) {
-    console.log(JSON.stringify({ ok: hits.length === 0, scanned: n, hits }, null, 2));
-    process.exit(hits.length ? 1 : 0);
-  }
-  console.log(`Scanning ${scope}`);
-  console.log(`  derived: ${identity.length} identity, ${thirdParty.size} third-party, ${figures.size} figures, ${prepPaths.size} prep paths`);
-  if (!hits.length) { console.log('  OK — no personal data in any message.'); process.exit(0); }
-  console.log(`\n${hits.length} LEAK(S) IN COMMIT MESSAGE(S):`);
-  for (const h of hits) console.log(`  [${h.why}] ${h.file}\n      ${h.detail}`);
-  console.log('\nA commit message is published like any file, and it is NOT covered by the');
-  console.log('file scan. Amend before pushing: git commit --amend  (or rebase for older ones).');
-  process.exit(1);
 }
 
 // ── derivation health ──────────────────────────────────────────────────────
@@ -569,6 +668,9 @@ const health = [];
   if (prof && identity.length === 0) {
     health.push('config/profile.yml exists but yielded 0 identity terms — the full_name/email/phone parser is broken (renamed field? reformatted?). Identity checking is OFF.');
   }
+  if (prof && compBlockHasDigits && compFigures.size === 0) {
+    health.push('config/profile.yml has a compensation block containing digits but yielded 0 compensation figures. Compensation figure checking is OFF.');
+  }
   const talent = read('data/target-talent.md');
   if (talent && /@[\w.-]+\.\w{2,}/.test(talent) && thirdParty.size === 0) {
     health.push('data/target-talent.md contains email addresses but yielded 0 third-party terms — the parser is broken. Third-party checking is OFF.');
@@ -584,6 +686,24 @@ if (health.length) {
   console.error('\nA source is present but produced no terms, so the scan would report a vacuous');
   console.error('OK. Refusing to pass. Fix the parser, or delete the source if it is genuinely gone.');
   process.exit(2);
+}
+
+// ── message mode: scan messages and report, never touching the file sweep ───
+if (MESSAGES || MSG_FILE) {
+  const n = scanMessages();
+  const scope = MSG_FILE ? 'the message being committed' : `${n} unpushed commit message(s)`;
+  if (JSON_OUT) {
+    console.log(JSON.stringify({ ok: hits.length === 0, scanned: n, hits }, null, 2));
+    process.exit(hits.length ? 1 : 0);
+  }
+  console.log(`Scanning ${scope}`);
+  console.log(`  derived: ${identity.length} identity, ${thirdParty.size} third-party, ${figures.size} figures, ${compFigures.size} comp figures, ${prepPaths.size} prep paths`);
+  if (!hits.length) { console.log('  OK: no personal data in any message.'); process.exit(0); }
+  console.log(`\n${hits.length} LEAK(S) IN COMMIT MESSAGE(S):`);
+  for (const h of hits) console.log(`  [${h.why}] ${h.file}\n      ${h.detail}`);
+  console.log('\nA commit message is published like any file, and it is NOT covered by the');
+  console.log('file scan. Amend before pushing: git commit --amend  (or rebase for older ones).');
+  process.exit(1);
 }
 
 // ── DOCUMENT TEXT EXTRACTION ────────────────────────────────────────────────
@@ -948,6 +1068,8 @@ for (const abs of files) {
   }
 
   // 4. compensation literals
+  scanCompFigures(text, rel);
+
   for (const m of text.matchAll(COMP_KEYS)) {
     if (!COMP_NEUTRAL.has(m[2])) {
       leak(rel, 'COMP LITERAL', `${m[1]} = ${m[2]} (neutral set: ${[...COMP_NEUTRAL].join('/')}; real targets belong in the gitignored config/profile.yml)`);
@@ -1020,7 +1142,7 @@ if (JSON_OUT) {
 }
 const scope = PAYLOAD ? `payload ${PAYLOAD}` : 'tracked tree';
 console.log(`Scanning ${scope}: ${files.length} files`);
-console.log(`  derived: ${identity.length} identity, ${thirdParty.size} third-party, ${pipeline.size} companies`);
+console.log(`  derived: ${identity.length} identity, ${thirdParty.size} third-party, ${compFigures.size} comp figures, ${pipeline.size} companies`);
 const showCannotCertify = () => {
   console.log(`\n${cannotCertify.length} DOCUMENT(S) COULD NOT BE CERTIFIED:`);
   for (const c of cannotCertify) console.log(`  [CANNOT CERTIFY] ${c.file}\n      ${c.reason}`);

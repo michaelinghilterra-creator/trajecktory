@@ -42,7 +42,7 @@ const tracker = [
   '| 9002 | 2024-01-02 | Northwind | Staff Eng | 4.0/5 | Evaluated | ❌ | — | [9002](reports/9002-drift.md) | . | — |',
   '| 9003 | 2024-01-03 | Bexad | Staff Eng | 2.5/5 | Evaluated | ❌ | — | [9003](reports/9003-legacy.md) | . | — |',
   '| 9004 | 2024-01-04 | Meridian | Staff Eng | 4.0/5 | Evaluated | ❌ | — | [9004](reports/9004-noscore.md) | . | — |',
-  '| 9005 | 2024-01-05 | Cobalt | Staff Eng | 3.3/5 | Evaluated | ❌ | — | — | . | — |', // no report — skipped
+  '| 9005 | 2024-01-05 | Corvane | Staff Eng | 3.3/5 | Evaluated | ❌ | — | — | . | — |', // no report — skipped
 ].join('\n');
 
 const rows = parseTracker(tracker);

@@ -109,8 +109,8 @@ window.fmtScore = (s) => s != null ? s.toFixed(1) : "N/A";
 window.FUNNEL_ORDER = ["Evaluated","Applied",...window.INTERVIEW_STAGES,"Offer"];
 
 // Parse a JD-stated comp string into a clean display + midpoint $K number.
-// Handles ranges ("$165,000 – $185,000 USD/year" → mid 175), single numbers
-// ("$200,000" → 200), shorthand ("$150K" → 150), and noise suffixes (USD,
+// Handles ranges ("$141,000 – $158,000 USD/year" → mid 149.5), single numbers
+// ("$163,500" → 163.5), shorthand ("$137K" → 137), and noise suffixes (USD,
 // USD/year, /yr, annually). Currency is assumed USD for an American user.
 window.parseComp = function parseComp(s) {
   if (!s || typeof s !== 'string') return { display: '-', salary: null };
@@ -122,7 +122,7 @@ window.parseComp = function parseComp(s) {
     .replace(/\s+\/\s*(year|yr|annually|annual)\b/gi, ' ')
     .replace(/\s{2,}/g, ' ')
     .trim();
-  // Extract dollar amounts. Supports "$165,000", "$150K", "150k".
+  // Extract dollar amounts. Supports "$141,000", "$137K", "137k".
   // A shorthand range where only the UPPER bound carries K applies the K to both
   // bounds: "$120-160K" means 120K-160K, not $120 (which the sanity filter drops,
   // leaving only 160 -> a wrong top-of-range salary instead of the 140 midpoint).

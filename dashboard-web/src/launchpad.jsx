@@ -764,8 +764,8 @@ const LP_REMOTE_SCOPES = [
   'Anywhere in the world (rare, and often not actually true)',
 ];
 
-// Salary steps for the compensation dropdowns. 10K increments up to 250K, then
-// 25K, which is roughly where posted bands stop being that precise. Wide enough
+// Salary steps for the compensation dropdowns. 10K increments through the first
+// loop below, then 25K, which is roughly where posted bands stop being that precise. Wide enough
 // to cover an early-career floor and an executive ceiling without becoming a
 // scroll of 60 near-identical options.
 const LP_COMP_STEPS = (() => {
