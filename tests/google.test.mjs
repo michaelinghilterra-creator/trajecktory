@@ -40,6 +40,7 @@ const {
 } = await import('../dashboard-web/server/lib/google.mjs');
 const { GOOGLE_TOKENS_PATH, TARGET_TALENT_MD } = await import('../dashboard-web/server/config.mjs');
 const { parseTargetTalentMd, readTTCorrespondence } = await import('../dashboard-web/server/lib/target-talent.mjs');
+const { addNote, readAppNotes } = await import('../dashboard-web/server/lib/notes.mjs');
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -230,19 +231,24 @@ check(dec.other.some(o => o.msgId === 'm-other'), 'reply from an unknown sender 
 // consumer domains, so that specific branch is covered in prod, not here.
 const apps = [
   { id: 501, company: 'Northwind Robotics' },
-  { id: 502, company: 'Cobalt Systems, Inc.' },
+  { id: 502, company: 'Corvane Systems, Inc.' },
 ];
-check(matchByCompanyDomain('careers@northwind.example', apps)?.appId === 501, 'sender domain (substring of company) → app suggested');
-check(matchByCompanyDomain('careers@northwind.example', apps)?.confidence === 'medium', 'a substring match is medium confidence');
-check(matchByCompanyDomain('talent@cobalt.example', apps)?.appId === 502, 'domain root matches despite an Inc./Systems suffix on the company');
-check(matchByCompanyDomain('talent@cobalt.example', apps)?.confidence === 'high', 'an exact root/company-token match is high confidence');
+check(matchByCompanyDomain('careers@northwindrobotics.example', apps)?.appId === 501, 'sender domain exactly matching joined company tokens suggests the app');
+check(matchByCompanyDomain('careers@northwindrobotics.example', apps)?.confidence === 'high', 'an exact joined-token domain match is high confidence');
+check(matchByCompanyDomain('careers@northwind.example', apps)?.appId === 501
+  && matchByCompanyDomain('careers@northwind.example', apps)?.confidence === 'medium',
+  'a domain root matching leading company tokens is medium confidence');
+check(matchByCompanyDomain('talent@corvane.example', apps)?.appId === 502, 'domain root matches despite an Inc./Systems suffix on the company');
+check(matchByCompanyDomain('talent@corvane.example', apps)?.confidence === 'high', 'an exact root/company-token match is high confidence');
+check(matchByCompanyDomain('system@hirebridgemail.test', [{ id: 503, company: 'Ema' }]) === null,
+  'domain matching requires equality, so hirebridgemail does not match Ema');
 check(matchByCompanyDomain('noreply@lever.example', apps) === null, 'an ATS mail domain (lever) is not a company match → null');
 check(matchByCompanyDomain('hi@unrelated-vendor.example', apps) === null, 'a domain matching no application → null');
 
 // scanDecisions attaches the guess to an unknown sender at a known company
 const firstContact = {
   id: 'm-first',
-  payload: { headers: [{ name: 'From', value: 'Talent Team <careers@northwind.example>' }, { name: 'Subject', value: 'Your application' }],
+  payload: { headers: [{ name: 'From', value: 'Talent Team <careers@northwindrobotics.example>' }, { name: 'Subject', value: 'Your application' }],
     parts: [{ mimeType: 'text/plain', body: { data: b64('Thanks for applying. We would love to set up a call.') } }] },
 };
 const dec2 = scanDecisions({ messages: [firstContact], taRows, apps });
@@ -255,37 +261,100 @@ check(guessed && guessed.sentiment === 'positive', 'the company-guessed first-co
 const appRows = [
   { id: 601, company: 'Northwind Robotics', role: 'RevOps Lead', status: 'Applied' },
   { id: 602, company: 'Northwind Robotics', role: 'Sales Ops Manager', status: 'Applied' },
-  { id: 603, company: 'Cobalt Systems', role: 'Analytics Lead', status: 'Responded' },
+  { id: 603, company: 'Corvane Systems', role: 'Analytics Lead', status: 'Responded' },
 ];
 const northwind = candidateAppsFor('Northwind Robotics', appRows);
 check(northwind.length === 2, 'both roles at the same company are candidates, so the user picks which');
 check(northwind.every(a => a.role && a.status), 'each candidate carries role + status for the picker');
-check(candidateAppsFor('cobalt systems', appRows).length === 1 && candidateAppsFor('cobalt systems', appRows)[0].id === 603, 'case- and punctuation-insensitive match finds the single Cobalt app');
+check(candidateAppsFor('corvane systems', appRows).length === 1 && candidateAppsFor('corvane systems', appRows)[0].id === 603, 'case- and punctuation-insensitive match finds the single Corvane app');
 check(candidateAppsFor('Nonexistent Co', appRows).length === 0, 'a company with no application yields no candidates');
 check(candidateAppsFor('', appRows).length === 0 && candidateAppsFor(null, appRows).length === 0, 'empty/null company is safe');
 
 // ── matchBySubject: the tier-3 subject matcher (the Kestrel case) ────────────
 const subjApps = [
   { id: 701, company: 'Kestrel', role: 'Field CTO', status: 'Applied' },
-  { id: 702, company: 'Cobalt Systems', role: 'Analytics Lead', status: 'Applied' },
+  { id: 702, company: 'Corvane Systems', role: 'Analytics Lead', status: 'Applied' },
   { id: 703, company: 'Bex Systems', role: 'RevOps Director', status: 'Applied' },
 ];
 const kestrel = matchBySubject('Update on your Kestrel Application', subjApps);
 check(kestrel && kestrel.appId === 701 && kestrel.confidence === 'subject', 'a subject naming the company resolves to its application (the Kestrel case)');
-check(matchBySubject('Re: your Kestrel, Inc. application', subjApps)?.appId === 701, 'a legal suffix on the app company still matches the distinctive core');
-check(matchBySubject('Following up on your Cobalt Systems role', subjApps)?.appId === 702, 'a multi-word company matches on its distinctive core (generic "Systems" dropped)');
+check(matchBySubject('Re: your Kestrel, Inc. application', subjApps)?.appId === 701, 'company tokens stay whole-word matched when the subject adds a legal suffix');
+check(matchBySubject('Following up on your Corvane Systems role', subjApps)?.appId === 702, 'a multi-word company matches as consecutive whole tokens');
 check(matchBySubject('Weekly newsletter, nothing to see here', subjApps) === null, 'a subject naming no known company matches nothing');
 
-// REVISED 2026-07-24. This asserted that "your Bex Systems update" matched NOTHING,
-// because the distinctive core ("bex") is under the 4-character guard. But that
-// subject names the company in full, so refusing it was the bug, not the protection.
-// The guard is about the NEEDLE, not the company: searching for "bex" alone would
-// hit "bexley"; searching for "bexsystems" cannot. Real cost of the old behaviour:
-// companies whose core is 3 characters after the generic word is stripped could
-// never be subject-matched at all, so interview mail sent via a scheduling tool went
-// to "unknown" every time.
+const collisionApps = [
+  { id: 711, company: 'Plica', role: 'Account Director', status: 'Applied' },
+  { id: 712, company: 'Northwind', role: 'Platform Lead', status: 'Applied' },
+];
+check(matchBySubject('Your application to Northwind', collisionApps)?.appId === 712,
+  'whole-word subject matching picks Northwind instead of Plica');
+check(matchBySubject('Thank you for your application', collisionApps) === null,
+  'a generic application subject does not match Plica');
+check(matchBySubject('Update from Acme Robotics', [{ id: 713, company: 'Acme Robotics', role: 'Systems Lead', status: 'Applied' }])?.appId === 713,
+  'multi-word company tokens match when they appear consecutively');
+check(matchBySubject('Your application to Lumora', [{ id: 714, company: 'Lumora Technologies', role: 'Systems Lead', status: 'Applied' }])?.appId === 714,
+  'a generic-word company matches on its distinctive core tokens');
+check(matchBySubject('Update on your Kestrel application', [{ id: 715, company: 'Kestrel, Inc.', role: 'Field CTO', status: 'Applied' }])?.appId === 715,
+  'a legal-suffix company matches on its distinctive core tokens');
+
+const rankingDate = '2026-08-20T15:00:00Z';
+const statusRankApps = [
+  { id: 721, company: 'Fabrikam', role: 'Growth Analyst', status: 'Not a Fit' },
+  { id: 722, company: 'Fabrikam', role: 'Growth Analyst', status: 'Applied' },
+];
+const statusRankOptions = { emailDate: rankingDate, applyDates: { 722: '2026-08-18' } };
+check(matchBySubject('Update from Fabrikam', statusRankApps, statusRankOptions)?.appId === 722,
+  'an applied row with a prior apply date outranks an earlier never-applied row');
+check(candidateAppsFor('Fabrikam', statusRankApps, statusRankOptions)[0]?.id === 722,
+  'candidateAppsFor returns the same-company candidates in ranked order');
+
+const roleRankApps = [
+  { id: 731, company: 'Solstice Labs', role: 'Product Operations Manager', status: 'Applied' },
+  { id: 732, company: 'Solstice Labs', role: 'Data Platform Engineer', status: 'Applied' },
+];
+const roleRankOptions = {
+  emailDate: rankingDate,
+  applyDates: { 731: '2026-08-18', 732: '2026-08-18' },
+};
+check(matchBySubject('Solstice Labs update for Data Platform Engineer', roleRankApps, roleRankOptions)?.appId === 732,
+  'subject role text breaks a tie between two applied rows');
+
+const recentRankApps = [
+  { id: 733, company: 'Woodgrove', role: 'Platform Engineer', status: 'Applied' },
+  { id: 734, company: 'Woodgrove', role: 'Platform Engineer', status: 'Applied' },
+];
+check(matchBySubject('Update from Woodgrove', recentRankApps, {
+  emailDate: rankingDate,
+  applyDates: { 733: '2026-08-12', 734: '2026-08-19' },
+})?.appId === 734, 'the most recent eligible apply date breaks the final tie');
+
+const futureApplyApps = [
+  { id: 735, company: 'Tailspin Works', role: 'Platform Engineer', status: 'Applied' },
+  { id: 736, company: 'Tailspin Works', role: 'Platform Engineer', status: 'Applied' },
+];
+check(matchBySubject('Update from Tailspin Works', futureApplyApps, {
+  emailDate: '2026-08-10T15:00:00Z',
+  applyDates: { 735: '2026-08-11', 736: '2026-08-19' },
+})?.appId === null, 'future apply dates cannot break a pre-email candidate tie');
+
+const ambiguousApps = [
+  { id: 741, company: 'Contoso Dynamics', role: 'Product Strategist', status: 'Applied' },
+  { id: 742, company: 'Contoso Dynamics', role: 'Data Architect', status: 'Applied' },
+];
+const ambiguousOptions = {
+  emailDate: rankingDate,
+  applyDates: { 741: '2026-08-18', 742: '2026-08-18' },
+};
+const ambiguousGuess = matchBySubject('An update from Contoso Dynamics', ambiguousApps, ambiguousOptions);
+const ambiguousCandidates = candidateAppsFor('Contoso Dynamics', ambiguousApps, {
+  ...ambiguousOptions,
+  subject: 'An update from Contoso Dynamics',
+});
+check(ambiguousGuess?.appId === null && ambiguousCandidates.length === 2,
+  'a true same-company tie returns no guess and lists both candidates');
+
 check(matchBySubject('your Bex Systems update', subjApps)?.appId === 703,
-  'a company named IN FULL matches even when its distinctive core is too short to search alone');
+  'a short company word matches when the full token sequence is present');
 
 const shortCore = [
   { id: 901, company: 'Art Systems', role: 'RevOps Director', status: 'Applied' },
@@ -295,11 +364,10 @@ check(matchBySubject('Reminder: Your Upcoming Interview with Art Systems', short
   'a scheduler-sent interview reminder resolves via the full company name');
 check(matchBySubject('You have an interview with Ion Group, Inc', shortCore)?.appId === 902,
   'a company written with its legal suffix still resolves on the full name');
-// The noise protection the guard exists for, proven rather than assumed: "art" is a
-// substring of "quarterly" and "ion" of "operations", so this subject contains BOTH
-// three-letter cores and must still match nothing.
 check(matchBySubject('Your quarterly operations report is ready', shortCore) === null,
-  'a short core is never searched on its own (quarterly/operations match neither company)');
+  'short company words do not match inside longer subject words');
+check(matchBySubject('Update from Art', shortCore) === null,
+  'a three-character distinctive core never matches on its own');
 
 // scanDecisions tier-3: an ATS-sent email (no domain signal) falls through to the subject.
 const atsMsg = {
@@ -312,6 +380,18 @@ const atsGuess = decAts.other.find(o => o.msgId === 'm-ats');
 check(atsGuess && atsGuess.companyGuess?.appId === 701, 'scanDecisions subject-matches an ATS-sent email the domain tier cannot');
 check(atsGuess && atsGuess.companyGuess?.confidence === 'subject', 'the subject-tier guess is labeled');
 check(atsGuess && atsGuess.sentiment === 'negative', 'the ATS rejection is still classified negative');
+check(rep && rep.threadId === 't1', 'reply decisions carry the Gmail thread id');
+
+const gmailNoteMeta = { msgId: 'msg-note-1', threadId: 'thread-note-1', sender: 'talent@northwind.example' };
+const firstNoteWrite = addNote(751, 'Invented reply note', gmailNoteMeta);
+const duplicateNoteWrite = addNote(751, 'Duplicate invented reply note', gmailNoteMeta);
+const storedGmailNotes = readAppNotes()['751'] || [];
+check(firstNoteWrite.added === true && duplicateNoteWrite.added === false && storedGmailNotes.length === 1,
+  'addNote stores one entry when the same Gmail message id is logged twice');
+check(storedGmailNotes[0]?.msgId === gmailNoteMeta.msgId
+  && storedGmailNotes[0]?.threadId === gmailNoteMeta.threadId
+  && storedGmailNotes[0]?.sender === gmailNoteMeta.sender,
+  'addNote stores optional Gmail message metadata');
 
 // ── fetchMessagesConcurrent: bounded-concurrency fetch ────────────────────────
 const ids20 = Array.from({ length: 20 }, (_, i) => ({ id: `id-${i}` }));

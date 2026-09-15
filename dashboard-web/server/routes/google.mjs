@@ -12,6 +12,7 @@ import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { PORT, TT_CORR_DIR } from '../config.mjs';
 import { patchRowInMd, parseApplicationsMd } from '../lib/applications.mjs';
 import { addNote } from '../lib/notes.mjs';
+import { readApplyDates } from '../lib/sidecars.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
 
@@ -360,7 +361,8 @@ router.get('/api/google/replies', async (req, res) => {
 
     const taRows = parseTargetTalentMd();
     const apps = (() => { try { return parseApplicationsMd(); } catch { return []; } })();
-    const { replies, other } = scanDecisions({ messages: raws, taRows, apps });
+    const applyDates = readApplyDates();
+    const { replies, other } = scanDecisions({ messages: raws, taRows, apps, applyDates });
     // Unmatched-by-contact senders are split: those the domain tier tied to a known
     // company (a likely first-contact email) vs. genuinely unknown. Both surfaced.
     const byCompany = other.filter(o => o.companyGuess);
@@ -375,7 +377,15 @@ router.get('/api/google/replies', async (req, res) => {
     // forward, so a random email that got picked up once stops resurfacing.
     const notRelated = sync.notRelatedSenders || {};
     const notSuppressed = (r) => { const a = senderAddress(r.from); return !(a && notRelated[a]); };
-    const withMeta = (rows, companyOf) => rows.filter(notSuppressed).map(r => previewEntry({ ...r, candidateApps: candidateAppsFor(companyOf(r), apps), handled: handled[r.msgId] || null }));
+    const withMeta = (rows, companyOf) => rows.filter(notSuppressed).map(r => previewEntry({
+      ...r,
+      candidateApps: candidateAppsFor(companyOf(r), apps, {
+        emailDate: r.date,
+        subject: r.subject,
+        applyDates,
+      }),
+      handled: handled[r.msgId] || null,
+    }));
     // Stamp that a preview sweep ran (manual "Check email" or the auto-scan on
     // Review open), so /health can show "last checked …" and nudge when it has
     // been a while. Best-effort: a freshness write must never fail the read.
@@ -402,7 +412,7 @@ router.get('/api/google/replies', async (req, res) => {
 router.post('/api/google/replies/:msgId/:action', async (req, res) => {
   try {
     const { msgId, action } = req.params;
-    const { appId, company, contact, sentiment, from, subject, snippet, bodyPreview, date } = req.body || {};
+    const { appId, company, contact, sentiment, from, subject, snippet, bodyPreview, date, threadId } = req.body || {};
     const today = new Date().toISOString().slice(0, 10);
     // Best-effort: the log/status may already be written, so a sync failure must not 500.
     const markHandled = (rec) => {
@@ -434,7 +444,7 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     const id = parseInt(appId, 10);
     if (Number.isNaN(id)) return res.status(400).json({ error: 'appId is required (which application this reply belongs to).' });
 
-    let message = { from, subject, snippet, text: bodyPreview || snippet || '', date };
+    let message = { from, subject, snippet, text: bodyPreview || snippet || '', date, threadId };
     try {
       const tokens = readTokens();
       const accessToken = await getAccessToken({ tokens });
@@ -444,7 +454,12 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     const sender = extractEmail(message.from) || from || '';
     const header = `${sender}: ${message.subject || subject || '(no subject)'} [${sentiment || 'neutral'}]`;
     const fullBody = String(message.text || bodyPreview || snippet || '').trim();
-    addNote(id, `### Reply logged (${today})\n${header}${fullBody ? `\n\n${fullBody}` : ''}`);
+    const noteHistory = addNote(
+      id,
+      `### Reply logged (${today})\n${header}${fullBody ? `\n\n${fullBody}` : ''}`,
+      { msgId, threadId: message.threadId || threadId, sender },
+    );
+    const alreadyLogged = noteHistory.added === false;
 
     let statusFlip = null;
     if (action === 'rejected') statusFlip = 'Rejected';
@@ -465,7 +480,7 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     }
 
     markHandled({ action, appId: id, date: today });
-    res.json({ ok: true, appId: id, statusFlip, contactLogged });
+    res.json({ ok: true, appId: id, statusFlip, contactLogged, alreadyLogged });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
