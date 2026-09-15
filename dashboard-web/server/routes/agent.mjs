@@ -30,6 +30,16 @@ export const router = express.Router();
 
 const agentJobs = new Map();
 
+const JOB_MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
+function evictOldJobs() {
+  const cutoff = Date.now() - JOB_MAX_AGE_MS;
+  for (const [id, job] of agentJobs) {
+    if (job.status !== 'running' && (job.finishedAt || job.startedAt || 0) < cutoff) {
+      agentJobs.delete(id);
+    }
+  }
+}
+
 // ── Admission control (Slice 7.4) ─────────────────────────────────────────────
 // The old lock was global single-flight: ANY running agent blocked every other,
 // so a long rolling Evaluate locked the user out for its whole duration. Its real
@@ -104,6 +114,10 @@ function loadPersistedJobs() {
   } catch { /* ignore a corrupt/partial snapshot */ }
 }
 loadPersistedJobs();
+
+// Evict stale completed jobs every 30 minutes to release memory.
+const _evictTimer = setInterval(evictOldJobs, 30 * 60 * 1000);
+if (_evictTimer.unref) _evictTimer.unref();
 
 function agentTail(output) {
   return (output || '').trim().split('\n').slice(-3).join('\n');
