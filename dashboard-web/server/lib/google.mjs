@@ -27,7 +27,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { GOOGLE_TOKENS_PATH, GOOGLE_SYNC_PATH } from '../config.mjs';
 import { classifyBounce } from '../../../lib/bounce-parse.mjs';
-import { normalizeCompany } from '../../../lib/identity.mjs';
+import { normalizeCompany, sameRole } from '../../../lib/identity.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from './target-talent.mjs';
 import { parseReferralsMd, readReferralCorrespondence, writeReferralCorrespondence, updateReferralLine, resolveReferralLink } from './referrals.mjs';
 
@@ -540,10 +540,18 @@ function matchAddress(address, { taRows = [] } = {}) {
 // Normalize a company name OR a domain root to a comparable token: lowercase,
 // strip common suffixes and all non-alphanumerics, so "XYZ Corp" and "xyzcorp.com"
 // both reduce to "xyz".
+const _GENERIC_COMPANY_WORD_LIST = [
+  'inc', 'corp', 'corporation', 'llc', 'ltd', 'limited', 'co', 'company',
+  'group', 'holdings', 'technologies', 'technology', 'labs', 'software',
+  'systems', 'solutions', 'global',
+];
+const _GENERIC_COMPANY_WORDS = new Set(_GENERIC_COMPANY_WORD_LIST);
+const _GENERIC_COMPANY_WORD_RE = new RegExp(`\\b(?:${_GENERIC_COMPANY_WORD_LIST.join('|')})\\b`, 'g');
+
 function _normCompanyToken(s) {
   return String(s || '').toLowerCase()
     .replace(/\.(com|io|co|net|org|ai|app|xyz|dev|inc)$/i, '')
-    .replace(/\b(inc|corp|corporation|llc|ltd|limited|co|company|group|holdings|technologies|technology|labs|software|systems|solutions|global)\b/g, '')
+    .replace(_GENERIC_COMPANY_WORD_RE, '')
     .replace(/[^a-z0-9]/g, '');
 }
 
@@ -559,10 +567,80 @@ function _domainRoot(addr) {
   return parts.length >= 2 ? parts[parts.length - 2] : '';
 }
 
+function _wordTokens(value) {
+  return String(value || '').toLowerCase().match(/[a-z0-9]+/g) || [];
+}
+
+function _companyCoreTokens(value) {
+  return _wordTokens(value).filter(token => !_GENERIC_COMPANY_WORDS.has(token));
+}
+
+function _hasTokenSequence(haystack, needle) {
+  if (!needle.length || needle.length > haystack.length) return false;
+  for (let i = 0; i <= haystack.length - needle.length; i++) {
+    if (needle.every((token, offset) => haystack[i + offset] === token)) return true;
+  }
+  return false;
+}
+
+function _dateMillis(value) {
+  const parsed = Date.parse(String(value || ''));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+const _SUBMITTED_STATUSES = new Set([
+  'applied', 'phone screen', '1st interview', '2nd interview', '3rd interview',
+  'offer', 'rejected', 'no response',
+]);
+
+function _roleAppearsInSubject(role, subject) {
+  const words = _wordTokens(subject);
+  for (let start = 0; start < words.length; start++) {
+    for (let end = start + 1; end <= words.length; end++) {
+      if (sameRole(role, words.slice(start, end).join(' '))) return true;
+    }
+  }
+  return false;
+}
+
+function _rankCompanyCandidates(rows, { emailDate, subject, applyDates = {} } = {}) {
+  const emailMs = _dateMillis(emailDate);
+  const scored = rows.map((row, index) => {
+    const applyDate = applyDates[String(row.id)];
+    const applyMs = _dateMillis(applyDate);
+    const eligibleApplyMs = applyMs !== null && emailMs !== null && applyMs <= emailMs
+      ? applyMs
+      : -Infinity;
+    return {
+      row,
+      index,
+      rank: [
+        eligibleApplyMs !== -Infinity ? 1 : 0,
+        _SUBMITTED_STATUSES.has(String(row.status || '').trim().toLowerCase()) ? 1 : 0,
+        _roleAppearsInSubject(row.role, subject) ? 1 : 0,
+        eligibleApplyMs,
+      ],
+    };
+  });
+  const compareRank = (a, b) => {
+    for (let i = 0; i < a.rank.length; i++) {
+      if (a.rank[i] !== b.rank[i]) return b.rank[i] - a.rank[i];
+    }
+    return a.index - b.index;
+  };
+  const sameRank = (a, b) => a.rank.every((value, i) => value === b.rank[i]);
+  scored.sort(compareRank);
+  return {
+    rows: scored.map(item => item.row),
+    appId: scored.length && (scored.length === 1 || !sameRank(scored[0], scored[1]))
+      ? scored[0].row.id
+      : null,
+  };
+}
+
 // Tier-2 match: an unknown SENDER may still be about a known COMPANY. Compare the
-// sender's email domain to each application's company name; a strong token overlap
-// suggests which application the reply belongs to. This is what catches a first
-// email from careers@company.example or a TA person not yet on file. Returns
+// sender's email domain root to each application's normalized name or leading
+// token sequence. This catches a first email from careers@company.example. Returns
 // { appId, company, confidence } or null. A SUGGESTION for confirmation, never an
 // auto-link: a company can mail from an unrelated domain, so a wrong guess must
 // cost a glance, not a mis-filed status. Pure.
@@ -571,64 +649,47 @@ function matchByCompanyDomain(fromAddr, apps = []) {
   if (!at || _GENERIC_DOMAINS.has(at.toLowerCase()) || _ATS_DOMAIN_RE.test(at)) return null;
   const root = _normCompanyToken(_domainRoot(fromAddr));
   if (!root || root.length < 3) return null;
-  let best = null;
   for (const a of apps) {
     const comp = _normCompanyToken(a.company);
     if (!comp || comp.length < 3) continue;
-    const exact = comp === root;
-    const overlap = exact || comp.includes(root) || root.includes(comp);
-    if (!overlap) continue;
-    const confidence = exact ? 'high' : 'medium';
-    if (!best || (confidence === 'high' && best.confidence !== 'high')) {
-      best = { appId: a.id, company: a.company, confidence };
+    const tokens = _wordTokens(a.company);
+    const joined = tokens.join('');
+    if (root === comp || root === joined) {
+      return { appId: a.id, company: a.company, confidence: 'high' };
     }
-    if (exact) break;
+    if (root.length < 4) continue;
+    for (let count = 1; count < tokens.length; count++) {
+      if (root === tokens.slice(0, count).join('')) {
+        return { appId: a.id, company: a.company, confidence: 'medium' };
+      }
+    }
   }
-  return best;
+  return null;
 }
 
-// Tier-3 match: the SENDER told us nothing (an ATS or unfamiliar domain), but the
-// SUBJECT often names the company outright ("Update on your Kestrel Application").
-// A SUGGESTION for confirmation, never an auto-link, exactly like the domain tier.
-// Biased toward recall (a missed application update costs more than an extra row
-// the user can ignore). Pure.
-//
-// TWO passes, and the order matters.
-//
-// Pass 1 searches the FULL company name. Pass 2 searches the DISTINCTIVE core from
-// _normCompanyToken, which drops legal suffixes and generic words so "Kestrel, Inc."
-// still matches a subject that says only "Kestrel".
-//
-// Only having pass 2 was a silent hole. The core is what the length guard measures,
-// and the guard rejects anything under 4 characters — so any company named as a
-// three-letter word plus a generic one ("<XYZ> Technology", "<XYZ> Group") could
-// NEVER be subject-matched, however plainly the subject named it. Two such
-// employers sat in the tracker with live interview processes, and their mail
-// landed in "unknown" on every sweep.
-//
-// The guard itself is right: a three-letter needle is a substring of ordinary
-// words and would match subjects naming nobody. The mistake was searching ONLY
-// the stripped core, when the FULL name is both present in the subject and far
-// too distinctive to collide with anything.
-//
-// (Shape, not values. The real company names were written here in the first
-// draft, which put two live interview counterparties into a tracked file in a
-// public repo. See AGENTS.md, "Commit messages are published".)
-function matchBySubject(subject, apps = []) {
-  const hay = normalizeCompany(subject); // lowercase, alphanumeric only (spaces dropped)
-  if (hay.length < 4) return null;
-  const hit = (a) => ({ appId: a.id, company: a.company, confidence: 'subject' });
-  // Pass 1 — full name. Long and specific, so it is safe even when the core is not.
-  for (const a of apps) {
-    const full = normalizeCompany(a.company);
-    if (full && full.length >= 4 && hay.includes(full)) return hit(a);
-  }
-  // Pass 2 — distinctive core, for subjects naming the company without its generic
-  // word. Still guarded at 4 characters: a shorter needle matches subject noise.
-  for (const a of apps) {
-    const core = _normCompanyToken(a.company);
-    if (!core || core.length < 4) continue;
-    if (hay.includes(core)) return hit(a);
+// Tier-3 match: the SENDER told us nothing, but the SUBJECT may name a company.
+// Full company words or a distinctive core must appear consecutively as whole
+// tokens. A short single-token core is not searched alone. Candidate rows for the
+// matched company are ranked, and an unresolved top tie keeps appId null.
+function matchBySubject(subject, apps = [], options = {}) {
+  const subjectTokens = _wordTokens(subject);
+  if (!subjectTokens.length) return null;
+  for (const app of apps) {
+    const companyTokens = _wordTokens(app.company);
+    const coreTokens = _companyCoreTokens(app.company);
+    const coreIsSafe = coreTokens.length > 1
+      || (coreTokens.length === 1 && coreTokens[0].length >= 4);
+    const fullMatch = _hasTokenSequence(subjectTokens, companyTokens);
+    const coreMatch = coreIsSafe && _hasTokenSequence(subjectTokens, coreTokens);
+    if (!fullMatch && !coreMatch) continue;
+    const companyKey = normalizeCompany(app.company);
+    const sameCompany = apps.filter(a => normalizeCompany(a.company) === companyKey);
+    const ranked = _rankCompanyCandidates(sameCompany, { ...options, subject });
+    return {
+      appId: ranked.appId,
+      company: app.company,
+      confidence: 'subject',
+    };
   }
   return null;
 }
@@ -642,11 +703,13 @@ function matchBySubject(subject, apps = []) {
 // so a contact company that differs only by ", Inc." will not collapse — a
 // deliberate miss, since under-matching just shows the reply for manual handling
 // while over-matching would attach it to the wrong company. Pure; unit-tested.
-function candidateAppsFor(company, apps = []) {
+function candidateAppsFor(company, apps = [], options = {}) {
   const token = normalizeCompany(company);
   if (!token) return [];
-  return apps
-    .filter(a => normalizeCompany(a.company) === token)
+  return _rankCompanyCandidates(
+    apps.filter(a => normalizeCompany(a.company) === token),
+    options,
+  ).rows
     .map(a => ({ id: a.id, role: a.role, status: a.status }));
 }
 
@@ -659,7 +722,7 @@ function candidateAppsFor(company, apps = []) {
 //   other[]   — everything else (unknown senders, automated mail), surfaced so a
 //               real reply from an unrecognized address is never dropped.
 // Pure: all inputs passed in.
-function scanDecisions({ messages = [], taRows = [], apps = [] } = {}) {
+function scanDecisions({ messages = [], taRows = [], apps = [], applyDates = {} } = {}) {
   const bounces = [], replies = [], other = [];
   for (const raw of messages) {
     const msg = parseGmailMessage(raw);
@@ -680,9 +743,11 @@ function scanDecisions({ messages = [], taRows = [], apps = [] } = {}) {
     // SUBJECT (an ATS-sent "Update on your <Company> Application", whose sender
     // domain carries no signal). Either is a suggestion for confirmation.
     let companyGuess = !contact ? matchByCompanyDomain(fromAddr, apps) : null;
-    if (!contact && !companyGuess) companyGuess = matchBySubject(msg.subject, apps);
+    if (!contact && !companyGuess) {
+      companyGuess = matchBySubject(msg.subject, apps, { emailDate: msg.date, applyDates });
+    }
     const entry = {
-      msgId: msg.id, from: fromAddr, subject: msg.subject, date: msg.date,
+      msgId: msg.id, threadId: msg.threadId, from: fromAddr, subject: msg.subject, date: msg.date,
       sentiment: classifyReply({ subject: msg.subject, text: msg.text }),
       contact, companyGuess, snippet: msg.snippet, body: msg.text,
     };

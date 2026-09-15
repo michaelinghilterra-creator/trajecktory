@@ -4,7 +4,7 @@ import { APP_NOTES_PATH } from '../config.mjs';
 // ── Per-application interview/meeting notes ──────────────────────────────────
 // An append-only, timestamped log kept OUT of applications.md (which stays a
 // fixed 10-column table). Shape, keyed by application id:
-//   { "<appId>": [ { timestamp: ISO8601, text: "..." }, ... ] }
+//   { "<appId>": [ { timestamp: ISO8601, text: "...", msgId?, threadId?, sender? }, ... ] }
 // Separate JSON sidecar, mirroring apply-dates.json / followup-snooze.json so
 // the tracker schema and its analytics are never perturbed.
 function readAppNotes() {
@@ -22,15 +22,31 @@ function getNotes(appId) {
 }
 
 // Append a timestamped entry. No-op on empty text. Returns the updated history.
-function addNote(appId, text) {
+function addNote(appId, text, meta) {
   const clean = String(text == null ? '' : text).trim();
-  if (!clean) return getNotes(appId);
+  if (!clean) {
+    const history = getNotes(appId);
+    history.added = false;
+    return history;
+  }
   const map = readAppNotes();
   const key = String(appId);
   if (!map[key]) map[key] = [];
-  map[key].push({ timestamp: new Date().toISOString(), text: clean });
+  const msgId = meta?.msgId == null ? '' : String(meta.msgId);
+  if (msgId && map[key].some(entry => String(entry.msgId || '') === msgId)) {
+    const history = getNotes(appId);
+    history.added = false;
+    return history;
+  }
+  const entry = { timestamp: new Date().toISOString(), text: clean };
+  for (const field of ['msgId', 'threadId', 'sender']) {
+    if (meta?.[field] != null && String(meta[field])) entry[field] = String(meta[field]);
+  }
+  map[key].push(entry);
   writeAppNotes(map);
-  return getNotes(appId);
+  const history = getNotes(appId);
+  history.added = true;
+  return history;
 }
 
 // Remove a single entry by its timestamp. Returns the updated history.
