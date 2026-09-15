@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.15.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.14.2...v3.15.0) (2026-09-15)
+
+
+### Features
+
+* log TWC activities the tracker cannot see, and correct the export ([#326](https://github.com/michaelinghilterra-creator/trajecktory/issues/326)) ([e745959](https://github.com/michaelinghilterra-creator/trajecktory/commit/e7459596fc854daa8a8cdcce05d26c4aeff55e03))
+
+
+### Bug Fixes
+
+* add a one-time TWC data repair driven by an evidence ledger ([#327](https://github.com/michaelinghilterra-creator/trajecktory/issues/327)) ([860478d](https://github.com/michaelinghilterra-creator/trajecktory/commit/860478d96ca42b0db3eae34fab01f57cc84c0e89))
+* count each real work-search action once in the TWC activity export ([#325](https://github.com/michaelinghilterra-creator/trajecktory/issues/325)) ([55c929e](https://github.com/michaelinghilterra-creator/trajecktory/commit/55c929ecd1f9687caa29c17d1ede83a04c131fec))
+* flag real compensation figures in the PII gate ([#323](https://github.com/michaelinghilterra-creator/trajecktory/issues/323)) ([63d1065](https://github.com/michaelinghilterra-creator/trajecktory/commit/63d1065051f25eff5e3944543834770e95a5eddd))
+* match Gmail replies to applications by whole words ([#322](https://github.com/michaelinghilterra-creator/trajecktory/issues/322)) ([7e7308d](https://github.com/michaelinghilterra-creator/trajecktory/commit/7e7308d6deff7251c65436525956b05c0ee11e78))
+
 ## [3.14.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.14.1...v3.14.2) (2026-09-14)
 
 
