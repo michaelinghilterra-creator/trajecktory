@@ -39,6 +39,18 @@ fs.writeFileSync(path.join(tmp, 'applications.md'), [
   '| 204 | 2026-07-19 | Umbrella | Gadget Supervisor | 3.8/5 | Applied | ❌ | — | — |  | https://umbrella.test/204 |',
   '| 205 | 2026-06-30 | Stark | Gizmo Engineer | 4.2/5 | Phone Screen | ❌ | — | — |  | https://stark.test/205 |',
   '| 206 | 2026-07-02 | Wayne | Contraption Lead | 3.6/5 | Applied | ❌ | — | — |  | https://wayne.test/206 |',
+  '| 207 | 2026-07-22 | Wonka | Factory Planner | 3.7/5 | Not a Fit | ❌ | - | - |  | https://wonka.test/jobs/207 |',
+  '| 208 | 2026-07-20 | Kestrel | Signal Analyst | 4.1/5 | Applied | ❌ | - | - |  | https://ats.shared.test/posting?jobId=88&utm_source=one |',
+  '| 209 | 2026-07-21 | Kestrel | Signal Analyst | 4.1/5 | Applied | ❌ | - | - |  | https://ats.shared.test/posting?utm_source=two&jobid=88 |',
+  '| 210 | 2026-07-22 | Soylent | Process Lead | 4.0/5 | Applied | ❌ | - | - |  | https://jobs.soylent.test/posting?jobId=10 |',
+  '| 211 | 2026-07-23 | Soylent | Process Lead | 4.0/5 | Applied | ❌ | - | - |  | https://jobs.soylent.test/posting?jobId=11 |',
+  '| 212 | 2026-08-01 | Tyrell | Systems Liaison | 4.3/5 | Phone Screen | ❌ | - | - |  | https://tyrell.test/jobs/212 |',
+  '| 213 | 2026-08-02 | Oceanic | Route Director | 4.2/5 | Applied | ❌ | - | - |  | https://oceanic.test/jobs/213 |',
+  '| 214 | 2026-07-24 | Cyberdyne | Program Analyst | 3.9/5 | No Response | ❌ | - | - |  | https://cyberdyne.test/jobs/214 |',
+  '| 215 | 2026-07-25 | Gringotts | Controls Lead | 3.8/5 | Closed | ❌ | - | - |  | https://gringotts.test/jobs/215 |',
+  '| 216 | 2026-07-24 | Massive Dynamic | Lab Planner | 4.0/5 | Applied | ❌ | - | - |  | https://massive.test/careers |',
+  '| 217 | 2026-07-25 | Massive Dynamic | Field Planner | 4.0/5 | Applied | ❌ | - | - |  | https://massive.test/careers |',
+  '| 218 | 2026-07-26 | Dharma | Signal Analyst | 4.0/5 | Applied | ❌ | - | - |  | https://ats.shared.test/posting?jobId=88 |',
   '',
 ].join('\n'));
 
@@ -46,13 +58,28 @@ fs.writeFileSync(path.join(tmp, 'applications.md'), [
 // approximate); 206 has none but a dated "Applied" status-event below.
 fs.writeFileSync(path.join(tmp, 'apply-dates.json'), JSON.stringify({
   201: '2026-07-20', 202: '2026-07-27', 205: '2026-06-30',
+  208: '2026-07-20', 209: '2026-07-21', 210: '2026-07-22', 211: '2026-07-23',
+  212: '2026-08-01', 213: '2026-08-02', 214: '2026-07-24', 215: '2026-07-25',
+  216: '2026-07-24', 217: '2026-07-25', 218: '2026-07-26',
 }, null, 2));
 
 fs.writeFileSync(path.join(tmp, 'status-events.tsv'),
   'app#\tdate\tstatus\tcompany\tlogged\n'
   + '205\t2026-07-24\tPhone Screen\tStark\t2026-07-24\n'   // interview activity
   + '206\t2026-07-21\tApplied\tWayne\t2026-07-21\n'         // fallback apply date for 206
-  + '202\t2026-07-26\tRejected\tGlobex\t2026-07-26\n');     // terminal, not an interview
+  + '202\t2026-07-26\tRejected\tGlobex\t2026-07-26\n'      // terminal, not an interview
+  + '207\t2026-07-22\tApplied\tWonka\t2026-07-22\n'
+  + '207\t2026-07-22\tNot a Fit\tWonka\t2026-07-22\n'
+  + '212\t2026-03-06\tPhone Screen\tTyrell\t2026-03-06\n'
+  + '215\t2026-07-20\tApplied\tGringotts\t2026-07-20\n'
+  + '215\t2026-07-25\tClosed\tGringotts\t2026-07-25\n');
+
+fs.writeFileSync(path.join(tmp, 'app-notes.json'), JSON.stringify({
+  212: [{
+    timestamp: '2026-03-12T10:00:00Z',
+    text: '### Phone Screen booked (2026-03-02)\n\n### Debrief: Phone Screen (2026-03-11)\n\nInvented debrief.',
+  }],
+}, null, 2));
 
 fs.writeFileSync(path.join(tmp, 'follow-ups.md'), [
   '# Follow-Ups', '',
@@ -63,6 +90,15 @@ fs.writeFileSync(path.join(tmp, 'follow-ups.md'), [
   // counted once, not twice. Notes carry the exact subject line, as the live
   // cross-log writes it.
   '| 2 | 201 | 2026-07-22 | Acme | Widget Operations Manager | Email | Jane Doe | Cross-logged from Talent Acquisition · Acme · Subject: Widget Operations Manager application follow-up |',
+  '| 3 | 201 | 2026-07-23 | Acme | Widget Operations Manager | Email | Jane Doe | Second touch |',
+  '| 4 | 201 | 2026-07-23 | Acme | Widget Operations Manager | Email | Drew Hill | Backfill 2026-08-11: cross-logged contact status |',
+  '| 5 | 201 | 2026-07-23 | Acme | Widget Operations Manager | Email | Rowan Vale | Self name test |',
+  '| 6 | 201 | 2026-07-24 | Acme | Widget Operations Manager | Email | rowan@example.test | Self email test |',
+  '| 7 | 201 | 2026-07-25 | Self Test | Widget Operations Manager | Email | Quinn Stone | Company test |',
+  '| 8 | 202 | 2026-07-25 | Globex | Sprocket Analyst | Email | Rich Roe | Subject: RE: LinkedIn connection request |',
+  '| 9 | 202 | 2026-07-25 | Globex | Sprocket Analyst | Email | Rich Roe | Subject: LinkedIn connection request |',
+  '| 10 | 201 | 2026-07-27 | Acme | Widget Operations Manager | Phone | Casey Bell | Called hiring desk |',
+  '| 11 | 201 | 2026-07-26 | Acme | Widget Operations Manager | Email | Avery Fox | Subject: LINKEDIN MESSAGE |',
   '',
 ].join('\n'));
 
@@ -74,6 +110,8 @@ fs.writeFileSync(path.join(tmp, 'target-talent.md'), [
   '|---|---------|------|-------|--------|-------|------|-------|-----|-------|-------|----------|--------|-----------|-------|---------|',
   '| 301 | Acme | Doe | Jane | Jane | Recruiter |  |  |  |  | jane@acme.test [v:ok:probe:2026-07-01:90] | linkedin.com/in/jane | Sent | 2026-07-24 |  |  |',
   '| 302 | Globex | Roe | Rich | Rich | TA Lead |  |  |  |  |  | linkedin.com/in/rich | Sent | 2026-07-25 |  |  |',
+  '| 303 | Acme | Same | Sam | Sam | Recruiter |  |  |  |  |  | linkedin.com/in/sam-acme | Sent | 2026-07-27 |  |  |',
+  '| 304 | Globex | Same | Sam | Sam | Recruiter |  |  |  |  |  | linkedin.com/in/sam-globex | Sent | 2026-07-27 |  |  |',
   '',
 ].join('\n'));
 const ttCorr = path.join(tmp, 'target-talent-correspondence');
@@ -130,6 +168,8 @@ fs.writeFileSync(path.join(tmp, 'linkedin-connects.json'), JSON.stringify([
   { date: '2026-07-25', id: 302, name: 'R. Roe', source: 'ta' },
   { date: '2026-07-26', id: 301, name: 'Jane Doe', source: 'ta' },
   { date: '2026-07-26', name: 'Ghost Lead', source: 'ta' },
+  { date: '2026-07-27', id: 303, name: 'Sam Same', source: 'ta' },
+  { date: '2026-07-27', id: 304, name: 'Sam Same', source: 'ta' },
   { date: '2026-08-05', id: 301, name: 'Jane Doe', source: 'ta' },
 ], null, 2));
 
@@ -145,6 +185,7 @@ fs.writeFileSync(path.join(tmp, 'employer-directory.json'), JSON.stringify({
 const twc = await import('../dashboard-web/server/lib/twc.mjs');
 const { toCsv } = await import('../dashboard-web/server/lib/csv.mjs');
 const { buildActivities, twcWeekStart, weeklyCounts, employersInActivities, toTwcCsv, TWC_CSV_HEADERS } = twc;
+const fictionalIdentity = { fullName: 'Rowan Vale', email: 'rowan@example.test' };
 
 let passed = 0, failed = 0;
 const check = (c, m) => { if (c) { console.log(`  ✅ ${m}`); passed++; } else { console.log(`  ❌ ${m}`); failed++; } };
@@ -161,16 +202,10 @@ try {
   check(twcWeekStart('nonsense') === null, 'an unparseable date yields null, never a wrong week');
 
   // ── 2. Range filter + who counts ─────────────────────────────────────────────
-  const narrow = buildActivities({ from: '2026-07-20', to: '2026-07-27' });
-  // apps 201/202/206 (3), interview 205 (1), follow-ups.md rows 1+2 (2),
-  // correspondence: 301 new email + 302 LinkedIn (2); 301's 07-22 email dedups
-  // against follow-ups.md row 2 → 8 from those sources. Ledger section 5 then adds
-  // two in-range connects (Jane Doe 301 on 07-26, Ghost Lead on 07-26); the Rich Roe
-  // ledger row dedups against the 302 correspondence connect by id, and Late Person
-  // (Jane Doe 08-05) is out of range → 10 from apps/interview/follow-ups/corr/ledger.
-  // Then the UNLINKED referral 501 adds its 07-23 LinkedIn connect (+1); the LINKED
-  // referral 502's own file is ignored → 11 total.
-  check(narrow.length === 11, `11 activities in the fortnight incl. ledger + referral connects (got ${narrow.length})`);
+  const narrow = buildActivities({ from: '2026-07-20', to: '2026-07-27', identity: fictionalIdentity });
+  // The total covers applications, channel-specific follow-ups, interviews,
+  // and company-scoped LinkedIn activity while invalid rows add nothing.
+  check(narrow.length === 25, `25 distinct activities in the fortnight (got ${narrow.length})`);
   check(!narrow.some(a => a.company === 'Initech'), 'an Evaluated-but-never-applied role is excluded');
   check(!narrow.some(a => a.date === '2026-07-19'), 'an out-of-range application (204 on 07-19) is filtered out');
 
@@ -178,12 +213,34 @@ try {
   const acme0722 = narrow.filter(a => a.kind === 'followup' && a.company === 'Acme' && a.date === '2026-07-22');
   check(acme0722.length === 1, `the cross-logged Acme touch (in BOTH follow-ups.md and correspondence) is counted once (got ${acme0722.length})`);
   const acmeEmail = find(narrow, a => a.company === 'Acme' && a.date === '2026-07-24' && a.method === 'Email');
-  check(acmeEmail && acmeEmail.result === 'Sent follow-up',
-    'a Sent email in the correspondence log (never cross-logged) becomes a Follow-up activity');
+  check(acmeEmail && acmeEmail.result === 'Other' && acmeEmail.note === 'Sent follow-up',
+    'a Sent email uses the TWC Other result and explains the follow-up in Note');
   const linkedin = find(narrow, a => a.kind === 'outreach' && a.company === 'Globex');
   check(linkedin && linkedin.company === 'Globex' && linkedin.method === 'LinkedIn'
-    && linkedin.result === 'Sent connection request' && /LinkedIn connection request/.test(linkedin.activity),
+    && linkedin.result === 'Other' && linkedin.note === 'Sent connection request'
+    && linkedin.activity === 'Networking, LinkedIn connection request',
     'a LinkedIn connection request becomes a Networking activity with method LinkedIn, not an email touch');
+  const richRows = narrow.filter(a => a.contact === 'Rich Roe' && a.date === '2026-07-25');
+  const richLinkedIn = richRows.filter(a => a.kind === 'outreach' && a.method === 'LinkedIn');
+  const richEmail = richRows.filter(a => a.kind === 'followup' && a.method === 'Email');
+  check(richLinkedIn.length === 1,
+    'a plain LinkedIn request plus correspondence and ledger copies becomes one LinkedIn row');
+  check(richEmail.length === 1 && richEmail[0].activity === 'Follow-up (Email)',
+    'a reply-prefixed LinkedIn request subject remains one email follow-up');
+  check(narrow.filter(a => a.kind === 'followup' && a.contact === 'Jane Doe' && a.date === '2026-07-23').length === 1,
+    'identical follow-up rows become one activity');
+  check(!narrow.some(a => a.contact === 'Drew Hill'), 'a Backfill follow-up row is excluded');
+  check(!narrow.some(a => ['Rowan Vale', 'rowan@example.test'].includes(a.contact)),
+    'activities addressed to the fictional candidate name or email are excluded');
+  check(narrow.some(a => a.company === 'Self Test' && a.contact === 'Quinn Stone'),
+    'a Self Test company row is kept when the contact is not the candidate');
+  const phone = find(narrow, a => a.contact === 'Casey Bell');
+  check(phone && phone.kind === 'followup' && phone.activity === 'Follow-up (Phone)' && phone.method === 'Phone',
+    'a Phone follow-up keeps Phone in its label and method');
+  const linkedInMessage = narrow.filter(a => a.contact === 'Avery Fox' && a.date === '2026-07-26');
+  check(linkedInMessage.length === 1 && linkedInMessage[0].kind === 'outreach'
+    && linkedInMessage[0].activity === 'LinkedIn message' && linkedInMessage[0].method === 'LinkedIn',
+    'an uppercase LinkedIn message subject becomes one LinkedIn message row');
 
   // ── 2c. Connects ledger (section 5): id-based dedup + join + best-effort employer ─
   const globexConnects = narrow.filter(a => a.kind === 'outreach' && a.company === 'Globex' && a.date === '2026-07-25');
@@ -191,18 +248,24 @@ try {
     `a connect in BOTH correspondence and the ledger is counted once, deduped by id despite a different name (got ${globexConnects.length})`);
   const janeConnect = find(narrow, a => a.kind === 'outreach' && a.contact === 'Jane Doe' && a.date === '2026-07-26');
   check(janeConnect && janeConnect.company === 'Acme' && janeConnect.method === 'LinkedIn'
-    && janeConnect.result === 'Sent connection request' && janeConnect.employerAddress === '1 Acme Way, Austin, TX 78701',
+    && janeConnect.result === 'Other' && janeConnect.note === 'Sent connection request'
+    && janeConnect.employerAddress === '1 Acme Way, Austin, TX 78701',
     'a ledger-only connect is added, resolved to its TA company by id, with the cached employer joined');
   const ghostConnect = find(narrow, a => a.kind === 'outreach' && a.contact === 'Ghost Lead');
   check(ghostConnect && ghostConnect.company === '' && ghostConnect.method === 'LinkedIn',
     'a ledger-only connect with no id and no TA name match still counts, with a blank Employer column');
   check(!narrow.some(a => a.date === '2026-08-05'),
     'an out-of-range ledger connect (Jane Doe 08-05) is filtered out');
+  const sameNameConnects = narrow.filter(a => a.contact === 'Sam Same' && a.date === '2026-07-27');
+  check(sameNameConnects.length === 2
+    && sameNameConnects.some(a => a.company === 'Acme')
+    && sameNameConnects.some(a => a.company === 'Globex'),
+    'same-name LinkedIn contacts at different companies are both kept');
 
   // ── 2d. Referral correspondence: unlinked swept, linked ignored (no double-count) ─
   const refConnect = find(narrow, a => a.kind === 'outreach' && a.contact === 'Nadia Vex' && a.date === '2026-07-23');
   check(refConnect && refConnect.company === 'Hooli' && refConnect.method === 'LinkedIn'
-    && refConnect.result === 'Sent connection request' && refConnect.contactId == null,
+    && refConnect.result === 'Other' && refConnect.note === 'Sent connection request' && refConnect.contactId == null,
     'an UNLINKED referral\'s own LinkedIn send is counted, with its company and no TA contact id');
   check(!narrow.some(a => a.kind === 'outreach' && a.contact === 'Jane Doe' && a.date === '2026-07-20'),
     'a LINKED referral\'s own correspondence file is NOT re-read (the TA twin already covers it)');
@@ -212,24 +275,88 @@ try {
   check(app206 && app206.date === '2026-07-21', 'app 206 is dated from its "Applied" status-event, not the tracker Date');
   check(app206 && app206.dateApprox === false, 'a status-event apply date is exact, not approximate');
 
-  const wide = buildActivities({ from: '2026-07-01', to: '2026-07-31' });
+  const wide = buildActivities({ from: '2026-07-01', to: '2026-07-31', identity: fictionalIdentity });
   const app204 = find(wide, a => a.kind === 'application' && a.appId === 204);
   check(app204 && app204.date === '2026-07-19' && app204.dateApprox === true,
     'app 204 (no apply date, no event) falls back to the tracker Date, flagged approximate');
+  check(app204 && app204.note === 'Apply date estimated from the evaluation date',
+    'an approximate application carries the estimate explanation in Note');
 
   // ── 4. Kinds, results, contact/method ────────────────────────────────────────
   const app201 = find(narrow, a => a.kind === 'application' && a.appId === 201);
-  check(app201 && app201.result === 'Submitted application', 'an Applied app reads "Submitted application"');
+  check(app201 && app201.result === 'Submitted job application', 'an Applied app uses the TWC submitted-job-application wording');
   const app202 = find(narrow, a => a.kind === 'application' && a.appId === 202);
   check(app202 && app202.result === 'Not hired', 'a Rejected app reads "Not hired"');
+  const app214 = find(narrow, a => a.kind === 'application' && a.appId === 214);
+  check(app214 && app214.result === 'No reply', 'a No Response app reads "No reply"');
+  const app215 = find(narrow, a => a.kind === 'application' && a.appId === 215);
+  check(app215 && app215.result === 'Other' && app215.note === 'Status: Closed',
+    'a Closed app uses Other and keeps the status detail in Note');
   const interview = find(narrow, a => a.kind === 'interview');
-  check(interview && /Phone Screen/.test(interview.activity) && interview.result === 'Interviewed' && interview.role === 'Gizmo Engineer',
-    'the interview event becomes an "Interviewed" row with the app role');
+  check(interview && interview.activity === 'Interview: Phone Screen' && interview.result === 'Interviewed'
+    && interview.role === 'Gizmo Engineer' && interview.note === 'Interview date is when the status changed',
+    'the interview event uses a colon label and becomes an Interviewed row with the app role');
   const follow = find(narrow, a => a.kind === 'followup');
-  check(follow && follow.contact === 'Jane Doe' && follow.method === 'Email' && follow.result === 'Sent follow-up',
+  check(follow && follow.contact === 'Jane Doe' && follow.method === 'Email'
+    && follow.result === 'Other' && follow.note === 'Sent follow-up',
     'a follow-up carries its contact, method, and result; online applications leave contact blank');
   check(app201 && app201.contact === '' && app201.method === 'Online application',
     'an online application has no contact and method "Online application"');
+  const allowedResults = new Set(['Submitted job application', 'Sent a résumé', 'Interviewed', 'Hired', 'Not hired', 'No reply', 'Other']);
+  check(narrow.every(a => allowedResults.has(a.result)), 'every result uses TWC wording');
+  check(narrow.every(a => Object.prototype.hasOwnProperty.call(a, 'note')),
+    'every activity carries a Note field');
+  const doubleHyphen = String.fromCharCode(45, 45);
+  check(narrow.every(a => ![a.activity, a.result, a.note].some(value => String(value).includes('\u2014')
+    || String(value).includes(doubleHyphen))),
+    'activity labels, results, and notes avoid forbidden punctuation');
+
+  // ── 4b. Application identity, voids, overrides, and interview dates ─────────
+  check(!narrow.some(a => a.kind === 'application' && a.appId === 207),
+    'an application voided later on its Applied date is excluded');
+  check(narrow.some(a => a.kind === 'application' && a.appId === 208)
+    && !narrow.some(a => a.kind === 'application' && a.appId === 209),
+    'same-company applications sharing a posting-specific canonical keep only the earlier apply');
+  check(narrow.some(a => a.kind === 'application' && a.appId === 210)
+    && narrow.some(a => a.kind === 'application' && a.appId === 211),
+    'same-title applications with different job ids remain distinct postings');
+  check(narrow.some(a => a.kind === 'application' && a.appId === 216)
+    && narrow.some(a => a.kind === 'application' && a.appId === 217),
+    'two postings sharing a generic careers URL are both kept');
+  check(narrow.some(a => a.kind === 'application' && a.appId === 218),
+    'a posting-specific canonical shared by a different company does not collapse');
+
+  fs.writeFileSync(path.join(tmp, 'twc-overrides.json'), '{invalid json');
+  const invalidOverride = buildActivities({ from: '2026-07-20', to: '2026-07-27', identity: fictionalIdentity });
+  check(invalidOverride.some(a => a.kind === 'application' && a.appId === 201)
+    && !invalidOverride.some(a => a.kind === 'application' && a.appId === 207),
+    'an invalid override file is safely treated as no overrides');
+
+  fs.writeFileSync(path.join(tmp, 'twc-overrides.json'), JSON.stringify({
+    applications: {
+      201: { include: false },
+      207: { include: true, date: '2026-07-23', note: 'Confirmed application receipt' },
+    },
+    interviews: [
+      { appId: 213, stage: '1st Interview', date: '2026-09-05', note: 'Confirmed with interviewer' },
+    ],
+  }, null, 2));
+  const overriddenJuly = buildActivities({ from: '2026-07-20', to: '2026-07-27', identity: fictionalIdentity });
+  const forced207 = find(overriddenJuly, a => a.kind === 'application' && a.appId === 207);
+  check(forced207 && forced207.date === '2026-07-23' && /Confirmed application receipt/.test(forced207.note),
+    'include true restores a same-day void and its override date and note are used');
+  check(!overriddenJuly.some(a => a.kind === 'application' && a.appId === 201),
+    'include false excludes an application');
+
+  const interviewRange = buildActivities({ from: '2026-03-01', to: '2026-09-10', identity: fictionalIdentity });
+  const debriefInterview = find(interviewRange, a => a.kind === 'interview' && String(a.appId) === '212');
+  check(debriefInterview && debriefInterview.date === '2026-03-11'
+    && debriefInterview.note === 'Interview date from debrief note',
+    'a matching debrief date wins over the status date and a booked heading is ignored');
+  const addedInterview = find(interviewRange, a => a.kind === 'interview' && Number(a.appId) === 213);
+  check(addedInterview && addedInterview.date === '2026-09-05'
+    && /Confirmed with interviewer/.test(addedInterview.note),
+    'an override adds an interview even without a status event');
 
   // ── 5. Employer join (posting URL wins for the web page) ─────────────────────
   check(app201 && app201.employerAddress === '1 Acme Way, Austin, TX 78701' && app201.employerPhone === '(512) 555-0100',
@@ -253,7 +380,10 @@ try {
   const csv = toTwcCsv(narrow);
   const lines = csv.split('\r\n');
   check(lines[0] === TWC_CSV_HEADERS.join(','), 'CSV header row mirrors the TWC column set');
+  check(TWC_CSV_HEADERS.at(-1) === 'Note', 'CSV keeps Note as its final column');
   check(lines.length === narrow.length + 1, `CSV has one line per activity plus the header (got ${lines.length})`);
+  check(toTwcCsv([app204]).split('\r\n')[1].endsWith('Apply date estimated from the evaluation date'),
+    'an approximate apply exports its estimate note in the last CSV column');
   const quoted = toCsv([['a,b', 'c"d', 'e\nf']]);
   check(quoted === '"a,b","c""d","e\nf"', 'toCsv quotes commas, doubles inner quotes, and quotes newlines');
 } finally {

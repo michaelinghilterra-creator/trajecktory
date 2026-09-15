@@ -23,7 +23,7 @@ const { computeJustConnectedQueue } = await import('../dashboard-web/server/lib/
 const { setLinkedInStatus, readLinkedInMap } = await import('../dashboard-web/server/lib/tt-linkedin.mjs');
 const { saveConnections } = await import('../dashboard-web/server/lib/linkedin-referrals.mjs');
 const { writeTTCorrespondence } = await import('../dashboard-web/server/lib/target-talent.mjs');
-const { isLinkedInEntry } = await import('../dashboard-web/server/lib/channels.mjs');
+const { isLinkedInEntry, isLinkedInSubject } = await import('../dashboard-web/server/lib/channels.mjs');
 
 let passed = 0, failed = 0;
 const check = (cond, msg) => { if (cond) { console.log(`  ✅ ${msg}`); passed++; } else { console.log(`  ❌ ${msg}`); failed++; } };
@@ -105,6 +105,10 @@ check(isLinkedInEntry({ channel: 'Email', subject: 'LinkedIn message' }) === tru
 check(isLinkedInEntry({ channel: 'LINKEDIN', subject: 'x' }) === true,               'isLinkedInEntry: LINKEDIN channel (any case) → true');
 check(isLinkedInEntry({ channel: 'Email', subject: 'LINKEDIN MESSAGE' }) === true,   'isLinkedInEntry: uppercase LinkedIn subject → true');
 check(isLinkedInEntry({ channel: 'Email', subject: 'Re: your application' }) === false, 'isLinkedInEntry: a real email subject → false');
+check(isLinkedInSubject('RE: LinkedIn connection request') === false, 'reply-prefixed LinkedIn request subject is email');
+check(isLinkedInSubject('Fwd: LinkedIn note') === false, 'forward-prefixed LinkedIn note subject is email');
+check(isLinkedInSubject('li') === true, 'bare li subject is LinkedIn');
+check(isLinkedInSubject('Following up on my application') === false, 'ordinary application follow-up subject is email');
 
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed} passed, ${failed} failed`);
 try { fs.rmSync(sandbox, { recursive: true, force: true }); } catch {}

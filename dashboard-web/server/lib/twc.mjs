@@ -10,7 +10,7 @@
 //
 // WHAT COUNTS AS AN ACTIVITY (all TWC-acceptable):
 //   - applications sent   → "Applied online for a job"
-//   - interviews          → each dated interview event ("Interview — Phone Screen")
+//   - interviews          → each dated interview event ("Interview: Phone Screen")
 //   - follow-up (email)   → each dated Sent email to an employer contact
 //   - networking          → each dated LinkedIn connection request to a contact
 // Raw evaluations are deliberately NOT counted (hundreds of them; padding).
@@ -33,18 +33,22 @@
 //
 // Pure apart from the sidecar reads (mirrors lib/activity.mjs), so it is unit
 // testable. enrichEmployers is the one impure, network-touching export.
+import fs from 'fs';
 import { parseApplicationsMd } from './applications.mjs';
 import { readApplyDates, parseStatusEvents } from './sidecars.mjs';
 import { parseFollowupsMd } from './followups.mjs';
 import { parseTargetTalentMd, readTTCorrespondence } from './target-talent.mjs';
 import { parseReferralsMd, readReferralCorrespondence, resolveReferralLink } from './referrals.mjs';
-import { isLinkedInEntry } from './channels.mjs';
-import { normalizeCompany } from '../../../lib/identity.mjs';
+import { isLinkedInEntry, isLinkedInInvite, isLinkedInSubject } from './channels.mjs';
+import { canonicalUrl, normalizeCompany } from '../../../lib/identity.mjs';
 import { appReached, isInterviewStage } from './statuses.mjs';
 import { readEmployerDirectory, employerKey, hasEmployer, mergeEmployers } from './employer-directory.mjs';
 import { toCsv } from './csv.mjs';
 import { readConnects } from './connects.mjs';
+import { readAppNotes } from './notes.mjs';
+import { getIdentity } from './profile.mjs';
 import { generateText, draftModel } from './anthropic.mjs';
+import { TWC_OVERRIDES_PATH } from '../config.mjs';
 
 const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const safe = (fn, dflt) => { try { return fn(); } catch { return dflt; } };
@@ -68,27 +72,76 @@ export function twcWeekStart(ymd) {
 // not hired, no reply, other. The application row reflects that application's
 // outcome, so a role that later rejected reads "Not hired" on its apply row.
 const RESULT_BY_STATUS = {
-  Evaluated: 'Submitted application',
-  Applied: 'Submitted application',
+  Evaluated: 'Submitted job application',
+  Applied: 'Submitted job application',
   'Phone Screen': 'Interviewed',
   '1st Interview': 'Interviewed',
   '2nd Interview': 'Interviewed',
   '3rd Interview': 'Interviewed',
-  Offer: 'Offer received',
+  Hired: 'Hired',
+  Offer: 'Other',
   Rejected: 'Not hired',
   'No Response': 'No reply',
-  Closed: 'Posting closed',
-  Discarded: 'Withdrew',
-  'Not a Fit': 'Not a fit',
+  Closed: 'Other',
+  Discarded: 'Other',
+  'Not a Fit': 'Other',
+  SKIP: 'Other',
 };
 function resultForStatus(status) { return RESULT_BY_STATUS[status] || 'Other'; }
+
+function readTwcOverrides() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(TWC_OVERRIDES_PATH, 'utf8'));
+    return {
+      applications: raw && typeof raw.applications === 'object' && !Array.isArray(raw.applications)
+        ? raw.applications : {},
+      interviews: Array.isArray(raw && raw.interviews) ? raw.interviews : [],
+    };
+  } catch {
+    return { applications: {}, interviews: [] };
+  }
+}
+
+const normalizePerson = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const normalizeStage = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+const joinNotes = (...parts) => parts.map(p => String(p || '').trim()).filter(Boolean).join('; ');
+const cleanTwcText = (s) => String(s || '').replace(/\u2014/g, '-').replace(/\x2d{2,}/g, '-');
+
+function isSelfActivity(contact, identity) {
+  const raw = String(contact || '').trim();
+  if (!raw) return false;
+  const ownName = normalizePerson(identity && identity.fullName);
+  const ownEmail = String((identity && identity.email) || '').trim().toLowerCase();
+  return Boolean((ownName && normalizePerson(raw) === ownName)
+    || (ownEmail && raw.toLowerCase().includes(ownEmail)));
+}
+
+function applicationDetailNote(status) {
+  return resultForStatus(status) === 'Other' && status ? `Status: ${status}` : '';
+}
+
+function isPostingSpecificCanonical(canonical) {
+  if (!canonical) return false;
+  if (/^(?:gh|lever|ashby):/i.test(canonical)) return true;
+  if (canonical.includes('?')) return true;
+  try {
+    const parsed = new URL(canonical);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (segments.some(segment => /^\d+$/.test(segment) || uuid.test(segment))) return true;
+    const atsHost = /(?:^|\.)(?:lever\.co|ashbyhq\.com)$/i.test(parsed.hostname);
+    return atsHost && segments.length >= 2 && /^[a-z0-9-]{8,}$/i.test(segments.at(-1));
+  } catch {
+    return false;
+  }
+}
 
 // The CSV header row — mirrors the TWC Work Search Log fields, with a leading
 // benefit-week column so each activity is grouped to its Sunday–Saturday week.
 export const TWC_CSV_HEADERS = [
   'Week of (Sun)', 'Date', 'Work search activity', 'Type of job you are seeking',
   'Employer name', 'Employer address', 'Employer web page', 'Employer phone',
-  'Person contacted', 'Method of contact', 'Result',
+  'Person contacted', 'Method of contact', 'Result', 'Note',
 ];
 
 /**
@@ -96,13 +149,16 @@ export const TWC_CSV_HEADERS = [
  * open-ended). One row per application (deduped), per interview event, and per
  * follow-up touch, joined to the cached employer directory for address/phone.
  */
-export function buildActivities({ from, to } = {}) {
+export function buildActivities({ from, to, identity } = {}) {
   const apps = safe(parseApplicationsMd, []);
   const byId = new Map(apps.map(a => [String(a.id), a]));
   const applyDates = safe(readApplyDates, {}) || {};
   const events = safe(parseStatusEvents, []) || [];
   const followups = safe(parseFollowupsMd, []) || [];
   const directory = safe(readEmployerDirectory, {}) || {};
+  const appNotes = safe(readAppNotes, {}) || {};
+  const overrides = readTwcOverrides();
+  const candidateIdentity = identity || getIdentity();
 
   // Earliest dashboard-logged "Applied" event per app — the fallback apply date
   // when apply-dates.json has no entry.
@@ -137,22 +193,78 @@ export function buildActivities({ from, to } = {}) {
   // store "Subject: …") OR the same contact reached the same day at the same
   // company (catches rows whose notes are the full email body, no "Subject:").
   const loggedSig = new Set();
+  const seenFollowupRows = new Set();
+  const seenFollowupDays = new Set();
+  const seenLinkedInDays = new Set();
+  const seenLinkedInIds = new Set();
   const normSub = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
-  const normNm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normNm = normalizePerson;
   const subjOf = (notes) => { const m = /subject:\s*(.+)$/i.exec(String(notes || '')); return m ? m[1] : notes; };
+  // Keep at most one row per person, company, day, and channel.
+  const personDayKey = (date, person, company, channel) => {
+    const name = normNm(person);
+    if (!name) return '';
+    const employer = normalizeCompany(company);
+    return `${date}|${employer || 'unknown'}|${name}|${channel}`;
+  };
+  const claimLinkedIn = (date, person, company, id) => {
+    const employer = normalizeCompany(company) || 'unknown';
+    const personKey = personDayKey(date, person, company, 'linkedin');
+    const idKey = id !== undefined && id !== null && id !== '' ? `${date}|${employer}|${id}|linkedin` : '';
+    const duplicate = (personKey && seenLinkedInDays.has(personKey))
+      || (idKey && seenLinkedInIds.has(idKey));
+    if (personKey) seenLinkedInDays.add(personKey);
+    if (idKey) seenLinkedInIds.add(idKey);
+    return !duplicate;
+  };
+  const claimFollowup = (date, person, company, channel, fallback) => {
+    const channelKey = String(channel || 'Other').toLowerCase();
+    const key = personDayKey(date, person, company, channelKey)
+      || `${date}|${normalizeCompany(company) || 'unknown'}|unknown|${channelKey}|${fallback}`;
+    if (seenFollowupDays.has(key)) return false;
+    seenFollowupDays.add(key);
+    return true;
+  };
 
   const activities = [];
 
   // 1) Applications — one row per app that ever reached Applied (or beyond).
-  for (const app of apps) {
-    if (!appReached(app, 'Applied')) continue;
+  const voidStatuses = new Set(['Not a Fit', 'SKIP', 'Discarded', 'Closed']);
+  const appliedEventIndex = new Map();
+  const sameDayVoids = new Set();
+  events.forEach((e, index) => {
+    const eventKey = `${e.app}|${e.date}`;
+    if (e.status === 'Applied') appliedEventIndex.set(eventKey, index);
+    else if (voidStatuses.has(e.status) && appliedEventIndex.has(eventKey)
+      && appliedEventIndex.get(eventKey) < index) sameDayVoids.add(String(e.app));
+  });
+
+  const applicationCandidates = [];
+  apps.forEach((app, index) => {
+    const override = overrides.applications[String(app.id)] || {};
+    if (override.include === false) return;
+    if (override.include !== true && !appReached(app, 'Applied')) return;
+    if (override.include !== true && sameDayVoids.has(String(app.id))) return;
     const raw = applyDates[String(app.id)];
     const applyDate = typeof raw === 'string' ? raw : (raw && raw.date);
     let date = null, approx = false;
-    if (isYmd(applyDate)) date = applyDate;
+    if (isYmd(override.date)) date = override.date;
+    else if (isYmd(applyDate)) date = applyDate;
     else if (earliestApplied.has(String(app.id))) date = earliestApplied.get(String(app.id));
     else if (isYmd(app.date)) { date = app.date; approx = true; } // tracker Date = eval date
-    if (!date) continue;
+    if (!date) return;
+    applicationCandidates.push({ app, date, approx, override, index });
+  });
+
+  const seenPostings = new Set();
+  applicationCandidates.sort((a, b) => a.date.localeCompare(b.date) || a.index - b.index);
+  for (const candidate of applicationCandidates) {
+    const { app, date, approx, override } = candidate;
+    const posting = canonicalUrl(app.url);
+    const company = normalizeCompany(app.company);
+    const postingKey = company && isPostingSpecificCanonical(posting) ? `${company}|${posting}` : '';
+    if (postingKey && seenPostings.has(postingKey)) continue;
+    if (postingKey) seenPostings.add(postingKey);
     const emp = empFor(app.company);
     activities.push({
       kind: 'application',
@@ -164,28 +276,72 @@ export function buildActivities({ from, to } = {}) {
       employerPhone: (emp && emp.phone) || '',
       contact: '', method: 'Online application',
       result: resultForStatus(app.status),
+      note: joinNotes(
+        approx ? 'Apply date estimated from the evaluation date' : '',
+        override.note,
+        applicationDetailNote(app.status),
+      ),
       appId: app.id,
     });
   }
 
-  // 2) Interviews — one row per dated interview status-event.
-  for (const e of events) {
-    if (!isInterviewStage(e.status) || !isYmd(e.date)) continue;
-    const app = byId.get(String(e.app));
-    const company = (app && app.company) || e.company || '';
+  const debriefDates = new Map();
+  for (const [appId, notes] of Object.entries(appNotes)) {
+    for (const entry of (Array.isArray(notes) ? notes : [])) {
+      const text = String((entry && entry.text) || '');
+      const re = /^###\s+Debrief:\s*(.+?)\s*\((\d{4}-\d{2}-\d{2})\)\s*$/gmi;
+      let match;
+      while ((match = re.exec(text))) {
+        if (!isYmd(match[2])) continue;
+        const key = `${appId}|${normalizeStage(match[1])}`;
+        if (!debriefDates.has(key)) debriefDates.set(key, match[2]);
+      }
+    }
+  }
+
+  const interviewOverrides = new Map();
+  for (const item of overrides.interviews) {
+    if (!item || !isYmd(item.date) || !item.stage || item.appId === undefined || item.appId === null) continue;
+    interviewOverrides.set(`${item.appId}|${normalizeStage(item.stage)}`, item);
+  }
+  const emittedInterviews = new Set();
+  const addInterview = ({ appId, stage, event, override }) => {
+    const key = `${appId}|${normalizeStage(stage)}`;
+    if (emittedInterviews.has(key)) return;
+    const app = byId.get(String(appId));
+    const debriefDate = debriefDates.get(key);
+    const date = override ? override.date : (debriefDate || (event && event.date));
+    if (!isYmd(date)) return;
+    const company = (app && app.company) || (event && event.company) || '';
+    emittedInterviews.add(key);
     const emp = empFor(company);
+    const dateSource = override
+      ? 'Interview date set by override'
+      : debriefDate
+        ? 'Interview date from debrief note'
+        : 'Interview date is when the status changed';
     activities.push({
       kind: 'interview',
-      date: e.date, week: twcWeekStart(e.date), dateApprox: false,
-      activity: `Interview — ${e.status}`,
+      date, week: twcWeekStart(date), dateApprox: false,
+      activity: `Interview: ${stage}`,
       role: (app && app.role) || '', company,
       employerAddress: (emp && emp.hqAddress) || '',
       employerWebPage: webPage(app, emp),
       employerPhone: (emp && emp.phone) || '',
-      contact: '', method: '',
-      result: 'Interviewed',
-      appId: e.app,
+      contact: '', method: '', result: 'Interviewed',
+      note: joinNotes(dateSource, override && override.note),
+      appId,
     });
+  };
+
+  // 2) Interviews, preferring overrides and debrief dates over status dates.
+  for (const e of events) {
+    if (!isInterviewStage(e.status) || !isYmd(e.date)) continue;
+    const key = `${e.app}|${normalizeStage(e.status)}`;
+    addInterview({ appId: e.app, stage: e.status, event: e, override: interviewOverrides.get(key) });
+  }
+  for (const override of interviewOverrides.values()) {
+    addInterview({ appId: override.appId, stage: override.stage, override });
   }
 
   // 3) Follow-ups from follow-ups.md — one row per dated touch. This is the only
@@ -194,22 +350,39 @@ export function buildActivities({ from, to } = {}) {
   // does not re-add a touch that was cross-logged here.
   for (const f of followups) {
     if (!isYmd(f.date)) continue;
+    if (/^backfill\b/i.test(String(f.notes || '').trim())) continue;
+    const exact = [f.date, f.appNum, f.company, f.role, f.channel, f.contact, f.notes]
+      .map(normSub).join('|');
+    if (seenFollowupRows.has(exact)) continue;
+    seenFollowupRows.add(exact);
     const app = byId.get(String(f.appNum));
     const company = f.company || (app && app.company) || '';
+    if (isSelfActivity(f.contact, candidateIdentity)) continue;
     const co = normalizeCompany(company);
-    loggedSig.add(`s|${f.date}|${co}|${normSub(subjOf(f.notes))}`);
+    const subject = subjOf(f.notes);
+    const linkedin = isLinkedInEntry({ channel: f.channel, subject });
+    const request = linkedin && isLinkedInInvite(subject);
+    const channel = String(f.channel || '').trim() || 'Other';
+    const claimed = linkedin
+      ? claimLinkedIn(f.date, f.contact, company, null)
+      : claimFollowup(f.date, f.contact, company, channel, `${co}|${normSub(subject)}`);
+    if (!claimed) continue;
+    loggedSig.add(`s|${f.date}|${co}|${normSub(subject)}`);
     if ((f.contact || '').trim()) loggedSig.add(`c|${f.date}|${co}|${normNm(f.contact)}`);
     const emp = empFor(company);
     activities.push({
-      kind: 'followup',
+      kind: linkedin ? 'outreach' : 'followup',
       date: f.date, week: twcWeekStart(f.date), dateApprox: false,
-      activity: `Follow-up (${f.channel || 'Other'})`,
+      activity: linkedin
+        ? (request ? 'Networking, LinkedIn connection request' : 'LinkedIn message')
+        : `Follow-up (${channel})`,
       role: f.role || (app && app.role) || '', company,
       employerAddress: (emp && emp.hqAddress) || '',
       employerWebPage: webPage(app, emp),
       employerPhone: (emp && emp.phone) || '',
-      contact: f.contact || '', method: f.channel || '',
-      result: 'Sent follow-up',
+      contact: f.contact || '', method: linkedin ? 'LinkedIn' : channel,
+      result: 'Other',
+      note: request ? 'Sent connection request' : linkedin ? 'Sent LinkedIn message' : 'Sent follow-up',
       appId: f.appNum,
     });
   }
@@ -248,6 +421,14 @@ export function buildActivities({ from, to } = {}) {
         const co = normalizeCompany(company);
         const subject = msg.subject || '';
         const contactName = book.contactOf(c);
+        if (isSelfActivity(contactName, candidateIdentity)
+          || isSelfActivity(c.email || '', candidateIdentity)) continue;
+        const linkedin = isLinkedInEntry(msg);
+        const channel = String(msg.channel || '').trim() || 'Email';
+        const claimed = linkedin
+          ? claimLinkedIn(date, contactName, company, book.idOf(c))
+          : claimFollowup(date, contactName, company, channel, `${co}|${normSub(subject)}`);
+        if (!claimed) continue;
         // Already captured as a follow-ups.md row?
         if (loggedSig.has(`s|${date}|${co}|${normSub(subject)}`)) continue;
         if (contactName && loggedSig.has(`c|${date}|${co}|${normNm(contactName)}`)) continue;
@@ -256,19 +437,22 @@ export function buildActivities({ from, to } = {}) {
         if (loggedSig.has(selfSig)) continue;
         loggedSig.add(selfSig);
 
-        const linkedin = isLinkedInEntry(msg);
+        const request = linkedin && isLinkedInInvite(subject);
         const emp = empFor(company);
         const { role, appId } = roleFor(company);
         activities.push({
           kind: linkedin ? 'outreach' : 'followup',
           date, week: twcWeekStart(date), dateApprox: false,
-          activity: linkedin ? 'Networking — LinkedIn connection request' : 'Follow-up (Email)',
+          activity: linkedin
+            ? (request ? 'Networking, LinkedIn connection request' : 'LinkedIn message')
+            : `Follow-up (${channel})`,
           role, company,
           employerAddress: (emp && emp.hqAddress) || '',
           employerWebPage: (emp && emp.website) || '',
           employerPhone: (emp && emp.phone) || '',
-          contact: contactName, method: linkedin ? 'LinkedIn' : 'Email',
-          result: linkedin ? 'Sent connection request' : 'Sent follow-up',
+          contact: contactName, method: linkedin ? 'LinkedIn' : channel,
+          result: 'Other',
+          note: request ? 'Sent connection request' : linkedin ? 'Sent LinkedIn message' : 'Sent follow-up',
           appId, contactId: book.idOf(c),
         });
       }
@@ -288,12 +472,6 @@ export function buildActivities({ from, to } = {}) {
   // legacy rows logged before id capture (until `node backfill-connect-ids.mjs`
   // stamps their ids). Employer is recovered by id → target-talent company (name as
   // the fallback), so these rows carry the same Employer/Type columns as the rest.
-  const seenConnect = new Set();
-  for (const a of activities) {
-    if (a.kind !== 'outreach') continue;
-    if (a.contactId !== undefined && a.contactId !== null) seenConnect.add(`id|${a.date}|${a.contactId}`);
-    seenConnect.add(`nm|${a.date}|${normNm(a.contact)}`);
-  }
   // taRows was parsed once in section 4 and is reused here.
   const taById = new Map();
   const taByName = new Map();
@@ -307,25 +485,21 @@ export function buildActivities({ from, to } = {}) {
     if (!isYmd(date)) continue;
     const hasId = e.id !== undefined && e.id !== null && e.id !== '';
     const nm = normNm(e.name);
-    // Already counted from correspondence (id when we have one, name otherwise), or
-    // already emitted from an earlier ledger row for the same invite.
-    if ((hasId && seenConnect.has(`id|${date}|${e.id}`)) || seenConnect.has(`nm|${date}|${nm}`)) continue;
-    if (hasId) seenConnect.add(`id|${date}|${e.id}`);
-    seenConnect.add(`nm|${date}|${nm}`);
-
     const company = (hasId && taById.get(String(e.id))) || taByName.get(nm) || '';
+    if (isSelfActivity(e.name, candidateIdentity)) continue;
+    if (!claimLinkedIn(date, e.name, company, hasId ? e.id : null)) continue;
     const emp = company ? empFor(company) : null;
     const { role, appId } = company ? roleFor(company) : { role: '', appId: '' };
     activities.push({
       kind: 'outreach',
       date, week: twcWeekStart(date), dateApprox: false,
-      activity: 'Networking — LinkedIn connection request',
+      activity: 'Networking, LinkedIn connection request',
       role, company,
       employerAddress: (emp && emp.hqAddress) || '',
       employerWebPage: (emp && emp.website) || '',
       employerPhone: (emp && emp.phone) || '',
       contact: e.name || '', method: 'LinkedIn',
-      result: 'Sent connection request',
+      result: 'Other', note: 'Sent connection request',
       appId, contactId: hasId ? e.id : null,
     });
   }
@@ -333,6 +507,12 @@ export function buildActivities({ from, to } = {}) {
   const inRange = (d) => (!from || d >= from) && (!to || d <= to);
   return activities
     .filter(a => a.date && inRange(a.date))
+    .map(a => ({
+      ...a,
+      activity: cleanTwcText(a.activity),
+      result: cleanTwcText(a.result),
+      note: cleanTwcText(a.note),
+    }))
     .sort((a, b) => a.date.localeCompare(b.date)
       || (a.company || '').localeCompare(b.company || '')
       || a.kind.localeCompare(b.kind));
@@ -380,7 +560,7 @@ export function toTwcCsv(activities) {
     rows.push([
       a.week || '', a.date || '', a.activity || '', a.role || '',
       a.company || '', a.employerAddress || '', a.employerWebPage || '', a.employerPhone || '',
-      a.contact || '', a.method || '', a.result || '',
+      a.contact || '', a.method || '', a.result || '', a.note || '',
     ]);
   }
   return toCsv(rows);
