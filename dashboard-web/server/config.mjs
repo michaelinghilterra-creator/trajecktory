@@ -42,6 +42,7 @@ export const MUTE_PATH = path.join(DATA_DIR, 'followup-mute.json');
 export const APP_NOTES_PATH = path.join(DATA_DIR, 'app-notes.json');
 export const STATUS_EVENTS_PATH = path.join(DATA_DIR, 'status-events.tsv');
 export const TWC_OVERRIDES_PATH = path.join(DATA_DIR, 'twc-overrides.json');
+export const TWC_EVENTS_PATH = path.join(DATA_DIR, 'twc-events.json');
 // Google OAuth tokens (refresh/access token, granted scopes, connected email) and
 // the Gmail read-scan cursor (which message ids have already been processed, so a
 // re-scan is idempotent). Both are gitignored personal data under DATA_DIR.

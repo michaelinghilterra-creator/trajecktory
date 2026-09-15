@@ -173,6 +173,17 @@ fs.writeFileSync(path.join(tmp, 'linkedin-connects.json'), JSON.stringify([
   { date: '2026-08-05', id: 301, name: 'Jane Doe', source: 'ta' },
 ], null, 2));
 
+fs.writeFileSync(path.join(tmp, 'twc-events.json'), JSON.stringify([{
+  id: 'event-one',
+  date: '2026-07-24',
+  type: 'Employment workshop',
+  organizer: 'Skill Guild',
+  contact: 'Alex Reed',
+  method: 'Online',
+  notes: 'Portfolio clinic',
+  createdAt: '2026-07-24T18:00:00.000Z',
+}], null, 2));
+
 // One cached employer so the join + the cached flag are exercised. Key is
 // normalizeToken('Acme') === 'acme'.
 fs.writeFileSync(path.join(tmp, 'employer-directory.json'), JSON.stringify({
@@ -205,7 +216,7 @@ try {
   const narrow = buildActivities({ from: '2026-07-20', to: '2026-07-27', identity: fictionalIdentity });
   // The total covers applications, channel-specific follow-ups, interviews,
   // and company-scoped LinkedIn activity while invalid rows add nothing.
-  check(narrow.length === 25, `25 distinct activities in the fortnight (got ${narrow.length})`);
+  check(narrow.length === 26, `26 distinct activities in the fortnight (got ${narrow.length})`);
   check(!narrow.some(a => a.company === 'Initech'), 'an Evaluated-but-never-applied role is excluded');
   check(!narrow.some(a => a.date === '2026-07-19'), 'an out-of-range application (204 on 07-19) is filtered out');
 
@@ -302,6 +313,10 @@ try {
     'a follow-up carries its contact, method, and result; online applications leave contact blank');
   check(app201 && app201.contact === '' && app201.method === 'Online application',
     'an online application has no contact and method "Online application"');
+  const loggedEvent = find(narrow, a => a.kind === 'event');
+  check(loggedEvent && loggedEvent.activity === 'Employment workshop' && loggedEvent.company === 'Skill Guild'
+    && loggedEvent.method === 'Online' && loggedEvent.result === 'Other' && loggedEvent.note === 'Portfolio clinic',
+    'a manually logged event carries its activity, organizer, method, result, and note');
   const allowedResults = new Set(['Submitted job application', 'Sent a résumé', 'Interviewed', 'Hired', 'Not hired', 'No reply', 'Other']);
   check(narrow.every(a => allowedResults.has(a.result)), 'every result uses TWC wording');
   check(narrow.every(a => Object.prototype.hasOwnProperty.call(a, 'note')),
@@ -340,6 +355,20 @@ try {
     interviews: [
       { appId: 213, stage: '1st Interview', date: '2026-09-05', note: 'Confirmed with interviewer' },
     ],
+    exclude: [
+      { date: '2026-07-23', kind: 'followup', contact: 'Jane Doe', company: 'Acme', note: 'No sent evidence' },
+      { date: '2026-07-24', kind: 'application', company: 'Cyberdyne', note: 'No submitted application evidence' },
+      { date: '2026-07-25', kind: 'application', note: 'Missing contact and company' },
+    ],
+    add: [
+      { date: '2026-07-26', kind: 'followup', activity: 'Follow-up email to employer contact', company: 'Acme', role: '', contact: 'Robin Lake', method: 'Email', result: 'Other', note: 'Sent mailbox evidence' },
+      { date: '2026-07-27', kind: 'followup', activity: 'Follow-up phone call', company: 'Acme', role: '', contact: 'Casey Bell', method: 'Phone', result: 'Other', note: 'Duplicate of logged call' },
+      { date: '2026-07-26', kind: 'application', activity: 'Applied online for a job', company: 'Alder Works', role: 'Operations Planner', contact: '', method: 'Online application', result: 'Submitted job application', note: 'Receipt one' },
+      { date: '2026-07-26', kind: 'application', activity: 'Applied online for a job', company: 'Birch Labs', role: 'Operations Planner', contact: '', method: 'Online application', result: 'Submitted job application', note: 'Receipt two' },
+      { date: '2026-07-26', kind: 'application', activity: 'Applied online for a job', company: 'Alder Works', role: 'Program Planner', contact: '', method: 'Online application', result: 'Submitted job application', note: 'Receipt three' },
+      { date: '2026-07-26', kind: 'application', activity: 'Applied online for a job', company: 'Alder Works', role: 'Operations Planner', contact: '', method: 'Online application', result: 'Submitted job application', note: 'Duplicate receipt' },
+      { date: 'not-a-date', kind: 'followup', activity: 'Invalid correction', company: 'Acme', role: '', contact: 'Invalid Person', method: 'Email', result: 'Other', note: '' },
+    ],
   }, null, 2));
   const overriddenJuly = buildActivities({ from: '2026-07-20', to: '2026-07-27', identity: fictionalIdentity });
   const forced207 = find(overriddenJuly, a => a.kind === 'application' && a.appId === 207);
@@ -347,6 +376,28 @@ try {
     'include true restores a same-day void and its override date and note are used');
   check(!overriddenJuly.some(a => a.kind === 'application' && a.appId === 201),
     'include false excludes an application');
+  check(!overriddenJuly.some(a => a.kind === 'followup' && a.date === '2026-07-23' && a.contact === 'Jane Doe')
+    && overriddenJuly.some(a => a.kind === 'followup' && a.date === '2026-07-22' && a.contact === 'Jane Doe'),
+    'an exclude removes exactly the matching date, kind, contact, and company row');
+  check(!overriddenJuly.some(a => a.kind === 'application' && a.appId === 214),
+    'a company-scoped exclude without a contact removes a contactless application');
+  check(overriddenJuly.some(a => a.kind === 'application' && a.appId === 217),
+    'an exclude without a contact or company is skipped');
+  check(overriddenJuly.filter(a => a.kind === 'followup' && a.contact === 'Robin Lake').length === 1,
+    'a valid added override appears exactly once');
+  check(overriddenJuly.filter(a => a.kind === 'followup' && a.contact === 'Casey Bell').length === 1,
+    'an added override that duplicates an existing row does not double-count');
+  const correctedApplications = overriddenJuly.filter(a => a.kind === 'application' && a.date === '2026-07-26'
+    && ['Alder Works', 'Birch Labs'].includes(a.company));
+  check(correctedApplications.some(a => a.company === 'Alder Works' && a.role === 'Operations Planner')
+    && correctedApplications.some(a => a.company === 'Birch Labs' && a.role === 'Operations Planner'),
+    'same-day application adds at different companies are both kept');
+  check(correctedApplications.length === 3
+    && correctedApplications.filter(a => a.company === 'Alder Works' && a.role === 'Operations Planner').length === 1
+    && correctedApplications.some(a => a.company === 'Alder Works' && a.role === 'Program Planner'),
+    'application add dedupe includes company and role while exact duplicates stay single');
+  check(overriddenJuly.overrideWarnings === 2,
+    'invalid add and exclude entries are skipped and reported as two warnings');
 
   const interviewRange = buildActivities({ from: '2026-03-01', to: '2026-09-10', identity: fictionalIdentity });
   const debriefInterview = find(interviewRange, a => a.kind === 'interview' && String(a.appId) === '212');
@@ -367,9 +418,11 @@ try {
   // ── 6. Weekly counts + employer roster ───────────────────────────────────────
   const weeks = weeklyCounts(narrow);
   check(weeks.reduce((n, w) => n + w.count, 0) === narrow.length, 'weekly counts sum to the activity total');
-  check(weeks.every(w => w.byKind && ['application', 'interview', 'followup', 'outreach']
+  check(weeks.every(w => w.byKind && ['application', 'interview', 'followup', 'outreach', 'event']
     .reduce((n, k) => n + w.byKind[k], 0) === w.count),
     'each week\'s byKind breakdown sums to that week\'s count');
+  check(weeks.some(w => w.byKind && w.byKind.event === 1),
+    'weekly counts include the logged event under byKind.event');
   const emps = employersInActivities(wide);
   const acme = emps.find(e => e.company === 'Acme');
   const globex = emps.find(e => e.company === 'Globex');
@@ -384,6 +437,9 @@ try {
   check(lines.length === narrow.length + 1, `CSV has one line per activity plus the header (got ${lines.length})`);
   check(toTwcCsv([app204]).split('\r\n')[1].endsWith('Apply date estimated from the evaluation date'),
     'an approximate apply exports its estimate note in the last CSV column');
+  const eventCsv = toTwcCsv([loggedEvent]).split('\r\n')[1];
+  check(eventCsv.includes('Employment workshop') && eventCsv.includes('Skill Guild') && eventCsv.endsWith('Portfolio clinic'),
+    'the CSV row carries the manually logged event');
   const quoted = toCsv([['a,b', 'c"d', 'e\nf']]);
   check(quoted === '"a,b","c""d","e\nf"', 'toCsv quotes commas, doubles inner quotes, and quotes newlines');
 } finally {

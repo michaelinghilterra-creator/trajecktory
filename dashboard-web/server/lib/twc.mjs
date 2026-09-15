@@ -46,6 +46,7 @@ import { readEmployerDirectory, employerKey, hasEmployer, mergeEmployers } from 
 import { toCsv } from './csv.mjs';
 import { readConnects } from './connects.mjs';
 import { readAppNotes } from './notes.mjs';
+import { readEvents, TWC_EVENT_TYPES, TWC_EVENT_METHODS } from './twc-events.mjs';
 import { getIdentity } from './profile.mjs';
 import { generateText, draftModel } from './anthropic.mjs';
 import { TWC_OVERRIDES_PATH } from '../config.mjs';
@@ -89,6 +90,10 @@ const RESULT_BY_STATUS = {
 };
 function resultForStatus(status) { return RESULT_BY_STATUS[status] || 'Other'; }
 
+export const TWC_KINDS = ['application', 'interview', 'followup', 'outreach', 'event'];
+const TWC_RESULTS = new Set(['Submitted job application', 'Sent a résumé', 'Interviewed', 'Hired', 'Not hired', 'No reply', 'Other']);
+const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f]/;
+
 function readTwcOverrides() {
   try {
     const raw = JSON.parse(fs.readFileSync(TWC_OVERRIDES_PATH, 'utf8'));
@@ -96,9 +101,11 @@ function readTwcOverrides() {
       applications: raw && typeof raw.applications === 'object' && !Array.isArray(raw.applications)
         ? raw.applications : {},
       interviews: Array.isArray(raw && raw.interviews) ? raw.interviews : [],
+      exclude: Array.isArray(raw && raw.exclude) ? raw.exclude : [],
+      add: Array.isArray(raw && raw.add) ? raw.add : [],
     };
   } catch {
-    return { applications: {}, interviews: [] };
+    return { applications: {}, interviews: [], exclude: [], add: [] };
   }
 }
 
@@ -106,6 +113,41 @@ const normalizePerson = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/
 const normalizeStage = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 const joinNotes = (...parts) => parts.map(p => String(p || '').trim()).filter(Boolean).join('; ');
 const cleanTwcText = (s) => String(s || '').replace(/\u2014/g, '-').replace(/\x2d{2,}/g, '-');
+
+function overrideString(value, max, required = false) {
+  if (value === undefined || value === null) value = '';
+  if (typeof value !== 'string') return null;
+  if (CONTROL_RE.test(value)) return null;
+  const clean = value.trim();
+  if ((required && !clean) || clean.length > max) return null;
+  return clean;
+}
+
+function validExcludeOverride(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const contact = overrideString(value.contact, 120);
+  const company = overrideString(value.company, 120);
+  const note = overrideString(value.note, 500);
+  if (!isYmd(value.date) || !TWC_KINDS.includes(value.kind)
+    || contact === null || company === null || note === null || (!contact && !company)) return null;
+  return { date: value.date, kind: value.kind, contact, company };
+}
+
+function validAddOverride(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const activity = overrideString(value.activity, 120, true);
+  const company = overrideString(value.company, 120);
+  const role = overrideString(value.role, 120);
+  const contact = overrideString(value.contact, 120);
+  const method = overrideString(value.method, 120);
+  const note = overrideString(value.note, 500);
+  if (!isYmd(value.date) || !TWC_KINDS.includes(value.kind) || !TWC_RESULTS.has(value.result)
+    || [activity, company, role, contact, method, note].some(field => field === null)) return null;
+  return {
+    date: value.date, kind: value.kind, activity, company, role, contact, method,
+    result: value.result, note,
+  };
+}
 
 function isSelfActivity(contact, identity) {
   const raw = String(contact || '').trim();
@@ -504,8 +546,71 @@ export function buildActivities({ from, to, identity } = {}) {
     });
   }
 
+  // 6) Manually logged activities that do not exist in the application and
+  // outreach ledgers, such as job clubs, workshops, and job fairs.
+  for (const event of (safe(readEvents, []) || [])) {
+    if (!event || !isYmd(event.date) || !TWC_EVENT_TYPES.includes(event.type)
+      || !TWC_EVENT_METHODS.includes(event.method)) continue;
+    const company = String(event.organizer || '').trim();
+    const emp = company ? empFor(company) : null;
+    activities.push({
+      kind: 'event',
+      date: event.date, week: twcWeekStart(event.date), dateApprox: false,
+      activity: event.type,
+      role: '', company,
+      employerAddress: (emp && emp.hqAddress) || '',
+      employerWebPage: (emp && emp.website) || '',
+      employerPhone: (emp && emp.phone) || '',
+      contact: String(event.contact || '').trim(), method: event.method,
+      result: 'Other', note: String(event.notes || '').trim(),
+      eventId: event.id,
+    });
+  }
+
+  // Corrections leave source data untouched. Exclusions remove only the exact
+  // kind, date, and normalized contact, plus company when one is supplied.
+  let overrideWarnings = 0;
+  const exclusions = [];
+  for (const value of overrides.exclude) {
+    const parsed = validExcludeOverride(value);
+    if (parsed) exclusions.push(parsed);
+    else overrideWarnings += 1;
+  }
+  let corrected = activities.filter(activity => !exclusions.some(exclude =>
+    activity.kind === exclude.kind
+    && activity.date === exclude.date
+    && normalizePerson(activity.contact) === normalizePerson(exclude.contact)
+    && (!exclude.company || normalizeCompany(activity.company) === normalizeCompany(exclude.company))));
+
+  // Added corrections dedupe against both source rows and earlier valid adds.
+  const overrideKey = (activity) => {
+    const role = ['application', 'interview'].includes(activity.kind) ? normSub(activity.role) : '';
+    return [activity.kind, activity.date, normalizeCompany(activity.company),
+      normalizePerson(activity.contact), role].join('|');
+  };
+  const overrideKeys = new Set(corrected.map(overrideKey));
+  for (const value of overrides.add) {
+    const parsed = validAddOverride(value);
+    if (!parsed) {
+      overrideWarnings += 1;
+      continue;
+    }
+    const key = overrideKey(parsed);
+    if (overrideKeys.has(key)) continue;
+    overrideKeys.add(key);
+    const emp = parsed.company ? empFor(parsed.company) : null;
+    corrected.push({
+      ...parsed,
+      week: twcWeekStart(parsed.date),
+      dateApprox: false,
+      employerAddress: (emp && emp.hqAddress) || '',
+      employerWebPage: (emp && emp.website) || '',
+      employerPhone: (emp && emp.phone) || '',
+    });
+  }
+
   const inRange = (d) => (!from || d >= from) && (!to || d <= to);
-  return activities
+  const result = corrected
     .filter(a => a.date && inRange(a.date))
     .map(a => ({
       ...a,
@@ -516,6 +621,8 @@ export function buildActivities({ from, to, identity } = {}) {
     .sort((a, b) => a.date.localeCompare(b.date)
       || (a.company || '').localeCompare(b.company || '')
       || a.kind.localeCompare(b.kind));
+  result.overrideWarnings = overrideWarnings;
+  return result;
 }
 
 // Per benefit-week activity counts, so the UI can show whether a week hit the
@@ -523,7 +630,6 @@ export function buildActivities({ from, to, identity } = {}) {
 // dashboard can show WHAT made up the week — applications vs LinkedIn networking
 // vs follow-ups vs interviews — not just the total. `count` is retained (it is
 // the sum of byKind) so an older client keeps working. Sorted by week ascending.
-const TWC_KINDS = ['application', 'interview', 'followup', 'outreach'];
 export function weeklyCounts(activities) {
   const map = new Map();
   const zero = () => TWC_KINDS.reduce((o, k) => (o[k] = 0, o), {});

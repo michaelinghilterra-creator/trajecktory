@@ -588,6 +588,7 @@ for (const suite of [
   'tests/data-dir-sandbox.test.mjs',
   'tests/linkedin-referrals.test.mjs',
   'tests/rolling-floor.test.mjs',
+  'tests/twc-events.test.mjs',
   'tests/twc.test.mjs',
   'tests/connects.test.mjs',
   'tests/text-hygiene.test.mjs',

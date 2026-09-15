@@ -2776,12 +2776,33 @@ function TellMeAboutYouPanel() {
 // from the user's own applications / interviews / follow-ups. Pick a date range,
 // eyeball the activities, download a CSV whose columns mirror the TWC Work Search
 // Log. Employer HQ address + phone are filled by on-demand web search (cached).
-const twcYmd = (d) => d.toISOString().slice(0, 10);
+const twcYmd = (d) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+const twcShiftDays = (d, days) => {
+  const shifted = new Date(d);
+  shifted.setDate(shifted.getDate() + days);
+  return shifted;
+};
+const TWC_RESTART_GUIDANCE = 'The Activity Tracker endpoints are not loaded on the running dashboard yet. Fully restart the dashboard (stop the server and start it again, not just reload the page), then Generate again.';
 function twcWeekLabel(wk) {
   const d = new Date(wk + 'T00:00:00Z');
   return isNaN(d.getTime()) ? wk : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
-const TWC_KIND_LABEL = { application: 'Application', interview: 'Interview', followup: 'Follow-up', outreach: 'Networking' };
+const TWC_KIND_LABEL = { application: 'Application', interview: 'Interview', followup: 'Follow-up', outreach: 'Networking', event: 'Event' };
+const TWC_EVENT_TYPES = [
+  'Networking event or job club',
+  'Job fair',
+  'Employment workshop',
+  'WorkInTexas.com activity',
+  'Résumé posted to a job board',
+  'Workforce Solutions reemployment services',
+  'Other work search activity',
+];
+const TWC_EVENT_METHODS = ['In person', 'Online', 'Phone', 'Email'];
 // Ordered short labels for the per-week activity-type breakdown. 'outreach' is
 // the LinkedIn connection-request channel, shown as "LinkedIn" here so the split
 // reads Applications / LinkedIn / Follow-ups / Interviews.
@@ -2790,33 +2811,49 @@ const TWC_BREAKDOWN = [
   ['outreach',   'LinkedIn'],
   ['followup',   'follow-ups'],
   ['interview',  'interviews'],
+  ['event',      'events'],
 ];
 
 function TwcPanel({ toast }) {
   const today = new Date();
-  const [from, setFrom] = useState(twcYmd(new Date(today.getTime() - 13 * 86400000)));
+  const [from, setFrom] = useState(twcYmd(twcShiftDays(today, -13)));
   const [to, setTo] = useState(twcYmd(today));
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [enriching, setEnriching] = useState(false);
   const [progress, setProgress] = useState(null);
+  const [loggedEvents, setLoggedEvents] = useState([]);
+  const [eventSaving, setEventSaving] = useState(false);
+  const [eventForm, setEventForm] = useState({
+    date: twcYmd(today), type: TWC_EVENT_TYPES[0], organizer: '', contact: '',
+    method: TWC_EVENT_METHODS[0], notes: '',
+  });
 
   function generate() {
     setLoading(true); setError(null);
-    fetch(`/api/setup/twc?from=${from}&to=${to}`)
-      .then(async r => {
+    return Promise.all([
+      fetch(`/api/setup/twc?from=${from}&to=${to}`).then(async r => {
         // A dashboard that booted before this tab shipped has no /api/setup/twc,
         // so Express serves the SPA index.html and r.json() would throw a cryptic
         // "Unexpected token '<'". Detect that and say the real fix in plain words.
         if (!(r.headers.get('content-type') || '').includes('application/json')) {
-          throw new Error('The Activity Tracker endpoints are not loaded on the running dashboard yet. Fully restart the dashboard (stop the server and start it again, not just reload the page), then Generate again.');
+          throw new Error(TWC_RESTART_GUIDANCE);
         }
         const d = await r.json();
         if (d.error) throw new Error(d.error);
         return d;
-      })
-      .then(setData)
+      }),
+      fetch('/api/setup/twc/events').then(async r => {
+        if (!(r.headers.get('content-type') || '').includes('application/json')) {
+          throw new Error(TWC_RESTART_GUIDANCE);
+        }
+        const d = await r.json();
+        if (!r.ok || d.error) throw new Error(d.error || 'Could not load logged activities.');
+        return Array.isArray(d.events) ? d.events : [];
+      }),
+    ])
+      .then(([report, events]) => { setData(report); setLoggedEvents(events); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }
@@ -2826,6 +2863,40 @@ function TwcPanel({ toast }) {
   const uncached = employers.filter(e => !e.cached);
   const activities = data?.activities || [];
   const hasApprox = activities.some(a => a.dateApprox);
+  const selectedEvents = loggedEvents.filter(event => event.date && (!from || event.date >= from) && (!to || event.date <= to));
+
+  function updateEvent(field, value) {
+    setEventForm(current => ({ ...current, [field]: value }));
+  }
+
+  async function logEvent(e) {
+    e.preventDefault();
+    setEventSaving(true); setError(null);
+    try {
+      const r = await window.tjkMutate('/api/setup/twc/events', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(eventForm),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok || body.error) throw new Error(body.error || 'Could not add the activity.');
+      setEventForm(current => ({ ...current, organizer: '', contact: '', notes: '' }));
+      await generate();
+      toast && toast('Activity added.');
+    } catch (err) { setError(err.message); }
+    finally { setEventSaving(false); }
+  }
+
+  async function removeEvent(event) {
+    if (!window.confirm(`Delete the ${event.type || 'logged activity'} on ${event.date}?`)) return;
+    setError(null);
+    try {
+      const r = await window.tjkMutate(`/api/setup/twc/events/${encodeURIComponent(event.id)}`, { method: 'DELETE' });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok || body.error) throw new Error(body.error || 'Could not delete the activity.');
+      await generate();
+      toast && toast('Activity deleted.');
+    } catch (err) { setError(err.message); }
+  }
 
   async function lookupEmployers() {
     const targets = uncached.map(e => e.company);
@@ -2870,6 +2941,46 @@ function TwcPanel({ toast }) {
           <button className="btn primary sm" onClick={generate} disabled={loading}>{loading ? 'Loading…' : 'Generate'}</button>
           <a className="btn sm" href={`/api/setup/twc/export?from=${from}&to=${to}`} download>Download CSV</a>
         </div>
+      </div>
+
+      <div className="card padded-lg col" style={{ gap: 10 }}>
+        <div className="card-head">
+          <span className="card-title"><span className="dot" />Log an activity</span>
+          <span className="card-meta mono">Events, workshops, job clubs, and services</span>
+        </div>
+        <form className="col" style={{ gap: 8 }} onSubmit={logEvent}>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            {dateInput(eventForm.date, value => updateEvent('date', value))}
+            <select className="inp" value={eventForm.type} onChange={e => updateEvent('type', e.target.value)} style={{ minWidth: 240 }}>
+              {TWC_EVENT_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+            </select>
+            <input className="inp" value={eventForm.organizer} onChange={e => updateEvent('organizer', e.target.value)}
+              placeholder="Organizer" maxLength={120} required style={{ minWidth: 180, flex: 1 }} />
+            <input className="inp" value={eventForm.contact} onChange={e => updateEvent('contact', e.target.value)}
+              placeholder="Contact (optional)" maxLength={120} style={{ minWidth: 170, flex: 1 }} />
+            <select className="inp" value={eventForm.method} onChange={e => updateEvent('method', e.target.value)}>
+              {TWC_EVENT_METHODS.map(method => <option key={method} value={method}>{method}</option>)}
+            </select>
+          </div>
+          <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+            <input className="inp" value={eventForm.notes} onChange={e => updateEvent('notes', e.target.value)}
+              placeholder="Notes (optional)" maxLength={500} style={{ flex: 1 }} />
+            <button className="btn primary sm" type="submit" disabled={eventSaving}>{eventSaving ? 'Adding…' : 'Add'}</button>
+          </div>
+        </form>
+        {selectedEvents.length > 0 && (
+          <div className="col" style={{ gap: 6, borderTop: '1px solid rgba(128,128,128,0.2)', paddingTop: 8 }}>
+            {selectedEvents.map(event => (
+              <div key={event.id} className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span className="mono" style={{ fontSize: 11 }}>{event.date}</span>
+                <span style={{ fontSize: 12, fontWeight: 600 }}>{event.type}</span>
+                <span className="dim" style={{ fontSize: 11 }}>{event.organizer}{event.contact ? `, ${event.contact}` : ''} · {event.method}</span>
+                {event.notes && <span className="dim" style={{ fontSize: 11 }}>{event.notes}</span>}
+                <button className="btn ghost sm" type="button" onClick={() => removeEvent(event)} style={{ marginLeft: 'auto', color: '#ef4444' }}>Delete</button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {error && (
