@@ -62,7 +62,7 @@ const fixtureLines = [
   '| ID | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |',
   '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   row(1, 'Aster', 'first note'),
-  row(2, 'Cobalt', 'middle note'),
+  row(2, 'Corvane', 'middle note'),
   row(3, 'Northwind', '[principal]'),
 ];
 const fixture = fixtureLines.join('\r\n') + '\r\n';

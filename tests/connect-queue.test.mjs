@@ -43,8 +43,8 @@ const taRows = [
        email: 'reese.calder@northwind.example', state: 'bounced',
        linkedin: 'linkedin.com/in/reese-calder-ex', status: 'Bounced' }),
   // unverified email + LinkedIn → IN the queue (unverified is not sendable)
-  ta({ id: 3, first: 'Alex', last: 'Moreno', title: 'Recruiting Lead', company: 'Cobalt Systems',
-       email: 'alex.moreno@cobalt.example', state: 'unverified',
+  ta({ id: 3, first: 'Alex', last: 'Moreno', title: 'Recruiting Lead', company: 'Corvane Systems',
+       email: 'alex.moreno@corvane.example', state: 'unverified',
        linkedin: 'linkedin.com/in/alex-moreno-ex', status: 'Not Contacted' }),
   // already a 1st-degree connection → excluded (message directly, no request)
   ta({ id: 4, first: 'Sam', last: 'Ito', title: 'Director TA', company: 'Umbra Tech',
@@ -85,7 +85,7 @@ const taRows = [
 // Evaluated-only (pre-application) so ta:10 must NOT appear.
 const apps = [
   { company: 'Northwind Robotics', status: 'Applied' },
-  { company: 'Cobalt Systems',     status: 'Phone Screen' }, // past Applied, still live
+  { company: 'Corvane Systems',     status: 'Phone Screen' }, // past Applied, still live
   { company: 'Aster Grid',         status: 'Applied' },
   { company: 'Meridian AI',        status: 'Applied' },
   { company: 'Solstice Data',      status: 'Applied' },       // ta:9 excluded by status, not gate
@@ -132,7 +132,7 @@ check(computeConnectQueue({ taRows: [] }).length === 0, 'empty rows → empty qu
 
 // ── channelFor: the corrected unverified-is-not-a-channel rule ────────────────
 check(channelFor('Brightwave Labs', taRows) === 'email', 'verified email → email channel');
-check(channelFor('Cobalt Systems', taRows) === 'linkedin',
+check(channelFor('Corvane Systems', taRows) === 'linkedin',
   'UNVERIFIED email + LinkedIn → linkedin (not email): the corrected rule');
 check(channelFor('Northwind Robotics', taRows) === 'linkedin', 'bounced email + LinkedIn → linkedin');
 check(channelFor('Delta Forge', taRows) === 'none', 'no usable email and no LinkedIn → none');

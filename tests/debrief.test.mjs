@@ -49,7 +49,7 @@ check(!isDebriefFor('Just some notes about the call', 'Phone Screen'),
 // ── pendingDebriefs ──────────────────────────────────────────────────────────
 const apps = [
   { id: 10, company: 'Northwind Robotics', role: 'Director RevOps', status: 'Phone Screen' },
-  { id: 11, company: 'Cobalt Systems',    role: 'Sr Director RevOps', status: '2nd Interview' },
+  { id: 11, company: 'Corvane Systems',    role: 'Sr Director RevOps', status: '2nd Interview' },
   { id: 12, company: 'Aster Grid',        role: 'Director SalesOps', status: 'Applied' },
   { id: 13, company: 'Vela Analytics',    role: 'Director BI',       status: '1st Interview' },
   // Terminal row that reached 2nd Interview: every concluded round is owed a debrief.
@@ -73,7 +73,7 @@ check(pendIds.includes(13), 'a concluded round with only a plain note is pending
 const p11 = pend.filter(p => p.id === 11);
 check(p11.length === 1 && p11[0].stage === '1st Interview',
   'pending entry carries the CONCLUDED round (1st Interview), not the in-progress current stage');
-check(p11[0] && p11[0].company === 'Cobalt Systems', 'pending entry carries company/role for the prompt');
+check(p11[0] && p11[0].company === 'Corvane Systems', 'pending entry carries company/role for the prompt');
 // Terminal row: Phone Screen + 1st + 2nd Interview all concluded, none debriefed → all three pending.
 const p14 = pend.filter(p => p.id === 14).map(p => p.stage).sort();
 check(p14.length === 3 && p14.join(',') === '1st Interview,2nd Interview,Phone Screen',

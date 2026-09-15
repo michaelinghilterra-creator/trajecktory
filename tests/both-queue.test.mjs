@@ -55,7 +55,7 @@ const taRows = [
        email: 'ivy.delgado@brightwave.example', state: 'ok',
        linkedin: 'linkedin.com/in/ivy-delgado-ex', status: 'Not Contacted' }),
   // LinkedIn ONLY (no email), applied → connect queue, NOT both
-  ta({ id: 502, first: 'Otis', last: 'Frame', title: 'Head of TA', company: 'Cobalt Systems',
+  ta({ id: 502, first: 'Otis', last: 'Frame', title: 'Head of TA', company: 'Corvane Systems',
        linkedin: 'linkedin.com/in/otis-frame-ex', status: 'Not Contacted' }),
   // Email ONLY (verified, no LinkedIn), applied → email queue, NOT both
   ta({ id: 503, first: 'Priya', last: 'Nayar', title: 'Recruiter', company: 'Aster Grid',
@@ -72,7 +72,7 @@ const taRows = [
 
 const apps = [
   { company: 'Brightwave Labs', status: 'Applied' },
-  { company: 'Cobalt Systems',  status: 'Applied' },
+  { company: 'Corvane Systems',  status: 'Applied' },
   { company: 'Aster Grid',      status: 'Applied' },
   { company: 'Meridian AI',     status: 'Applied' },
   { company: 'Nimbus Health',   status: 'Evaluated' }, // 505 gated out (pre-application)

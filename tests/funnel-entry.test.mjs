@@ -30,7 +30,7 @@ const rows = [
   { id: 1, company: 'Northwind Foods',  status: 'Evaluated',     reached: null },
   { id: 2, company: 'Aster Robotics',   status: 'Discarded',     reached: null },
   { id: 3, company: 'Bellhaven Labs',   status: 'SKIP',          reached: null },
-  { id: 4, company: 'Cobalt Freight',   status: 'Not a Fit',     reached: null },
+  { id: 4, company: 'Corvane Freight',   status: 'Not a Fit',     reached: null },
   { id: 5, company: 'Dunmore Systems',  status: 'Closed',        reached: null },
   { id: 6, company: 'Ember Analytics',  status: 'Applied',       reached: 'Applied' },
   { id: 7, company: 'Foxglove Health',  status: 'Rejected',      reached: 'Applied' },
