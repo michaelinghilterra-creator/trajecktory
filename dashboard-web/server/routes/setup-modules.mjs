@@ -15,6 +15,7 @@ import { cleanProse } from '../lib/text-hygiene.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { loadProfileContext } from '../lib/insights.mjs';
 import { buildActivities, weeklyCounts, employersInActivities, toTwcCsv, enrichEmployers, ENRICH_MAX } from '../lib/twc.mjs';
+import { readEvents, addEvent, deleteEvent } from '../lib/twc-events.mjs';
 import { getArchetypeRules } from '../lib/profile.mjs';
 
 export const router = express.Router();
@@ -207,7 +208,31 @@ router.get('/api/setup/twc', (req, res) => {
       activities,
       weeks: weeklyCounts(activities),
       employers: employersInActivities(activities),
+      overrideWarnings: activities.overrideWarnings || 0,
     });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Manual TWC activities that are not represented by an application or message.
+router.get('/api/setup/twc/events', (req, res) => {
+  try {
+    const events = readEvents().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+    res.json({ events });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/api/setup/twc/events', (req, res) => {
+  try {
+    const result = addEvent(req.body);
+    if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/api/setup/twc/events/:id', (req, res) => {
+  try {
+    if (!deleteEvent(req.params.id)) return res.status(404).json({ error: 'Event not found' });
+    res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
