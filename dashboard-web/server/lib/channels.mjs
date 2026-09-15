@@ -35,8 +35,9 @@ export function isLinkedInInvite(subject) {
 // touch, which hid it from the just-connected warm queue and re-pitched a
 // contact who had already been messaged.
 export function isLinkedInSubject(subject) {
-  const s = String(subject || '').trim();
-  return isLinkedInInvite(s) || /^linked ?in\b/i.test(s);
+  const raw = String(subject || '').trim();
+  if (/^li$/i.test(raw)) return true;
+  return isLinkedInInvite(raw) || /^linked ?in\b/i.test(raw);
 }
 
 // True when a correspondence MESSAGE is a LinkedIn touch rather than an email one.

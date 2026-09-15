@@ -2952,7 +2952,7 @@ function TwcPanel({ toast }) {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead><tr style={{ textAlign: 'left', color: 'var(--text-mute)' }}>
-                {['Date', 'Activity', 'Company', 'Type of job', 'HQ address', 'Phone', 'Contact', 'Method', 'Result'].map(h => (
+                {['Date', 'Activity', 'Company', 'Type of job', 'HQ address', 'Phone', 'Contact', 'Method', 'Result', 'Note'].map(h => (
                   <th key={h} style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr></thead>
@@ -2968,6 +2968,7 @@ function TwcPanel({ toast }) {
                     <td style={cell}>{a.contact || <span className="dim">—</span>}</td>
                     <td style={cell}>{a.method || <span className="dim">—</span>}</td>
                     <td style={cell}>{a.result}</td>
+                    <td style={cell}>{a.note || <span className="dim">{'\u2014'}</span>}</td>
                   </tr>
                 ))}
               </tbody>
