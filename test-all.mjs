@@ -542,6 +542,7 @@ for (const suite of [
   'tests/both-queue.test.mjs',
   'tests/ta-crosslog.test.mjs',
   'tests/stale-contacts.test.mjs',
+  'tests/stale-ta.test.mjs',
   'tests/linkedin-acceptance.test.mjs',
   'tests/draft-endpoints.test.mjs',
   'tests/draft-improve.test.mjs',
