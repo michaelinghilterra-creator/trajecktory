@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.0.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.15.2...v4.0.0) (2026-09-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* every existing install (bundle generation 1 or 2) must run the new installer to keep receiving updates, and running from source needs Node.js 24.21 or newer.
+
+### Features
+
+* require Node.js 24.21 and add the event store foundation ([#332](https://github.com/michaelinghilterra-creator/trajecktory/issues/332)) ([4f3de6b](https://github.com/michaelinghilterra-creator/trajecktory/commit/4f3de6b1a7b4e75de3770745cf9af2c15e763474))
+
 ## [3.15.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.15.1...v3.15.2) (2026-09-16)
 
 
