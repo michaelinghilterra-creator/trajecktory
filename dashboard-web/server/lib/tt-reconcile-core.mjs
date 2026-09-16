@@ -5,17 +5,16 @@
 // which contacted companies still lack a hiring principal.
 //
 // Rule: a TA contact is archived when their company has logged applications and
-// NONE of them are still worth keeping — i.e. none are active (Evaluated..Offer)
-// AND none are "No Response". Recruiters are external firms, not tied to one
-// opportunity, and are never considered here.
+// all of them are closed for outreach, including No Response. Recruiters are
+// external firms, not tied to one opportunity, and are never considered here.
 import { OUTREACH_ELIGIBLE_STATUSES, OUTREACH_DEAD_STATUSES } from './statuses.mjs';
 import { parseInfluenceTier, INFLUENCE_RANK } from '../../../lib/influence-tier.mjs';
 import { isAtCap } from './contact-search-attempts.mjs';
 
 // The outreach rule lives in statuses.mjs as the single source of truth, shared
 // with the follow-up queues so the two can never disagree:
-//   ELIGIBLE = live funnel (Applied..Offer) + No Response — worth a contact.
-//   DEAD     = {Rejected, Discarded, SKIP, Closed, Not a Fit} — safe to archive.
+//   ELIGIBLE = live funnel (Applied..Offer) — worth a contact.
+//   DEAD     = all closed statuses, including No Response — safe to archive.
 // Evaluated is in NEITHER set on purpose: an evaluated-not-applied company is
 // pre-application limbo, so reconcile neither sources a contact for it nor
 // archives one it already has (you may apply next). See OUTREACH_* in statuses.mjs.
@@ -47,9 +46,9 @@ export function reconcilePreview(apps, ttRows, { mode, attempts } = {}) {
   }
 
   // Archive a contact only when their company is DEFINITIVELY dead: it has apps
-  // and EVERY one is terminal (Rejected/Discarded/SKIP/Closed/Not a Fit). Any
-  // live/No-Response app keeps the contact; an Evaluated-only company is limbo and
-  // is left alone (the `every` is false when any app is Evaluated), so a contact
+  // and EVERY one is terminal (Rejected/Discarded/SKIP/Closed/Not a Fit/No Response).
+  // Any live app keeps the contact; an Evaluated-only company is limbo and is left
+  // alone (the `every` is false when any app is Evaluated), so a contact
   // sourced just before you apply is never wiped. This replaced a "none are
   // keep-worthy" test, which would have archived Evaluated-only contacts.
   const toArchive = [];
@@ -80,8 +79,8 @@ export function reconcilePreview(apps, ttRows, { mode, attempts } = {}) {
       })
     : toArchive;
 
-  // Companies worth a contact (>=1 outreach-eligible app: currently-live funnel or
-  // a ghosted No Response) that have no TA contact yet — the discover targets. An
+  // Companies worth a contact (>=1 outreach-eligible, currently-live funnel app)
+  // that have no TA contact yet — the discover targets. An
   // Evaluated-only company is excluded here: no application means no reason to
   // source a contact yet. Uses the SAME eligible set as the follow-up queues.
   const ttCompaniesNorm = new Set(ttRows.map(c => normCompany(c.company)));

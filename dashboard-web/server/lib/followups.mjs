@@ -268,6 +268,9 @@ const TA_FU_CAP = 1; // cap nudges to avoid burning warm relationships
 const TA_TRACKED_STATUSES = ['Sent', 'Replied', 'Meeting Scheduled'];
 
 function computeStaleTA() {
+  const apps = (() => { try { return parseApplicationsMd(); } catch { return []; } })();
+  const eligible = outreachEligibleCompanies(apps);
+
   // Lazy require so apps-only environments (legacy fixtures) still boot.
   let contacts = [];
   try { contacts = parseTargetTalentMd(); } catch (_) { return []; }
@@ -276,6 +279,7 @@ function computeStaleTA() {
   for (const c of contacts) {
     if (!TA_TRACKED_STATUSES.includes(c.status)) continue;
     if (!c.lastTouch) continue;
+    if (!eligible.has(normalizeCompany(c.company))) continue;
     const daysSinceLastTouch = _businessDaysAgo(c.lastTouch); // business days (weekends excluded)
     if (daysSinceLastTouch == null || daysSinceLastTouch < TA_STALE_THRESHOLD_DAYS) continue;
 
@@ -357,8 +361,8 @@ function contactChannelBucket(contact) {
 // recruiter books. Only contacts at companies with a CURRENTLY-LIVE application
 // surface — a contact at a dead opportunity (Rejected, Discarded…) is noise.
 //
-// `computeStaleTA()` stays intact for backward compatibility (tests depend on
-// it). This function is the target state and supersedes it in the route.
+// `computeStaleTA()` keeps its no-argument signature for backward compatibility.
+// This function is the target state and supersedes it in the route.
 const CONTACT_STALE_THRESHOLD_DAYS = 14; // calendar-threshold before we check business-days
 const CONTACT_FU_CAP = 1;               // nudge cap; more than one follow-up burns warm contacts
 // Active-thread statuses that carry a real follow-up clock. 'Connected' (invite
@@ -527,13 +531,13 @@ function _hasLinkedIn(row) {
 
 // Companies with a CURRENTLY-LIVE application, the only ones worth spending an
 // outreach contact on. Uses the shared OUTREACH_ELIGIBLE_STATUSES (live funnel
-// Applied..Offer + No Response) from statuses.mjs, matched on CURRENT status —
+// Applied..Offer only) from statuses.mjs, matched on CURRENT status —
 // NOT the furthest rung ever reached. That distinction is the whole point of this
 // change: the old `reached >= Applied` test kept an applied-then-Rejected company
 // in the queues forever (its furthest rung was still Applied), so a dead
 // opportunity kept surfacing contacts to chase. Current-status gating drops it
-// the moment the row goes terminal, while No Response (a chase-worthy ghost)
-// stays. Evaluated-only and Triage-only companies never qualify (no live app).
+// the moment the row goes terminal, including No Response. Evaluated-only and
+// Triage-only companies never qualify (no live app).
 // Matched on the normalized company name (the one identity engine).
 function outreachEligibleCompanies(apps) {
   const set = new Set();
