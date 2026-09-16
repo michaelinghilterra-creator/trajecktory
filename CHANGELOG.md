@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.15.0...v3.15.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* cap server heap and evict stale agent jobs to prevent OOM kill ([c5565db](https://github.com/michaelinghilterra-creator/trajecktory/commit/c5565dbe0457ccb97db42e8a74e6ef0c3f98aa74))
+
 ## [3.15.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.14.2...v3.15.0) (2026-09-15)
 
 
