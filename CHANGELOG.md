@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.15.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.15.1...v3.15.2) (2026-09-16)
+
+
+### Bug Fixes
+
+* exclude No Response from outreach eligibility ([#330](https://github.com/michaelinghilterra-creator/trajecktory/issues/330)) ([7379bff](https://github.com/michaelinghilterra-creator/trajecktory/commit/7379bffafe7cdf5aabce130db37439bbee9975b6))
+
 ## [3.15.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.15.0...v3.15.1) (2026-09-15)
 
 
