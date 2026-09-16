@@ -130,8 +130,7 @@ day to day*. The same day-to-day guide is built into the app under **Setup -> Da
 
 ### Option 2: Run from source (macOS / Linux / Windows, for developers)
 
-**Prerequisites:** Node.js 20 or newer (Node 24 recommended, which is what CI and the bundled runtime
-use), Git, and [Claude Code](https://claude.ai/code) installed and signed in (`claude login`).
+**Prerequisites:** Node.js 24.21 or newer (the version CI and the bundled runtime use), Git, and [Claude Code](https://claude.ai/code) installed and signed in (`claude login`).
 
 ```bash
 # 1. Clone and install
