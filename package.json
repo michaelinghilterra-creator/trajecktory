@@ -35,7 +35,7 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=18"
+    "node": ">=24.21.0"
   },
   "dependencies": {
     "adm-zip": "^0.6.0",

@@ -27,7 +27,7 @@ $ErrorActionPreference = 'Stop'
 # on it until a new .exe shipped. Move BEFORE the EOL date, not after. 24.x
 # (Krypton) is supported through April 2028; check the schedule at
 # https://nodejs.org/en/about/previous-releases when touching this line.
-$NodeVersion = '24.18.0'
+$NodeVersion = '24.21.0'
 $NodeZipName = "node-v$NodeVersion-win-x64"
 $NodeUrl     = "https://nodejs.org/dist/v$NodeVersion/$NodeZipName.zip"
 
@@ -243,12 +243,13 @@ $RepoUrl   = "https://github.com/michaelinghilterra-creator/trajecktory.git"
   # — the self-update repo (and its authenticated remote) lives there.
   & attrib -h (Join-Path $PayloadApp '.git')
   # Heavy-runtime generation marker; update-system.mjs refuses code updates that
-  # need a newer bundle than this. Bump when you ship a new .exe with new Node/Chromium.
-  # Generation 2 = Node 24.x; generation 1 was Node 20.x. MIN_BUNDLE_VERSION in the
-  # repo deliberately STAYS at 1: the code still runs on the old runtime, and
-  # raising it would cut every existing generation-1 install off from all code
-  # updates, not just from changes that actually need Node 24.
-  Set-Content -Path (Join-Path $PayloadApp '.bundle-version') -Value '2' -NoNewline
+  # need a newer bundle than this. Generation 3 = Node 24.21.x, the floor the
+  # event store requires; generation 2 = Node 24.18.0; generation 1 = Node 20.x.
+  # MIN_BUNDLE_VERSION is 3, so generation 1 and 2 installs receive
+  # BUNDLE_UPDATE_REQUIRED and must run the latest installer. Bump the generation
+  # when shipping a new .exe with new Node or Chromium major versions, or any Node
+  # version the code floor requires.
+  Set-Content -Path (Join-Path $PayloadApp '.bundle-version') -Value '3' -NoNewline
   Write-Host "Self-update repo ready (tokenless public origin, baseline committed at v$bundleVer)."
 
 # ── 6.6 interview-prep layout QA: no stray FLAT cheat sheets may ship ─────────

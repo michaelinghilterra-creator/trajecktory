@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": ">=24.21.0"
   },
   "scripts": {
     "start": "node build.mjs && node --report-on-fatalerror --report-directory=logs server/index.mjs",

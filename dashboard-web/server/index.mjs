@@ -1,3 +1,4 @@
+import './node-floor.mjs';
 import { initCrashCapture, serverStats, countRequest, countStatus5xx } from './crash-capture.mjs';
 initCrashCapture();
 
