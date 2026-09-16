@@ -20,6 +20,7 @@ These files contain your personal data, customizations, and work product. Update
 | `data/applications.md` | Your application tracker |
 | `data/pipeline.md` | Your URL inbox |
 | `data/scan-history.tsv` | Your scan history |
+| `data/trajecktory.db`, `data/trajecktory.db-wal`, `data/trajecktory.db-shm` | Your append-only SQLite event log and its WAL sidecar files |
 | `data/follow-ups.md` | Your follow-up history |
 | `data/status-events.tsv` | Every status change, dated. 5 columns: `app# / date / status / company / logged`. `date` is when the change HAPPENED (specifically when it was booked or notified); `logged` is when the row was written. Rows written before the date could be entered by hand have an empty `logged`, which also marks a date nobody confirmed. Legacy 4-column rows still parse. |
 | `data/apply-dates.json` | When you actually applied, per app — distinct from the tracker's Date column, which is when the row was evaluated. Anchors follow-up cadence and the timing analytics. |
