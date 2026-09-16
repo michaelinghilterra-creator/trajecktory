@@ -38,8 +38,8 @@ check(JSON.stringify(ids(APPS, 'Alphacorp')) === JSON.stringify([1, 6]),
 check(ids(APPS, 'Betacorp').length === 0, 'an only-Evaluated company gets no cross-log');
 check(ids(APPS, 'Gammacorp').length === 0, 'a Rejected app gets no cross-log');
 check(ids(APPS, 'Zetacorp').length === 0, 'a Discarded app gets no cross-log');
-check(JSON.stringify(ids(APPS, 'Deltacorp')) === JSON.stringify([4]),
-  'a ghosted No-Response app IS eligible (highest-leverage outreach case)');
+check(ids(APPS, 'Deltacorp').length === 0,
+  'a No-Response app gets no cross-log because it is closed for outreach');
 check(JSON.stringify(ids(APPS, 'Epsiloncorp')) === JSON.stringify([5]), 'an Offer app is eligible');
 check(ids(APPS, 'Omegacorp').length === 0, 'a company with no application at all → nothing');
 

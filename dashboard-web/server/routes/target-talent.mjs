@@ -227,7 +227,7 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     // the follow-up log, and the Unserviced/WIP gauge (which reads the follow-up
     // log, NOT the TA CRM) drifted — reading dozens of applications as untouched
     // that had already had outreach sent. Scoped to OUTREACH_ELIGIBLE_STATUSES
-    // (applied through offer, plus a ghosted No Response) so an only-Evaluated or
+    // (applied through offer only) so an only-Evaluated, No Response, or other
     // closed row is never touched. Explicit ids, when given, win and suppress the
     // auto path.
     const crossLoggedFollowups = [];

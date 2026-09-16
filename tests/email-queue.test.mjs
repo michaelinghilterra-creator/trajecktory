@@ -30,7 +30,7 @@ const taRows = [
   ta({ id: 5, first: 'Eli', last: 'Park',  title: 'People Ops', company: 'Northwind Robotics', email: 'eli.park@northwind.example', state: 'risky', status: 'Archived' }),             // archived → out
   ta({ id: 6, first: 'Fay', last: 'Quinn', title: 'Sourcer',    company: 'Northwind Robotics', email: 'fay.quinn@northwind.example', state: 'bounced', status: 'Not Contacted' }),     // dead address → not sendable
 ];
-// Gate is CURRENT status in OUTREACH_ELIGIBLE_STATUSES (live funnel + No Response),
+// Gate is CURRENT status in OUTREACH_ELIGIBLE_STATUSES (Applied through Offer),
 // not the furthest rung ever reached. Nimbus (Evaluated) is pre-application → gated.
 const apps = [
   { company: 'Northwind Robotics', status: 'Applied' },

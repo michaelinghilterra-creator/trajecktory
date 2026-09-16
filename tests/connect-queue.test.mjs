@@ -80,8 +80,8 @@ const taRows = [
 ];
 
 // Applications gate: a contact only surfaces if its company has a CURRENTLY-LIVE
-// application (current status in OUTREACH_ELIGIBLE_STATUSES = live funnel + No
-// Response), not merely one that ever reached Applied. Nimbus Health is
+// application (current status in OUTREACH_ELIGIBLE_STATUSES = live funnel from
+// Applied through Offer), not merely one that ever reached Applied. Nimbus Health is
 // Evaluated-only (pre-application) so ta:10 must NOT appear.
 const apps = [
   { company: 'Northwind Robotics', status: 'Applied' },

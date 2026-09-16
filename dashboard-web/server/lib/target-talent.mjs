@@ -262,7 +262,7 @@ function findRelatedApps(companyName) {
 // If the caller named applications explicitly, those win verbatim — the user made
 // a deliberate choice. Otherwise (the AUTO path) a Sent touch services every LIVE
 // application at that company, resolved by company match and gated to
-// OUTREACH_ELIGIBLE_STATUSES (applied through offer, plus a ghosted No Response).
+// OUTREACH_ELIGIBLE_STATUSES (applied through offer only; No Response is closed).
 // The gate is the point: without it a company where you have only an *evaluated*
 // (not-yet-applied) row, or a closed/rejected one, would get a follow-up that
 // claims outreach on an application you never sent — the inverse of the drift this

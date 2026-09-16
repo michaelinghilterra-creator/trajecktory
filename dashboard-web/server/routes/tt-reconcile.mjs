@@ -41,12 +41,12 @@ function bareHostname(website) {
 //   2) Discover — Claude + WebSearch for missing contacts at active companies
 //   3) Apply — write archive flips and/or new contact rows
 //
-// KEEP app statuses (keep TA contacts engaged):
-//   Evaluated, Applied, Responded, interview rounds, Offer (the funnel), PLUS
-//   No Response — a ghosted app is still worth chasing via a TA contact, and the
-//   connect/email queues already treat it as applied, so reconcile agrees.
+// OUTREACH-ELIGIBLE app statuses (keep TA contacts engaged):
+//   Applied, Responded, interview rounds, Offer — the live funnel after Evaluated.
+//   Evaluated is pre-application limbo: neither a sourcing target nor dead.
 // DEAD app statuses (archive related TA contacts when ALL related apps are dead):
-//   Rejected, Discarded, SKIP, Closed
+//   Rejected, Discarded, SKIP, Closed, Not a Fit, No Response. No Response remains
+//   distinct for reporting, but is deliberately closed for outreach.
 
 // The archive decision + companies-needing-contacts live in
 // lib/tt-reconcile-core.mjs (reconcilePreview), shared with the reconcile-ta.mjs
