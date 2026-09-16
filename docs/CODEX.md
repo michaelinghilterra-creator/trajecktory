@@ -10,7 +10,7 @@ Claude workflow.
 ## Prerequisites
 
 - A Codex client that can work with project `AGENTS.md`
-- Node.js 18+
+- Node.js 24.21+
 - Playwright Chromium installed for PDF generation and reliable job verification
 - Go 1.21+ if you want the TUI dashboard
 

@@ -76,5 +76,5 @@ A PID-based lock file (`batch-runner.pid`) prevents concurrent batch runs. If a 
 ## Prerequisites
 
 - `claude` CLI in PATH (Claude Max subscription for default model)
-- Node.js >= 18, Playwright chromium installed (`npm run doctor` to verify)
+- Node.js >= 24.21, Playwright chromium installed (`npm run doctor` to verify)
 - `batch-input.tsv` with at least one offer

@@ -7,7 +7,7 @@
 ## Prerequisites
 
 - A [Claude](https://claude.ai) subscription (a paid plan) and [Claude Code](https://claude.ai/code) installed and signed in (`claude login`)
-- Node.js 20 or newer (Node 24 recommended, which is what CI and the bundled runtime use) for CV generation, the dashboard, and utility scripts
+- Node.js 24.21 or newer (the version CI and the bundled runtime use) for CV generation, the dashboard, and utility scripts
 - Git (to clone the repo and for the in-app self-updater)
 
 ## Quick Start (5 steps)
