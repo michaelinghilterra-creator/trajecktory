@@ -454,6 +454,7 @@ for (const suite of [
   'tests/resolve-jds.test.mjs',
   'tests/gate-history.test.mjs',
   'tests/event-store.test.mjs',
+  'tests/identity-store.test.mjs',
   'tests/reconcile-triage.test.mjs',
   'tests/identity.test.mjs',
   'tests/identity-single-source.test.mjs',

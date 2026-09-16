@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import {
   SCHEMA_VERSION,
   appendEvents,
+  insertEvents,
   openEventStore,
   readEvents,
 } from '../lib/event-store.mjs';
@@ -52,6 +53,11 @@ const dir = makeSandbox('event-store-test');
 
 {
   const store = openEventStore(join(dir, 'round-trip.db'));
+  check(
+    throwsMatching(() => insertEvents(store, [event()]), /requires an active database transaction/),
+    'insertEvents rejects writes outside a transaction',
+  );
+  check(readEvents(store).length === 0, 'rejected insertEvents writes no event');
   const ids = appendEvents(store, [event({
     occurred_at: '2030-01-04T14:30:00Z',
     application_id: 'app-1',
@@ -175,7 +181,7 @@ const dir = makeSandbox('event-store-test');
   store.close();
   store = openEventStore(dbPath);
   check(readEvents(store).length === 1, 'closing and reopening preserves events');
-  check(store.db.prepare('PRAGMA user_version').get().user_version === 1, 'reopening keeps user_version at 1');
+  check(store.db.prepare('PRAGMA user_version').get().user_version === SCHEMA_VERSION, 'reopening keeps user_version at SCHEMA_VERSION');
   store.close();
 }
 
