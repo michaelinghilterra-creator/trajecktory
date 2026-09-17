@@ -1,5 +1,5 @@
 import express from 'express';
-import { ROOT_DIR } from '../config.mjs';
+import { DATA_DIR, ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { pauseSequence, getSequence, getTemplate } from '../lib/sequences.mjs';
 import { generateText, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
@@ -23,6 +23,7 @@ import { INFLUENCE_TIERS, resolveInfluenceTier } from '../../../lib/influence-ti
 import { classifyInbound } from '../../../lib/inbound-classify.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
+import { logWritesEnabled, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 function sequenceTone(contactId) {
   try {
@@ -112,15 +113,17 @@ router.patch('/api/target-talent/:id', (req, res) => {
     // LinkedIn state lives in a sidecar (not the markdown row), so a request that
     // ONLY changes linkedinStatus must not require the contact's row to be
     // rewritten. Set it first, then only touch the row if a row field was given.
-    if (linkedinStatus !== undefined) setLinkedInStatus(id, linkedinStatus);
-    // Row fields — status/lastTouch/notes plus the editable identity fields.
     const rowUpdates = { status, notes, lastTouch, website, phone, influenceTier,
                          first, last, salute, title, company, city, state, zip, email, linkedin };
     const touchesRow = Object.values(rowUpdates).some(v => v !== undefined);
-    if (touchesRow) {
-      const ok = updateTTLine(id, rowUpdates);
-      if (!ok) return res.status(404).json({ error: 'Contact not found' });
-    }
+    const save = () => {
+      if (linkedinStatus !== undefined) setLinkedInStatus(id, linkedinStatus);
+      if (!touchesRow) return true;
+      runLogWriteTestHook('before-target-talent-patch-row');
+      return updateTTLine(id, rowUpdates);
+    };
+    const ok = logWritesEnabled(DATA_DIR) ? withLogWrite(DATA_DIR, save) : save();
+    if (!ok) return res.status(404).json({ error: 'Contact not found' });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -182,7 +185,6 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     const ts = timestamp || new Date().toISOString().replace('T', ' ').slice(0, 16);
     const message = { timestamp: ts, direction, channel, subject: subject.trim(), body: body.trim() };
     messages.push(message);
-    writeTTCorrespondence(id, messages);
     const isHumanReply = direction === 'Received' && classifyInbound(message) === 'human';
 
     // Auto-advance status — never regress. A Sent follow-up after a Reply
@@ -196,27 +198,6 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     // Automatic responses are recorded but cannot advance the funnel because no
     // person has replied. Departures and invite acceptances follow the same rule.
     else if (isHumanReply && curStage < 3) newStatus = 'Replied';
-    if (newStatus !== r.status || direction !== 'Draft') {
-      updateTTLine(id, { status: newStatus, lastTouch: today });
-    }
-
-    // Only a human reply pauses outreach because it means a person is in the
-    // conversation. Automatic responses stay logged without stopping the sequence.
-    if (isHumanReply) {
-      try { pauseSequence('ta', id, today); } catch { /* no active sequence, safe to ignore */ }
-    }
-
-    // A LinkedIn connection request is a connect, NOT an email touch. Tally it in
-    // the connects log so "LinkedIn connects" counts it and "verified touches"
-    // (email only) does not. Idempotent on (date, name, source).
-    if (direction === 'Sent' && (channel === 'LinkedIn' || isLinkedInInvite(subject))) {
-      logConnect({ name: `${r.first || ''} ${r.last || ''}`.trim(), source: 'ta', id, date: ts.slice(0, 10) });
-      // The invite just went out → advance the LinkedIn axis to 'Invite Pending'.
-      // Only from 'Not Connected'; never regress someone already 'Connected'. The
-      // user flips it to 'Connected' by hand when the invite is accepted.
-      markInvitePending(id, ts.slice(0, 10));
-    }
-
     // Cross-log to applications follow-ups for an outbound Sent. Accepts an
     // explicit `alsoLogToAppNums: number[]` (multi-app) or legacy
     // `alsoLogToAppNum: number` (single app).
@@ -231,36 +212,50 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     // closed row is never touched. Explicit ids, when given, win and suppress the
     // auto path.
     const crossLoggedFollowups = [];
-    if (direction === 'Sent') {
-      const apps = parseApplicationsMd();
-      const explicit = [
-        ...(Array.isArray(alsoLogToAppNums) ? alsoLogToAppNums : []),
-        ...(alsoLogToAppNum ? [alsoLogToAppNum] : []),
-      ];
-      const ids = crossLogAppNums(apps, r.company, explicit);
-      if (ids.length > 0) {
-        try {
-          // Dedupe against a touch already logged today for this contact, so a
-          // re-sent message or a double-submit does not stack duplicate rows.
-          const existing = parseFollowupsMd();
-          const contactName = `${r.first || ''} ${r.last || ''}`.trim();
-          for (const appNum of ids) {
-            const app = apps.find(a => a.id === appNum);
-            if (!app) continue;
-            if (existing.some(f => f.appNum === appNum && f.date === today && (f.contact || '').trim() === contactName)) continue;
-            const n = appendFollowupRow({
-              appNum,
-              date: today,
-              company: app.company,
-              role: app.role,
-              channel: alsoLogChannel || 'Email',
-              contact: contactName,
-              notes: `Cross-logged from Talent Acquisition · ${r.company} · Subject: ${subject.trim()}`,
-            });
-            crossLoggedFollowups.push({ appNum, n });
-          }
-        } catch (e) { /* non-fatal */ }
+    const save = () => {
+      writeTTCorrespondence(id, messages);
+      if (newStatus !== r.status || direction !== 'Draft') {
+        updateTTLine(id, { status: newStatus, lastTouch: today });
       }
+      if (direction === 'Sent' && (channel === 'LinkedIn' || isLinkedInInvite(subject))) {
+        logConnect({ name: `${r.first || ''} ${r.last || ''}`.trim(), source: 'ta', id, date: ts.slice(0, 10) });
+        markInvitePending(id, ts.slice(0, 10));
+      }
+      if (direction === 'Sent') {
+        const apps = parseApplicationsMd();
+        const explicit = [
+          ...(Array.isArray(alsoLogToAppNums) ? alsoLogToAppNums : []),
+          ...(alsoLogToAppNum ? [alsoLogToAppNum] : []),
+        ];
+        const ids = crossLogAppNums(apps, r.company, explicit);
+        if (ids.length > 0) {
+          try {
+            const existing = parseFollowupsMd();
+            const contactName = `${r.first || ''} ${r.last || ''}`.trim();
+            for (const appNum of ids) {
+              const app = apps.find(a => a.id === appNum);
+              if (!app) continue;
+              if (existing.some(f => f.appNum === appNum && f.date === today && (f.contact || '').trim() === contactName)) continue;
+              runLogWriteTestHook('before-target-talent-followup-row');
+              const n = appendFollowupRow({
+                appNum, date: today, company: app.company, role: app.role,
+                channel: alsoLogChannel || 'Email', contact: contactName,
+                notes: `Cross-logged from Talent Acquisition · ${r.company} · Subject: ${subject.trim()}`,
+              });
+              crossLoggedFollowups.push({ appNum, n });
+            }
+          } catch (error) {
+            if (logWritesEnabled(DATA_DIR)) throw error;
+          }
+        }
+      }
+    };
+    if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+    else save();
+
+    // Sequence state is intentionally outside the event-log transaction.
+    if (isHumanReply) {
+      try { pauseSequence('ta', id, today); } catch { /* no active sequence, safe to ignore */ }
     }
 
     res.json({

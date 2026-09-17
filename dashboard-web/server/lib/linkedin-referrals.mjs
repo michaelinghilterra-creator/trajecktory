@@ -17,6 +17,8 @@ import { DATA_DIR } from '../config.mjs';
 import { ACTIVE_STATUSES } from './statuses.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseReferralsMd, appendReferralRows, updateReferralLine } from './referrals.mjs';
+import { appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
+import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
 
 // DATA_DIR, never ROOT_DIR + 'data'. Those look equivalent and are not: only
 // DATA_DIR honors TJK_DATA_DIR, so a hardcoded ROOT_DIR path escapes the test
@@ -138,11 +140,31 @@ export function parseConnectionsCsv(text) {
 
 export function saveConnections(connections, source = 'upload') {
   const payload = { importedAt: new Date().toISOString(), source, count: connections.length, connections };
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      appendEventsWithEffects(store, [{
+        type: 'linkedin_export_imported', occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
+        payload: {
+          file: 'linkedin-connections.json', source, count: connections.length, imported_at: payload.importedAt,
+          legacy_effects: [{ file: 'linkedin-connections.json', op: 'json_replace', value: payload }],
+        },
+      }]);
+      return payload;
+    });
+  }
   fs.mkdirSync(path.dirname(LINKEDIN_STORE), { recursive: true });
   fs.writeFileSync(LINKEDIN_STORE, JSON.stringify(payload), 'utf8');
   return payload;
 }
 export function loadConnections() {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      const text = renderLegacyFile(store, 'linkedin-connections.json');
+      if (text === null) return { importedAt: null, source: null, count: 0, connections: [] };
+      try { return JSON.parse(text); }
+      catch { return { importedAt: null, source: null, count: 0, connections: [] }; }
+    });
+  }
   try { return JSON.parse(fs.readFileSync(LINKEDIN_STORE, 'utf8')); }
   catch { return { importedAt: null, source: null, count: 0, connections: [] }; }
 }

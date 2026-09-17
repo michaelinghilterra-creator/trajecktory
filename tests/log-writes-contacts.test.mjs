@@ -194,7 +194,8 @@ let store = openEventStore(path.join(on, 'trajecktory.db'));
 const dashboardEvents = readEvents(store).filter(event => event.source === 'dashboard');
 const types = new Set(dashboardEvents.map(event => event.type));
 check(['person_updated', 'person_added', 'people_merged', 'people_unmerged', 'people_kept_separate', 'legacy_record'].every(type => types.has(type)), 'database contains every expected contact event type');
-check(dashboardEvents.every(event => event.payload.ref || event.type.startsWith('people_')), 'row events carry refs and people events carry refs arrays');
+check(dashboardEvents.filter(event => event.type.startsWith('person_'))
+  .every(event => event.payload.ref), 'contact row events carry refs');
 check(dashboardEvents.every(event => {
   const semantic = { ...event.payload }; delete semantic.raw; delete semantic.legacy_effects;
   return !/Example Person|Zorblax|Quennox|example\.test/.test(JSON.stringify(semantic));

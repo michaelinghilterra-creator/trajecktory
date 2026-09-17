@@ -457,6 +457,7 @@ for (const suite of [
   'tests/legacy-files.test.mjs',
   'tests/log-writes.test.mjs',
   'tests/log-writes-contacts.test.mjs',
+  'tests/log-writes-touches.test.mjs',
   'tests/log-writes-scripts.test.mjs',
   'tests/atomic-write.test.mjs',
   'tests/event-store-switch.test.mjs',

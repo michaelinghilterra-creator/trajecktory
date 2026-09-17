@@ -6,7 +6,7 @@ import { REFERRAL_STATUS_LABELS } from './statuses.mjs';
 import { parseVerifyTag, setVerifyTag } from '../../../lib/email-verify.mjs';
 import { parseCorrespondence, formatCorrespondence } from './correspondence-format.mjs';
 import { linkedinKey } from './contact-identity.mjs';
-import { appendEventsWithEffects, findTableRowsByKey, tableRows } from '../../../lib/legacy-files.mjs';
+import { appendEventsWithEffects, findTableRowsByKey, renderLegacyFile, tableRows } from '../../../lib/legacy-files.mjs';
 import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
 
 // ── Referral tracker ──────────────────────────────────────────────────────────
@@ -243,12 +243,31 @@ function updateReferralRaw(line, updates) {
 // so the drawer renders all three identically. A LINKED referral never writes here:
 // the route redirects its correspondence to the twin's dir so the message is shared.
 function readReferralCorrespondence(id) {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      const text = renderLegacyFile(store, `referral-correspondence/${id}.md`);
+      return text === null ? [] : parseCorrespondence(text);
+    });
+  }
   const f = path.join(REFERRAL_CORR_DIR, `${id}.md`);
   if (!fs.existsSync(f)) return [];
   return parseCorrespondence(fs.readFileSync(f, 'utf8'));
 }
 
 function writeReferralCorrespondence(id, messages) {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      const raw = formatCorrespondence(messages);
+      appendEventsWithEffects(store, [{
+        type: 'legacy_record', occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
+        payload: {
+          reason: 'correspondence_written', dir: 'referral-correspondence', file: `${id}.md`, entries: messages.length,
+          legacy_effects: [{ file: `referral-correspondence/${id}.md`, op: 'file_replace', raw }],
+        },
+      }]);
+      return undefined;
+    });
+  }
   fs.mkdirSync(REFERRAL_CORR_DIR, { recursive: true });
   fs.writeFileSync(path.join(REFERRAL_CORR_DIR, `${id}.md`), formatCorrespondence(messages));
 }

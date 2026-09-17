@@ -1,5 +1,7 @@
 import fs from 'fs';
-import { TT_LINKEDIN_PATH } from '../config.mjs';
+import { DATA_DIR, TT_LINKEDIN_PATH } from '../config.mjs';
+import { appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
+import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
 
 /**
  * lib/tt-linkedin.mjs — LinkedIn connection state for TA Outreach contacts.
@@ -50,12 +52,24 @@ function writeMap(map) {
 // The whole map, for callers that want to attach status to many rows in one pass
 // (parseTargetTalentMd reads it once per parse rather than once per contact).
 export function readLinkedInMap() {
+  if (logWritesEnabled(DATA_DIR)) {
+    try {
+      return withLogWrite(DATA_DIR, store => {
+        const text = renderLegacyFile(store, 'tt-linkedin.json');
+        if (text === null) return {};
+        const value = JSON.parse(text);
+        return value && typeof value === 'object' ? value : {};
+      });
+    } catch {
+      return {};
+    }
+  }
   return readMap();
 }
 
 // Label for one contact. Default 'Not Connected' when no entry exists.
 export function getLinkedInStatus(id) {
-  const e = readMap()[String(id)];
+  const e = readLinkedInMap()[String(id)];
   return (e && isLinkedInState(e.state)) ? e.state : 'Not Connected';
 }
 
@@ -65,6 +79,27 @@ export function getLinkedInStatus(id) {
 export function setLinkedInStatus(id, state, date) {
   if (!isLinkedInState(state)) {
     throw new Error(`Invalid LinkedIn state. Must be one of: ${LINKEDIN_STATES.join(', ')}`);
+  }
+  if (logWritesEnabled(DATA_DIR)) {
+    try {
+      return withLogWrite(DATA_DIR, store => {
+        const key = String(id);
+        const effect = state === 'Not Connected'
+          ? { file: 'tt-linkedin.json', op: 'json_delete', key }
+          : { file: 'tt-linkedin.json', op: 'json_set', key, value: { state, updated: date || new Date().toISOString().slice(0, 10) } };
+        appendEventsWithEffects(store, [{
+          type: 'legacy_record', occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
+          payload: {
+            reason: 'linkedin_state_set', ref: `ta:${id}`, state,
+            legacy_effects: [effect],
+          },
+        }]);
+        return state;
+      });
+    } catch (error) {
+      console.warn(`[tt-linkedin] failed to write: ${error.message}`);
+      return state;
+    }
   }
   const map = readMap();
   const key = String(id);
@@ -82,6 +117,23 @@ export function setLinkedInStatus(id, state, date) {
 // long ago) or overwrite an existing 'Invite Pending' timestamp. Returns the
 // resulting label. Idempotent.
 export function markInvitePending(id, date) {
+  if (logWritesEnabled(DATA_DIR)) {
+    let result = 'Invite Pending';
+    try {
+      return withLogWrite(DATA_DIR, store => {
+        const text = renderLegacyFile(store, 'tt-linkedin.json');
+        const map = text === null ? {} : JSON.parse(text);
+        const entry = map[String(id)];
+        const cur = entry && isLinkedInState(entry.state) ? entry.state : 'Not Connected';
+        result = linkedInRank(cur) >= linkedInRank('Invite Pending')
+          ? cur : setLinkedInStatus(id, 'Invite Pending', date);
+        return result;
+      });
+    } catch (error) {
+      console.warn(`[tt-linkedin] failed to write: ${error.message}`);
+      return result;
+    }
+  }
   const cur = getLinkedInStatus(id);
   if (linkedInRank(cur) >= linkedInRank('Invite Pending')) return cur;
   return setLinkedInStatus(id, 'Invite Pending', date);

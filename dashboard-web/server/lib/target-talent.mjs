@@ -112,12 +112,31 @@ function parseTargetTalentMd() {
 }
 
 function readTTCorrespondence(id) {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      const text = renderLegacyFile(store, `target-talent-correspondence/${id}.md`);
+      return text === null ? [] : parseCorrespondence(text);
+    });
+  }
   const f = path.join(TT_CORR_DIR, `${id}.md`);
   if (!fs.existsSync(f)) return [];
   return parseCorrespondence(fs.readFileSync(f, 'utf8'));
 }
 
 function writeTTCorrespondence(id, messages) {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      const raw = formatCorrespondence(messages);
+      appendEventsWithEffects(store, [{
+        type: 'legacy_record', occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
+        payload: {
+          reason: 'correspondence_written', dir: 'target-talent-correspondence', file: `${id}.md`, entries: messages.length,
+          legacy_effects: [{ file: `target-talent-correspondence/${id}.md`, op: 'file_replace', raw }],
+        },
+      }]);
+      return undefined;
+    });
+  }
   fs.mkdirSync(TT_CORR_DIR, { recursive: true });
   fs.writeFileSync(path.join(TT_CORR_DIR, `${id}.md`), formatCorrespondence(messages));
 }

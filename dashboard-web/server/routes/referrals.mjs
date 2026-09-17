@@ -80,9 +80,14 @@ router.get('/api/referrals/followups', (req, res) => {
 // only by default; pass { seedPool: true } to also seed the Stage-2 referrer pool.
 router.post('/api/referrals/reconcile', (req, res) => {
   try {
-    const result = reconcile({ seedPool: !!(req.body && req.body.seedPool) });
-    // Same LinkedIn haystack tells us which invited TA contacts have now accepted.
-    const accepted = detectAcceptances({});
+    let accepted;
+    const save = () => {
+      const result = reconcile({ seedPool: !!(req.body && req.body.seedPool) });
+      runLogWriteTestHook('before-referrals-reconcile-linkedin-states');
+      accepted = detectAcceptances({});
+      return result;
+    };
+    const result = logWritesEnabled(DATA_DIR) ? withLogWrite(DATA_DIR, save) : save();
     res.json({ ok: true, ...result, acceptedFlipped: accepted.flipped.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -107,11 +112,15 @@ router.post('/api/referrals/import-linkedin', (req, res) => {
     if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'Provide the CSV text in { csv }.' });
     const connections = parseConnectionsCsv(csv);
     if (!connections.length) return res.status(400).json({ error: 'No connections parsed — is this a LinkedIn Connections.csv?' });
-    saveConnections(connections, 'upload');
-    const result = reconcile({ seedPool: true });
-    // Detect TA contacts whose pending invite this import shows as accepted, and
-    // flip them to LinkedIn-Connected (exact slug match only; see linkedin-acceptance).
-    const accepted = detectAcceptances({ connections });
+    let accepted;
+    const save = () => {
+      saveConnections(connections, 'upload');
+      const result = reconcile({ seedPool: true });
+      runLogWriteTestHook('before-referrals-import-linkedin-states');
+      accepted = detectAcceptances({ connections });
+      return result;
+    };
+    const result = logWritesEnabled(DATA_DIR) ? withLogWrite(DATA_DIR, save) : save();
     res.json({ ok: true, imported: connections.length, ...result, acceptedFlipped: accepted.flipped.length, accepted: accepted.flipped });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -289,12 +298,13 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
     const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
     const entry = { timestamp: stamp, direction, channel, subject: String(subject || '(no subject)').trim() || '(no subject)', body: String(body || '').trim() || '(no body)' };
     const link = resolveReferralLink(ref, parseTargetTalentMd());
-    if (link && link.source === 'ta') {
-      const msgs = readTTCorrespondence(link.contact.id); msgs.push(entry); writeTTCorrespondence(link.contact.id, msgs);
-    } else {
-      const msgs = readReferralCorrespondence(id); msgs.push(entry); writeReferralCorrespondence(id, msgs);
-    }
-    if (direction !== 'Draft') {
+    const save = () => {
+      if (link && link.source === 'ta') {
+        const msgs = readTTCorrespondence(link.contact.id); msgs.push(entry); writeTTCorrespondence(link.contact.id, msgs);
+      } else {
+        const msgs = readReferralCorrespondence(id); msgs.push(entry); writeReferralCorrespondence(id, msgs);
+      }
+      if (direction === 'Draft') return;
       // Auto-advance the ladder, never regressing. A received reply after an ask
       // is a positive response (Asked → Responded); the existing Not Asked →
       // Catching Up nudge stands for any first non-draft touch. Intro Made and
@@ -303,14 +313,12 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
       const upd = { lastTouch: today };
       if (ref.status === 'Not Asked' || !ref.status) upd.status = 'Catching Up';
       else if (direction === 'Received' && ref.status === 'Asked') upd.status = 'Responded';
-      const saveTouches = () => {
-        if (link && link.source === 'ta') updateTTLine(link.contact.id, { lastTouch: today });
-        runLogWriteTestHook('before-referral-correspondence-referral-update');
-        updateReferralLine(id, upd);
-      };
-      if (link && link.source === 'ta' && logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, saveTouches);
-      else saveTouches();
-    }
+      if (link && link.source === 'ta') updateTTLine(link.contact.id, { lastTouch: today });
+      runLogWriteTestHook('before-referral-correspondence-referral-update');
+      updateReferralLine(id, upd);
+    };
+    if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+    else save();
     res.json({ ok: true, linkedTo: link ? { source: link.source, id: link.contact.id } : null });
   } catch (err) {
     res.status(500).json({ error: err.message });

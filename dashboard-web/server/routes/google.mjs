@@ -9,12 +9,13 @@ import {
   getTodayCalendarEvents,
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
-import { PORT, TT_CORR_DIR } from '../config.mjs';
+import { DATA_DIR, PORT, TT_CORR_DIR } from '../config.mjs';
 import { patchRowInMd, parseApplicationsMd } from '../lib/applications.mjs';
 import { addNote, findNoteByMsgId } from '../lib/notes.mjs';
 import { readApplyDates } from '../lib/sidecars.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
+import { logWritesEnabled, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -466,30 +467,31 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     const sender = extractEmail(message.from) || from || '';
     const header = `${sender}: ${message.subject || subject || '(no subject)'} [${sentiment || 'neutral'}]`;
     const fullBody = String(message.text || bodyPreview || snippet || '').trim();
-    const noteHistory = addNote(
-      id,
-      `### Reply logged (${today})\n${header}${fullBody ? `\n\n${fullBody}` : ''}`,
-      { msgId, threadId: message.threadId || threadId, sender },
-    );
-    const alreadyLogged = noteHistory.added === false;
+    const save = () => {
+      const noteHistory = addNote(
+        id,
+        `### Reply logged (${today})\n${header}${fullBody ? `\n\n${fullBody}` : ''}`,
+        { msgId, threadId: message.threadId || threadId, sender },
+      );
+      let statusFlip = null;
+      if (action === 'rejected') statusFlip = 'Rejected';
+      else if (INTERVIEW_STAGES.includes(action)) statusFlip = action;
+      else if (action !== 'log') return { invalid: true, alreadyLogged: noteHistory.added === false };
+      if (statusFlip) patchRowInMd(id, { status: statusFlip }, { company });
 
-    let statusFlip = null;
-    if (action === 'rejected') statusFlip = 'Rejected';
-    else if (INTERVIEW_STAGES.includes(action)) statusFlip = action;
-    else if (action !== 'log') return res.status(400).json({ error: `Unknown action: ${action}` });
-
-    if (statusFlip) patchRowInMd(id, { status: statusFlip }, { company });
-
-    // Record the received email on the CONTACT's own correspondence timeline too,
-    // so the reply shows on their card in Network → TA Outreach / Recruiters, not
-    // only as a note on the application. Best-effort: the app note and status flip
-    // already stand, and a reply with no matched contact (company-guess only) has
-    // no card to log to, so this simply no-ops.
-    let contactLogged = false;
-    if (contact) {
-      try { contactLogged = logReplyToContact(contact, { subject: message.subject || subject, body: fullBody, timestamp: message.date || date }); }
-      catch { /* contact correspondence logging is best-effort */ }
-    }
+      let contactLogged = false;
+      if (contact) {
+        runLogWriteTestHook('before-google-reply-contact');
+        try { contactLogged = logReplyToContact(contact, { subject: message.subject || subject, body: fullBody, timestamp: message.date || date }); }
+        catch (error) {
+          if (logWritesEnabled(DATA_DIR)) throw error;
+        }
+      }
+      return { statusFlip, contactLogged, alreadyLogged: noteHistory.added === false };
+    };
+    const saved = logWritesEnabled(DATA_DIR) ? withLogWrite(DATA_DIR, save) : save();
+    if (saved.invalid) return res.status(400).json({ error: `Unknown action: ${action}` });
+    const { statusFlip, contactLogged, alreadyLogged } = saved;
 
     markHandled({ action, appId: id, date: today });
     res.json({ ok: true, appId: id, statusFlip, contactLogged, alreadyLogged });
