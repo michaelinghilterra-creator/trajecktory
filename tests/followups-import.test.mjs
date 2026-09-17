@@ -167,7 +167,9 @@ check(Object.keys(actualFlagLines).length === Object.keys(expectedFlagLines).len
 
 const importedEvents = readEvents(store).filter(event => event.payload.file === 'follow-ups.md');
 const sent = importedEvents.filter(event => event.type === 'message_sent');
-const legacy = importedEvents.filter(event => event.type === 'legacy_record');
+// The file_layout legacy_record is whole-file metadata, not an imported follow-up row.
+const legacy = importedEvents.filter(event => event.type === 'legacy_record'
+  && Number.isInteger(event.payload.line_index));
 check(sent.length === 8
   && legacy.length === 11
   && sent.every(event => !event.person_id)
