@@ -147,11 +147,19 @@ console.log('\nwriteTableText');
   const fixture = importFixture('table-noop');
   const store = openDataStore(fixture.dataDir);
   const before = readEvents(store).length;
-  let renders = 0;
-  setLogWritesTestHooks({ writeFile: () => { renders++; } });
+  const apps = path.join(fixture.dataDir, 'applications.md');
+  const beforeFile = fs.readFileSync(apps);
+  store.db.prepare(`
+    INSERT INTO legacy_render_state (file, dirty) VALUES (?, 1)
+    ON CONFLICT(file) DO UPDATE SET dirty = 1
+  `).run('applications.md');
+  let writes = 0;
+  setLogWritesTestHooks({ writeFile: () => { writes++; } });
   const result = callWrite(fixture, fixture.text);
-  check(result.changed === false && readEvents(store).length === before && renders === 0,
-    'no-op appends no event and renders no file');
+  const dirty = store.db.prepare('SELECT dirty FROM legacy_render_state WHERE file = ?').get('applications.md').dirty;
+  check(result.changed === false && readEvents(store).length === before && writes === 0
+    && dirty === 1 && Buffer.compare(fs.readFileSync(apps), beforeFile) === 0,
+  'no-op leaves a pre-existing dirty marker untouched and writes no file');
   setLogWritesTestHooks();
 }
 
@@ -206,6 +214,74 @@ console.log('\nwriteTableText');
     && readEvents(store).length === beforeCount
     && fs.readFileSync(path.join(fixture.dataDir, 'applications.md'), 'utf8') === beforeFile,
   'rejects a builder that drops an effect and writes nothing');
+}
+
+{
+  const fixture = importFixture('table-effect-extra');
+  const store = openDataStore(fixture.dataDir);
+  const beforeCount = readEvents(store).length;
+  const beforeFile = fs.readFileSync(path.join(fixture.dataDir, 'applications.md'), 'utf8');
+  const error = caught(() => callWrite(
+    fixture,
+    trackerText([row({ num: 900001, score: '0.67/5' }), BASE_ROWS[1]]),
+    ({ changed }) => [{
+      type: 'legacy_record',
+      occurred_on: '2030-03-10',
+      payload: {
+        reason: 'invented_extra_effect',
+        legacy_effects: [
+          changed[0].effect,
+          {
+            file: 'status-events.tsv',
+            op: 'row_upsert',
+            row_id: 'status-events.tsv#invented-extra',
+            raw: '900001\t2030-03-10\tEvaluated\tZorblax Widgetry\t2030-03-10',
+            anchor: { at: 'table_end' },
+          },
+        ],
+      },
+    }],
+  ));
+  check(/no other effects/.test(error?.message || '')
+    && readEvents(store).length === beforeCount
+    && fs.readFileSync(path.join(fixture.dataDir, 'applications.md'), 'utf8') === beforeFile,
+  'rejects an extra unrequested effect and writes nothing');
+}
+
+{
+  const fixture = importFixture('table-effect-duplicate');
+  const store = openDataStore(fixture.dataDir);
+  const beforeCount = readEvents(store).length;
+  const beforeFile = fs.readFileSync(path.join(fixture.dataDir, 'applications.md'), 'utf8');
+  const error = caught(() => callWrite(
+    fixture,
+    trackerText([row({ num: 900001, score: '0.68/5' }), BASE_ROWS[1]]),
+    ({ changed }) => [{
+      type: 'legacy_record',
+      occurred_on: '2030-03-10',
+      payload: {
+        reason: 'invented_duplicate_effect',
+        legacy_effects: [changed[0].effect, changed[0].effect],
+      },
+    }],
+  ));
+  check(/exactly one event/.test(error?.message || '')
+    && readEvents(store).length === beforeCount
+    && fs.readFileSync(path.join(fixture.dataDir, 'applications.md'), 'utf8') === beforeFile,
+  'rejects a duplicated generated effect and writes nothing');
+}
+
+{
+  const withoutTrailingNewline = trackerText(BASE_ROWS).replace(/\n$/, '');
+  const fixture = importFixture('table-round-trip', withoutTrailingNewline);
+  const store = openDataStore(fixture.dataDir);
+  const beforeCount = readEvents(store).length;
+  const requested = trackerText([BASE_ROWS[0]]).replace(/\n$/, '');
+  const error = caught(() => callWrite(fixture, requested));
+  check(error?.code === 'ROUND_TRIP_MISMATCH'
+    && readEvents(store).length === beforeCount
+    && fs.readFileSync(path.join(fixture.dataDir, 'applications.md'), 'utf8') === withoutTrailingNewline,
+  'ROUND_TRIP_MISMATCH rolls back deleting the last row of a file without a trailing newline');
 }
 
 {
@@ -333,6 +409,30 @@ console.log('\nmerge-tracker');
     && evaluated.filter(event => event.payload.re_evaluation === false).length === 1
     && dirty === 0,
   'merge logs one added and one re-evaluated posting with no dirty files');
+}
+
+{
+  const sandbox = setupMergeSandbox('merge-log-render-failure', true);
+  fs.writeFileSync(path.join(sandbox, 'merge-render-failure.mjs'), [
+    "import { setLogWritesTestHooks } from './lib/log-writes.mjs';",
+    "setLogWritesTestHooks({ writeFile: () => { throw new Error('invented render failure'); } });",
+    "await import('./merge-tracker.mjs');",
+    '',
+  ].join('\n'));
+  const run = runScript(sandbox, 'merge-render-failure.mjs');
+  const pipeline = fs.readFileSync(path.join(sandbox, 'data/pipeline.md'), 'utf8');
+  const store = openEventStore(path.join(sandbox, 'data/trajecktory.db'));
+  const evaluated = readEvents(store).filter(event => event.type === 'posting_evaluated' && event.source === 'cli');
+  const dirty = store.db.prepare('SELECT dirty FROM legacy_render_state WHERE file = ?').get('applications.md').dirty;
+  store.close();
+  check(run.status === 0 && /Warning: Change saved, but files could not be updated yet: applications\.md/.test(run.stderr)
+    && pipeline.split('\n').filter(Boolean).every(line => line.startsWith('- [x]'))
+    && treeBytes(sandbox, 'batch/tracker-additions/merged').length === 2
+    && treeBytes(sandbox, 'batch/tracker-additions/dropped').length === 1
+    && fs.existsSync(path.join(sandbox, 'data/merge-drops.tsv'))
+    && fs.existsSync(path.join(sandbox, 'data/source-corrections.tsv'))
+    && evaluated.length === 2 && dirty > 0,
+  'merge RENDER_FAILED warns and continues pipeline check-off, TSV moves, and audit logs');
 }
 
 {

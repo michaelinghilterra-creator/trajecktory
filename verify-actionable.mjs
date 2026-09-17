@@ -171,7 +171,12 @@ if (logWritesEnabled(DATA_DIR)) {
       },
     });
   } catch (error) {
-    console.error(error.message);
+    if (error.code === 'RENDER_FAILED') {
+      console.warn(`Warning: ${error.message}`);
+      console.log(`\n✅ Flipped ${expired.length} entries to Discarded.`);
+    } else {
+      console.error(error.message);
+    }
     process.exit(1);
   }
 } else {

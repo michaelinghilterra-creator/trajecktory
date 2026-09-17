@@ -809,8 +809,12 @@ if (!DRY_RUN) {
         ],
       });
     } catch (error) {
-      console.error(error.message);
-      process.exit(1);
+      if (error.code === 'RENDER_FAILED') {
+        console.warn(`Warning: ${error.message}`);
+      } else {
+        console.error(error.message);
+        process.exit(1);
+      }
     }
   } else {
     writeFileSync(APPS_FILE, newText);
