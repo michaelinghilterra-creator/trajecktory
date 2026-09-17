@@ -231,12 +231,16 @@ function status(dataDir, io) {
     io.log(`Database: present (${dbPath})`);
     io.log(`Events: ${summary.count}; latest event id: ${summary.latest ?? 'none'}`);
     const store = { db };
+    const renderIssues = [];
     for (const file of listLegacyFiles(store)) {
       const match = fileMatchesLastRender(store, dataDir, file);
       io.log(`Render ${file}: ${match === null ? 'no marker yet' : match}`);
+      if (match !== true) renderIssues.push(`${file} (${match === null ? 'no marker' : 'mismatch'})`);
     }
     if (state.writes === 'on') {
-      io.log('Verdict: already on');
+      io.log(renderIssues.length
+        ? `Verdict: DANGEROUS, writes are on but projected files are not healthy: ${renderIssues.join(', ')}. Stop the dashboard and every script. Resolve the reported files, or run rollback --apply --no-other-writers and then flip --apply --reimport --no-other-writers if the current files are authoritative.`
+        : 'Verdict: already on');
     } else {
       io.log('Database state: stale because writes made while the switch is off do not reach it.');
       io.log('Verdict: flip forward by re-importing from the current files with flip --apply --reimport.');

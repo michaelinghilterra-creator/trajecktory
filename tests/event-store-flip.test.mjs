@@ -228,6 +228,26 @@ let appliedOriginal;
 }
 
 {
+  const item = fixture(root, 'correspondence-created-during-flip');
+  const createdFile = join(item.dataDir, 'referral-correspondence', '900099.md');
+  const result = command(item, ['flip', '--apply', '--no-other-writers', '--data-dir', item.dataDir, '--output-dir', item.outputDir], {
+    verifyImportFn(store, imported, dataDir, outputDir) {
+      const verification = verifyImport(store, imported, dataDir, outputDir);
+      mkdirSync(join(item.dataDir, 'referral-correspondence'), { recursive: true });
+      writeFileSync(createdFile, '# Invented late correspondence\n', 'utf8');
+      return verification;
+    },
+  });
+  check(result.code === 1
+    && /something wrote during the flip/.test(result.stderr.join('\n'))
+    && /referral-correspondence\/900099\.md/.test(result.stderr.join('\n'))
+    && existsSync(createdFile)
+    && !existsSync(join(item.dataDir, 'trajecktory.db'))
+    && !existsSync(join(item.dataDir, 'event-store.json')),
+  'a correspondence file created after import aborts the flip and names the file');
+}
+
+{
   const before = snapshot(applied.dataDir);
   const result = command(applied, ['flip', '--apply', '--no-other-writers', '--data-dir', applied.dataDir, '--output-dir', applied.outputDir]);
   check(result.code === 1 && /already on/.test(result.stderr.join('\n'))
@@ -463,15 +483,35 @@ for (const [name, failure] of [
   'status reports the on switch, database and matching render baseline');
   writeFileSync(join(item.dataDir, 'applications.md'), `${readFileSync(join(item.dataDir, 'applications.md'), 'utf8')}Invented outside edit\n`, 'utf8');
   const edited = command(item, ['status']);
-  check(/Render applications\.md: false/.test(edited.stdout.join('\n')),
-    'status reports a projected file edited outside the app');
+  check(/Render applications\.md: false/.test(edited.stdout.join('\n'))
+    && /Verdict: DANGEROUS/.test(edited.stdout.join('\n'))
+    && /applications\.md \(mismatch\)/.test(edited.stdout.join('\n'))
+    && /rollback --apply --no-other-writers/.test(edited.stdout.join('\n'))
+    && !/Verdict: already on/.test(edited.stdout.join('\n')),
+  'status gives a dangerous verdict and a remedy for an on switch with a mismatched file');
 
   command(item, ['rollback', '--apply', '--no-other-writers']);
   const stale = command(item, ['status']);
   check(stale.code === 0
     && /Database state: stale because writes made while the switch is off do not reach it/.test(stale.stdout.join('\n'))
-    && /flip --apply --reimport/.test(stale.stdout.join('\n')),
+    && /flip --apply --reimport/.test(stale.stdout.join('\n'))
+    && !/Verdict: DANGEROUS/.test(stale.stdout.join('\n')),
   'status identifies an off-switch database as stale and names the reimport command');
+}
+
+{
+  const item = fixture(root, 'status-missing-marker');
+  command(item, ['flip', '--apply', '--no-other-writers', '--data-dir', item.dataDir, '--output-dir', item.outputDir]);
+  const store = openEventStore(join(item.dataDir, 'trajecktory.db'));
+  store.db.prepare('DELETE FROM legacy_render_state WHERE file = ?').run('applications.md');
+  store.close();
+  const result = command(item, ['status']);
+  check(/Render applications\.md: no marker yet/.test(result.stdout.join('\n'))
+    && /Verdict: DANGEROUS/.test(result.stdout.join('\n'))
+    && /applications\.md \(no marker\)/.test(result.stdout.join('\n'))
+    && /flip --apply --reimport --no-other-writers/.test(result.stdout.join('\n'))
+    && !/Verdict: already on/.test(result.stdout.join('\n')),
+  'status gives a dangerous verdict and a remedy for an on switch with no render marker');
 }
 
 {

@@ -144,6 +144,43 @@ console.log('hand-edit-guard.test.mjs');
 }
 
 {
+  const dataDir = setup('correspondence-no-marker-outside-file', {});
+  const file = path.join(dataDir, 'target-talent-correspondence', '900099.md');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, '# Invented outside correspondence\n', 'utf8');
+  const beforeCount = eventCount(dataDir);
+  let error;
+  try {
+    save(dataDir, [{
+      file: 'target-talent-correspondence/900099.md',
+      op: 'file_replace',
+      raw: '# Invented app correspondence\n',
+    }], 'correspondence-no-marker-outside-file');
+  } catch (caught) {
+    error = caught;
+  }
+  check(error?.code === 'HAND_EDITED'
+    && error.files?.join(',') === 'target-talent-correspondence/900099.md'
+    && fs.readFileSync(file, 'utf8') === '# Invented outside correspondence\n'
+    && eventCount(dataDir) === beforeCount,
+  'an existing correspondence file with no baseline is treated as an outside edit');
+}
+
+{
+  const dataDir = setup('correspondence-first-app-write', {});
+  const file = path.join(dataDir, 'target-talent-correspondence', '900100.md');
+  const beforeCount = eventCount(dataDir);
+  save(dataDir, [{
+    file: 'target-talent-correspondence/900100.md',
+    op: 'file_replace',
+    raw: '# Invented first app correspondence\n',
+  }], 'correspondence-first-app-write');
+  check(fs.readFileSync(file, 'utf8') === '# Invented first app correspondence\n'
+    && eventCount(dataDir) === beforeCount + 1,
+  'the app can create a new correspondence file when no file or baseline exists');
+}
+
+{
   const dataDir = setup('known-absent', {});
   openDataStore(dataDir).db.prepare(`
     INSERT INTO legacy_render_state (file, dirty, sha256)
