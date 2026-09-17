@@ -14,6 +14,10 @@ import {
   compareApplyDates,
   importApplyEvidence,
 } from '../lib/import/apply-import.mjs';
+import {
+  compareStatusHistory,
+  importStatusHistory,
+} from '../lib/import/status-import.mjs';
 import { compareTracker, importTracker } from '../lib/import/tracker-import.mjs';
 
 function refuse(message) {
@@ -74,6 +78,9 @@ const trackerText = readFileSync(resolve(inputDir, 'applications.md'), 'utf8');
 const applyDatesPath = resolve(inputDir, 'apply-dates.json');
 const applyDatesMissing = !existsSync(applyDatesPath);
 const applyDates = applyDatesMissing ? {} : JSON.parse(readFileSync(applyDatesPath, 'utf8'));
+const statusEventsPath = resolve(inputDir, 'status-events.tsv');
+const statusEventsMissing = !existsSync(statusEventsPath);
+const statusText = statusEventsMissing ? '' : readFileSync(statusEventsPath, 'utf8');
 const outputFiles = readdirSync(outputDir, { withFileTypes: true })
   .filter(entry => entry.isFile())
   .map(entry => entry.name);
@@ -86,6 +93,8 @@ let trackerReport;
 let trackerComparison;
 let applyReport;
 let applyComparison;
+let statusReport;
+let statusComparison;
 try {
   trackerReport = importTracker(store, trackerText, { definitionsVersion, importedOn });
   trackerComparison = compareTracker(trackerText, store);
@@ -97,11 +106,14 @@ try {
     ownerName,
   });
   applyComparison = compareApplyDates(applyDates, store);
+  statusReport = importStatusHistory(store, statusText, { definitionsVersion, importedOn });
+  statusComparison = compareStatusHistory(statusText, store);
 } finally {
   store.close();
 }
 
 applyReport.counts.apply_dates_file_missing = applyDatesMissing;
+statusReport.counts.status_events_file_missing = statusEventsMissing;
 const report = {
   tracker: {
     ...trackerReport,
@@ -113,6 +125,10 @@ const report = {
   },
   apply: applyReport,
   apply_dates_match: applyComparison,
+  status: {
+    ...statusReport,
+    comparison: statusComparison,
+  },
 };
 writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 
@@ -127,7 +143,13 @@ console.log(JSON.stringify({
     evidence_used: applyReport.evidence_used,
     flags: flagCounts(applyReport.flags),
   },
+  status: {
+    counts: statusReport.counts,
+    status_counts: statusReport.status_counts,
+    flags: flagCounts(statusReport.flags),
+  },
 }, null, 2));
 console.log(trackerComparison.match ? 'TRACKER MATCH' : 'TRACKER MISMATCH');
 console.log(applyComparison.match ? 'APPLY DATES MATCH' : 'APPLY DATES MISMATCH');
-process.exit(trackerComparison.match && applyComparison.match ? 0 : 1);
+console.log(statusComparison.match ? 'STATUS HISTORY MATCH' : 'STATUS HISTORY MISMATCH');
+process.exit(trackerComparison.match && applyComparison.match && statusComparison.match ? 0 : 1);
