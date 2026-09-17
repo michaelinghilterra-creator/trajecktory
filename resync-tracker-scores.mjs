@@ -53,9 +53,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine } from './lib/tracker.mjs';
 import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs';
+import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const APPS = path.join(HERE, 'data', 'applications.md');
+const DATA_DIR = process.env.TJK_DATA_DIR ? path.resolve(process.env.TJK_DATA_DIR) : path.join(HERE, 'data');
+const APPS = path.join(DATA_DIR, 'applications.md');
 
 // The canonical Score cell format, matching merge-tracker.mjs exactly.
 const fmtScore = (n) => `${n.toFixed(1)}/5`;
@@ -180,7 +182,34 @@ function main() {
 
   const byLine = new Map(plan.changes.map(c => [c.line, c.newLine]));
   const out = lines.map(l => (byLine.has(l) ? byLine.get(l) : l));
-  fs.writeFileSync(APPS, out.join(eol), 'utf-8');
+  const newText = out.join(eol);
+  if (logWritesEnabled(DATA_DIR)) {
+    try {
+      writeTableText({
+        dataDir: DATA_DIR,
+        file: 'applications.md',
+        baseText: text,
+        newText,
+        rowKey: line => {
+          const row = parseTrackerLine(line);
+          return row ? String(row.num) : null;
+        },
+        buildEvents: ({ added, changed, removed }) => {
+          if (added.length || removed.length) throw new Error('resync-tracker-scores may only update existing tracker rows');
+          return changed.map(change => {
+            const row = parseTrackerLine(change.raw);
+            return {
+              type: 'legacy_record', application_id: String(row.num), occurred_on: localToday(),
+              payload: { reason: 'tracker_row_updated', ref: `app:${row.num}`, fields: ['score'], legacy_effects: [change.effect] },
+            };
+          });
+        },
+      });
+    } catch (error) {
+      if (error.code === 'RENDER_FAILED') console.warn(`Warning: ${error.message}`);
+      else { console.error(error.message); process.exit(1); }
+    }
+  } else fs.writeFileSync(APPS, newText, 'utf-8');
 
   if (!jsonOut) {
     console.log(`\nBacked up to ${path.basename(backup)}`);

@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine, formatTrackerLine } from '../lib/tracker.mjs';
+import { localToday, logWritesEnabled, writeTableText } from '../lib/log-writes.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const flag = name => '-' + `-${name}`;
@@ -66,7 +67,47 @@ function rewriteTracker(appsPath, transform, apply) {
     changed++;
     return formatTrackerLine(replacement);
   });
-  if (changed && apply) fs.writeFileSync(appsPath, next.join(newline));
+  if (changed && apply) {
+    const dataDir = path.dirname(appsPath);
+    const newText = next.join(newline);
+    if (logWritesEnabled(dataDir)) {
+      try {
+        writeTableText({
+          dataDir,
+          file: 'applications.md',
+          baseText: text,
+          newText,
+          rowKey: line => {
+            const row = parseTrackerLine(line);
+            return row ? String(row.num) : null;
+          },
+          buildEvents: ({ added, changed: rowChanges, removed }) => {
+            if (added.length || removed.length) throw new Error('obsidian-postfix may only update existing tracker rows');
+            return rowChanges.map(change => {
+              const before = parseTrackerLine(change.previousRaw);
+              const after = parseTrackerLine(change.raw);
+              const fields = [];
+              if (before.url !== after.url) fields.push('url');
+              if (before.status !== after.status) fields.push('status');
+              return {
+                type: before.status !== after.status ? 'status_changed' : 'legacy_record',
+                application_id: String(after.num), occurred_on: localToday(),
+                payload: {
+                  ref: `app:${after.num}`, fields,
+                  ...(before.status === after.status ? { reason: 'tracker_row_updated' } : {}),
+                  ...(before.status !== after.status ? { from: before.status, to: after.status } : {}),
+                  legacy_effects: [change.effect],
+                },
+              };
+            });
+          },
+        });
+      } catch (error) {
+        if (error.code === 'RENDER_FAILED') console.warn(`Warning: ${error.message}`);
+        else throw error;
+      }
+    } else fs.writeFileSync(appsPath, newText);
+  }
   return changed;
 }
 
@@ -80,7 +121,8 @@ function main() {
   const repo = path.resolve(options.repo);
   const reportsDir = path.join(repo, 'reports');
   const strayDir = path.join(repo, 'batch', 'reports');
-  const appsPath = path.join(repo, 'data', 'applications.md');
+  const dataDir = process.env.TJK_DATA_DIR ? path.resolve(process.env.TJK_DATA_DIR) : path.join(repo, 'data');
+  const appsPath = path.join(dataDir, 'applications.md');
   const manifestPath = path.join(repo, 'batch', 'obsidian-manifest.tsv');
   const statePath = path.join(repo, 'batch', 'batch-state.tsv');
   let recovered = 0;

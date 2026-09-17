@@ -348,6 +348,7 @@ function patchRowInMd(id, updates, hint = {}) {
       const raw = formatTrackerLine({
         ...target.row,
         ...(updates.status !== undefined ? { status: updates.status } : {}),
+        ...(updates.role !== undefined ? { role: updates.role } : {}),
         ...(updates.notes !== undefined ? { notes: updates.notes } : {}),
       });
       const effects = [{
@@ -375,7 +376,8 @@ function patchRowInMd(id, updates, hint = {}) {
           definitions_version: 'v1',
           payload: {
             num: id,
-            company: target.row.company,
+            ref: `app:${id}`,
+            fields: Object.keys(updates),
             from: target.row.status,
             to: updates.status,
             date: occurredOn,
@@ -391,7 +393,8 @@ function patchRowInMd(id, updates, hint = {}) {
           payload: {
             reason: 'tracker_row_updated',
             num: id,
-            company: target.row.company,
+            ref: `app:${id}`,
+            fields: Object.keys(updates),
             legacy_effects: effects,
           },
         };
@@ -423,6 +426,7 @@ function patchRowInMd(id, updates, hint = {}) {
   newLines[target.idx] = formatTrackerLine({
     ...target.row,
     ...(updates.status !== undefined ? { status: updates.status } : {}),
+    ...(updates.role !== undefined ? { role: updates.role } : {}),
     ...(updates.notes !== undefined ? { notes: updates.notes } : {}),
   });
 

@@ -12,16 +12,24 @@
  */
 
 import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
+import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md (original)
-const APPS_FILE = existsSync(join(CAREER_OPS, 'data/applications.md'))
-  ? join(CAREER_OPS, 'data/applications.md')
+const DATA_DIR = process.env.TJK_DATA_DIR ? resolve(process.env.TJK_DATA_DIR) : join(CAREER_OPS, 'data');
+const DATA_APPS = join(DATA_DIR, 'applications.md');
+const APPS_FILE = existsSync(DATA_APPS)
+  ? DATA_APPS
   : join(CAREER_OPS, 'applications.md');
 const DRY_RUN = process.argv.includes('--dry-run');
+
+if (logWritesEnabled(DATA_DIR) && APPS_FILE !== DATA_APPS) {
+  console.error('Event-log writes require an existing data/applications.md; nothing was saved.');
+  process.exit(1);
+}
 
 // Ensure required directories exist (fresh setup)
 mkdirSync(join(CAREER_OPS, 'data'), { recursive: true });
@@ -165,7 +173,38 @@ console.log(`\n📊 ${changes} statuses normalized`);
 if (!DRY_RUN && changes > 0) {
   // Backup first
   copyFileSync(APPS_FILE, APPS_FILE + '.bak');
-  writeFileSync(APPS_FILE, lines.join('\n'));
+  const newText = lines.join('\n');
+  if (logWritesEnabled(DATA_DIR)) {
+    try {
+      writeTableText({
+        dataDir: DATA_DIR,
+        file: 'applications.md',
+        baseText: content,
+        newText,
+        rowKey: line => {
+          const row = parseTrackerLine(line);
+          return row ? String(row.num) : null;
+        },
+        buildEvents: ({ added, changed, removed }) => {
+          if (added.length || removed.length) throw new Error('normalize-statuses may only update existing tracker rows');
+          return changed.map(change => {
+            const before = parseTrackerLine(change.previousRaw);
+            const after = parseTrackerLine(change.raw);
+            const fields = ['status'];
+            if (before.notes !== after.notes) fields.push('notes');
+            if (before.score !== after.score) fields.push('score');
+            return {
+              type: 'status_changed', application_id: String(after.num), occurred_on: localToday(),
+              payload: { ref: `app:${after.num}`, fields, from: before.status, to: after.status, legacy_effects: [change.effect] },
+            };
+          });
+        },
+      });
+    } catch (error) {
+      if (error.code === 'RENDER_FAILED') console.warn(`Warning: ${error.message}`);
+      else { console.error(error.message); process.exit(1); }
+    }
+  } else writeFileSync(APPS_FILE, newText);
   console.log('✅ Written to applications.md (backup: applications.md.bak)');
 } else if (DRY_RUN) {
   console.log('(dry-run — no changes written)');

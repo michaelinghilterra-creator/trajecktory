@@ -14,9 +14,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
 import { AUTO_DISCARD_SCORE } from './lib/discard.mjs';
+import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const APPS = path.join(__dirname, 'data/applications.md');
+const DATA_DIR = process.env.TJK_DATA_DIR ? path.resolve(process.env.TJK_DATA_DIR) : path.join(__dirname, 'data');
+const APPS = path.join(DATA_DIR, 'applications.md');
 
 const apply = process.argv.includes('--apply');
 
@@ -79,5 +81,43 @@ if (!apply) {
   process.exit(0);
 }
 
-fs.writeFileSync(APPS, out.join('\n'));
+const newText = out.join('\n');
+if (logWritesEnabled(DATA_DIR)) {
+  try {
+    writeTableText({
+      dataDir: DATA_DIR,
+      file: 'applications.md',
+      baseText: lines.join('\n'),
+      newText,
+      rowKey: line => {
+        const row = parseTrackerLine(line);
+        return row ? String(row.num) : null;
+      },
+      buildEvents: ({ added, changed, removed }) => {
+        if (added.length || removed.length) throw new Error('auto-discard-low may only update existing tracker rows');
+        return changed.map(change => {
+          const before = parseTrackerLine(change.previousRaw);
+          const row = parseTrackerLine(change.raw);
+          return {
+            type: 'status_changed',
+            application_id: String(row.num),
+            occurred_on: localToday(),
+            payload: {
+              ref: `app:${row.num}`,
+              fields: ['status', 'notes'],
+              from: before.status,
+              to: row.status,
+              legacy_effects: [change.effect],
+            },
+          };
+        });
+      },
+    });
+  } catch (error) {
+    if (error.code === 'RENDER_FAILED') console.warn(`Warning: ${error.message}`);
+    else { console.error(error.message); process.exit(1); }
+  }
+} else {
+  fs.writeFileSync(APPS, newText);
+}
 console.log(`\n✅ Flipped ${changes.length} entries to Discarded.`);

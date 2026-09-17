@@ -21,7 +21,7 @@
  * Run: node tests/backfill-tracker-urls.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { mkdirSync, writeFileSync, readFileSync, copyFileSync, rmSync } from 'fs';
+import { mkdirSync, writeFileSync, readFileSync, copyFileSync, cpSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
@@ -43,8 +43,7 @@ mkdirSync(join(sandbox, 'reports'), { recursive: true });
 mkdirSync(join(sandbox, 'batch/tracker-additions'), { recursive: true });
 mkdirSync(join(sandbox, 'lib'), { recursive: true });
 copyFileSync(join(ROOT, 'backfill-tracker-urls.mjs'), join(sandbox, 'backfill-tracker-urls.mjs'));
-copyFileSync(join(ROOT, 'lib/tracker.mjs'), join(sandbox, 'lib/tracker.mjs'));
-copyFileSync(join(ROOT, 'lib/identity.mjs'), join(sandbox, 'lib/identity.mjs'));
+cpSync(join(ROOT, 'lib'), join(sandbox, 'lib'), { recursive: true });
 
 const APPS = join(sandbox, 'data/applications.md');
 

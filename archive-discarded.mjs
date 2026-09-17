@@ -21,9 +21,57 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { parseTrackerLine } from './lib/tracker.mjs';
+import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const APPS = path.join(__dirname, 'data/applications.md');
+const DATA_DIR = process.env.TJK_DATA_DIR ? path.resolve(process.env.TJK_DATA_DIR) : path.join(__dirname, 'data');
+const APPS = path.join(DATA_DIR, 'applications.md');
+
+function writeApplications(baseText, newText, action) {
+  if (!logWritesEnabled(DATA_DIR)) {
+    fs.writeFileSync(APPS, newText);
+    return true;
+  }
+  try {
+    writeTableText({
+      dataDir: DATA_DIR,
+      file: 'applications.md',
+      baseText,
+      newText,
+      rowKey: line => {
+        const row = parseTrackerLine(line);
+        return row ? String(row.num) : null;
+      },
+      buildEvents: ({ added, changed, removed }) => {
+        if (changed.length) throw new Error('archive-discarded may only add or remove tracker rows');
+        const selected = action === 'restore' ? added : removed;
+        const unexpected = action === 'restore' ? removed : added;
+        if (unexpected.length) throw new Error(`archive-discarded ${action} produced an unexpected tracker change`);
+        return selected.map(change => {
+          const row = parseTrackerLine(change.raw);
+          return {
+            type: 'legacy_record',
+            application_id: String(row.num),
+            occurred_on: localToday(),
+            payload: {
+              reason: action === 'restore' ? 'tracker_row_restored' : 'tracker_row_archived',
+              ref: `app:${row.num}`, state: row.status, legacy_effects: [change.effect],
+            },
+          };
+        });
+      },
+    });
+  } catch (error) {
+    if (error.code === 'RENDER_FAILED') {
+      console.warn(`Warning: ${error.message}`);
+      return true;
+    }
+    console.error(error.message);
+    return false;
+  }
+  return true;
+}
 
 const args = process.argv.slice(2);
 const restoreIdx = args.indexOf('--restore');
@@ -40,14 +88,15 @@ const archiveTag = tagIdx >= 0 ? args[tagIdx + 1] : null;
 if (restoreTagIdx >= 0) {
   const tag = args[restoreTagIdx + 1];
   if (!tag) { console.error('Usage: --restore-tag <tag>'); process.exit(1); }
-  const archive = path.join(__dirname, `data/applications-archive-${tag}.md`);
+  const archive = path.join(DATA_DIR, `applications-archive-${tag}.md`);
   if (!fs.existsSync(archive)) { console.error(`No archive at ${archive}`); process.exit(1); }
-  const archived = fs.readFileSync(archive, 'utf8').split('\n').filter(l => l.startsWith('| '));
-  const apps = fs.readFileSync(APPS, 'utf8').split('\n');
+  const archived = fs.readFileSync(archive, 'utf8').split('\n').filter(line => parseTrackerLine(line));
+  const baseText = fs.readFileSync(APPS, 'utf8');
+  const apps = baseText.split('\n');
   const sepIdx = apps.findIndex(l => /^\|[-\s|]+\|$/.test(l.trim()));
   if (sepIdx === -1) { console.error('Could not find applications.md table header'); process.exit(1); }
   apps.splice(sepIdx + 1, 0, ...archived);
-  fs.writeFileSync(APPS, apps.join('\n'));
+  if (!writeApplications(baseText, apps.join('\n'), 'restore')) process.exit(1);
   fs.unlinkSync(archive);
   console.log(`✅ Restored ${archived.length} entries from ${path.basename(archive)}. Archive file removed.`);
   process.exit(0);
@@ -58,22 +107,23 @@ if (restoreIdx >= 0) {
   if (!date) { console.error('Usage: --restore YYYY-MM-DD [--noscore]'); process.exit(1); }
   const restoreNoscore = args.includes('--noscore');
   const suffix = restoreNoscore ? `-noscore` : '';
-  const archive = path.join(__dirname, `data/applications-archive-${date}${suffix}.md`);
+  const archive = path.join(DATA_DIR, `applications-archive-${date}${suffix}.md`);
   if (!fs.existsSync(archive)) {
     console.error(`No archive at ${archive}`);
     process.exit(1);
   }
   const archived = fs.readFileSync(archive, 'utf8').split('\n')
-    .filter(l => l.startsWith('| '));
+    .filter(line => parseTrackerLine(line));
   console.log(`Restoring ${archived.length} entries from ${archive}`);
 
-  const apps = fs.readFileSync(APPS, 'utf8').split('\n');
+  const baseText = fs.readFileSync(APPS, 'utf8');
+  const apps = baseText.split('\n');
   // Insert after the table header (the |---|---|... separator row)
   const sepIdx = apps.findIndex(l => /^\|[-\s|]+\|$/.test(l.trim()));
   if (sepIdx === -1) { console.error('Could not find applications.md table header'); process.exit(1); }
 
   apps.splice(sepIdx + 1, 0, ...archived);
-  fs.writeFileSync(APPS, apps.join('\n'));
+  if (!writeApplications(baseText, apps.join('\n'), 'restore')) process.exit(1);
   fs.unlinkSync(archive);
   console.log(`✅ Restored. Archive file removed.`);
   process.exit(0);
@@ -85,16 +135,15 @@ if (idsList) {
     console.error('--ids requires --tag <name> (used to label the archive file)');
     process.exit(1);
   }
-  const lines = fs.readFileSync(APPS, 'utf8').split('\n');
+  const baseText = fs.readFileSync(APPS, 'utf8');
+  const lines = baseText.split('\n');
   const keep = [];
   const move = [];
   for (const line of lines) {
-    if (!line.startsWith('|')) { keep.push(line); continue; }
-    const parts = line.split('|').map(p => p.trim());
-    if (parts.length < 10) { keep.push(line); continue; }
-    const id = parseInt(parts[1], 10);
-    if (isNaN(id)) { keep.push(line); continue; }
-    const status = parts[6];
+    const row = parseTrackerLine(line);
+    if (!row) { keep.push(line); continue; }
+    const id = row.num;
+    const status = row.status;
     // NEVER touch user-progressed statuses, regardless of ID list
     const safeForArchive = ['SKIP', 'Discarded', 'Evaluated', 'Rejected'].includes(status);
     if (idsList.has(id) && safeForArchive) move.push(line);
@@ -115,7 +164,7 @@ if (idsList) {
     console.log(`\nRun with --apply to archive → data/applications-archive-${archiveTag}.md`);
     process.exit(0);
   }
-  const archive = path.join(__dirname, `data/applications-archive-${archiveTag}.md`);
+  const archive = path.join(DATA_DIR, `applications-archive-${archiveTag}.md`);
   const header = [
     `# Applications Archive — ${archiveTag}`,
     '',
@@ -127,8 +176,8 @@ if (idsList) {
     '|---|------|---------|------|-------|--------|-----|--------|-------|',
     ...move,
   ];
+  if (!writeApplications(baseText, keep.join('\n'), 'archive')) process.exit(1);
   fs.writeFileSync(archive, header.join('\n'));
-  fs.writeFileSync(APPS, keep.join('\n'));
   console.log(`\n✅ Archived ${move.length} entries → ${path.basename(archive)}`);
   console.log(`   Restore with: node archive-discarded.mjs --restore-tag ${archiveTag}`);
   process.exit(0);
@@ -141,18 +190,17 @@ if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
   process.exit(1);
 }
 
-const lines = fs.readFileSync(APPS, 'utf8').split('\n');
+const baseText = fs.readFileSync(APPS, 'utf8');
+const lines = baseText.split('\n');
 const keep = [];
 const move = [];
 
 for (const line of lines) {
-  if (!line.startsWith('|')) { keep.push(line); continue; }
-  // Parse: | id | date | company | role | score | status | ...
-  const parts = line.split('|').map(p => p.trim());
-  if (parts.length < 10) { keep.push(line); continue; }
-  const rowDate = parts[2];
-  const score = parts[5];
-  const status = parts[6];
+  const row = parseTrackerLine(line);
+  if (!row) { keep.push(line); continue; }
+  const rowDate = row.date;
+  const score = row.score;
+  const status = row.status;
 
   // Match criteria
   let shouldMove = false;
@@ -193,7 +241,7 @@ if (!apply) {
 
 // Write archive
 const suffix = noscore ? `-noscore` : '';
-const archive = path.join(__dirname, `data/applications-archive-${date}${suffix}.md`);
+const archive = path.join(DATA_DIR, `applications-archive-${date}${suffix}.md`);
 const archiveLabel = noscore ? 'SKIP/Discarded N/A-score scanner noise' : 'Discarded entries';
 const header = [
   `# Applications Archive — ${date} (${archiveLabel})`,
@@ -206,8 +254,8 @@ const header = [
   '|---|------|---------|------|-------|--------|-----|--------|-------|',
   ...move,
 ];
+if (!writeApplications(baseText, keep.join('\n'), 'archive')) process.exit(1);
 fs.writeFileSync(archive, header.join('\n'));
-fs.writeFileSync(APPS, keep.join('\n'));
 console.log(`\n✅ Archived ${move.length} entries → ${path.basename(archive)}`);
 console.log(`   applications.md now has ${keep.filter(l => l.startsWith('| ') && /^\| \d/.test(l)).length} tracker rows`);
 console.log(`   Restore anytime with: node archive-discarded.mjs --restore ${date}`);
