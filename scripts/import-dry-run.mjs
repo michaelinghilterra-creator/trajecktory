@@ -36,6 +36,7 @@ import {
   compareLinkedIn,
   importLinkedIn,
 } from '../lib/import/linkedin-import.mjs';
+import { compareTwc, importTwc } from '../lib/import/twc-import.mjs';
 
 function refuse(message) {
   console.error(message);
@@ -156,6 +157,10 @@ const linkedinFiles = {
   sidecarText: readOptionalText(inputDir, 'tt-linkedin.json'),
   connectionsText: readOptionalText(inputDir, 'linkedin-connections.json'),
 };
+const twcFiles = {
+  eventsText: readOptionalText(inputDir, 'twc-events.json'),
+  overridesText: readOptionalText(inputDir, 'twc-overrides.json'),
+};
 const outputFiles = readdirSync(outputDir, { withFileTypes: true })
   .filter(entry => entry.isFile())
   .map(entry => entry.name);
@@ -179,6 +184,8 @@ let correspondenceReport;
 let correspondenceComparison;
 let linkedinReport;
 let linkedinComparison;
+let twcReport;
+let twcComparison;
 try {
   trackerReport = importTracker(store, trackerText, { definitionsVersion, importedOn });
   trackerComparison = compareTracker(trackerText, store);
@@ -223,6 +230,12 @@ try {
     importedOn,
   });
   linkedinComparison = compareLinkedIn(linkedinFiles, store);
+  twcReport = importTwc(store, {
+    ...twcFiles,
+    definitionsVersion,
+    importedOn,
+  });
+  twcComparison = compareTwc(twcFiles, store);
 } finally {
   store.close();
 }
@@ -267,6 +280,10 @@ const report = {
   linkedin: {
     ...linkedinReport,
     comparison: linkedinComparison,
+  },
+  twc: {
+    ...twcReport,
+    comparison: twcComparison,
   },
 };
 writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
@@ -320,6 +337,10 @@ console.log(JSON.stringify({
     accepted_after_request: linkedinReport.accepted_after_request,
     flags: flagCounts(linkedinReport.flags),
   },
+  twc: {
+    counts: twcReport.counts,
+    flags: flagCounts(twcReport.flags),
+  },
 }, null, 2));
 console.log(trackerComparison.match ? 'TRACKER MATCH' : 'TRACKER MISMATCH');
 console.log(applyComparison.match ? 'APPLY DATES MATCH' : 'APPLY DATES MISMATCH');
@@ -328,6 +349,7 @@ console.log(peopleComparison.match ? 'PEOPLE MATCH' : 'PEOPLE MISMATCH');
 console.log(followupsComparison.match ? 'FOLLOWUPS MATCH' : 'FOLLOWUPS MISMATCH');
 console.log(correspondenceComparison.match ? 'CORRESPONDENCE MATCH' : 'CORRESPONDENCE MISMATCH');
 console.log(linkedinComparison.match ? 'LINKEDIN MATCH' : 'LINKEDIN MISMATCH');
+console.log(twcComparison.match ? 'TWC MATCH' : 'TWC MISMATCH');
 process.exit(trackerComparison.match && applyComparison.match && statusComparison.match
   && peopleComparison.match && followupsComparison.match && correspondenceComparison.match
-  && linkedinComparison.match ? 0 : 1);
+  && linkedinComparison.match && twcComparison.match ? 0 : 1);
