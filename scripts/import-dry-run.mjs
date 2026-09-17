@@ -2,8 +2,6 @@
 
 import {
   existsSync,
-  readFileSync,
-  readdirSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
@@ -14,37 +12,10 @@ import {
   LEGACY_JSON_FILES,
   LEGACY_TABLE_FILES,
   listLegacyFiles,
-  recordJsonSnapshots,
   renderLegacyFile,
   splitLegacyLines,
 } from '../lib/legacy-files.mjs';
-import {
-  compareApplyDates,
-  importApplyEvidence,
-} from '../lib/import/apply-import.mjs';
-import {
-  compareStatusHistory,
-  importStatusHistory,
-} from '../lib/import/status-import.mjs';
-import { compareTracker, importTracker } from '../lib/import/tracker-import.mjs';
-import {
-  compareGroupingWithResolvePeople,
-  comparePeople,
-  importPeople,
-} from '../lib/import/people-import.mjs';
-import {
-  compareFollowups,
-  importFollowups,
-} from '../lib/import/followups-import.mjs';
-import {
-  compareCorrespondence,
-  importCorrespondence,
-} from '../lib/import/correspondence-import.mjs';
-import {
-  compareLinkedIn,
-  importLinkedIn,
-} from '../lib/import/linkedin-import.mjs';
-import { compareTwc, importTwc } from '../lib/import/twc-import.mjs';
+import { importDataFolder } from '../lib/import/import-data-folder.mjs';
 
 function refuse(message) {
   console.error(message);
@@ -79,36 +50,6 @@ function flagCounts(flags) {
   const counts = {};
   for (const flag of flags) counts[flag.type] = (counts[flag.type] ?? 0) + 1;
   return counts;
-}
-
-function readContactLinks(path, missing) {
-  if (missing) return { document: {}, unreadable: false };
-  try {
-    const value = JSON.parse(readFileSync(path, 'utf8'));
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      return { document: {}, unreadable: true };
-    }
-    return { document: value, unreadable: false };
-  } catch {
-    return { document: {}, unreadable: true };
-  }
-}
-
-function readCorrespondenceDirectory(inputDir, name) {
-  const path = resolve(inputDir, name);
-  const missing = !existsSync(path);
-  if (missing) return { files: {}, missing };
-  const files = {};
-  for (const entry of readdirSync(path, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.md')) continue;
-    files[entry.name] = readFileSync(resolve(path, entry.name), 'utf8');
-  }
-  return { files, missing };
-}
-
-function readOptionalText(inputDir, name) {
-  const path = resolve(inputDir, name);
-  return existsSync(path) ? readFileSync(path, 'utf8') : null;
 }
 
 function byteComparison(original, rendered) {
@@ -154,163 +95,23 @@ if (existsSync(dbPath)) refuse('--db must not already exist');
 
 const inputDir = resolve(options['data-dir']);
 const outputDir = resolve(options['output-dir']);
-const trackerPath = resolve(inputDir, 'applications.md');
-const trackerMissing = !existsSync(trackerPath);
-const trackerText = trackerMissing ? '' : readFileSync(trackerPath, 'utf8');
-const applyDatesPath = resolve(inputDir, 'apply-dates.json');
-const applyDatesMissing = !existsSync(applyDatesPath);
-const applyDatesText = applyDatesMissing ? null : readFileSync(applyDatesPath, 'utf8');
-const applyDates = applyDatesMissing ? {} : JSON.parse(applyDatesText);
-const statusEventsPath = resolve(inputDir, 'status-events.tsv');
-const statusEventsMissing = !existsSync(statusEventsPath);
-const statusText = statusEventsMissing ? '' : readFileSync(statusEventsPath, 'utf8');
-const targetTalentPath = resolve(inputDir, 'target-talent.md');
-const targetTalentMissing = !existsSync(targetTalentPath);
-const targetTalentText = targetTalentMissing ? '' : readFileSync(targetTalentPath, 'utf8');
-const referralsPath = resolve(inputDir, 'referrals.md');
-const referralsMissing = !existsSync(referralsPath);
-const referralsText = referralsMissing ? '' : readFileSync(referralsPath, 'utf8');
-const contactLinksPath = resolve(inputDir, 'contact-links.json');
-const contactLinksMissing = !existsSync(contactLinksPath);
-const contactLinksText = contactLinksMissing ? null : readFileSync(contactLinksPath, 'utf8');
-const contactLinksRead = readContactLinks(contactLinksPath, contactLinksMissing);
-const contactLinks = contactLinksRead.document;
-const contactPins = contactLinks.pins && typeof contactLinks.pins === 'object'
-  && !Array.isArray(contactLinks.pins) ? contactLinks.pins : {};
-const followupsPath = resolve(inputDir, 'follow-ups.md');
-const followupsMissing = !existsSync(followupsPath);
-const followupsText = followupsMissing ? '' : readFileSync(followupsPath, 'utf8');
-const targetTalentCorrespondence = readCorrespondenceDirectory(
-  inputDir,
-  'target-talent-correspondence',
-);
-const referralCorrespondence = readCorrespondenceDirectory(
-  inputDir,
-  'referral-correspondence',
-);
-const linkedinFiles = {
-  connectsText: readOptionalText(inputDir, 'linkedin-connects.json'),
-  sidecarText: readOptionalText(inputDir, 'tt-linkedin.json'),
-  connectionsText: readOptionalText(inputDir, 'linkedin-connections.json'),
-};
-const twcFiles = {
-  eventsText: readOptionalText(inputDir, 'twc-events.json'),
-  overridesText: readOptionalText(inputDir, 'twc-overrides.json'),
-};
-const jsonTexts = {
-  'apply-dates.json': applyDatesText,
-  'linkedin-connects.json': linkedinFiles.connectsText,
-  'tt-linkedin.json': linkedinFiles.sidecarText,
-  'linkedin-connections.json': linkedinFiles.connectionsText,
-  'twc-events.json': twcFiles.eventsText,
-  'twc-overrides.json': twcFiles.overridesText,
-  'contact-links.json': contactLinksText,
-};
-const outputFiles = readdirSync(outputDir, { withFileTypes: true })
-  .filter(entry => entry.isFile())
-  .map(entry => entry.name);
 const definitionsVersion = options['definitions-version'] ?? 'v1';
 const importedOn = localDate();
 const ownerName = options['owner-name'] ?? getIdentity().fullName;
 
 const store = openEventStore(dbPath);
-let trackerReport;
-let trackerComparison;
-let applyReport;
-let applyComparison;
-let statusReport;
-let statusComparison;
-let peopleReport;
-let peopleComparison;
-let groupingComparison;
-let followupsReport;
-let followupsComparison;
-let correspondenceReport;
-let correspondenceComparison;
-let linkedinReport;
-let linkedinComparison;
-let twcReport;
-let twcComparison;
+let imported;
 let bytesReport;
 try {
-  trackerReport = importTracker(store, trackerText, {
-    definitionsVersion,
-    importedOn,
-    exists: !trackerMissing,
+  imported = importDataFolder(store, {
+    dataDir: inputDir, outputDir, ownerName, definitionsVersion, importedOn,
   });
-  trackerComparison = compareTracker(trackerText, store);
-  applyReport = importApplyEvidence(store, {
-    applyDates,
-    outputFiles,
-    definitionsVersion,
-    importedOn,
-    ownerName,
-  });
-  applyComparison = compareApplyDates(applyDates, store);
-  statusReport = importStatusHistory(store, statusText, {
-    definitionsVersion,
-    importedOn,
-    exists: !statusEventsMissing,
-  });
-  statusComparison = compareStatusHistory(statusText, store);
-  peopleReport = importPeople(store, {
-    targetTalentText,
-    referralsText,
-    pins: contactPins,
-    definitionsVersion,
-    importedOn,
-    targetTalentExists: !targetTalentMissing,
-    referralsExists: !referralsMissing,
-  });
-  peopleComparison = comparePeople({ targetTalentText, referralsText }, store);
-  groupingComparison = compareGroupingWithResolvePeople(store, {
-    targetTalentText,
-    referralsText,
-    pins: contactPins,
-  });
-  followupsReport = importFollowups(store, followupsText, {
-    definitionsVersion,
-    importedOn,
-    exists: !followupsMissing,
-  });
-  followupsComparison = compareFollowups(followupsText, store);
-  correspondenceReport = importCorrespondence(store, {
-    targetTalentFiles: targetTalentCorrespondence.files,
-    referralFiles: referralCorrespondence.files,
-    definitionsVersion,
-    importedOn,
-  });
-  correspondenceComparison = compareCorrespondence({
-    targetTalentFiles: targetTalentCorrespondence.files,
-    referralFiles: referralCorrespondence.files,
-  }, store);
-  linkedinReport = importLinkedIn(store, {
-    ...linkedinFiles,
-    definitionsVersion,
-    importedOn,
-  });
-  linkedinComparison = compareLinkedIn(linkedinFiles, store);
-  twcReport = importTwc(store, {
-    ...twcFiles,
-    definitionsVersion,
-    importedOn,
-  });
-  twcComparison = compareTwc(twcFiles, store);
-  recordJsonSnapshots(store, { texts: jsonTexts, definitionsVersion, importedOn });
-
-  const originals = {
-    'applications.md': trackerMissing ? null : trackerText,
-    'status-events.tsv': statusEventsMissing ? null : statusText,
-    'target-talent.md': targetTalentMissing ? null : targetTalentText,
-    'referrals.md': referralsMissing ? null : referralsText,
-    'follow-ups.md': followupsMissing ? null : followupsText,
-  };
   const tables = Object.fromEntries(LEGACY_TABLE_FILES.map(file => [
     file,
-    byteComparison(originals[file], renderLegacyFile(store, file)),
+    byteComparison(imported.texts[file], renderLegacyFile(store, file)),
   ]));
   const json = Object.fromEntries(LEGACY_JSON_FILES.map(file => {
-    const original = jsonTexts[file];
+    const original = imported.texts[file];
     const rendered = renderLegacyFile(store, file);
     return [file, {
       match: original === rendered,
@@ -320,10 +121,7 @@ try {
     }];
   }));
   const correspondence = {};
-  for (const [dir, input] of [
-    ['target-talent-correspondence', targetTalentCorrespondence.files],
-    ['referral-correspondence', referralCorrespondence.files],
-  ]) {
+  for (const [dir, input] of Object.entries(imported.reports.correspondenceInputs)) {
     const known = new Set([
       ...Object.keys(input).map(file => `${dir}/${file}`),
       ...listLegacyFiles(store).filter(file => file.startsWith(`${dir}/`)),
@@ -346,16 +144,25 @@ try {
   store.close();
 }
 
-applyReport.counts.apply_dates_file_missing = applyDatesMissing;
-trackerReport.counts.tracker_file_missing = trackerMissing;
-statusReport.counts.status_events_file_missing = statusEventsMissing;
-peopleReport.counts.target_talent_file_missing = targetTalentMissing;
-peopleReport.counts.referrals_file_missing = referralsMissing;
-peopleReport.counts.contact_links_file_missing = contactLinksMissing;
-peopleReport.counts.pins_file_unreadable = contactLinksRead.unreadable;
-followupsReport.counts.followups_file_missing = followupsMissing;
-correspondenceReport.counts.target_talent_dir_missing = targetTalentCorrespondence.missing;
-correspondenceReport.counts.referral_dir_missing = referralCorrespondence.missing;
+const {
+  tracker: trackerReport,
+  trackerComparison,
+  apply: applyReport,
+  applyComparison,
+  status: statusReport,
+  statusComparison,
+  people: peopleReport,
+  peopleComparison,
+  groupingComparison,
+  followups: followupsReport,
+  followupsComparison,
+  correspondence: correspondenceReport,
+  correspondenceComparison,
+  linkedin: linkedinReport,
+  linkedinComparison,
+  twc: twcReport,
+  twcComparison,
+} = imported.reports;
 const report = {
   tracker: {
     ...trackerReport,
@@ -397,8 +204,8 @@ const report = {
 writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 
 const {
-  by_us_only_pairs: ignoredByUsPairs,
-  by_them_only_pairs: ignoredByThemPairs,
+  by_us_only_pairs: _ignoredByUsPairs,
+  by_them_only_pairs: _ignoredByThemPairs,
   ...groupingCounts
 } = groupingComparison;
 
