@@ -33,13 +33,15 @@ import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs'
 // canonicalUrl, so the same function went by two names inside one file.
 import { canonicalUrl, normalizeCompany, sameRole, urlFromReport, urlForRow, buildDecidedIndex } from './lib/identity.mjs';
 import { markDone, sourceUrlOf } from './lib/pipeline.mjs';
+import { localToday, logWritesEnabled, openDataStore, writeTableText } from './lib/log-writes.mjs';
 // next-jd.mjs (persistent JD counter) can be one update cycle behind on installs
 // updating from a pre-counter version. Load it defensively so a missing file
 // degrades to max+1 numbering instead of crashing merge-tracker at module load.
-let issueJd = null;
+let issueJd;
 try { ({ issueJd } = await import('./next-jd.mjs')); } catch { issueJd = null; }
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = join(CAREER_OPS, 'data');
 // Support both layouts: data/applications.md (boilerplate, default) and the
 // original root applications.md. On a fresh install NEITHER exists yet — default
 // to the canonical data/applications.md so a created tracker lands where the
@@ -56,8 +58,21 @@ const PIPELINE_FILE = join(CAREER_OPS, 'data/pipeline.md');
 const DRY_RUN = process.argv.includes('--dry-run');
 const VERIFY = process.argv.includes('--verify');
 
+const LOG_WRITES = logWritesEnabled(DATA_DIR);
+if (LOG_WRITES && (APPS_FILE !== DATA_APPS || !existsSync(APPS_FILE))) {
+  console.error('Event-log writes require an existing data/applications.md; nothing was saved.');
+  process.exit(1);
+}
+if (LOG_WRITES && !DRY_RUN) {
+  try { openDataStore(DATA_DIR); }
+  catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+}
+
 // Ensure required directories exist (fresh setup)
-mkdirSync(join(CAREER_OPS, 'data'), { recursive: true });
+mkdirSync(DATA_DIR, { recursive: true });
 mkdirSync(ADDITIONS_DIR, { recursive: true });
 
 // ── Canonical states + aliases (loaded from templates/states.yml) ─────────────
@@ -237,7 +252,8 @@ if (!existsSync(APPS_FILE)) {
     '# Applications Tracker\n\n' + TRACKER_HEADER + '\n' + TRACKER_SEPARATOR + '\n');
   console.log(`Created ${APPS_FILE} (fresh install).`);
 }
-const appContent = readFileSync(APPS_FILE, 'utf-8');
+const baseText = readFileSync(APPS_FILE, 'utf-8');
+const appContent = baseText;
 const appLines = appContent.split('\n');
 const existingApps = [];
 let maxNum = 0;
@@ -730,7 +746,75 @@ if (newLines.length > 0) {
 
 // Write back
 if (!DRY_RUN) {
-  writeFileSync(APPS_FILE, appLines.join('\n'));
+  const newText = appLines.join('\n');
+  if (LOG_WRITES) {
+    const validDate = value => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+      const [year, month, day] = value.split('-').map(Number);
+      const date = new Date(Date.UTC(year, month - 1, day));
+      return date.getUTCFullYear() === year
+        && date.getUTCMonth() === month - 1
+        && date.getUTCDate() === day;
+    };
+    const evaluatedEvent = (change, reEvaluation) => {
+      const row = parseTrackerLine(change.raw);
+      return {
+        type: 'posting_evaluated',
+        occurred_on: validDate(row.date) ? row.date : localToday(),
+        payload: {
+          num: row.num,
+          date: row.date,
+          company: row.company,
+          role: row.role,
+          score: row.score,
+          status: row.status,
+          pdf: row.pdf,
+          resume: row.resume,
+          report: row.report,
+          notes: row.notes,
+          url: row.url,
+          raw: change.raw,
+          re_evaluation: reEvaluation,
+          legacy_effects: [change.effect],
+        },
+      };
+    };
+    try {
+      writeTableText({
+        dataDir: DATA_DIR,
+        file: 'applications.md',
+        baseText,
+        newText,
+        rowKey: line => {
+          const row = parseTrackerLine(line);
+          return row ? String(row.num) : null;
+        },
+        buildEvents: ({ added: addedRows, changed: changedRows, removed }) => [
+          ...addedRows.map(change => evaluatedEvent(change, false)),
+          ...changedRows.map(change => evaluatedEvent(change, true)),
+          ...removed.map(change => {
+            const row = parseTrackerLine(change.raw);
+            return {
+              type: 'legacy_record',
+              occurred_on: validDate(row?.date) ? row.date : localToday(),
+              payload: {
+                reason: 'tracker_row_removed',
+                num: row?.num,
+                company: row?.company,
+                raw: change.raw,
+                legacy_effects: [change.effect],
+              },
+            };
+          }),
+        ],
+      });
+    } catch (error) {
+      console.error(error.message);
+      process.exit(1);
+    }
+  } else {
+    writeFileSync(APPS_FILE, newText);
+  }
 
   // Flip evaluated URLs' pipeline.md rows to done so re-running Evaluate advances
   // to the next batch instead of re-scoring these.

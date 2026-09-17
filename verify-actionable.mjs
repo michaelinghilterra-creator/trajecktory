@@ -18,9 +18,11 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
 import { urlForRow } from './lib/identity.mjs';
+import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const APPS = join(__dirname, 'data/applications.md');
+const DATA_DIR = join(__dirname, 'data');
+const APPS = join(DATA_DIR, 'applications.md');
 
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
@@ -32,7 +34,8 @@ if (!existsSync(APPS)) {
   console.log('All checked entries are still live (no applications.md yet).');
   process.exit(0);
 }
-const lines = readFileSync(APPS, 'utf8').split('\n');
+const baseText = readFileSync(APPS, 'utf8');
+const lines = baseText.split('\n');
 const targets = [];
 for (let idx = 0; idx < lines.length; idx++) {
   const line = lines[idx];
@@ -132,6 +135,47 @@ const newLines = lines.map(line => {
   });
 });
 
-writeFileSync(APPS, newLines.join('\n'));
+const newText = newLines.join('\n');
+if (logWritesEnabled(DATA_DIR)) {
+  try {
+    writeTableText({
+      dataDir: DATA_DIR,
+      file: 'applications.md',
+      baseText,
+      newText,
+      rowKey: line => {
+        const row = parseTrackerLine(line);
+        return row ? String(row.num) : null;
+      },
+      buildEvents: ({ added, changed, removed }) => {
+        if (added.length || removed.length) {
+          throw new Error('verify-actionable may only change existing tracker rows');
+        }
+        return changed.map(change => {
+          const before = parseTrackerLine(change.previousRaw);
+          const after = parseTrackerLine(change.raw);
+          return {
+            type: 'status_changed',
+            application_id: String(after.num),
+            occurred_on: localToday(),
+            payload: {
+              num: after.num,
+              company: after.company,
+              from: before.status,
+              to: after.status,
+              reason: 'posting_closed',
+              legacy_effects: [change.effect],
+            },
+          };
+        });
+      },
+    });
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
+} else {
+  writeFileSync(APPS, newText);
+}
 console.log(`\n✅ Flipped ${expired.length} entries to Discarded.`);
 process.exit(0);
