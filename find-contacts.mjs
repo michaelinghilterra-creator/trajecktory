@@ -26,6 +26,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { parseVerifyTag, setVerifyTag } from './lib/email-verify.mjs';
 import { loadEnvKey, mvVerify } from './verify-contacts.mjs';
+import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 
@@ -241,13 +242,44 @@ async function main() {
     if (statSync(cfg.path).mtimeMs !== mtimeBefore) { say(`\n⚠️  ${cfg.path} changed under us — ${fk} NOT written.`); continue; }
     const backup = `${cfg.path}.bak-${stamp()}-find`;
     copyFileSync(cfg.path, backup);
-    writeFileSync(cfg.path, newText);
+    try {
+      if (logWritesEnabled(join(ROOT, 'data'))) {
+        writeTableText({
+          dataDir: join(ROOT, 'data'), file: 'target-talent.md', baseText: readFileSync(cfg.path, 'utf8'), newText,
+          rowKey: contactRowKey,
+          buildEvents: ({ added, changed: rowChanges, removed }) => {
+            if (added.length || removed.length) throw new Error('find-contacts may only update existing contact rows');
+            return rowChanges.map(change => contactUpdateEvent(change, ['email']));
+          },
+        });
+      } else writeFileSync(cfg.path, newText);
+    } catch (error) {
+      if (error.code !== 'RENDER_FAILED') throw error;
+      say(`⚠️  ${error.message}`);
+    }
     backups.push(backup.replace(ROOT, '.'));
     say(`💾 ${fk}: backed up → ${backup.replace(ROOT, '.')}, wrote ${changed} address(es)`);
   }
 
   say(`\n✅ Found + verified: ${tally.found_ok} ok · ${tally.found_risky} risky written. ${tally.found_invalid} found-but-bad · ${tally.not_found} not found · ${tally.error} error.`);
   if (JSON_OUT) console.log(JSON.stringify({ ok: true, applied: true, tally, backups }, null, 2));
+}
+
+function contactRowKey(raw) {
+  if (!raw.startsWith('| ')) return null;
+  const id = parseInt(raw.split('|')[1]?.trim(), 10);
+  return Number.isNaN(id) ? null : String(id);
+}
+
+function contactUpdateEvent(change, fields) {
+  const id = Number(change.key);
+  return {
+    type: 'person_updated', occurred_on: localToday(), source: 'cli', definitions_version: 'v1',
+    payload: {
+      file: 'target-talent.md', id, ref: `ta:${id}`, fields,
+      legacy_effects: [change.effect],
+    },
+  };
 }
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));

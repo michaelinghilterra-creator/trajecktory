@@ -43,6 +43,7 @@
  */
 
 import { readFileSync, writeFileSync, copyFileSync, existsSync, statSync } from 'fs';
+import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
@@ -321,12 +322,43 @@ if (APPLY) {
     if (statSync(cfg.path).mtimeMs !== f._mtimeBefore) die(`${cfg.path} changed while running. Nothing written — re-run.`);
     const backup = `${cfg.path}.bak-${stamp}-bounce-backfill`;
     copyFileSync(cfg.path, backup);
-    writeFileSync(cfg.path, f._newText);
+    try {
+      if (logWritesEnabled(join(ROOT, 'data'))) {
+        writeTableText({
+          dataDir: join(ROOT, 'data'), file: 'target-talent.md', baseText: readFileSync(cfg.path, 'utf8'), newText: f._newText,
+          rowKey: contactRowKey,
+          buildEvents: ({ added, changed, removed }) => {
+            if (added.length || removed.length) throw new Error('backfill-bounces may only update existing contact rows');
+            return changed.map(change => contactUpdateEvent(change, ['email', 'status']));
+          },
+        });
+      } else writeFileSync(cfg.path, f._newText);
+    } catch (error) {
+      if (error.code !== 'RENDER_FAILED') throw error;
+      say(`⚠️  ${error.message}`);
+    }
     say(`💾 ${key}: backed up → ${backup.replace(ROOT, '.')}, wrote ${f.marked + f.annotated} change(s)`);
   }
   say(`\n✅ Applied. Rollback: restore the .bak-${stamp}-bounce-backfill file(s).`);
 } else {
   say(`\n   Dry run only. Re-run with --apply to write (a timestamped backup is made first).`);
+}
+
+function contactRowKey(raw) {
+  if (!raw.startsWith('| ')) return null;
+  const id = parseInt(raw.split('|')[1]?.trim(), 10);
+  return Number.isNaN(id) ? null : String(id);
+}
+
+function contactUpdateEvent(change, fields) {
+  const id = Number(change.key);
+  return {
+    type: 'person_updated', occurred_on: localToday(), source: 'cli', definitions_version: 'v1',
+    payload: {
+      file: 'target-talent.md', id, ref: `ta:${id}`, fields,
+      legacy_effects: [change.effect],
+    },
+  };
 }
 
 // Drop the heavy internal fields from JSON output.

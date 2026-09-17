@@ -1,5 +1,5 @@
 import express from 'express';
-import { ROOT_DIR } from '../config.mjs';
+import { DATA_DIR, ROOT_DIR } from '../config.mjs';
 import { parseReferralsMd, referralTitle, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence, resolveReferralLink } from '../lib/referrals.mjs';
 import { reconcile, cleanupStale, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
 import { detectAcceptances, computePendingAcceptances } from '../lib/linkedin-acceptance.mjs';
@@ -20,6 +20,7 @@ import { snoozeToday, readSnooze, writeSnooze, pruneSnooze, isMuted } from '../l
 import { resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finishOptionsFor, wrapReferralDraft } from '../../../lib/outreach-voice.mjs';
+import { logWritesEnabled, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -290,7 +291,6 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
     const link = resolveReferralLink(ref, parseTargetTalentMd());
     if (link && link.source === 'ta') {
       const msgs = readTTCorrespondence(link.contact.id); msgs.push(entry); writeTTCorrespondence(link.contact.id, msgs);
-      if (direction !== 'Draft') updateTTLine(link.contact.id, { lastTouch: today });
     } else {
       const msgs = readReferralCorrespondence(id); msgs.push(entry); writeReferralCorrespondence(id, msgs);
     }
@@ -303,7 +303,13 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
       const upd = { lastTouch: today };
       if (ref.status === 'Not Asked' || !ref.status) upd.status = 'Catching Up';
       else if (direction === 'Received' && ref.status === 'Asked') upd.status = 'Responded';
-      updateReferralLine(id, upd);
+      const saveTouches = () => {
+        if (link && link.source === 'ta') updateTTLine(link.contact.id, { lastTouch: today });
+        runLogWriteTestHook('before-referral-correspondence-referral-update');
+        updateReferralLine(id, upd);
+      };
+      if (link && link.source === 'ta' && logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, saveTouches);
+      else saveTouches();
     }
     res.json({ ok: true, linkedTo: link ? { source: link.source, id: link.contact.id } : null });
   } catch (err) {

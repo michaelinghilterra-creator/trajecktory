@@ -18,6 +18,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { logWritesEnabled } from './lib/log-writes.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TARGET_MD = path.resolve(__dirname, 'data/target-talent.md');
@@ -93,6 +94,11 @@ function escapeMdCell(s) {
 }
 
 function main() {
+  if (logWritesEnabled(path.join(__dirname, 'data'))) {
+    console.error('The event log is in charge of target-talent.md, and this importer would rewrite the file layout.');
+    console.error("Use the dashboard's CSV import instead.");
+    process.exit(1);
+  }
   const arg = process.argv[2];
   if (!arg) {
     console.error('Usage: node import-target-talent.mjs <path/to/file.csv|tsv>');

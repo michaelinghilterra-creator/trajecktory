@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { TARGET_TALENT_MD, TT_CORR_DIR } from '../config.mjs';
+import { randomUUID } from 'node:crypto';
+import { DATA_DIR, TARGET_TALENT_MD, TT_CORR_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { TALENT_STATUS_LABELS, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { parseVerifyTag } from '../../../lib/email-verify.mjs';
@@ -8,6 +9,8 @@ import { resolveInfluenceTier, setInfluenceTier } from '../../../lib/influence-t
 import { parseProvenance } from '../../../lib/stakeholder-additions.mjs';
 import { readLinkedInMap } from './tt-linkedin.mjs';
 import { parseCorrespondence, formatCorrespondence } from './correspondence-format.mjs';
+import { appendEventsWithEffects, findTableRowsByKey, renderLegacyFile, tableRows } from '../../../lib/legacy-files.mjs';
+import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
 
 // A quarter is long enough that a leadership change is likely, and short enough
 // that a re-check is still cheap. Missing provenance is deliberately not stale:
@@ -120,6 +123,38 @@ function writeTTCorrespondence(id, messages) {
 }
 
 function updateTTLine(id, updates) {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      if (renderLegacyFile(store, 'target-talent.md') === null) {
+        // Preserve the legacy contract: a missing file is an error, not "row not found".
+        const error = new Error(`ENOENT: no such file or directory, open '${TARGET_TALENT_MD}'`);
+        error.errno = process.platform === 'win32' ? -4058 : -2;
+        error.code = 'ENOENT';
+        error.syscall = 'open';
+        error.path = TARGET_TALENT_MD;
+        throw error;
+      }
+      const matches = findTableRowsByKey(store, 'target-talent.md', contactRowId, id);
+      if (!matches.length) return false;
+      const changed = matches.map(match => ({ ...match, next: updateTTRaw(match.raw, updates) }))
+        .filter(match => match.next !== match.raw);
+      if (!changed.length) return true;
+      appendEventsWithEffects(store, [{
+        type: 'person_updated',
+        occurred_on: localToday(),
+        source: 'dashboard',
+        definitions_version: 'v1',
+        payload: {
+          file: 'target-talent.md', id, ref: `ta:${id}`,
+          fields: Object.keys(updates).filter(field => updates[field] !== undefined),
+          legacy_effects: changed.map(({ row_id, next }) => ({
+            file: 'target-talent.md', op: 'row_upsert', row_id, raw: next,
+          })),
+        },
+      }]);
+      return true;
+    });
+  }
   const text = fs.readFileSync(TARGET_TALENT_MD, 'utf8');
   const lines = text.split('\n');
   let touched = false;
@@ -129,41 +164,44 @@ function updateTTLine(id, updates) {
     if (parts.length < 17) return line;
     const lineId = parseInt(parts[1].trim(), 10);
     if (lineId !== id) return line;
-    const cell = v => ` ${(v || '').toString().replace(/[|\r\n]+/g, ' ')} `;
-    if (updates.status     !== undefined) parts[13] = ` ${updates.status} `;
-    if (updates.lastTouch  !== undefined) parts[14] = ` ${updates.lastTouch} `;
-    if (updates.notes      !== undefined) parts[15] = cell(updates.notes);
-    if (updates.influenceTier !== undefined) {
-      parts[15] = cell(setInfluenceTier(parts[15].trim(), updates.influenceTier));
-    }
-    if (updates.phone      !== undefined) parts[10] = cell(updates.phone);
-    // Email cell may carry an inline [v:...] verification tag; cell() keeps it intact
-    // (no pipe/newline in a tag). Used by the reconcile find-emails endpoint. When
-    // the user edits the address by hand, they pass a plain email with no tag, so it
-    // correctly reverts to unverified until re-checked.
-    if (updates.email      !== undefined) parts[11] = cell(updates.email);
-    // Identity fields — editable from the contact drawer so the user can fix data
-    // in place. Column layout mirrors parseTargetTalentMd's index map.
-    if (updates.company    !== undefined) parts[2]  = cell(updates.company);
-    if (updates.last       !== undefined) parts[3]  = cell(updates.last);
-    if (updates.first      !== undefined) parts[4]  = cell(updates.first);
-    if (updates.salute     !== undefined) parts[5]  = cell(updates.salute);
-    if (updates.title      !== undefined) parts[6]  = cell(updates.title);
-    if (updates.city       !== undefined) parts[7]  = cell(updates.city);
-    if (updates.state      !== undefined) parts[8]  = cell(updates.state);
-    if (updates.zip        !== undefined) parts[9]  = cell(updates.zip);
-    if (updates.linkedin   !== undefined) parts[12] = cell(updates.linkedin);
-    if (updates.website    !== undefined) {
-      // Older rows have no Website cell; insert one before the trailing '' so the
-      // row stays well-formed. Newer rows (length >= 18) just overwrite parts[16].
-      if (parts.length >= 18) parts[16] = cell(updates.website);
-      else parts.splice(parts.length - 1, 0, cell(updates.website));
-    }
     touched = true;
-    return parts.join('|');
+    return updateTTRaw(line, updates);
   });
   if (touched) fs.writeFileSync(TARGET_TALENT_MD, newLines.join('\n'));
   return touched;
+}
+
+function contactRowId(raw) {
+  if (!raw.startsWith('| ')) return null;
+  const id = parseInt(raw.split('|')[1]?.trim(), 10);
+  return Number.isNaN(id) ? null : id;
+}
+
+function updateTTRaw(line, updates) {
+  if (!line.startsWith('| ')) return line;
+  const parts = line.split('|');
+  if (parts.length < 17) return line;
+  const cell = v => ` ${(v || '').toString().replace(/[|\r\n]+/g, ' ')} `;
+  if (updates.status     !== undefined) parts[13] = ` ${updates.status} `;
+  if (updates.lastTouch  !== undefined) parts[14] = ` ${updates.lastTouch} `;
+  if (updates.notes      !== undefined) parts[15] = cell(updates.notes);
+  if (updates.influenceTier !== undefined) parts[15] = cell(setInfluenceTier(parts[15].trim(), updates.influenceTier));
+  if (updates.phone      !== undefined) parts[10] = cell(updates.phone);
+  if (updates.email      !== undefined) parts[11] = cell(updates.email);
+  if (updates.company    !== undefined) parts[2]  = cell(updates.company);
+  if (updates.last       !== undefined) parts[3]  = cell(updates.last);
+  if (updates.first      !== undefined) parts[4]  = cell(updates.first);
+  if (updates.salute     !== undefined) parts[5]  = cell(updates.salute);
+  if (updates.title      !== undefined) parts[6]  = cell(updates.title);
+  if (updates.city       !== undefined) parts[7]  = cell(updates.city);
+  if (updates.state      !== undefined) parts[8]  = cell(updates.state);
+  if (updates.zip        !== undefined) parts[9]  = cell(updates.zip);
+  if (updates.linkedin   !== undefined) parts[12] = cell(updates.linkedin);
+  if (updates.website    !== undefined) {
+    if (parts.length >= 18) parts[16] = cell(updates.website);
+    else parts.splice(parts.length - 1, 0, cell(updates.website));
+  }
+  return parts.join('|');
 }
 
 // Append one or more new TA contact rows to target-talent.md. Used by the
@@ -173,9 +211,14 @@ function updateTTLine(id, updates) {
 // Auto-assigns next sequential id starting from max+1 in the existing file.
 function appendTTRows(rows) {
   if (!rows || !rows.length) return [];
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      if (renderLegacyFile(store, 'target-talent.md') === null) return [];
+      return appendTTLogRows(store, rows);
+    });
+  }
   if (!fs.existsSync(TARGET_TALENT_MD)) return [];
   const text = fs.readFileSync(TARGET_TALENT_MD, 'utf8');
-  const lines = text.split('\n');
   // Determine next id
   const existing = parseTargetTalentMd();
   let nextId = existing.length ? Math.max(...existing.map(r => r.id)) + 1 : 1;
@@ -200,6 +243,38 @@ function appendTTRows(rows) {
   let out = text.replace(/\s*$/, '') + '\n' + newRows.map(r => r.row).join('\n') + '\n';
   fs.writeFileSync(TARGET_TALENT_MD, out, 'utf8');
   return newRows.map(r => ({ id: r.id }));
+}
+
+function appendTTLogRows(store, rows) {
+  const ids = tableRows(store, 'target-talent.md')
+    .map(({ raw }) => contactRowId(raw)).filter(id => id !== null);
+  let nextId = ids.length ? Math.max(...ids) + 1 : 1;
+  const esc = s => (s || '').toString().replace(/[|\r\n]+/g, ' ').trim();
+  let previousRowId = null;
+  const events = rows.map(r => {
+    const id = nextId++;
+    let notes = r.notes || '';
+    const emailGiven = (r.email || '').trim();
+    const alreadyFlagged = /⚠|unverified|bounced|verified|pattern-med|pattern-low/i.test(notes);
+    if (emailGiven && !r.emailVerified && !alreadyFlagged) {
+      notes = '⚠ Email unverified (auto-synthesized, confirm before sending). ' + notes;
+    }
+    const raw = `| ${id} | ${esc(r.company)} | ${esc(r.last)} | ${esc(r.first)} | ${esc(r.salute)} | ${esc(r.title)} | ${esc(r.city)} | ${esc(r.state)} | ${esc(r.zip)} | ${esc(r.phone)} | ${esc(r.email)} | ${esc(r.linkedin)} | Not Contacted |  | ${esc(notes)} | ${esc(r.website)} |`;
+    const rowId = `target-talent.md#n-${randomUUID()}`;
+    const anchor = previousRowId
+      ? { at: 'after', row_id: previousRowId }
+      : { at: 'table_end' };
+    previousRowId = rowId;
+    return {
+      type: 'person_added', occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
+      payload: {
+        file: 'target-talent.md', id, ref: `ta:${id}`, raw,
+        legacy_effects: [{ file: 'target-talent.md', op: 'row_upsert', row_id: rowId, raw, anchor }],
+      },
+    };
+  });
+  appendEventsWithEffects(store, events);
+  return events.map(event => ({ id: event.payload.id }));
 }
 
 // Cross-link: find applications.md rows where Company matches this TT contact's
