@@ -135,14 +135,23 @@ if (!APPLY) { console.log(`\nDRY RUN: would add ${toAdd.length} and would repair
 // lastTouch change, so this historical repair never moves anyone's funnel stage
 // or recency. It purely restores the received emails onto the cards.
 let wrote = 0, repaired = 0;
-for (const a of toAdd) { if (logReplyToContact(a.contact, { subject: a.subject, body: a.body, timestamp: a.rawDate, advanceStatus: false })) wrote++; }
+function applied(write) {
+  try { return write(); }
+  catch (error) {
+    if (error.code !== 'RENDER_FAILED') throw error;
+    console.warn(`Warning: ${error.message}`);
+    return true;
+  }
+}
+for (const a of toAdd) {
+  if (applied(() => logReplyToContact(a.contact, { subject: a.subject, body: a.body, timestamp: a.rawDate, advanceStatus: false }))) wrote++;
+}
 for (const r of toRepair) {
   const current = readTTCorrespondence(r.contact.id);
   const index = current.findIndex(m => m.direction === 'Received' && normSubject(m.subject) === normSubject(r.subject) && day(m.timestamp) === day(r.ts));
   if (index !== -1) {
     current[index] = { ...current[index], body: r.body };
-    writeTTCorrespondence(r.contact.id, current);
-    repaired++;
+    if (applied(() => { writeTTCorrespondence(r.contact.id, current); return true; })) repaired++;
   }
 }
 console.log(`\nApplied: wrote ${wrote} Received entries and repaired ${repaired} bodies (no status or lastTouch changes).`);

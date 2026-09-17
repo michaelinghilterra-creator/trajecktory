@@ -1,6 +1,15 @@
 import fs from 'fs';
 import { randomUUID } from 'crypto';
-import { TWC_EVENTS_PATH } from '../config.mjs';
+import { DATA_DIR, TWC_EVENTS_PATH } from '../config.mjs';
+import { appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
+import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
+
+function projectedEvents(store) {
+  const text = renderLegacyFile(store, 'twc-events.json');
+  if (text === null) return [];
+  try { const value = JSON.parse(text); return Array.isArray(value) ? value : []; }
+  catch { return []; }
+}
 
 export const TWC_EVENT_TYPES = [
   'Networking event or job club',
@@ -61,29 +70,55 @@ export function addEvent(input) {
   const notes = cleanString(body.notes, 'notes', 500);
   if (notes.error) return { ok: false, error: notes.error };
 
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => addToEvents(projectedEvents(store), store));
+  }
   const events = readEvents();
-  const ids = new Set(events.map(event => String(event && event.id || '')));
-  let id;
-  do { id = randomUUID(); } while (ids.has(id));
-  const event = {
-    id,
-    date: date.value,
-    type: type.value,
-    organizer: organizer.value,
-    contact: contact.value,
-    method: method.value,
-    notes: notes.value,
-    createdAt: new Date().toISOString(),
-  };
-  events.push(event);
+  const result = addToEvents(events);
   writeEvents(events);
-  return { ok: true, event };
+  return result;
+
+  function addToEvents(events, store) {
+    const ids = new Set(events.map(event => String(event && event.id || '')));
+    let id;
+    do { id = randomUUID(); } while (ids.has(id));
+    const event = {
+      id, date: date.value, type: type.value, organizer: organizer.value,
+      contact: contact.value, method: method.value, notes: notes.value,
+      createdAt: new Date().toISOString(),
+    };
+    events.push(event);
+    if (store) appendEventsWithEffects(store, [{
+      type: 'work_search_event_logged', occurred_on: event.date, source: 'dashboard', definitions_version: 'v1',
+      payload: {
+        file: 'twc-events.json', id: event.id, date: event.date, kind: event.type,
+        legacy_effects: [{ file: 'twc-events.json', op: 'json_append', item: event }],
+      },
+    }]);
+    return { ok: true, event };
+  }
 }
 
 export function deleteEvent(id) {
+  const enabled = logWritesEnabled(DATA_DIR);
+  if (enabled) {
+    return withLogWrite(DATA_DIR, store => removeFromEvents(projectedEvents(store), store));
+  }
   const events = readEvents();
-  const kept = events.filter(event => String(event && event.id) !== String(id));
-  if (kept.length === events.length) return false;
-  writeEvents(kept);
-  return true;
+  const removed = removeFromEvents(events);
+  if (removed) writeEvents(events.filter(event => String(event && event.id) !== String(id)));
+  return removed;
+
+  function removeFromEvents(events, store) {
+    const kept = events.filter(event => String(event && event.id) !== String(id));
+    if (kept.length === events.length) return false;
+    if (store) appendEventsWithEffects(store, [{
+      type: 'legacy_record', occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
+      payload: {
+        reason: 'work_search_event_removed', id,
+        legacy_effects: [{ file: 'twc-events.json', op: 'json_replace', value: kept }],
+      },
+    }]);
+    return true;
+  }
 }

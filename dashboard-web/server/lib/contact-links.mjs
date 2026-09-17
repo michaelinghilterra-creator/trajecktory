@@ -22,6 +22,8 @@
 import fs from 'fs';
 import path from 'path';
 import { DATA_DIR } from '../config.mjs';
+import { appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
+import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
 
 const LINKS_PATH = path.join(DATA_DIR, 'contact-links.json');
 
@@ -34,7 +36,30 @@ function readDocument() {
   }
 }
 
-function writePins(change) {
+function writePins(change, { type, refs, note = '' }) {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      const rendered = renderLegacyFile(store, 'contact-links.json');
+      let document = {};
+      if (rendered !== null) {
+        try {
+          const value = JSON.parse(rendered);
+          if (value && typeof value === 'object' && !Array.isArray(value)) document = value;
+        } catch { /* corrupt means no pins, matching readDocument */ }
+      }
+      const pins = document.pins && typeof document.pins === 'object' && !Array.isArray(document.pins) ? { ...document.pins } : {};
+      change(pins);
+      const value = { ...document, version: document.version || 1, pins };
+      appendEventsWithEffects(store, [{
+        type, occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
+        payload: {
+          refs, note_present: Boolean(note),
+          legacy_effects: [{ file: 'contact-links.json', op: 'json_replace', value }],
+        },
+      }]);
+      return pins;
+    });
+  }
   const document = readDocument();
   const pins = document.pins && typeof document.pins === 'object' && !Array.isArray(document.pins) ? { ...document.pins } : {};
   change(pins);
@@ -49,13 +74,19 @@ export function readPins() {
 }
 
 export function pinTogether(refA, refB, note = '') {
-  return writePins(pins => { pins[refA] = { with: refB, by: 'manual', at: new Date().toISOString().slice(0, 10), note: String(note || '') }; });
+  return writePins(
+    pins => { pins[refA] = { with: refB, by: 'manual', at: new Date().toISOString().slice(0, 10), note: String(note || '') }; },
+    { type: 'people_merged', refs: [refA, refB], note },
+  );
 }
 
 export function pinAlone(ref) {
-  return writePins(pins => { pins[ref] = { alone: true, at: new Date().toISOString().slice(0, 10) }; });
+  return writePins(
+    pins => { pins[ref] = { alone: true, at: new Date().toISOString().slice(0, 10) }; },
+    { type: 'people_kept_separate', refs: [ref], note: '' },
+  );
 }
 
 export function unpin(ref) {
-  return writePins(pins => { delete pins[ref]; });
+  return writePins(pins => { delete pins[ref]; }, { type: 'people_unmerged', refs: [ref], note: '' });
 }

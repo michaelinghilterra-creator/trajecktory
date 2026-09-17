@@ -20,18 +20,25 @@
  *         node backfill-connect-ids.mjs --apply    # write the ids into the ledger
  */
 import fs from 'fs';
-import { CONNECTS_PATH } from './dashboard-web/server/config.mjs';
+import { CONNECTS_PATH, DATA_DIR } from './dashboard-web/server/config.mjs';
 import { parseTargetTalentMd } from './dashboard-web/server/lib/target-talent.mjs';
 import { normName } from './dashboard-web/server/lib/connects.mjs';
+import { appendEventsWithEffects, renderLegacyFile } from './lib/legacy-files.mjs';
+import { localToday, logWritesEnabled, openDataStore, withLogWrite } from './lib/log-writes.mjs';
 
 const APPLY = process.argv.includes('--apply');
 
-if (!fs.existsSync(CONNECTS_PATH)) {
+const writesOn = logWritesEnabled(DATA_DIR);
+const ledgerText = writesOn
+  ? renderLegacyFile(openDataStore(DATA_DIR), 'linkedin-connects.json')
+  : (fs.existsSync(CONNECTS_PATH) ? fs.readFileSync(CONNECTS_PATH, 'utf8') : null);
+
+if (ledgerText === null) {
   console.log(`No connects ledger at ${CONNECTS_PATH} — nothing to backfill.`);
   process.exit(0);
 }
 
-const ledger = JSON.parse(fs.readFileSync(CONNECTS_PATH, 'utf8'));
+const ledger = JSON.parse(ledgerText);
 const list = Array.isArray(ledger) ? ledger : (Array.isArray(ledger?.connects) ? ledger.connects : []);
 
 // name → set of contact ids, so a name shared by two contacts is detected as ambiguous
@@ -73,5 +80,20 @@ if (matched === 0) {
   console.log('\nNothing to write.');
   process.exit(0);
 }
-fs.writeFileSync(CONNECTS_PATH, JSON.stringify(list, null, 2) + '\n');
+if (writesOn) {
+  try {
+    withLogWrite(DATA_DIR, store => appendEventsWithEffects(store, [{
+      type: 'legacy_record', occurred_on: localToday(), source: 'cli', definitions_version: 'v1',
+      payload: {
+        reason: 'connect_ids_backfilled', count: matched,
+        legacy_effects: [{ file: 'linkedin-connects.json', op: 'json_replace', value: list }],
+      },
+    }]));
+  } catch (error) {
+    if (error.code !== 'RENDER_FAILED') throw error;
+    console.warn(`Warning: ${error.message}`);
+  }
+} else {
+  fs.writeFileSync(CONNECTS_PATH, JSON.stringify(list, null, 2) + '\n');
+}
 console.log(`\nWrote ${matched} id${matched === 1 ? '' : 's'} into ${CONNECTS_PATH}.`);

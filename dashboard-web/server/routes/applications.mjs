@@ -11,7 +11,7 @@ import { ALL_STATUSES } from '../lib/statuses.mjs';
 import { mdToHtml, escapeHtml } from '../lib/html.mjs';
 import { isRequeueableDiscard } from '../../../lib/discard.mjs';
 import { canonicalUrl } from '../../../lib/identity.mjs';
-import { logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
+import { logWritesEnabled, renderPendingResponse, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -126,12 +126,20 @@ router.patch('/api/applications/:id', (req, res) => {
     if (status !== undefined) updates.status = status;
     if (notes !== undefined) updates.notes = notes;
 
+    let ok;
     const save = () => {
       const patched = patchRowInMd(id, updates, { company, eventDate: when });
+      ok = patched;
       if (patched && status === 'Applied') recordApplyDate(id, when, { force: !!when });
       return patched;
     };
-    const ok = logWritesEnabled(DATA_DIR) ? withLogWrite(DATA_DIR, save) : save();
+    let renderPending = {};
+    try {
+      if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+      else save();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'applications PATCH');
+    }
     if (!ok) return res.status(404).json({ error: `Row ${id} not found` });
 
     // Capture the real apply date the first time a row goes Applied, so
@@ -160,7 +168,8 @@ router.patch('/api/applications/:id', (req, res) => {
         .catch(() => { /* pushObsidianNote already logs; never surfaces here */ });
     }
 
-    res.json(updated || { id, ...updates });
+    const response = renderPending.render_pending ? { id, ...updates } : (updated || { id, ...updates });
+    res.json({ ...response, ...renderPending });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
