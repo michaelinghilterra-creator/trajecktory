@@ -8,11 +8,13 @@
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import {
+  MIGRATIONS,
   SCHEMA_VERSION,
   appendEvents,
   insertEvents,
   openEventStore,
   readEvents,
+  reserveIds,
 } from '../lib/event-store.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 
@@ -123,6 +125,42 @@ const dir = makeSandbox('event-store-test');
 }
 
 {
+  const store = openEventStore(join(dir, 'migration-four-tables.db'));
+  const tables = store.db.prepare(`
+    SELECT name FROM sqlite_master
+    WHERE type = 'table' AND name IN ('legacy_render_state', 'id_counters')
+    ORDER BY name
+  `).all().map(row => row.name);
+  check(tables.join(',') === 'id_counters,legacy_render_state', 'migration 4 creates both mutable state tables');
+  store.db.prepare('INSERT INTO legacy_render_state (file, dirty) VALUES (?, ?)').run('applications.md', 1);
+  store.db.prepare('UPDATE legacy_render_state SET dirty = 0 WHERE file = ?').run('applications.md');
+  store.db.prepare('DELETE FROM legacy_render_state WHERE file = ?').run('applications.md');
+  store.db.prepare('INSERT INTO id_counters (name, value) VALUES (?, ?)').run('example_ids', 900001);
+  store.db.prepare('UPDATE id_counters SET value = ? WHERE name = ?').run(900002, 'example_ids');
+  store.db.prepare('DELETE FROM id_counters WHERE name = ?').run('example_ids');
+  check(store.db.prepare('SELECT COUNT(*) AS n FROM legacy_render_state').get().n === 0
+    && store.db.prepare('SELECT COUNT(*) AS n FROM id_counters').get().n === 0,
+  'migration 4 tables accept UPDATE and DELETE');
+  store.close();
+}
+
+{
+  const dbPath = join(dir, 'reserve-ids.db');
+  let store = openEventStore(dbPath);
+  check(reserveIds(store, 'example_ids', 3).join(',') === '1,2,3', 'reserveIds hands out consecutive ids');
+  check(reserveIds(store, 'example_ids', 2, 900001).join(',') === '900002,900003', 'reserveIds honors its floor');
+  store.close();
+  store = openEventStore(dbPath);
+  check(reserveIds(store, 'example_ids').join(',') === '900004', 'reserveIds survives reopening the database');
+  check(throwsMatching(() => reserveIds(store, 'Example-Bad'), /name must match/), 'reserveIds rejects bad names');
+  check(throwsMatching(() => reserveIds(store, 'example_ids', 0), /positive integer/)
+    && throwsMatching(() => reserveIds(store, 'example_ids', 1.5), /positive integer/),
+  'reserveIds rejects bad counts');
+  check(throwsMatching(() => reserveIds(store, 'example_ids', 1, -1), /non-negative integer/), 'reserveIds rejects a bad floor');
+  store.close();
+}
+
+{
   const store = openEventStore(join(dir, 'validate-first.db'));
   const rejected = throwsMatching(() => appendEvents(store, [
     event({ dedupe_key: 'valid-1' }),
@@ -194,6 +232,22 @@ const dir = makeSandbox('event-store-test');
     throwsMatching(() => openEventStore(dbPath), /newer than supported/),
     'a database above SCHEMA_VERSION is rejected',
   );
+}
+
+{
+  const dbPath = join(dir, 'version-three.db');
+  const db = new DatabaseSync(dbPath);
+  for (const migration of MIGRATIONS.slice(0, 3)) db.exec(migration);
+  db.exec('PRAGMA user_version = 3');
+  db.prepare(`
+    INSERT INTO events (type, occurred_on, recorded_at, source, payload, definitions_version)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run('posting_evaluated', '2030-01-04', '2030-01-04T00:00:00.000Z', 'cli', '{}', 'test-v1');
+  db.close();
+  const store = openEventStore(dbPath);
+  check(store.db.prepare('PRAGMA user_version').get().user_version === 4, 'reopening a version 3 database migrates it to version 4');
+  check(readEvents(store).length === 1, 'version 3 migration preserves existing event rows');
+  store.close();
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
