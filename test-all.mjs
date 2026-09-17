@@ -463,6 +463,7 @@ for (const suite of [
   'tests/agent-edit.test.mjs',
   'tests/atomic-write.test.mjs',
   'tests/event-store-switch.test.mjs',
+  'tests/event-store-flip.test.mjs',
   'tests/identity-store.test.mjs',
   'tests/tracker-import.test.mjs',
   'tests/apply-import.test.mjs',
