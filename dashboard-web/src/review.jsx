@@ -118,10 +118,9 @@ function replyCompany(reply) {
 // flips the application status. Once acted, the row shows a confirmation.
 function ReplyRow({ reply, toast }) {
   const cands = reply.candidateApps || [];
-  const guessId = reply.companyGuess ? reply.companyGuess.appId : null;
-  const initial = (guessId && cands.some(a => a.id === guessId))
-    ? guessId
-    : (cands.length === 1 ? cands[0].id : null);
+  const initial = cands.some(a => a.id === reply.suggestedAppId)
+    ? reply.suggestedAppId
+    : null;
   const [appId, setAppId] = useStateRv(initial);
   const [done, setDone] = useStateRv(null);
   const [busy, setBusy] = useStateRv(false);
@@ -181,17 +180,15 @@ function ReplyRow({ reply, toast }) {
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 6, marginTop: 5, alignItems: 'center', flexWrap: 'wrap' }}>
-          {cands.length > 1 ? (
-            <select value={appId || ''} onChange={e => setAppId(parseInt(e.target.value, 10))}
-              style={{ fontSize: 12, padding: '2px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
-              {!appId ? <option value="" disabled>Select an application</option> : null}
-              {cands.map(a => <option key={a.id} value={a.id}>{a.role} — {a.status}</option>)}
-            </select>
-          ) : (
-            <span className="dim">{cands[0].role} — {cands[0].status}</span>
-          )}
+          {!initial ? <span className="dim">Not sure which application. Pick one.</span> : null}
+          <select value={appId || ''} onChange={e => setAppId(parseInt(e.target.value, 10))}
+            style={{ fontSize: 12, padding: '2px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
+            {!appId ? <option value="" disabled>Select an application</option> : null}
+            {cands.map(a => <option key={a.id} value={a.id}>{a.role} · {a.status} · {a.applyDate ? `applied ${a.applyDate}` : 'no apply date'}</option>)}
+          </select>
           <button className="btn sm" onClick={() => act('log')} disabled={busy || !appId}>Log</button>
           <button className="btn ghost sm" onClick={() => act('rejected')} disabled={busy || !appId}>Rejected</button>
+          <button className="btn ghost sm" onClick={() => act('dismiss')} disabled={busy} title="Hide just this email.">Dismiss</button>
           <button className="btn ghost sm" onClick={() => act('not-related')} disabled={busy} title="This email isn't about your job search. Hide it and stop surfacing future emails from this sender.">Not job-related</button>
         </div>
       )}

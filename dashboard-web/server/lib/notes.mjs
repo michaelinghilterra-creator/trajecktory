@@ -21,6 +21,16 @@ function getNotes(appId) {
   return [...list].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 }
 
+function findNoteByMsgId(msgId) {
+  const needle = msgId == null ? '' : String(msgId);
+  if (!needle) return null;
+  const map = readAppNotes();
+  for (const [appId, notes] of Object.entries(map)) {
+    if (Array.isArray(notes) && notes.some(note => String(note?.msgId || '') === needle)) return appId;
+  }
+  return null;
+}
+
 // Append a timestamped entry. No-op on empty text. Returns the updated history.
 function addNote(appId, text, meta) {
   const clean = String(text == null ? '' : text).trim();
@@ -33,7 +43,7 @@ function addNote(appId, text, meta) {
   const key = String(appId);
   if (!map[key]) map[key] = [];
   const msgId = meta?.msgId == null ? '' : String(meta.msgId);
-  if (msgId && map[key].some(entry => String(entry.msgId || '') === msgId)) {
+  if (msgId && findNoteByMsgId(msgId)) {
     const history = getNotes(appId);
     history.added = false;
     return history;
@@ -61,4 +71,4 @@ function deleteNote(appId, timestamp) {
   return getNotes(appId);
 }
 
-export { readAppNotes, writeAppNotes, getNotes, addNote, deleteNote };
+export { readAppNotes, writeAppNotes, getNotes, findNoteByMsgId, addNote, deleteNote };
