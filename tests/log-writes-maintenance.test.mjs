@@ -122,8 +122,25 @@ for (const archiveCase of [
   const changed = fs.readFileSync(apps, 'utf8').replace('Invented fixture note', 'Changed after import');
   fs.writeFileSync(apps, changed);
   const result = run(root, 'archive-discarded.mjs', archiveCase.args);
-  check(result.status === 1 && fs.readFileSync(apps, 'utf8') === changed && !fs.existsSync(path.join(root, archiveCase.file)),
+  const staged = fs.readdirSync(path.join(root, 'data')).filter(file => file.includes('.tmp-'));
+  check(result.status === 1 && fs.readFileSync(apps, 'utf8') === changed
+    && !fs.existsSync(path.join(root, archiveCase.file)) && staged.length === 0,
     `archive ${archiveCase.name} refusal leaves the tracker unchanged and creates no archive`);
+}
+
+for (const archiveCase of [
+  { name: 'date', args: ['2030-04-01', '--apply'], file: 'applications-archive-2030-04-01.md' },
+  { name: 'ids', args: ['--ids', '900001', '--tag', 'rename-failure', '--apply'], file: 'applications-archive-rename-failure.md' },
+]) {
+  const root = setup(`archive-rename-${archiveCase.name}`, false, [row({ num: 900001, status: 'Discarded' })], ['archive-discarded.mjs']);
+  const destination = path.join(root, 'data', archiveCase.file);
+  fs.mkdirSync(destination);
+  const result = run(root, 'archive-discarded.mjs', archiveCase.args);
+  const staged = fs.readdirSync(path.join(root, 'data')).filter(file => file.startsWith(`${archiveCase.file}.tmp-`));
+  const trackerText = fs.readFileSync(path.join(root, 'data/applications.md'), 'utf8');
+  check(result.status === 1 && staged.length === 1 && !trackerText.includes('| 900001 |')
+    && result.stderr.includes(staged[0]),
+  `archive ${archiveCase.name} rename failure preserves a named recovery file`);
 }
 
 for (const script of ['dedup-tracker.mjs', 'normalize-statuses.mjs']) {
@@ -139,6 +156,71 @@ for (const script of ['dedup-tracker.mjs', 'normalize-statuses.mjs']) {
     && Buffer.compare(fs.readFileSync(rootApps), original) === 0
     && !fs.existsSync(dataApps),
   `${script} refuses the legacy root tracker before any write`);
+}
+
+{
+  const root = setup('normalize-backup-refusal', true, [row({ num: 900001, status: 'Aplicado 2030-04-02' })], ['normalize-statuses.mjs']);
+  const apps = path.join(root, 'data/applications.md');
+  const backup = `${apps}.bak`;
+  fs.writeFileSync(backup, 'previous rollback copy');
+  fs.writeFileSync(apps, fs.readFileSync(apps, 'utf8').replace('Invented fixture note', 'Changed after import'));
+  const result = run(root, 'normalize-statuses.mjs');
+  check(result.status === 1 && fs.readFileSync(backup, 'utf8') === 'previous rollback copy',
+    'normalize refusal preserves the existing fixed-name backup');
+}
+
+for (const scriptCase of [
+  {
+    name: 'dedup', script: 'dedup-tracker.mjs', args: ['--apply'],
+    rows: [
+      row({ num: 900001, url: 'https://example.test/shared' }),
+      row({ num: 900002, status: 'Applied', url: 'https://example.test/shared' }),
+    ],
+    prepare: () => {},
+  },
+  {
+    name: 'resync', script: 'resync-tracker-scores.mjs', args: ['--apply'],
+    rows: [row({ num: 900001, score: '0.11/5', report: '[900001](reports/900001-fixture.md)' })],
+    prepare: root => fs.writeFileSync(path.join(root, 'reports/900001-fixture.md'), '---\n{"schema":"trajecktory-report/v1","score":0.22,"scoreSource":"derived"}\n---\n# Example\n'),
+  },
+]) {
+  const root = setup(`${scriptCase.name}-backup-refusal`, true, scriptCase.rows, [scriptCase.script]);
+  scriptCase.prepare(root);
+  const apps = path.join(root, 'data/applications.md');
+  fs.writeFileSync(apps, fs.readFileSync(apps, 'utf8').replace('Invented fixture note', 'Changed after import'));
+  const result = run(root, scriptCase.script, scriptCase.args);
+  const backups = fs.readdirSync(path.join(root, 'data')).filter(file => file.includes('.bak-'));
+  check(result.status === 1 && backups.length === 0,
+    `${scriptCase.name} refusal creates no backup`);
+}
+
+{
+  const root = setup('repair-backup-refusal', true, [row({ num: 900001, status: 'Closed' })], []);
+  const dataDir = path.join(root, 'data');
+  const apps = path.join(dataDir, 'applications.md');
+  const changed = fs.readFileSync(apps, 'utf8').replace('Invented fixture note', 'Changed after import');
+  fs.writeFileSync(apps, changed);
+  const ledger = {
+    final: [{
+      date: '2030-04-02', kind: 'application', activity: 'Applied online', employer: 'Zorblax Widgetry',
+      role: 'Example Cog Lead', contact: '', method: 'Online', result: 'Submitted job application',
+      status: 'VERIFIED', evidence: 'Invented evidence', include: 'yes', appId: '900001',
+    }],
+  };
+  const ledgerFile = path.join(root, 'ledger.json');
+  fs.writeFileSync(ledgerFile, `${JSON.stringify(ledger)}\n`);
+  const result = spawnSync(process.execPath, [
+    path.join(ROOT, 'repair-twc-data.mjs'), '--ledger', ledgerFile,
+    '--plan', path.join(root, 'plan.md'), '--apply',
+  ], {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env, TZ: 'UTC', TJK_DATA_DIR: dataDir, NODE_OPTIONS: `--import=${pathToFileURL(path.join(root, 'freeze.mjs')).href}` },
+  });
+  const backups = fs.readdirSync(dataDir).filter(file => file.includes('.bak-'));
+  check(result.status === 1 && /file changed since it was read/.test(`${result.stdout}${result.stderr}`)
+    && fs.readFileSync(apps, 'utf8') === changed && backups.length === 0,
+  'repair refusal preserves the tracker and removes its backups');
 }
 
 compareCase('backfill', [row({ num: 900001, url: null, report: '[900001](reports/900001-fixture.md)' })], 'backfill-tracker-urls.mjs', ['--apply'], root => {

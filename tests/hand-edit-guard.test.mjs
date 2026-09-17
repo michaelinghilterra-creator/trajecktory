@@ -5,7 +5,9 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { openEventStore, readEvents } from '../lib/event-store.mjs';
 import { appendEventsWithEffects, recordJsonSnapshots } from '../lib/legacy-files.mjs';
-import { openDataStore, renderPendingResponse, resetLogWritesCache, withLogWrite } from '../lib/log-writes.mjs';
+import {
+  openDataStore, renderPendingResponse, resetLogWritesCache, setLogWritesTestHooks, withLogWrite,
+} from '../lib/log-writes.mjs';
 import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0;
@@ -139,6 +141,39 @@ console.log('hand-edit-guard.test.mjs');
   check(eventCount(dataDir) === beforeCount + 1
     && JSON.parse(fs.readFileSync(path.join(dataDir, 'apply-dates.json'), 'utf8'))['900001'] === '2030-09-17',
   'a missing render marker allows the first write');
+}
+
+{
+  const dataDir = setup('interrupted-render', {
+    'apply-dates.json': '{}\n',
+    'contact-links.json': '{"version":1,"pins":{}}\n',
+  });
+  save(dataDir, [{ file: 'apply-dates.json', op: 'json_set', key: '900001', value: '2030-09-17' }], 'interrupted-baseline');
+  setLogWritesTestHooks({
+    writeFile: (destination, content) => {
+      fs.writeFileSync(destination, content);
+      throw new Error('invented interruption after file write');
+    },
+  });
+  let renderError;
+  try {
+    save(dataDir, [{ file: 'apply-dates.json', op: 'json_set', key: '900002', value: '2030-09-18' }], 'interrupted-write');
+  } catch (error) {
+    renderError = error;
+  } finally {
+    setLogWritesTestHooks();
+  }
+  const beforeCount = eventCount(dataDir);
+  let saveError;
+  try {
+    save(dataDir, [{ file: 'contact-links.json', op: 'json_set', key: 'version', value: 2 }], 'after-interruption');
+  } catch (error) {
+    saveError = error;
+  }
+  const dates = JSON.parse(fs.readFileSync(path.join(dataDir, 'apply-dates.json'), 'utf8'));
+  check(renderError?.code === 'RENDER_FAILED' && !saveError
+    && dates['900002'] === '2030-09-18' && eventCount(dataDir) === beforeCount + 1,
+  'an interrupted render whose bytes match the projection does not block the next save');
 }
 
 {

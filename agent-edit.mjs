@@ -2,6 +2,7 @@
 
 import { patchRowInMd, parseApplicationsMd } from './dashboard-web/server/lib/applications.mjs';
 import { appendFollowupRow } from './dashboard-web/server/lib/followups.mjs';
+import { ALL_STATUSES } from './dashboard-web/server/lib/statuses.mjs';
 
 const HELP = `Usage:
   node agent-edit.mjs application --id <num> [--company <name>] [--status <status>] [--role <title>] [--note <text>] [--append-note <text>] [--event-date <YYYY-MM-DD>] [--json]
@@ -37,10 +38,28 @@ function printResult(options, value, human) {
   else console.log(human);
 }
 
+function validateDate(value, flag) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(`${flag} must be a real calendar date in YYYY-MM-DD format`);
+  }
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new Error(`${flag} must be a real calendar date in YYYY-MM-DD format`);
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  if (value < '2000-01-01' || value > today) {
+    throw new Error(`${flag} must be between 2000-01-01 and ${today}`);
+  }
+}
+
 function runApplication(options) {
   required(options, ['id']);
   if (!/^\d+$/.test(options.id)) throw new Error('--id must be an integer');
   if (options.note !== undefined && options.appendNote !== undefined) throw new Error('--note and --append-note cannot be used together');
+  if (options.status !== undefined && !ALL_STATUSES.includes(options.status)) {
+    throw new Error(`--status must be one of: ${ALL_STATUSES.join(', ')}`);
+  }
+  if (options.eventDate !== undefined) validateDate(options.eventDate, '--event-date');
   const id = Number(options.id);
   const updates = {};
   if (options.status !== undefined) updates.status = options.status;
@@ -71,7 +90,7 @@ function runApplication(options) {
 function runFollowup(options) {
   required(options, ['app', 'date', 'company', 'role', 'channel', 'contact']);
   if (!/^\d+$/.test(options.app)) throw new Error('--app must be an integer');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(options.date)) throw new Error('--date must use YYYY-MM-DD');
+  validateDate(options.date, '--date');
   const appNum = Number(options.app);
   const n = appendFollowupRow({
     appNum, date: options.date, company: options.company, role: options.role,

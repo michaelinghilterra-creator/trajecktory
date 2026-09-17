@@ -614,7 +614,7 @@ export function buildRepairPlan({ ledger, now = new Date() }) {
     counts: Object.fromEntries(CHANGE_TYPES.map(type => [type, changes.filter(change => change.type === type).length])),
     totalChanges: changes.length,
     files: {
-      trackerText: trackerLines.join(eol), trackerChanged,
+      trackerBaseText: trackerText, trackerText: trackerLines.join(eol), trackerChanged,
       applyDates, applyDatesChanged,
       overrides, overridesChanged,
       pendingEvents,
@@ -751,27 +751,36 @@ function writeData(plan, now, statusEventLogger = logStatusEvent) {
   const collision = backupPairs.find(pair => fs.existsSync(pair.backup));
   if (collision) throw new Error(`Backup already exists: ${collision.backup}`);
 
-  const backups = [];
-  for (const pair of backupPairs) {
-    fs.copyFileSync(pair.file, pair.backup, fs.constants.COPYFILE_EXCL);
-    backups.push(pair.backup);
-  }
-
   const written = [];
   const statusEventsBefore = plan.files.pendingEvents.length ? (parseStatusEvents() || []) : [];
   const dataDir = path.dirname(APPS_MD);
   let renderFailed = false;
+  const backups = [];
+  const removeBackups = () => {
+    for (const backup of backups) {
+      try { fs.unlinkSync(backup); } catch { /* best effort */ }
+    }
+    backups.length = 0;
+  };
+  try {
+    for (const pair of backupPairs) {
+      fs.copyFileSync(pair.file, pair.backup, fs.constants.COPYFILE_EXCL);
+      backups.push(pair.backup);
+    }
+  } catch (error) {
+    removeBackups();
+    throw error;
+  }
 
   if (logWritesEnabled(dataDir)) {
     try {
       withLogWrite(dataDir, store => {
         if (plan.files.applyDatesChanged) writeApplyDates(plan.files.applyDates);
         if (plan.files.trackerChanged) {
-          const baseText = fs.readFileSync(APPS_MD, 'utf8');
           writeTableText({
             dataDir,
             file: 'applications.md',
-            baseText,
+            baseText: plan.files.trackerBaseText,
             newText: plan.files.trackerText,
             rowKey: line => {
               const row = parseTrackerLine(line);
@@ -810,7 +819,10 @@ function writeData(plan, now, statusEventLogger = logStatusEvent) {
       if (error.code === 'RENDER_FAILED') {
         renderFailed = true;
         console.warn(`Warning: ${error.message}`);
-      } else throw error;
+      } else {
+        removeBackups();
+        throw error;
+      }
     }
   } else {
     if (plan.files.applyDatesChanged) writeApplyDates(plan.files.applyDates);

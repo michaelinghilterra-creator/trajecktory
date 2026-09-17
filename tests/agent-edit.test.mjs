@@ -3,13 +3,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { makeSandbox } from './helpers/sandbox.mjs';
 import { openEventStore, readEvents } from '../lib/event-store.mjs';
 import { importDataFolder } from '../lib/import/import-data-folder.mjs';
 import { TRACKER_HEADER, TRACKER_SEPARATOR, formatTrackerLine } from '../lib/tracker.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const clockDir = makeSandbox('agent-edit-clock');
+const clockFile = path.join(clockDir, 'freeze.mjs');
+fs.writeFileSync(clockFile, "const NativeDate = Date; globalThis.Date = class extends NativeDate { constructor(...args) { super(...(args.length ? args : ['2030-05-10T12:00:00.000Z'])); } static now() { return new NativeDate('2030-05-10T12:00:00.000Z').getTime(); } };\n");
 let passed = 0;
 let failed = 0;
 const check = (condition, message) => {
@@ -36,7 +39,10 @@ function setup(name, on) {
 }
 
 function run(dataDir, args) {
-  return spawnSync(process.execPath, [path.join(ROOT, 'agent-edit.mjs'), ...args], { encoding: 'utf8', env: { ...process.env, TJK_DATA_DIR: dataDir, TZ: 'UTC' } });
+  return spawnSync(process.execPath, [path.join(ROOT, 'agent-edit.mjs'), ...args], {
+    encoding: 'utf8',
+    env: { ...process.env, TJK_DATA_DIR: dataDir, TZ: 'UTC', NODE_OPTIONS: `--import=${pathToFileURL(clockFile).href}` },
+  });
 }
 
 function compare(name, args, files = ['applications.md', 'status-events.tsv']) {
@@ -65,6 +71,22 @@ check(fs.readFileSync(path.join(appended.on, 'applications.md'), 'utf8').include
   const dataDir = setup('unknown', false);
   const result = run(dataDir, ['application', '--id', '900001', '--mystery', 'x']);
   check(result.status === 1 && /Unknown argument: --mystery/.test(result.stderr), 'unknown flag exits 1 with a clear message');
+}
+{
+  const dataDir = setup('bad-status', false);
+  const before = fs.readFileSync(path.join(dataDir, 'applications.md'), 'utf8');
+  const result = run(dataDir, ['application', '--id', '900001', '--status', 'TotallyMadeUp']);
+  check(result.status === 1 && /must be one of:/.test(result.stderr)
+    && fs.readFileSync(path.join(dataDir, 'applications.md'), 'utf8') === before,
+  'a noncanonical status is rejected before any write');
+}
+{
+  const dataDir = setup('bad-date', false);
+  const before = fs.readFileSync(path.join(dataDir, 'applications.md'), 'utf8');
+  const result = run(dataDir, ['application', '--id', '900001', '--status', 'Applied', '--event-date', '2030-99-99']);
+  check(result.status === 1 && /real calendar date in YYYY-MM-DD format/.test(result.stderr)
+    && fs.readFileSync(path.join(dataDir, 'applications.md'), 'utf8') === before,
+  'an impossible event date is rejected before any write');
 }
 
 const followup = compare('follow-up append', ['followup', '--app', '900001', '--date', '2030-05-03', '--company', 'Quennox Ratchet Works', '--role', 'Example Gear Director', '--channel', 'Email', '--contact', 'Example Personone', '--note', 'Invented sent note', '--json'], ['follow-ups.md']);

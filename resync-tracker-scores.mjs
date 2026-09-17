@@ -178,7 +178,6 @@ function main() {
 
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
   const backup = `${APPS}.bak-scores-${stamp}`;
-  fs.copyFileSync(APPS, backup);
 
   const byLine = new Map(plan.changes.map(c => [c.line, c.newLine]));
   const out = lines.map(l => (byLine.has(l) ? byLine.get(l) : l));
@@ -209,7 +208,11 @@ function main() {
       if (error.code === 'RENDER_FAILED') console.warn(`Warning: ${error.message}`);
       else { console.error(error.message); process.exit(1); }
     }
-  } else fs.writeFileSync(APPS, newText, 'utf-8');
+    fs.writeFileSync(backup, text);
+  } else {
+    fs.copyFileSync(APPS, backup);
+    fs.writeFileSync(APPS, newText, 'utf-8');
+  }
 
   if (!jsonOut) {
     console.log(`\nBacked up to ${path.basename(backup)}`);

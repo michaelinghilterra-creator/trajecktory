@@ -171,8 +171,6 @@ if (unknowns.length > 0) {
 console.log(`\n📊 ${changes} statuses normalized`);
 
 if (!DRY_RUN && changes > 0) {
-  // Backup first
-  copyFileSync(APPS_FILE, APPS_FILE + '.bak');
   const newText = lines.join('\n');
   if (logWritesEnabled(DATA_DIR)) {
     try {
@@ -204,7 +202,11 @@ if (!DRY_RUN && changes > 0) {
       if (error.code === 'RENDER_FAILED') console.warn(`Warning: ${error.message}`);
       else { console.error(error.message); process.exit(1); }
     }
-  } else writeFileSync(APPS_FILE, newText);
+    writeFileSync(APPS_FILE + '.bak', content);
+  } else {
+    copyFileSync(APPS_FILE, APPS_FILE + '.bak');
+    writeFileSync(APPS_FILE, newText);
+  }
   console.log('✅ Written to applications.md (backup: applications.md.bak)');
 } else if (DRY_RUN) {
   console.log('(dry-run — no changes written)');

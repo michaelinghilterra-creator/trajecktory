@@ -261,6 +261,8 @@ check(deriveInterviewStage('Hiring manager conversation') === '1st Interview'
 const dry = runRepair({ ledgerPath: files.ledger, planPath: files.dryPlan, now: fixedNow });
 check(dataFiles.every(file => fs.readFileSync(file, 'utf8') === beforeDryRun.get(file)),
   'dry run leaves every sandbox data file byte-for-byte unchanged');
+check(dry.files.trackerBaseText === beforeDryRun.get(files.tracker),
+  'the plan retains the exact tracker text it parsed for compare and swap');
 check(fs.existsSync(files.dryPlan), 'dry run writes the requested plan file');
 const dryPlanText = fs.readFileSync(files.dryPlan, 'utf8');
 check(dry.totalChanges === 43 && dry.needsTrackerRows.length === 7,

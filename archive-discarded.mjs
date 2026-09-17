@@ -20,6 +20,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine } from './lib/tracker.mjs';
 import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
@@ -68,6 +69,49 @@ function writeApplications(baseText, newText, action) {
       return true;
     }
     console.error(error.message);
+    return false;
+  }
+  return true;
+}
+
+function removeStagedArchive(tempFile) {
+  try {
+    fs.unlinkSync(tempFile);
+    return true;
+  } catch (error) {
+    console.error(`Could not remove staged archive ${tempFile}: ${error.message}`);
+    return false;
+  }
+}
+
+function commitArchive({ archive, content, baseText, newText }) {
+  const tempFile = `${archive}.tmp-${process.pid}-${randomUUID()}`;
+  try {
+    fs.writeFileSync(tempFile, content, { flag: 'wx' });
+  } catch (error) {
+    try { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch { /* best effort */ }
+    console.error(`Could not stage archive ${tempFile}: ${error.message}`);
+    return false;
+  }
+
+  let trackerWritten;
+  try {
+    trackerWritten = writeApplications(baseText, newText, 'archive');
+  } catch (error) {
+    removeStagedArchive(tempFile);
+    console.error(error.message);
+    return false;
+  }
+  if (!trackerWritten) {
+    removeStagedArchive(tempFile);
+    return false;
+  }
+
+  try {
+    fs.renameSync(tempFile, archive);
+  } catch (error) {
+    console.error(`Archive rename failed after applications.md was updated: ${error.message}`);
+    console.error(`Recover the archived rows from temporary file: ${tempFile}`);
     return false;
   }
   return true;
@@ -176,8 +220,7 @@ if (idsList) {
     '|---|------|---------|------|-------|--------|-----|--------|-------|',
     ...move,
   ];
-  if (!writeApplications(baseText, keep.join('\n'), 'archive')) process.exit(1);
-  fs.writeFileSync(archive, header.join('\n'));
+  if (!commitArchive({ archive, content: header.join('\n'), baseText, newText: keep.join('\n') })) process.exit(1);
   console.log(`\n✅ Archived ${move.length} entries → ${path.basename(archive)}`);
   console.log(`   Restore with: node archive-discarded.mjs --restore-tag ${archiveTag}`);
   process.exit(0);
@@ -254,8 +297,7 @@ const header = [
   '|---|------|---------|------|-------|--------|-----|--------|-------|',
   ...move,
 ];
-if (!writeApplications(baseText, keep.join('\n'), 'archive')) process.exit(1);
-fs.writeFileSync(archive, header.join('\n'));
+if (!commitArchive({ archive, content: header.join('\n'), baseText, newText: keep.join('\n') })) process.exit(1);
 console.log(`\n✅ Archived ${move.length} entries → ${path.basename(archive)}`);
 console.log(`   applications.md now has ${keep.filter(l => l.startsWith('| ') && /^\| \d/.test(l)).length} tracker rows`);
 console.log(`   Restore anytime with: node archive-discarded.mjs --restore ${date}`);

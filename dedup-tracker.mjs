@@ -237,7 +237,6 @@ if (removed === 0 && conflicted === 0) {
   // rollback there is.
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
   const backup = `${APPS_FILE}.bak-${stamp}-dedup`;
-  copyFileSync(APPS_FILE, backup);
   const newText = lines.join('\n');
   if (logWritesEnabled(DATA_DIR)) {
     try {
@@ -275,6 +274,10 @@ if (removed === 0 && conflicted === 0) {
       if (error.code === 'RENDER_FAILED') console.warn(`Warning: ${error.message}`);
       else { console.error(error.message); process.exit(1); }
     }
-  } else writeFileSync(APPS_FILE, newText);
+    writeFileSync(backup, content);
+  } else {
+    copyFileSync(APPS_FILE, backup);
+    writeFileSync(APPS_FILE, newText);
+  }
   console.log(`✅ Written to applications.md (backup: ${backup.split(/[\\/]/).pop()})`);
 }
