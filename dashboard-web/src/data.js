@@ -233,5 +233,12 @@ window.tjkMutate = async function tjkMutate(url, options) {
     try { await fetch('/', { headers: { Accept: 'text/html' }, cache: 'no-store' }); } catch (e) { /* ignore */ }
     res = await fetch(url, options);
   }
+  if (res && res.status === 409) {
+    res.clone().json().then(body => {
+      if (body?.error === 'hand_edited' && Array.isArray(body.files)) {
+        window.dispatchEvent(new CustomEvent('tjk:hand-edited', { detail: { files: body.files } }));
+      }
+    }).catch(() => {});
+  }
   return res;
 };

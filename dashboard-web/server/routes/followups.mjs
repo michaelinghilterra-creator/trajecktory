@@ -28,7 +28,7 @@ import { reconcileInviteStatus } from '../lib/invite-status-reconcile.mjs';
 import { findSubmittedApplication } from '../lib/statuses.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
-import { logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -84,7 +84,7 @@ router.post('/api/followups/reconcile-sent-invites', (req, res) => {
       unmatched: unmatched.map(u => u.name || u.handle).filter(Boolean),
       ...renderPending,
     });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { logWriteRouteError(res, err); }
 });
 
 // ── Follow-Ups (Stale Applications Action Queue) ─────────────────────────────
@@ -175,6 +175,7 @@ router.get('/api/followups/both-queue', (req, res) => {
 router.get('/api/followups/stale', (req, res) => {
   try {
     let renderPending = {};
+    let handEdited = {};
     // Self-heal the LinkedIn status axis from our own correspondence before building
     // the queue: any contact with a recorded invite but a stale 'Not Connected' status
     // is advanced to 'Invite Pending', so the queue never re-pitches someone already
@@ -185,7 +186,9 @@ router.get('/api/followups/stale', (req, res) => {
       if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, heal);
       else heal();
     } catch (error) {
-      if (error?.code === 'RENDER_FAILED') {
+      if (error?.code === 'HAND_EDITED') {
+        handEdited = { hand_edited: { files: error.files } };
+      } else if (error?.code === 'RENDER_FAILED') {
         renderPending = renderPendingResponse(error, 'followups stale self-heal');
       }
       // Every other self-heal failure stays best-effort and silent.
@@ -344,9 +347,10 @@ router.get('/api/followups/stale', (req, res) => {
       // Deprecated alias: legacy readers expect `items` to be the badge list.
       items: warm,
       ...renderPending,
+      ...handEdited,
     });
   }
-  catch (err) { res.status(500).json({ error: err.message }); }
+  catch (err) { logWriteRouteError(res, err); }
 });
 
 // POST /api/followups/snooze — defer a stale alert.
@@ -529,7 +533,7 @@ router.post('/api/followups', (req, res) => {
 
     res.json({ ok: true, n, crossLogged, ...renderPending });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 

@@ -11,7 +11,7 @@ import { ALL_STATUSES } from '../lib/statuses.mjs';
 import { mdToHtml, escapeHtml } from '../lib/html.mjs';
 import { isRequeueableDiscard } from '../../../lib/discard.mjs';
 import { canonicalUrl } from '../../../lib/identity.mjs';
-import { logWritesEnabled, renderPendingResponse, withLogWrite } from '../../../lib/log-writes.mjs';
+import { logWriteRouteError, logWritesEnabled, renderPendingResponse, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -69,7 +69,7 @@ router.get('/api/applications', (req, res) => {
   try {
     res.json(parseApplicationsMd());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 
@@ -77,7 +77,7 @@ router.get('/api/split-test', (req, res) => {
   try {
     res.json(splitTestSummary());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 
@@ -171,7 +171,7 @@ router.patch('/api/applications/:id', (req, res) => {
     const response = renderPending.render_pending ? { id, ...updates } : (updated || { id, ...updates });
     res.json({ ...response, ...renderPending });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 
@@ -222,7 +222,7 @@ router.post('/api/applications/:id/requeue', (req, res) => {
     }
     res.json({ ok: true, requeued: true, url: row.url, alreadyQueued: already });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 
@@ -232,7 +232,7 @@ router.get('/api/insights/rejection-timing', (req, res) => {
   try {
     res.json(rejectionTimingStats());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 
@@ -241,7 +241,7 @@ router.get('/api/insights/response-progress', (req, res) => {
   try {
     res.json(readResponseProgressStats());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 

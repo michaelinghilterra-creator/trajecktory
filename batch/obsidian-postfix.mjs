@@ -216,4 +216,10 @@ function main() {
   console.log(`source files moved: ${moved}`);
 }
 
-main();
+try {
+  main();
+} catch (error) {
+  if (error.code !== 'HAND_EDITED') throw error;
+  console.error(error.message);
+  process.exitCode = 1;
+}
