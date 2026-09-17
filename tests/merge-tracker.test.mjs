@@ -2,7 +2,7 @@
 /**
  * merge-tracker.test.mjs — end-to-end test of the TSV → applications.md merge,
  * focused on the column-order heuristic and dedup logic flagged in the
- * 2026-06-12 audit (merge-tracker.mjs parseTsvContent, lines ~190-212).
+ * 2030-06-12 audit (merge-tracker.mjs parseTsvContent, lines ~190-212).
  *
  * Runs the real merge-tracker.mjs inside a throwaway sandbox directory
  * (the script resolves all paths relative to its own location, so a copy
@@ -68,8 +68,8 @@ const HEADER = [
 // Seed rows: one for the skip-lower-score case, one for the update-higher case.
 const seed = [
   HEADER,
-  '| 1 | 2026-06-01 | SeedCo | Director of Customer Support | 3.0/5 | Evaluated | ❌ | — | [1](reports/1-seedco-2026-06-01.md) | Seed row |',
-  '| 2 | 2026-06-01 | UpdateCo | VP Sales Strategy | 3.0/5 | Evaluated | ❌ | — | [2](reports/2-updateco-2026-06-01.md) | Seed row |',
+  '| 1 | 2030-06-01 | SeedCo | Director of Customer Support | 3.01/5 | Evaluated | ❌ | — | [1](reports/1-seedco-2030-06-01.md) | Seed row |',
+  '| 2 | 2030-06-01 | UpdateCo | Example Sprocket Director | 3.01/5 | Evaluated | ❌ | — | [2](reports/2-updateco-2030-06-01.md) | Seed row |',
   '',
 ].join('\n');
 writeFileSync(join(sandbox, 'data/applications.md'), seed);
@@ -80,13 +80,13 @@ writeFileSync(join(sandbox, 'data/applications.md'), seed);
 // could not run compute-scores leaves a placeholder). A LEGACY report has no
 // scoreSource, so its number is ignored and the TSV score stands.
 const v1 = (o) => '---\n' + JSON.stringify(o) + '\n---\n# body\n';
-writeFileSync(join(sandbox, 'reports/112-derivedco-2026-06-12.md'), v1({
-  schema: 'trajecktory-report/v1', id: 112, company: 'DerivedCo', role: 'Director of RevOps',
-  url: 'https://example.test/derivedco', score: 4.4, scoreSource: 'derived',
+writeFileSync(join(sandbox, 'reports/900112-derivedco-2030-06-12.md'), v1({
+  schema: 'trajecktory-report/v1', id: 900112, company: 'DerivedCo', role: 'Director of RevOps',
+  url: 'https://example.test/derivedco', score: 4.41, scoreSource: 'derived',
   globalScore: [{ key: 'fit', dim: 'Fit / CV Match', val: 4, max: 5 }],
 }));
-writeFileSync(join(sandbox, 'reports/113-legacyco-2026-06-12.md'), v1({
-  schema: 'trajecktory-report/v1', id: 113, company: 'LegacyCo', role: 'VP Ops',
+writeFileSync(join(sandbox, 'reports/900113-legacyco-2030-06-12.md'), v1({
+  schema: 'trajecktory-report/v1', id: 900113, company: 'LegacyCo', role: 'Example Pulley Manager',
   url: 'https://example.test/legacyco', score: 9.9,   // absurd on purpose: must be ignored
   globalScore: [{ dim: 'CV Match', val: 4, max: 5 }],
 }));
@@ -96,47 +96,47 @@ const T = '\t';
 const tsv = (parts) => parts.join(T) + '\n';
 const cases = {
   // 1. Standard order: status in col4, score in col5
-  '101-acmecorp.tsv': tsv(['101', '2026-06-12', 'AcmeCorp', 'Director of Customer Support',
-    'Evaluated', '4.2/5', '❌', '[101](reports/101-acmecorp-2026-06-12.md)', 'Standard column order']),
+  '900101-acmecorp.tsv': tsv(['900101', '2030-06-12', 'AcmeCorp', 'Director of Customer Support',
+    'Evaluated', '4.21/5', '❌', '[900101](reports/900101-acmecorp-2030-06-12.md)', 'Standard column order']),
   // 2. SWAPPED order: score in col4, status in col5 — heuristic must un-swap
-  '102-betaworks.tsv': tsv(['102', '2026-06-12', 'BetaWorks', 'VP Sales Operations',
-    '3.9/5', 'Evaluated', '❌', '[102](reports/102-betaworks-2026-06-12.md)', 'Swapped column order']),
-  // 3. Score with spaces ("4.0 / 5") — fails the score regex; documents behavior
-  '103-gammasoft.tsv': tsv(['103', '2026-06-12', 'GammaSoft', 'Director of Horology',
-    'Evaluated', '4.0 / 5', '❌', '[103](reports/103-gammasoft-2026-06-12.md)', 'Spaced score format']),
+  '900102-betaworks.tsv': tsv(['900102', '2030-06-12', 'BetaWorks', 'Example Cog Lead',
+    '3.91/5', 'Evaluated', '❌', '[900102](reports/900102-betaworks-2030-06-12.md)', 'Swapped column order']),
+  // 3. Score with spaces ("4.01 / 5") — fails the score regex; documents behavior
+  '900103-gammasoft.tsv': tsv(['900103', '2030-06-12', 'GammaSoft', 'Director of Horology',
+    'Evaluated', '4.01 / 5', '❌', '[900103](reports/900103-gammasoft-2030-06-12.md)', 'Spaced score format']),
   // 4. Lowercase status — must be canonicalized to 'Evaluated'
-  '104-deltatech.tsv': tsv(['104', '2026-06-12', 'DeltaTech', 'Head of BizDev',
-    'evaluated', '3.8/5', '❌', '[104](reports/104-deltatech-2026-06-12.md)', 'Lowercase status']),
+  '900104-deltatech.tsv': tsv(['900104', '2030-06-12', 'DeltaTech', 'Head of BizDev',
+    'evaluated', '3.81/5', '❌', '[900104](reports/900104-deltatech-2030-06-12.md)', 'Lowercase status']),
   // 5. Duplicate of seed #1 with LOWER score — must be skipped
-  '105-seedco.tsv': tsv(['105', '2026-06-12', 'SeedCo', 'Director of Customer Support',
-    'Evaluated', '2.9/5', '❌', '[105](reports/105-seedco-2026-06-12.md)', 'Lower-score duplicate']),
+  '900105-seedco.tsv': tsv(['900105', '2030-06-12', 'SeedCo', 'Director of Customer Support',
+    'Evaluated', '2.91/5', '❌', '[900105](reports/900105-seedco-2030-06-12.md)', 'Lower-score duplicate']),
   // 6. Duplicate of seed #2 with HIGHER score — must update in place, not add
-  '106-updateco.tsv': tsv(['106', '2026-06-12', 'UpdateCo', 'VP Sales Strategy',
-    'Evaluated', '4.5/5', '❌', '[106](reports/106-updateco-2026-06-12.md)', 'Higher-score re-eval']),
+  '900106-updateco.tsv': tsv(['900106', '2030-06-12', 'UpdateCo', 'Example Sprocket Director',
+    'Evaluated', '4.51/5', '❌', '[900106](reports/900106-updateco-2030-06-12.md)', 'Higher-score re-eval']),
   // 7. Canonical "Closed" (new state in states.yml): must be preserved, not
   //    silently rewritten to Evaluated.
-  '107-epsilonco.tsv': tsv(['107', '2026-06-12', 'EpsilonCo', 'Director of Strategy',
-    'Closed', '4.1/5', '❌', '[107](reports/107-epsilonco-2026-06-12.md)', 'Posting closed']),
+  '900107-epsilonco.tsv': tsv(['900107', '2030-06-12', 'EpsilonCo', 'Director of Strategy',
+    'Closed', '4.11/5', '❌', '[900107](reports/900107-epsilonco-2030-06-12.md)', 'Posting closed']),
   // 8. Alias "expired": must canonicalize to "Closed".
-  '108-zetalabs.tsv': tsv(['108', '2026-06-12', 'ZetaLabs', 'Head of Operations',
-    'expired', '4.0/5', '❌', '[108](reports/108-zetalabs-2026-06-12.md)', 'Expired alias']),
+  '900108-zetalabs.tsv': tsv(['900108', '2030-06-12', 'ZetaLabs', 'Head of Operations',
+    'expired', '4.01/5', '❌', '[900108](reports/900108-zetalabs-2030-06-12.md)', 'Expired alias']),
   // 9. Canonical "Not a Fit" (new state): must be preserved.
-  '109-etacorp.tsv': tsv(['109', '2026-06-12', 'EtaCorp', 'VP Marketing',
-    'Not a Fit', '3.7/5', '❌', '[109](reports/109-etacorp-2026-06-12.md)', 'Poor fit']),
+  '900109-etacorp.tsv': tsv(['900109', '2030-06-12', 'EtaCorp', 'Example Gear Director',
+    'Not a Fit', '3.71/5', '❌', '[900109](reports/900109-etacorp-2030-06-12.md)', 'Poor fit']),
   // 10. Alias "naf": must canonicalize to "Not a Fit".
-  '110-thetaco.tsv': tsv(['110', '2026-06-12', 'ThetaCo', 'Director of Product',
-    'naf', '3.6/5', '❌', '[110](reports/110-thetaco-2026-06-12.md)', 'naf alias']),
+  '900110-thetaco.tsv': tsv(['900110', '2030-06-12', 'ThetaCo', 'Director of Product',
+    'naf', '3.61/5', '❌', '[900110](reports/900110-thetaco-2030-06-12.md)', 'naf alias']),
   // 11. SWAPPED column order with a NEW state: score in col4, "Closed" in col5.
   //     The heuristic must recognize "Closed" (from states.yml) and un-swap.
-  '111-iotacorp.tsv': tsv(['111', '2026-06-12', 'IotaCorp', 'Chief of Cartography',
-    '4.3/5', 'Closed', '❌', '[111](reports/111-iotacorp-2026-06-12.md)', 'Swapped order, new state']),
-  // 12. Report scored the NEW way → merge uses the report's DERIVED score (4.4),
+  '900111-iotacorp.tsv': tsv(['900111', '2030-06-12', 'IotaCorp', 'Chief of Cartography',
+    '4.31/5', 'Closed', '❌', '[900111](reports/900111-iotacorp-2030-06-12.md)', 'Swapped order, new state']),
+  // 12. Report scored the NEW way → merge uses the report's DERIVED score (4.41),
   //     overriding the placeholder score a worker left in the TSV.
-  '112-derivedco.tsv': tsv(['112', '2026-06-12', 'DerivedCo', 'Director of RevOps',
-    'Evaluated', '0.0/5', '❌', '[112](reports/112-derivedco-2026-06-12.md)', 'Placeholder score in TSV']),
+  '900112-derivedco.tsv': tsv(['900112', '2030-06-12', 'DerivedCo', 'Director of RevOps',
+    'Evaluated', '0.01/5', '❌', '[900112](reports/900112-derivedco-2030-06-12.md)', 'Placeholder score in TSV']),
   // 13. LEGACY report (no scoreSource) → its number is ignored; the TSV score stands.
-  '113-legacyco.tsv': tsv(['113', '2026-06-12', 'LegacyCo', 'VP Ops',
-    'Evaluated', '3.3/5', '❌', '[113](reports/113-legacyco-2026-06-12.md)', 'Legacy TSV score']),
+  '900113-legacyco.tsv': tsv(['900113', '2030-06-12', 'LegacyCo', 'Example Pulley Manager',
+    'Evaluated', '3.31/5', '❌', '[900113](reports/900113-legacyco-2030-06-12.md)', 'Legacy TSV score']),
 };
 for (const [name, content] of Object.entries(cases)) {
   writeFileSync(join(sandbox, 'batch/tracker-additions', name), content);
@@ -162,16 +162,16 @@ const SCORE = 4, STATUS = 5, NOTES = 9;
 console.log('\n1. Column-order heuristic');
 {
   const std = cols(rowFor('AcmeCorp'));
-  check(std[SCORE] === '4.2/5' && std[STATUS] === 'Evaluated',
+  check(std[SCORE] === '4.21/5' && std[STATUS] === 'Evaluated',
     `standard TSV → score/status land correctly (${std[SCORE]} / ${std[STATUS]})`);
 
   const swapped = cols(rowFor('BetaWorks'));
-  check(swapped[SCORE] === '3.9/5' && swapped[STATUS] === 'Evaluated',
+  check(swapped[SCORE] === '3.91/5' && swapped[STATUS] === 'Evaluated',
     `SWAPPED TSV un-swapped by heuristic (${swapped[SCORE]} / ${swapped[STATUS]})`);
 
   const spaced = cols(rowFor('GammaSoft'));
-  check(spaced[STATUS] === 'Evaluated' && spaced[SCORE].includes('4.0'),
-    `spaced score "4.0 / 5" does not flip columns (score cell: "${spaced[SCORE]}")`);
+  check(spaced[STATUS] === 'Evaluated' && spaced[SCORE].includes('4.01'),
+    `spaced score "4.01 / 5" does not flip columns (score cell: "${spaced[SCORE]}")`);
 }
 
 console.log('\n2. Status canonicalization');
@@ -184,12 +184,12 @@ console.log('\n3. Dedup behavior');
 {
   const seedRows = rows.filter(r => r.includes('SeedCo'));
   check(seedRows.length === 1, `lower-score duplicate skipped (SeedCo rows: ${seedRows.length})`);
-  check(cols(seedRows[0])[SCORE] === '3.0/5', 'seed row score unchanged by lower-score duplicate');
+  check(cols(seedRows[0])[SCORE] === '3.01/5', 'seed row score unchanged by lower-score duplicate');
 
   const updateRows = rows.filter(r => r.includes('UpdateCo'));
   check(updateRows.length === 1, `higher-score re-eval updated in place (UpdateCo rows: ${updateRows.length})`);
   const u = cols(updateRows[0]);
-  check(u[SCORE] === '4.5/5', `updated score written (${u[SCORE]})`);
+  check(u[SCORE] === '4.51/5', `updated score written (${u[SCORE]})`);
   check(u[0] === '2', `original entry number preserved (#${u[0]})`);
   check(u[NOTES].includes('Re-eval'), 'update annotated as re-eval in notes');
 }
@@ -209,16 +209,17 @@ console.log('\n4. New canonical states + aliases (states.yml drift guard)');
   check(naf[STATUS] === 'Not a Fit', `alias "naf" canonicalized to Not a Fit (${naf[STATUS]})`);
 
   const swappedNew = cols(rowFor('IotaCorp'));
-  check(swappedNew[STATUS] === 'Closed' && swappedNew[SCORE] === '4.3/5',
+  check(swappedNew[STATUS] === 'Closed' && swappedNew[SCORE] === '4.31/5',
     `swapped col order with new state un-swapped (${swappedNew[SCORE]} / ${swappedNew[STATUS]})`);
 }
 
 console.log('\n5. Derived score from the report (single source of the headline)');
 {
   const derived = cols(rowFor('DerivedCo'));
-  check(derived[SCORE] === '4.4/5', `derived report overrides the TSV placeholder 0.0 → 4.4 (got ${derived[SCORE]})`);
+  check(parseFloat(derived[SCORE]) === 4.4,
+    `derived report overrides the TSV placeholder 0.01 → 4.41, normalized to one decimal (got ${derived[SCORE]})`);
   const legacy = cols(rowFor('LegacyCo'));
-  check(legacy[SCORE] === '3.3/5', `legacy report's number ignored; the TSV score stands (got ${legacy[SCORE]})`);
+  check(legacy[SCORE] === '3.31/5', `legacy report's number ignored; the TSV score stands (got ${legacy[SCORE]})`);
 }
 
 console.log('\n6. No collateral damage');
@@ -229,8 +230,8 @@ console.log('\n6. No collateral damage');
 
 rmSync(sandbox, { recursive: true, force: true });
 
-// ── Scenario B: 2026-07-15 regressions ────────────────────────────────────────
-// Two bugs surfaced by the 2026-07-15 eval batches, exercised on a FRESH
+// ── Scenario B: 2030-07-15 regressions ────────────────────────────────────────
+// Two bugs surfaced by the 2030-07-15 eval batches, exercised on a FRESH
 // applications.md (independent of Scenario A's carefully-counted assertions):
 //   1. roleFuzzyMatch too loose — two DISTINCT new roles in the same family
 //      ("Director, Topiary Standards", "Director, Topiary Logistics (Calibration)")
@@ -296,30 +297,30 @@ function runMerge(seedRows, caseMap, extraFiles = {}) {
 
 const B = runMerge(
   [
-    '| 71 | 2026-05-01 | Contoso | Director, Topiary Logistics | 4.0/5 | Closed | ❌ | — | [71](reports/71-contoso-2026-05-01.md) | Posting closed |',
-    '| 50 | 2026-05-01 | Acme2 | VP, Glassblowing Standards | 3.0/5 | Evaluated | ❌ | — | [50](reports/50-acme2-2026-05-01.md) | Seed VP |',
+    '| 71 | 2030-05-01 | Contoso | Director, Topiary Logistics | 4.01/5 | Closed | ❌ | — | [71](reports/71-contoso-2030-05-01.md) | Posting closed |',
+    '| 50 | 2030-05-01 | Acme2 | VP, Glassblowing Standards | 3.01/5 | Evaluated | ❌ | — | [50](reports/50-acme2-2030-05-01.md) | Seed VP |',
   ],
   {
     // Legit re-eval of the existing VP row (report-number match) — must update
     // in place on the CRLF file, proving the splice is EOL-tolerant.
-    '50-acme2.tsv': tsv(['50', '2026-07-15', 'Acme2', 'VP, Glassblowing Standards',
-      'Evaluated', '4.6/5', '❌', '[50](reports/50-acme2-2026-07-15.md)', 'Legit re-eval']),
+    '50-acme2.tsv': tsv(['50', '2030-07-15', 'Acme2', 'VP, Glassblowing Standards',
+      'Evaluated', '4.61/5', '❌', '[50](reports/50-acme2-2030-07-15.md)', 'Legit re-eval']),
     // Two DISTINCT Contoso roles in the "Sales/Operations/Director" family — must
     // NOT collapse onto existing #71, and must NOT collapse into each other.
-    '72-contoso.tsv': tsv(['72', '2026-07-15', 'Contoso', 'Director, Topiary Standards',
-      'Evaluated', '4.1/5', '❌', '[72](reports/72-contoso-2026-07-15.md)', 'Topiary Standards']),
-    '73-contoso.tsv': tsv(['73', '2026-07-15', 'Contoso', 'Director, Topiary Logistics (Calibration)',
-      'Evaluated', '4.0/5', '❌', '[73](reports/73-contoso-2026-07-15.md)', 'Sales Ops Planning']),
+    '72-contoso.tsv': tsv(['72', '2030-07-15', 'Contoso', 'Director, Topiary Standards',
+      'Evaluated', '4.11/5', '❌', '[72](reports/72-contoso-2030-07-15.md)', 'Topiary Standards']),
+    '73-contoso.tsv': tsv(['73', '2030-07-15', 'Contoso', 'Director, Topiary Logistics (Calibration)',
+      'Evaluated', '4.01/5', '❌', '[73](reports/73-contoso-2030-07-15.md)', 'Sales Ops Planning']),
     // Same-company+role postings with different JD numbers — must consolidate to
-    // the highest score (4.2), not leave two intra-batch dupes.
-    '80-northwind.tsv': tsv(['80', '2026-07-15', 'Northwind', 'Partnerships Director',
-      'Evaluated', '4.2/5', '❌', '[80](reports/80-northwind-2026-07-15.md)', 'Regional hi']),
-    '81-northwind.tsv': tsv(['81', '2026-07-15', 'Northwind', 'Partnerships Director',
-      'Evaluated', '3.8/5', '❌', '[81](reports/81-northwind-2026-07-15.md)', 'Regional lo']),
+    // the highest score (4.21), not leave two intra-batch dupes.
+    '80-northwind.tsv': tsv(['80', '2030-07-15', 'Northwind', 'Example Bearing Director',
+      'Evaluated', '4.21/5', '❌', '[80](reports/80-northwind-2030-07-15.md)', 'Regional hi']),
+    '81-northwind.tsv': tsv(['81', '2030-07-15', 'Northwind', 'Example Bearing Director',
+      'Evaluated', '3.81/5', '❌', '[81](reports/81-northwind-2030-07-15.md)', 'Regional lo']),
     // Same core nouns, DIFFERENT level (Director vs the existing VP) — must NOT
     // match; added as its own distinct row.
-    '2001-acme2.tsv': tsv(['2001', '2026-07-15', 'Acme2', 'Director, Glassblowing Standards',
-      'Evaluated', '4.5/5', '❌', '[2001](reports/2001-acme2-2026-07-15.md)', 'Different level']),
+    '2001-acme2.tsv': tsv(['2001', '2030-07-15', 'Acme2', 'Director, Glassblowing Standards',
+      'Evaluated', '4.51/5', '❌', '[2001](reports/2001-acme2-2030-07-15.md)', 'Different level']),
   },
 );
 
@@ -328,8 +329,8 @@ console.log('\n6. Tightened fuzzy match — distinct roles do not collapse (bug 
   const z = B.rowsFor('Contoso');
   check(z.length === 3, `Contoso keeps 3 distinct rows (existing + 2 new): got ${z.length}`);
   const closed = z.find(r => r.includes('[71]'));
-  check(!!closed && cols(closed)[STATUS] === 'Closed' && cols(closed)[SCORE] === '4.0/5',
-    `existing #71 "Director, Topiary Logistics" NOT clobbered (still Closed / 4.0/5): "${closed ? cols(closed)[SCORE] + ' ' + cols(closed)[STATUS] : 'MISSING'}"`);
+  check(!!closed && cols(closed)[STATUS] === 'Closed' && cols(closed)[SCORE] === '4.01/5',
+    `existing #71 "Director, Topiary Logistics" NOT clobbered (still Closed / 4.01/5): "${closed ? cols(closed)[SCORE] + ' ' + cols(closed)[STATUS] : 'MISSING'}"`);
   check(z.some(r => r.includes('Topiary Standards')), 'Director, Topiary Standards kept as its own row (not silently lost)');
   check(z.some(r => r.includes('(Calibration)')), 'Director, Topiary Logistics (Calibration) kept as its own row');
 }
@@ -339,8 +340,8 @@ console.log('\n7. Level distinction — Director ≠ VP (bug 1)');
   const a = B.rowsFor('Acme2');
   check(a.length === 2, `Acme2 keeps VP re-eval + distinct Director row: got ${a.length}`);
   const vp = a.find(r => r.includes('[50]'));
-  check(!!vp && cols(vp)[SCORE] === '4.6/5',
-    `legit VP re-eval updated in place on CRLF file (4.6/5): "${vp ? cols(vp)[SCORE] : 'MISSING'}"`);
+  check(!!vp && cols(vp)[SCORE] === '4.61/5',
+    `legit VP re-eval updated in place on CRLF file (4.61/5): "${vp ? cols(vp)[SCORE] : 'MISSING'}"`);
   check(a.some(r => r.includes('[2001]') && r.includes('Director,')),
     'Director, Glassblowing Standards added as its own row (Director ≠ VP, same core)');
 }
@@ -349,38 +350,38 @@ console.log('\n8. Intra-batch dedup — same company+role consolidates to highes
 {
   const v = B.rowsFor('Northwind');
   check(v.length === 1, `Northwind intra-batch dupes consolidated to 1 row: got ${v.length}`);
-  check(v.length === 1 && cols(v[0])[SCORE] === '4.2/5',
-    `kept the highest score (4.2/5): "${v[0] ? cols(v[0])[SCORE] : 'MISSING'}"`);
+  check(v.length === 1 && cols(v[0])[SCORE] === '4.21/5',
+    `kept the highest score (4.21/5): "${v[0] ? cols(v[0])[SCORE] : 'MISSING'}"`);
   check(/Consolidated \(intra-batch\)/.test(B.output), 'intra-batch consolidation is logged');
   check(/Summary: \+4 added/.test(B.output), 'batch reported +4 added (2 Contoso + 1 Northwind + 1 Acme2)');
 }
 
 // ── Scenario C: source-tag strip must not leave an orphaned delimiter ─────────
-// Reproduces row #1125 (2026-07-20). The eval agent attached the source tag with
+// Reproduces row #900192 (2030-07-20). The eval agent attached the source tag with
 // a pipe ("…remote | [self-sourced]"); the URL was in pipeline.md, so enforceSource
 // correctly stripped the tag — and left the pipe. Written unescaped, that orphan
 // became an 11th cell, and the dashboard warned "11 columns, expected 10".
-const SCANNED_URL = 'https://jobs.lever.co/acme/16dbfc6c-2e50-4742-a1e1-f7ed9dd63765';
+const SCANNED_URL = 'https://jobs.lever.co/acme/16dbfc6c-2e50-900193-a1e1-f7ed9dd63765';
 const C = runMerge(
   [],
   {
     // Tag attached with a pipe, URL IS in pipeline.md → tag stripped.
-    '900-acme.tsv': tsv(['900', '2026-07-20', 'Acme', 'Director, Bookbinding Programs',
-      'Evaluated', '3.2/5', '❌', '[900](reports/900-acme-2026-07-20.md)',
+    '900190-acme.tsv': tsv(['900190', '2030-07-20', 'Acme', 'Director, Bookbinding Programs',
+      'Evaluated', '3.21/5', '❌', '[900190](reports/900190-acme-2030-07-20.md)',
       'IC role (no direct reports), $100K–$120K remote | [self-sourced]']),
     // A pipe in notes with no tag involved — the serializer alone must hold.
-    '901-beta.tsv': tsv(['901', '2026-07-20', 'Beta', 'Head of Analytics',
-      'Evaluated', '4.0/5', '❌', '[901](reports/901-beta-2026-07-20.md)',
+    '900191-beta.tsv': tsv(['900191', '2030-07-20', 'Beta', 'Head of Analytics',
+      'Evaluated', '4.01/5', '❌', '[900191](reports/900191-beta-2030-07-20.md)',
       'strong fit | remote | $999K']),
   },
   {
-    'reports/900-acme-2026-07-20.md': `---\n{ "schema": "trajecktory-report/v1", "url": "${SCANNED_URL}" }\n---\n`,
-    'reports/901-beta-2026-07-20.md': '---\n{ "schema": "trajecktory-report/v1" }\n---\n',
+    'reports/900190-acme-2030-07-20.md': `---\n{ "schema": "trajecktory-report/v1", "url": "${SCANNED_URL}" }\n---\n`,
+    'reports/900191-beta-2030-07-20.md': '---\n{ "schema": "trajecktory-report/v1" }\n---\n',
     'data/pipeline.md': `- [x] ${SCANNED_URL} | Acme | Director, Bookbinding Programs\n`,
   },
 );
 
-console.log('\n9. Source-tag strip leaves no orphaned delimiter (row #1125)');
+console.log('\n9. Source-tag strip leaves no orphaned delimiter (row #900192)');
 {
   const a = C.rowsFor('Acme')[0] || '';
   check(cols(a).length === 11, `row has exactly 11 cells: got ${cols(a).length}`);
@@ -395,7 +396,7 @@ console.log('\n10. Unescaped pipe in notes cannot restructure a row');
 {
   const b = C.rowsFor('Beta')[0] || '';
   check(cols(b).length === 11, `row has exactly 11 cells: got ${cols(b).length}`);
-  check(cols(b)[STATUS] === 'Evaluated' && cols(b)[SCORE] === '4.0/5',
+  check(cols(b)[STATUS] === 'Evaluated' && cols(b)[SCORE] === '4.01/5',
     `fields do not shift (${cols(b)[SCORE]} / ${cols(b)[STATUS]})`);
   const n = cols(b)[NOTES] || '';
   check(n.includes('strong fit') && n.includes('$999K'),
@@ -412,18 +413,18 @@ console.log('\n10. Unescaped pipe in notes cannot restructure a row');
 // read like a record of a real evaluation.
 const rpt = (url) => `---\n{"schema":"trajecktory-report/v1","url":"${url}"}\n---\n\n# Fixture\n`;
 const seedRow = (n, co, role, score, url) =>
-  `| ${n} | 2026-07-01 | ${co} | ${role} | ${score} | Evaluated | ❌ | — | [${n}](reports/${n}-${co.toLowerCase()}-2026-07-01.md) | Seed | ${url} |`;
+  `| ${n} | 2030-07-01 | ${co} | ${role} | ${score} | Evaluated | ❌ | — | [${n}](reports/${n}-${co.toLowerCase()}-2030-07-01.md) | Seed | ${url} |`;
 
 // Two requisitions at ONE employer with byte-identical titles and different
 // URLs. This exact shape silently ate evaluations twice.
 const D1 = runMerge([], {
-  '9201-fabrikam.tsv': tsv(['9201', '2026-07-22', 'Fabrikam', 'Director, Glassblowing Standards',
-    'Evaluated', '4.2/5', '❌', '[9201](reports/9201-fabrikam-2026-07-22.md)', 'Req one']),
-  '9202-fabrikam.tsv': tsv(['9202', '2026-07-22', 'Fabrikam', 'Director, Glassblowing Standards',
-    'Evaluated', '3.9/5', '❌', '[9202](reports/9202-fabrikam-2026-07-22.md)', 'Req two']),
+  '9201-fabrikam.tsv': tsv(['9201', '2030-07-22', 'Fabrikam', 'Director, Glassblowing Standards',
+    'Evaluated', '4.21/5', '❌', '[9201](reports/9201-fabrikam-2030-07-22.md)', 'Req one']),
+  '9202-fabrikam.tsv': tsv(['9202', '2030-07-22', 'Fabrikam', 'Director, Glassblowing Standards',
+    'Evaluated', '3.91/5', '❌', '[9202](reports/9202-fabrikam-2030-07-22.md)', 'Req two']),
 }, {
-  'reports/9201-fabrikam-2026-07-22.md': rpt('https://jobs.example.com/fabrikam/aaa111'),
-  'reports/9202-fabrikam-2026-07-22.md': rpt('https://jobs.example.com/fabrikam/bbb222'),
+  'reports/9201-fabrikam-2030-07-22.md': rpt('https://jobs.example.com/fabrikam/aaa111'),
+  'reports/9202-fabrikam-2030-07-22.md': rpt('https://jobs.example.com/fabrikam/bbb222'),
 });
 
 console.log('\n11. Identical titles at one employer, different URLs (the regression pin)');
@@ -433,12 +434,12 @@ check(D1.dropsLog === '', 'nothing was dropped, so no ledger line');
 
 // Same title as an EXISTING row, different URL — must not update it in place.
 const D2 = runMerge(
-  [seedRow(9210, 'Tailwind', 'Director, Glassblowing Standards', '4.0/5', 'https://jobs.example.com/tailwind/ccc333')],
+  [seedRow(9210, 'Tailwind', 'Director, Glassblowing Standards', '4.01/5', 'https://jobs.example.com/tailwind/ccc333')],
   {
-    '9211-tailwind.tsv': tsv(['9211', '2026-07-22', 'Tailwind', 'Director, Glassblowing Standards',
-      'Evaluated', '4.5/5', '❌', '[9211](reports/9211-tailwind-2026-07-22.md)', 'Different req']),
+    '9211-tailwind.tsv': tsv(['9211', '2030-07-22', 'Tailwind', 'Director, Glassblowing Standards',
+      'Evaluated', '4.51/5', '❌', '[9211](reports/9211-tailwind-2030-07-22.md)', 'Different req']),
   },
-  { 'reports/9211-tailwind-2026-07-22.md': rpt('https://jobs.example.com/tailwind/ddd444') },
+  { 'reports/9211-tailwind-2030-07-22.md': rpt('https://jobs.example.com/tailwind/ddd444') },
 );
 
 console.log('\n12. A differing URL vetoes a title match against an existing row');
@@ -446,34 +447,34 @@ check(D2.rowsFor('Tailwind').length === 2,
   `existing row survives and the new req is added: got ${D2.rowsFor('Tailwind').length}`);
 check(D2.rows.some(r => r.includes('ccc333')) && D2.rows.some(r => r.includes('ddd444')),
   'both postings keep their own URL');
-check(D2.rows.some(r => r.includes('4.0/5')), 'the seed row was NOT clobbered by the higher-scoring new one');
+check(D2.rows.some(r => r.includes('4.01/5')), 'the seed row was NOT clobbered by the higher-scoring new one');
 
 // A genuine re-eval: same URL, different report number, and a differently worded
 // title. URL identity must win over all of it and update in place.
 const D3 = runMerge(
-  [seedRow(9220, 'Umbrella', 'Director, Glassblowing Standards', '3.0/5', 'https://jobs.example.com/umbrella/eee555')],
+  [seedRow(9220, 'Umbrella', 'Director, Glassblowing Standards', '3.01/5', 'https://jobs.example.com/umbrella/eee555')],
   {
-    '9221-umbrella.tsv': tsv(['9221', '2026-07-22', 'Umbrella', 'Senior Director, Cartography & Survey',
-      'Evaluated', '4.6/5', '❌', '[9221](reports/9221-umbrella-2026-07-22.md)', 'Re-eval']),
+    '9221-umbrella.tsv': tsv(['9221', '2030-07-22', 'Umbrella', 'Senior Director, Cartography & Survey',
+      'Evaluated', '4.61/5', '❌', '[9221](reports/9221-umbrella-2030-07-22.md)', 'Re-eval']),
   },
-  { 'reports/9221-umbrella-2026-07-22.md': rpt('https://jobs.example.com/umbrella/eee555') },
+  { 'reports/9221-umbrella-2030-07-22.md': rpt('https://jobs.example.com/umbrella/eee555') },
 );
 
 console.log('\n13. Same URL is the same posting, whatever the title says');
 check(D3.rowsFor('Umbrella').length === 1,
   `re-eval updates in place rather than adding: got ${D3.rowsFor('Umbrella').length}`);
-check(D3.rows[0].includes('4.6/5'), 'higher score wins');
+check(D3.rows[0].includes('4.61/5'), 'higher score wins');
 check(cols(D3.rows[0])[10] === 'https://jobs.example.com/umbrella/eee555',
   `the url cell survives the update: got "${cols(D3.rows[0])[10]}"`);
 
 // Cosmetic URL variants are the same posting.
 const D4 = runMerge(
-  [seedRow(9230, 'Initech', 'Head of Herbarium Curation', '3.2/5', 'https://jobs.example.com/initech/fff666')],
+  [seedRow(9230, 'Initech', 'Head of Herbarium Curation', '3.21/5', 'https://jobs.example.com/initech/fff666')],
   {
-    '9231-initech.tsv': tsv(['9231', '2026-07-22', 'Initech', 'Head of Herbarium Curation',
-      'Evaluated', '4.1/5', '❌', '[9231](reports/9231-initech-2026-07-22.md)', 'Same posting, tracked link']),
+    '9231-initech.tsv': tsv(['9231', '2030-07-22', 'Initech', 'Head of Herbarium Curation',
+      'Evaluated', '4.11/5', '❌', '[9231](reports/9231-initech-2030-07-22.md)', 'Same posting, tracked link']),
   },
-  { 'reports/9231-initech-2026-07-22.md': rpt('https://jobs.example.com/initech/fff666/apply?utm_source=news') },
+  { 'reports/9231-initech-2030-07-22.md': rpt('https://jobs.example.com/initech/fff666/apply?utm_source=news') },
 );
 
 console.log('\n14. A tracking parameter or /apply suffix is not a new posting');
@@ -483,32 +484,32 @@ check(D4.rowsFor('Initech').length === 1,
 // Neither side resolves to a URL — the role fallback must behave exactly as
 // before, because that is all there is to go on.
 const D5 = runMerge(
-  ['| 9240 | 2026-07-01 | Globex | Director, Topiary Logistics | 3.0/5 | Evaluated | ❌ | — | [9240](reports/9240-globex-2026-07-01.md) | Seed |'],
+  ['| 9240 | 2030-07-01 | Globex | Director, Topiary Logistics | 3.01/5 | Evaluated | ❌ | — | [9240](reports/9240-globex-2030-07-01.md) | Seed |'],
   {
-    '9241-globex.tsv': tsv(['9241', '2026-07-22', 'Globex', 'Director, Topiary Logistics',
-      'Evaluated', '4.4/5', '❌', '[9241](reports/9241-globex-2026-07-22.md)', 'No report file anywhere']),
+    '9241-globex.tsv': tsv(['9241', '2030-07-22', 'Globex', 'Director, Topiary Logistics',
+      'Evaluated', '4.41/5', '❌', '[9241](reports/9241-globex-2030-07-22.md)', 'No report file anywhere']),
   },
 );
 
 console.log('\n15. With no URL on either side, the role fallback is unchanged');
 check(D5.rowsFor('Globex').length === 1,
   `same company+role still consolidates: got ${D5.rowsFor('Globex').length}`);
-check(D5.rows[0].includes('4.4/5'), 'higher score still wins on the fallback path');
+check(D5.rows[0].includes('4.41/5'), 'higher score still wins on the fallback path');
 
 // A genuinely lower-scoring re-eval of the SAME posting is still skipped, but it
 // may no longer vanish: it must leave a ledger line and land in dropped/.
 const D6 = runMerge(
-  [seedRow(9250, 'Soylent', 'Director, Glassblowing Standards', '4.5/5', 'https://jobs.example.com/soylent/ggg777')],
+  [seedRow(9250, 'Soylent', 'Director, Glassblowing Standards', '4.51/5', 'https://jobs.example.com/soylent/ggg777')],
   {
-    '9251-soylent.tsv': tsv(['9251', '2026-07-22', 'Soylent', 'Director, Glassblowing Standards',
-      'Evaluated', '3.1/5', '❌', '[9251](reports/9251-soylent-2026-07-22.md)', 'Lower re-eval']),
+    '9251-soylent.tsv': tsv(['9251', '2030-07-22', 'Soylent', 'Director, Glassblowing Standards',
+      'Evaluated', '3.11/5', '❌', '[9251](reports/9251-soylent-2030-07-22.md)', 'Lower re-eval']),
   },
-  { 'reports/9251-soylent-2026-07-22.md': rpt('https://jobs.example.com/soylent/ggg777') },
+  { 'reports/9251-soylent-2030-07-22.md': rpt('https://jobs.example.com/soylent/ggg777') },
 );
 
 console.log('\n16. A dropped evaluation leaves a trace instead of vanishing');
 check(D6.rowsFor('Soylent').length === 1, 'the lower re-eval does not add a row');
-check(D6.rows[0].includes('4.5/5'), 'the existing higher score is kept');
+check(D6.rows[0].includes('4.51/5'), 'the existing higher score is kept');
 check(/9251/.test(D6.dropsLog), 'the drop is recorded in data/merge-drops.tsv');
 check(/9250/.test(D6.dropsLog), 'the ledger names the row that was kept instead');
 check(D6.droppedTsvs.includes('9251-soylent.tsv'),
@@ -522,14 +523,14 @@ check(!D6.mergedTsvs.includes('9251-soylent.tsv'),
 // backfilled into the tracker, seven live rows became invisible to the merge.
 // An invisible row does not dedup, so a re-eval of one is added as a SECOND row.
 const D7 = runMerge(
-  [seedRow(9260, 'Vandelay', 'Sr Director Herbarium Tooling', '3.5/5',
+  [seedRow(9260, 'Vandelay', 'Sr Director Herbarium Tooling', '3.51/5',
     'https://vandelay.wd108.myworkdayjobs.com/job/Northern-California-USA---Remote/Sr-Director-Herbarium_R12274-1')],
   {
-    '9261-vandelay.tsv': tsv(['9261', '2026-07-22', 'Vandelay', 'Sr Director Herbarium Tooling',
-      'Evaluated', '4.3/5', '❌', '[9261](reports/9261-vandelay-2026-07-22.md)', 'Re-eval of the same req']),
+    '9261-vandelay.tsv': tsv(['9261', '2030-07-22', 'Vandelay', 'Sr Director Herbarium Tooling',
+      'Evaluated', '4.31/5', '❌', '[9261](reports/9261-vandelay-2030-07-22.md)', 'Re-eval of the same req']),
   },
   {
-    'reports/9261-vandelay-2026-07-22.md':
+    'reports/9261-vandelay-2030-07-22.md':
       rpt('https://vandelay.wd108.myworkdayjobs.com/job/Northern-California-USA---Remote/Sr-Director-Herbarium_R12274-1'),
   },
 );
@@ -537,7 +538,7 @@ const D7 = runMerge(
 console.log('\n18. A posting URL containing --- does not hide the row from the merge');
 check(D7.rowsFor('Vandelay').length === 1,
   `the row is visible and updates in place: got ${D7.rowsFor('Vandelay').length}`);
-check(D7.rows[0].includes('4.3/5'), 're-eval applied to the existing row rather than duplicating it');
+check(D7.rows[0].includes('4.31/5'), 're-eval applied to the existing row rather than duplicating it');
 
 console.log('\n17. New rows record their URL from the start');
 check(cols(D1.rowsFor('Fabrikam')[0])[10].startsWith('https://jobs.example.com/fabrikam/'),
