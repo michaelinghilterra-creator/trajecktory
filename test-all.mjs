@@ -458,6 +458,7 @@ for (const suite of [
   'tests/tracker-import.test.mjs',
   'tests/apply-import.test.mjs',
   'tests/status-import.test.mjs',
+  'tests/people-import.test.mjs',
   'tests/reconcile-triage.test.mjs',
   'tests/identity.test.mjs',
   'tests/identity-single-source.test.mjs',

@@ -36,9 +36,7 @@ export const REFERRAL_HEADER =
   '| # | Name | How you know them | Where they are now | Target company/role | Status | Last Touch | Notes | LinkedIn | Email |\n' +
   '|---|------|-------------------|--------------------|---------------------|--------|------------|-------|----------|-------|\n';
 
-function parseReferralsMd() {
-  if (!fs.existsSync(REFERRALS_MD)) return [];
-  const text = fs.readFileSync(REFERRALS_MD, 'utf8');
+export function parseReferralsText(text) {
   const rows = [];
   for (const line of text.split('\n')) {
     if (!line.startsWith('| ')) continue;
@@ -66,6 +64,11 @@ function parseReferralsMd() {
     });
   }
   return rows;
+}
+
+function parseReferralsMd() {
+  if (!fs.existsSync(REFERRALS_MD)) return [];
+  return parseReferralsText(fs.readFileSync(REFERRALS_MD, 'utf8'));
 }
 
 // Referral imports keep the contact's current job title as the first Notes

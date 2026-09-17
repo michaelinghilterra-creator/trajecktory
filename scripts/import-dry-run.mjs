@@ -19,6 +19,11 @@ import {
   importStatusHistory,
 } from '../lib/import/status-import.mjs';
 import { compareTracker, importTracker } from '../lib/import/tracker-import.mjs';
+import {
+  compareGroupingWithResolvePeople,
+  comparePeople,
+  importPeople,
+} from '../lib/import/people-import.mjs';
 
 function refuse(message) {
   console.error(message);
@@ -55,6 +60,19 @@ function flagCounts(flags) {
   return counts;
 }
 
+function readContactLinks(path, missing) {
+  if (missing) return { document: {}, unreadable: false };
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'));
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return { document: {}, unreadable: true };
+    }
+    return { document: value, unreadable: false };
+  } catch {
+    return { document: {}, unreadable: true };
+  }
+}
+
 const options = argumentsFrom(process.argv.slice(2));
 if (!options['data-dir'] || !options['output-dir'] || !options.db || !options.report) {
   refuse('usage: --data-dir, --output-dir, --db and --report are required');
@@ -81,6 +99,18 @@ const applyDates = applyDatesMissing ? {} : JSON.parse(readFileSync(applyDatesPa
 const statusEventsPath = resolve(inputDir, 'status-events.tsv');
 const statusEventsMissing = !existsSync(statusEventsPath);
 const statusText = statusEventsMissing ? '' : readFileSync(statusEventsPath, 'utf8');
+const targetTalentPath = resolve(inputDir, 'target-talent.md');
+const targetTalentMissing = !existsSync(targetTalentPath);
+const targetTalentText = targetTalentMissing ? '' : readFileSync(targetTalentPath, 'utf8');
+const referralsPath = resolve(inputDir, 'referrals.md');
+const referralsMissing = !existsSync(referralsPath);
+const referralsText = referralsMissing ? '' : readFileSync(referralsPath, 'utf8');
+const contactLinksPath = resolve(inputDir, 'contact-links.json');
+const contactLinksMissing = !existsSync(contactLinksPath);
+const contactLinksRead = readContactLinks(contactLinksPath, contactLinksMissing);
+const contactLinks = contactLinksRead.document;
+const contactPins = contactLinks.pins && typeof contactLinks.pins === 'object'
+  && !Array.isArray(contactLinks.pins) ? contactLinks.pins : {};
 const outputFiles = readdirSync(outputDir, { withFileTypes: true })
   .filter(entry => entry.isFile())
   .map(entry => entry.name);
@@ -95,6 +125,9 @@ let applyReport;
 let applyComparison;
 let statusReport;
 let statusComparison;
+let peopleReport;
+let peopleComparison;
+let groupingComparison;
 try {
   trackerReport = importTracker(store, trackerText, { definitionsVersion, importedOn });
   trackerComparison = compareTracker(trackerText, store);
@@ -108,12 +141,29 @@ try {
   applyComparison = compareApplyDates(applyDates, store);
   statusReport = importStatusHistory(store, statusText, { definitionsVersion, importedOn });
   statusComparison = compareStatusHistory(statusText, store);
+  peopleReport = importPeople(store, {
+    targetTalentText,
+    referralsText,
+    pins: contactPins,
+    definitionsVersion,
+    importedOn,
+  });
+  peopleComparison = comparePeople({ targetTalentText, referralsText }, store);
+  groupingComparison = compareGroupingWithResolvePeople(store, {
+    targetTalentText,
+    referralsText,
+    pins: contactPins,
+  });
 } finally {
   store.close();
 }
 
 applyReport.counts.apply_dates_file_missing = applyDatesMissing;
 statusReport.counts.status_events_file_missing = statusEventsMissing;
+peopleReport.counts.target_talent_file_missing = targetTalentMissing;
+peopleReport.counts.referrals_file_missing = referralsMissing;
+peopleReport.counts.contact_links_file_missing = contactLinksMissing;
+peopleReport.counts.pins_file_unreadable = contactLinksRead.unreadable;
 const report = {
   tracker: {
     ...trackerReport,
@@ -129,13 +179,29 @@ const report = {
     ...statusReport,
     comparison: statusComparison,
   },
+  people: {
+    ...peopleReport,
+    comparison: peopleComparison,
+    grouping_comparison: groupingComparison,
+  },
 };
 writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+
+const {
+  by_us_only_pairs: ignoredByUsPairs,
+  by_them_only_pairs: ignoredByThemPairs,
+  ...groupingCounts
+} = groupingComparison;
 
 console.log(JSON.stringify({
   tracker: {
     counts: trackerReport.counts,
     flags: flagCounts(trackerReport.flags),
+    shared_postings: trackerReport.shared_postings.length,
+    company_spellings: trackerReport.company_spellings.length,
+    merge_candidates: trackerReport.merge_candidates.length,
+    same_role_postings: trackerReport.same_role_postings.length,
+    company_word_candidates: trackerReport.company_word_candidates.length,
   },
   apply: {
     counts: applyReport.counts,
@@ -148,8 +214,16 @@ console.log(JSON.stringify({
     status_counts: statusReport.status_counts,
     flags: flagCounts(statusReport.flags),
   },
+  people: {
+    counts: peopleReport.counts,
+    flags: flagCounts(peopleReport.flags),
+    possible_duplicate_people: peopleReport.possible_duplicate_people.length,
+    same_name_other_company: peopleReport.same_name_other_company.length,
+    grouping_comparison: groupingCounts,
+  },
 }, null, 2));
 console.log(trackerComparison.match ? 'TRACKER MATCH' : 'TRACKER MISMATCH');
 console.log(applyComparison.match ? 'APPLY DATES MATCH' : 'APPLY DATES MISMATCH');
 console.log(statusComparison.match ? 'STATUS HISTORY MATCH' : 'STATUS HISTORY MISMATCH');
-process.exit(trackerComparison.match && applyComparison.match && statusComparison.match ? 0 : 1);
+console.log(peopleComparison.match ? 'PEOPLE MATCH' : 'PEOPLE MISMATCH');
+process.exit(trackerComparison.match && applyComparison.match && statusComparison.match && peopleComparison.match ? 0 : 1);
