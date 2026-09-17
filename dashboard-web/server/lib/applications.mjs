@@ -1,10 +1,17 @@
 import fs from 'fs';
-import path from 'path';
-import { APPS_MD, ROOT_DIR, STATUS_EVENTS_PATH } from '../config.mjs';
+import { randomUUID } from 'node:crypto';
+import { APPS_MD, DATA_DIR, STATUS_EVENTS_PATH } from '../config.mjs';
 import { resolveReportPath } from './safe-path.mjs';
 import { parseTrackerLine, formatTrackerLine, hasStrayPipe } from '../../../lib/tracker.mjs';
+import { appendEventsWithEffects, findTrackerRow } from '../../../lib/legacy-files.mjs';
+import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
 import { hasV1Frontmatter, parseV1, v1Header } from '../v1-loader.mjs';
-import { logStatusEvent, parseStatusEvents, readApplyDates } from './sidecars.mjs';
+import {
+  formatStatusEventRow,
+  logStatusEvent,
+  parseStatusEvents,
+  readApplyDates,
+} from './sidecars.mjs';
 import { FUNNEL_ORDER, makeApplyAnchor, makeFurthestIdx, isInbound, isOutbound } from './statuses.mjs';
 import { getArchetypeRules } from './profile.mjs';
 
@@ -334,6 +341,65 @@ function parseApplicationsMd() {
 // hint.eventDate is when the change actually happened (booked/notified), if the
 // caller knows it; omitted, the event log falls back to today as it always did.
 function patchRowInMd(id, updates, hint = {}) {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      const target = findTrackerRow(store, id, { company: hint.company });
+      if (!target) return false;
+      const raw = formatTrackerLine({
+        ...target.row,
+        ...(updates.status !== undefined ? { status: updates.status } : {}),
+        ...(updates.notes !== undefined ? { notes: updates.notes } : {}),
+      });
+      const effects = [{
+        file: 'applications.md', op: 'row_upsert', row_id: target.row_id, raw,
+      }];
+      let event;
+      if (updates.status !== undefined) {
+        const statusRaw = formatStatusEventRow(id, updates.status, {
+          company: target.row.company,
+          date: hint.eventDate,
+        });
+        const occurredOn = statusRaw.split('\t')[1];
+        effects.push({
+          file: 'status-events.tsv',
+          op: 'row_upsert',
+          row_id: `status-events.tsv#n-${randomUUID()}`,
+          raw: statusRaw,
+          anchor: { at: 'table_end' },
+        });
+        event = {
+          type: 'status_changed',
+          application_id: String(id),
+          occurred_on: occurredOn,
+          source: 'dashboard',
+          definitions_version: 'v1',
+          payload: {
+            num: id,
+            company: target.row.company,
+            from: target.row.status,
+            to: updates.status,
+            date: occurredOn,
+            legacy_effects: effects,
+          },
+        };
+      } else {
+        event = {
+          type: 'legacy_record',
+          occurred_on: localToday(),
+          source: 'dashboard',
+          definitions_version: 'v1',
+          payload: {
+            reason: 'tracker_row_updated',
+            num: id,
+            company: target.row.company,
+            legacy_effects: effects,
+          },
+        };
+      }
+      appendEventsWithEffects(store, [event]);
+      return true;
+    });
+  }
   const text = fs.readFileSync(APPS_MD, 'utf8');
   const lines = text.split('\n');
 
@@ -375,6 +441,37 @@ function patchRowInMd(id, updates, hint = {}) {
 // caller to re-queue), or null if no matching row was found. Rewrites through the
 // same line array as patchRowInMd so no other row's formatting is touched.
 function removeRowFromMd(id, hint = {}) {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      const target = findTrackerRow(store, id, { company: hint.company });
+      if (!target) return null;
+      const removed = {
+        url: target.row.url || null,
+        company: target.row.company,
+        role: target.row.role,
+        status: target.row.status,
+        score: target.row.score,
+      };
+      appendEventsWithEffects(store, [{
+        type: 'legacy_record',
+        occurred_on: localToday(),
+        source: 'dashboard',
+        definitions_version: 'v1',
+        payload: {
+          reason: 'tracker_row_removed',
+          num: id,
+          company: target.row.company,
+          role: target.row.role,
+          status: target.row.status,
+          url: target.row.url,
+          legacy_effects: [{
+            file: 'applications.md', op: 'row_delete', row_id: target.row_id,
+          }],
+        },
+      }]);
+      return removed;
+    });
+  }
   const text = fs.readFileSync(APPS_MD, 'utf8');
   const lines = text.split('\n');
   const candidates = [];
