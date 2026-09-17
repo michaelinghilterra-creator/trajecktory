@@ -63,6 +63,30 @@ const directEmail = tableRow([
   '1', '900001', '2030-01-02', 'Zorblax Widgetry', 'Example Pulley Role',
   'Email', 'Example Personone', 'Invented direct signal',
 ]);
+const skipNotes = tableRow([
+  '13', '900001', '2030-01-14', 'Zorblax Widgetry', 'Example Pulley Role',
+  'Email', 'Example Personthirteen', 'SKIP',
+]);
+const skipContact = tableRow([
+  '14', '900002', '2030-01-15', 'Quennox Ratchet Works', 'Example Pulley Role',
+  'LinkedIn', 'SKIP', 'Invented placeholder signal',
+]);
+const skpNotes = tableRow([
+  '15', '900001', '2030-01-16', 'Zorblax Widgetry', 'Example Pulley Role',
+  'Email', 'Example Personfourteen', 'SKP',
+]);
+const backFilled = tableRow([
+  '16', '900002', '2030-01-17', 'Quennox Ratchet Works', 'Example Pulley Role',
+  'Email', 'Example Personfifteen', 'Back-filled from Talent Acquisition (status snapshot)',
+]);
+const backFill = tableRow([
+  '17', '900001', '2030-01-18', 'Zorblax Widgetry', 'Example Pulley Role',
+  'LinkedIn', 'Example Personsixteen', 'Back-fill',
+]);
+const escapedPipe = tableRow([
+  '18', '900002', '2030-01-19', 'Quennox Ratchet Works', 'Example Pulley Role',
+  'Email', 'Example Personseventeen', 'Invented escaped \\| pipe signal',
+]);
 const followupLines = [
   '# Invented Follow-Ups',
   'This fixture documents invented messages.',
@@ -82,6 +106,12 @@ const followupLines = [
   tableRow(['11', 'not-digits', '2030-01-11', 'Zorblax Widgetry', 'Example Pulley Role', 'Email', 'Example Personten', 'Invented invalid app signal']),
   tableRow(['12', '900999', '2030-01-12', 'Quennox Ratchet Works', 'Example Pulley Role', 'LinkedIn', 'Example Personeleven', 'Invented absent tracker signal']),
   tableRow(['12', '900002', '2030-01-13', 'Quennox Ratchet Works', 'Example Pulley Role', 'Email', 'Example Persontwelve', 'Invented repeated number signal']),
+  skipNotes,
+  skipContact,
+  skpNotes,
+  backFilled,
+  backFill,
+  escapedPipe,
 ];
 const followupsText = followupLines
   .map((line, index) => (index === 6 ? `${line}\r` : line))
@@ -98,28 +128,29 @@ const report = importFollowups(store, followupsText, { definitionsVersion, impor
 const comparison = compareFollowups(followupsText, store);
 
 check(comparison.match
-  && comparison.original_rows === 13
-  && comparison.rebuilt_rows === 13
+  && comparison.original_rows === 19
+  && comparison.rebuilt_rows === 19
   && comparison.mismatch_positions_count === 0
   && rebuildFollowupRows(store)[1] === followupLines[6],
 'follow-up rows round-trip exactly, including a CRLF input line');
 
 check(JSON.stringify(report.counts) === JSON.stringify({
-  lines: 18,
+  lines: 24,
   non_row_lines: 5,
-  rows: 13,
-  direct: 7,
+  rows: 19,
+  direct: 8,
   cross_log_copy: 2,
-  backfill: 1,
+  backfill: 3,
+  skip_placeholder: 3,
   duplicate_row: 1,
   unknown_channel: 2,
 }) && JSON.stringify(report.direct_by_channel) === JSON.stringify({
-  email: 4,
+  email: 5,
   linkedin_message: 3,
 }), 'classification counts and direct channel counts are exact');
 
 const expectedFlagLines = {
-  no_person_link: [5, 6, 13, 14, 15, 16, 17],
+  no_person_link: [5, 6, 13, 14, 15, 16, 17, 23],
   linkedin_request_in_email_channel: [7],
   extra_cells: [13],
   invalid_date: [14],
@@ -137,12 +168,25 @@ check(Object.keys(actualFlagLines).length === Object.keys(expectedFlagLines).len
 const importedEvents = readEvents(store).filter(event => event.payload.file === 'follow-ups.md');
 const sent = importedEvents.filter(event => event.type === 'message_sent');
 const legacy = importedEvents.filter(event => event.type === 'legacy_record');
-check(sent.length === 7
-  && legacy.length === 6
+check(sent.length === 8
+  && legacy.length === 11
   && sent.every(event => !event.person_id)
   && legacy.map(event => event.payload.reason).sort().join(',')
-    === 'backfill,cross_log_copy,cross_log_copy,duplicate_row,unknown_channel,unknown_channel',
+    === 'backfill,backfill,backfill,cross_log_copy,cross_log_copy,duplicate_row,skip_placeholder,skip_placeholder,skip_placeholder,unknown_channel,unknown_channel',
 'only direct rows create unlinked message events and every other row creates one legacy event');
+
+const eventByRaw = new Map(importedEvents.map(event => [event.payload.raw, event]));
+check([skipNotes, skipContact, skpNotes].every(raw => (
+  eventByRaw.get(raw)?.type === 'legacy_record'
+    && eventByRaw.get(raw)?.payload.reason === 'skip_placeholder'
+))
+  && [backFilled, backFill].every(raw => (
+    eventByRaw.get(raw)?.type === 'legacy_record'
+      && eventByRaw.get(raw)?.payload.reason === 'backfill'
+  ))
+  && eventByRaw.get(escapedPipe)?.type === 'message_sent'
+  && !report.flags.some(flag => flag.type === 'extra_cells' && flag.line_index === 23),
+'placeholders, hyphenated backfills and an escaped pipe are classified as intended');
 
 const eventCountBeforeRepeat = readEvents(store).length;
 let repeatedRefused = false;
