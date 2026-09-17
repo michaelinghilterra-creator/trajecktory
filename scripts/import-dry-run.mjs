@@ -11,6 +11,14 @@ import { fileURLToPath } from 'node:url';
 import { getIdentity } from '../dashboard-web/server/lib/profile.mjs';
 import { openEventStore } from '../lib/event-store.mjs';
 import {
+  LEGACY_JSON_FILES,
+  LEGACY_TABLE_FILES,
+  listLegacyFiles,
+  recordJsonSnapshots,
+  renderLegacyFile,
+  splitLegacyLines,
+} from '../lib/legacy-files.mjs';
+import {
   compareApplyDates,
   importApplyEvidence,
 } from '../lib/import/apply-import.mjs';
@@ -103,6 +111,30 @@ function readOptionalText(inputDir, name) {
   return existsSync(path) ? readFileSync(path, 'utf8') : null;
 }
 
+function byteComparison(original, rendered) {
+  const originalLines = original === null ? [] : splitLegacyLines(original);
+  const renderedLines = rendered === null ? [] : splitLegacyLines(rendered);
+  const length = Math.max(originalLines.length, renderedLines.length);
+  let firstDifferingLine = null;
+  let lineEndingsDiffer = false;
+  for (let index = 0; index < length; index++) {
+    const left = originalLines[index];
+    const right = renderedLines[index];
+    if (left?.eol !== right?.eol) lineEndingsDiffer = true;
+    if (firstDifferingLine === null
+      && (!left || !right || left.text !== right.text || left.eol !== right.eol)) {
+      firstDifferingLine = index + 1;
+    }
+  }
+  return {
+    match: original === rendered,
+    original_lines: originalLines.length,
+    rendered_lines: renderedLines.length,
+    first_differing_line: firstDifferingLine,
+    line_endings_differ: lineEndingsDiffer,
+  };
+}
+
 const options = argumentsFrom(process.argv.slice(2));
 if (!options['data-dir'] || !options['output-dir'] || !options.db || !options.report) {
   refuse('usage: --data-dir, --output-dir, --db and --report are required');
@@ -122,10 +154,13 @@ if (existsSync(dbPath)) refuse('--db must not already exist');
 
 const inputDir = resolve(options['data-dir']);
 const outputDir = resolve(options['output-dir']);
-const trackerText = readFileSync(resolve(inputDir, 'applications.md'), 'utf8');
+const trackerPath = resolve(inputDir, 'applications.md');
+const trackerMissing = !existsSync(trackerPath);
+const trackerText = trackerMissing ? '' : readFileSync(trackerPath, 'utf8');
 const applyDatesPath = resolve(inputDir, 'apply-dates.json');
 const applyDatesMissing = !existsSync(applyDatesPath);
-const applyDates = applyDatesMissing ? {} : JSON.parse(readFileSync(applyDatesPath, 'utf8'));
+const applyDatesText = applyDatesMissing ? null : readFileSync(applyDatesPath, 'utf8');
+const applyDates = applyDatesMissing ? {} : JSON.parse(applyDatesText);
 const statusEventsPath = resolve(inputDir, 'status-events.tsv');
 const statusEventsMissing = !existsSync(statusEventsPath);
 const statusText = statusEventsMissing ? '' : readFileSync(statusEventsPath, 'utf8');
@@ -137,6 +172,7 @@ const referralsMissing = !existsSync(referralsPath);
 const referralsText = referralsMissing ? '' : readFileSync(referralsPath, 'utf8');
 const contactLinksPath = resolve(inputDir, 'contact-links.json');
 const contactLinksMissing = !existsSync(contactLinksPath);
+const contactLinksText = contactLinksMissing ? null : readFileSync(contactLinksPath, 'utf8');
 const contactLinksRead = readContactLinks(contactLinksPath, contactLinksMissing);
 const contactLinks = contactLinksRead.document;
 const contactPins = contactLinks.pins && typeof contactLinks.pins === 'object'
@@ -160,6 +196,15 @@ const linkedinFiles = {
 const twcFiles = {
   eventsText: readOptionalText(inputDir, 'twc-events.json'),
   overridesText: readOptionalText(inputDir, 'twc-overrides.json'),
+};
+const jsonTexts = {
+  'apply-dates.json': applyDatesText,
+  'linkedin-connects.json': linkedinFiles.connectsText,
+  'tt-linkedin.json': linkedinFiles.sidecarText,
+  'linkedin-connections.json': linkedinFiles.connectionsText,
+  'twc-events.json': twcFiles.eventsText,
+  'twc-overrides.json': twcFiles.overridesText,
+  'contact-links.json': contactLinksText,
 };
 const outputFiles = readdirSync(outputDir, { withFileTypes: true })
   .filter(entry => entry.isFile())
@@ -186,8 +231,13 @@ let linkedinReport;
 let linkedinComparison;
 let twcReport;
 let twcComparison;
+let bytesReport;
 try {
-  trackerReport = importTracker(store, trackerText, { definitionsVersion, importedOn });
+  trackerReport = importTracker(store, trackerText, {
+    definitionsVersion,
+    importedOn,
+    exists: !trackerMissing,
+  });
   trackerComparison = compareTracker(trackerText, store);
   applyReport = importApplyEvidence(store, {
     applyDates,
@@ -197,7 +247,11 @@ try {
     ownerName,
   });
   applyComparison = compareApplyDates(applyDates, store);
-  statusReport = importStatusHistory(store, statusText, { definitionsVersion, importedOn });
+  statusReport = importStatusHistory(store, statusText, {
+    definitionsVersion,
+    importedOn,
+    exists: !statusEventsMissing,
+  });
   statusComparison = compareStatusHistory(statusText, store);
   peopleReport = importPeople(store, {
     targetTalentText,
@@ -205,6 +259,8 @@ try {
     pins: contactPins,
     definitionsVersion,
     importedOn,
+    targetTalentExists: !targetTalentMissing,
+    referralsExists: !referralsMissing,
   });
   peopleComparison = comparePeople({ targetTalentText, referralsText }, store);
   groupingComparison = compareGroupingWithResolvePeople(store, {
@@ -212,7 +268,11 @@ try {
     referralsText,
     pins: contactPins,
   });
-  followupsReport = importFollowups(store, followupsText, { definitionsVersion, importedOn });
+  followupsReport = importFollowups(store, followupsText, {
+    definitionsVersion,
+    importedOn,
+    exists: !followupsMissing,
+  });
   followupsComparison = compareFollowups(followupsText, store);
   correspondenceReport = importCorrespondence(store, {
     targetTalentFiles: targetTalentCorrespondence.files,
@@ -236,11 +296,58 @@ try {
     importedOn,
   });
   twcComparison = compareTwc(twcFiles, store);
+  recordJsonSnapshots(store, { texts: jsonTexts, definitionsVersion, importedOn });
+
+  const originals = {
+    'applications.md': trackerMissing ? null : trackerText,
+    'status-events.tsv': statusEventsMissing ? null : statusText,
+    'target-talent.md': targetTalentMissing ? null : targetTalentText,
+    'referrals.md': referralsMissing ? null : referralsText,
+    'follow-ups.md': followupsMissing ? null : followupsText,
+  };
+  const tables = Object.fromEntries(LEGACY_TABLE_FILES.map(file => [
+    file,
+    byteComparison(originals[file], renderLegacyFile(store, file)),
+  ]));
+  const json = Object.fromEntries(LEGACY_JSON_FILES.map(file => {
+    const original = jsonTexts[file];
+    const rendered = renderLegacyFile(store, file);
+    return [file, {
+      match: original === rendered,
+      absent: original === null,
+      original_bytes: original === null ? 0 : Buffer.byteLength(original, 'utf8'),
+      rendered_bytes: rendered === null ? 0 : Buffer.byteLength(rendered, 'utf8'),
+    }];
+  }));
+  const correspondence = {};
+  for (const [dir, input] of [
+    ['target-talent-correspondence', targetTalentCorrespondence.files],
+    ['referral-correspondence', referralCorrespondence.files],
+  ]) {
+    const known = new Set([
+      ...Object.keys(input).map(file => `${dir}/${file}`),
+      ...listLegacyFiles(store).filter(file => file.startsWith(`${dir}/`)),
+    ]);
+    const comparisons = [...known].sort().map(file => byteComparison(
+      input[file.slice(dir.length + 1)] ?? null,
+      renderLegacyFile(store, file),
+    ));
+    correspondence[dir] = {
+      files: known.size,
+      differing_files: comparisons.filter(result => !result.match).length,
+      original_lines: comparisons.reduce((sum, result) => sum + result.original_lines, 0),
+      rendered_lines: comparisons.reduce((sum, result) => sum + result.rendered_lines, 0),
+      first_differing_line: comparisons.find(result => !result.match)?.first_differing_line ?? null,
+      line_endings_differ: comparisons.some(result => result.line_endings_differ),
+    };
+  }
+  bytesReport = { tables, correspondence, json };
 } finally {
   store.close();
 }
 
 applyReport.counts.apply_dates_file_missing = applyDatesMissing;
+trackerReport.counts.tracker_file_missing = trackerMissing;
 statusReport.counts.status_events_file_missing = statusEventsMissing;
 peopleReport.counts.target_talent_file_missing = targetTalentMissing;
 peopleReport.counts.referrals_file_missing = referralsMissing;
@@ -285,6 +392,7 @@ const report = {
     ...twcReport,
     comparison: twcComparison,
   },
+  bytes: bytesReport,
 };
 writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 
@@ -350,6 +458,27 @@ console.log(followupsComparison.match ? 'FOLLOWUPS MATCH' : 'FOLLOWUPS MISMATCH'
 console.log(correspondenceComparison.match ? 'CORRESPONDENCE MATCH' : 'CORRESPONDENCE MISMATCH');
 console.log(linkedinComparison.match ? 'LINKEDIN MATCH' : 'LINKEDIN MISMATCH');
 console.log(twcComparison.match ? 'TWC MATCH' : 'TWC MISMATCH');
+for (const file of LEGACY_TABLE_FILES) {
+  const result = bytesReport.tables[file];
+  console.log(result.match
+    ? `BYTES MATCH ${file}`
+    : `BYTES DIFFER ${file} (original_lines=${result.original_lines} rendered_lines=${result.rendered_lines} first_differing_line=${result.first_differing_line} line_endings_differ=${result.line_endings_differ})`);
+}
+for (const dir of ['target-talent-correspondence', 'referral-correspondence']) {
+  const result = bytesReport.correspondence[dir];
+  console.log(result.differing_files === 0
+    ? `BYTES MATCH ${dir} (${result.files} files)`
+    : `BYTES DIFFER ${dir} (${result.differing_files} of ${result.files} files; original_lines=${result.original_lines} rendered_lines=${result.rendered_lines} first_differing_line=${result.first_differing_line} line_endings_differ=${result.line_endings_differ})`);
+}
+for (const file of LEGACY_JSON_FILES) {
+  const result = bytesReport.json[file];
+  console.log(result.match
+    ? `BYTES MATCH ${file}${result.absent ? ' (absent)' : ''}`
+    : `BYTES DIFFER ${file} (original_bytes=${result.original_bytes} rendered_bytes=${result.rendered_bytes})`);
+}
+const bytesMatch = Object.values(bytesReport.tables).every(result => result.match)
+  && Object.values(bytesReport.correspondence).every(result => result.differing_files === 0)
+  && Object.values(bytesReport.json).every(result => result.match);
 process.exit(trackerComparison.match && applyComparison.match && statusComparison.match
   && peopleComparison.match && followupsComparison.match && correspondenceComparison.match
-  && linkedinComparison.match && twcComparison.match ? 0 : 1);
+  && linkedinComparison.match && twcComparison.match && bytesMatch ? 0 : 1);

@@ -67,7 +67,7 @@ const dir = makeSandbox('identity-store-test');
     'company_unmerges', 'people', 'people_separate', 'person_aliases', 'person_identifiers',
     'person_merges', 'person_unmerges', 'postings',
   ];
-  check(SCHEMA_VERSION === 3 && store.db.prepare('PRAGMA user_version').get().user_version === SCHEMA_VERSION, 'fresh store is at SCHEMA_VERSION 3');
+  check(SCHEMA_VERSION === 4 && store.db.prepare('PRAGMA user_version').get().user_version === SCHEMA_VERSION, 'fresh store is at SCHEMA_VERSION 4');
   check(expected.every(table => tables.includes(table)), 'fresh store has all identity and merge tables');
   store.close();
 }
@@ -91,7 +91,7 @@ const dir = makeSandbox('identity-store-test');
   db.exec('PRAGMA user_version = 2');
   db.close();
   const store = openEventStore(dbPath);
-  check(store.db.prepare('PRAGMA user_version').get().user_version === SCHEMA_VERSION, 'v2 database migrates to version 3');
+  check(store.db.prepare('PRAGMA user_version').get().user_version === SCHEMA_VERSION, 'v2 database migrates to version 4');
   check(
     readEvents(store).length === 1
       && store.db.prepare('SELECT id FROM people WHERE id = ?').get('per_migration')?.id === 'per_migration'
