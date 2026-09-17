@@ -28,7 +28,7 @@ import { reconcileInviteStatus } from '../lib/invite-status-reconcile.mjs';
 import { findSubmittedApplication } from '../lib/statuses.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
-import { logWritesEnabled, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -69,14 +69,20 @@ router.post('/api/followups/reconcile-sent-invites', (req, res) => {
         newlyMarked.push(label(contact));
       }
     };
-    if (apply && logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, reconcileWrites);
-    else reconcileWrites();
+    let renderPending = {};
+    try {
+      if (apply && logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, reconcileWrites);
+      else reconcileWrites();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'followups reconcile-sent-invites');
+    }
     res.json({
       applied: apply,
       counts: { parsed: invites.length, newlyMarked: newlyMarked.length, alreadyRecorded: alreadyRecorded.length, ambiguous: ambiguous.length, unmatched: unmatched.length },
       newlyMarked, alreadyRecorded,
       ambiguous: ambiguous.map(a => ({ name: a.invite.name, candidates: a.candidates.map(label) })),
       unmatched: unmatched.map(u => u.name || u.handle).filter(Boolean),
+      ...renderPending,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -168,6 +174,7 @@ router.get('/api/followups/both-queue', (req, res) => {
 // `source: 'app' | 'ta'`.
 router.get('/api/followups/stale', (req, res) => {
   try {
+    let renderPending = {};
     // Self-heal the LinkedIn status axis from our own correspondence before building
     // the queue: any contact with a recorded invite but a stale 'Not Connected' status
     // is advanced to 'Invite Pending', so the queue never re-pitches someone already
@@ -177,7 +184,12 @@ router.get('/api/followups/stale', (req, res) => {
       const heal = () => reconcileInviteStatus({ apply: true });
       if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, heal);
       else heal();
-    } catch { /* never break the queue on self-heal */ }
+    } catch (error) {
+      if (error?.code === 'RENDER_FAILED') {
+        renderPending = renderPendingResponse(error, 'followups stale self-heal');
+      }
+      // Every other self-heal failure stays best-effort and silent.
+    }
 
     const rawStaleApps = computeStaleApps();
     const apps = rawStaleApps.map(it => ({ source: 'app', ...it }));
@@ -331,6 +343,7 @@ router.get('/api/followups/stale', (req, res) => {
       snoozedContactFollowups,
       // Deprecated alias: legacy readers expect `items` to be the badge list.
       items: warm,
+      ...renderPending,
     });
   }
   catch (err) { res.status(500).json({ error: err.message }); }
@@ -476,8 +489,9 @@ router.post('/api/followups', (req, res) => {
     if (!app) return res.status(404).json({ error: `Application #${appNum} not found` });
     const touchDate = date || new Date().toISOString().slice(0, 10);
     const crossLogged = [];
+    let n;
     const save = () => {
-      const n = appendFollowupRow({
+      n = appendFollowupRow({
         appNum: parseInt(appNum, 10), date: touchDate, company: app.company, role: app.role,
         channel, contact: contact || '', notes: notes || '',
       });
@@ -505,9 +519,15 @@ router.post('/api/followups', (req, res) => {
       }
       return n;
     };
-    const n = logWritesEnabled(DATA_DIR) ? withLogWrite(DATA_DIR, save) : save();
+    let renderPending = {};
+    try {
+      if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+      else save();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'followups POST');
+    }
 
-    res.json({ ok: true, n, crossLogged });
+    res.json({ ok: true, n, crossLogged, ...renderPending });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -141,11 +141,12 @@ export function parseConnectionsCsv(text) {
 export function saveConnections(connections, source = 'upload') {
   const payload = { importedAt: new Date().toISOString(), source, count: connections.length, connections };
   if (logWritesEnabled(DATA_DIR)) {
+    const sourceKind = source === 'upload' ? 'upload' : 'cli';
     return withLogWrite(DATA_DIR, store => {
       appendEventsWithEffects(store, [{
         type: 'linkedin_export_imported', occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
         payload: {
-          file: 'linkedin-connections.json', source, count: connections.length, imported_at: payload.importedAt,
+          file: 'linkedin-connections.json', source: sourceKind, count: connections.length, imported_at: payload.importedAt,
           legacy_effects: [{ file: 'linkedin-connections.json', op: 'json_replace', value: payload }],
         },
       }]);

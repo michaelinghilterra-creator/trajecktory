@@ -15,7 +15,7 @@ import { addNote, findNoteByMsgId } from '../lib/notes.mjs';
 import { readApplyDates } from '../lib/sidecars.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
-import { logWritesEnabled, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -467,6 +467,7 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     const sender = extractEmail(message.from) || from || '';
     const header = `${sender}: ${message.subject || subject || '(no subject)'} [${sentiment || 'neutral'}]`;
     const fullBody = String(message.text || bodyPreview || snippet || '').trim();
+    let saved;
     const save = () => {
       const noteHistory = addNote(
         id,
@@ -476,7 +477,10 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
       let statusFlip = null;
       if (action === 'rejected') statusFlip = 'Rejected';
       else if (INTERVIEW_STAGES.includes(action)) statusFlip = action;
-      else if (action !== 'log') return { invalid: true, alreadyLogged: noteHistory.added === false };
+      else if (action !== 'log') {
+        saved = { invalid: true, alreadyLogged: noteHistory.added === false };
+        return saved;
+      }
       if (statusFlip) patchRowInMd(id, { status: statusFlip }, { company });
 
       let contactLogged = false;
@@ -487,14 +491,21 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
           if (logWritesEnabled(DATA_DIR)) throw error;
         }
       }
-      return { statusFlip, contactLogged, alreadyLogged: noteHistory.added === false };
+      saved = { statusFlip, contactLogged, alreadyLogged: noteHistory.added === false };
+      return saved;
     };
-    const saved = logWritesEnabled(DATA_DIR) ? withLogWrite(DATA_DIR, save) : save();
+    let renderPending = {};
+    try {
+      if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+      else save();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'google reply');
+    }
     if (saved.invalid) return res.status(400).json({ error: `Unknown action: ${action}` });
     const { statusFlip, contactLogged, alreadyLogged } = saved;
 
     markHandled({ action, appId: id, date: today });
-    res.json({ ok: true, appId: id, statusFlip, contactLogged, alreadyLogged });
+    res.json({ ok: true, appId: id, statusFlip, contactLogged, alreadyLogged, ...renderPending });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -23,7 +23,7 @@ import { INFLUENCE_TIERS, resolveInfluenceTier } from '../../../lib/influence-ti
 import { classifyInbound } from '../../../lib/inbound-classify.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
-import { logWritesEnabled, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 function sequenceTone(contactId) {
   try {
@@ -116,15 +116,23 @@ router.patch('/api/target-talent/:id', (req, res) => {
     const rowUpdates = { status, notes, lastTouch, website, phone, influenceTier,
                          first, last, salute, title, company, city, state, zip, email, linkedin };
     const touchesRow = Object.values(rowUpdates).some(v => v !== undefined);
+    let ok;
     const save = () => {
       if (linkedinStatus !== undefined) setLinkedInStatus(id, linkedinStatus);
-      if (!touchesRow) return true;
+      if (!touchesRow) { ok = true; return ok; }
       runLogWriteTestHook('before-target-talent-patch-row');
-      return updateTTLine(id, rowUpdates);
+      ok = updateTTLine(id, rowUpdates);
+      return ok;
     };
-    const ok = logWritesEnabled(DATA_DIR) ? withLogWrite(DATA_DIR, save) : save();
+    let renderPending = {};
+    try {
+      if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+      else save();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'target-talent PATCH');
+    }
     if (!ok) return res.status(404).json({ error: 'Contact not found' });
-    res.json({ ok: true });
+    res.json({ ok: true, ...renderPending });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -217,6 +225,12 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
       if (newStatus !== r.status || direction !== 'Draft') {
         updateTTLine(id, { status: newStatus, lastTouch: today });
       }
+      // Sequence state is a direct sidecar write, not an event-log effect. Its
+      // position still matters: a human reply must pause outreach immediately
+      // after the contact row update, before any connect or follow-up writes.
+      if (isHumanReply) {
+        try { pauseSequence('ta', id, today); } catch { /* no active sequence, safe to ignore */ }
+      }
       if (direction === 'Sent' && (channel === 'LinkedIn' || isLinkedInInvite(subject))) {
         logConnect({ name: `${r.first || ''} ${r.last || ''}`.trim(), source: 'ta', id, date: ts.slice(0, 10) });
         markInvitePending(id, ts.slice(0, 10));
@@ -250,18 +264,19 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
         }
       }
     };
-    if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
-    else save();
-
-    // Sequence state is intentionally outside the event-log transaction.
-    if (isHumanReply) {
-      try { pauseSequence('ta', id, today); } catch { /* no active sequence, safe to ignore */ }
+    let renderPending = {};
+    try {
+      if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+      else save();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'target-talent correspondence');
     }
 
     res.json({
       ok: true,
       status: newStatus,
       crossLoggedFollowups,
+      ...renderPending,
       // Backwards-compat for older clients that read `crossLoggedFollowup`
       crossLoggedFollowup: crossLoggedFollowups[0]?.n ?? null,
     });

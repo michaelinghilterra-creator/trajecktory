@@ -106,7 +106,7 @@ function appendFollowupRow({ appNum, date, company, role, channel, contact, note
         payload: {
           file: 'follow-ups.md', n: nextN,
           app: Number.isFinite(parseInt(appNum, 10)) ? parseInt(appNum, 10) : null,
-          channel,
+          channel: ['Email', 'LinkedIn', 'InMail', 'LinkedIn Request'].includes(channel) ? channel : 'other',
           legacy_effects: [{
             file: 'follow-ups.md', op: 'row_upsert', row_id: `follow-ups.md#n-${randomUUID()}`,
             raw: row, anchor: { at: 'table_end' },

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import { DATA_DIR, TT_LINKEDIN_PATH } from '../config.mjs';
 import { appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
-import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
+import { inLogWrite, localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
 
 /**
  * lib/tt-linkedin.mjs — LinkedIn connection state for TA Outreach contacts.
@@ -81,6 +81,7 @@ export function setLinkedInStatus(id, state, date) {
     throw new Error(`Invalid LinkedIn state. Must be one of: ${LINKEDIN_STATES.join(', ')}`);
   }
   if (logWritesEnabled(DATA_DIR)) {
+    const outermost = !inLogWrite(DATA_DIR);
     try {
       return withLogWrite(DATA_DIR, store => {
         const key = String(id);
@@ -97,6 +98,7 @@ export function setLinkedInStatus(id, state, date) {
         return state;
       });
     } catch (error) {
+      if (!outermost) throw error;
       console.warn(`[tt-linkedin] failed to write: ${error.message}`);
       return state;
     }
@@ -118,6 +120,7 @@ export function setLinkedInStatus(id, state, date) {
 // resulting label. Idempotent.
 export function markInvitePending(id, date) {
   if (logWritesEnabled(DATA_DIR)) {
+    const outermost = !inLogWrite(DATA_DIR);
     let result = 'Invite Pending';
     try {
       return withLogWrite(DATA_DIR, store => {
@@ -130,6 +133,7 @@ export function markInvitePending(id, date) {
         return result;
       });
     } catch (error) {
+      if (!outermost) throw error;
       console.warn(`[tt-linkedin] failed to write: ${error.message}`);
       return result;
     }

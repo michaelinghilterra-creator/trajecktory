@@ -20,7 +20,7 @@ import { snoozeToday, readSnooze, writeSnooze, pruneSnooze, isMuted } from '../l
 import { resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finishOptionsFor, wrapReferralDraft } from '../../../lib/outreach-voice.mjs';
-import { logWritesEnabled, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -81,14 +81,21 @@ router.get('/api/referrals/followups', (req, res) => {
 router.post('/api/referrals/reconcile', (req, res) => {
   try {
     let accepted;
+    let result;
     const save = () => {
-      const result = reconcile({ seedPool: !!(req.body && req.body.seedPool) });
+      result = reconcile({ seedPool: !!(req.body && req.body.seedPool) });
       runLogWriteTestHook('before-referrals-reconcile-linkedin-states');
       accepted = detectAcceptances({});
       return result;
     };
-    const result = logWritesEnabled(DATA_DIR) ? withLogWrite(DATA_DIR, save) : save();
-    res.json({ ok: true, ...result, acceptedFlipped: accepted.flipped.length });
+    let renderPending = {};
+    try {
+      if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+      else save();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'referrals reconcile');
+    }
+    res.json({ ok: true, ...result, acceptedFlipped: accepted.flipped.length, ...renderPending });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -113,15 +120,22 @@ router.post('/api/referrals/import-linkedin', (req, res) => {
     const connections = parseConnectionsCsv(csv);
     if (!connections.length) return res.status(400).json({ error: 'No connections parsed — is this a LinkedIn Connections.csv?' });
     let accepted;
+    let result;
     const save = () => {
       saveConnections(connections, 'upload');
-      const result = reconcile({ seedPool: true });
+      result = reconcile({ seedPool: true });
       runLogWriteTestHook('before-referrals-import-linkedin-states');
       accepted = detectAcceptances({ connections });
       return result;
     };
-    const result = logWritesEnabled(DATA_DIR) ? withLogWrite(DATA_DIR, save) : save();
-    res.json({ ok: true, imported: connections.length, ...result, acceptedFlipped: accepted.flipped.length, accepted: accepted.flipped });
+    let renderPending = {};
+    try {
+      if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+      else save();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'referrals import-linkedin');
+    }
+    res.json({ ok: true, imported: connections.length, ...result, acceptedFlipped: accepted.flipped.length, accepted: accepted.flipped, ...renderPending });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -317,9 +331,14 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
       runLogWriteTestHook('before-referral-correspondence-referral-update');
       updateReferralLine(id, upd);
     };
-    if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
-    else save();
-    res.json({ ok: true, linkedTo: link ? { source: link.source, id: link.contact.id } : null });
+    let renderPending = {};
+    try {
+      if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+      else save();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'referrals correspondence');
+    }
+    res.json({ ok: true, linkedTo: link ? { source: link.source, id: link.contact.id } : null, ...renderPending });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

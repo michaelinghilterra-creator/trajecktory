@@ -60,14 +60,18 @@ function logConnect({ name = '', source = '', id = null, date = null } = {}) {
       if (id !== undefined && id !== null && id !== '') entry.id = id;
       const key = connectKey(entry);
       if (list.some(e => connectKey(e) === key)) return list;
+      const appended = [...list, entry];
+      const effect = !Array.isArray(parsed) && Array.isArray(parsed?.connects)
+        ? { file: 'linkedin-connects.json', op: 'json_replace', value: appended }
+        : { file: 'linkedin-connects.json', op: 'json_append', item: entry };
       appendEventsWithEffects(store, [{
         type: 'connection_request_sent', occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
         payload: {
           file: 'linkedin-connects.json', ref: entry.id !== undefined ? `ta:${entry.id}` : null, date: entry.date,
-          legacy_effects: [{ file: 'linkedin-connects.json', op: 'json_append', item: entry }],
+          legacy_effects: [effect],
         },
       }]);
-      return [...list, entry];
+      return appended;
     });
   }
   const list = readConnects() || [];
