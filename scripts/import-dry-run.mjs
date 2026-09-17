@@ -24,6 +24,10 @@ import {
   comparePeople,
   importPeople,
 } from '../lib/import/people-import.mjs';
+import {
+  compareFollowups,
+  importFollowups,
+} from '../lib/import/followups-import.mjs';
 
 function refuse(message) {
   console.error(message);
@@ -111,6 +115,9 @@ const contactLinksRead = readContactLinks(contactLinksPath, contactLinksMissing)
 const contactLinks = contactLinksRead.document;
 const contactPins = contactLinks.pins && typeof contactLinks.pins === 'object'
   && !Array.isArray(contactLinks.pins) ? contactLinks.pins : {};
+const followupsPath = resolve(inputDir, 'follow-ups.md');
+const followupsMissing = !existsSync(followupsPath);
+const followupsText = followupsMissing ? '' : readFileSync(followupsPath, 'utf8');
 const outputFiles = readdirSync(outputDir, { withFileTypes: true })
   .filter(entry => entry.isFile())
   .map(entry => entry.name);
@@ -128,6 +135,8 @@ let statusComparison;
 let peopleReport;
 let peopleComparison;
 let groupingComparison;
+let followupsReport;
+let followupsComparison;
 try {
   trackerReport = importTracker(store, trackerText, { definitionsVersion, importedOn });
   trackerComparison = compareTracker(trackerText, store);
@@ -154,6 +163,8 @@ try {
     referralsText,
     pins: contactPins,
   });
+  followupsReport = importFollowups(store, followupsText, { definitionsVersion, importedOn });
+  followupsComparison = compareFollowups(followupsText, store);
 } finally {
   store.close();
 }
@@ -164,6 +175,7 @@ peopleReport.counts.target_talent_file_missing = targetTalentMissing;
 peopleReport.counts.referrals_file_missing = referralsMissing;
 peopleReport.counts.contact_links_file_missing = contactLinksMissing;
 peopleReport.counts.pins_file_unreadable = contactLinksRead.unreadable;
+followupsReport.counts.followups_file_missing = followupsMissing;
 const report = {
   tracker: {
     ...trackerReport,
@@ -183,6 +195,10 @@ const report = {
     ...peopleReport,
     comparison: peopleComparison,
     grouping_comparison: groupingComparison,
+  },
+  followups: {
+    ...followupsReport,
+    comparison: followupsComparison,
   },
 };
 writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
@@ -221,9 +237,16 @@ console.log(JSON.stringify({
     same_name_other_company: peopleReport.same_name_other_company.length,
     grouping_comparison: groupingCounts,
   },
+  followups: {
+    counts: followupsReport.counts,
+    direct_by_channel: followupsReport.direct_by_channel,
+    flags: flagCounts(followupsReport.flags),
+  },
 }, null, 2));
 console.log(trackerComparison.match ? 'TRACKER MATCH' : 'TRACKER MISMATCH');
 console.log(applyComparison.match ? 'APPLY DATES MATCH' : 'APPLY DATES MISMATCH');
 console.log(statusComparison.match ? 'STATUS HISTORY MATCH' : 'STATUS HISTORY MISMATCH');
 console.log(peopleComparison.match ? 'PEOPLE MATCH' : 'PEOPLE MISMATCH');
-process.exit(trackerComparison.match && applyComparison.match && statusComparison.match && peopleComparison.match ? 0 : 1);
+console.log(followupsComparison.match ? 'FOLLOWUPS MATCH' : 'FOLLOWUPS MISMATCH');
+process.exit(trackerComparison.match && applyComparison.match && statusComparison.match
+  && peopleComparison.match && followupsComparison.match ? 0 : 1);
