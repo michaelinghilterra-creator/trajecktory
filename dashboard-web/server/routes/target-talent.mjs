@@ -23,7 +23,7 @@ import { INFLUENCE_TIERS, resolveInfluenceTier } from '../../../lib/influence-ti
 import { classifyInbound } from '../../../lib/inbound-classify.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
-import { logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 function sequenceTone(contactId) {
   try {
@@ -134,7 +134,7 @@ router.patch('/api/target-talent/:id', (req, res) => {
     if (!ok) return res.status(404).json({ error: 'Contact not found' });
     res.json({ ok: true, ...renderPending });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 
@@ -281,7 +281,7 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
       crossLoggedFollowup: crossLoggedFollowups[0]?.n ?? null,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 

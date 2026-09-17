@@ -127,25 +127,15 @@ For each draft, show:
 
 After the user reviews and says they've sent a follow-up, record it:
 
-1. If `data/follow-ups.md` doesn't exist, create it:
-   ```markdown
-   # Follow-up History
-
-   | # | App# | Date | Company | Role | Channel | Contact | Notes |
-   |---|------|------|---------|------|---------|---------|-------|
+1. Record the sent follow-up in one command. The helper creates the file and header when needed and assigns the next number:
+   ```text
+   node agent-edit.mjs followup --app <num> --date <YYYY-MM-DD> --company "<company>" --role "<role>" --channel "<channel>" --contact "<contact>" --note "<brief note>"
    ```
 
-2. Append a row with:
-   - `#` = next sequential number in the follow-ups table
-   - `App#` = application number from tracker
-   - `Date` = today's date
-   - `Company` = company name
-   - `Role` = role title
-   - `Channel` = Email / LinkedIn / Other
-   - `Contact` = who it was sent to
-   - `Notes` = brief note (e.g., "First follow-up, referenced Barbeiro.app")
-
-3. Optionally update the Notes column in `data/applications.md` with "Follow-up {N} sent {YYYY-MM-DD}"
+2. Optionally append the send marker to the application notes:
+   ```text
+   node agent-edit.mjs application --id <num> --append-note "Follow-up <N> sent <YYYY-MM-DD>"
+   ```
 
 **IMPORTANT:** Only record follow-ups the user confirms they actually sent. Never record a draft as sent.
 

@@ -17,7 +17,7 @@
  * Run: node tests/tracker-writers.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { mkdirSync, writeFileSync, readFileSync, copyFileSync, rmSync } from 'fs';
+import { mkdirSync, writeFileSync, readFileSync, copyFileSync, cpSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
@@ -50,10 +50,7 @@ function runScript(script, rows, args = []) {
   mkdirSync(join(sb, 'data'), { recursive: true });
   mkdirSync(join(sb, 'lib'), { recursive: true });
   copyFileSync(join(ROOT, script), join(sb, script));
-  copyFileSync(join(ROOT, 'lib/tracker.mjs'), join(sb, 'lib/tracker.mjs'));
-  copyFileSync(join(ROOT, 'lib/identity.mjs'), join(sb, 'lib/identity.mjs'));
-  // auto-discard-low.mjs imports the shared threshold from lib/discard.mjs.
-  copyFileSync(join(ROOT, 'lib/discard.mjs'), join(sb, 'lib/discard.mjs'));
+  cpSync(join(ROOT, 'lib'), join(sb, 'lib'), { recursive: true });
   writeFileSync(join(sb, 'data/applications.md'), [HEADER, ...rows, ''].join('\n'));
   let output = '';
   try {

@@ -319,7 +319,13 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
     setLoading(true);
     fetch('/api/followups/stale')
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
+      .then(d => {
+        if (Array.isArray(d.hand_edited?.files)) {
+          window.dispatchEvent(new CustomEvent('tjk:hand-edited', { detail: { files: d.hand_edited.files } }));
+        }
+        setData(d);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   };
   useEffectF(() => { load(); }, []);

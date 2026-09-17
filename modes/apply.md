@@ -45,7 +45,7 @@ If the role on screen differs from the one evaluated:
 - **Notify the candidate**: "The role has changed from [X] to [Y]. Do you want me to re-evaluate or adapt the responses to the new title?"
 - **If adapt**: Adjust responses to the new role without re-evaluating
 - **If re-evaluate**: Execute full A-F evaluation, update report, regenerate Section G
-- **Update tracker**: Change role title in applications.md if applicable
+- **Update tracker**: If applicable, run `node agent-edit.mjs application --id <num> --role "<new title>"`
 
 ## Step 4 — Analyze form questions
 
@@ -98,7 +98,7 @@ Notes:
 
 If the candidate confirms they submitted the application, run in order:
 
-1. **Update tracker**: change status in `data/applications.md` from `Evaluated` → `Applied`
+1. **Update tracker**: run `node agent-edit.mjs application --id <num> --status Applied --event-date <YYYY-MM-DD>`
 2. **Update report**: append final responses to the report as section `## H) Draft Application Answers` (if it doesn't exist yet)
 3. **Auto-push cheat sheet to Obsidian** (without asking):
    - Read `config/profile.yml` → `integrations.obsidian.applied_folder` and `integrations.obsidian.applied_filename_format` (default: `"{applied_date_mdy} - {company} - {role}"`)

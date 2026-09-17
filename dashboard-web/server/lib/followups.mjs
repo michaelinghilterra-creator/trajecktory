@@ -104,7 +104,7 @@ function appendFollowupRow({ appNum, date, company, role, channel, contact, note
       appendEventsWithEffects(store, [{
         type: 'message_sent', occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
         payload: {
-          file: 'follow-ups.md', n: nextN,
+          ref: `followup:${nextN}`, n: nextN,
           app: Number.isFinite(parseInt(appNum, 10)) ? parseInt(appNum, 10) : null,
           channel: ['Email', 'LinkedIn', 'InMail', 'LinkedIn Request'].includes(channel) ? channel : 'other',
           legacy_effects: [{

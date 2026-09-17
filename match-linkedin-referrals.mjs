@@ -36,6 +36,10 @@ function saveTouches(fn) {
   let result;
   try { withLogWrite(DATA_DIR, () => { result = fn(); }); }
   catch (error) {
+    if (error.code === 'HAND_EDITED') {
+      console.error(error.message);
+      process.exit(1);
+    }
     if (error.code !== 'RENDER_FAILED') throw error;
     console.warn(`Warning: ${error.message}`);
   }

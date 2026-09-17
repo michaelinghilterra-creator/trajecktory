@@ -86,7 +86,7 @@ If the final score is >= 4.5, generate draft responses for the application form:
 **Language**: Always in the JD's language (English default). Apply `/tech-translate` if needed.
 
 ## Step 4 — Update Tracker
-Register in `data/applications.md`. PDF column is always ❌ at evaluation time — CV is generated only when the user explicitly applies (`/trajecktory apply` or `/trajecktory pdf`).
+Write one nine-column TSV row to `batch/tracker-additions/{num}-{company-slug}.tsv`, using the format in `modes/pipeline.md`. Never edit `data/applications.md` directly. PDF is always ❌ at evaluation time because a CV is generated only when the user explicitly applies (`/trajecktory apply` or `/trajecktory pdf`).
 
 **Source tagging in Notes column (CRITICAL — controls auto-discard behavior):**
 - If `source = "self-sourced"`: prefix the notes with `[self-sourced] ` — e.g., `[self-sourced] Strong fit — apply`

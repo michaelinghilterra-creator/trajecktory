@@ -335,6 +335,10 @@ if (APPLY) {
         });
       } else writeFileSync(cfg.path, f._newText);
     } catch (error) {
+      if (error.code === 'HAND_EDITED') {
+        console.error(error.message);
+        process.exit(1);
+      }
       if (error.code !== 'RENDER_FAILED') throw error;
       summary.render_failed = true;
       summary.render_failed_message = error.message;

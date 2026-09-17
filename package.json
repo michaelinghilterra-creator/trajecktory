@@ -15,6 +15,7 @@
     "rollback": "node update-system.mjs rollback",
     "liveness": "node check-liveness.mjs",
     "scan": "node scan.mjs",
+    "agent-edit": "node agent-edit.mjs",
     "lint": "eslint ."
   },
   "keywords": [

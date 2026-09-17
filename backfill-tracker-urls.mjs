@@ -34,13 +34,15 @@
  * fails, a merge is in flight, verification fails, or the file changed underfoot.
  */
 
-import { readFileSync, writeFileSync, copyFileSync, existsSync, readdirSync, statSync } from 'fs';
-import { join, dirname } from 'path';
+import { readFileSync, writeFileSync, copyFileSync, existsSync, readdirSync, statSync, unlinkSync } from 'fs';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { TRACKER_COLUMNS, TRACKER_HEADER, TRACKER_SEPARATOR, parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
 import { urlFromReport, canonicalUrl, normalizeCompany } from './lib/identity.mjs';
+import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = process.env.TJK_DATA_DIR ? resolve(process.env.TJK_DATA_DIR) : join(ROOT, 'data');
 const argv = process.argv.slice(2);
 const APPLY = argv.includes('--apply');
 const JSON_OUT = argv.includes('--json');
@@ -69,7 +71,7 @@ if (!TRACKER_COLUMNS.includes('url')) {
   die("lib/tracker.mjs has no 'url' column. Nothing to backfill — this script is for the 11-column schema.");
 }
 
-const APPS = join(ROOT, 'data/applications.md');
+const APPS = join(DATA_DIR, 'applications.md');
 if (!existsSync(APPS)) die(`No tracker at ${APPS}`);
 
 // ── Guard 2: no merge in flight ──────────────────────────────────────────────
@@ -148,6 +150,7 @@ for (let i = 0; i < originalLines.length; i++) {
 }
 
 const newText = newLines.join('\n');
+const layoutChanged = [...changed].some(index => !parseTrackerLine(originalLines[index]));
 
 // ── Verification — runs BEFORE any write, on both dry run and apply ──────────
 // The failure mode this defends against is silent: a shifted cell still produces
@@ -236,6 +239,9 @@ say(`\n✅ Verified: ${before.length} rows intact, every non-url cell byte-ident
 // ── Write ────────────────────────────────────────────────────────────────────
 let backup = null;
 if (APPLY && (written || changed.size)) {
+  if (logWritesEnabled(DATA_DIR) && layoutChanged) {
+    die('The event log owns applications.md and the legacy table layout cannot be upgraded through it. Switch log writes off to upgrade the layout first.');
+  }
   // Re-check mtime: a dashboard status PATCH or a merge between the read above
   // and this write would be silently reverted by it.
   if (statSync(APPS).mtimeMs !== mtimeBefore) {
@@ -246,7 +252,36 @@ if (APPLY && (written || changed.size)) {
   const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
   backup = `${APPS}.bak-${stamp}-url-backfill`;
   copyFileSync(APPS, backup);
-  writeFileSync(APPS, newText);
+  if (logWritesEnabled(DATA_DIR)) {
+    try {
+      writeTableText({
+        dataDir: DATA_DIR,
+        file: 'applications.md',
+        baseText: originalText,
+        newText,
+        rowKey: line => {
+          const row = parseTrackerLine(line);
+          return row ? String(row.num) : null;
+        },
+        buildEvents: ({ added, changed: rowChanges, removed }) => {
+          if (added.length || removed.length) throw new Error('backfill-tracker-urls may only update existing tracker rows');
+          return rowChanges.map(change => {
+            const row = parseTrackerLine(change.raw);
+            return {
+              type: 'legacy_record', application_id: String(row.num), occurred_on: localToday(),
+              payload: { reason: 'tracker_row_updated', ref: `app:${row.num}`, fields: ['url'], legacy_effects: [change.effect] },
+            };
+          });
+        },
+      });
+    } catch (error) {
+      if (error.code === 'RENDER_FAILED') console.warn(`Warning: ${error.message}`);
+      else {
+        try { unlinkSync(backup); } catch { /* best effort cleanup after a refused write */ }
+        die(error.message);
+      }
+    }
+  } else writeFileSync(APPS, newText);
   say(`\n💾 Backup: ${backup.replace(ROOT, '.')}`);
   say(`✅ Wrote ${written} url cell(s) into data/applications.md`);
   say(`\n   Rollback:  cp "${backup.replace(ROOT, '.')}" data/applications.md`);

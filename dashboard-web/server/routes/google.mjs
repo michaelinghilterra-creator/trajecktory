@@ -15,7 +15,7 @@ import { addNote, findNoteByMsgId } from '../lib/notes.mjs';
 import { readApplyDates } from '../lib/sidecars.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
-import { logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -62,7 +62,7 @@ router.get('/api/google/status', (req, res) => {
   try {
     res.json(googleStatus());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 
@@ -103,7 +103,7 @@ router.get('/api/google/health', async (req, res) => {
   try {
     res.json(await checkHealth());
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 
@@ -326,7 +326,7 @@ router.post('/api/google/apply-bounce', (req, res) => {
     res.json({ ok: true, flipped: 1, id: numId });
   } catch (err) {
     console.error('[apply-bounce]', err.message);
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 
@@ -507,7 +507,7 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     markHandled({ action, appId: id, date: today });
     res.json({ ok: true, appId: id, statusFlip, contactLogged, alreadyLogged, ...renderPending });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 
@@ -530,6 +530,6 @@ router.post('/api/google/draft', async (req, res) => {
     const draft = await createDraft({ to: String(to), subject: String(subject || ''), body: String(body || ''), accessToken });
     res.json({ ok: true, draftId: draft.id, messageId: draft.messageId });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });

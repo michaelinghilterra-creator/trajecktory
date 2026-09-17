@@ -5,6 +5,7 @@ import { SNOOZE_PATH, APPLY_DATES_PATH, STATUS_EVENTS_PATH, MUTE_PATH, DATA_DIR 
 import { ALL_STATUSES } from './statuses.mjs';
 import { appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
 import {
+  inLogWrite,
   localToday,
   logWritesEnabled,
   runLogWriteTestHook,
@@ -139,6 +140,19 @@ function readApplyDates() {
   catch { return {}; }
 }
 function writeApplyDates(map) {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => appendEventsWithEffects(store, [{
+      type: 'legacy_record',
+      occurred_on: localToday(),
+      source: 'dashboard',
+      definitions_version: 'v1',
+      payload: {
+        reason: 'apply_dates_repaired',
+        count: Object.keys(map).length,
+        legacy_effects: [{ file: 'apply-dates.json', op: 'json_replace', value: map }],
+      },
+    }]));
+  }
   fs.writeFileSync(APPLY_DATES_PATH, JSON.stringify(map, null, 2) + '\n');
 }
 // Record the apply date for an app the first time it goes Applied. Defaults to
@@ -216,7 +230,7 @@ function logStatusEvent(appNum, status, { company = '', date } = {}) {
         definitions_version: 'v1',
         payload: {
           num: appNum,
-          company,
+          ref: `app:${appNum}`,
           from: null,
           to: status,
           date: row.split('\t')[1],
@@ -237,6 +251,7 @@ function logStatusEvent(appNum, status, { company = '', date } = {}) {
       fs.appendFileSync(STATUS_EVENTS_PATH, `${row}\n`);
     }
   } catch (e) {
+    if (inLogWrite(DATA_DIR)) throw e;
     console.warn('[status-events] failed to log:', e.message);
   }
 }

@@ -177,6 +177,7 @@ export const SYSTEM_PATHS = [
 // release which purged it. Append; do not prune.
 const PURGE_PATHS = [
   'dashboard-web/Career-Ops-Live.zip',
+  'auto-close-stale.mjs',
   // NOTE: dashboard-web/talent-acquisition-design-audit.md is deliberately NOT here.
   // It is a legitimate TRACKED file (scrubbed to a fictional persona at HEAD), so the
   // normal system-file checkout overwrites any dirty on-disk copy with the clean one.
