@@ -5,6 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openEventStore } from '../lib/event-store.mjs';
+import { findCompany, mergeCompanies } from '../lib/identity-store.mjs';
 import {
   compareTracker,
   importTracker,
@@ -37,6 +38,27 @@ function catches(fn) {
 
 function row(cells) {
   return `| ${cells.join(' | ')} |`;
+}
+
+function duplicateFixture(entries) {
+  return [
+    '# Invented Applications Tracker',
+    TRACKER_HEADER,
+    TRACKER_SEPARATOR,
+    ...entries.map(({ num, company, role, url }) => row([
+      num,
+      '2030-03-01',
+      company,
+      role,
+      '0.01/5',
+      'Reviewed',
+      'no',
+      'fixture.docx',
+      `[${num}](fixtures/${num}.md)`,
+      'Invented fixture note',
+      url ?? '',
+    ])),
+  ].join('\n');
 }
 
 const fixtureLines = [
@@ -142,6 +164,119 @@ const updateError = catches(() => store.db.prepare('UPDATE events SET payload = 
 check(/append-only/.test(String(updateError?.message)), 'event payload cannot be changed after import');
 store.close();
 
+const differentStore = openEventStore(join(sandbox, 'same-role-different.db'));
+const differentFixture = duplicateFixture([
+  { num: '900001', company: 'Zorblax Widgetry', role: 'Example Pulley Role', url: 'https://jobs.example.test/roles/900001' },
+  { num: '900002', company: 'Zorblax Widgetry', role: 'Example Pulley Role', url: 'https://jobs.example.test/roles/900002' },
+]);
+const differentReport = importTracker(differentStore, differentFixture, { definitionsVersion, importedOn });
+check(differentReport.same_role_postings.length === 1
+  && differentReport.same_role_postings[0].reason === 'different_urls'
+  && JSON.stringify(differentReport.same_role_postings[0].nums) === JSON.stringify([900001, 900002])
+  && differentReport.same_role_postings[0].posting_ids.length === 2,
+'same company and role with different URLs form one posting candidate group');
+check(compareTracker(differentFixture, differentStore).match,
+  'duplicate candidate reporting leaves tracker comparison unchanged');
+differentStore.close();
+
+const chainStore = openEventStore(join(sandbox, 'same-role-chain.db'));
+const chainFixture = duplicateFixture([
+  { num: '900001', company: 'Zorblax Widgetry', role: 'Senior Example Pulley Role', url: 'https://jobs.example.test/roles/900011' },
+  { num: '900002', company: 'Zorblax Widgetry', role: 'Example Pulley Role', url: 'https://jobs.example.test/roles/900012' },
+  { num: '900003', company: 'Zorblax Widgetry', role: 'Junior Example Pulley Role', url: 'https://jobs.example.test/roles/900013' },
+]);
+const chainReport = importTracker(chainStore, chainFixture, { definitionsVersion, importedOn });
+check(chainReport.same_role_postings.length === 1
+  && JSON.stringify(chainReport.same_role_postings[0].nums) === JSON.stringify([900001, 900002, 900003])
+  && chainReport.same_role_postings[0].posting_ids.length === 3,
+'role matching builds one transitive group');
+chainStore.close();
+
+const missingUrlStore = openEventStore(join(sandbox, 'same-role-missing-url.db'));
+const missingUrlFixture = duplicateFixture([
+  { num: '900001', company: 'Zorblax Widgetry', role: 'Example Pulley Role', url: 'https://jobs.example.test/roles/900021' },
+  { num: '900002', company: 'Zorblax Widgetry', role: 'Example Pulley Role' },
+]);
+const missingUrlReport = importTracker(missingUrlStore, missingUrlFixture, { definitionsVersion, importedOn });
+check(missingUrlReport.same_role_postings.length === 1
+  && missingUrlReport.same_role_postings[0].reason === 'missing_url',
+'a same-role group with a missing URL reports the missing URL reason');
+missingUrlStore.close();
+
+const sharedStore = openEventStore(join(sandbox, 'same-role-shared.db'));
+const sharedFixture = duplicateFixture([
+  { num: '900001', company: 'Zorblax Widgetry', role: 'Example Pulley Role', url: 'https://jobs.example.test/roles/900031' },
+  { num: '900002', company: 'Zorblax Widgetry', role: 'Example Pulley Role', url: 'https://jobs.example.test/roles/900031' },
+]);
+const sharedReport = importTracker(sharedStore, sharedFixture, { definitionsVersion, importedOn });
+check(sharedReport.shared_postings.length === 1 && sharedReport.same_role_postings.length === 0,
+  'rows sharing one posting are not repeated as same-role candidates');
+sharedStore.close();
+
+const mergedStore = openEventStore(join(sandbox, 'same-role-merged-company.db'));
+const mergeSeed = duplicateFixture([
+  { num: '900001', company: 'Zorblax Widgetry', role: 'Example Pulley Role', url: 'https://jobs.example.test/roles/900041' },
+  { num: '900002', company: 'Quennox Ratchet Works', role: 'Example Pulley Role', url: 'https://jobs.example.test/roles/900042' },
+]);
+importTracker(mergedStore, mergeSeed, { definitionsVersion, importedOn, file: 'merge-seed.md' });
+mergeCompanies(mergedStore, {
+  fromId: findCompany(mergedStore, 'Quennox Ratchet Works'),
+  intoId: findCompany(mergedStore, 'Zorblax Widgetry'),
+}, {
+  occurred_on: importedOn,
+  source: 'cli',
+  definitions_version: definitionsVersion,
+  evidence_ref: 'fixture-merge',
+});
+const mergedFixture = duplicateFixture([
+  { num: '900003', company: 'Zorblax Widgetry', role: 'Example Pulley Role', url: 'https://jobs.example.test/roles/900043' },
+  { num: '900004', company: 'Quennox Ratchet Works', role: 'Example Pulley Role', url: 'https://jobs.example.test/roles/900044' },
+]);
+const mergedReport = importTracker(mergedStore, mergedFixture, {
+  definitionsVersion,
+  importedOn,
+  file: 'merged-import.md',
+});
+check(mergedReport.same_role_postings.length === 1
+  && JSON.stringify(mergedReport.same_role_postings[0].nums) === JSON.stringify([900003, 900004]),
+'resolved company merges combine rows into the correct per-company group');
+mergedStore.close();
+
+const wordStore = openEventStore(join(sandbox, 'company-word.db'));
+const wordFixture = duplicateFixture([
+  { num: '900001', company: 'Zorblax', role: 'Example Pulley Role', url: 'https://jobs.example.test/roles/900051' },
+  { num: '900002', company: 'Zorblax Widgetry', role: 'Example Cog Role', url: 'https://jobs.example.test/roles/900052' },
+  { num: '900003', company: 'Zorblax Gearworks', role: 'Example Ratchet Role', url: 'https://jobs.example.test/roles/900053' },
+  { num: '900004', company: 'Quennox Ratchet Works', role: 'Example Gauge Role', url: 'https://jobs.example.test/roles/900054' },
+]);
+const wordReport = importTracker(wordStore, wordFixture, { definitionsVersion, importedOn });
+const widgetryId = findCompany(wordStore, 'Zorblax Widgetry');
+const gearworksId = findCompany(wordStore, 'Zorblax Gearworks');
+const wordPair = wordReport.company_word_candidates.find(candidate => (
+  new Set([candidate.a_company_id, candidate.b_company_id]).has(widgetryId)
+  && new Set([candidate.a_company_id, candidate.b_company_id]).has(gearworksId)
+));
+const mergePairs = new Set(wordReport.merge_candidates.map(candidate => (
+  [candidate.a_company_id, candidate.b_company_id].sort().join(':')
+)));
+check(wordPair?.shared_word_length === 7
+  && wordReport.company_word_candidates.every(candidate => !mergePairs.has(
+    [candidate.a_company_id, candidate.b_company_id].sort().join(':'),
+  )),
+'company word candidates report the length and exclude merge candidates');
+const newReportData = JSON.stringify({
+  same_role_postings: differentReport.same_role_postings,
+  company_word_candidates: wordReport.company_word_candidates,
+});
+check([
+  'Zorblax Widgetry',
+  'Zorblax Gearworks',
+  'Example Pulley Role',
+  'jobs.example.test',
+].every(value => !newReportData.includes(value)),
+'new report arrays contain no fixture company name, role or URL');
+wordStore.close();
+
 const missingStore = openEventStore(join(sandbox, 'missing.db'));
 importTracker(missingStore, fixtureLines.slice(0, -1).join('\n'), { definitionsVersion, importedOn });
 const missingComparison = compareTracker(fixture, missingStore);
@@ -166,12 +301,17 @@ const writtenReport = JSON.parse(readFileSync(cliReport, 'utf8'));
 check(!cli.stdout.includes('Example')
   && !cli.stdout.includes('Sprocket')
   && !cli.stdout.includes('jobs.example.test')
+  && /"same_role_postings":\s*\d+/.test(cli.stdout)
+  && /"company_word_candidates":\s*\d+/.test(cli.stdout)
   && /"rendered_identical":\s*\d+/.test(cli.stdout)
   && /"rendered_different":\s*\d+/.test(cli.stdout)
   && writtenReport.match, 'CLI stdout contains counts only');
 check(!('original_rows' in writtenReport)
   && !('rebuilt_rows' in writtenReport)
-  && !('comparison' in writtenReport), 'CLI report omits row payloads');
+  && !('comparison' in writtenReport)
+  && Array.isArray(writtenReport.same_role_postings)
+  && Array.isArray(writtenReport.company_word_candidates),
+'CLI report omits row payloads and includes duplicate candidate arrays');
 check(writtenReport.rendered_identical === comparison.rendered_identical
   && writtenReport.rendered_different === comparison.rendered_different
   && JSON.stringify(writtenReport.rendered_different_positions) === JSON.stringify(comparison.rendered_different_positions),

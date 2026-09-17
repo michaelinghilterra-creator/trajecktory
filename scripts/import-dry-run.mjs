@@ -136,6 +136,11 @@ console.log(JSON.stringify({
   tracker: {
     counts: trackerReport.counts,
     flags: flagCounts(trackerReport.flags),
+    shared_postings: trackerReport.shared_postings.length,
+    company_spellings: trackerReport.company_spellings.length,
+    merge_candidates: trackerReport.merge_candidates.length,
+    same_role_postings: trackerReport.same_role_postings.length,
+    company_word_candidates: trackerReport.company_word_candidates.length,
   },
   apply: {
     counts: applyReport.counts,
