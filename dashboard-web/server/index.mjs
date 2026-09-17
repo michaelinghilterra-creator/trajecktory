@@ -10,7 +10,7 @@ import { randomBytes } from 'crypto';
 import { existsSync } from 'fs';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
-import { STATIC, OUTPUT_DIR, PORT, HOST } from './config.mjs';
+import { DATA_DIR, STATIC, OUTPUT_DIR, PORT, HOST } from './config.mjs';
 import { router as applicationsRoutes } from './routes/applications.mjs';
 import { router as followupsRoutes } from './routes/followups.mjs';
 import { router as applyRoutes, applyJobs } from './routes/apply.mjs';
@@ -44,6 +44,7 @@ import { router as sequencesRoutes } from './routes/sequences.mjs';
 import { router as searchRoutes } from './routes/search.mjs';
 import { router as peopleRoutes } from './routes/people.mjs';
 import { getIdentity, getArchetypeNames } from './lib/profile.mjs';
+import { catchUpEventStore } from './lib/event-store-startup.mjs';
 
 // Process-level safety nets (unhandledRejection, uncaughtException, exit,
 // signals) are registered in crash-capture.mjs, which also tees all console
@@ -290,6 +291,7 @@ function openDashboardWindow(url) {
   } catch { /* never let opening a browser break the server */ }
 }
 
+catchUpEventStore(DATA_DIR);
 app.listen(PORT, HOST, () => {
   const shown = HOST === '0.0.0.0' || HOST === '::' ? `your machine on port ${PORT} (all interfaces)` : `http://localhost:${PORT}`;
   console.log(`trajecktory Dashboard → ${shown}`);

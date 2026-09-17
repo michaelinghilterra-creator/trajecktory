@@ -1,7 +1,15 @@
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'node:crypto';
 import { SNOOZE_PATH, APPLY_DATES_PATH, STATUS_EVENTS_PATH, MUTE_PATH, DATA_DIR } from '../config.mjs';
 import { ALL_STATUSES } from './statuses.mjs';
+import { appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
+import {
+  localToday,
+  logWritesEnabled,
+  runLogWriteTestHook,
+  withLogWrite,
+} from '../../../lib/log-writes.mjs';
 
 // A calendar date the caller supplied, or null. Anything that is not exactly
 // YYYY-MM-DD is rejected rather than written, so a malformed date degrades to
@@ -38,11 +46,12 @@ function addReconcileDismissed(keys) {
 // LOCAL date, not the UTC date: toISOString() is already tomorrow during the US
 // evening, which expired a snooze (and re-surfaced the alert) the night before
 // its intended date. snoozeToday and the prune comparison must share this basis.
-function localYmd(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function snoozeToday() { return localToday(); }
+function snoozeDateIn(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return localToday(d);
 }
-function snoozeToday() { return localYmd(); }
-function snoozeDateIn(days) { const d = new Date(); d.setDate(d.getDate() + days); return localYmd(d); }
 
 // All source buckets the snooze store tracks. Adding a new contact source
 // means adding it here and nowhere else: read/write/prune
@@ -138,6 +147,29 @@ function writeApplyDates(map) {
 // anchor) unless `force` is set — a correction to a wrong anchor is the one
 // legitimate reason to overwrite, and it has to be asked for by name.
 function recordApplyDate(appNum, date, { force = false } = {}) {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      const rendered = renderLegacyFile(store, 'apply-dates.json');
+      const map = rendered === null ? {} : JSON.parse(rendered);
+      const key = String(appNum);
+      if (map[key] && !force) return map[key];
+      const value = (date && ISO_DATE.test(date)) ? date : snoozeToday();
+      runLogWriteTestHook('before-record-apply-date');
+      appendEventsWithEffects(store, [{
+        type: 'application_submitted',
+        application_id: key,
+        occurred_on: value,
+        source: 'dashboard',
+        definitions_version: 'v1',
+        payload: {
+          apply_date: value,
+          forced: Boolean(force),
+          legacy_effects: [{ file: 'apply-dates.json', op: 'json_set', key, value }],
+        },
+      }]);
+      return value;
+    });
+  }
   const map = readApplyDates();
   const key = String(appNum);
   if (map[key] && !force) return map[key];
@@ -159,26 +191,50 @@ function recordApplyDate(appNum, date, { force = false } = {}) {
 // every timing metric silently measured data entry rather than the job search.
 // Rows written before that have an empty `logged`, which is also the marker for
 // "this date was never confirmed by anyone".
+function formatStatusEventRow(appNum, status, { company = '', date } = {}) {
+  const clean = (s) => String(s ?? '').replace(/[\t\r\n]+/g, ' ').trim();
+  const st = clean(status);
+  if (st && !ALL_STATUSES.includes(st)) {
+    console.warn(`[status-events] non-canonical status "${st}" for app ${clean(appNum)} — written, but funnel analytics will skip it`);
+  }
+  const when = (date && ISO_DATE.test(date)) ? date : snoozeToday();
+  if (date && !ISO_DATE.test(date)) {
+    console.warn(`[status-events] ignoring malformed date "${date}" for app ${clean(appNum)} — using today`);
+  }
+  return `${clean(appNum)}\t${when}\t${st}\t${clean(company)}\t${snoozeToday()}`;
+}
+
 function logStatusEvent(appNum, status, { company = '', date } = {}) {
   try {
-    const clean = (s) => String(s ?? '').replace(/[\t\r\n]+/g, ' ').trim();
-    const st = clean(status);
-    // Nothing validated status on the way in, which is how non-canonical rows
-    // (e.g. a bare "Interview") got logged and then silently ignored by every
-    // funnel calculation. Warn, but still write: dropping the row would lose
-    // history, and logging must never break the status change it records.
-    if (st && !ALL_STATUSES.includes(st)) {
-      console.warn(`[status-events] non-canonical status "${st}" for app ${clean(appNum)} — written, but funnel analytics will skip it`);
+    const row = formatStatusEventRow(appNum, status, { company, date });
+    if (logWritesEnabled(DATA_DIR)) {
+      withLogWrite(DATA_DIR, store => appendEventsWithEffects(store, [{
+        type: 'status_changed',
+        application_id: String(appNum),
+        occurred_on: row.split('\t')[1],
+        source: 'dashboard',
+        definitions_version: 'v1',
+        payload: {
+          num: appNum,
+          company,
+          from: null,
+          to: status,
+          date: row.split('\t')[1],
+          legacy_effects: [{
+            file: 'status-events.tsv',
+            op: 'row_upsert',
+            row_id: `status-events.tsv#n-${randomUUID()}`,
+            raw: row,
+            anchor: { at: 'table_end' },
+          }],
+        },
+      }]));
+      return;
     }
-    const when = (date && ISO_DATE.test(date)) ? date : snoozeToday();
-    if (date && !ISO_DATE.test(date)) {
-      console.warn(`[status-events] ignoring malformed date "${date}" for app ${clean(appNum)} — using today`);
-    }
-    const row = `${clean(appNum)}\t${when}\t${st}\t${clean(company)}\t${snoozeToday()}\n`;
     if (!fs.existsSync(STATUS_EVENTS_PATH)) {
-      fs.writeFileSync(STATUS_EVENTS_PATH, 'app#\tdate\tstatus\tcompany\tlogged\n' + row);
+      fs.writeFileSync(STATUS_EVENTS_PATH, `app#\tdate\tstatus\tcompany\tlogged\n${row}\n`);
     } else {
-      fs.appendFileSync(STATUS_EVENTS_PATH, row);
+      fs.appendFileSync(STATUS_EVENTS_PATH, `${row}\n`);
     }
   } catch (e) {
     console.warn('[status-events] failed to log:', e.message);
@@ -212,6 +268,6 @@ export {
   readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS,
   readMute, writeMute, setMute, isMuted,
   readApplyDates, writeApplyDates, recordApplyDate,
-  logStatusEvent, parseStatusEvents,
+  formatStatusEventRow, logStatusEvent, parseStatusEvents,
 };
 

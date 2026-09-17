@@ -1,7 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { OUTPUT_DIR, ROOT_DIR } from '../config.mjs';
+import { DATA_DIR, OUTPUT_DIR, ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd, patchRowInMd, removeRowFromMd, rejectionTimingStats } from '../lib/applications.mjs';
 import { readResponseProgressStats } from '../lib/response-timing.mjs';
 import { recordApplyDate } from '../lib/sidecars.mjs';
@@ -11,6 +11,7 @@ import { ALL_STATUSES } from '../lib/statuses.mjs';
 import { mdToHtml, escapeHtml } from '../lib/html.mjs';
 import { isRequeueableDiscard } from '../../../lib/discard.mjs';
 import { canonicalUrl } from '../../../lib/identity.mjs';
+import { logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -125,14 +126,18 @@ router.patch('/api/applications/:id', (req, res) => {
     if (status !== undefined) updates.status = status;
     if (notes !== undefined) updates.notes = notes;
 
-    const ok = patchRowInMd(id, updates, { company, eventDate: when });
+    const save = () => {
+      const patched = patchRowInMd(id, updates, { company, eventDate: when });
+      if (patched && status === 'Applied') recordApplyDate(id, when, { force: !!when });
+      return patched;
+    };
+    const ok = logWritesEnabled(DATA_DIR) ? withLogWrite(DATA_DIR, save) : save();
     if (!ok) return res.status(404).json({ error: `Row ${id} not found` });
 
     // Capture the real apply date the first time a row goes Applied, so
     // follow-up cadence counts from when the user actually applied — not the
     // evaluation/scrape date in the Date column. An explicit eventDate is the
     // user correcting the anchor, so it is allowed to overwrite.
-    if (status === 'Applied') recordApplyDate(id, when, { force: !!when });
     if (becomingApplied && prevRow) {
       try { assignSplitTest(id, prevRow.score, when); }
       catch (err) { console.warn(`[split-test] failed to assign app ${id}: ${err.message}`); }
