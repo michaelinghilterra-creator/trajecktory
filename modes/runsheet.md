@@ -702,8 +702,8 @@ Short, imperative, scannable at a glance. If it needs a paragraph it belongs in 
 ## Actions
 
 - [ ] Thank-you note to {interviewer}, same day
-- [ ] Log call notes in `data/applications.md` notes column for #{id}
-- [ ] Update the status ladder if advanced
+- [ ] Log call notes with `node agent-edit.mjs application --id {id} --append-note "<call notes>"`
+- [ ] If advanced, update the status ladder with `node agent-edit.mjs application --id {id} --status "<status>" --event-date <YYYY-MM-DD>`
 - [ ] If advanced: open the round-{N+1} prep from the `{next template}` template
 ```
 

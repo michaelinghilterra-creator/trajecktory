@@ -774,15 +774,15 @@ Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slu
 ### Pipeline Integrity
 
 1. **NEVER edit applications.md to ADD new entries** -- Write TSV in `batch/tracker-additions/` and `merge-tracker.mjs` handles the merge.
-2. **YES you can edit applications.md to UPDATE status/notes of existing entries.**
+2. **Update existing tracker rows only through `node agent-edit.mjs application`.**
 3. All reports MUST include `**URL:**` in the header (between Score and PDF). Include `**Legitimacy:** {tier}` (see Block G in `modes/oferta.md`).
 4. All statuses MUST be canonical (see `templates/states.yml`).
 5. Health check: `node verify-pipeline.mjs`
 6. Normalize statuses: `node normalize-statuses.mjs`
 7. Dedup: `node dedup-tracker.mjs`
-8. **NEVER hand-roll a tracker row.** Read rows with `parseTrackerLine`, write them
-   with `formatTrackerLine`, both from `lib/tracker.mjs`. Never `line.split('|')`
-   with literal indices, and never build a row from a template literal.
+8. **NEVER hand-roll or hand-edit a tracker row.** Use `node agent-edit.mjs application`
+   for existing rows. New rows still go through `batch/tracker-additions/` and
+   `merge-tracker.mjs`.
 
 ### Never re-add a tracked company (RULE)
 

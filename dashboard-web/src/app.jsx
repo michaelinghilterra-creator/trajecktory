@@ -225,6 +225,7 @@ function App() {
   const [reviewAttention, setReviewAttention] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateHidden, setUpdateHidden] = useState(false);
+  const [handEditedFiles, setHandEditedFiles] = useState([]);
   const [version, setVersion] = useState(null);
   // Short git SHA of the running checkout (dev only; null in an installed bundle).
   // A trailing "*" marks a dirty working tree. Shown next to the version so an
@@ -361,6 +362,15 @@ function App() {
       .then(r => r.json())
       .then(d => { if (d && d.status === 'update-available') setUpdateInfo(d); })
       .catch(() => {}); // non-critical — no banner if the check can't run
+  }, []);
+
+  useEffect(() => {
+    const onHandEdited = event => {
+      const files = Array.isArray(event.detail?.files) ? event.detail.files : [];
+      setHandEditedFiles(current => [...new Set([...current, ...files])]);
+    };
+    window.addEventListener('tjk:hand-edited', onHandEdited);
+    return () => window.removeEventListener('tjk:hand-edited', onHandEdited);
   }, []);
 
   // Current installed version, shown in the sidebar brand.
@@ -670,6 +680,11 @@ function App() {
 
         <div className="content" data-screen-label={`trajecktory · ${tab}`} data-tab={tab}>
           {!updateHidden && window.UpdateBanner ? <window.UpdateBanner info={updateInfo} toast={toast} onDismiss={() => setUpdateHidden(true)} /> : null}
+          {handEditedFiles.length ? (
+            <div role="alert" style={{ margin:'0 0 14px', padding:'10px 14px', borderRadius:8, border:'1px solid var(--danger, #ef4444)', background:'rgba(239, 68, 68, 0.12)', fontSize:13 }}>
+              <strong>Saving paused.</strong> These files were edited outside the app: {handEditedFiles.join(', ')}. Nothing was saved. Saving to these files remains paused.
+            </div>
+          ) : null}
           {tab === "focus"     && <window.FocusTab toast={toast} onFocusDataChanged={refreshFocusBadge} />}
           {tab === "coach"     && window.CoachTab && <window.CoachTab toast={toast} />}
           {tab === "pipeline"  && <window.PipelineTab  apps={apps} view={pipelineView} setView={setPipelineView} filters={filters} setFilters={setFilters} onOpen={setDrawerApp} onQuickAction={handleAction} onDataChanged={refreshApps} search={search} compTweaks={compBands(setupState, tweaks)} />}

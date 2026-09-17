@@ -13,6 +13,8 @@ import {
 } from './dashboard-web/server/lib/sidecars.mjs';
 import { parseFollowupsMd } from './dashboard-web/server/lib/followups.mjs';
 import { buildActivities, TWC_KINDS } from './dashboard-web/server/lib/twc.mjs';
+import { appendEventsWithEffects } from './lib/legacy-files.mjs';
+import { localToday, logWritesEnabled, withLogWrite, writeTableText } from './lib/log-writes.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -612,7 +614,7 @@ export function buildRepairPlan({ ledger, now = new Date() }) {
     counts: Object.fromEntries(CHANGE_TYPES.map(type => [type, changes.filter(change => change.type === type).length])),
     totalChanges: changes.length,
     files: {
-      trackerText: trackerLines.join(eol), trackerChanged,
+      trackerBaseText: trackerText, trackerText: trackerLines.join(eol), trackerChanged,
       applyDates, applyDatesChanged,
       overrides, overridesChanged,
       pendingEvents,
@@ -749,33 +751,97 @@ function writeData(plan, now, statusEventLogger = logStatusEvent) {
   const collision = backupPairs.find(pair => fs.existsSync(pair.backup));
   if (collision) throw new Error(`Backup already exists: ${collision.backup}`);
 
+  const written = [];
+  const statusEventsBefore = plan.files.pendingEvents.length ? (parseStatusEvents() || []) : [];
+  const dataDir = path.dirname(APPS_MD);
+  let renderFailed = false;
   const backups = [];
-  for (const pair of backupPairs) {
-    fs.copyFileSync(pair.file, pair.backup, fs.constants.COPYFILE_EXCL);
-    backups.push(pair.backup);
+  const removeBackups = () => {
+    for (const backup of backups) {
+      try { fs.unlinkSync(backup); } catch { /* best effort */ }
+    }
+    backups.length = 0;
+  };
+  try {
+    for (const pair of backupPairs) {
+      fs.copyFileSync(pair.file, pair.backup, fs.constants.COPYFILE_EXCL);
+      backups.push(pair.backup);
+    }
+  } catch (error) {
+    removeBackups();
+    throw error;
   }
 
-  const written = [];
-  if (plan.files.applyDatesChanged) {
-    writeApplyDates(plan.files.applyDates);
-    written.push(APPLY_DATES_PATH);
+  if (logWritesEnabled(dataDir)) {
+    try {
+      withLogWrite(dataDir, store => {
+        if (plan.files.applyDatesChanged) writeApplyDates(plan.files.applyDates);
+        if (plan.files.trackerChanged) {
+          writeTableText({
+            dataDir,
+            file: 'applications.md',
+            baseText: plan.files.trackerBaseText,
+            newText: plan.files.trackerText,
+            rowKey: line => {
+              const row = parseTrackerLine(line);
+              return row ? String(row.num) : null;
+            },
+            buildEvents: ({ added, changed, removed }) => {
+              if (added.length || removed.length) throw new Error('repair-twc-data may only update existing tracker rows');
+              return changed.map(change => {
+                const before = parseTrackerLine(change.previousRaw);
+                const after = parseTrackerLine(change.raw);
+                return {
+                  type: 'status_changed', application_id: String(after.num), occurred_on: localToday(now),
+                  payload: {
+                    ref: `app:${after.num}`, fields: ['status'], from: before.status, to: after.status,
+                    legacy_effects: [change.effect],
+                  },
+                };
+              });
+            },
+          });
+        }
+        for (const event of plan.files.pendingEvents) {
+          statusEventLogger(event.appId, event.status, { company: event.company, date: event.date });
+        }
+        if (plan.files.overridesChanged) {
+          appendEventsWithEffects(store, [{
+            type: 'legacy_record', occurred_on: localToday(now), source: 'cli', definitions_version: 'v1',
+            payload: {
+              reason: 'twc_overrides_repaired', count: plan.changes.length,
+              legacy_effects: [{ file: 'twc-overrides.json', op: 'json_replace', value: plan.files.overrides }],
+            },
+          }]);
+        }
+      });
+    } catch (error) {
+      if (error.code === 'RENDER_FAILED') {
+        renderFailed = true;
+        console.warn(`Warning: ${error.message}`);
+      } else {
+        removeBackups();
+        throw error;
+      }
+    }
+  } else {
+    if (plan.files.applyDatesChanged) writeApplyDates(plan.files.applyDates);
+    if (plan.files.trackerChanged) fs.writeFileSync(APPS_MD, plan.files.trackerText);
+    for (const event of plan.files.pendingEvents) {
+      statusEventLogger(event.appId, event.status, { company: event.company, date: event.date });
+    }
+    if (plan.files.overridesChanged) {
+      fs.writeFileSync(TWC_OVERRIDES_PATH, `${JSON.stringify(plan.files.overrides, null, 2)}\n`);
+    }
   }
-  if (plan.files.trackerChanged) {
-    fs.writeFileSync(APPS_MD, plan.files.trackerText);
-    written.push(APPS_MD);
-  }
-  const statusEventsBefore = plan.files.pendingEvents.length ? (parseStatusEvents() || []) : [];
-  for (const event of plan.files.pendingEvents) {
-    statusEventLogger(event.appId, event.status, { company: event.company, date: event.date });
-  }
+
+  if (plan.files.applyDatesChanged) written.push(APPLY_DATES_PATH);
+  if (plan.files.trackerChanged) written.push(APPS_MD);
   if (plan.files.pendingEvents.length) {
-    verifyAppendedStatusEvents(statusEventsBefore, plan.files.pendingEvents);
+    if (!renderFailed) verifyAppendedStatusEvents(statusEventsBefore, plan.files.pendingEvents);
     written.push(STATUS_EVENTS_PATH);
   }
-  if (plan.files.overridesChanged) {
-    fs.writeFileSync(TWC_OVERRIDES_PATH, `${JSON.stringify(plan.files.overrides, null, 2)}\n`);
-    written.push(TWC_OVERRIDES_PATH);
-  }
+  if (plan.files.overridesChanged) written.push(TWC_OVERRIDES_PATH);
   return { backups, written };
 }
 

@@ -20,7 +20,7 @@ import { snoozeToday, readSnooze, writeSnooze, pruneSnooze, isMuted } from '../l
 import { resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finishOptionsFor, wrapReferralDraft } from '../../../lib/outreach-voice.mjs';
-import { logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -97,7 +97,7 @@ router.post('/api/referrals/reconcile', (req, res) => {
     }
     res.json({ ok: true, ...result, acceptedFlipped: accepted.flipped.length, ...renderPending });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 
@@ -137,7 +137,7 @@ router.post('/api/referrals/import-linkedin', (req, res) => {
     }
     res.json({ ok: true, imported: connections.length, ...result, acceptedFlipped: accepted.flipped.length, accepted: accepted.flipped, ...renderPending });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 
@@ -340,7 +340,7 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
     }
     res.json({ ok: true, linkedTo: link ? { source: link.source, id: link.contact.id } : null, ...renderPending });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    logWriteRouteError(res, err);
   }
 });
 

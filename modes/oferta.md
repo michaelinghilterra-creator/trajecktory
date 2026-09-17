@@ -382,7 +382,7 @@ The narrative body below the closing `---` is freeform markdown. Use it for: why
 
 ### 2. Register in tracker
 
-**ALWAYS** register in `data/applications.md`:
+**ALWAYS** register by writing one nine-column TSV row to `batch/tracker-additions/{num}-{company-slug}.tsv`, as described in `modes/pipeline.md` and `AGENTS.md`:
 - The SAME JD number used for the report above (from `node next-jd.mjs`) — the tracker id must equal the report number
 - Current date
 - Company
@@ -392,8 +392,10 @@ The narrative body below the closing `---` is freeform markdown. Use it for: why
 - PDF: ❌ (always ❌ at evaluation time — CV generated only when user applies)
 - Report: relative link to the report .md (e.g., `[001](reports/001-company-2026-01-01.md)`)
 
-**Tracker format:**
+**TSV format:**
 
-```markdown
-| # | Date | Company | Role | Score | Status | PDF | Report |
+```text
+{num}\t{date}\t{company}\t{role}\tEvaluated\t{score}/5\t❌\t[{num}](reports/{num}-{slug}-{date}.md)\t{note}
 ```
+
+Never edit `data/applications.md` directly. `merge-tracker.mjs` folds the addition into the tracker.

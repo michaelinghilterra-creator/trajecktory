@@ -34,19 +34,27 @@
  */
 
 import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
 import { canonicalUrl, normalizeCompany, sameRole, urlForRow } from './lib/identity.mjs';
+import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 // Support both layouts: data/applications.md (boilerplate) and applications.md (original)
-const APPS_FILE = existsSync(join(CAREER_OPS, 'data/applications.md'))
-  ? join(CAREER_OPS, 'data/applications.md')
+const DATA_DIR = process.env.TJK_DATA_DIR ? resolve(process.env.TJK_DATA_DIR) : join(CAREER_OPS, 'data');
+const DATA_APPS = join(DATA_DIR, 'applications.md');
+const APPS_FILE = existsSync(DATA_APPS)
+  ? DATA_APPS
   : join(CAREER_OPS, 'applications.md');
 // Report-only unless the caller explicitly opts into writing. --dry-run is kept
 // as a no-op alias so existing muscle memory still lands somewhere safe.
 const APPLY = process.argv.includes('--apply');
+
+if (logWritesEnabled(DATA_DIR) && APPS_FILE !== DATA_APPS) {
+  console.error('Event-log writes require an existing data/applications.md; nothing was saved.');
+  process.exit(1);
+}
 
 // Ensure required directories exist (fresh setup)
 mkdirSync(join(CAREER_OPS, 'data'), { recursive: true });
@@ -229,7 +237,47 @@ if (removed === 0 && conflicted === 0) {
   // rollback there is.
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
   const backup = `${APPS_FILE}.bak-${stamp}-dedup`;
-  copyFileSync(APPS_FILE, backup);
-  writeFileSync(APPS_FILE, lines.join('\n'));
+  const newText = lines.join('\n');
+  if (logWritesEnabled(DATA_DIR)) {
+    try {
+      writeTableText({
+        dataDir: DATA_DIR,
+        file: 'applications.md',
+        baseText: content,
+        newText,
+        rowKey: line => {
+          const row = parseTrackerLine(line);
+          return row ? String(row.num) : null;
+        },
+        buildEvents: ({ added, changed, removed: removedRows }) => {
+          if (added.length) throw new Error('dedup-tracker may not add tracker rows');
+          return [
+            ...changed.map(change => {
+              const before = parseTrackerLine(change.previousRaw);
+              const after = parseTrackerLine(change.raw);
+              return {
+                type: 'status_changed', application_id: String(after.num), occurred_on: localToday(),
+                payload: { ref: `app:${after.num}`, fields: ['status'], from: before.status, to: after.status, legacy_effects: [change.effect] },
+              };
+            }),
+            ...removedRows.map(change => {
+              const row = parseTrackerLine(change.raw);
+              return {
+                type: 'legacy_record', application_id: String(row.num), occurred_on: localToday(),
+                payload: { reason: 'tracker_row_deduplicated', ref: `app:${row.num}`, state: row.status, legacy_effects: [change.effect] },
+              };
+            }),
+          ];
+        },
+      });
+    } catch (error) {
+      if (error.code === 'RENDER_FAILED') console.warn(`Warning: ${error.message}`);
+      else { console.error(error.message); process.exit(1); }
+    }
+    writeFileSync(backup, content);
+  } else {
+    copyFileSync(APPS_FILE, backup);
+    writeFileSync(APPS_FILE, newText);
+  }
   console.log(`✅ Written to applications.md (backup: ${backup.split(/[\\/]/).pop()})`);
 }
