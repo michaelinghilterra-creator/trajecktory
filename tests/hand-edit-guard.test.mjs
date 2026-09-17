@@ -144,6 +144,27 @@ console.log('hand-edit-guard.test.mjs');
 }
 
 {
+  const dataDir = setup('known-absent', {});
+  openDataStore(dataDir).db.prepare(`
+    INSERT INTO legacy_render_state (file, dirty, sha256)
+    VALUES ('apply-dates.json', 0, 'known-absent')
+  `).run();
+  const file = path.join(dataDir, 'apply-dates.json');
+  fs.writeFileSync(file, '{"outside":true}\n', 'utf8');
+  const beforeCount = eventCount(dataDir);
+  let error;
+  try {
+    save(dataDir, [{ file: 'apply-dates.json', op: 'json_set', key: '900001', value: '2030-09-17' }], 'known-absent');
+  } catch (caught) {
+    error = caught;
+  }
+  check(error?.code === 'HAND_EDITED'
+    && fs.readFileSync(file, 'utf8') === '{"outside":true}\n'
+    && eventCount(dataDir) === beforeCount,
+  'a file appearing after a known absent baseline is treated as an outside edit');
+}
+
+{
   const dataDir = setup('interrupted-render', {
     'apply-dates.json': '{}\n',
     'contact-links.json': '{"version":1,"pins":{}}\n',

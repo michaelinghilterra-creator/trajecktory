@@ -3,12 +3,16 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import {
+  closeSync,
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -21,11 +25,20 @@ import {
   readEventStoreSwitch,
 } from '../lib/event-store-switch.mjs';
 import { importDataFolder } from '../lib/import/import-data-folder.mjs';
-import { printImportVerification, verifyImport } from '../lib/import/verify-import.mjs';
-import { fileMatchesLastRender, listLegacyFiles } from '../lib/legacy-files.mjs';
+import {
+  changedImportedFiles,
+  printImportVerification,
+  verifyImport,
+} from '../lib/import/verify-import.mjs';
+import {
+  ABSENT_FILE_SHA256,
+  fileMatchesLastRender,
+  listLegacyFiles,
+} from '../lib/legacy-files.mjs';
 import { writeFileAtomic } from '../lib/atomic-write.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const LOCK_FILE = '.event-store-operation.lock';
 
 function timestampForPath(date) {
   const part = value => String(value).padStart(2, '0');
@@ -37,11 +50,20 @@ function localDate(date) {
   return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}`;
 }
 
-function removeDatabase(path) {
-  for (const suffix of ['', '-shm', '-wal']) rmSync(`${path}${suffix}`, { force: true });
+export function removeDatabase(path, removeFile = rmSync) {
+  const failures = [];
+  for (const suffix of ['', '-shm', '-wal']) {
+    const file = `${path}${suffix}`;
+    try {
+      removeFile(file, { force: true });
+    } catch (error) {
+      failures.push({ file, error });
+    }
+  }
+  return failures;
 }
 
-function recordVerifiedBaselines(store, dataDir) {
+function recordVerifiedBaselines(store, _dataDir, imported) {
   const latest = store.db.prepare('SELECT MAX(id) AS id FROM events').get().id;
   const statement = store.db.prepare(`
     INSERT INTO legacy_render_state (file, dirty, last_event_id, sha256, rendered_at)
@@ -54,11 +76,108 @@ function recordVerifiedBaselines(store, dataDir) {
   `);
   const renderedAt = new Date().toISOString();
   for (const file of listLegacyFiles(store)) {
-    const path = join(dataDir, file);
-    if (!existsSync(path)) continue;
-    const sha256 = createHash('sha256').update(readFileSync(path)).digest('hex');
+    const text = imported.texts[file] ?? null;
+    const sha256 = text !== null
+      ? createHash('sha256').update(Buffer.from(text, 'utf8')).digest('hex')
+      : ABSENT_FILE_SHA256;
     statement.run(file, latest, sha256, renderedAt);
   }
+}
+
+function processIsAlive(pid) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
+}
+
+function acquireOperationLock(dataDir, io, now, isProcessAlive) {
+  const lockPath = join(dataDir, LOCK_FILE);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let descriptor;
+    try {
+      descriptor = openSync(lockPath, 'wx');
+      writeFileSync(descriptor, `${JSON.stringify({
+        pid: process.pid,
+        started_at: now().toISOString(),
+      }, null, 2)}\n`, 'utf8');
+      closeSync(descriptor);
+      return () => {
+        try {
+          rmSync(lockPath, { force: true });
+        } catch (error) {
+          io.error(`Could not remove operation lock ${lockPath}: ${error.message}`);
+        }
+      };
+    } catch (error) {
+      if (descriptor !== undefined) {
+        try { closeSync(descriptor); } catch { /* already closed */ }
+      }
+      if (error.code !== 'EEXIST') {
+        try { rmSync(lockPath, { force: true }); } catch { /* reported below */ }
+        throw error;
+      }
+      let lock;
+      try {
+        lock = JSON.parse(readFileSync(lockPath, 'utf8'));
+      } catch (parseError) {
+        throw new Error(`Another event store operation may be running. Lock file: ${lockPath}`, {
+          cause: parseError,
+        });
+      }
+      if (isProcessAlive(lock.pid)) {
+        throw new Error(`Another event store operation is running with pid ${lock.pid}. Lock file: ${lockPath}`, {
+          cause: error,
+        });
+      }
+      io.log(`Removing stale event store operation lock for dead pid ${lock.pid}.`);
+      rmSync(lockPath, { force: true });
+    }
+  }
+  throw new Error(`Could not acquire event store operation lock: ${lockPath}`);
+}
+
+function createBackup(dataDir, backupsDir, backupPath) {
+  mkdirSync(backupsDir, { recursive: true });
+  mkdirSync(backupPath);
+  try {
+    for (const entry of readdirSync(dataDir)) {
+      if (entry === LOCK_FILE) continue;
+      cpSync(join(dataDir, entry), join(backupPath, entry), {
+        recursive: true,
+        errorOnExist: true,
+        force: false,
+      });
+    }
+  } catch (error) {
+    try { rmSync(backupPath, { recursive: true, force: true }); } catch { /* caller reports copy failure */ }
+    throw error;
+  }
+}
+
+function describeRemovalFailures(io, heading, failures) {
+  if (!failures.length) return;
+  io.error(`${heading}: ${failures.map(item => `${item.file}: ${item.error.message}`).join('; ')}`);
+}
+
+function restoreDatabase(dbPath, backupPath, io) {
+  const failures = removeDatabase(dbPath);
+  for (const suffix of ['', '-shm', '-wal']) {
+    const source = join(backupPath, `${DATABASE_FILE}${suffix}`);
+    if (!existsSync(source)) continue;
+    try {
+      cpSync(source, `${dbPath}${suffix}`, { force: true });
+    } catch (error) {
+      failures.push({ file: `${dbPath}${suffix}`, error });
+    }
+  }
+  if (!failures.length) return true;
+  io.error(`DATABASE RESTORE FAILED. Restore manually from backup: ${backupPath}`);
+  describeRemovalFailures(io, 'Restore errors', failures);
+  return false;
 }
 
 function parseOptions(argv, allowed) {
@@ -66,7 +185,7 @@ function parseOptions(argv, allowed) {
   for (let index = 0; index < argv.length; index++) {
     const key = argv[index];
     if (!allowed.has(key) || Object.hasOwn(options, key)) return null;
-    if (key === '--apply' || key === '--reimport') {
+    if (key === '--apply' || key === '--reimport' || key === '--no-other-writers') {
       options[key] = true;
       continue;
     }
@@ -95,9 +214,13 @@ function status(dataDir, io) {
   if (!existsSync(dbPath)) {
     io.log(`Database: missing (${dbPath})`);
     io.log('Render matches: unavailable until the database exists');
-    io.log(state.state === 'invalid'
-      ? 'Verdict: not ready, the switch file is invalid'
-      : 'Verdict: ready to flip');
+    if (state.writes === 'on') {
+      io.log('Verdict: DANGEROUS, writes are on but the database is missing. Stop the dashboard and every script, then run rollback --apply --no-other-writers before repairing or flipping again.');
+    } else {
+      io.log(state.state === 'invalid'
+        ? 'Verdict: not ready, the switch file is invalid'
+        : 'Verdict: ready to flip');
+    }
     return 0;
   }
 
@@ -129,8 +252,17 @@ function status(dataDir, io) {
   return 0;
 }
 
-function flip(options, context) {
-  const { io, now, backupsDir, verifyImportFn, getOwnerName } = context;
+function flipUnlocked(options, context) {
+  const {
+    io,
+    now,
+    backupsDir,
+    verifyImportFn,
+    getOwnerName,
+    countEvents,
+    recordVerifiedBaselinesFn,
+    writeSwitch,
+  } = context;
   const dataDir = resolve(options['--data-dir'] ?? process.env.TJK_DATA_DIR ?? join(root, 'data'));
   const outputDir = resolve(options['--output-dir'] ?? join(root, 'output'));
   const dbPath = join(dataDir, DATABASE_FILE);
@@ -149,82 +281,116 @@ function flip(options, context) {
   const apply = options['--apply'] === true;
   const startedAt = now();
   let backupPath = null;
+  let backupCreated = false;
+  let staleDatabaseRemoved = false;
+  let operationSucceeded = false;
+  let temporaryDir;
+  let store;
   if (apply) {
     backupPath = join(backupsDir, `event-store-flip-${timestampForPath(startedAt)}`);
     try {
-      mkdirSync(backupsDir, { recursive: true });
-      cpSync(dataDir, backupPath, { recursive: true, errorOnExist: true, force: false });
+      createBackup(dataDir, backupsDir, backupPath);
+      backupCreated = true;
     } catch (error) {
-      rmSync(backupPath, { recursive: true, force: true });
       io.error(`Backup failed. Nothing was changed. ${error.message}`);
       return 1;
     }
     io.log(`Backup: ${backupPath}`);
-    if (databaseExists) removeDatabase(dbPath);
+    if (databaseExists) {
+      staleDatabaseRemoved = true;
+      const failures = removeDatabase(dbPath);
+      if (failures.length) {
+        describeRemovalFailures(io, 'Could not remove the stale database', failures);
+        restoreDatabase(dbPath, backupPath, io);
+        return 1;
+      }
+    }
   }
 
-  const temporaryDir = apply ? null : mkdtempSync(join(tmpdir(), 'tjk-event-store-flip-'));
+  temporaryDir = apply ? null : mkdtempSync(join(tmpdir(), 'tjk-event-store-flip-'));
   const importDbPath = apply ? dbPath : join(temporaryDir, DATABASE_FILE);
-  let store;
-  let imported;
-  let verification;
-  let count;
   try {
     store = openEventStore(importDbPath);
-    imported = importDataFolder(store, {
+    const imported = importDataFolder(store, {
       dataDir,
       outputDir,
       ownerName: getOwnerName(),
       definitionsVersion: 'v1',
       importedOn: localDate(startedAt),
     });
-    verification = verifyImportFn(store, imported, dataDir, outputDir);
+    const verification = verifyImportFn(store, imported, dataDir, outputDir);
     printImportVerification(verification, io.log);
-    count = store.db.prepare('SELECT COUNT(*) AS count FROM events').get().count;
-    if (apply && verification.ok) recordVerifiedBaselines(store, dataDir);
-  } catch (error) {
-    io.error(`Import failed: ${error.message}`);
-    return 1;
-  } finally {
-    store?.close();
-    if (temporaryDir) rmSync(temporaryDir, { recursive: true, force: true });
-    if (apply && (!verification || !verification.ok)) removeDatabase(dbPath);
-  }
+    const count = countEvents(store);
+    if (!verification.ok) {
+      io.error('Verification failed. The new database was removed and the switch remains off.');
+      if (backupPath) io.error(`Backup retained at ${backupPath}`);
+      return 1;
+    }
+    if (!apply) {
+      operationSucceeded = true;
+      io.log(`Dry run passed with ${count} events. No backup, database or switch file was created.`);
+      io.log(databaseExists
+        ? 'Plan: run flip --apply --reimport --no-other-writers to back up the data folder, discard the stale database, import from the current files, verify and enable event-store writes.'
+        : 'Plan: run flip --apply --no-other-writers to back up the data folder, import, verify and enable event-store writes.');
+      return 0;
+    }
 
-  if (!verification.ok) {
-    io.error('Verification failed. The new database was removed and the switch remains off.');
-    if (backupPath) io.error(`Backup retained at ${backupPath}`);
-    return 1;
-  }
-
-  if (!apply) {
-    io.log(`Dry run passed with ${count} events. No backup, database or switch file was created.`);
-    io.log(databaseExists
-      ? 'Plan: run flip --apply --reimport to back up the data folder, discard the stale database, import from the current files, verify and enable event-store writes.'
-      : 'Plan: run flip --apply to back up the data folder, import, verify and enable event-store writes.');
-    return 0;
-  }
-
-  const switchPath = join(dataDir, SWITCH_FILE);
-  try {
-    writeFileAtomic(switchPath, `${JSON.stringify({
+    const changed = changedImportedFiles(store, imported, dataDir);
+    if (changed.length) {
+      io.error(`Verification failed because something wrote during the flip. Changed files: ${changed.join(', ')}`);
+      io.error('The new database was removed and the switch remains off.');
+      io.error(`Backup retained at ${backupPath}`);
+      return 1;
+    }
+    recordVerifiedBaselinesFn(store, dataDir, imported);
+    writeSwitch(join(dataDir, SWITCH_FILE), `${JSON.stringify({
       writes: 'on',
       flipped_at: startedAt.toISOString(),
     }, null, 2)}\n`, 'utf8');
+    operationSucceeded = true;
+    io.log(`Flip complete: ${count} events imported.`);
+    io.log(`Backup: ${backupPath}`);
+    io.log('To roll back, run: node scripts/event-store.mjs rollback --apply --no-other-writers');
+    io.log('RESTART REQUIRED: restart the dashboard and every script because running processes cache the switch.');
+    return 0;
   } catch (error) {
-    removeDatabase(dbPath);
-    io.error(`Writing the switch failed. The new database was removed. ${error.message}`);
-    io.error(`Backup retained at ${backupPath}`);
+    io.error(`Flip failed: ${error.message}`);
+    if (backupPath) io.error(`Backup retained at ${backupPath}`);
     return 1;
+  } finally {
+    try { store?.close(); } catch (error) { io.error(`Closing the imported database failed: ${error.message}`); }
+    if (temporaryDir) rmSync(temporaryDir, { recursive: true, force: true });
+    if (apply && !operationSucceeded) {
+      const failures = removeDatabase(dbPath);
+      describeRemovalFailures(io, 'New database cleanup errors', failures);
+      if (staleDatabaseRemoved && backupCreated) restoreDatabase(dbPath, backupPath, io);
+    }
   }
-  io.log(`Flip complete: ${count} events imported.`);
-  io.log(`Backup: ${backupPath}`);
-  io.log('To roll back, run: node scripts/event-store.mjs rollback --apply');
-  return 0;
 }
 
-function rollback(options, context) {
-  const { io } = context;
+function flip(options, context) {
+  const { io, now, isProcessAlive } = context;
+  const apply = options['--apply'] === true;
+  if (apply && options['--no-other-writers'] !== true) {
+    io.error('IMPORTANT: Refusing to flip without --no-other-writers. Stop the dashboard and every script first. Restart all of them afterwards because running processes cache the switch.');
+    return 1;
+  }
+  if (!apply) return flipUnlocked(options, context);
+  const dataDir = resolve(options['--data-dir'] ?? process.env.TJK_DATA_DIR ?? join(root, 'data'));
+  let release;
+  try {
+    release = acquireOperationLock(dataDir, io, now, isProcessAlive);
+    return flipUnlocked(options, context);
+  } catch (error) {
+    io.error(`Refusing event store operation: ${error.message}`);
+    return 1;
+  } finally {
+    release?.();
+  }
+}
+
+function rollbackUnlocked(options, context) {
+  const { io, writeSwitch } = context;
   const dataDir = resolve(process.env.TJK_DATA_DIR ?? join(root, 'data'));
   const state = readEventStoreSwitch(dataDir);
   if (state.writes === 'off') {
@@ -236,13 +402,34 @@ function rollback(options, context) {
     io.log('Run rollback --apply to continue.');
     return 0;
   }
-  writeFileAtomic(join(dataDir, SWITCH_FILE), `${JSON.stringify({
+  writeSwitch(join(dataDir, SWITCH_FILE), `${JSON.stringify({
     writes: 'off',
     flipped_at: state.flipped_at,
   }, null, 2)}\n`, 'utf8');
   io.log('Rollback complete. Writes are off. The database and every data file stayed in place.');
-  io.log('To flip forward again, run: node scripts/event-store.mjs flip --apply --reimport');
+  io.log('To flip forward again, run: node scripts/event-store.mjs flip --apply --reimport --no-other-writers');
+  io.log('RESTART REQUIRED: restart the dashboard and every script because running processes cache the switch.');
   return 0;
+}
+
+function rollback(options, context) {
+  const { io, now, isProcessAlive } = context;
+  if (options['--apply'] && options['--no-other-writers'] !== true) {
+    io.error('IMPORTANT: Refusing to roll back without --no-other-writers. Stop the dashboard and every script first. Restart all of them afterwards because running processes cache the switch.');
+    return 1;
+  }
+  if (!options['--apply']) return rollbackUnlocked(options, context);
+  const dataDir = resolve(process.env.TJK_DATA_DIR ?? join(root, 'data'));
+  let release;
+  try {
+    release = acquireOperationLock(dataDir, io, now, isProcessAlive);
+    return rollbackUnlocked(options, context);
+  } catch (error) {
+    io.error(`Refusing event store operation: ${error.message}`);
+    return 1;
+  } finally {
+    release?.();
+  }
 }
 
 export function runEventStore(argv, dependencies = {}) {
@@ -253,6 +440,10 @@ export function runEventStore(argv, dependencies = {}) {
     backupsDir: dependencies.backupsDir ?? join(root, 'backups'),
     verifyImportFn: dependencies.verifyImportFn ?? verifyImport,
     getOwnerName: dependencies.getOwnerName ?? (() => getIdentity().fullName),
+    countEvents: dependencies.countEvents ?? (store => store.db.prepare('SELECT COUNT(*) AS count FROM events').get().count),
+    recordVerifiedBaselinesFn: dependencies.recordVerifiedBaselinesFn ?? recordVerifiedBaselines,
+    writeSwitch: dependencies.writeSwitch ?? writeFileAtomic,
+    isProcessAlive: dependencies.isProcessAlive ?? processIsAlive,
   };
   const [command, ...rest] = argv;
   if (command === 'status') {
@@ -263,22 +454,22 @@ export function runEventStore(argv, dependencies = {}) {
     return status(resolve(process.env.TJK_DATA_DIR ?? join(root, 'data')), io);
   }
   if (command === 'flip') {
-    const options = parseOptions(rest, new Set(['--apply', '--reimport', '--data-dir', '--output-dir']));
+    const options = parseOptions(rest, new Set(['--apply', '--reimport', '--no-other-writers', '--data-dir', '--output-dir']));
     if (!options) {
-      io.error('usage: event-store.mjs flip [--apply] [--reimport] [--data-dir <dir>] [--output-dir <dir>]');
+      io.error('usage: event-store.mjs flip [--apply] [--reimport] [--no-other-writers] [--data-dir <dir>] [--output-dir <dir>]');
       return 2;
     }
     return flip(options, context);
   }
   if (command === 'rollback') {
-    const options = parseOptions(rest, new Set(['--apply']));
+    const options = parseOptions(rest, new Set(['--apply', '--no-other-writers']));
     if (!options) {
-      io.error('usage: event-store.mjs rollback [--apply]');
+      io.error('usage: event-store.mjs rollback [--apply] [--no-other-writers]');
       return 2;
     }
     return rollback(options, context);
   }
-  io.error('usage: event-store.mjs status | flip [--apply] [--reimport] | rollback [--apply]');
+  io.error('usage: event-store.mjs status | flip [--apply] [--reimport] [--no-other-writers] | rollback [--apply] [--no-other-writers]');
   return 2;
 }
 
