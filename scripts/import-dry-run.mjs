@@ -24,6 +24,18 @@ import {
   comparePeople,
   importPeople,
 } from '../lib/import/people-import.mjs';
+import {
+  compareFollowups,
+  importFollowups,
+} from '../lib/import/followups-import.mjs';
+import {
+  compareCorrespondence,
+  importCorrespondence,
+} from '../lib/import/correspondence-import.mjs';
+import {
+  compareLinkedIn,
+  importLinkedIn,
+} from '../lib/import/linkedin-import.mjs';
 
 function refuse(message) {
   console.error(message);
@@ -73,6 +85,23 @@ function readContactLinks(path, missing) {
   }
 }
 
+function readCorrespondenceDirectory(inputDir, name) {
+  const path = resolve(inputDir, name);
+  const missing = !existsSync(path);
+  if (missing) return { files: {}, missing };
+  const files = {};
+  for (const entry of readdirSync(path, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.md')) continue;
+    files[entry.name] = readFileSync(resolve(path, entry.name), 'utf8');
+  }
+  return { files, missing };
+}
+
+function readOptionalText(inputDir, name) {
+  const path = resolve(inputDir, name);
+  return existsSync(path) ? readFileSync(path, 'utf8') : null;
+}
+
 const options = argumentsFrom(process.argv.slice(2));
 if (!options['data-dir'] || !options['output-dir'] || !options.db || !options.report) {
   refuse('usage: --data-dir, --output-dir, --db and --report are required');
@@ -111,6 +140,22 @@ const contactLinksRead = readContactLinks(contactLinksPath, contactLinksMissing)
 const contactLinks = contactLinksRead.document;
 const contactPins = contactLinks.pins && typeof contactLinks.pins === 'object'
   && !Array.isArray(contactLinks.pins) ? contactLinks.pins : {};
+const followupsPath = resolve(inputDir, 'follow-ups.md');
+const followupsMissing = !existsSync(followupsPath);
+const followupsText = followupsMissing ? '' : readFileSync(followupsPath, 'utf8');
+const targetTalentCorrespondence = readCorrespondenceDirectory(
+  inputDir,
+  'target-talent-correspondence',
+);
+const referralCorrespondence = readCorrespondenceDirectory(
+  inputDir,
+  'referral-correspondence',
+);
+const linkedinFiles = {
+  connectsText: readOptionalText(inputDir, 'linkedin-connects.json'),
+  sidecarText: readOptionalText(inputDir, 'tt-linkedin.json'),
+  connectionsText: readOptionalText(inputDir, 'linkedin-connections.json'),
+};
 const outputFiles = readdirSync(outputDir, { withFileTypes: true })
   .filter(entry => entry.isFile())
   .map(entry => entry.name);
@@ -128,6 +173,12 @@ let statusComparison;
 let peopleReport;
 let peopleComparison;
 let groupingComparison;
+let followupsReport;
+let followupsComparison;
+let correspondenceReport;
+let correspondenceComparison;
+let linkedinReport;
+let linkedinComparison;
 try {
   trackerReport = importTracker(store, trackerText, { definitionsVersion, importedOn });
   trackerComparison = compareTracker(trackerText, store);
@@ -154,6 +205,24 @@ try {
     referralsText,
     pins: contactPins,
   });
+  followupsReport = importFollowups(store, followupsText, { definitionsVersion, importedOn });
+  followupsComparison = compareFollowups(followupsText, store);
+  correspondenceReport = importCorrespondence(store, {
+    targetTalentFiles: targetTalentCorrespondence.files,
+    referralFiles: referralCorrespondence.files,
+    definitionsVersion,
+    importedOn,
+  });
+  correspondenceComparison = compareCorrespondence({
+    targetTalentFiles: targetTalentCorrespondence.files,
+    referralFiles: referralCorrespondence.files,
+  }, store);
+  linkedinReport = importLinkedIn(store, {
+    ...linkedinFiles,
+    definitionsVersion,
+    importedOn,
+  });
+  linkedinComparison = compareLinkedIn(linkedinFiles, store);
 } finally {
   store.close();
 }
@@ -164,6 +233,9 @@ peopleReport.counts.target_talent_file_missing = targetTalentMissing;
 peopleReport.counts.referrals_file_missing = referralsMissing;
 peopleReport.counts.contact_links_file_missing = contactLinksMissing;
 peopleReport.counts.pins_file_unreadable = contactLinksRead.unreadable;
+followupsReport.counts.followups_file_missing = followupsMissing;
+correspondenceReport.counts.target_talent_dir_missing = targetTalentCorrespondence.missing;
+correspondenceReport.counts.referral_dir_missing = referralCorrespondence.missing;
 const report = {
   tracker: {
     ...trackerReport,
@@ -183,6 +255,18 @@ const report = {
     ...peopleReport,
     comparison: peopleComparison,
     grouping_comparison: groupingComparison,
+  },
+  followups: {
+    ...followupsReport,
+    comparison: followupsComparison,
+  },
+  correspondence: {
+    ...correspondenceReport,
+    comparison: correspondenceComparison,
+  },
+  linkedin: {
+    ...linkedinReport,
+    comparison: linkedinComparison,
   },
 };
 writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
@@ -221,9 +305,29 @@ console.log(JSON.stringify({
     same_name_other_company: peopleReport.same_name_other_company.length,
     grouping_comparison: groupingCounts,
   },
+  followups: {
+    counts: followupsReport.counts,
+    direct_by_channel: followupsReport.direct_by_channel,
+    flags: flagCounts(followupsReport.flags),
+  },
+  correspondence: {
+    counts: correspondenceReport.counts,
+    by_channel: correspondenceReport.by_channel,
+    flags: flagCounts(correspondenceReport.flags),
+  },
+  linkedin: {
+    counts: linkedinReport.counts,
+    accepted_after_request: linkedinReport.accepted_after_request,
+    flags: flagCounts(linkedinReport.flags),
+  },
 }, null, 2));
 console.log(trackerComparison.match ? 'TRACKER MATCH' : 'TRACKER MISMATCH');
 console.log(applyComparison.match ? 'APPLY DATES MATCH' : 'APPLY DATES MISMATCH');
 console.log(statusComparison.match ? 'STATUS HISTORY MATCH' : 'STATUS HISTORY MISMATCH');
 console.log(peopleComparison.match ? 'PEOPLE MATCH' : 'PEOPLE MISMATCH');
-process.exit(trackerComparison.match && applyComparison.match && statusComparison.match && peopleComparison.match ? 0 : 1);
+console.log(followupsComparison.match ? 'FOLLOWUPS MATCH' : 'FOLLOWUPS MISMATCH');
+console.log(correspondenceComparison.match ? 'CORRESPONDENCE MATCH' : 'CORRESPONDENCE MISMATCH');
+console.log(linkedinComparison.match ? 'LINKEDIN MATCH' : 'LINKEDIN MISMATCH');
+process.exit(trackerComparison.match && applyComparison.match && statusComparison.match
+  && peopleComparison.match && followupsComparison.match && correspondenceComparison.match
+  && linkedinComparison.match ? 0 : 1);
