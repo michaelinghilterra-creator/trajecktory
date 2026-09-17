@@ -4,14 +4,14 @@ import path from 'path';
 import {
   readTokens, writeTokens, readSync, writeSync, googleStatus, checkHealth, clientConfigured,
   getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions, heldBackBounceIds,
-  buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, candidateAppsFor, createDraft,
+  buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, rankCandidateApps, createDraft,
   getMessage, parseGmailMessage, extractEmail, logReplyToContact, previewEntry,
   getTodayCalendarEvents,
 } from '../lib/google.mjs';
 import { parseTargetTalentMd, updateTTLine } from '../lib/target-talent.mjs';
 import { PORT, TT_CORR_DIR } from '../config.mjs';
 import { patchRowInMd, parseApplicationsMd } from '../lib/applications.mjs';
-import { addNote } from '../lib/notes.mjs';
+import { addNote, findNoteByMsgId } from '../lib/notes.mjs';
 import { readApplyDates } from '../lib/sidecars.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
@@ -377,15 +377,19 @@ router.get('/api/google/replies', async (req, res) => {
     // forward, so a random email that got picked up once stops resurfacing.
     const notRelated = sync.notRelatedSenders || {};
     const notSuppressed = (r) => { const a = senderAddress(r.from); return !(a && notRelated[a]); };
-    const withMeta = (rows, companyOf) => rows.filter(notSuppressed).map(r => previewEntry({
-      ...r,
-      candidateApps: candidateAppsFor(companyOf(r), apps, {
+    const withMeta = (rows, companyOf) => rows.filter(notSuppressed).map(r => {
+      const ranked = rankCandidateApps(companyOf(r), apps, {
         emailDate: r.date,
         subject: r.subject,
         applyDates,
-      }),
-      handled: handled[r.msgId] || null,
-    }));
+      });
+      return previewEntry({
+        ...r,
+        candidateApps: ranked.candidates,
+        suggestedAppId: ranked.suggestedAppId,
+        handled: handled[r.msgId] || null,
+      });
+    });
     // Stamp that a preview sweep ran (manual "Check email" or the auto-scan on
     // Review open), so /health can show "last checked …" and nudge when it has
     // been a while. Best-effort: a freshness write must never fail the read.
@@ -443,6 +447,14 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
 
     const id = parseInt(appId, 10);
     if (Number.isNaN(id)) return res.status(400).json({ error: 'appId is required (which application this reply belongs to).' });
+    const alreadyLoggedOn = findNoteByMsgId(msgId);
+    if (alreadyLoggedOn) {
+      return res.status(409).json({
+        error: `This email is already logged on application #${alreadyLoggedOn}.`,
+        alreadyLogged: true,
+        appId: Number(alreadyLoggedOn),
+      });
+    }
 
     let message = { from, subject, snippet, text: bodyPreview || snippet || '', date, threadId };
     try {

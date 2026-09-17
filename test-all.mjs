@@ -565,6 +565,7 @@ for (const suite of [
   'tests/correspondence-format.test.mjs',
   'tests/debrief.test.mjs',
   'tests/google.test.mjs',
+  'tests/reply-save-route.test.mjs',
   'tests/gmail-url-safety.test.mjs',
   'tests/reply-draft.test.mjs',
   'tests/google-connect.test.mjs',

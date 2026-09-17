@@ -588,11 +588,6 @@ function _dateMillis(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-const _SUBMITTED_STATUSES = new Set([
-  'applied', 'phone screen', '1st interview', '2nd interview', '3rd interview',
-  'offer', 'rejected', 'no response',
-]);
-
 function _roleAppearsInSubject(role, subject) {
   const words = _wordTokens(subject);
   for (let start = 0; start < words.length; start++) {
@@ -608,17 +603,14 @@ function _rankCompanyCandidates(rows, { emailDate, subject, applyDates = {} } = 
   const scored = rows.map((row, index) => {
     const applyDate = applyDates[String(row.id)];
     const applyMs = _dateMillis(applyDate);
-    const eligibleApplyMs = applyMs !== null && emailMs !== null && applyMs <= emailMs
-      ? applyMs
-      : -Infinity;
+    const eligible = applyMs !== null && emailMs !== null && applyMs <= emailMs;
     return {
       row,
       index,
       rank: [
-        eligibleApplyMs !== -Infinity ? 1 : 0,
-        _SUBMITTED_STATUSES.has(String(row.status || '').trim().toLowerCase()) ? 1 : 0,
-        _roleAppearsInSubject(row.role, subject) ? 1 : 0,
-        eligibleApplyMs,
+        eligible ? 1 : 0,
+        eligible && _roleAppearsInSubject(row.role, subject) ? 1 : 0,
+        eligible ? applyMs : -Infinity,
       ],
     };
   });
@@ -630,9 +622,10 @@ function _rankCompanyCandidates(rows, { emailDate, subject, applyDates = {} } = 
   };
   const sameRank = (a, b) => a.rank.every((value, i) => value === b.rank[i]);
   scored.sort(compareRank);
+  const topIsEligible = scored[0]?.rank[0] === 1;
   return {
     rows: scored.map(item => item.row),
-    appId: scored.length && (scored.length === 1 || !sameRank(scored[0], scored[1]))
+    appId: topIsEligible && (scored.length === 1 || !sameRank(scored[0], scored[1]))
       ? scored[0].row.id
       : null,
   };
@@ -644,7 +637,7 @@ function _rankCompanyCandidates(rows, { emailDate, subject, applyDates = {} } = 
 // { appId, company, confidence } or null. A SUGGESTION for confirmation, never an
 // auto-link: a company can mail from an unrelated domain, so a wrong guess must
 // cost a glance, not a mis-filed status. Pure.
-function matchByCompanyDomain(fromAddr, apps = []) {
+function matchByCompanyDomain(fromAddr, apps = [], options = {}) {
   const at = String(fromAddr || '').split('@')[1] || '';
   if (!at || _GENERIC_DOMAINS.has(at.toLowerCase()) || _ATS_DOMAIN_RE.test(at)) return null;
   const root = _normCompanyToken(_domainRoot(fromAddr));
@@ -655,12 +648,18 @@ function matchByCompanyDomain(fromAddr, apps = []) {
     const tokens = _wordTokens(a.company);
     const joined = tokens.join('');
     if (root === comp || root === joined) {
-      return { appId: a.id, company: a.company, confidence: 'high' };
+      const companyKey = normalizeCompany(a.company);
+      const sameCompany = apps.filter(app => normalizeCompany(app.company) === companyKey);
+      const ranked = _rankCompanyCandidates(sameCompany, options);
+      return { appId: ranked.appId, company: a.company, confidence: 'high' };
     }
     if (root.length < 4) continue;
     for (let count = 1; count < tokens.length; count++) {
       if (root === tokens.slice(0, count).join('')) {
-        return { appId: a.id, company: a.company, confidence: 'medium' };
+        const companyKey = normalizeCompany(a.company);
+        const sameCompany = apps.filter(app => normalizeCompany(app.company) === companyKey);
+        const ranked = _rankCompanyCandidates(sameCompany, options);
+        return { appId: ranked.appId, company: a.company, confidence: 'medium' };
       }
     }
   }
@@ -703,14 +702,26 @@ function matchBySubject(subject, apps = [], options = {}) {
 // so a contact company that differs only by ", Inc." will not collapse — a
 // deliberate miss, since under-matching just shows the reply for manual handling
 // while over-matching would attach it to the wrong company. Pure; unit-tested.
-function candidateAppsFor(company, apps = [], options = {}) {
+function rankCandidateApps(company, apps = [], options = {}) {
   const token = normalizeCompany(company);
-  if (!token) return [];
-  return _rankCompanyCandidates(
+  if (!token) return { candidates: [], suggestedAppId: null };
+  const ranked = _rankCompanyCandidates(
     apps.filter(a => normalizeCompany(a.company) === token),
     options,
-  ).rows
-    .map(a => ({ id: a.id, role: a.role, status: a.status }));
+  );
+  return {
+    candidates: ranked.rows.map(a => ({
+      id: a.id,
+      role: a.role,
+      status: a.status,
+      applyDate: options.applyDates?.[String(a.id)] || null,
+    })),
+    suggestedAppId: ranked.appId,
+  };
+}
+
+function candidateAppsFor(company, apps = [], options = {}) {
+  return rankCandidateApps(company, apps, options).candidates;
 }
 
 // The heart: turn a batch of raw Gmail messages into decisions.
@@ -742,7 +753,11 @@ function scanDecisions({ messages = [], taRows = [], apps = [], applyDates = {} 
     // domain (a first email from careers@company.example), then tier-3 from the
     // SUBJECT (an ATS-sent "Update on your <Company> Application", whose sender
     // domain carries no signal). Either is a suggestion for confirmation.
-    let companyGuess = !contact ? matchByCompanyDomain(fromAddr, apps) : null;
+    let companyGuess = !contact ? matchByCompanyDomain(fromAddr, apps, {
+      emailDate: msg.date,
+      subject: msg.subject,
+      applyDates,
+    }) : null;
     if (!contact && !companyGuess) {
       companyGuess = matchBySubject(msg.subject, apps, { emailDate: msg.date, applyDates });
     }
@@ -880,5 +895,5 @@ export {
   readTokens, writeTokens, readSync, writeSync, tokenScopes,
   clientConfigured, googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
   parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, heldBackBounceIds,
-  exchangeCode, fetchProfileEmail, candidateAppsFor, createDraft, logReplyToContact, previewEntry,
+  exchangeCode, fetchProfileEmail, candidateAppsFor, rankCandidateApps, createDraft, logReplyToContact, previewEntry,
 };
