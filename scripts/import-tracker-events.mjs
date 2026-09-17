@@ -74,6 +74,8 @@ console.log(JSON.stringify({
   shared_postings: report.shared_postings.length,
   company_spellings: report.company_spellings.length,
   merge_candidates: report.merge_candidates.length,
+  same_role_postings: report.same_role_postings.length,
+  company_word_candidates: report.company_word_candidates.length,
   rendered_identical: comparison.rendered_identical,
   rendered_different: comparison.rendered_different,
 }, null, 2));

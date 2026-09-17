@@ -33,13 +33,7 @@ function provenanceAgeDays(date) {
 // same way Bounced silently rendered as "Not Contacted" for a month.
 const TT_STATUSES = TALENT_STATUS_LABELS;
 
-function parseTargetTalentMd() {
-  if (!fs.existsSync(TARGET_TALENT_MD)) return [];
-  const text = fs.readFileSync(TARGET_TALENT_MD, 'utf8');
-  // LinkedIn connection state lives in a sidecar keyed by id. Read it once here
-  // and attach per-row, so every consumer (list, single, by-company) sees the
-  // same `linkedinStatus` without each re-reading the file.
-  const liMap = readLinkedInMap();
+export function parseTargetTalentText(text, liMap = {}) {
   const rows = [];
   for (const line of text.split('\n')) {
     if (!line.startsWith('| ')) continue;
@@ -102,6 +96,16 @@ function parseTargetTalentMd() {
     });
   }
   return rows;
+}
+
+function parseTargetTalentMd() {
+  if (!fs.existsSync(TARGET_TALENT_MD)) return [];
+  const text = fs.readFileSync(TARGET_TALENT_MD, 'utf8');
+  // LinkedIn connection state lives in a sidecar keyed by id. Read it once here
+  // and attach per-row, so every consumer (list, single, by-company) sees the
+  // same `linkedinStatus` without each re-reading the file.
+  const liMap = readLinkedInMap();
+  return parseTargetTalentText(text, liMap);
 }
 
 function readTTCorrespondence(id) {
