@@ -32,6 +32,10 @@ import {
   compareCorrespondence,
   importCorrespondence,
 } from '../lib/import/correspondence-import.mjs';
+import {
+  compareLinkedIn,
+  importLinkedIn,
+} from '../lib/import/linkedin-import.mjs';
 
 function refuse(message) {
   console.error(message);
@@ -93,6 +97,11 @@ function readCorrespondenceDirectory(inputDir, name) {
   return { files, missing };
 }
 
+function readOptionalText(inputDir, name) {
+  const path = resolve(inputDir, name);
+  return existsSync(path) ? readFileSync(path, 'utf8') : null;
+}
+
 const options = argumentsFrom(process.argv.slice(2));
 if (!options['data-dir'] || !options['output-dir'] || !options.db || !options.report) {
   refuse('usage: --data-dir, --output-dir, --db and --report are required');
@@ -142,6 +151,11 @@ const referralCorrespondence = readCorrespondenceDirectory(
   inputDir,
   'referral-correspondence',
 );
+const linkedinFiles = {
+  connectsText: readOptionalText(inputDir, 'linkedin-connects.json'),
+  sidecarText: readOptionalText(inputDir, 'tt-linkedin.json'),
+  connectionsText: readOptionalText(inputDir, 'linkedin-connections.json'),
+};
 const outputFiles = readdirSync(outputDir, { withFileTypes: true })
   .filter(entry => entry.isFile())
   .map(entry => entry.name);
@@ -163,6 +177,8 @@ let followupsReport;
 let followupsComparison;
 let correspondenceReport;
 let correspondenceComparison;
+let linkedinReport;
+let linkedinComparison;
 try {
   trackerReport = importTracker(store, trackerText, { definitionsVersion, importedOn });
   trackerComparison = compareTracker(trackerText, store);
@@ -201,6 +217,12 @@ try {
     targetTalentFiles: targetTalentCorrespondence.files,
     referralFiles: referralCorrespondence.files,
   }, store);
+  linkedinReport = importLinkedIn(store, {
+    ...linkedinFiles,
+    definitionsVersion,
+    importedOn,
+  });
+  linkedinComparison = compareLinkedIn(linkedinFiles, store);
 } finally {
   store.close();
 }
@@ -241,6 +263,10 @@ const report = {
   correspondence: {
     ...correspondenceReport,
     comparison: correspondenceComparison,
+  },
+  linkedin: {
+    ...linkedinReport,
+    comparison: linkedinComparison,
   },
 };
 writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
@@ -289,6 +315,11 @@ console.log(JSON.stringify({
     by_channel: correspondenceReport.by_channel,
     flags: flagCounts(correspondenceReport.flags),
   },
+  linkedin: {
+    counts: linkedinReport.counts,
+    accepted_after_request: linkedinReport.accepted_after_request,
+    flags: flagCounts(linkedinReport.flags),
+  },
 }, null, 2));
 console.log(trackerComparison.match ? 'TRACKER MATCH' : 'TRACKER MISMATCH');
 console.log(applyComparison.match ? 'APPLY DATES MATCH' : 'APPLY DATES MISMATCH');
@@ -296,5 +327,7 @@ console.log(statusComparison.match ? 'STATUS HISTORY MATCH' : 'STATUS HISTORY MI
 console.log(peopleComparison.match ? 'PEOPLE MATCH' : 'PEOPLE MISMATCH');
 console.log(followupsComparison.match ? 'FOLLOWUPS MATCH' : 'FOLLOWUPS MISMATCH');
 console.log(correspondenceComparison.match ? 'CORRESPONDENCE MATCH' : 'CORRESPONDENCE MISMATCH');
+console.log(linkedinComparison.match ? 'LINKEDIN MATCH' : 'LINKEDIN MISMATCH');
 process.exit(trackerComparison.match && applyComparison.match && statusComparison.match
-  && peopleComparison.match && followupsComparison.match && correspondenceComparison.match ? 0 : 1);
+  && peopleComparison.match && followupsComparison.match && correspondenceComparison.match
+  && linkedinComparison.match ? 0 : 1);

@@ -461,6 +461,7 @@ for (const suite of [
   'tests/people-import.test.mjs',
   'tests/followups-import.test.mjs',
   'tests/correspondence-import.test.mjs',
+  'tests/linkedin-import.test.mjs',
   'tests/reconcile-triage.test.mjs',
   'tests/identity.test.mjs',
   'tests/identity-single-source.test.mjs',
