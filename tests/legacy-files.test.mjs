@@ -354,6 +354,8 @@ const writerJsonTexts = {
     { file: 'apply-dates.json', op: 'json_set', key: 'bad', value: cyclic },
     { file: 'linkedin-connects.json', op: 'json_append' },
     { file: 'linkedin-connects.json', op: 'json_set', key: 'bad', value: 1 },
+    { file: 'apply-dates.json', op: 'json_set', key: 'bad', value: Object.defineProperty({}, 'toJSON', { value: () => undefined }) },
+    { file: 'linkedin-connects.json', op: 'json_append', item: new Date('2030-01-01T00:00:00Z') },
   ];
   for (let index = 0; index < cases.length; index++) {
     const before = readEvents(store).length;
