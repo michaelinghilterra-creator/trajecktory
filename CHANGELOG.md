@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.0.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.0.0...v4.0.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* **gmail:** stop preselecting an application when the reply match is unsure ([#342](https://github.com/michaelinghilterra-creator/trajecktory/issues/342)) ([37e305d](https://github.com/michaelinghilterra-creator/trajecktory/commit/37e305d3cb7959b288e7191867e8fdb24debfec7))
+
 ## [4.0.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v3.15.2...v4.0.0) (2026-09-16)
 
 
