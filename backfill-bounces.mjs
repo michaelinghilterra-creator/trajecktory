@@ -43,11 +43,13 @@
  */
 
 import { readFileSync, writeFileSync, copyFileSync, existsSync, statSync } from 'fs';
+import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import { parseVerifyTag, setVerifyTag } from './lib/email-verify.mjs';
 import { mineNotesForBounce } from './lib/bounce-parse.mjs';
+import { contactIdFromOccurrenceKey, contactRowOccurrenceKey } from './lib/contact-row-key.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -321,7 +323,23 @@ if (APPLY) {
     if (statSync(cfg.path).mtimeMs !== f._mtimeBefore) die(`${cfg.path} changed while running. Nothing written — re-run.`);
     const backup = `${cfg.path}.bak-${stamp}-bounce-backfill`;
     copyFileSync(cfg.path, backup);
-    writeFileSync(cfg.path, f._newText);
+    try {
+      if (logWritesEnabled(join(ROOT, 'data'))) {
+        writeTableText({
+          dataDir: join(ROOT, 'data'), file: 'target-talent.md', baseText: readFileSync(cfg.path, 'utf8'), newText: f._newText,
+          rowKey: contactRowOccurrenceKey,
+          buildEvents: ({ added, changed, removed }) => {
+            if (added.length || removed.length) throw new Error('backfill-bounces may only update existing contact rows');
+            return changed.map(change => contactUpdateEvent(change, ['email', 'status']));
+          },
+        });
+      } else writeFileSync(cfg.path, f._newText);
+    } catch (error) {
+      if (error.code !== 'RENDER_FAILED') throw error;
+      summary.render_failed = true;
+      summary.render_failed_message = error.message;
+      console.warn(`⚠️  ${error.message}`);
+    }
     say(`💾 ${key}: backed up → ${backup.replace(ROOT, '.')}, wrote ${f.marked + f.annotated} change(s)`);
   }
   say(`\n✅ Applied. Rollback: restore the .bak-${stamp}-bounce-backfill file(s).`);
@@ -329,9 +347,23 @@ if (APPLY) {
   say(`\n   Dry run only. Re-run with --apply to write (a timestamped backup is made first).`);
 }
 
+function contactUpdateEvent(change, fields) {
+  const id = contactIdFromOccurrenceKey(change.key);
+  return {
+    type: 'person_updated', occurred_on: localToday(), source: 'cli', definitions_version: 'v1',
+    payload: {
+      file: 'target-talent.md', id, ref: `ta:${id}`, fields,
+      legacy_effects: [change.effect],
+    },
+  };
+}
+
 // Drop the heavy internal fields from JSON output.
 function scrub(s) {
-  const out = { ok: s.ok, applied: s.applied, replyRate: s.replyRate, files: {} };
+  const out = {
+    ok: s.ok, applied: s.applied, replyRate: s.replyRate, files: {},
+    ...(s.render_failed ? { render_failed: true, render_failed_message: s.render_failed_message } : {}),
+  };
   for (const [k, f] of Object.entries(s.files)) {
     out.files[k] = { path: f.path, dataRows: f.dataRows, marked: f.marked, annotated: f.annotated, review: f.review, badStatus: f.badStatus, problems: f.problems, details: f.details };
   }

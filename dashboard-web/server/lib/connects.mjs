@@ -1,11 +1,23 @@
 import fs from 'fs';
-import { CONNECTS_PATH } from '../config.mjs';
+import { CONNECTS_PATH, DATA_DIR } from '../config.mjs';
+import { appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
+import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
 
 // Manual LinkedIn-connect tally. Connections are sent by hand (never automated),
 // so the count is logged here, one entry per invite. Returns null when no log
 // exists yet, so the weekly metric reads "not logged" rather than a false zero;
 // an existing-but-empty log reads a real zero.
 function readConnects() {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      const text = renderLegacyFile(store, 'linkedin-connects.json');
+      if (text === null) return null;
+      try {
+        const value = JSON.parse(text);
+        return Array.isArray(value) ? value : (Array.isArray(value?.connects) ? value.connects : []);
+      } catch { return []; }
+    });
+  }
   if (!fs.existsSync(CONNECTS_PATH)) return null;
   try {
     const j = JSON.parse(fs.readFileSync(CONNECTS_PATH, 'utf8'));
@@ -32,6 +44,36 @@ function connectKey(e) {
 }
 
 function logConnect({ name = '', source = '', id = null, date = null } = {}) {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      const projected = renderLegacyFile(store, 'linkedin-connects.json');
+      const parsed = (() => {
+        try { return projected === null ? [] : JSON.parse(projected); }
+        catch { return []; }
+      })();
+      const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.connects) ? parsed.connects : []);
+      const entry = {
+        date: date || new Date().toISOString().slice(0, 10),
+        name: String(name).slice(0, 120),
+        source: String(source).slice(0, 40),
+      };
+      if (id !== undefined && id !== null && id !== '') entry.id = id;
+      const key = connectKey(entry);
+      if (list.some(e => connectKey(e) === key)) return list;
+      const appended = [...list, entry];
+      const effect = !Array.isArray(parsed) && Array.isArray(parsed?.connects)
+        ? { file: 'linkedin-connects.json', op: 'json_replace', value: appended }
+        : { file: 'linkedin-connects.json', op: 'json_append', item: entry };
+      appendEventsWithEffects(store, [{
+        type: 'connection_request_sent', occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
+        payload: {
+          file: 'linkedin-connects.json', ref: entry.id !== undefined ? `ta:${entry.id}` : null, date: entry.date,
+          legacy_effects: [effect],
+        },
+      }]);
+      return appended;
+    });
+  }
   const list = readConnects() || [];
   const entry = {
     date: date || new Date().toISOString().slice(0, 10),

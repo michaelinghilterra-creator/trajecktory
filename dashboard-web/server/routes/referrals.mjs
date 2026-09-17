@@ -1,5 +1,5 @@
 import express from 'express';
-import { ROOT_DIR } from '../config.mjs';
+import { DATA_DIR, ROOT_DIR } from '../config.mjs';
 import { parseReferralsMd, referralTitle, appendReferralRows, updateReferralLine, deleteReferralLine, REFERRAL_STATUSES, readReferralCorrespondence, writeReferralCorrespondence, resolveReferralLink } from '../lib/referrals.mjs';
 import { reconcile, cleanupStale, parseConnectionsCsv, saveConnections, linkedinStatus, stageForRow, activeFormSet } from '../lib/linkedin-referrals.mjs';
 import { detectAcceptances, computePendingAcceptances } from '../lib/linkedin-acceptance.mjs';
@@ -20,6 +20,7 @@ import { snoozeToday, readSnooze, writeSnooze, pruneSnooze, isMuted } from '../l
 import { resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finishOptionsFor, wrapReferralDraft } from '../../../lib/outreach-voice.mjs';
+import { logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -79,10 +80,22 @@ router.get('/api/referrals/followups', (req, res) => {
 // only by default; pass { seedPool: true } to also seed the Stage-2 referrer pool.
 router.post('/api/referrals/reconcile', (req, res) => {
   try {
-    const result = reconcile({ seedPool: !!(req.body && req.body.seedPool) });
-    // Same LinkedIn haystack tells us which invited TA contacts have now accepted.
-    const accepted = detectAcceptances({});
-    res.json({ ok: true, ...result, acceptedFlipped: accepted.flipped.length });
+    let accepted;
+    let result;
+    const save = () => {
+      result = reconcile({ seedPool: !!(req.body && req.body.seedPool) });
+      runLogWriteTestHook('before-referrals-reconcile-linkedin-states');
+      accepted = detectAcceptances({});
+      return result;
+    };
+    let renderPending = {};
+    try {
+      if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+      else save();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'referrals reconcile');
+    }
+    res.json({ ok: true, ...result, acceptedFlipped: accepted.flipped.length, ...renderPending });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -106,12 +119,23 @@ router.post('/api/referrals/import-linkedin', (req, res) => {
     if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'Provide the CSV text in { csv }.' });
     const connections = parseConnectionsCsv(csv);
     if (!connections.length) return res.status(400).json({ error: 'No connections parsed — is this a LinkedIn Connections.csv?' });
-    saveConnections(connections, 'upload');
-    const result = reconcile({ seedPool: true });
-    // Detect TA contacts whose pending invite this import shows as accepted, and
-    // flip them to LinkedIn-Connected (exact slug match only; see linkedin-acceptance).
-    const accepted = detectAcceptances({ connections });
-    res.json({ ok: true, imported: connections.length, ...result, acceptedFlipped: accepted.flipped.length, accepted: accepted.flipped });
+    let accepted;
+    let result;
+    const save = () => {
+      saveConnections(connections, 'upload');
+      result = reconcile({ seedPool: true });
+      runLogWriteTestHook('before-referrals-import-linkedin-states');
+      accepted = detectAcceptances({ connections });
+      return result;
+    };
+    let renderPending = {};
+    try {
+      if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+      else save();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'referrals import-linkedin');
+    }
+    res.json({ ok: true, imported: connections.length, ...result, acceptedFlipped: accepted.flipped.length, accepted: accepted.flipped, ...renderPending });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -288,13 +312,13 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
     const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
     const entry = { timestamp: stamp, direction, channel, subject: String(subject || '(no subject)').trim() || '(no subject)', body: String(body || '').trim() || '(no body)' };
     const link = resolveReferralLink(ref, parseTargetTalentMd());
-    if (link && link.source === 'ta') {
-      const msgs = readTTCorrespondence(link.contact.id); msgs.push(entry); writeTTCorrespondence(link.contact.id, msgs);
-      if (direction !== 'Draft') updateTTLine(link.contact.id, { lastTouch: today });
-    } else {
-      const msgs = readReferralCorrespondence(id); msgs.push(entry); writeReferralCorrespondence(id, msgs);
-    }
-    if (direction !== 'Draft') {
+    const save = () => {
+      if (link && link.source === 'ta') {
+        const msgs = readTTCorrespondence(link.contact.id); msgs.push(entry); writeTTCorrespondence(link.contact.id, msgs);
+      } else {
+        const msgs = readReferralCorrespondence(id); msgs.push(entry); writeReferralCorrespondence(id, msgs);
+      }
+      if (direction === 'Draft') return;
       // Auto-advance the ladder, never regressing. A received reply after an ask
       // is a positive response (Asked → Responded); the existing Not Asked →
       // Catching Up nudge stands for any first non-draft touch. Intro Made and
@@ -303,9 +327,18 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
       const upd = { lastTouch: today };
       if (ref.status === 'Not Asked' || !ref.status) upd.status = 'Catching Up';
       else if (direction === 'Received' && ref.status === 'Asked') upd.status = 'Responded';
+      if (link && link.source === 'ta') updateTTLine(link.contact.id, { lastTouch: today });
+      runLogWriteTestHook('before-referral-correspondence-referral-update');
       updateReferralLine(id, upd);
+    };
+    let renderPending = {};
+    try {
+      if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+      else save();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'referrals correspondence');
     }
-    res.json({ ok: true, linkedTo: link ? { source: link.source, id: link.contact.id } : null });
+    res.json({ ok: true, linkedTo: link ? { source: link.source, id: link.contact.id } : null, ...renderPending });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

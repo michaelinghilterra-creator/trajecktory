@@ -32,6 +32,24 @@ async function runWorker() {
   const { openDataStore, setLogWritesTestHooks } = await import('../lib/log-writes.mjs');
   const { readEvents } = await import('../lib/event-store.mjs');
   const workerAction = process.env.TJK_LOG_WRITES_ACTION || 'sequence';
+  if (workerAction === 'render-route') {
+    const warnings = [];
+    console.warn = value => warnings.push(String(value?.message || value));
+    setLogWritesTestHooks({ writeFile: () => { throw new Error('invented route render failure'); } });
+    const express = (await import('express')).default;
+    const { router } = await import('../dashboard-web/server/routes/applications.mjs');
+    const app = express(); app.use(express.json()); app.use(router);
+    const server = app.listen(0);
+    await new Promise(resolve => server.once('listening', resolve));
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/applications/900001`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company: 'Zorblax Widgetry', notes: 'Invented render-pending note' }),
+    });
+    const body = await response.json();
+    await new Promise(resolve => server.close(resolve));
+    process.stdout.write(`${JSON.stringify({ status: response.status, body, warnings })}\n`);
+    return;
+  }
   if (workerAction === 'rollback') {
     const before = snapshot(dataDir);
     const beforeCount = readEvents(openDataStore(dataDir)).length;
@@ -227,6 +245,20 @@ check(rollback.status === 500
   && JSON.stringify(rollback.before) === JSON.stringify(rollback.after)
   && rollback.beforeCount === rollback.afterCount,
 'PATCH rolls back tracker, status row, apply date, and events when apply-date saving throws');
+
+const renderRouteDir = path.join(root, 'render-route');
+fixture(renderRouteDir);
+fs.writeFileSync(path.join(renderRouteDir, 'event-store.json'), '{"writes":"on"}\n');
+store = openEventStore(path.join(renderRouteDir, 'trajecktory.db'));
+importDataFolder(store, {
+  dataDir: renderRouteDir, outputDir, ownerName: 'Example Person', definitionsVersion: 'v1', importedOn: '2030-03-01',
+});
+store.close();
+const renderRoute = runChild(renderRouteDir, 'render-route');
+check(renderRoute.status === 200 && renderRoute.body.render_pending === true
+  && /files could not be updated/.test(renderRoute.body.message)
+  && renderRoute.warnings.length === 1,
+'PATCH reports a committed RENDER_FAILED change as 200 with render_pending and one warning');
 
 const missingDir = path.join(root, 'missing-db');
 fixture(missingDir);

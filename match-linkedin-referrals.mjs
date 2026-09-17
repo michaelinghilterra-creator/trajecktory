@@ -18,6 +18,9 @@ import { readFileSync } from 'node:fs';
 import {
   parseConnectionsCsv, saveConnections, reconcile, linkedinStatus,
 } from './dashboard-web/server/lib/linkedin-referrals.mjs';
+import { detectAcceptances } from './dashboard-web/server/lib/linkedin-acceptance.mjs';
+import { DATA_DIR } from './dashboard-web/server/config.mjs';
+import { logWritesEnabled, withLogWrite } from './lib/log-writes.mjs';
 
 const [cmd, ...rest] = process.argv.slice(2);
 
@@ -28,17 +31,36 @@ function printResult(r) {
   console.log(`  Stage 2 promoted (referrer pool): ${r.stage2Added}${r.stage2Added ? '' : ` (${r.stage2Available} available — pass --seed-pool to add)`}`);
 }
 
+function saveTouches(fn) {
+  if (!logWritesEnabled(DATA_DIR)) return fn();
+  let result;
+  try { withLogWrite(DATA_DIR, () => { result = fn(); }); }
+  catch (error) {
+    if (error.code !== 'RENDER_FAILED') throw error;
+    console.warn(`Warning: ${error.message}`);
+  }
+  return result;
+}
+
 if (cmd === 'import') {
   const p = rest.find((a) => !a.startsWith('--'));
   if (!p) { console.error('Usage: node match-linkedin-referrals.mjs import <path/to/Connections.csv>'); process.exit(1); }
   const connections = parseConnectionsCsv(readFileSync(p, 'utf8'));
   if (!connections.length) { console.error('No connections parsed — is this a LinkedIn Connections.csv?'); process.exit(1); }
-  saveConnections(connections, `import:${p}`);
+  let r;
+  saveTouches(() => {
+    saveConnections(connections, `import:${p}`);
+    r = reconcile({ seedPool: true });
+    detectAcceptances({ connections });
+  });
   console.log(`Imported ${connections.length} connections into the haystack.`);
-  const r = reconcile({ seedPool: true });
   printResult(r);
 } else if (cmd === 'reconcile') {
-  const r = reconcile({ seedPool: rest.includes('--seed-pool') });
+  const r = saveTouches(() => {
+    const result = reconcile({ seedPool: rest.includes('--seed-pool') });
+    detectAcceptances({});
+    return result;
+  });
   console.log('Reconciled LinkedIn haystack against the active pipeline.');
   printResult(r);
 } else if (cmd === 'status') {

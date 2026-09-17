@@ -1,7 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { ROOT_DIR } from '../config.mjs';
+import { DATA_DIR, ROOT_DIR } from '../config.mjs';
 import { resolveReportPath } from '../lib/safe-path.mjs';
 import { parseApplicationsMd, patchRowInMd } from '../lib/applications.mjs';
 import { parseReport } from '../parser.mjs';
@@ -28,6 +28,7 @@ import { reconcileInviteStatus } from '../lib/invite-status-reconcile.mjs';
 import { findSubmittedApplication } from '../lib/statuses.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
+import { logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -49,17 +50,31 @@ router.post('/api/followups/reconcile-sent-invites', (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     const label = (c) => ({ id: c.id, name: `${c.first || ''} ${c.last || ''}`.trim(), company: c.company || '' });
     const newlyMarked = [], alreadyRecorded = [];
-    for (const { contact } of matched) {
-      const msgs = readTTCorrespondence(contact.id);
-      const has = msgs.some(m => m.direction === 'Sent' && isLinkedInInvite(m.subject));
-      if (has) { alreadyRecorded.push(label(contact)); continue; }
-      if (apply) {
-        msgs.push({ timestamp: today, direction: 'Sent', channel: 'LinkedIn', subject: LINKEDIN_INVITE_SUBJECT, body: 'Reconciled from LinkedIn Sent invitations (exact send date unknown).' });
-        writeTTCorrespondence(contact.id, msgs);
-        markInvitePending(contact.id, today);
-        try { logConnect({ name: label(contact).name, source: 'ta', id: contact.id, date: today }); } catch { /* metric best-effort */ }
+    const reconcileWrites = () => {
+      for (const { contact } of matched) {
+        const msgs = readTTCorrespondence(contact.id);
+        const has = msgs.some(m => m.direction === 'Sent' && isLinkedInInvite(m.subject));
+        if (has) { alreadyRecorded.push(label(contact)); continue; }
+        if (apply) {
+          msgs.push({ timestamp: today, direction: 'Sent', channel: 'LinkedIn', subject: LINKEDIN_INVITE_SUBJECT, body: 'Reconciled from LinkedIn Sent invitations (exact send date unknown).' });
+          writeTTCorrespondence(contact.id, msgs);
+          markInvitePending(contact.id, today);
+          runLogWriteTestHook('before-reconcile-sent-invites-connect');
+          try { logConnect({ name: label(contact).name, source: 'ta', id: contact.id, date: today }); }
+          catch (error) {
+            if (logWritesEnabled(DATA_DIR)) throw error;
+            /* metric best-effort */
+          }
+        }
+        newlyMarked.push(label(contact));
       }
-      newlyMarked.push(label(contact));
+    };
+    let renderPending = {};
+    try {
+      if (apply && logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, reconcileWrites);
+      else reconcileWrites();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'followups reconcile-sent-invites');
     }
     res.json({
       applied: apply,
@@ -67,6 +82,7 @@ router.post('/api/followups/reconcile-sent-invites', (req, res) => {
       newlyMarked, alreadyRecorded,
       ambiguous: ambiguous.map(a => ({ name: a.invite.name, candidates: a.candidates.map(label) })),
       unmatched: unmatched.map(u => u.name || u.handle).filter(Boolean),
+      ...renderPending,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -158,12 +174,22 @@ router.get('/api/followups/both-queue', (req, res) => {
 // `source: 'app' | 'ta'`.
 router.get('/api/followups/stale', (req, res) => {
   try {
+    let renderPending = {};
     // Self-heal the LinkedIn status axis from our own correspondence before building
     // the queue: any contact with a recorded invite but a stale 'Not Connected' status
     // is advanced to 'Invite Pending', so the queue never re-pitches someone already
     // invited even if a write path missed the status update. Cheap (reads correspondence
     // only for Not-Connected contacts) and best-effort — a failure never breaks the queue.
-    try { reconcileInviteStatus({ apply: true }); } catch { /* never break the queue on self-heal */ }
+    try {
+      const heal = () => reconcileInviteStatus({ apply: true });
+      if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, heal);
+      else heal();
+    } catch (error) {
+      if (error?.code === 'RENDER_FAILED') {
+        renderPending = renderPendingResponse(error, 'followups stale self-heal');
+      }
+      // Every other self-heal failure stays best-effort and silent.
+    }
 
     const rawStaleApps = computeStaleApps();
     const apps = rawStaleApps.map(it => ({ source: 'app', ...it }));
@@ -317,6 +343,7 @@ router.get('/api/followups/stale', (req, res) => {
       snoozedContactFollowups,
       // Deprecated alias: legacy readers expect `items` to be the badge list.
       items: warm,
+      ...renderPending,
     });
   }
   catch (err) { res.status(500).json({ error: err.message }); }
@@ -461,43 +488,46 @@ router.post('/api/followups', (req, res) => {
     const app = apps.find(a => a.id === parseInt(appNum, 10));
     if (!app) return res.status(404).json({ error: `Application #${appNum} not found` });
     const touchDate = date || new Date().toISOString().slice(0, 10);
-    const n = appendFollowupRow({
-      appNum: parseInt(appNum, 10),
-      date: touchDate,
-      company: app.company,
-      role: app.role,
-      channel,
-      contact: contact || '',
-      notes: notes || '',
-    });
-
-    // Cross-log to TA contact correspondence if requested
     const crossLogged = [];
-    if (Array.isArray(alsoLogToTalentIds) && alsoLogToTalentIds.length) {
-      const taRows = parseTargetTalentMd();
-      const ts = touchDate + ' ' + new Date().toTimeString().slice(0, 5);
-      const subject = alsoLogSubject || `Follow-up re: ${app.role} (#${app.id})`;
-      const body = alsoLogBody || (notes
-        ? `${notes}\n\n(Cross-logged from Follow-Ups page · App #${app.id} ${app.company} ${app.role})`
-        : `Cross-logged follow-up touch from the Follow-Ups page.\nApplication: #${app.id} ${app.company} — ${app.role}`);
-      for (const taId of alsoLogToTalentIds) {
-        const id = parseInt(taId, 10);
-        const taRow = taRows.find(r => r.id === id);
-        if (!taRow) continue;
-        const messages = readTTCorrespondence(id);
-        messages.push({ timestamp: ts, direction: 'Sent', subject, body });
-        writeTTCorrespondence(id, messages);
-        // Bump TA status if appropriate
-        const today = new Date().toISOString().slice(0, 10);
-        // Treat legacy/non-canonical 'New' and empty values as equivalent to 'Not Contacted' for advance purposes.
-        const advanceable = ['Not Contacted', 'Drafted', 'New', ''];
-        const newStatus = advanceable.includes(taRow.status || '') ? 'Sent' : taRow.status;
-        updateTTLine(id, { status: newStatus, lastTouch: today });
-        crossLogged.push(id);
+    let n;
+    const save = () => {
+      n = appendFollowupRow({
+        appNum: parseInt(appNum, 10), date: touchDate, company: app.company, role: app.role,
+        channel, contact: contact || '', notes: notes || '',
+      });
+      if (Array.isArray(alsoLogToTalentIds) && alsoLogToTalentIds.length) {
+        const taRows = parseTargetTalentMd();
+        const ts = touchDate + ' ' + new Date().toTimeString().slice(0, 5);
+        const subject = alsoLogSubject || `Follow-up re: ${app.role} (#${app.id})`;
+        const body = alsoLogBody || (notes
+          ? `${notes}\n\n(Cross-logged from Follow-Ups page · App #${app.id} ${app.company} ${app.role})`
+          : `Cross-logged follow-up touch from the Follow-Ups page.\nApplication: #${app.id} ${app.company} — ${app.role}`);
+        for (const taId of alsoLogToTalentIds) {
+          const id = parseInt(taId, 10);
+          const taRow = taRows.find(r => r.id === id);
+          if (!taRow) continue;
+          const messages = readTTCorrespondence(id);
+          messages.push({ timestamp: ts, direction: 'Sent', subject, body });
+          writeTTCorrespondence(id, messages);
+          const today = new Date().toISOString().slice(0, 10);
+          const advanceable = ['Not Contacted', 'Drafted', 'New', ''];
+          const newStatus = advanceable.includes(taRow.status || '') ? 'Sent' : taRow.status;
+          runLogWriteTestHook('before-followups-contact-row');
+          updateTTLine(id, { status: newStatus, lastTouch: today });
+          crossLogged.push(id);
+        }
       }
+      return n;
+    };
+    let renderPending = {};
+    try {
+      if (logWritesEnabled(DATA_DIR)) withLogWrite(DATA_DIR, save);
+      else save();
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'followups POST');
     }
 
-    res.json({ ok: true, n, crossLogged });
+    res.json({ ok: true, n, crossLogged, ...renderPending });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

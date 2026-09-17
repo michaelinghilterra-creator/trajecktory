@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { FOLLOWUPS_MD, LINKEDIN_SSI_DIR } from '../config.mjs';
+import { DATA_DIR, FOLLOWUPS_MD, LINKEDIN_SSI_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, matchByCompany, getNewBaselineId } from './target-talent.mjs';
 import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
@@ -17,6 +17,9 @@ import { buildTimeline } from './contact-timeline.mjs';
 import { parseConnectedOn } from './linkedin-acceptance.mjs';
 import { INFLUENCE_RANK, DEFAULT_TIER } from '../../../lib/influence-tier.mjs';
 import { getOutreachPolicy } from './profile.mjs';
+import { randomUUID } from 'node:crypto';
+import { appendEventsWithEffects, tableRows } from '../../../lib/legacy-files.mjs';
+import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
 
 // Per-status stale thresholds (days since last touch). Tier reflects how
 // quickly each stage cools: post-interview windows are tight, while cold Applied
@@ -90,6 +93,29 @@ function parseFollowupsMd() {
 }
 
 function appendFollowupRow({ appNum, date, company, role, channel, contact, notes }) {
+  if (logWritesEnabled(DATA_DIR)) {
+    return withLogWrite(DATA_DIR, store => {
+      const numbers = tableRows(store, 'follow-ups.md')
+        .map(({ raw }) => parseInt(raw.split('|')[1]?.trim(), 10))
+        .filter(Number.isFinite);
+      const nextN = numbers.length ? Math.max(...numbers) + 1 : 1;
+      const esc = s => (s || '').toString().replace(/[|\r\n]+/g, ' ').trim();
+      const row = `| ${nextN} | ${appNum} | ${date} | ${esc(company)} | ${esc(role)} | ${esc(channel)} | ${esc(contact)} | ${esc(notes)} |`;
+      appendEventsWithEffects(store, [{
+        type: 'message_sent', occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
+        payload: {
+          file: 'follow-ups.md', n: nextN,
+          app: Number.isFinite(parseInt(appNum, 10)) ? parseInt(appNum, 10) : null,
+          channel: ['Email', 'LinkedIn', 'InMail', 'LinkedIn Request'].includes(channel) ? channel : 'other',
+          legacy_effects: [{
+            file: 'follow-ups.md', op: 'row_upsert', row_id: `follow-ups.md#n-${randomUUID()}`,
+            raw: row, anchor: { at: 'table_end' },
+          }],
+        },
+      }]);
+      return nextN;
+    });
+  }
   fs.mkdirSync(path.dirname(FOLLOWUPS_MD), { recursive: true });
   let existingText = '';
   if (fs.existsSync(FOLLOWUPS_MD)) existingText = fs.readFileSync(FOLLOWUPS_MD, 'utf8');
