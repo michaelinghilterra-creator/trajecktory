@@ -53,7 +53,7 @@ function writePins(change, { type, refs, note = '' }) {
       appendEventsWithEffects(store, [{
         type, occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
         payload: {
-          refs, note: String(note || ''),
+          refs, note_present: Boolean(note),
           legacy_effects: [{ file: 'contact-links.json', op: 'json_replace', value }],
         },
       }]);

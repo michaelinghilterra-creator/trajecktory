@@ -98,6 +98,7 @@ function emailCell(r) {
 function appendReferralRows(rows) {
   if (!rows || !rows.length) return [];
   if (logWritesEnabled(DATA_DIR)) {
+    if (!fs.existsSync(REFERRALS_MD)) fs.writeFileSync(REFERRALS_MD, REFERRAL_HEADER, 'utf8');
     return withLogWrite(DATA_DIR, store => {
       const ids = tableRows(store, 'referrals.md')
         .map(({ raw }) => contactRowId(raw)).filter(id => id !== null);

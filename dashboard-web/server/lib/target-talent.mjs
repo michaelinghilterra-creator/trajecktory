@@ -212,10 +212,8 @@ function updateTTRaw(line, updates) {
 function appendTTRows(rows) {
   if (!rows || !rows.length) return [];
   if (logWritesEnabled(DATA_DIR)) {
-    return withLogWrite(DATA_DIR, store => {
-      if (renderLegacyFile(store, 'target-talent.md') === null) return [];
-      return appendTTLogRows(store, rows);
-    });
+    if (!fs.existsSync(TARGET_TALENT_MD)) return [];
+    return withLogWrite(DATA_DIR, store => appendTTLogRows(store, rows));
   }
   if (!fs.existsSync(TARGET_TALENT_MD)) return [];
   const text = fs.readFileSync(TARGET_TALENT_MD, 'utf8');
