@@ -1,7 +1,7 @@
 import fs from 'fs';
 import { CONNECTS_PATH, DATA_DIR } from '../config.mjs';
 import { appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
-import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
+import { localToday, logWritesEnabled, withLogRead, withLogWrite } from '../../../lib/log-writes.mjs';
 
 // Manual LinkedIn-connect tally. Connections are sent by hand (never automated),
 // so the count is logged here, one entry per invite. Returns null when no log
@@ -9,7 +9,7 @@ import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-wri
 // an existing-but-empty log reads a real zero.
 function readConnects() {
   if (logWritesEnabled(DATA_DIR)) {
-    return withLogWrite(DATA_DIR, store => {
+    return withLogRead(DATA_DIR, store => {
       const text = renderLegacyFile(store, 'linkedin-connects.json');
       if (text === null) return null;
       try {

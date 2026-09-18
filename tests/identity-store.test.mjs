@@ -67,7 +67,7 @@ const dir = makeSandbox('identity-store-test');
     'company_unmerges', 'people', 'people_separate', 'person_aliases', 'person_identifiers',
     'person_merges', 'person_unmerges', 'postings',
   ];
-  check(SCHEMA_VERSION === 4 && store.db.prepare('PRAGMA user_version').get().user_version === SCHEMA_VERSION, 'fresh store is at SCHEMA_VERSION 4');
+  check(SCHEMA_VERSION === 5 && store.db.prepare('PRAGMA user_version').get().user_version === SCHEMA_VERSION, 'fresh store is at SCHEMA_VERSION 5');
   check(expected.every(table => tables.includes(table)), 'fresh store has all identity and merge tables');
   store.close();
 }
