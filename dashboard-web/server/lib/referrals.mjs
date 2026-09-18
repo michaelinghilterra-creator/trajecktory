@@ -7,7 +7,7 @@ import { parseVerifyTag, setVerifyTag } from '../../../lib/email-verify.mjs';
 import { parseCorrespondence, formatCorrespondence } from './correspondence-format.mjs';
 import { linkedinKey } from './contact-identity.mjs';
 import { appendEventsWithEffects, findTableRowsByKey, renderLegacyFile, tableRows } from '../../../lib/legacy-files.mjs';
-import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
+import { localToday, logWritesEnabled, withLogRead, withLogWrite } from '../../../lib/log-writes.mjs';
 
 // ── Referral tracker ──────────────────────────────────────────────────────────
 // Backs the "Referrals" page. A referral is a person in the user's OWN network
@@ -244,7 +244,7 @@ function updateReferralRaw(line, updates) {
 // the route redirects its correspondence to the twin's dir so the message is shared.
 function readReferralCorrespondence(id) {
   if (logWritesEnabled(DATA_DIR)) {
-    return withLogWrite(DATA_DIR, store => {
+    return withLogRead(DATA_DIR, store => {
       const text = renderLegacyFile(store, `referral-correspondence/${id}.md`);
       return text === null ? [] : parseCorrespondence(text);
     });

@@ -245,8 +245,49 @@ const dir = makeSandbox('event-store-test');
   `).run('posting_evaluated', '2030-01-04', '2030-01-04T00:00:00.000Z', 'cli', '{}', 'test-v1');
   db.close();
   const store = openEventStore(dbPath);
-  check(store.db.prepare('PRAGMA user_version').get().user_version === 4, 'reopening a version 3 database migrates it to version 4');
+  check(store.db.prepare('PRAGMA user_version').get().user_version === SCHEMA_VERSION,
+    `reopening a version 3 database migrates it to version ${SCHEMA_VERSION}`);
   check(readEvents(store).length === 1, 'version 3 migration preserves existing event rows');
+  store.close();
+}
+
+{
+  const dbPath = join(dir, 'version-four-file-index.db');
+  const db = new DatabaseSync(dbPath);
+  for (const migration of MIGRATIONS.slice(0, 4)) db.exec(migration);
+  db.exec('PRAGMA user_version = 4');
+  const insert = db.prepare(`
+    INSERT INTO events (
+      type, occurred_on, recorded_at, source, evidence_ref, payload, definitions_version
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  const args = payload => [
+    'legacy_record', '2030-01-04', '2030-01-04T00:00:00.000Z', 'import', null,
+    JSON.stringify(payload), 'test-v1',
+  ];
+  insert.run(...args({ file: 'apply-dates.json', reason: 'json_snapshot' }));
+  insert.run(...args({
+    dir: 'target-talent-correspondence', file: '900001.md', segment_index: 0,
+    raw: 'Invented correspondence.\n',
+  }));
+  insert.run(...args({
+    legacy_effects: [{
+      file: 'referral-correspondence/900002.md', op: 'file_replace', raw: 'Invented referral.\n',
+    }],
+  }));
+  insert.run(
+    'legacy_record', '2030-01-04', '2030-01-04T00:00:00.000Z', 'import',
+    'applications.md#line4', '{}', 'test-v1',
+  );
+  db.close();
+  const store = openEventStore(dbPath);
+  const files = store.db.prepare('SELECT file FROM event_files ORDER BY file').all().map(row => row.file);
+  check([
+    'applications.md',
+    'apply-dates.json',
+    'referral-correspondence/900002.md',
+    'target-talent-correspondence/900001.md',
+  ].every(file => files.includes(file)), 'migration 5 backfills every legacy file provenance shape');
   store.close();
 }
 

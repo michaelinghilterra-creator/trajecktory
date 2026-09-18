@@ -8,14 +8,8 @@ import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getIdentity } from '../dashboard-web/server/lib/profile.mjs';
 import { openEventStore } from '../lib/event-store.mjs';
-import {
-  LEGACY_JSON_FILES,
-  LEGACY_TABLE_FILES,
-  listLegacyFiles,
-  renderLegacyFile,
-  splitLegacyLines,
-} from '../lib/legacy-files.mjs';
 import { importDataFolder } from '../lib/import/import-data-folder.mjs';
+import { printImportVerification, verifyImport } from '../lib/import/verify-import.mjs';
 
 function refuse(message) {
   console.error(message);
@@ -52,30 +46,6 @@ function flagCounts(flags) {
   return counts;
 }
 
-function byteComparison(original, rendered) {
-  const originalLines = original === null ? [] : splitLegacyLines(original);
-  const renderedLines = rendered === null ? [] : splitLegacyLines(rendered);
-  const length = Math.max(originalLines.length, renderedLines.length);
-  let firstDifferingLine = null;
-  let lineEndingsDiffer = false;
-  for (let index = 0; index < length; index++) {
-    const left = originalLines[index];
-    const right = renderedLines[index];
-    if (left?.eol !== right?.eol) lineEndingsDiffer = true;
-    if (firstDifferingLine === null
-      && (!left || !right || left.text !== right.text || left.eol !== right.eol)) {
-      firstDifferingLine = index + 1;
-    }
-  }
-  return {
-    match: original === rendered,
-    original_lines: originalLines.length,
-    rendered_lines: renderedLines.length,
-    first_differing_line: firstDifferingLine,
-    line_endings_differ: lineEndingsDiffer,
-  };
-}
-
 const options = argumentsFrom(process.argv.slice(2));
 if (!options['data-dir'] || !options['output-dir'] || !options.db || !options.report) {
   refuse('usage: --data-dir, --output-dir, --db and --report are required');
@@ -101,45 +71,12 @@ const ownerName = options['owner-name'] ?? getIdentity().fullName;
 
 const store = openEventStore(dbPath);
 let imported;
-let bytesReport;
+let verification;
 try {
   imported = importDataFolder(store, {
     dataDir: inputDir, outputDir, ownerName, definitionsVersion, importedOn,
   });
-  const tables = Object.fromEntries(LEGACY_TABLE_FILES.map(file => [
-    file,
-    byteComparison(imported.texts[file], renderLegacyFile(store, file)),
-  ]));
-  const json = Object.fromEntries(LEGACY_JSON_FILES.map(file => {
-    const original = imported.texts[file];
-    const rendered = renderLegacyFile(store, file);
-    return [file, {
-      match: original === rendered,
-      absent: original === null,
-      original_bytes: original === null ? 0 : Buffer.byteLength(original, 'utf8'),
-      rendered_bytes: rendered === null ? 0 : Buffer.byteLength(rendered, 'utf8'),
-    }];
-  }));
-  const correspondence = {};
-  for (const [dir, input] of Object.entries(imported.reports.correspondenceInputs)) {
-    const known = new Set([
-      ...Object.keys(input).map(file => `${dir}/${file}`),
-      ...listLegacyFiles(store).filter(file => file.startsWith(`${dir}/`)),
-    ]);
-    const comparisons = [...known].sort().map(file => byteComparison(
-      input[file.slice(dir.length + 1)] ?? null,
-      renderLegacyFile(store, file),
-    ));
-    correspondence[dir] = {
-      files: known.size,
-      differing_files: comparisons.filter(result => !result.match).length,
-      original_lines: comparisons.reduce((sum, result) => sum + result.original_lines, 0),
-      rendered_lines: comparisons.reduce((sum, result) => sum + result.rendered_lines, 0),
-      first_differing_line: comparisons.find(result => !result.match)?.first_differing_line ?? null,
-      line_endings_differ: comparisons.some(result => result.line_endings_differ),
-    };
-  }
-  bytesReport = { tables, correspondence, json };
+  verification = verifyImport(store, imported, inputDir, outputDir);
 } finally {
   store.close();
 }
@@ -199,7 +136,7 @@ const report = {
     ...twcReport,
     comparison: twcComparison,
   },
-  bytes: bytesReport,
+  bytes: verification.bytes,
 };
 writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 
@@ -257,35 +194,5 @@ console.log(JSON.stringify({
     flags: flagCounts(twcReport.flags),
   },
 }, null, 2));
-console.log(trackerComparison.match ? 'TRACKER MATCH' : 'TRACKER MISMATCH');
-console.log(applyComparison.match ? 'APPLY DATES MATCH' : 'APPLY DATES MISMATCH');
-console.log(statusComparison.match ? 'STATUS HISTORY MATCH' : 'STATUS HISTORY MISMATCH');
-console.log(peopleComparison.match ? 'PEOPLE MATCH' : 'PEOPLE MISMATCH');
-console.log(followupsComparison.match ? 'FOLLOWUPS MATCH' : 'FOLLOWUPS MISMATCH');
-console.log(correspondenceComparison.match ? 'CORRESPONDENCE MATCH' : 'CORRESPONDENCE MISMATCH');
-console.log(linkedinComparison.match ? 'LINKEDIN MATCH' : 'LINKEDIN MISMATCH');
-console.log(twcComparison.match ? 'TWC MATCH' : 'TWC MISMATCH');
-for (const file of LEGACY_TABLE_FILES) {
-  const result = bytesReport.tables[file];
-  console.log(result.match
-    ? `BYTES MATCH ${file}`
-    : `BYTES DIFFER ${file} (original_lines=${result.original_lines} rendered_lines=${result.rendered_lines} first_differing_line=${result.first_differing_line} line_endings_differ=${result.line_endings_differ})`);
-}
-for (const dir of ['target-talent-correspondence', 'referral-correspondence']) {
-  const result = bytesReport.correspondence[dir];
-  console.log(result.differing_files === 0
-    ? `BYTES MATCH ${dir} (${result.files} files)`
-    : `BYTES DIFFER ${dir} (${result.differing_files} of ${result.files} files; original_lines=${result.original_lines} rendered_lines=${result.rendered_lines} first_differing_line=${result.first_differing_line} line_endings_differ=${result.line_endings_differ})`);
-}
-for (const file of LEGACY_JSON_FILES) {
-  const result = bytesReport.json[file];
-  console.log(result.match
-    ? `BYTES MATCH ${file}${result.absent ? ' (absent)' : ''}`
-    : `BYTES DIFFER ${file} (original_bytes=${result.original_bytes} rendered_bytes=${result.rendered_bytes})`);
-}
-const bytesMatch = Object.values(bytesReport.tables).every(result => result.match)
-  && Object.values(bytesReport.correspondence).every(result => result.differing_files === 0)
-  && Object.values(bytesReport.json).every(result => result.match);
-process.exit(trackerComparison.match && applyComparison.match && statusComparison.match
-  && peopleComparison.match && followupsComparison.match && correspondenceComparison.match
-  && linkedinComparison.match && twcComparison.match && bytesMatch ? 0 : 1);
+printImportVerification(verification);
+process.exit(verification.ok ? 0 : 1);

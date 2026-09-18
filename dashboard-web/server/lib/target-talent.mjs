@@ -10,7 +10,7 @@ import { parseProvenance } from '../../../lib/stakeholder-additions.mjs';
 import { readLinkedInMap } from './tt-linkedin.mjs';
 import { parseCorrespondence, formatCorrespondence } from './correspondence-format.mjs';
 import { appendEventsWithEffects, findTableRowsByKey, renderLegacyFile, tableRows } from '../../../lib/legacy-files.mjs';
-import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
+import { localToday, logWritesEnabled, withLogRead, withLogWrite } from '../../../lib/log-writes.mjs';
 
 // A quarter is long enough that a leadership change is likely, and short enough
 // that a re-check is still cheap. Missing provenance is deliberately not stale:
@@ -113,7 +113,7 @@ function parseTargetTalentMd() {
 
 function readTTCorrespondence(id) {
   if (logWritesEnabled(DATA_DIR)) {
-    return withLogWrite(DATA_DIR, store => {
+    return withLogRead(DATA_DIR, store => {
       const text = renderLegacyFile(store, `target-talent-correspondence/${id}.md`);
       return text === null ? [] : parseCorrespondence(text);
     });

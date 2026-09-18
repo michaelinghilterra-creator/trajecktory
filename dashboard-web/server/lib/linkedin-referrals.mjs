@@ -18,7 +18,7 @@ import { ACTIVE_STATUSES } from './statuses.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseReferralsMd, appendReferralRows, updateReferralLine } from './referrals.mjs';
 import { appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
-import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
+import { localToday, logWritesEnabled, withLogRead, withLogWrite } from '../../../lib/log-writes.mjs';
 
 // DATA_DIR, never ROOT_DIR + 'data'. Those look equivalent and are not: only
 // DATA_DIR honors TJK_DATA_DIR, so a hardcoded ROOT_DIR path escapes the test
@@ -159,7 +159,7 @@ export function saveConnections(connections, source = 'upload') {
 }
 export function loadConnections() {
   if (logWritesEnabled(DATA_DIR)) {
-    return withLogWrite(DATA_DIR, store => {
+    return withLogRead(DATA_DIR, store => {
       const text = renderLegacyFile(store, 'linkedin-connections.json');
       if (text === null) return { importedAt: null, source: null, count: 0, connections: [] };
       try { return JSON.parse(text); }
