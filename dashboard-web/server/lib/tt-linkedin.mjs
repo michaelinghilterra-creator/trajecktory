@@ -1,7 +1,7 @@
 import fs from 'fs';
 import { DATA_DIR, TT_LINKEDIN_PATH } from '../config.mjs';
 import { appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
-import { inLogWrite, localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
+import { inLogWrite, localToday, logWritesEnabled, withLogRead, withLogWrite } from '../../../lib/log-writes.mjs';
 
 /**
  * lib/tt-linkedin.mjs — LinkedIn connection state for TA Outreach contacts.
@@ -54,7 +54,7 @@ function writeMap(map) {
 export function readLinkedInMap() {
   if (logWritesEnabled(DATA_DIR)) {
     try {
-      return withLogWrite(DATA_DIR, store => {
+      return withLogRead(DATA_DIR, store => {
         const text = renderLegacyFile(store, 'tt-linkedin.json');
         if (text === null) return {};
         const value = JSON.parse(text);
