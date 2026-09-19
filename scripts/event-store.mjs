@@ -25,6 +25,7 @@ import {
   SWITCH_FILE,
   readEventStoreSwitch,
 } from '../lib/event-store-switch.mjs';
+import { findOtherWriters } from '../lib/event-store-writers.mjs';
 import { importDataFolder } from '../lib/import/import-data-folder.mjs';
 import { findNonUtf8Files } from '../lib/import/utf8-guard.mjs';
 import {
@@ -440,6 +441,11 @@ function flip(options, context) {
     return 1;
   }
   if (!apply) return flipUnlocked(options, context);
+  const writers = context.findOtherWriters();
+  if (writers.length) {
+    io.error(`Refusing to flip: --no-other-writers was given but ${writers.join('; ')}. Stop the dashboard and try again. This check sees dashboard ports only; scripts started from a terminal are not detected, so confirm none are running.`);
+    return 1;
+  }
   const dataDir = resolve(options['--data-dir'] ?? process.env.TJK_DATA_DIR ?? join(root, 'data'));
   let release;
   try {
@@ -483,6 +489,11 @@ function rollback(options, context) {
     return 1;
   }
   if (!options['--apply']) return rollbackUnlocked(options, context);
+  const writers = context.findOtherWriters();
+  if (writers.length) {
+    io.error(`Refusing to roll back: --no-other-writers was given but ${writers.join('; ')}. Stop the dashboard and try again. This check sees dashboard ports only; scripts started from a terminal are not detected, so confirm none are running.`);
+    return 1;
+  }
   const dataDir = resolve(process.env.TJK_DATA_DIR ?? join(root, 'data'));
   let release;
   try {
@@ -509,6 +520,7 @@ export function runEventStore(argv, dependencies = {}) {
     writeSwitch: dependencies.writeSwitch ?? writeFileAtomic,
     isProcessAlive: dependencies.isProcessAlive ?? processIsAlive,
     hooks: dependencies.hooks ?? {},
+    findOtherWriters: dependencies.findOtherWriters ?? (() => findOtherWriters()),
   };
   const [command, ...rest] = argv;
   if (command === 'status') {

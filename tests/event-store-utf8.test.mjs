@@ -107,6 +107,7 @@ function flip(item, extraArgs) {
       getOwnerName: () => 'Example Personone',
       now: () => new Date('2030-03-04T05:06:07.000Z'),
       isProcessAlive: () => false,
+      findOtherWriters: () => [],
       io: { log: value => stdout.push(String(value)), error: value => stderr.push(String(value)) },
     });
   } finally {

@@ -647,6 +647,7 @@ for (const suite of [
   'tests/event-store-utf8.test.mjs',
   'tests/event-store-lock.test.mjs',
   'tests/event-store-late-write.test.mjs',
+  'tests/event-store-writers.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);
