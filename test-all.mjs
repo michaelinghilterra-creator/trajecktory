@@ -633,6 +633,7 @@ for (const suite of [
   'tests/obsidian-prep.test.mjs',
   'tests/obsidian-postfix.test.mjs',
   'tests/prune-gated.test.mjs',
+  'tests/held-evidence.test.mjs',
   'tests/provenance.test.mjs',
 ]) {
   if (!fileExists(suite)) {
