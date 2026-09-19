@@ -226,7 +226,7 @@ function parseOptions(argv, allowed) {
   for (let index = 0; index < argv.length; index++) {
     const key = argv[index];
     if (!allowed.has(key) || Object.hasOwn(options, key)) return null;
-    if (key === '--apply' || key === '--reimport' || key === '--no-other-writers') {
+    if (key === '--apply' || key === '--reimport' || key === '--no-other-writers' || key === '--json') {
       options[key] = true;
       continue;
     }
@@ -433,9 +433,52 @@ function flipUnlocked(options, context) {
   }
 }
 
+// The dry run as one JSON document, for the Data storage screen. It runs the same dry run and reads the
+// check lines it prints, so the two can never disagree. Nothing is written to the data folder.
+function previewFlip(options, context) {
+  const stdout = [];
+  const stderr = [];
+  const captured = {
+    ...context,
+    io: { log: value => stdout.push(String(value)), error: value => stderr.push(String(value)) },
+  };
+  const code = flipUnlocked(options, captured);
+  const names = { LINKEDIN: 'LinkedIn', TWC: 'TWC' };
+  const sentence = label => names[label] ?? `${label.charAt(0)}${label.slice(1).toLowerCase()}`;
+  const events = stdout.map(line => /Dry run passed with (\d+) events/.exec(line)).find(Boolean);
+  const document = {
+    command: 'flip',
+    dry_run: true,
+    ok: code === 0,
+    exit_code: code,
+    events: events ? Number(events[1]) : null,
+    checks: stdout.flatMap(line => {
+      const match = /^([A-Z ]+) (MATCH|MISMATCH)$/.exec(line);
+      return match ? [{ name: sentence(match[1]), match: match[2] === 'MATCH' }] : [];
+    }),
+    byte_checks: stdout.flatMap(line => {
+      const match = /^BYTES (MATCH|DIFFER) (\S+)/.exec(line);
+      return match ? [{ file: match[2], match: match[1] === 'MATCH' }] : [];
+    }),
+    messages: stdout,
+    errors: stderr,
+    will_add: ['trajecktory.db', 'event-store.json', 'a backup copy of the data folder'],
+    will_not_change: ['Your data files are not rewritten by the flip. They are read, checked, and left exactly as they are.'],
+  };
+  context.io.log(JSON.stringify(document, null, 2));
+  return code;
+}
+
 function flip(options, context) {
   const { io, now, isProcessAlive, hooks } = context;
   const apply = options['--apply'] === true;
+  if (options['--json'] === true) {
+    if (apply) {
+      io.error('--json works with the dry run only. Run flip --json without --apply.');
+      return 2;
+    }
+    return previewFlip(options, context);
+  }
   if (apply && options['--no-other-writers'] !== true) {
     io.error('IMPORTANT: Refusing to flip without --no-other-writers. Stop the dashboard and every script first. Restart all of them afterwards because running processes cache the switch.');
     return 1;
@@ -531,9 +574,9 @@ export function runEventStore(argv, dependencies = {}) {
     return status(resolve(process.env.TJK_DATA_DIR ?? join(root, 'data')), io);
   }
   if (command === 'flip') {
-    const options = parseOptions(rest, new Set(['--apply', '--reimport', '--no-other-writers', '--data-dir', '--output-dir']));
+    const options = parseOptions(rest, new Set(['--apply', '--reimport', '--no-other-writers', '--json', '--data-dir', '--output-dir']));
     if (!options) {
-      io.error('usage: event-store.mjs flip [--apply] [--reimport] [--no-other-writers] [--data-dir <dir>] [--output-dir <dir>]');
+      io.error('usage: event-store.mjs flip [--apply] [--reimport] [--no-other-writers] [--json] [--data-dir <dir>] [--output-dir <dir>]');
       return 2;
     }
     return flip(options, context);
@@ -546,7 +589,7 @@ export function runEventStore(argv, dependencies = {}) {
     }
     return rollback(options, context);
   }
-  io.error('usage: event-store.mjs status | flip [--apply] [--reimport] [--no-other-writers] | rollback [--apply] [--no-other-writers]');
+  io.error('usage: event-store.mjs status | flip [--apply] [--reimport] [--no-other-writers] [--json] | rollback [--apply] [--no-other-writers]');
   return 2;
 }
 
