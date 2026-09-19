@@ -136,6 +136,44 @@ check(result10.excluded.length === 1, 'countedInterviewRows with bad held_on giv
 check(result10.excluded[0].id === 900001, 'countedInterviewRows bad held_on excluded has correct id');
 check(result10.excluded[0].reason === 'bad_held_on', 'countedInterviewRows bad held_on excluded has reason bad_held_on');
 
+check(isCalendarDate('2030-12-01') === true, 'isCalendarDate accepts month 12');
+check(isCalendarDate('2030-01-01') === true, 'isCalendarDate accepts month 1');
+
+check(isCalendarDate('2030-01-15') === true, 'isCalendarDate accepts day in month 1');
+
+check(isCalendarDate('2030-00-01') === false, 'isCalendarDate rejects month 0');
+check(isCalendarDate('2030-13-01') === false, 'isCalendarDate rejects month 13');
+
+check(isCalendarDate('2030-03-31') === true, 'isCalendarDate accepts day 31 in March');
+check(isCalendarDate('2030-03-32') === false, 'isCalendarDate rejects day 32 in March');
+
+check(isCalendarDate('2030-03-01') === true, 'isCalendarDate accepts day 1 in March');
+
+check(isCalendarDate(null) === false, 'isCalendarDate returns false for null');
+check(isCalendarDate(20300308) === false, 'isCalendarDate returns false for number');
+
+// Use window that includes today's date
+const recordsToday = [
+  { id: 900001, stage: 'Phone Screen', booked_on: '2030-03-01', scheduled_for: '2030-03-08', held_on: '2030-03-20' }
+];
+const resultToday = countedInterviewRows(recordsToday, { from: '2030-03-15', to: '2030-03-20', today: '2030-03-20' });
+check(resultToday.rows.length === 1, 'countedInterviewRows with held_on equal to today includes the row');
+check(resultToday.excluded.length === 0, 'countedInterviewRows with held_on equal to today has no excluded');
+
+const recordsInWindow = [
+  { id: 900001, stage: 'Phone Screen', booked_on: '2030-03-01', scheduled_for: '2030-03-08', held_on: '2030-03-05' }
+];
+const resultInWindow = countedInterviewRows(recordsInWindow, { from: '2030-03-01', to: '2030-03-07', today: '2030-03-20' });
+check(resultInWindow.rows.length === 1, 'countedInterviewRows with held_on in window gives a row');
+check(resultInWindow.excluded.length === 0, 'countedInterviewRows with held_on in window has no excluded');
+
+const recordsOutWindow = [
+  { id: 900001, stage: 'Phone Screen', booked_on: '2030-03-01', scheduled_for: '2030-03-08', held_on: '2030-01-15' }
+];
+const resultOutWindow = countedInterviewRows(recordsOutWindow, { from: '2030-03-01', to: '2030-03-07', today: '2030-03-20' });
+check(resultOutWindow.rows.length === 0, 'countedInterviewRows with held_on outside window gives empty rows');
+check(resultOutWindow.excluded.length === 0, 'countedInterviewRows with held_on outside window gives zero excluded (record skipped)');
+
 console.log(`\n${passes} passed, ${failures} failed`);
 if (failures > 0) {
   process.exit(1);
