@@ -247,6 +247,15 @@ With `trusted-signers` present, `update-system.mjs` (both `check` and `apply`):
 requires a new `.exe`. Add the new public-key line, commit, rebuild, and ship.
 Keep the old line until every install has moved to a bundle carrying the new key.
 
+If the private key is lost (a wiped machine, no backup), nothing can sign for that
+line any more. Generate a new key as in the one-time setup, append its public line
+next to the old one, and ship a new `.exe`. Tags already signed with the old key
+keep verifying; installs anchored to the old line alone will not accept tags signed
+with the new key until they are reinstalled from a bundle that carries it. Drop the
+old line only once nothing depends on it. Back up the private key somewhere off the
+machine (a password manager works), because the next wipe is otherwise the same
+problem again.
+
 ## Why this step is easy to miss
 
 Forgetting to sign does **not** break an install. It silently freezes it.
