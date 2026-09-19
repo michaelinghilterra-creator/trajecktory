@@ -633,6 +633,7 @@ for (const suite of [
   'tests/obsidian-prep.test.mjs',
   'tests/obsidian-postfix.test.mjs',
   'tests/prune-gated.test.mjs',
+  'tests/interview-stage.test.mjs',
   'tests/export-gate.test.mjs',
   'tests/employer-status.test.mjs',
   'tests/bulk-ledger.test.mjs',
