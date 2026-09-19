@@ -397,6 +397,20 @@ function flipUnlocked(options, context) {
       writes: 'on',
       flipped_at: startedAt.toISOString(),
     }, null, 2)}\n`, 'utf8');
+    // A file written between the last check and the switch write would otherwise go unnoticed and the
+    // log would vouch for stale content. Check once more now that the switch is on.
+    const late = changedImportedFiles(store, imported, dataDir);
+    if (late.length) {
+      let offFailure = '';
+      try {
+        writeSwitch(join(dataDir, SWITCH_FILE), `${JSON.stringify({ writes: 'off', flipped_at: null }, null, 2)}\n`, 'utf8');
+      } catch (error) {
+        offFailure = ` The switch could NOT be turned back off: ${error.message}. Run rollback --apply --no-other-writers.`;
+      }
+      io.error(`Verification failed because something wrote during the flip, after the switch was turned on, so the switch was turned back off. Changed files: ${late.join(', ')}.${offFailure}`);
+      io.error(`Backup retained at ${backupPath}`);
+      return 1;
+    }
     operationSucceeded = true;
     io.log(`Flip complete: ${count} events imported.`);
     io.log(`Backup: ${backupPath}`);
