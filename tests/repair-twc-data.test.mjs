@@ -265,8 +265,10 @@ check(dry.files.trackerBaseText === beforeDryRun.get(files.tracker),
   'the plan retains the exact tracker text it parsed for compare and swap');
 check(fs.existsSync(files.dryPlan), 'dry run writes the requested plan file');
 const dryPlanText = fs.readFileSync(files.dryPlan, 'utf8');
-check(dry.totalChanges === 43 && dry.needsTrackerRows.length === 7,
-  `dry run plans 43 data changes and seven tracker-row needs, got ${dry.totalChanges} and ${dry.needsTrackerRows.length}`);
+check(dry.totalChanges === 39 && dry.needsTrackerRows.length === 7,
+  `dry run plans 39 data changes and seven tracker-row needs, got ${dry.totalChanges} and ${dry.needsTrackerRows.length}`);
+check(dryPlanText.includes('## Statuses needing a decision') && dryPlanText.includes('statuses needing a decision: 2'),
+  'the plan file lists the held statuses');
 check(dry.pendingConfirmations.length === 1
   && dryPlanText.includes('Pending your confirmation (counted by the tracker, not by the ledger)'),
   'confirm applications are listed without being changed');
@@ -356,8 +358,16 @@ check(plannedExcludes.some(item => item.kind === 'interview' && item.date === '2
 const statusChanges = dry.changes.filter(item => item.type === 'tracker_status_event');
 const statusDate = appId => statusChanges.find(item => item.after.app === appId)?.after.date;
 check(statusDate('3') === '2026-09-01', 'a recovered Applied event uses the ledger application date');
-check(statusDate('1') === '2026-09-14' && statusDate('2') === '2026-09-14' && statusDate('4') === '2026-09-14',
-  'No Response and Rejected repair events use the repair date');
+check(statusDate('2') === '2026-09-14', 'a Rejected repair event uses the repair date');
+check(statusDate('1') === undefined && statusDate('4') === undefined,
+  'no status event is planned for the two rows that would have been closed as No Response');
+check(!dry.changes.some(item => item.after === 'No Response' || item.after?.status === 'No Response'),
+  'the plan never contains a No Response change');
+const held = new Map(dry.manualStatuses.map(item => [item.appId, item]));
+check(dry.manualStatuses.length === 2 && held.get('1')?.status === 'Rejected' && held.get('4')?.status === 'Discarded',
+  'the two rows that would have been closed are listed for a decision with their current status');
+check(/Rejected but the ledger says no reply/.test(held.get('1')?.reason) && /set by hand/.test(held.get('4')?.reason),
+  'each held row states why it was not changed');
 
 const collisionPath = `${files.dates}.bak-20260914-120000000-pre-twc-repair`;
 fs.writeFileSync(collisionPath, 'existing backup');
@@ -391,16 +401,17 @@ const datesAfter = JSON.parse(fs.readFileSync(files.dates, 'utf8'));
 check(datesAfter['1'] === '2026-09-03' && datesAfter['13'] === '2026-06-15'
   && datesAfter['5'] === '2026-08-15' && datesAfter['14'] === '2026-07-01',
   'receipt-backed incorrect apply dates are corrected while unchanged dates remain stable');
-check(byId.get('1').status === 'No Response' && byId.get('2').status === 'Rejected'
-  && byId.get('3').status === 'Applied' && byId.get('4').status === 'No Response',
-  'silent close and missing-application status rules produce the expected statuses');
+check(byId.get('1').status === 'Rejected' && byId.get('2').status === 'Rejected'
+  && byId.get('3').status === 'Applied' && byId.get('4').status === 'Discarded',
+  'the repair recovers Rejected and Applied but leaves the would-be No Response rows as they were');
+check(!trackerAfter.some(item => item.status === 'No Response'), 'no tracker row is set to No Response');
 check(byId.get('11').status === 'Closed', 'the confirmation-pending tracker row remains unchanged');
 check(trackerAfter.every(item => parseTrackerLine(item.raw)), 'every tracker data row still parses after the edit');
 const changedIds = trackerLines.map((line, index) => ({ before: line, after: trackerAfterText.split(/\r?\n/)[index] }))
   .filter(pair => pair.before !== pair.after)
   .map(pair => String(parseTrackerLine(pair.after)?.num || ''));
-check(JSON.stringify(changedIds) === JSON.stringify(['1', '2', '3', '4']),
-  'no tracker rows other than the four planned status edits changed');
+check(JSON.stringify(changedIds) === JSON.stringify(['2', '3']),
+  'no tracker rows other than the two planned status edits changed');
 check(!trackerAfter.some(item => item.company === 'Nimbus Acorn Cooperative'),
   'the application without an app id is added only to overrides, not the tracker');
 check(!trackerAfter.some(item => item.company === 'Synthetic Juniper Works'),
@@ -410,7 +421,7 @@ const eventsAfter = fs.readFileSync(files.events, 'utf8').trim().split('\n').sli
 const eventDate = (appId, status) => eventsAfter.find(parts => parts[0] === appId && parts[2] === status)?.[1];
 check(eventDate('3', 'Applied') === '2026-09-01'
   && eventDate('2', 'Rejected') === '2026-09-14'
-  && eventDate('1', 'No Response') === '2026-09-14',
+  && eventsAfter.every(parts => parts[2] !== 'No Response'),
   'written status events preserve the planned event-date semantics');
 
 const exportAfter = buildActivities();
