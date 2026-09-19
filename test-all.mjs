@@ -645,6 +645,7 @@ for (const suite of [
   'tests/provenance.test.mjs',
   'tests/reply-match.test.mjs',
   'tests/event-store-utf8.test.mjs',
+  'tests/event-store-lock.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);

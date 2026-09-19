@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { DatabaseSync } from 'node:sqlite';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   closeSync,
   cpSync,
@@ -11,6 +11,7 @@ import {
   openSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -95,8 +96,33 @@ function processIsAlive(pid) {
   }
 }
 
-function acquireOperationLock(dataDir, io, now, isProcessAlive) {
+function readLockFile(lockPath) {
+  try {
+    return JSON.parse(readFileSync(lockPath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+// Removes the lock only when it is still the one this process created. A lock that was replaced by
+// another process is left alone and reported.
+function releaseOperationLock(lockPath, token, io) {
+  if (!existsSync(lockPath)) return;
+  const lock = readLockFile(lockPath);
+  if (lock?.token !== token) {
+    io.error(`Operation lock ${lockPath} is no longer ours and was left in place.`);
+    return;
+  }
+  try {
+    rmSync(lockPath, { force: true });
+  } catch (error) {
+    io.error(`Could not remove operation lock ${lockPath}: ${error.message}`);
+  }
+}
+
+function acquireOperationLock(dataDir, io, now, isProcessAlive, hooks = {}) {
   const lockPath = join(dataDir, LOCK_FILE);
+  const token = randomUUID();
   for (let attempt = 0; attempt < 2; attempt++) {
     let descriptor;
     try {
@@ -104,15 +130,10 @@ function acquireOperationLock(dataDir, io, now, isProcessAlive) {
       writeFileSync(descriptor, `${JSON.stringify({
         pid: process.pid,
         started_at: now().toISOString(),
+        token,
       }, null, 2)}\n`, 'utf8');
       closeSync(descriptor);
-      return () => {
-        try {
-          rmSync(lockPath, { force: true });
-        } catch (error) {
-          io.error(`Could not remove operation lock ${lockPath}: ${error.message}`);
-        }
-      };
+      return () => releaseOperationLock(lockPath, token, io);
     } catch (error) {
       if (descriptor !== undefined) {
         try { closeSync(descriptor); } catch { /* already closed */ }
@@ -135,7 +156,25 @@ function acquireOperationLock(dataDir, io, now, isProcessAlive) {
         });
       }
       io.log(`Removing stale event store operation lock for dead pid ${lock.pid}.`);
-      rmSync(lockPath, { force: true });
+      hooks.beforeStaleRemoval?.(lockPath);
+      // Claim the stale file by renaming it, then check that what was claimed is what was judged
+      // stale. Deleting by path would remove a live lock that another process wrote in between.
+      const claimed = `${lockPath}.stale-${process.pid}-${randomUUID()}`;
+      try {
+        renameSync(lockPath, claimed);
+      } catch (renameError) {
+        if (renameError.code === 'ENOENT') continue;
+        throw renameError;
+      }
+      const claimedLock = readLockFile(claimed);
+      if (claimedLock && claimedLock.pid === lock.pid && claimedLock.started_at === lock.started_at) {
+        rmSync(claimed, { force: true });
+        continue;
+      }
+      if (!existsSync(lockPath)) {
+        try { renameSync(claimed, lockPath); } catch { /* the copy stays beside the lock path */ }
+      }
+      throw new Error(`Another event store operation is running. The lock changed while it was being cleaned up: ${lockPath}`, { cause: error });
     }
   }
   throw new Error(`Could not acquire event store operation lock: ${lockPath}`);
@@ -146,7 +185,7 @@ function createBackup(dataDir, backupsDir, backupPath) {
   mkdirSync(backupPath);
   try {
     for (const entry of readdirSync(dataDir)) {
-      if (entry === LOCK_FILE) continue;
+      if (entry === LOCK_FILE || entry.startsWith(`${LOCK_FILE}.stale-`)) continue;
       cpSync(join(dataDir, entry), join(backupPath, entry), {
         recursive: true,
         errorOnExist: true,
@@ -380,7 +419,7 @@ function flipUnlocked(options, context) {
 }
 
 function flip(options, context) {
-  const { io, now, isProcessAlive } = context;
+  const { io, now, isProcessAlive, hooks } = context;
   const apply = options['--apply'] === true;
   if (apply && options['--no-other-writers'] !== true) {
     io.error('IMPORTANT: Refusing to flip without --no-other-writers. Stop the dashboard and every script first. Restart all of them afterwards because running processes cache the switch.');
@@ -390,7 +429,7 @@ function flip(options, context) {
   const dataDir = resolve(options['--data-dir'] ?? process.env.TJK_DATA_DIR ?? join(root, 'data'));
   let release;
   try {
-    release = acquireOperationLock(dataDir, io, now, isProcessAlive);
+    release = acquireOperationLock(dataDir, io, now, isProcessAlive, hooks);
     return flipUnlocked(options, context);
   } catch (error) {
     io.error(`Refusing event store operation: ${error.message}`);
@@ -424,7 +463,7 @@ function rollbackUnlocked(options, context) {
 }
 
 function rollback(options, context) {
-  const { io, now, isProcessAlive } = context;
+  const { io, now, isProcessAlive, hooks } = context;
   if (options['--apply'] && options['--no-other-writers'] !== true) {
     io.error('IMPORTANT: Refusing to roll back without --no-other-writers. Stop the dashboard and every script first. Restart all of them afterwards because running processes cache the switch.');
     return 1;
@@ -433,7 +472,7 @@ function rollback(options, context) {
   const dataDir = resolve(process.env.TJK_DATA_DIR ?? join(root, 'data'));
   let release;
   try {
-    release = acquireOperationLock(dataDir, io, now, isProcessAlive);
+    release = acquireOperationLock(dataDir, io, now, isProcessAlive, hooks);
     return rollbackUnlocked(options, context);
   } catch (error) {
     io.error(`Refusing event store operation: ${error.message}`);
@@ -455,6 +494,7 @@ export function runEventStore(argv, dependencies = {}) {
     recordVerifiedBaselinesFn: dependencies.recordVerifiedBaselinesFn ?? recordVerifiedBaselines,
     writeSwitch: dependencies.writeSwitch ?? writeFileAtomic,
     isProcessAlive: dependencies.isProcessAlive ?? processIsAlive,
+    hooks: dependencies.hooks ?? {},
   };
   const [command, ...rest] = argv;
   if (command === 'status') {
