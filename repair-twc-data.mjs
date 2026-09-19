@@ -346,6 +346,7 @@ export function buildRepairPlan({ ledger, now = new Date() }) {
   const pendingConfirmations = [];
   const ambiguousExclusions = [];
   const manualInterviews = [];
+  const manualStatuses = [];
   let applyDatesChanged = false;
   let trackerChanged = false;
   let overridesChanged = false;
@@ -417,12 +418,18 @@ export function buildRepairPlan({ ledger, now = new Date() }) {
 
     if (trackedApplication) {
       const target = trackerById.get(appId);
+      // No Response is set by hand (Definitions v1 section 3): a bulk repair never writes it.
+      // A row that would have been closed that way is listed for a decision instead.
       let nextStatus = null;
+      const holdForDecision = reason => manualStatuses.push({
+        appId, status: target.parsed.status, company: employerOf(row), reason, evidence: evidenceText(row),
+      });
       if (target && target.parsed.status === 'Rejected' && row.result === 'No reply' && !trueValue(row.hasRej)) {
-        nextStatus = 'No Response';
+        holdForDecision('tracker says Rejected but the ledger says no reply');
       } else if (target && RECOVERABLE_STATUSES.has(target.parsed.status)) {
-        nextStatus = trueValue(row.hasRej) ? 'Rejected'
-          : withinLastDays(row.date, today, 20) ? 'Applied' : 'No Response';
+        if (trueValue(row.hasRej)) nextStatus = 'Rejected';
+        else if (withinLastDays(row.date, today, 20)) nextStatus = 'Applied';
+        else holdForDecision('no reply on the ledger; No Response is set by hand');
       }
       if (nextStatus && changeStatus({
         trackerLines, trackerById, appId, after: nextStatus, row, changes, pendingEvents, today,
@@ -609,6 +616,7 @@ export function buildRepairPlan({ ledger, now = new Date() }) {
     pendingConfirmations,
     ambiguousExclusions,
     manualInterviews,
+    manualStatuses,
     exportBefore: countByKind(preActivities),
     exportAfter: countByKind(afterActivities),
     counts: Object.fromEntries(CHANGE_TYPES.map(type => [type, changes.filter(change => change.type === type).length])),
@@ -639,7 +647,8 @@ function renderPlan(plan, { applied = false, backups = [], written = [] } = {}) 
   lines.push(`- needs a tracker row: ${plan.needsTrackerRows.length}`);
   lines.push(`- pending confirmation: ${plan.pendingConfirmations.length}`);
   lines.push(`- ambiguous exclusions: ${plan.ambiguousExclusions.length}`);
-  lines.push(`- interviews needing a manual entry: ${plan.manualInterviews.length}`, '');
+  lines.push(`- interviews needing a manual entry: ${plan.manualInterviews.length}`);
+  lines.push(`- statuses needing a decision: ${plan.manualStatuses.length}`, '');
 
   lines.push('## Export activity by kind', '');
   for (const kind of TWC_KINDS) lines.push(`- ${kind}: before ${plan.exportBefore[kind]}, after ${plan.exportAfter[kind]}`);
@@ -685,6 +694,13 @@ function renderPlan(plan, { applied = false, backups = [], written = [] } = {}) 
     lines.push(`- Application ${item.appId}: ${item.stage} at ${item.company} | Dates: ${item.dates.join(' and ')} | Evidence: ${item.evidence.join(' | ')}`);
   }
   if (plan.manualInterviews.length) lines.push('');
+
+  lines.push('## Statuses needing a decision (this script never writes No Response)', '');
+  if (!plan.manualStatuses.length) lines.push('None.', '');
+  for (const item of plan.manualStatuses) {
+    lines.push(`- Application ${item.appId}: ${item.company} | now ${item.status} | ${item.reason} | Evidence: ${item.evidence || '(none)'}`);
+  }
+  if (plan.manualStatuses.length) lines.push('');
 
   if (applied) {
     lines.push('## Backups', '');
@@ -868,6 +884,7 @@ export function runRepair({
   console.log(`pending confirmation: ${plan.pendingConfirmations.length}`);
   console.log(`ambiguous exclusions: ${plan.ambiguousExclusions.length}`);
   console.log(`interviews needing a manual entry: ${plan.manualInterviews.length}`);
+  console.log(`statuses needing a decision: ${plan.manualStatuses.length}`);
   for (const kind of TWC_KINDS) console.log(`${kind}: before ${plan.exportBefore[kind]}, after ${plan.exportAfter[kind]}`);
   console.log(`plan: ${destination}`);
   if (apply) {
