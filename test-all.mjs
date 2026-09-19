@@ -643,6 +643,7 @@ for (const suite of [
   'tests/override-evidence.test.mjs',
   'tests/held-evidence.test.mjs',
   'tests/provenance.test.mjs',
+  'tests/reply-match.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);
