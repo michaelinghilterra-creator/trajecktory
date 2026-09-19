@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.0.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.0.1...v4.0.2) (2026-09-19)
+
+
+### Bug Fixes
+
+* **twc:** stop the repair script from closing applications as no response ([#355](https://github.com/michaelinghilterra-creator/trajecktory/issues/355)) ([e7789fd](https://github.com/michaelinghilterra-creator/trajecktory/commit/e7789fd92b6ce7f749e27e98c732f2bd720a9bd0))
+
 ## [4.0.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.0.0...v4.0.1) (2026-09-17)
 
 
