@@ -39,7 +39,7 @@
     "node": ">=24.21.0"
   },
   "dependencies": {
-    "adm-zip": "^0.6.0",
+    "adm-zip": "^0.6.1",
     "dotenv": "^17.4.2",
     "express-rate-limit": "^7.5.0",
     "js-yaml": "^4.3.0",
