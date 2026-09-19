@@ -202,6 +202,144 @@ check((counts4.status_changed ?? 0) === 0, 'countByType excludes voided event');
 check(history4.length === 2, 'historyEvents includes all events');
 check(history4[0].id === 900001, 'historyEvents includes voided event');
 
+try {
+  buildVoidEvent({
+    target_event_id: 900010,
+    reason_code: 'not_held',
+    evidence_ref: evidenceRef,
+    actor: 'owner',
+    occurred_on: 12345,
+    definitions_version: definitionsVersion
+  });
+  check(false, 'buildVoidEvent with non-string occurred_on throws');
+} catch (e) {
+  check(e.message === 'occurred_on', 'buildVoidEvent with non-string occurred_on throws TypeError');
+}
+
+try {
+  buildVoidEvent({
+    target_event_id: 900011,
+    reason_code: 'not_held',
+    evidence_ref: evidenceRef,
+    actor: 'owner',
+    occurred_on: 'not-a-date',
+    definitions_version: definitionsVersion
+  });
+  check(false, 'buildVoidEvent with invalid format occurred_on throws');
+} catch (e) {
+  check(e.message === 'occurred_on', 'buildVoidEvent with invalid format occurred_on throws TypeError');
+}
+
+try {
+  buildVoidEvent({
+    target_event_id: 900018,
+    reason_code: 'not_held',
+    evidence_ref: evidenceRef,
+    actor: 'owner',
+    occurred_on: '0000-01-15',
+    definitions_version: definitionsVersion
+  });
+  check(false, 'buildVoidEvent with year 0 throws');
+} catch (e) {
+  check(e.message === 'occurred_on', 'buildVoidEvent with year 0 throws TypeError');
+}
+
+try {
+  buildVoidEvent({
+    target_event_id: 900019,
+    reason_code: 'not_held',
+    evidence_ref: evidenceRef,
+    actor: 'owner',
+    occurred_on: '2030-00-15',
+    definitions_version: definitionsVersion
+  });
+  check(false, 'buildVoidEvent with month 0 throws');
+} catch (e) {
+  check(e.message === 'occurred_on', 'buildVoidEvent with month 0 throws TypeError');
+}
+
+try {
+  buildVoidEvent({
+    target_event_id: 900020,
+    reason_code: 'not_held',
+    evidence_ref: evidenceRef,
+    actor: 'owner',
+    occurred_on: '2030-13-15',
+    definitions_version: definitionsVersion
+  });
+  check(false, 'buildVoidEvent with month 13 throws');
+} catch (e) {
+  check(e.message === 'occurred_on', 'buildVoidEvent with month 13 throws TypeError');
+}
+
+try {
+  buildVoidEvent({
+    target_event_id: 900021,
+    reason_code: 'not_held',
+    evidence_ref: evidenceRef,
+    actor: 'owner',
+    occurred_on: '2030-01-00',
+    definitions_version: definitionsVersion
+  });
+  check(false, 'buildVoidEvent with day 0 throws');
+} catch (e) {
+  check(e.message === 'occurred_on', 'buildVoidEvent with day 0 throws TypeError');
+}
+
+try {
+  buildVoidEvent({
+    target_event_id: 900022,
+    reason_code: 'not_held',
+    evidence_ref: evidenceRef,
+    actor: 'owner',
+    occurred_on: '2030-01-32',
+    definitions_version: definitionsVersion
+  });
+  check(false, 'buildVoidEvent with day 32 throws');
+} catch (e) {
+  check(e.message === 'occurred_on', 'buildVoidEvent with day 32 throws TypeError');
+}
+
+const events5 = [
+  { id: 900014, type: 'status_changed', corrects_event_id: null },
+  { id: 900015, type: 'status_changed', corrects_event_id: null }
+];
+const _visible5 = visibleEvents(events5);
+const counts5 = countByType(events5);
+check((counts5.status_changed ?? 0) === 2, 'countByType correctly counts same-type events');
+
+try {
+  buildVoidEvent({
+    target_event_id: 900016,
+    reason_code: 'duplicate',
+    evidence_ref: evidenceRef,
+    actor: 'bulk_script',
+    script: '',
+    run_id: 'run-900002',
+    occurred_on: occurredOn,
+    definitions_version: definitionsVersion
+  });
+  check(false, 'buildVoidEvent with empty script throws');
+} catch (e) {
+  check(e.message === 'script', 'buildVoidEvent with empty script throws TypeError');
+}
+
+try {
+  buildVoidEvent({
+    target_event_id: 900017,
+    reason_code: 'duplicate',
+    evidence_ref: evidenceRef,
+    actor: 'bulk_script',
+    script: 12345,
+    run_id: 'run-900002',
+    occurred_on: occurredOn,
+    definitions_version: definitionsVersion
+  });
+  check(false, 'buildVoidEvent with non-string script throws');
+} catch (e) {
+  check(e.message === 'script', 'buildVoidEvent with non-string script throws TypeError');
+}
+
 // Summary
 console.log(`void-events: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
