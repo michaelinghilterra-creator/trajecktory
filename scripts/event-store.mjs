@@ -25,6 +25,7 @@ import {
   readEventStoreSwitch,
 } from '../lib/event-store-switch.mjs';
 import { importDataFolder } from '../lib/import/import-data-folder.mjs';
+import { findNonUtf8Files } from '../lib/import/utf8-guard.mjs';
 import {
   changedImportedFiles,
   printImportVerification,
@@ -279,6 +280,12 @@ function flipUnlocked(options, context) {
   const databaseExists = existsSync(dbPath);
   if (databaseExists && !reimport) {
     io.error(`Refusing to flip: ${dbPath} is from an earlier flip and is stale because writes made while the switch was off never reached it. Flipping forward re-imports from the current files; pass --reimport to do that.`);
+    return 1;
+  }
+
+  const badFiles = findNonUtf8Files(dataDir);
+  if (badFiles.length > 0) {
+    io.error(`Refusing to flip: these files are not valid UTF-8 and would not survive the round trip: ${badFiles.join(', ')}. Nothing was changed.`);
     return 1;
   }
 
