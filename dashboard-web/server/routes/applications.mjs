@@ -4,7 +4,10 @@ import path from 'path';
 import { DATA_DIR, OUTPUT_DIR, ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd, patchRowInMd, removeRowFromMd, rejectionTimingStats } from '../lib/applications.mjs';
 import { readResponseProgressStats } from '../lib/response-timing.mjs';
-import { recordApplyDate } from '../lib/sidecars.mjs';
+import { recordApplyDate, readApplyDates } from '../lib/sidecars.mjs';
+import { readAppNotes } from '../lib/notes.mjs';
+import { repliesByApplication } from '../../../lib/data-review.mjs';
+import { evaluateStatusChange } from '../../../lib/status-guards.mjs';
 import { assignSplitTest, splitTestSummary } from '../lib/split-test.mjs';
 import { pushObsidianNote } from '../lib/obsidian.mjs';
 import { ALL_STATUSES } from '../lib/statuses.mjs';
@@ -79,6 +82,33 @@ router.get('/api/split-test', (req, res) => {
   } catch (err) {
     logWriteRouteError(res, err);
   }
+});
+
+// GET /api/applications/:id/status-check?to=<status>[&phoneOn=YYYY-MM-DD][&byHand=1][&withdrawn=1]
+// Read only (E-5). Says whether a hand-made status change has the evidence it needs, and which employer
+// messages to show first. It changes nothing; the PATCH route below does not call it yet.
+router.get('/api/applications/:id/status-check', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid id' });
+    const to = String(req.query.to || '');
+    if (!ALL_STATUSES.includes(to) && to !== 'Passed') return res.status(400).json({ error: `Invalid status: ${to}` });
+    const row = parseApplicationsMd().find(a => a.id === id);
+    if (!row) return res.status(404).json({ error: `Row ${id} not found` });
+    const messages = repliesByApplication(readAppNotes()).get(String(id)) ?? [];
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const verdict = evaluateStatusChange({
+      to,
+      messages,
+      applied_on: readApplyDates()[String(id)] || null,
+      phone_rejection_on: req.query.phoneOn ? String(req.query.phoneOn) : null,
+      withdrawn: req.query.withdrawn === '1',
+      by_hand: req.query.byHand === '1',
+      today,
+    });
+    res.json({ id, to, ...verdict });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // PATCH /api/applications/:id — update status and/or notes

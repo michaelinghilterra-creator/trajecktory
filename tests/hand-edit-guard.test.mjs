@@ -70,7 +70,7 @@ async function request(router, method, url) {
 }
 
 if (process.env.TJK_HAND_EDIT_WORKER === 'stale-route') {
-  const applications = '# Applications Tracker\n\n| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes | URL |\n|---|------|---------|------|-------|--------|-----|--------|--------|-------|-----|\n| 900001 | 2020-09-01 | Zorblax Widgetry | Example Cog Lead | 4/5 | Applied |  |  |  | Invented app note | https://example.test/jobs/900001 |\n';
+  const applications = '# Applications Tracker\n\n| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes | URL |\n|---|------|---------|------|-------|--------|-----|--------|--------|-------|-----|\n| 900001 | 2020-09-01 | Zorblax Widgetry | Example Cog Lead | 4/5 | Phone Screen |  |  |  | Invented app note | https://example.test/jobs/900001 |\n';
   const targetTalent = '# Target Talent\n\n| # | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |\n|---|---------|------|-------|--------|-------|------|-------|-----|-------|-------|----------|--------|------------|-------|---------|\n| 900001 | Zorblax Widgetry | Personone | Example |  | Example Talent Lead |  |  |  |  | example.personone@example.test | linkedin.com/in/example-person-one | Not Contacted |  | Invented note | example.test |\n';
   const correspondence = '## 2020-09-02 | Sent | LinkedIn | LinkedIn connection request\n\nInvented invite body\n';
   const texts = {

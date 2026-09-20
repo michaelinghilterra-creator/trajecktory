@@ -17,9 +17,8 @@ function check(condition, message) {
 // A bulk close is any write that names the status as a value to assign.
 const ASSIGNS_NO_RESPONSE = /(?:status\s*:|nextStatus\s*=|status\s*=|after\s*:)\s*['"]No Response['"]/;
 
-// Known exceptions. Remove an entry when its code is removed; the test fails on a stale entry.
+// Known exceptions. The list is empty; add an entry only for a documented reason, and remove it when its code is removed (the test fails on a stale entry).
 const ALLOWED = new Map([
-  ['dashboard-web/server/routes/followups.mjs', 'archive-ghosted route, to be removed with the Ghosted feature (Definitions v1 section 3)'],
 ]);
 
 function walk(dir, out = []) {
