@@ -71,6 +71,8 @@ const writerJsonTexts = {
   'twc-events.json': `${JSON.stringify([{ id: 'example-event-900001', date: '2030-01-04', type: 'meeting' }], null, 2)}\n`,
   'twc-overrides.json': `${JSON.stringify({ add: { 'example-900001': { company: 'Zorblax Widgetry' } } }, null, 2)}\n`,
   'contact-links.json': `${JSON.stringify({ version: 1, pins: { 'ta:900001': { alone: true, at: '2030-01-05' } } }, null, 2)}\n`,
+  'app-notes.json': `${JSON.stringify({ 900001: [{ timestamp: '2030-01-01T00:00:00.000Z', text: 'Invented note' }] }, null, 2)}\n`,
+  'google-sync.json': `${JSON.stringify({ seenMessageIds: ['example00000001'], lastCheckedAt: '2030-01-01T00:00:00.000Z', handledReplies: {}, lastPreviewAt: '2030-01-01T00:00:00.000Z', notRelatedSenders: {} }, null, 2)}\n`,
 };
 
 {
@@ -242,10 +244,10 @@ const writerJsonTexts = {
   const snapshots = store.db.prepare(`
     SELECT payload FROM events WHERE type = 'legacy_record' AND evidence_ref LIKE '%#snapshot' ORDER BY id
   `).all().map(row => JSON.parse(row.payload));
-  check(ids.length === 7 && snapshots.length === 7
-    && snapshots.every(snapshot => snapshot.format === 'writer'), 'all seven writer-formatted JSON files snapshot as writer format in one import');
-  check(LEGACY_JSON_FILES.every(file => renderLegacyFile(store, file) === writerJsonTexts[file]), 'all seven writer-formatted JSON snapshots render byte for byte');
-  check(LEGACY_JSON_FILES.every(file => listLegacyFiles(store).includes(file)), 'listLegacyFiles includes all seven JSON files');
+  check(ids.length === LEGACY_JSON_FILES.length && snapshots.length === LEGACY_JSON_FILES.length
+    && snapshots.every(snapshot => snapshot.format === 'writer'), 'every writer-formatted JSON file snapshots as writer format in one import');
+  check(LEGACY_JSON_FILES.every(file => renderLegacyFile(store, file) === writerJsonTexts[file]), 'every writer-formatted JSON snapshot renders byte for byte');
+  check(LEGACY_JSON_FILES.every(file => listLegacyFiles(store).includes(file)), 'listLegacyFiles includes every JSON file');
   store.close();
 }
 
