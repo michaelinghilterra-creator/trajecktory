@@ -1,4 +1,5 @@
 import { parseApplicationsMd } from './applications.mjs';
+import { isPostingClosed } from '../../../lib/passed.mjs';
 import { weekStartOf } from './activity.mjs';
 import { readApplyDates, parseStatusEvents } from './sidecars.mjs';
 import {
@@ -56,7 +57,7 @@ export function responseProgressStats({
   const anchorSources = { both: 0, event: 0, applyDate: 0, rowDate: 0 };
 
   for (const app of apps) {
-    if (app.status === 'Closed') {
+    if (isPostingClosed(app)) {
       closedExcluded++;
       continue;
     }

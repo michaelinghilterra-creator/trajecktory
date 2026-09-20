@@ -14,6 +14,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
 import { AUTO_DISCARD_SCORE } from './lib/discard.mjs';
+import { withPassedReason } from './lib/passed.mjs';
 import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -55,12 +56,12 @@ for (const line of lines) {
 
   if (!lowScore && !recommendsAgainst) { out.push(line); continue; }
 
-  // Flip to Discarded
+  // Flip to Passed (Definitions v1 section 3), tagged with why
   const reason = recommendsAgainst
     ? `auto-discarded: agent recommends against`
     : `auto-discarded: score ${score} < ${AUTO_DISCARD_SCORE.toFixed(1)}`;
-  const newNotes = notes ? `${reason}. ${notes}` : reason;
-  out.push(formatTrackerLine({ ...row, status: 'Discarded', notes: newNotes }));
+  const newNotes = withPassedReason(notes ? `${reason}. ${notes}` : reason, recommendsAgainst ? 'discarded' : 'low_score');
+  out.push(formatTrackerLine({ ...row, status: 'Passed', notes: newNotes }));
   changes.push({ id, score: score ?? '–', company, role, why: recommendsAgainst ? 'rec' : 'score' });
 }
 
@@ -77,7 +78,7 @@ for (const c of changes) {
 }
 
 if (!apply) {
-  console.log('\nRun with --apply to flip these to Discarded in applications.md');
+  console.log('\nRun with --apply to flip these to Passed in applications.md');
   process.exit(0);
 }
 
@@ -120,4 +121,4 @@ if (logWritesEnabled(DATA_DIR)) {
 } else {
   fs.writeFileSync(APPS, newText);
 }
-console.log(`\n✅ Flipped ${changes.length} entries to Discarded.`);
+console.log(`\n✅ Flipped ${changes.length} entries to Passed.`);

@@ -18,6 +18,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine } from './lib/tracker.mjs';
+import { oldLabel } from './lib/passed.mjs';
 import { AUTO_DISCARD_SCORE, parseScore, scoreIsParseable } from './lib/discard.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,7 +35,7 @@ const rows = [];
 for (const line of fs.readFileSync(APPS, 'utf8').split('\n')) {
   const row = parseTrackerLine(line);
   if (!row) continue;
-  if (row.status !== 'Discarded') continue;
+  if (oldLabel(row.status, row.notes) !== 'Discarded') continue;
   if (!/auto-discarded:/i.test(row.notes || '')) continue;
   const m = (row.score || '').match(/^([\d.]+)/);
   const score = scoreIsParseable(row.score) && m ? parseFloat(m[1]) : null;

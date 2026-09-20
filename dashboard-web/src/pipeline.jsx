@@ -1225,7 +1225,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     // Re-queue a near-threshold auto-discard (a noisy 2.9, just under the 3.0 cut)
     // for a fresh evaluation instead of hardening it as a permanent reject (7.5).
     // Reopen just flips the status; Re-evaluate puts it back in the eval queue.
-    if (st === 'Discarded' && typeof app.score === 'number' && app.score >= 2.5 && app.score < 3.0) {
+    if (window.oldStatus(app) === 'Discarded' && typeof app.score === 'number' && app.score >= 2.5 && app.score < 3.0) {
       primary.push({ id: 'requeue', label: 'Re-evaluate', cls: 'ghost' });
     }
   }

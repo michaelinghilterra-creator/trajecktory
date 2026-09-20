@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { APPS_MD, DATA_DIR, STATUS_EVENTS_PATH } from '../config.mjs';
 import { resolveReportPath } from './safe-path.mjs';
 import { parseTrackerLine, formatTrackerLine, hasStrayPipe } from '../../../lib/tracker.mjs';
+import { passedReasonOf } from '../../../lib/passed.mjs';
 import { appendEventsWithEffects, findTrackerRow } from '../../../lib/legacy-files.mjs';
 import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
 import { hasV1Frontmatter, parseV1, v1Header } from '../v1-loader.mjs';
@@ -297,6 +298,8 @@ function parseApplicationsMd() {
       score: parseScore(base.score),
       scoreRaw: base.score,
       status: base.status,
+      // Why a Passed row was passed (from the tag in its notes); null for any other status.
+      passedReason: base.status === 'Passed' ? passedReasonOf(notes) : null,
       pdf: base.pdf === '✅',
       resume,
       report: report || null,
@@ -381,6 +384,7 @@ function patchRowInMd(id, updates, hint = {}) {
             from: target.row.status,
             to: updates.status,
             date: occurredOn,
+            ...(updates.status === 'Passed' ? { passed_reason: passedReasonOf(updates.notes) } : {}),
             legacy_effects: effects,
           },
         };

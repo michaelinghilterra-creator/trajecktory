@@ -69,6 +69,12 @@ window.APPS = (() => {
 window.INTERVIEW_STAGES = ["Phone Screen","1st Interview","2nd Interview","3rd Interview"];
 window.isInterviewStage = (s) => window.INTERVIEW_STAGES.includes(s);
 
+// Passed folds SKIP, Not a Fit, Discarded and Closed; the server sends why as passedReason (from the tag in the
+// notes). oldStatus() gives the label a row would have had, for the few views that still tell the four apart
+// (a closed posting is not a role you turned down). Mirrors oldLabel() in lib/passed.mjs. Other statuses pass through.
+window.PASSED_OLD_LABEL = { not_a_fit: "Not a Fit", skip: "SKIP", posting_closed: "Closed", discarded: "Discarded", withdrew: "Discarded", low_score: "Discarded" };
+window.oldStatus = (app) => (app && app.status === "Passed" ? (window.PASSED_OLD_LABEL[app.passedReason] || "Discarded") : (app && app.status));
+
 window.STATUSES = ["Evaluated","Applied",...window.INTERVIEW_STAGES,"Offer","Rejected","Discarded","SKIP","Closed","Not a Fit","Passed","No Response"];
 // The SINGLE source of the archetype list for the browser — the Sankey, the
 // Archetype list for pipeline filters, chart axes, and tracker grouping.
