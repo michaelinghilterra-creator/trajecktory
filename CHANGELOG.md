@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.0.4](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.0.3...v4.0.4) (2026-09-20)
+
+
+### Bug Fixes
+
+* **pipeline:** ask before a rejected or no response change is saved without evidence ([#363](https://github.com/michaelinghilterra-creator/trajecktory/issues/363)) ([d0e3ce6](https://github.com/michaelinghilterra-creator/trajecktory/commit/d0e3ce6e6dabad432c712889ede55a6bdaa20c58))
+
 ## [4.0.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.0.2...v4.0.3) (2026-09-20)
 
 
