@@ -85,6 +85,7 @@ check(same(server.FUNNEL_ORDER, defs.LADDER), 'server FUNNEL_ORDER matches the l
 check(same(server.OUTREACH_ELIGIBLE_STATUSES, defs.ACTIVE_STATUSES), 'server OUTREACH_ELIGIBLE_STATUSES matches Active');
 check(sameSet(server.OUTREACH_DEAD_STATUSES, defs.ALL_APPLICATION_STATUSES.filter(s => !defs.LADDER.includes(s))), 'server OUTREACH_DEAD_STATUSES is everything off the ladder');
 check(sameSet(server.ACTIVE_STATUSES, [...defs.ACTIVE_STATUSES, ...extraFor('ACTIVE_STATUSES')]), 'server ACTIVE_STATUSES is Active plus only the listed divergence');
+check(!server.ACTIVE_STATUSES.includes('Evaluated'), 'server ACTIVE_STATUSES does not include Evaluated');
 for (const d of defs.KNOWN_DIVERGENCES) {
   check(d.extra.every(s => server[d.export].includes(s)) && !d.extra.some(s => defs.ACTIVE_STATUSES.includes(s)), `the listed divergence is still real: ${d.export} extra ${d.extra.join(', ')}`);
 }

@@ -519,7 +519,7 @@ function RollingFloor({ toast }) {
         <div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Build cap · rolling outreach floor</div>
           <div className="dim mono" style={{ fontSize: 11, marginTop: 2 }}>
-            Verified touches over your trailing {st.windowDays} working days.
+            Verified touches over your trailing {st.windowDays} days.
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -532,7 +532,7 @@ function RollingFloor({ toast }) {
 
       <div className="dim" style={{ fontSize: 12, marginTop: 8 }}>
         <span style={{ color: s.color, fontWeight: 600 }}>{s.gate}</span>{' '}
-        {st.state === 'behind' && `${st.gap} more ${st.gap === 1 ? 'touch' : 'touches'} in your trailing week unlocks it. Weekend touches count.`}
+        {st.state === 'behind' && `${st.gap} more ${st.gap === 1 ? 'touch' : 'touches'} in your trailing week unlocks it.`}
         {st.state === 'grace' && `Grace period active through ${st.graceUntil}.`}
       </div>
 

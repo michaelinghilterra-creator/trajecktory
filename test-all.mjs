@@ -655,6 +655,8 @@ for (const suite of [
   'tests/weekly-review-route.test.mjs',
   'tests/status-guards.test.mjs',
   'tests/status-check-route.test.mjs',
+  'tests/status-guard-patch.test.mjs',
+  'tests/status-guard-dialog.test.mjs',
   'tests/ghosted-removed.test.mjs',
   'tests/data-review.test.mjs',
   'tests/report-data-review.test.mjs',

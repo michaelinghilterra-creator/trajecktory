@@ -51,9 +51,10 @@ export function findSubmittedApplication(applications) {
   return applications.find(app => SUBMITTED_STATUSES.includes(app?.status)) || null;
 }
 
-// Active = anything still on the funnel (Evaluated .. Offer). Closed/terminal =
-// everything else (Rejected, Discarded, SKIP, Closed, Not a Fit, No Response).
-export const ACTIVE_STATUSES = FUNNEL_ORDER.slice();
+// Active (Definitions v1 section 3) = Applied, any interview stage, or Offer. Evaluated is on the
+// funnel but is not active. Closed/terminal = everything off the funnel (Rejected, Discarded, SKIP,
+// Closed, Not a Fit, No Response).
+export const ACTIVE_STATUSES = FUNNEL_ORDER.filter(s => s !== 'Evaluated');
 export const CLOSED_STATUSES = ALL_STATUSES.filter(s => !FUNNEL_ORDER.includes(s));
 
 // Response outcomes are centralized beside the canonical status ladder. Timing

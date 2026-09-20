@@ -101,7 +101,7 @@ function stateForPrompt(state) {
   lines.push(`- Roles evaluated and awaiting your decision: ${state.pendingEvals}${state.topPending.length ? ` (top fits: ${state.topPending.map(p => `${p.company} ${p.score ?? '?'}/5`).join(', ')})` : ''}`);
   lines.push(`- LinkedIn Connect queue: ${state.connectQueue} waiting · Email queue: ${state.emailQueue} waiting`);
   lines.push(`- Applications gone quiet (need a nudge): ${state.staleFollowups}; TA contacts to re-touch: ${state.staleTA}`);
-  if (state.floor) lines.push(`- Weekly outreach floor: ${state.floor.done}/${state.floor.target} verified touches over the last ${state.floor.windowDays} working days${state.floor.met ? ' (met)' : ` (${state.floor.gap} to go)`}`);
+  if (state.floor) lines.push(`- Weekly outreach floor: ${state.floor.done}/${state.floor.target} verified touches over the last ${state.floor.windowDays} days${state.floor.met ? ' (met)' : ` (${state.floor.gap} to go)`}`);
   if (state.activeApplications.length) {
     lines.push(`- Active applications you can log an outcome on (id · company · status): ${state.activeApplications.map(a => `${a.id}·${a.company}·${a.status}`).join(' | ')}`);
   }

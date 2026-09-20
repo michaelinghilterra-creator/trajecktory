@@ -8,6 +8,7 @@ import { recordApplyDate, readApplyDates } from '../lib/sidecars.mjs';
 import { readAppNotes } from '../lib/notes.mjs';
 import { repliesByApplication } from '../../../lib/data-review.mjs';
 import { evaluateStatusChange } from '../../../lib/status-guards.mjs';
+import { dialogFor } from '../../../lib/status-guard-dialog.mjs';
 import { assignSplitTest, splitTestSummary } from '../lib/split-test.mjs';
 import { pushObsidianNote } from '../lib/obsidian.mjs';
 import { ALL_STATUSES } from '../lib/statuses.mjs';
@@ -84,9 +85,26 @@ router.get('/api/split-test', (req, res) => {
   }
 });
 
+// The guard verdict for a hand made change of application `id` to status `to` (E-5). Shared by the
+// read only check route and by the PATCH route below.
+function guardVerdict(id, to, { phoneOn = null, byHand = false, withdrawn = false } = {}) {
+  const messages = repliesByApplication(readAppNotes()).get(String(id)) ?? [];
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return evaluateStatusChange({
+    to,
+    messages,
+    applied_on: readApplyDates()[String(id)] || null,
+    phone_rejection_on: phoneOn,
+    withdrawn,
+    by_hand: byHand,
+    today,
+  });
+}
+
 // GET /api/applications/:id/status-check?to=<status>[&phoneOn=YYYY-MM-DD][&byHand=1][&withdrawn=1]
 // Read only (E-5). Says whether a hand-made status change has the evidence it needs, and which employer
-// messages to show first. It changes nothing; the PATCH route below does not call it yet.
+// messages to show first. It changes nothing; the PATCH route below enforces the same rules.
 router.get('/api/applications/:id/status-check', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -95,19 +113,12 @@ router.get('/api/applications/:id/status-check', (req, res) => {
     if (!ALL_STATUSES.includes(to) && to !== 'Passed') return res.status(400).json({ error: `Invalid status: ${to}` });
     const row = parseApplicationsMd().find(a => a.id === id);
     if (!row) return res.status(404).json({ error: `Row ${id} not found` });
-    const messages = repliesByApplication(readAppNotes()).get(String(id)) ?? [];
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const verdict = evaluateStatusChange({
-      to,
-      messages,
-      applied_on: readApplyDates()[String(id)] || null,
-      phone_rejection_on: req.query.phoneOn ? String(req.query.phoneOn) : null,
+    const verdict = guardVerdict(id, to, {
+      phoneOn: req.query.phoneOn ? String(req.query.phoneOn) : null,
       withdrawn: req.query.withdrawn === '1',
-      by_hand: req.query.byHand === '1',
-      today,
+      byHand: req.query.byHand === '1',
     });
-    res.json({ id, to, ...verdict });
+    res.json({ id, to, ...verdict, dialog: dialogFor(verdict, row.company) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -115,7 +126,7 @@ router.get('/api/applications/:id/status-check', (req, res) => {
 router.patch('/api/applications/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { status, notes, company, eventDate } = req.body;
+    const { status, notes, company, eventDate, guard } = req.body;
 
     if (status && !ALL_STATUSES.includes(status)) {
       return res.status(400).json({ error: `Invalid status: ${status}` });
@@ -141,7 +152,7 @@ router.patch('/api/applications/:id', (req, res) => {
         return res.status(400).json({ error: `Invalid eventDate: ${eventDate} is implausibly old` });
       }
     }
-    const when = eventDate || undefined;
+    let when = eventDate || undefined;
 
     // Detect the transition INTO Applied. We push a vault note only when a row
     // that was NOT already Applied becomes Applied — not on every save where the
@@ -151,6 +162,20 @@ router.patch('/api/applications/:id', (req, res) => {
     const prevRow = (company && before.find(r => r.id === id && r.company === company))
       || before.find(r => r.id === id);
     const becomingApplied = status === 'Applied' && (!prevRow || prevRow.status !== 'Applied');
+
+    // E-5: Rejected needs an employer rejection or a dated phone rejection, and No Response is only set by
+    // hand and only when no employer message exists since the application. A refused change writes nothing.
+    // `guard` carries the person's answers: { byHand, phoneRejectionOn }.
+    if ((status === 'Rejected' || status === 'No Response') && (!prevRow || prevRow.status !== status)) {
+      const verdict = guardVerdict(id, status, {
+        phoneOn: guard && typeof guard.phoneRejectionOn === 'string' ? guard.phoneRejectionOn : null,
+        byHand: !!guard && guard.byHand === true,
+      });
+      if (!verdict.allowed) {
+        return res.status(409).json({ error: 'This status change needs evidence or a confirmation first.', guard: verdict, dialog: dialogFor(verdict, prevRow?.company) });
+      }
+      if (status === 'Rejected' && !when && verdict.dated_on && verdict.dated_on <= new Date().toISOString().slice(0, 10)) when = verdict.dated_on;
+    }
 
     const updates = {};
     if (status !== undefined) updates.status = status;
