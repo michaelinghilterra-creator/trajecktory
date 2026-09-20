@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import { ROOT_DIR } from '../config.mjs';
+import { isPostingClosed } from '../../../lib/passed.mjs';
 
 const STATES_FILE = path.join(ROOT_DIR, 'templates', 'states.yml');
 
@@ -123,7 +124,7 @@ export const OUTREACH_DEAD_STATUSES = CLOSED_STATUSES;
 // they chose not to apply to blames them for someone else's timing. It is
 // surfaced as its own count instead, never silently folded in.
 export function enteredFunnel(app) {
-  return app?.status !== 'Closed';
+  return !isPostingClosed(app);
 }
 
 // ─── Outreach ladder (target talent) ─────────────────────────────────────────

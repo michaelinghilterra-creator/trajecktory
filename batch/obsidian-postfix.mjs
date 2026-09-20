@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine, formatTrackerLine } from '../lib/tracker.mjs';
+import { oldLabel, stripPassedReason } from '../lib/passed.mjs';
 import { localToday, logWritesEnabled, writeTableText } from '../lib/log-writes.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -191,9 +192,9 @@ function main() {
   }, options.apply);
 
   const reflipped = rewriteTracker(appsPath, row => {
-    if (!runNums.has(row.num) || row.status !== 'Discarded') return null;
+    if (!runNums.has(row.num) || oldLabel(row.status, row.notes) !== 'Discarded') return null;
     console.log(`${options.apply ? 'flipped' : 'would flip'} ${row.num}, ${row.company}`);
-    return { ...row, status: 'Evaluated' };
+    return { ...row, status: 'Evaluated', notes: stripPassedReason(row.notes) };
   }, options.apply);
 
   let moved = 0;

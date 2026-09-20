@@ -18,7 +18,7 @@ import { localToday, logWritesEnabled, withLogWrite, writeTableText } from './li
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const RECOVERABLE_STATUSES = new Set(['Closed', 'Not a Fit', 'Discarded', 'SKIP', 'Evaluated']);
+const RECOVERABLE_STATUSES = new Set(['Closed', 'Not a Fit', 'Discarded', 'SKIP', 'Passed', 'Evaluated']);
 const CHANGE_TYPES = [
   'apply_date', 'tracker_status', 'tracker_status_event', 'interview_override',
   'interview_status_event', 'application_restore', 'application_exclusion',

@@ -23,6 +23,7 @@ import path from 'path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'url';
 import { parseTrackerLine } from './lib/tracker.mjs';
+import { oldLabel } from './lib/passed.mjs';
 import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -187,7 +188,7 @@ if (idsList) {
     const row = parseTrackerLine(line);
     if (!row) { keep.push(line); continue; }
     const id = row.num;
-    const status = row.status;
+    const status = oldLabel(row.status, row.notes);
     // NEVER touch user-progressed statuses, regardless of ID list
     const safeForArchive = ['SKIP', 'Discarded', 'Evaluated', 'Rejected'].includes(status);
     if (idsList.has(id) && safeForArchive) move.push(line);
@@ -243,7 +244,7 @@ for (const line of lines) {
   if (!row) { keep.push(line); continue; }
   const rowDate = row.date;
   const score = row.score;
-  const status = row.status;
+  const status = oldLabel(row.status, row.notes);
 
   // Match criteria
   let shouldMove = false;

@@ -79,8 +79,8 @@ const A = runScript('auto-discard-low.mjs', [
 console.log('\n1. Low score flips, and the reason lands in Notes (not Report)');
 {
   const r = A.byId(10);
-  check(r.status === 'Discarded', `status flipped to Discarded (got "${r.status}")`);
-  check(/^auto-discarded: score 2\.4 < 3\.0/.test(r.notes), `reason prepended to NOTES: "${r.notes}"`);
+  check(r.status === 'Passed', `status flipped to Passed (got "${r.status}")`);
+  check(/^\[passed: low_score\] auto-discarded: score 2\.4 < 3\.0/.test(r.notes), `reason prepended to NOTES behind the passed tag: "${r.notes}"`);
   check(r.notes.includes('thin scope'), 'original note preserved after the reason');
   // The regression: index 9 was Report, so the reason used to be written there.
   check(r.report === '[10](reports/10-lowco.md)', `Report cell untouched: "${r.report}"`);
@@ -97,7 +97,7 @@ console.log('\n2. Notes are actually read — exemptions and verdicts work');
   // Healthy score, but the notes say do-not-apply. Only reachable if notes are
   // read from the right cell.
   const verdict = A.byId(12);
-  check(verdict.status === 'Discarded',
+  check(verdict.status === 'Passed',
     `recommends-against note discards despite a 4.1 score (got "${verdict.status}")`);
   check(/recommends against/.test(verdict.notes), `verdict reason recorded: "${verdict.notes}"`);
 }

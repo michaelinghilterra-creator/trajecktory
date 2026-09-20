@@ -14,6 +14,7 @@ import { pushObsidianNote } from '../lib/obsidian.mjs';
 import { ALL_STATUSES } from '../lib/statuses.mjs';
 import { mdToHtml, escapeHtml } from '../lib/html.mjs';
 import { isRequeueableDiscard } from '../../../lib/discard.mjs';
+import { PASSED_REASONS, passedReasonOf, withPassedReason, stripPassedReason } from '../../../lib/passed.mjs';
 import { canonicalUrl } from '../../../lib/identity.mjs';
 import { logWriteRouteError, logWritesEnabled, renderPendingResponse, withLogWrite } from '../../../lib/log-writes.mjs';
 
@@ -126,10 +127,13 @@ router.get('/api/applications/:id/status-check', (req, res) => {
 router.patch('/api/applications/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { status, notes, company, eventDate, guard } = req.body;
+    const { status, notes, company, eventDate, guard, passedReason } = req.body;
 
     if (status && !ALL_STATUSES.includes(status)) {
       return res.status(400).json({ error: `Invalid status: ${status}` });
+    }
+    if (passedReason !== undefined && passedReason !== null && !PASSED_REASONS.includes(passedReason)) {
+      return res.status(400).json({ error: `Invalid passedReason: ${passedReason}` });
     }
 
     // A bad date is rejected outright rather than quietly ignored. The body is
@@ -180,6 +184,14 @@ router.patch('/api/applications/:id', (req, res) => {
     const updates = {};
     if (status !== undefined) updates.status = status;
     if (notes !== undefined) updates.notes = notes;
+    // Passed carries its reason as a tag at the front of the notes (Passed Status Migration Plan): the reason
+    // sent with the change, else the one already on the row, else "discarded". Leaving Passed drops the tag.
+    if (status === 'Passed') {
+      const reason = passedReason || passedReasonOf(notes ?? prevRow?.notes) || 'discarded';
+      updates.notes = withPassedReason(notes ?? prevRow?.notes ?? '', reason);
+    } else if (status !== undefined && prevRow?.status === 'Passed') {
+      updates.notes = stripPassedReason(notes ?? prevRow.notes ?? '');
+    }
 
     let ok;
     const save = () => {
@@ -248,7 +260,7 @@ router.post('/api/applications/:id/requeue', (req, res) => {
     const rows = parseApplicationsMd();
     const row = (company && rows.find(r => r.id === id && r.company === company)) || rows.find(r => r.id === id);
     if (!row) return res.status(404).json({ error: `Row ${id} not found` });
-    if (!isRequeueableDiscard({ status: row.status, score: row.score })) {
+    if (!isRequeueableDiscard({ status: row.status, score: row.score, notes: row.notes })) {
       return res.status(400).json({ error: 'Only a near-threshold Discarded role (score 2.5–2.9) can be re-queued.' });
     }
     if (!row.url) {

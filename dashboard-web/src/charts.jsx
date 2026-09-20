@@ -151,7 +151,7 @@ window.Histogram = function Histogram({ apps, height = 180 }) {
         const verdict = score >= 4.0 ? "strong match" : score >= 3.0 ? "borderline" : "weak";
         const verdictColor = score >= 4.0 ? "var(--green)" : score >= 3.0 ? "var(--yellow)" : "var(--red)";
         const top = items.slice().sort((a, b) => b.score - a.score).slice(0, 4);
-        const applied = items.filter(a => !["Evaluated","Discarded","SKIP","Closed","Not a Fit","Passed"].includes(a.status)).length;
+        const applied = items.filter(a => !["Evaluated","Discarded","SKIP","Closed","Not a Fit"].includes(window.oldStatus(a))).length;
         const pct = apps.length ? Math.round((items.length / apps.length) * 100) : 0;
         const insight = items.length === 0
           ? "No roles in this band."
@@ -436,7 +436,7 @@ window.Velocity = function Velocity({ apps, windowDays = 7, color = "var(--cyan)
       const k = d.toISOString().slice(0,10);
       counts[k] = 0; lists[k] = [];
     }
-    apps.filter(a => !["Evaluated","Discarded","SKIP","Closed","Not a Fit","Passed"].includes(a.status))
+    apps.filter(a => !["Evaluated","Discarded","SKIP","Closed","Not a Fit"].includes(window.oldStatus(a)))
       .forEach(a => { if (counts[a.date] != null) { counts[a.date]++; lists[a.date].push(a); } });
     const dates = Object.keys(counts).sort();
     const roll = [];
@@ -670,8 +670,8 @@ window.Sankey = function Sankey({ apps }) {
     // into a terminal bucket, which is why this node read 173 against the
     // server's 177.
     const inEval = a => effIdx(a) >= 0;
-    const dropped = a => !inEval(a) && ["Discarded","SKIP","Not a Fit","Passed"].includes(a.status);
-    const aged = a => !inEval(a) && a.status === "Closed";
+    const dropped = a => !inEval(a) && ["Discarded","SKIP","Not a Fit"].includes(window.oldStatus(a));
+    const aged = a => !inEval(a) && window.oldStatus(a) === "Closed";
     // "Lost" terminal statuses. No Response can only land at Applied (eff caps it
     // there), so it shows as a loss at Applied, never deeper.
     const isRej = a => a.status === "Rejected" || a.status === "No Response";

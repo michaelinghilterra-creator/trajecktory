@@ -2,7 +2,7 @@
 // Passed row the same answer it gives the closest old label, so a row that reaches Passed by hand cannot
 // change a count. The four old labels stay canonical and are not rewritten into Passed.
 import * as server from '../dashboard-web/server/lib/statuses.mjs';
-import { resultForStatus } from '../dashboard-web/server/lib/twc.mjs';
+import { resultForStatus, applicationDetailNote } from '../dashboard-web/server/lib/twc.mjs';
 import { evaluateStatusChange } from '../lib/status-guards.mjs';
 
 let passed = 0;
@@ -24,6 +24,7 @@ check(server.hasResponded({ status: 'Passed', reached: 'Phone Screen' }) === tru
 check(server.enteredFunnel({ status: 'Passed' }) === server.enteredFunnel({ status: 'Discarded' }) && server.enteredFunnel({ status: 'Passed' }) === true, 'a Passed row entered the funnel, as Discarded does');
 check(resultForStatus('Passed') === 'Other' && resultForStatus('Passed') === resultForStatus('Discarded'), 'the Work Search result for Passed is Other, as for Discarded');
 check(evaluateStatusChange({ to: 'Passed' }).allowed === true, 'the guard allows Passed');
+check(applicationDetailNote('Passed', '[passed: not_a_fit] x') === applicationDetailNote('Not a Fit', 'x') && applicationDetailNote('Passed', '[passed: skip]') === 'Status: SKIP', 'the Work Search detail note reads a Passed row as its old label, so the CSV wording does not change');
 
 console.log(`passed-alias: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

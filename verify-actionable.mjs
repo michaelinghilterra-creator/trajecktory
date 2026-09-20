@@ -17,6 +17,7 @@ import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { parseTrackerLine, formatTrackerLine } from './lib/tracker.mjs';
+import { withPassedReason } from './lib/passed.mjs';
 import { urlForRow } from './lib/identity.mjs';
 import { localToday, logWritesEnabled, writeTableText } from './lib/log-writes.mjs';
 
@@ -113,7 +114,7 @@ for (const t of expired) {
 }
 
 if (!apply) {
-  console.log('\nRun with --apply to flip these to Discarded in applications.md');
+  console.log('\nRun with --apply to flip these to Passed in applications.md');
   process.exit(1);
 }
 
@@ -130,8 +131,8 @@ const newLines = lines.map(line => {
   const reason = `auto-discarded: ${statusLabel}`;
   return formatTrackerLine({
     ...row,
-    status: 'Discarded',
-    notes: row.notes ? `${reason}. ${row.notes}` : reason,
+    status: 'Passed',
+    notes: withPassedReason(row.notes ? `${reason}. ${row.notes}` : reason, found?.livenessStatus === 'uncertain' ? 'discarded' : 'posting_closed'),
   });
 });
 
@@ -173,7 +174,7 @@ if (logWritesEnabled(DATA_DIR)) {
   } catch (error) {
     if (error.code === 'RENDER_FAILED') {
       console.warn(`Warning: ${error.message}`);
-      console.log(`\n✅ Flipped ${expired.length} entries to Discarded.`);
+      console.log(`\n✅ Flipped ${expired.length} entries to Passed.`);
     } else {
       console.error(error.message);
     }
@@ -182,5 +183,5 @@ if (logWritesEnabled(DATA_DIR)) {
 } else {
   writeFileSync(APPS, newText);
 }
-console.log(`\n✅ Flipped ${expired.length} entries to Discarded.`);
+console.log(`\n✅ Flipped ${expired.length} entries to Passed.`);
 process.exit(0);

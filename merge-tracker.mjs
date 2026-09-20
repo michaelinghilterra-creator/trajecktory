@@ -23,6 +23,7 @@ import { execFileSync } from 'child_process';
 import yaml from 'js-yaml';
 import { parseScore, shouldAutoDiscard, recommendsAgainst, AUTO_DISCARD_SCORE } from './lib/discard.mjs';
 import { parseTrackerLine, formatTrackerLine, TRACKER_HEADER, TRACKER_SEPARATOR } from './lib/tracker.mjs';
+import { withPassedReason, passedReasonOf } from './lib/passed.mjs';
 // Read a report's DERIVED headline (see lib/score.mjs). Same v1 frontmatter reader
 // compute-scores.mjs uses, so the tracker score comes from the one source of truth.
 import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs';
@@ -651,7 +652,10 @@ for (const { addition, existing: duplicate } of updatesByExisting.values()) {
         pdf: duplicate.pdf,
         resume: resumeVal,
         report: addition.report,
-        notes: `Re-eval ${addition.date} (${oldScore}→${newScore}). ${addition.notes}`,
+        // A row that stays Passed keeps the reason it was passed for; the re-eval note replaces the rest.
+        notes: resolvedStatus === 'Passed'
+          ? withPassedReason(`Re-eval ${addition.date} (${oldScore}→${newScore}). ${addition.notes}`, passedReasonOf(duplicate.notes) || 'discarded')
+          : `Re-eval ${addition.date} (${oldScore}→${newScore}). ${addition.notes}`,
         // Without this the update ERASES the url cell: formatTrackerLine writes
         // the '—' placeholder for any field it is not given, so every re-eval
         // would silently blank a backfilled URL. Keep what the row already has,
@@ -699,11 +703,12 @@ for (const addition of pendingNew) {
   let finalStatus = addition.status;
   let finalNotes = addition.notes;
   if (shouldAutoDiscard({ status: finalStatus, score: addition.score, notes: finalNotes })) {
-    finalStatus = 'Discarded';
-    const reason = recommendsAgainst(finalNotes)
+    finalStatus = 'Passed';
+    const againstRec = recommendsAgainst(finalNotes);
+    const reason = againstRec
       ? `auto-discarded: agent recommends against`
       : `auto-discarded: score ${numScore} < ${AUTO_DISCARD_SCORE.toFixed(1)}`;
-    finalNotes = finalNotes ? `${reason}. ${finalNotes}` : reason;
+    finalNotes = withPassedReason(finalNotes ? `${reason}. ${finalNotes}` : reason, againstRec ? 'discarded' : 'low_score');
   }
 
   const newLine = formatTrackerLine({
@@ -723,7 +728,7 @@ for (const addition of pendingNew) {
   });
   newLines.push(newLine);
   added++;
-  const tag = finalStatus === 'Discarded' ? '🗑️ ' : '➕ ';
+  const tag = finalStatus === 'Passed' ? '🗑️ ' : '➕ ';
   console.log(`${tag}Add #${entryNum}: ${addition.company} — ${addition.role} (${addition.score}, ${finalStatus})`);
 }
 

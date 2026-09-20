@@ -462,9 +462,10 @@ function App() {
   // `eventDate` (optional): when the change actually happened (booked/notified).
   //   Omitted, the server dates the event today, which is what it always did.
   const handleAction = useCallback((app, newStatus, silent, reachedStage, eventDate) => {
-    // Map UI-only labels to canonical statuses before storage
-    const STATUS_ALIASES = { "Not a Fit": "Discarded" };
-    const canonicalStatus = STATUS_ALIASES[newStatus] || newStatus;
+    // The four old close actions all store Passed, with the reason the person chose (Passed Status Migration Plan).
+    const PASSED_ACTIONS = { SKIP: "skip", "Not a Fit": "not_a_fit", Closed: "posting_closed", Discarded: "discarded", Passed: "discarded" };
+    const passedReason = PASSED_ACTIONS[newStatus];
+    const canonicalStatus = passedReason ? "Passed" : newStatus;
 
     // Auto-attribute the exit stage: when a row goes Rejected / No Response from an
     // interview round (or Offer), stamp the furthest stage reached so the funnel +
@@ -490,11 +491,13 @@ function App() {
       nextNotes = stripped ? `${tag} ${stripped}` : tag;
     }
 
-    setApps(prev => prev.map(a => a.id === app.id ? { ...a, status: canonicalStatus, ...(nextNotes !== undefined && { notes: nextNotes }) } : a));
-    setDrawerApp(d => d && d.id === app.id ? { ...d, status: canonicalStatus, ...(nextNotes !== undefined && { notes: nextNotes }) } : d);
+    const passedFields = { passedReason: canonicalStatus === "Passed" ? passedReason : null };
+    setApps(prev => prev.map(a => a.id === app.id ? { ...a, status: canonicalStatus, ...passedFields, ...(nextNotes !== undefined && { notes: nextNotes }) } : a));
+    setDrawerApp(d => d && d.id === app.id ? { ...d, status: canonicalStatus, ...passedFields, ...(nextNotes !== undefined && { notes: nextNotes }) } : d);
     // Persist to applications.md
     const body = { status: canonicalStatus, company: app.company };
     if (guard) body.guard = guard;
+    if (passedReason) body.passedReason = passedReason;
     if (nextNotes !== undefined) body.notes = nextNotes;
     if (eventDate) body.eventDate = eventDate;
     window.tjkMutate(`/api/applications/${app.id}`, {
@@ -511,7 +514,7 @@ function App() {
       setDebriefPrompt({ appId: app.id, company: app.company, role: app.role, stage: app.status });
     }
     if (!silent) {
-      const verb = { Applied: "Applied to", SKIP: "Skipped", Discarded: "Discarded", Closed: "Marked closed:", "Not a Fit": "Not a fit:", Rejected: "Marked rejected:", Offer: "Marked offer:" }[newStatus] || (window.isInterviewStage(newStatus) ? `Moved to ${newStatus}:` : "Updated");
+      const verb = { Applied: "Applied to", Passed: "Passed on:", SKIP: "Skipped", Discarded: "Discarded", Closed: "Marked closed:", "Not a Fit": "Not a fit:", Rejected: "Marked rejected:", Offer: "Marked offer:" }[newStatus] || (window.isInterviewStage(newStatus) ? `Moved to ${newStatus}:` : "Updated");
       const suffix = reachedStage ? ` (reached ${reachedStage})` : "";
       toast(`${verb} ${app.company}${suffix}`, newStatus === "Applied" || newStatus === "Offer" ? "success" : newStatus === "SKIP" || newStatus === "Discarded" || newStatus === "Closed" || newStatus === "Not a Fit" || newStatus === "Rejected" ? "warn" : null);
     }

@@ -182,7 +182,7 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
   );
 
   // Active apps = exclude Closed (aged-out, not user-actioned).
-  const activeApps = useMemoO(() => apps.filter(a => a.status !== "Closed"), [apps]);
+  const activeApps = useMemoO(() => apps.filter(a => window.oldStatus(a) !== "Closed"), [apps]);
 
   // Recent activity (last 14d, active apps only)
   const recent = useMemoO(() => activeApps.filter(a => window.daysAgo(a.date) <= 14).length, [activeApps]);
