@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.1.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.0.4...v4.1.0) (2026-09-20)
+
+
+### Features
+
+* **setup:** count interviews only when held with evidence and warn before a log is sent ([#365](https://github.com/michaelinghilterra-creator/trajecktory/issues/365)) ([08638f1](https://github.com/michaelinghilterra-creator/trajecktory/commit/08638f17c25ddeecbe1bfc953e9cfb2d4b3b2d11))
+
 ## [4.0.4](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.0.3...v4.0.4) (2026-09-20)
 
 
