@@ -354,8 +354,6 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
           };
           const warm = rate(sent.filter(isWarmApp));
           const cold = rate(sent.filter(a => !isWarmApp(a)));
-          const closed = apps.filter(a => a.status === 'Closed').length;
-          const stalePct = apps.length ? Math.round((closed / apps.length) * 100) : 0;
           // Warm COVERAGE, not a warm reply rate. A reply rate over the handful of
           // warm rows is noise — n is tiny, one row swings it 25 points — and it
           // describes the ~10% exception, not the work: most applications go in cold.
@@ -398,11 +396,6 @@ window.OverviewTab = function OverviewTab({ apps, onOpen, onAction, setTab, sear
               <span className="kpi-delta">
                 {!referral ? 'loading' : !referral.available ? 'not logged' : `${referral.percentage == null ? '-' : `${referral.percentage}%`} of ${referral.denominator} live · ${referral.introductions} ${referral.introductions === 1 ? 'introduction' : 'introductions'} made`}
               </span>
-            </div>,
-            <div className="kpi" key="stale" title="Postings that closed before you could act. Evaluation effort spent on roles that expired.">
-              <span className="kpi-label">Expired before action</span>
-              <span className="kpi-value" style={{ color: stalePct > 10 ? 'var(--orange)' : 'var(--green)' }}>{stalePct}%</span>
-              <span className="kpi-delta">{closed} of {apps.length} · target under 10%</span>
             </div>,
             <div className="kpi" key="wip" title="Applications sent but not serviced. The plan's WIP limit, which governs volume in place of a cap.">
               <span className="kpi-label">Unserviced (WIP)</span>
