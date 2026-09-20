@@ -69,7 +69,7 @@ window.APPS = (() => {
 window.INTERVIEW_STAGES = ["Phone Screen","1st Interview","2nd Interview","3rd Interview"];
 window.isInterviewStage = (s) => window.INTERVIEW_STAGES.includes(s);
 
-window.STATUSES = ["Evaluated","Applied",...window.INTERVIEW_STAGES,"Offer","Rejected","Discarded","SKIP","Closed","Not a Fit","No Response"];
+window.STATUSES = ["Evaluated","Applied",...window.INTERVIEW_STAGES,"Offer","Rejected","Discarded","SKIP","Closed","Not a Fit","Passed","No Response"];
 // The SINGLE source of the archetype list for the browser — the Sankey, the
 // Archetype list for pipeline filters, chart axes, and tracker grouping.
 // Fetched from /api/archetypes (derived from the user's profile.yml) at startup.
@@ -97,6 +97,7 @@ window.STATUS_META = {
   SKIP:       { color: "#52525b", bg: "rgba(82,82,91,0.14)",    icon: "/" },
   Closed:     { color: "#78716c", bg: "rgba(120,113,108,0.14)", icon: "⊘" },
   "Not a Fit":{ color: "#b45309", bg: "rgba(180,83,9,0.12)",   icon: "≠" },
+  Passed:     { color: "#71717a", bg: "rgba(113,113,122,0.14)", icon: "−" },
   "No Response":{ color: "#6b7280", bg: "rgba(107,114,128,0.14)", icon: "∅" },
 };
 

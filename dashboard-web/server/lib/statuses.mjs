@@ -67,7 +67,7 @@ export const CLOSED_STATUSES = ALL_STATUSES.filter(s => !FUNNEL_ORDER.includes(s
 export const RESPONSE_DECISION_BUCKETS = Object.freeze({
   advance: new Set(FUNNEL_ORDER.slice(FUNNEL_ORDER.indexOf('Phone Screen'))),
   employerNo: new Set(ALL_STATUSES.filter(s => s === 'Rejected')),
-  candidateSide: new Set(ALL_STATUSES.filter(s => ['Not a Fit', 'SKIP', 'Discarded'].includes(s))),
+  candidateSide: new Set(ALL_STATUSES.filter(s => ['Not a Fit', 'SKIP', 'Discarded', 'Passed'].includes(s))),
 });
 
 // The single derived "did the company respond?" rule, shared by every reply-rate

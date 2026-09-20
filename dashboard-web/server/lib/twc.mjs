@@ -88,10 +88,11 @@ const RESULT_BY_STATUS = {
   'No Response': 'No reply',
   Closed: 'Other',
   Discarded: 'Other',
+  Passed: 'Other',
   'Not a Fit': 'Other',
   SKIP: 'Other',
 };
-function resultForStatus(status) { return RESULT_BY_STATUS[status] || 'Other'; }
+export function resultForStatus(status) { return RESULT_BY_STATUS[status] || 'Other'; }
 
 export const TWC_KINDS = ['application', 'interview', 'followup', 'outreach', 'event'];
 const TWC_RESULTS = new Set(['Submitted job application', 'Sent a résumé', 'Interviewed', 'Hired', 'Not hired', 'No reply', 'Other']);
@@ -282,7 +283,7 @@ export function buildActivities({ from, to, identity, interviewRecords, today, s
   const activities = [];
 
   // 1) Applications — one row per app that ever reached Applied (or beyond).
-  const voidStatuses = new Set(['Not a Fit', 'SKIP', 'Discarded', 'Closed']);
+  const voidStatuses = new Set(['Not a Fit', 'SKIP', 'Discarded', 'Closed', 'Passed']);
   const appliedEventIndex = new Map();
   const sameDayVoids = new Set();
   events.forEach((e, index) => {

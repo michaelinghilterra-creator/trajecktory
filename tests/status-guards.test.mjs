@@ -1,4 +1,4 @@
-// E-5: status guards. Rejected needs employer evidence, Passed is not live, No Response is only a prompt.
+// E-5: status guards. Rejected needs employer evidence, Passed is always allowed, No Response is only a prompt.
 import { evaluateStatusChange, noResponsePrompt } from '../lib/status-guards.mjs';
 
 let passed = 0;
@@ -62,7 +62,7 @@ check(!v.allowed && v.reason === 'withdrawal_is_not_rejection' && v.suggest === 
 
 // Passed
 v = evaluateStatusChange({ to: 'Passed' });
-check(!v.allowed && v.reason === 'passed_not_live' && v.suggest === 'Discarded', 'Passed is not live yet and Discarded is suggested');
+check(v.allowed && v.reason === null && v.suggest === null, 'Passed is live and allowed');
 
 // No Response
 v = evaluateStatusChange({ to: 'No Response', messages: [], applied_on: '2030-03-01' });

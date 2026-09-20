@@ -91,7 +91,7 @@ function normalizeStatus(raw) {
   const canonical = [
     'Evaluated', 'Applied',
     'Phone Screen', '1st Interview', '2nd Interview', '3rd Interview',
-    'Offer', 'Rejected', 'Discarded', 'SKIP', 'Closed', 'Not a Fit', 'No Response',
+    'Offer', 'Rejected', 'Discarded', 'SKIP', 'Closed', 'Not a Fit', 'Passed', 'No Response',
   ];
   for (const c of canonical) {
     if (lower === c.toLowerCase()) return { status: c };
