@@ -651,6 +651,7 @@ for (const suite of [
   'tests/event-store-preview.test.mjs',
   'tests/bulk-no-response-guard.test.mjs',
   'tests/definitions.test.mjs',
+  'tests/ghosted-removed.test.mjs',
   'tests/data-review.test.mjs',
   'tests/report-data-review.test.mjs',
   'tests/event-store-route.test.mjs',
