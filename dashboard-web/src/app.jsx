@@ -165,6 +165,7 @@ function App() {
   const [lastSync, setLastSync] = useState(null);   // ms timestamp of the last apps refetch
   const [tab, setTab] = useState(() => loadNav().tab || "pipeline");
   const [debriefPrompt, setDebriefPrompt] = useState(null);
+  const [schedulePrompt, setSchedulePrompt] = useState(null);
   const [search, setSearch] = useState("");
   // Universal-search dropdown results (people + companies) for the top bar.
   const [searchResults, setSearchResults] = useState({ people: [], companies: [] });
@@ -433,6 +434,14 @@ function App() {
   // failure and simply swallowed them. Modules communicate via window.* here
   // (build.mjs runs esbuild with bundle:false), so this matches the house style.
   useEffect(() => { window.tjkToast = toast; }, [toast]);
+  // E-1: any caller (this file's handleAction, or Pipeline's own advance) can ask for a schedule and await the
+  // person's answer, the same cross-file bridge tjkToast uses. Resolves null if the person backs out.
+  useEffect(() => {
+    window.tjkScheduleInterview = (app, stage) => new Promise(resolve => setSchedulePrompt({ app, stage, resolve }));
+  }, []);
+  // E-2: lets the outcome card open the SAME debrief modal every other Held path uses, without needing a prop
+  // into the Today tab.
+  useEffect(() => { window.tjkOpenDebrief = (prompt) => setDebriefPrompt(prompt); }, []);
 
   // Gmail reconnect lands back here at /?google=connected|error|setup (the OAuth
   // callback cannot know which tab was open). Surface the result once, open Insights
@@ -478,9 +487,10 @@ function App() {
       if (fi >= window.FUNNEL_ORDER.indexOf("Phone Screen")) reachedStage = app.status;
     }
 
-    // E-5: a Rejected or No Response change is checked first, so nothing is shown as saved that the server
-    // would refuse. The rest of the handler runs once the person has answered any question.
-    const proceed = (guard) => {
+    // E-5 and E-1: a Rejected/No Response change or a move into an interview stage is checked first, so
+    // nothing is shown as saved that the server would refuse. The rest of the handler runs once the person
+    // has answered any question.
+    const proceed = (guard, schedule) => {
     // Build notes update (prefix-tag) only if reachedStage was set
     let nextNotes;
     if (reachedStage) {
@@ -497,6 +507,7 @@ function App() {
     // Persist to applications.md
     const body = { status: canonicalStatus, company: app.company };
     if (guard) body.guard = guard;
+    if (schedule) body.schedule = schedule;
     if (passedReason) body.passedReason = passedReason;
     if (nextNotes !== undefined) body.notes = nextNotes;
     if (eventDate) body.eventDate = eventDate;
@@ -519,6 +530,15 @@ function App() {
       toast(`${verb} ${app.company}${suffix}`, newStatus === "Applied" || newStatus === "Offer" ? "success" : newStatus === "SKIP" || newStatus === "Discarded" || newStatus === "Closed" || newStatus === "Not a Fit" || newStatus === "Rejected" ? "warn" : null);
     }
     };
+    // E-1: moving into an interview stage asks for the schedule first (silent/bulk callers skip the modal,
+    // same gate the debrief prompt uses, and proceed with no schedule).
+    if (!silent && window.isInterviewStage(canonicalStatus) && app.status !== canonicalStatus && window.tjkScheduleInterview) {
+      window.tjkScheduleInterview(app, canonicalStatus).then(schedule => {
+        if (!schedule) return; // backed out of the prompt; nothing changes
+        proceed(undefined, schedule);
+      });
+      return;
+    }
     if ((canonicalStatus === "Rejected" || canonicalStatus === "No Response") && app.status !== canonicalStatus) {
       window.tjkGuardStatus(app, canonicalStatus, { interactive: !silent }).then(g => {
         if (g.ok) proceed(g.guard);
@@ -725,6 +745,10 @@ function App() {
       {debriefPrompt && window.DebriefModal && (
         <window.DebriefModal prompt={debriefPrompt} toast={toast}
           onClose={(saved) => { setDebriefPrompt(null); if (saved) refreshApps(); }} />
+      )}
+      {schedulePrompt && window.ScheduleModal && (
+        <window.ScheduleModal prompt={schedulePrompt}
+          onClose={(result) => { const p = schedulePrompt; setSchedulePrompt(null); p && p.resolve(result); }} />
       )}
       <window.CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} commands={commands} />
       {window.CoachFloating && <window.CoachFloating toast={toast} />}

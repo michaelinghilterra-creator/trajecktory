@@ -2254,6 +2254,13 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
     try {
       const body = { status: newStatus };
       if (eventDate) body.eventDate = eventDate;
+      // E-1: moving into an interview stage asks for the schedule first. Backing out of the prompt cancels
+      // the whole change, same as declining the Rejected/No Response guard below.
+      if (window.isInterviewStage(newStatus) && a.status !== newStatus && window.tjkScheduleInterview) {
+        const schedule = await window.tjkScheduleInterview(a, newStatus);
+        if (!schedule) return;
+        body.schedule = schedule;
+      }
       // E-5: Rejected and No Response are checked first and may ask the person a question.
       if ((newStatus === 'Rejected' || newStatus === 'No Response') && a.status !== newStatus) {
         const g = await window.tjkGuardStatus(a, newStatus);
