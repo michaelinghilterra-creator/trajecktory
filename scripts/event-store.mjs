@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { DatabaseSync } from 'node:sqlite';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   closeSync,
   cpSync,
@@ -11,6 +11,7 @@ import {
   openSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -24,7 +25,9 @@ import {
   SWITCH_FILE,
   readEventStoreSwitch,
 } from '../lib/event-store-switch.mjs';
+import { findOtherWriters } from '../lib/event-store-writers.mjs';
 import { importDataFolder } from '../lib/import/import-data-folder.mjs';
+import { findNonUtf8Files } from '../lib/import/utf8-guard.mjs';
 import {
   changedImportedFiles,
   printImportVerification,
@@ -94,8 +97,33 @@ function processIsAlive(pid) {
   }
 }
 
-function acquireOperationLock(dataDir, io, now, isProcessAlive) {
+function readLockFile(lockPath) {
+  try {
+    return JSON.parse(readFileSync(lockPath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+// Removes the lock only when it is still the one this process created. A lock that was replaced by
+// another process is left alone and reported.
+function releaseOperationLock(lockPath, token, io) {
+  if (!existsSync(lockPath)) return;
+  const lock = readLockFile(lockPath);
+  if (lock?.token !== token) {
+    io.error(`Operation lock ${lockPath} is no longer ours and was left in place.`);
+    return;
+  }
+  try {
+    rmSync(lockPath, { force: true });
+  } catch (error) {
+    io.error(`Could not remove operation lock ${lockPath}: ${error.message}`);
+  }
+}
+
+function acquireOperationLock(dataDir, io, now, isProcessAlive, hooks = {}) {
   const lockPath = join(dataDir, LOCK_FILE);
+  const token = randomUUID();
   for (let attempt = 0; attempt < 2; attempt++) {
     let descriptor;
     try {
@@ -103,15 +131,10 @@ function acquireOperationLock(dataDir, io, now, isProcessAlive) {
       writeFileSync(descriptor, `${JSON.stringify({
         pid: process.pid,
         started_at: now().toISOString(),
+        token,
       }, null, 2)}\n`, 'utf8');
       closeSync(descriptor);
-      return () => {
-        try {
-          rmSync(lockPath, { force: true });
-        } catch (error) {
-          io.error(`Could not remove operation lock ${lockPath}: ${error.message}`);
-        }
-      };
+      return () => releaseOperationLock(lockPath, token, io);
     } catch (error) {
       if (descriptor !== undefined) {
         try { closeSync(descriptor); } catch { /* already closed */ }
@@ -134,7 +157,25 @@ function acquireOperationLock(dataDir, io, now, isProcessAlive) {
         });
       }
       io.log(`Removing stale event store operation lock for dead pid ${lock.pid}.`);
-      rmSync(lockPath, { force: true });
+      hooks.beforeStaleRemoval?.(lockPath);
+      // Claim the stale file by renaming it, then check that what was claimed is what was judged
+      // stale. Deleting by path would remove a live lock that another process wrote in between.
+      const claimed = `${lockPath}.stale-${process.pid}-${randomUUID()}`;
+      try {
+        renameSync(lockPath, claimed);
+      } catch (renameError) {
+        if (renameError.code === 'ENOENT') continue;
+        throw renameError;
+      }
+      const claimedLock = readLockFile(claimed);
+      if (claimedLock && claimedLock.pid === lock.pid && claimedLock.started_at === lock.started_at) {
+        rmSync(claimed, { force: true });
+        continue;
+      }
+      if (!existsSync(lockPath)) {
+        try { renameSync(claimed, lockPath); } catch { /* the copy stays beside the lock path */ }
+      }
+      throw new Error(`Another event store operation is running. The lock changed while it was being cleaned up: ${lockPath}`, { cause: error });
     }
   }
   throw new Error(`Could not acquire event store operation lock: ${lockPath}`);
@@ -145,7 +186,7 @@ function createBackup(dataDir, backupsDir, backupPath) {
   mkdirSync(backupPath);
   try {
     for (const entry of readdirSync(dataDir)) {
-      if (entry === LOCK_FILE) continue;
+      if (entry === LOCK_FILE || entry.startsWith(`${LOCK_FILE}.stale-`)) continue;
       cpSync(join(dataDir, entry), join(backupPath, entry), {
         recursive: true,
         errorOnExist: true,
@@ -185,7 +226,7 @@ function parseOptions(argv, allowed) {
   for (let index = 0; index < argv.length; index++) {
     const key = argv[index];
     if (!allowed.has(key) || Object.hasOwn(options, key)) return null;
-    if (key === '--apply' || key === '--reimport' || key === '--no-other-writers') {
+    if (key === '--apply' || key === '--reimport' || key === '--no-other-writers' || key === '--json') {
       options[key] = true;
       continue;
     }
@@ -282,6 +323,12 @@ function flipUnlocked(options, context) {
     return 1;
   }
 
+  const badFiles = findNonUtf8Files(dataDir);
+  if (badFiles.length > 0) {
+    io.error(`Refusing to flip: these files are not valid UTF-8 and would not survive the round trip: ${badFiles.join(', ')}. Nothing was changed.`);
+    return 1;
+  }
+
   const apply = options['--apply'] === true;
   const startedAt = now();
   let backupPath = null;
@@ -351,6 +398,20 @@ function flipUnlocked(options, context) {
       writes: 'on',
       flipped_at: startedAt.toISOString(),
     }, null, 2)}\n`, 'utf8');
+    // A file written between the last check and the switch write would otherwise go unnoticed and the
+    // log would vouch for stale content. Check once more now that the switch is on.
+    const late = changedImportedFiles(store, imported, dataDir);
+    if (late.length) {
+      let offFailure = '';
+      try {
+        writeSwitch(join(dataDir, SWITCH_FILE), `${JSON.stringify({ writes: 'off', flipped_at: null }, null, 2)}\n`, 'utf8');
+      } catch (error) {
+        offFailure = ` The switch could NOT be turned back off: ${error.message}. Run rollback --apply --no-other-writers.`;
+      }
+      io.error(`Verification failed because something wrote during the flip, after the switch was turned on, so the switch was turned back off. Changed files: ${late.join(', ')}.${offFailure}`);
+      io.error(`Backup retained at ${backupPath}`);
+      return 1;
+    }
     operationSucceeded = true;
     io.log(`Flip complete: ${count} events imported.`);
     io.log(`Backup: ${backupPath}`);
@@ -372,18 +433,66 @@ function flipUnlocked(options, context) {
   }
 }
 
+// The dry run as one JSON document, for the Data storage screen. It runs the same dry run and reads the
+// check lines it prints, so the two can never disagree. Nothing is written to the data folder.
+function previewFlip(options, context) {
+  const stdout = [];
+  const stderr = [];
+  const captured = {
+    ...context,
+    io: { log: value => stdout.push(String(value)), error: value => stderr.push(String(value)) },
+  };
+  const code = flipUnlocked(options, captured);
+  const names = { LINKEDIN: 'LinkedIn', TWC: 'TWC' };
+  const sentence = label => names[label] ?? `${label.charAt(0)}${label.slice(1).toLowerCase()}`;
+  const events = stdout.map(line => /Dry run passed with (\d+) events/.exec(line)).find(Boolean);
+  const document = {
+    command: 'flip',
+    dry_run: true,
+    ok: code === 0,
+    exit_code: code,
+    events: events ? Number(events[1]) : null,
+    checks: stdout.flatMap(line => {
+      const match = /^([A-Z ]+) (MATCH|MISMATCH)$/.exec(line);
+      return match ? [{ name: sentence(match[1]), match: match[2] === 'MATCH' }] : [];
+    }),
+    byte_checks: stdout.flatMap(line => {
+      const match = /^BYTES (MATCH|DIFFER) (\S+)/.exec(line);
+      return match ? [{ file: match[2], match: match[1] === 'MATCH' }] : [];
+    }),
+    messages: stdout,
+    errors: stderr,
+    will_add: ['trajecktory.db', 'event-store.json', 'a backup copy of the data folder'],
+    will_not_change: ['Your data files are not rewritten by the flip. They are read, checked, and left exactly as they are.'],
+  };
+  context.io.log(JSON.stringify(document, null, 2));
+  return code;
+}
+
 function flip(options, context) {
-  const { io, now, isProcessAlive } = context;
+  const { io, now, isProcessAlive, hooks } = context;
   const apply = options['--apply'] === true;
+  if (options['--json'] === true) {
+    if (apply) {
+      io.error('--json works with the dry run only. Run flip --json without --apply.');
+      return 2;
+    }
+    return previewFlip(options, context);
+  }
   if (apply && options['--no-other-writers'] !== true) {
     io.error('IMPORTANT: Refusing to flip without --no-other-writers. Stop the dashboard and every script first. Restart all of them afterwards because running processes cache the switch.');
     return 1;
   }
   if (!apply) return flipUnlocked(options, context);
+  const writers = context.findOtherWriters();
+  if (writers.length) {
+    io.error(`Refusing to flip: --no-other-writers was given but ${writers.join('; ')}. Stop the dashboard and try again. This check sees dashboard ports only; scripts started from a terminal are not detected, so confirm none are running.`);
+    return 1;
+  }
   const dataDir = resolve(options['--data-dir'] ?? process.env.TJK_DATA_DIR ?? join(root, 'data'));
   let release;
   try {
-    release = acquireOperationLock(dataDir, io, now, isProcessAlive);
+    release = acquireOperationLock(dataDir, io, now, isProcessAlive, hooks);
     return flipUnlocked(options, context);
   } catch (error) {
     io.error(`Refusing event store operation: ${error.message}`);
@@ -417,16 +526,21 @@ function rollbackUnlocked(options, context) {
 }
 
 function rollback(options, context) {
-  const { io, now, isProcessAlive } = context;
+  const { io, now, isProcessAlive, hooks } = context;
   if (options['--apply'] && options['--no-other-writers'] !== true) {
     io.error('IMPORTANT: Refusing to roll back without --no-other-writers. Stop the dashboard and every script first. Restart all of them afterwards because running processes cache the switch.');
     return 1;
   }
   if (!options['--apply']) return rollbackUnlocked(options, context);
+  const writers = context.findOtherWriters();
+  if (writers.length) {
+    io.error(`Refusing to roll back: --no-other-writers was given but ${writers.join('; ')}. Stop the dashboard and try again. This check sees dashboard ports only; scripts started from a terminal are not detected, so confirm none are running.`);
+    return 1;
+  }
   const dataDir = resolve(process.env.TJK_DATA_DIR ?? join(root, 'data'));
   let release;
   try {
-    release = acquireOperationLock(dataDir, io, now, isProcessAlive);
+    release = acquireOperationLock(dataDir, io, now, isProcessAlive, hooks);
     return rollbackUnlocked(options, context);
   } catch (error) {
     io.error(`Refusing event store operation: ${error.message}`);
@@ -448,6 +562,8 @@ export function runEventStore(argv, dependencies = {}) {
     recordVerifiedBaselinesFn: dependencies.recordVerifiedBaselinesFn ?? recordVerifiedBaselines,
     writeSwitch: dependencies.writeSwitch ?? writeFileAtomic,
     isProcessAlive: dependencies.isProcessAlive ?? processIsAlive,
+    hooks: dependencies.hooks ?? {},
+    findOtherWriters: dependencies.findOtherWriters ?? (() => findOtherWriters()),
   };
   const [command, ...rest] = argv;
   if (command === 'status') {
@@ -458,9 +574,9 @@ export function runEventStore(argv, dependencies = {}) {
     return status(resolve(process.env.TJK_DATA_DIR ?? join(root, 'data')), io);
   }
   if (command === 'flip') {
-    const options = parseOptions(rest, new Set(['--apply', '--reimport', '--no-other-writers', '--data-dir', '--output-dir']));
+    const options = parseOptions(rest, new Set(['--apply', '--reimport', '--no-other-writers', '--json', '--data-dir', '--output-dir']));
     if (!options) {
-      io.error('usage: event-store.mjs flip [--apply] [--reimport] [--no-other-writers] [--data-dir <dir>] [--output-dir <dir>]');
+      io.error('usage: event-store.mjs flip [--apply] [--reimport] [--no-other-writers] [--json] [--data-dir <dir>] [--output-dir <dir>]');
       return 2;
     }
     return flip(options, context);
@@ -473,7 +589,7 @@ export function runEventStore(argv, dependencies = {}) {
     }
     return rollback(options, context);
   }
-  io.error('usage: event-store.mjs status | flip [--apply] [--reimport] [--no-other-writers] | rollback [--apply] [--no-other-writers]');
+  io.error('usage: event-store.mjs status | flip [--apply] [--reimport] [--no-other-writers] [--json] | rollback [--apply] [--no-other-writers]');
   return 2;
 }
 
