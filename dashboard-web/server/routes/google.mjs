@@ -530,26 +530,29 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     const sender = extractEmail(message.from) || from || '';
     const header = `${sender}: ${message.subject || subject || '(no subject)'} [${sentiment || 'neutral'}]`;
     const fullBody = String(message.text || bodyPreview || snippet || '').trim();
+    const noteText = `### Reply logged (${today})\n${header}${fullBody ? `\n\n${fullBody}` : ''}`;
+    const noteMeta = { msgId, threadId: message.threadId || threadId, sender };
     let saved;
     const save = (store) => {
-      const noteHistory = addNote(
-        id,
-        `### Reply logged (${today})\n${header}${fullBody ? `\n\n${fullBody}` : ''}`,
-        { msgId, threadId: message.threadId || threadId, sender },
-      );
       let statusFlip = null;
       if (action === 'rejected') statusFlip = 'Rejected';
       else if (INTERVIEW_STAGES.includes(action)) statusFlip = action;
       else if (action !== 'log') {
-        saved = { invalid: true, alreadyLogged: noteHistory.added === false };
+        saved = { invalid: true, alreadyLogged: false };
         return saved;
       }
       // E-6: record the attachment as one event, before the status flip it may cause, so an undo can find both.
-      if (store && noteHistory.added !== false) {
-        appendEventsWithEffects(store, [buildReplyAttachedEvent({
-          application_id: id, msg_id: msgId, note_timestamp: noteHistory.at(-1)?.timestamp || null, action,
-          sentiment: sentiment || 'neutral', status_flip: statusFlip, occurred_on: today,
-        })]);
+      let alreadyLogged;
+      if (store) {
+        alreadyLogged = Boolean(findNoteByMsgId(msgId));
+        if (!alreadyLogged) {
+          appendEventsWithEffects(store, [buildReplyAttachedEvent({
+            application_id: id, msg_id: msgId, note_text: noteText, note_meta: noteMeta, action,
+            sentiment: sentiment || 'neutral', status_flip: statusFlip, occurred_on: today,
+          })]);
+        }
+      } else {
+        alreadyLogged = addNote(id, noteText, noteMeta).added === false;
       }
       if (statusFlip) patchRowInMd(id, { status: statusFlip }, { company });
 
@@ -561,7 +564,7 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
           if (logWritesEnabled(DATA_DIR)) throw error;
         }
       }
-      saved = { statusFlip, contactLogged, alreadyLogged: noteHistory.added === false };
+      saved = { statusFlip, contactLogged, alreadyLogged };
       return saved;
     };
     let renderPending = {};

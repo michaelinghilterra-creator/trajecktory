@@ -29,6 +29,7 @@ fs.writeFileSync(path.join(sandbox, 'app-notes.json'), '{}\n');
 fs.writeFileSync(path.join(sandbox, 'event-store.json'), JSON.stringify({ writes: 'on', flipped_at: '2030-03-01T00:00:00.000Z' }));
 
 const { openEventStore } = await import('../lib/event-store.mjs');
+const { renderLegacyFile } = await import('../lib/legacy-files.mjs');
 const { importDataFolder } = await import('../lib/import/import-data-folder.mjs');
 {
   const out = path.join(sandbox, 'fixture-output');
@@ -58,7 +59,12 @@ await new Promise(resolve => server.once('listening', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const send = (method, url, body) => fetch(`${base}${url}`, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   .then(async r => ({ status: r.status, body: await r.json() }));
-const notesFor = (id) => (JSON.parse(fs.readFileSync(path.join(sandbox, 'app-notes.json'), 'utf8'))[String(id)] || []);
+const notesFor = (id) => {
+  const store = openEventStore(path.join(sandbox, 'trajecktory.db'));
+  const text = renderLegacyFile(store, 'app-notes.json');
+  store.close();
+  return (text ? JSON.parse(text) : {})[String(id)] || [];
+};
 const recordOf = (id, stage) => readInterviewRecords(sandbox).get(`${id}|${stage.toLowerCase()}`);
 
 console.log('interview-outcome-route.test.mjs');
@@ -126,7 +132,11 @@ try {
   r = await send('POST', '/api/interviews/outcome', { appId: 900003, stage: 'Phone Screen', outcome: 'cancelled_by_employer' });
   check(r.status === 200 && r.body.voided, 'a cancellation voids the scheduled recording');
   check(!recordOf(900003, 'Phone Screen'), 'the voided recording is gone from the current record (D-10)');
-  check(notesFor(900003).some((n) => /Interview outcome/.test(n.text) && /Cancelled by employer/.test(n.text)), 'and a plain note keeps why');
+  const outcomeEvents = (() => { const store = reopen(path.join(sandbox, 'trajecktory.db')); const events = readEvents(store); store.close(); return events; })();
+  const outcomeEvent = outcomeEvents.find((event) => event.type === 'event_undone' && event.corrects_event_id === r.body.voided);
+  check(notesFor(900003).some((n) => /Interview outcome/.test(n.text) && /Cancelled by employer/.test(n.text))
+    && outcomeEvent?.payload?.legacy_effects?.some((effect) => effect.file === 'app-notes.json' && effect.op === 'json_nested_append'),
+  'the same void event projects the note that keeps why');
   r = await send('GET', '/api/interviews/pending-outcome');
   check(!r.body.items.some((it) => it.appId === 900003), 'a cancelled round leaves the pending list too');
 

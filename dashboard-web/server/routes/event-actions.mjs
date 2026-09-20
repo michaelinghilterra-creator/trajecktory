@@ -9,7 +9,7 @@ import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
 import { recordInterview, readInterviewRecords } from '../lib/interview-events.mjs';
 import { appendEventsWithEffects } from '../../../lib/legacy-files.mjs';
 import { undoableActions, REPLY_EVENT_TYPE } from '../../../lib/event-undo.mjs';
-import { addNote, deleteNote } from '../lib/notes.mjs';
+import { noteEffect } from '../lib/notes.mjs';
 import { readSync, writeSync } from '../lib/google.mjs';
 import { isCalendarDate } from '../../../lib/interview-dates.mjs';
 import { INTERVIEW_EVENT_TYPE, INTERVIEW_DEFINITIONS_VERSION, interviewKey } from '../../../lib/interview-store.mjs';
@@ -115,7 +115,7 @@ router.get('/api/events/recent', (req, res) => {
 });
 
 // POST /api/events/:id/undo  { reason? }  undo one action by the id of its leading event. Writes a void event for the
-// action and for each event written with it; for a logged reply it also removes the note and lets the message show up
+// action and for each event written with it; for a logged reply its event-owned note disappears and the message shows up
 // in the sweep again.
 router.post('/api/events/:id/undo', (req, res) => {
   try {
@@ -145,7 +145,7 @@ router.post('/api/events/:id/undo', (req, res) => {
     let noteRemoved = false;
     if (action.type === REPLY_EVENT_TYPE && !renderPending.render_pending) {
       const p = action.payload || {};
-      if (p.note_timestamp) { deleteNote(action.application_id, p.note_timestamp); noteRemoved = true; }
+      noteRemoved = true;
       if (p.msg_id) {
         const sync = readSync();
         if (sync.handledReplies && sync.handledReplies[p.msg_id]) { delete sync.handledReplies[p.msg_id]; writeSync(sync); }
@@ -237,14 +237,12 @@ router.post('/api/interviews/outcome', (req, res) => {
       occurred_on: localToday(),
       definitions_version: INTERVIEW_DEFINITIONS_VERSION,
     });
+    const built = noteEffect(id, `### Interview outcome (${localToday()})\n${canonicalStage}: ${OUTCOME_LABELS[outcome]}`);
+    if (built) event.payload.legacy_effects = [built.effect];
     let renderPending = {};
     let event_ids;
     try {
-      event_ids = withLogWrite(DATA_DIR, (store) => {
-        const ids = appendEventsWithEffects(store, [event]);
-        addNote(id, `### Interview outcome (${localToday()})\n${canonicalStage}: ${OUTCOME_LABELS[outcome]}`);
-        return ids;
-      });
+      event_ids = withLogWrite(DATA_DIR, (store) => appendEventsWithEffects(store, [event]));
     } catch (error) {
       renderPending = renderPendingResponse(error, 'interview outcome');
     }
