@@ -8,6 +8,9 @@ import { parseApplicationsMd } from '../lib/applications.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
 import { recordInterview } from '../lib/interview-events.mjs';
 import { appendEventsWithEffects } from '../../../lib/legacy-files.mjs';
+import { undoableActions, REPLY_EVENT_TYPE } from '../../../lib/event-undo.mjs';
+import { deleteNote } from '../lib/notes.mjs';
+import { readSync, writeSync } from '../lib/google.mjs';
 import { isCalendarDate } from '../../../lib/interview-dates.mjs';
 import { INTERVIEW_EVENT_TYPE, INTERVIEW_DEFINITIONS_VERSION } from '../../../lib/interview-store.mjs';
 import { VOID_REASON_CODES, buildVoidEvent } from '../../../lib/void-events.mjs';
@@ -74,6 +77,82 @@ router.post('/api/events/:id/void', (req, res) => {
     }
     res.json({ ok: true, event_ids: ids, ...renderPending });
   } catch (error) {
+    logWriteRouteError(res, error);
+  }
+});
+
+// ── E-6: undo ────────────────────────────────────────────────────────────────
+// GET /api/events/recent?limit=  the changes the person made through the dashboard, newest first, each with what it
+// was and whether it can be undone now (only the newest change on an application can be).
+function dashboardEvents() {
+  return withLogRead(DATA_DIR, (store) => store.db
+    .prepare("SELECT * FROM events WHERE source = 'dashboard' OR type = 'event_undone' ORDER BY id")
+    .all()
+    .map((row) => ({ ...row, payload: JSON.parse(row.payload) })));
+}
+
+function describeAction(action, apps) {
+  const app = apps.find((a) => String(a.id) === String(action.application_id));
+  const p = action.payload || {};
+  const what = action.type === 'status_changed' ? `Status ${p.from || '?'} to ${p.to || '?'}`
+    : action.type === REPLY_EVENT_TYPE ? `Reply logged${p.status_flip ? `, status set to ${p.status_flip}` : ''}`
+      : action.type === INTERVIEW_EVENT_TYPE ? 'Interview recorded'
+        : action.type;
+  return { ...action, company: app ? app.company : null, role: app ? app.role : null, summary: what };
+}
+
+router.get('/api/events/recent', (req, res) => {
+  try {
+    if (!logWritesEnabled(DATA_DIR)) return res.json({ enabled: false, actions: [] });
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 15, 1), 100);
+    const apps = (() => { try { return parseApplicationsMd(); } catch { return []; } })();
+    const actions = undoableActions(dashboardEvents(), { limit }).map((a) => describeAction(a, apps));
+    res.json({ enabled: true, actions });
+  } catch (error) {
+    logWriteRouteError(res, error);
+  }
+});
+
+// POST /api/events/:id/undo  { reason? }  undo one action by the id of its leading event. Writes a void event for the
+// action and for each event written with it; for a logged reply it also removes the note and lets the message show up
+// in the sweep again.
+router.post('/api/events/:id/undo', (req, res) => {
+  try {
+    const target = Number(req.params.id);
+    const reason = (req.body && req.body.reason) || 'undone_by_owner';
+    if (!Number.isInteger(target) || target <= 0) return res.status(400).json({ error: 'Invalid event id' });
+    if (!VOID_REASON_CODES.includes(reason)) return res.status(400).json({ error: `reason must be one of: ${VOID_REASON_CODES.join(', ')}` });
+    if (!logWritesEnabled(DATA_DIR)) return res.status(409).json({ error: 'The event store is off, so there is nothing to undo.' });
+    const action = undoableActions(dashboardEvents(), { limit: 1000 }).find((a) => a.event_id === target);
+    if (!action) return res.status(404).json({ error: 'That change is not in the list of changes you made, or it was already undone.' });
+    if (!action.undoable) return res.status(409).json({ error: 'A newer change on this application has to be undone first.', blocked_reason: action.blocked_reason });
+    const voids = [...action.member_ids, action.event_id].map((id) => buildVoidEvent({
+      target_event_id: id,
+      reason_code: reason,
+      evidence_ref: 'owner',
+      actor: 'owner',
+      occurred_on: localToday(),
+      definitions_version: INTERVIEW_DEFINITIONS_VERSION,
+    }));
+    let renderPending = {};
+    let ids;
+    try {
+      ids = withLogWrite(DATA_DIR, (store) => appendEventsWithEffects(store, voids));
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'event undo');
+    }
+    let noteRemoved = false;
+    if (action.type === REPLY_EVENT_TYPE && !renderPending.render_pending) {
+      const p = action.payload || {};
+      if (p.note_timestamp) { deleteNote(action.application_id, p.note_timestamp); noteRemoved = true; }
+      if (p.msg_id) {
+        const sync = readSync();
+        if (sync.handledReplies && sync.handledReplies[p.msg_id]) { delete sync.handledReplies[p.msg_id]; writeSync(sync); }
+      }
+    }
+    res.json({ ok: true, event_ids: ids, note_removed: noteRemoved, ...renderPending });
+  } catch (error) {
+    if (error instanceof TypeError) return res.status(400).json({ error: `Invalid ${error.message}` });
     logWriteRouteError(res, error);
   }
 });

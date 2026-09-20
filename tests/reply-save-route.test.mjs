@@ -58,6 +58,7 @@ try {
   const first = await post('m900001', 'log', {
     appId: 900001,
     company: 'Zorblax Widgetry',
+    pickConfirmed: true,
     from: 'Example Personone <example.personone@zorblax.example>',
     subject: 'Example Cog Lead update',
     bodyPreview: 'Invented reply body.',
@@ -77,6 +78,7 @@ try {
   const duplicate = await post('m900001', 'rejected', {
     appId: 900002,
     company: 'Zorblax Widgetry',
+    pickConfirmed: true,
     from: 'Example Personone <example.personone@zorblax.example>',
     subject: 'Example Pulley Director update',
     bodyPreview: 'Invented duplicate reply body.',
@@ -99,6 +101,7 @@ try {
   const rejected = await post('m900002', 'rejected', {
     appId: 900002,
     company: 'Zorblax Widgetry',
+    pickConfirmed: true,
     from: 'Example Personone <example.personone@zorblax.example>',
     subject: 'Example Pulley Director decision',
     bodyPreview: 'Invented rejection body.',

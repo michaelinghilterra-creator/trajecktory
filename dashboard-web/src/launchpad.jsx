@@ -3306,6 +3306,41 @@ function WeeklyReviewPanel() {
   );
 }
 
+// ─── Recent changes (E-6): undo what you changed through the dashboard ────────────────────
+// Lists the newest changes with what each did. Only the newest change on an application can be undone, so the files go
+// back exactly as they were; an undo is recorded as a void, and the original stays in the history.
+function RecentChanges() {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState('');
+  const load = () => fetch('/api/events/recent?limit=15').then(r => r.json()).then(setData).catch(() => {});
+  useEffect(() => { load(); }, []);
+  const undo = (a) => {
+    if (!window.confirm(`Undo: ${a.summary}${a.company ? ` (${a.company})` : ''}?`)) return;
+    setBusy(a.event_id); setError('');
+    window.tjkMutate(`/api/events/${a.event_id}/undo`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) })
+      .then(async r => { const body = await r.json().catch(() => ({})); if (!r.ok || body.error) throw new Error(body.error || 'Could not undo that.'); return load(); })
+      .catch(e => setError(e.message))
+      .finally(() => setBusy(null));
+  };
+  if (!data || !data.enabled) return null;
+  return (
+    <div className="card padded-lg col" style={{ gap: 8 }}>
+      <div className="card-head"><span className="card-title"><span className="dot" style={{ background: 'var(--accent)' }} />Recent changes</span></div>
+      <div className="dim" style={{ fontSize: 12, lineHeight: 1.55 }}>Changes you made through the dashboard. Undo puts the files back exactly as they were; the change stays in the history. Only the newest change on a role can be undone.</div>
+      {error && <div style={{ fontSize: 12, color: 'var(--red, #ef4444)' }}>{error}</div>}
+      {data.actions.length === 0 && <div className="dim" style={{ fontSize: 12 }}>Nothing to undo.</div>}
+      {data.actions.map(a => (
+        <div key={a.event_id} className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
+          <span className="mono dim" style={{ minWidth: 84 }}>{a.occurred_on}</span>
+          <span style={{ flex: 1, minWidth: 220 }}>{a.summary}{a.company ? <span className="dim"> · {a.company}{a.role ? ` · ${a.role}` : ''}</span> : null}</span>
+          <button type="button" className="btn sm" disabled={!a.undoable || busy === a.event_id} title={a.undoable ? '' : 'A newer change on this role has to be undone first.'} onClick={() => undo(a)}>Undo</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Data storage: what the event store would change, before anyone turns it on ────────
 // Read-only. The button runs the dry run; nothing is written. Turning the store on is a command
 // line step done with the person present, so this screen never offers to do it.
@@ -3356,6 +3391,8 @@ function DataStoragePanel() {
           {status && on && <>The event store is <b>on</b>{status.flipped_at ? ` (since ${String(status.flipped_at).slice(0, 10)})` : ''}. Saves go through a change log, and your files are rebuilt from it.</>}
         </div>
       </div>
+
+      {on && <RecentChanges />}
 
       <div className="card padded-lg col" style={{ gap: 12 }}>
         <div className="card-head"><span className="card-title"><span className="dot" style={{ background: 'var(--accent)' }} />What would change</span></div>

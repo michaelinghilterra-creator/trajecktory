@@ -118,12 +118,13 @@ function replyCompany(reply) {
 // flips the application status. Once acted, the row shows a confirmation.
 function ReplyRow({ reply, toast }) {
   const cands = reply.candidateApps || [];
-  const initial = cands.some(a => a.id === reply.suggestedAppId)
-    ? reply.suggestedAppId
-    : null;
+  // E-3: when more than one application at the employer fits, the person picks; nothing is preselected.
+  const initial = cands.length === 1 ? cands[0].id : null;
   const [appId, setAppId] = useStateRv(initial);
   const [done, setDone] = useStateRv(null);
   const [busy, setBusy] = useStateRv(false);
+  // E-3: set when the server holds the message for an acknowledgement (older than the application, or automated).
+  const [guard, setGuard] = useStateRv(null);
   // The auto-detected sentiment is a coarse keyword guess ("next steps" reads
   // positive even on a bland info email), so it is an editable override, not a
   // verdict. Whatever it is set to is what gets written into the logged note.
@@ -132,23 +133,28 @@ function ReplyRow({ reply, toast }) {
   const picked = cands.find(a => a.id === appId);
   const tag = reply.companyGuess ? `≈ ${reply.companyGuess.company}` : (reply.contact ? reply.contact.company : '');
 
-  const act = (action) => {
-    const noApp = action === 'dismiss' || action === 'not-related';
+  const act = (action, extra = {}) => {
+    const noApp = action === 'dismiss' || action === 'not-related' || action === 'unmatched';
     if (!noApp && !appId) { toast && toast('Pick which application this reply belongs to.', 'error'); return; }
     setBusy(true);
+    setGuard(null);
     const body = action === 'dismiss' ? {}
       : action === 'not-related' ? { from: reply.from }   // sender, so future emails from them are suppressed too
+      // E-4: park it on the unmatched list with its evidence; nothing is attached.
+      : action === 'unmatched' ? { from: reply.from, subject: reply.subject, snippet: reply.snippet || reply.bodyPreview, date: reply.date, threadId: reply.threadId, company }
       // Sentiment is the user's override. The identifying fields are fallbacks if
       // the server cannot re-fetch the full message from Gmail by its message id.
-      : { appId, company, contact: reply.contact, sentiment, from: reply.from, subject: reply.subject, snippet: reply.snippet, bodyPreview: reply.bodyPreview, date: reply.date, threadId: reply.threadId };
+      : { appId, company, contact: reply.contact, sentiment: extra.sentiment || sentiment, pickConfirmed: true, ...(extra.acknowledged ? { acknowledged: true } : {}), from: reply.from, subject: reply.subject, snippet: reply.snippet, bodyPreview: reply.bodyPreview, date: reply.date, threadId: reply.threadId };
     fetch(`/api/google/replies/${encodeURIComponent(reply.msgId)}/${action}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }).then(r => r.json())
       .then(res => {
+        // E-3: an old or automated message is held until the person confirms, logs it as neutral, or dismisses it.
+        if (res.guard && res.guard.reason === 'needs_acknowledgement') { setGuard(res.guard); return; }
         if (res.error) { toast && toast(res.error, 'error'); return; }
-        setDone(action === 'dismiss' ? 'dismissed' : action === 'not-related' ? 'not-related' : (res.statusFlip || 'logged'));
-        toast && toast(action === 'dismiss' ? 'Dismissed' : action === 'not-related' ? 'Marked not job-related' : (res.statusFlip ? `Marked ${res.statusFlip}` : 'Reply logged'), 'success');
+        setDone(action === 'unmatched' ? 'unmatched' : action === 'dismiss' ? 'dismissed' : action === 'not-related' ? 'not-related' : (res.statusFlip || 'logged'));
+        toast && toast(action === 'unmatched' ? 'Parked on the unmatched list' : action === 'dismiss' ? 'Dismissed' : action === 'not-related' ? 'Marked not job-related' : (res.statusFlip ? `Marked ${res.statusFlip}` : 'Reply logged'), 'success');
       })
       .catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(false));
   };
@@ -170,17 +176,30 @@ function ReplyRow({ reply, toast }) {
           {tag ? <span className="dim mono">· {tag}</span> : null}
         </div>
       </div>
+      {guard && !done ? (
+        <div style={{ marginTop: 5, padding: '6px 8px', border: '1px solid var(--yellow, #f59e0b)', borderRadius: 5 }}>
+          <div>{guard.warnings.map(w => w.type === 'older_than_application'
+            ? `This message is dated ${w.message_on}, before you applied (${w.apply_date}).`
+            : `This looks automated (${String(w.kind).replace(/_/g, ' ')}).`).join(' ')}</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+            <button className="btn ghost sm" onClick={() => act('log', { acknowledged: true })} disabled={busy}>Log anyway</button>
+            <button className="btn ghost sm" onClick={() => act('log', { acknowledged: true, sentiment: 'neutral' })} disabled={busy}>Log as neutral</button>
+            <button className="btn ghost sm" onClick={() => act('dismiss')} disabled={busy}>Dismiss</button>
+          </div>
+        </div>
+      ) : null}
       {done ? (
-        <div style={{ marginTop: 4, color: 'var(--green)' }}>✓ {done === 'logged' ? 'Logged' : done === 'dismissed' ? 'Dismissed' : done === 'not-related' ? 'Not job-related' : `Marked ${done}`}{picked && done !== 'not-related' ? ` · ${picked.role}` : ''}</div>
+        <div style={{ marginTop: 4, color: 'var(--green)' }}>✓ {done === 'logged' ? 'Logged' : done === 'unmatched' ? 'Parked as unmatched' : done === 'dismissed' ? 'Dismissed' : done === 'not-related' ? 'Not job-related' : `Marked ${done}`}{picked && done !== 'not-related' ? ` · ${picked.role}` : ''}</div>
       ) : cands.length === 0 ? (
         <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="dim">No matching application on file{company ? ` for ${company}` : ''}.</span>
+          <button className="btn ghost sm" onClick={() => act('unmatched')} disabled={busy} title="Keep this on the unmatched list with its evidence, to attach later.">Unmatched</button>
           <button className="btn ghost sm" onClick={() => act('dismiss')} disabled={busy} title="Hide just this email.">Dismiss</button>
           <button className="btn ghost sm" onClick={() => act('not-related')} disabled={busy} title="Not about your job search. Hide it and stop surfacing future emails from this sender.">Not job-related</button>
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 6, marginTop: 5, alignItems: 'center', flexWrap: 'wrap' }}>
-          {!initial ? <span className="dim">Not sure which application. Pick one.</span> : null}
+          {!initial ? <span className="dim">{cands.length > 1 ? `${cands.length} applications at this employer. Pick the one this is about.` : 'Pick one.'}</span> : null}
           <select value={appId || ''} onChange={e => setAppId(parseInt(e.target.value, 10))}
             style={{ fontSize: 12, padding: '2px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
             {!appId ? <option value="" disabled>Select an application</option> : null}
@@ -188,10 +207,59 @@ function ReplyRow({ reply, toast }) {
           </select>
           <button className="btn sm" onClick={() => act('log')} disabled={busy || !appId}>Log</button>
           <button className="btn ghost sm" onClick={() => act('rejected')} disabled={busy || !appId}>Rejected</button>
+          <button className="btn ghost sm" onClick={() => act('unmatched')} disabled={busy} title="None of these fit. Keep it on the unmatched list with its evidence.">Unmatched</button>
           <button className="btn ghost sm" onClick={() => act('dismiss')} disabled={busy} title="Hide just this email.">Dismiss</button>
           <button className="btn ghost sm" onClick={() => act('not-related')} disabled={busy} title="This email isn't about your job search. Hide it and stop surfacing future emails from this sender.">Not job-related</button>
         </div>
       )}
+    </div>
+  );
+}
+
+// E-4: messages the person parked because no application fit, or because they could not tell which. Each shows its
+// evidence (sender, subject, date, snippet) and the applications that could fit now; attaching needs an explicit pick.
+function UnmatchedList({ toast, refreshKey }) {
+  const [items, setItems] = useStateRv([]);
+  const [picks, setPicks] = useStateRv({});
+  const [busy, setBusy] = useStateRv(null);
+  const [tick, setTick] = useStateRv(0);
+  useEffectRv(() => {
+    fetch('/api/google/replies/unmatched').then(r => r.json()).then(d => setItems(d.items || [])).catch(() => {});
+  }, [refreshKey, tick]);
+  if (!items.length) return null;
+  const act = (item, action) => {
+    const appId = picks[item.msgId];
+    if (action === 'log' && !appId) { toast && toast('Pick which application this belongs to.', 'error'); return; }
+    setBusy(item.msgId);
+    const body = action === 'log'
+      ? { appId, company: (item.suggestions.find(x => x.id === appId) || {}).company || item.company, pickConfirmed: true, from: item.from, subject: item.subject, snippet: item.snippet, bodyPreview: item.snippet, date: item.date, threadId: item.threadId }
+      : {};
+    fetch(`/api/google/replies/${encodeURIComponent(item.msgId)}/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(r => r.json())
+      .then(res => { if (res.error) { toast && toast(res.error, 'error'); return; } toast && toast(action === 'log' ? 'Attached' : 'Dismissed', 'success'); setTick(t => t + 1); })
+      .catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(null));
+  };
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+      <div style={{ fontWeight: 600, fontSize: 13 }}>Unmatched ({items.length})</div>
+      <div className="dim" style={{ fontSize: 11.5, marginBottom: 4 }}>Nothing here is attached until you pick an application.</div>
+      {items.map(it => (
+        <div key={it.msgId} style={{ padding: '6px 2px', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
+          <div>{it.from} · {it.subject || '(no subject)'} <span className="dim mono">· {String(it.date || '').slice(0, 10)}</span></div>
+          {it.snippet ? <div className="dim" style={{ marginTop: 2 }}>{it.snippet}</div> : null}
+          <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+            {it.suggestions.length ? (
+              <select value={picks[it.msgId] || ''} onChange={e => setPicks(p => ({ ...p, [it.msgId]: parseInt(e.target.value, 10) }))}
+                style={{ fontSize: 12, padding: '2px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }}>
+                <option value="" disabled>Select an application</option>
+                {it.suggestions.map(a => <option key={a.id} value={a.id}>{a.role} · {a.status} · {a.applyDate ? `applied ${a.applyDate}` : 'no apply date'}</option>)}
+              </select>
+            ) : <span className="dim">No application on file{it.company ? ` for ${it.company}` : ''}.</span>}
+            {it.suggestions.length ? <button className="btn sm" onClick={() => act(it, 'log')} disabled={busy === it.msgId}>Attach</button> : null}
+            <button className="btn ghost sm" onClick={() => act(it, 'dismiss')} disabled={busy === it.msgId}>Dismiss</button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -241,6 +309,7 @@ function GmailSweep({ sweep, onApplyBounces, busy, toast }) {
       {rows.length === 0
         ? <div className="dim" style={{ fontSize: 12 }}>{handledCount ? 'All matched replies handled. Nothing left in range.' : 'No contact- or company-matched replies in range.'}</div>
         : rows.map((x, i) => <ReplyRow key={x.msgId || i} reply={x} toast={toast} />)}
+      <UnmatchedList toast={toast} refreshKey={all.length + handledCount} />
       <p className="dim" style={{ fontSize: 11, marginTop: 8, marginBottom: 0 }}>
         Nothing is sent. Bounce flips write the contact's verify tag and status; logging a reply writes a note on the chosen application.
       </p>
