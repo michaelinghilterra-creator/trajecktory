@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.6.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.5.0...v4.6.0) (2026-09-20)
+
+
+### Features
+
+* show every interview line on the weekly review, and let an item be excluded with a reason ([#375](https://github.com/michaelinghilterra-creator/trajecktory/issues/375)) ([42d9051](https://github.com/michaelinghilterra-creator/trajecktory/commit/42d9051ac9f548421b514735c3057456d44cbde3))
+
 ## [4.5.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.4.0...v4.5.0) (2026-09-20)
 
 
