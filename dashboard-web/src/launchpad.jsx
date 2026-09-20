@@ -3255,6 +3255,33 @@ function WeeklyReviewPanel() {
     return (who || ('#' + item.application_id)) + (what ? ' - ' + String(what).replace(/_/g, ' ') : '');
   };
 
+  // E-7: looked at, deliberately left as is for now. The item stays on the list, but reads as excluded with the
+  // reason until the underlying thing is resolved or the exclusion is undone (Setup > Data storage > Recent changes).
+  const [excludeOpen, setExcludeOpen] = useState(null); // item_key of the row whose reason box is open
+  const [excludeReason, setExcludeReason] = useState('');
+  const exclude = async (kind, item) => {
+    try {
+      const r = await window.tjkMutate('/api/setup/weekly-review/exclude', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemKind: kind, applicationId: item.application_id, stage: item.stage, messageId: item.message_id, reason: excludeReason }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || 'Could not save that.');
+      setExcludeOpen(null); setExcludeReason('');
+      if (window.tjkToast) window.tjkToast('Excluded, with the reason on record.', 'success');
+      setReload(n => n + 1);
+    } catch (e) { if (window.tjkToast) window.tjkToast(e.message, 'error'); }
+  };
+  const undoExclude = async (eventId) => {
+    try {
+      const r = await window.tjkMutate('/api/events/' + eventId + '/undo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || 'Could not undo that.');
+      if (window.tjkToast) window.tjkToast('Exclusion undone.', 'success');
+      setReload(n => n + 1);
+    } catch (e) { if (window.tjkToast) window.tjkToast(e.message, 'error'); }
+  };
+
   return (
     <div className="col" style={{ gap: 16 }}>
       <div className="ta-head">
@@ -3274,10 +3301,12 @@ function WeeklyReviewPanel() {
       {!review && !error && <div className="card padded-lg" style={{ fontSize: 13 }}>Loading...</div>}
 
       {review && (
-        <div style={{ padding: '10px 12px', borderRadius: 8, fontSize: 13, background: review.needs_review === 0 ? 'rgba(34,197,94,0.12)' : 'rgba(245,158,11,0.14)' }}>
+        <div style={{ padding: '10px 12px', borderRadius: 8, fontSize: 13, background: review.open === 0 ? 'rgba(34,197,94,0.12)' : 'rgba(245,158,11,0.14)' }}>
           {review.needs_review === 0
             ? <><b>Nothing to review</b> in these weeks.</>
-            : <><b>{review.needs_review}</b> item{review.needs_review === 1 ? '' : 's'} to look at across these weeks. Newest week first.</>}
+            : review.open === 0
+              ? <><b>{review.excluded}</b> item{review.excluded === 1 ? '' : 's'} excluded, with a reason on record. Nothing left open.</>
+              : <><b>{review.open}</b> open, <b>{review.excluded}</b> excluded (of {review.needs_review} flagged), across these weeks. Newest week first.</>}
         </div>
       )}
 
@@ -3292,12 +3321,33 @@ function WeeklyReviewPanel() {
             <div key={g.key}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{g.title} ({week[g.key].length})</div>
               <div className="dim" style={{ fontSize: 11.5, marginBottom: 4 }}>{g.note}</div>
-              {week[g.key].map((item, i) => (
-                <div key={i} className="mono" style={{ fontSize: 11, lineHeight: 1.6 }}>
-                  {item.date || item.dated_on || ''} {describe(item)}
-                  {g.key === 'unconfirmed_interviews' && item.date && <button type="button" className="btn sm" style={{ marginLeft: 8 }} onClick={() => confirmHeld(item)}>It was held</button>}
-                </div>
-              ))}
+              {week[g.key].map((item, i) => {
+                const kind = { unconfirmed_interviews: 'unconfirmed_interview', scheduled: 'scheduled', newer_messages: 'newer_message', unmatched_replies: 'unmatched_reply' }[g.key];
+                const open = excludeOpen === (item.item_key + '|' + i);
+                return (
+                  <div key={i} style={{ opacity: item.excluded ? 0.6 : 1 }}>
+                    <div className="mono" style={{ fontSize: 11, lineHeight: 1.6 }}>
+                      {item.date || item.dated_on || ''} {describe(item)}
+                      {g.key === 'unconfirmed_interviews' && item.date && !item.excluded && <button type="button" className="btn sm" style={{ marginLeft: 8 }} onClick={() => confirmHeld(item)}>It was held</button>}
+                      {!item.excluded && !open && <button type="button" className="btn ghost sm" style={{ marginLeft: 8 }} onClick={() => { setExcludeOpen(item.item_key + '|' + i); setExcludeReason(''); }}>Exclude</button>}
+                    </div>
+                    {item.excluded && (
+                      <div className="dim" style={{ fontSize: 10.5, marginLeft: 2 }}>
+                        Excluded {item.excluded.on}: {item.excluded.reason}
+                        {item.excluded.event_id && <button type="button" className="btn ghost sm" style={{ marginLeft: 6 }} onClick={() => undoExclude(item.excluded.event_id)}>Undo</button>}
+                      </div>
+                    )}
+                    {open && (
+                      <div className="row" style={{ gap: 6, marginTop: 3, marginBottom: 4 }}>
+                        <input value={excludeReason} onChange={e => setExcludeReason(e.target.value)} placeholder="Why leave this as is?"
+                          style={{ fontSize: 11, padding: '3px 6px', flex: 1, background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }} />
+                        <button type="button" className="btn sm" disabled={!excludeReason.trim()} onClick={() => exclude(kind, item)}>Save</button>
+                        <button type="button" className="btn ghost sm" onClick={() => setExcludeOpen(null)}>Cancel</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>

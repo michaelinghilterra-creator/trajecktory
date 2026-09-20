@@ -121,5 +121,14 @@ const lastDay = buildWeeklyReview({ today: '2030-03-16', weekCount: 1, interview
 check(lastDay.weeks[0].unconfirmed_interviews.map((i) => i.application_id).join() === '4' && lastDay.weeks[0].scheduled.length === 0, 'the last day of a week counts and the day after it does not');
 check(buildWeeklyReview({ today: '2030-03-13', interviews: [{ appId: 1, stage: 'Phone Screen', date: '2030-01-01', evidence_ok: false }] }).needs_review === 0, 'an item outside the shown weeks is not counted');
 
+// A line recorded in the event store can say directly which bucket it is in (needed for a held date entered
+// ahead of the day itself, which is still in the future but is not merely "scheduled").
+let bucketLines = interviewItems([{ appId: 1, stage: 'Phone Screen', date: '2030-03-20', bucket: 'unconfirmed' }], '2030-03-13');
+check(bucketLines.unconfirmed.length === 1 && bucketLines.scheduled.length === 0, 'an explicit unconfirmed bucket wins even though the date is in the future');
+bucketLines = interviewItems([{ appId: 2, stage: 'Phone Screen', date: '2030-03-10', bucket: 'scheduled' }], '2030-03-13');
+check(bucketLines.scheduled.length === 1 && bucketLines.unconfirmed.length === 0, 'an explicit scheduled bucket wins even though the date is in the past');
+bucketLines = interviewItems([{ appId: 3, stage: 'Phone Screen', date: '2030-03-10', evidence_ok: true, bucket: 'counted' }], '2030-03-13');
+check(bucketLines.unconfirmed.length === 0 && bucketLines.scheduled.length === 0, 'a bucket value neither scheduled nor unconfirmed drops the line (counted, nothing to review)');
+
 console.log(`weekly-review: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
