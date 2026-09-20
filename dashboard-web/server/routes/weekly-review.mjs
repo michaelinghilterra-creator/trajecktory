@@ -10,6 +10,8 @@ import { readAppNotes } from '../lib/notes.mjs';
 import { readApplyDates, parseStatusEvents } from '../lib/sidecars.mjs';
 import { overrideEvidenceGaps, repliesByApplication } from '../../../lib/data-review.mjs';
 import { buildWeeklyReview } from '../../../lib/weekly-review.mjs';
+import { readInterviewRecords } from '../lib/interview-events.mjs';
+import { interviewKey, interviewState } from '../../../lib/interview-store.mjs';
 
 const DEFAULT_WEEKS = 4;
 const MAX_WEEKS = 12;
@@ -39,6 +41,8 @@ export function buildReviewForData({ today = centralToday(), weekCount = DEFAULT
   const overrides = readInterviewOverrides();
   const gaps = overrideEvidenceGaps(overrides, resolveReference);
   const gapIndexes = new Set(gaps.gaps.map(gap => gap.index));
+  // A line with a recorded interview event is judged by that record (held, with evidence) instead of the overrides file.
+  const records = readInterviewRecords();
   const lastStatusDate = new Map();
   for (const event of parseStatusEvents()) {
     if (!lastStatusDate.has(event.app) || event.date > lastStatusDate.get(event.app)) lastStatusDate.set(event.app, event.date);
@@ -50,7 +54,11 @@ export function buildReviewForData({ today = centralToday(), weekCount = DEFAULT
     repliesByApp: repliesByApplication(readAppNotes()),
     lastStatusDate,
     applyDates: readApplyDates(),
-    interviews: overrides.map((entry, index) => ({ appId: entry?.appId, stage: entry?.stage, date: entry?.date, evidence_ok: !gapIndexes.has(index) })),
+    interviews: overrides.map((entry, index) => {
+      const record = records.get(interviewKey(entry?.appId, entry?.stage));
+      const evidenceOk = record ? interviewState(record, today).state === 'counted' : !gapIndexes.has(index);
+      return { appId: entry?.appId, stage: entry?.stage, date: entry?.date, evidence_ok: evidenceOk };
+    }),
   });
   const name = item => {
     const app = byId.get(String(item.application_id));

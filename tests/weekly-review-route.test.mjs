@@ -83,6 +83,20 @@ try {
   check((await get('/api/setup/weekly-review?weeks=13')).status === 400, 'thirteen weeks is a 400');
   check((await get('/api/setup/weekly-review?weeks=abc')).status === 400, 'a word for weeks is a 400');
 
+  // A recorded interview event decides its line: confirmed and held, it is no longer listed (D-1).
+  fs.writeFileSync(path.join(sandbox, 'event-store.json'), JSON.stringify({ writes: 'on', flipped_at: '2030-03-01T00:00:00.000Z' }));
+  const { openEventStore } = await import('../lib/event-store.mjs');
+  const { resetLogWritesCache } = await import('../lib/log-writes.mjs');
+  const { recordInterview } = await import('../dashboard-web/server/lib/interview-events.mjs');
+  openEventStore(path.join(sandbox, 'trajecktory.db')).db.close();
+  resetLogWritesCache();
+  const listedBefore = (await get('/api/setup/weekly-review?weeks=2')).body.weeks.flatMap(w => w.unconfirmed_interviews).some(i => i.stage === 'Phone Screen');
+  recordInterview({ application_id: 900002, stage: 'Phone Screen', recorded_on: centralToday(), held_on: daysBack(2), evidence: [{ kind: 'owner_confirmation', confirmed_on: centralToday(), ref: 'confirmation-900002' }] }, sandbox);
+  const listedAfter = (await get('/api/setup/weekly-review?weeks=2')).body.weeks.flatMap(w => w.unconfirmed_interviews).some(i => i.stage === 'Phone Screen');
+  check(listedBefore && !listedAfter, 'a line that is recorded as held with evidence is no longer listed as unconfirmed');
+  const noEvidence = recordInterview({ application_id: 900002, stage: 'Phone Screen', recorded_on: centralToday(), held_on: daysBack(2), evidence: [] }, sandbox);
+  check(noEvidence.length === 1 && (await get('/api/setup/weekly-review?weeks=2')).body.weeks.flatMap(w => w.unconfirmed_interviews).some(i => i.stage === 'Phone Screen'), 'a newer recording with no evidence puts the line back on the list');
+
   const after = ['applications.md', 'app-notes.json', 'twc-overrides.json', 'status-events.tsv']
     .map(name => fs.readFileSync(path.join(sandbox, name), 'utf8')).join('\n');
   check(before === after, 'the review changed no file');
