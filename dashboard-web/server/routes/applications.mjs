@@ -8,6 +8,7 @@ import { recordApplyDate, readApplyDates } from '../lib/sidecars.mjs';
 import { readAppNotes } from '../lib/notes.mjs';
 import { repliesByApplication } from '../../../lib/data-review.mjs';
 import { evaluateStatusChange } from '../../../lib/status-guards.mjs';
+import { dialogFor } from '../../../lib/status-guard-dialog.mjs';
 import { assignSplitTest, splitTestSummary } from '../lib/split-test.mjs';
 import { pushObsidianNote } from '../lib/obsidian.mjs';
 import { ALL_STATUSES } from '../lib/statuses.mjs';
@@ -117,7 +118,7 @@ router.get('/api/applications/:id/status-check', (req, res) => {
       withdrawn: req.query.withdrawn === '1',
       byHand: req.query.byHand === '1',
     });
-    res.json({ id, to, ...verdict });
+    res.json({ id, to, ...verdict, dialog: dialogFor(verdict, row.company) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -171,7 +172,7 @@ router.patch('/api/applications/:id', (req, res) => {
         byHand: !!guard && guard.byHand === true,
       });
       if (!verdict.allowed) {
-        return res.status(409).json({ error: 'This status change needs evidence or a confirmation first.', guard: verdict });
+        return res.status(409).json({ error: 'This status change needs evidence or a confirmation first.', guard: verdict, dialog: dialogFor(verdict, prevRow?.company) });
       }
       if (status === 'Rejected' && !when && verdict.dated_on && verdict.dated_on <= new Date().toISOString().slice(0, 10)) when = verdict.dated_on;
     }

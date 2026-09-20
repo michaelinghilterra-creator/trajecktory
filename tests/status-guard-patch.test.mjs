@@ -61,6 +61,7 @@ try {
   // Rejected with no evidence is refused and writes nothing.
   let r = await patch(900002, { status: 'Rejected', company: 'Quennox Ratchet Works' });
   check(r.status === 409 && r.body.guard.reason === 'no_employer_evidence' && r.body.guard.allowed === false, 'Rejected with no evidence is a 409 with the reason');
+  check(r.body.dialog && r.body.dialog.kind === 'ask_phone_date' && r.body.dialog.needsDate === true && r.body.dialog.text.includes('Quennox Ratchet Works'), 'the refusal carries the words to show, naming the company');
   check(statusOf(900002) === 'Applied' && eventsFor(900002).length === 0, 'a refused change writes no status and no event');
 
   // A non rejection human reply does not allow Rejected, and is listed.

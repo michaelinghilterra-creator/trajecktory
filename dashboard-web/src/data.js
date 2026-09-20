@@ -242,3 +242,33 @@ window.tjkMutate = async function tjkMutate(url, options) {
   }
   return res;
 };
+
+// E-5: Rejected and No Response need evidence or the person's confirmation. Before saving one, ask the
+// read only check route what the server will accept. When more is needed the person is asked in plain
+// words (a dated phone rejection, or to read the employer's message first). Returns { ok, guard, reason };
+// `guard` goes into the save so the server sees the person's answers. Choosing the status in the screen is
+// the person's own act, so byHand is always true here. Silent callers are never asked: they get ok false.
+window.tjkGuardStatus = async function tjkGuardStatus(app, to, { interactive = true } = {}) {
+  let guard = { byHand: true };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const phone = guard.phoneRejectionOn ? '&phoneOn=' + encodeURIComponent(guard.phoneRejectionOn) : '';
+    let verdict;
+    try {
+      const res = await fetch('/api/applications/' + app.id + '/status-check?to=' + encodeURIComponent(to) + '&byHand=1' + phone);
+      if (!res.ok) return { ok: true, guard };
+      verdict = await res.json();
+    } catch (e) { return { ok: true, guard }; } // the server still enforces the same rules on save
+    if (verdict.allowed) return { ok: true, guard };
+    const dialog = verdict.dialog || { kind: 'blocked', text: 'This change is not allowed.' };
+    if (!interactive) return { ok: false, guard, reason: dialog.text };
+    if (dialog.kind === 'ask_phone_date') {
+      const answer = window.prompt(dialog.text, '');
+      if (answer === null) return { ok: false, guard, reason: '' };
+      guard = { ...guard, phoneRejectionOn: answer.trim() };
+      continue;
+    }
+    window.alert(dialog.text);
+    return { ok: false, guard, reason: dialog.text };
+  }
+  return { ok: false, guard, reason: '' };
+};

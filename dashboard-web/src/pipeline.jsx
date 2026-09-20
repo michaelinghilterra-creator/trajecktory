@@ -2250,6 +2250,12 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
     try {
       const body = { status: newStatus };
       if (eventDate) body.eventDate = eventDate;
+      // E-5: Rejected and No Response are checked first and may ask the person a question.
+      if ((newStatus === 'Rejected' || newStatus === 'No Response') && a.status !== newStatus) {
+        const g = await window.tjkGuardStatus(a, newStatus);
+        if (!g.ok) return;
+        body.guard = g.guard;
+      }
       // Auto-attribute the exit stage: closing from an interview round (or
       // Phone Screen/Offer) stamps [reached: <stage>] so the funnel + rejections-
       // by-stage analytics credit the right rung. Mirrors app.jsx handleAction.
