@@ -1141,7 +1141,7 @@ function computeJustConnectedQueue({ taRows, referralRows, influencers, apps } =
   const touchIdx = buildCompanyTouchIndex(books);
   const today = _localToday();
   // Hold a fresh acceptance out of the queue for a cool-off so the first ask does
-  // not land the day after they connect. Business days, user-configurable.
+  // not land the day after they connect. Calendar days, user-configurable.
   const cooloffDays = getOutreachPolicy().connectedCooloffDays;
   const out = [];
   for (const row of ta) {
