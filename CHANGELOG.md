@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.3.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.2.0...v4.3.0) (2026-09-20)
+
+
+### Features
+
+* write Passed with a reason and read it back as the old labels ([#369](https://github.com/michaelinghilterra-creator/trajecktory/issues/369)) ([07b64be](https://github.com/michaelinghilterra-creator/trajecktory/commit/07b64be792c75bc1d8a3948b463e23a3311b29a6))
+
 ## [4.2.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.1.0...v4.2.0) (2026-09-20)
 
 
