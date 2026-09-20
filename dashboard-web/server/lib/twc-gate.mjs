@@ -1,7 +1,7 @@
 // D-11: what to look at before a Work Search log for a date range is sent. This is the WARNING form of the
 // export gate: it lists unconfirmed interviews, scheduled interviews and status mismatches inside the range
 // and never blocks the export. It becomes blocking only after the interview lines have their evidence and
-// Michael approves the switch (decision of 2026-09-19).
+// the owner approves the switch (decision of 2026-09-19).
 import { parseApplicationsMd } from './applications.mjs';
 import { readAppNotes } from './notes.mjs';
 import { buildActivities, interviewGateLines } from './twc.mjs';
