@@ -75,7 +75,7 @@ try {
   check(r.body.allowed === true, 'No Response by hand with no messages is allowed');
 
   r = await get('/api/applications/900003/status-check?to=Passed');
-  check(r.status === 200 && r.body.allowed === false && r.body.suggest === 'Discarded', 'Passed is not live and Discarded is suggested');
+  check(r.status === 200 && r.body.allowed === true, 'Passed is live and allowed');
 
   r = await get('/api/applications/900003/status-check?to=Nonsense');
   check(r.status === 400, 'an unknown status is a 400');

@@ -73,7 +73,7 @@ export function coachState() {
 
   // Active applications (Applied or further) — the set an outcome action can target.
   const active = apps
-    .filter(a => FUNNEL_ORDER.indexOf(a.reached) >= _APPLIED_IDX && !['Rejected', 'No Response', 'Discarded', 'Offer'].includes(a.status))
+    .filter(a => FUNNEL_ORDER.indexOf(a.reached) >= _APPLIED_IDX && !['Rejected', 'No Response', 'Discarded', 'Passed', 'Offer'].includes(a.status))
     .slice(-40)
     .map(a => ({ id: a.id, company: a.company, role: a.role, status: a.status }));
 

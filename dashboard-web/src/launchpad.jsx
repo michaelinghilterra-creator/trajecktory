@@ -2952,6 +2952,7 @@ function TwcPanel({ toast }) {
       style={{ background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 4, padding: '4px 8px', color: 'var(--text)', fontSize: 12 }} />
   );
   const cell = { padding: '6px 8px', verticalAlign: 'top' };
+  const blocked = !!(gate && gate.blocking && gate.count > 0);
 
   return (
     <div className="col" style={{ gap: 16 }}>
@@ -2967,14 +2968,16 @@ function TwcPanel({ toast }) {
           <span className="mono dim" style={{ fontSize: 11 }}>From</span>{dateInput(from, setFrom)}
           <span className="mono dim" style={{ fontSize: 11 }}>To</span>{dateInput(to, setTo)}
           <button className="btn primary sm" onClick={generate} disabled={loading}>{loading ? 'Loading…' : 'Generate'}</button>
-          <a className="btn sm" href={`/api/setup/twc/export?from=${from}&to=${to}`} download>Download CSV</a>
+          {blocked
+            ? <button type="button" className="btn sm" disabled title="Look at the items below first">Download CSV</button>
+            : <a className="btn sm" href={`/api/setup/twc/export?from=${from}&to=${to}`} download>Download CSV</a>}
         </div>
       </div>
 
       {gate && gate.count > 0 && (
         <div className="card padded-lg col" style={{ gap: 8, borderLeft: '3px solid var(--orange, #f59e0b)' }}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{gate.count} thing{gate.count === 1 ? '' : 's'} to look at before you send this</div>
-          <div className="dim" style={{ fontSize: 12, lineHeight: 1.5 }}>The download still works. These are warnings so the log says only what you can back up.</div>
+          <div className="dim" style={{ fontSize: 12, lineHeight: 1.5 }}>{blocked ? 'The download is held until these are dealt with, so the log says only what you can back up.' : 'The download still works. These are warnings so the log says only what you can back up.'}</div>
           {gate.warnings.map((w, i) => (
             <div key={i} className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
               <span className="mono" style={{ minWidth: 220 }}>{[w.company, w.stage].filter(Boolean).join(' | ') || ('#' + w.id)}{w.date ? ' ' + w.date : ''}</span>
@@ -2982,6 +2985,13 @@ function TwcPanel({ toast }) {
               {w.type === 'unconfirmed_interview' && w.date && <button type="button" className="btn sm" onClick={() => confirmHeld(w)}>It was held</button>}
             </div>
           ))}
+          {blocked && (
+            <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <a className="btn sm" href={`/api/setup/twc/export?from=${from}&to=${to}&acknowledged=1`} download
+                onClick={e => { if (!window.confirm('Send this log with the items above still unresolved?')) e.preventDefault(); }}>Download anyway</a>
+              <span className="dim" style={{ fontSize: 11.5 }}>Only if you have checked each one and the log is right as it stands.</span>
+            </div>
+          )}
           {gate.other_replies_in_range > 0 && (
             <div className="dim" style={{ fontSize: 11.5 }}>{gate.other_replies_in_range} more application{gate.other_replies_in_range === 1 ? ' is' : 's are'} marked No Response with a reply on record in this range. Most are receipts, so they are not listed here.</div>
           )}

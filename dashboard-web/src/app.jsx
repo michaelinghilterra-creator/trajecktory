@@ -537,13 +537,13 @@ function App() {
       offer: 'Offer', accept: 'Offer', reopen: 'Evaluated',
       Applied: 'Applied', Offer: 'Offer',
       'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview',
-      SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
+      SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', Passed: 'Passed', 'No Response': 'No Response',
     };
     const next = MAP[actionId];
     if (!next) return;
     handleAction(app, next, undefined, undefined, eventDate);
     // Leaving the active pipeline closes the drawer (parity with Pipeline).
-    const TERMINAL = ['SKIP', 'Not a Fit', 'Closed', 'Rejected', 'Discarded', 'No Response'];
+    const TERMINAL = ['SKIP', 'Not a Fit', 'Closed', 'Rejected', 'Discarded', 'Passed', 'No Response'];
     if (TERMINAL.includes(next)) setDrawerApp(null);
   };
 

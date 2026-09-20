@@ -94,6 +94,20 @@ const records = recordsOf(events);
   check(interviews(before).length === 0, 'the old status change day no longer holds the interview');
 }
 
+// 2b. Strict (store on): a line with no recording is not counted; it is listed and the gate asks about it.
+{
+  const acts = buildActivities({ from: '2030-01-01', to: '2030-12-31', identity, today: TODAY, interviewRecords: records, strictInterviews: true });
+  const lines = interviews(acts);
+  check(lines.map(a => a.appId).sort().join() === '900001,900005', 'strict: only lines with a recording that says held with evidence are counted');
+  check(acts.strictInterviews === true && acts.unrecordedInterviews.map(l => `${l.appId}|${l.stage}|${l.date}`).join() === '900002|Phone Screen|2030-03-06', 'strict: the line with no recording is listed with its old date');
+  const gateLines = interviewGateLines(acts, records, TODAY);
+  check(gateLines.length === 5 && gateLines.find(l => l.id === 900002).held_on === '2030-03-06' && gateLines.find(l => l.id === 900002).evidence.length === 0, 'strict: the gate still checks the unrecorded line, as held with no evidence');
+  const relaxed = buildActivities({ from: '2030-01-01', to: '2030-12-31', identity, today: TODAY, interviewRecords: records, strictInterviews: false });
+  check(interviews(relaxed).map(a => a.appId).sort().join() === '900001,900002,900005' && relaxed.unrecordedInterviews.length === 0 && relaxed.strictInterviews === false, 'not strict (store off): the line with no recording keeps the old rules');
+  const none = buildActivities({ from: '2030-01-01', to: '2030-12-31', identity, today: TODAY, interviewRecords: new Map(), strictInterviews: true });
+  check(interviews(none).length === 0 && none.unrecordedInterviews.length === 4, 'strict with nothing recorded: no interview counts and all four lines are listed');
+}
+
 // 3. A held date in the future is never counted.
 {
   const future = recordsOf([record({ application_id: 900001, stage: 'Phone Screen', held_on: '2030-07-01', evidence: [confirm] }, 1)]);
@@ -117,7 +131,9 @@ const records = recordsOf(events);
 
   const gate = twcGateWarnings({ from: '2030-03-01', to: '2030-03-31', today: TODAY, interviewRecords: records });
   const types = gate.warnings.map(w => `${w.type}:${w.id}`).sort();
-  check(gate.warn_only === true && gate.count === gate.warnings.length, 'the gate is a warning and never blocks');
+  check(gate.warn_only === true && gate.blocking === false && gate.count === gate.warnings.length, 'with the store off (not strict) the gate only warns');
+  const strictGate = twcGateWarnings({ from: '2030-03-01', to: '2030-03-31', today: TODAY, interviewRecords: records, strictInterviews: true });
+  check(strictGate.blocking === true && strictGate.warn_only === false && strictGate.count === gate.count, 'with the store on (strict) the gate blocks');
   check(types.join() === 'status_mismatch:900006,unconfirmed_interview:900002,unconfirmed_interview:900003', 'the range lists the line with no recording, the held line with no evidence and a No Response that has a rejection on record');
   const mismatch = gate.warnings.find(w => w.id === 900006);
   check(gate.other_replies_in_range === 2, 'plain replies on No Response applications inside the range are counted, not listed, and one outside the range is not counted');
@@ -159,7 +175,7 @@ const records = recordsOf(events);
   stored = readInterviewRecords(tmp);
   check(stored.size === 0, 'a voided recording is no longer read');
   const after = buildActivities({ from: '2030-01-01', to: '2030-12-31', identity, today: TODAY });
-  check(interviews(after).find(a => a.appId === '900001').evidenced === false, 'the line falls back to the old rules once its recording is voided');
+  check(!interviews(after).some(a => a.appId === '900001') && after.unrecordedInterviews.some(l => l.appId === '900001'), 'with the store on, a line whose recording is voided is not counted and is listed as having no recording');
 
   let bad = null;
   try { recordInterview({ application_id: 900001, stage: 'Phone Screen', recorded_on: '2030-03-10' }, tmp); } catch (error) { bad = error; }
@@ -180,14 +196,25 @@ const records = recordsOf(events);
   try {
     const before = fs.readFileSync(path.join(tmp, 'status-events.tsv'), 'utf8');
     let r = await get('/api/setup/twc/gate?from=2030-03-01&to=2030-03-31');
-    check(r.status === 200 && r.body.warn_only === true && Array.isArray(r.body.warnings) && r.body.from === '2030-03-01', 'the gate route answers 200 with the warnings');
+    check(r.status === 200 && r.body.blocking === true && Array.isArray(r.body.warnings) && r.body.from === '2030-03-01', 'the gate route answers 200 with the warnings, and says it blocks (the store is on here)');
     check(r.body.warnings.some(w => w.id === 900002), 'the route lists the line with no recording (scheduled here, because the real today is before 2030)');
     r = await get('/api/setup/twc/gate?from=2030-03-01');
     check(r.status === 400, 'a missing date is a 400');
     r = await get('/api/setup/twc/gate?from=2030-04-01&to=2030-03-01');
     check(r.status === 400, 'a range in the wrong order is a 400');
     r = await get('/api/setup/twc/export?from=2030-03-01&to=2030-03-31');
-    check(r.status === 200 && /text\/csv/.test(r.response.headers.get('content-type')), 'the CSV export is still served while there are warnings');
+    check(r.status === 409 && r.body.blocked === true && r.body.gate.count > 0, 'the CSV export is refused with the items when there are any (D-11 blocking)');
+    check(r.response.headers.get('content-disposition') === null, 'a refused export carries no file');
+    r = await get('/api/setup/twc/export?from=2030-03-01&to=2030-03-31&acknowledged=1');
+    check(r.status === 200 && /text\/csv/.test(r.response.headers.get('content-type')), 'the CSV is served when the person says to download anyway');
+    r = await get('/api/setup/twc/export?from=2030-03-01&to=2030-03-31&acknowledged=0');
+    check(r.status === 409, 'only acknowledged=1 counts as download anyway');
+    r = await get('/api/setup/twc/export?from=2030-08-01&to=2030-08-31');
+    check(r.status === 200 && /text\/csv/.test(r.response.headers.get('content-type')), 'a range with nothing to look at is served without asking');
+    r = await get('/api/setup/twc/export?to=2030-03-31');
+    check(r.status === 409, 'a range with no start is checked from the beginning and refused too');
+    r = await get('/api/setup/twc/export?from=2030-04-01&to=2030-03-01');
+    check(r.status === 400, 'a range in the wrong order is a 400 on the export too');
     check(fs.readFileSync(path.join(tmp, 'status-events.tsv'), 'utf8') === before, 'the gate changed no file');
   } finally {
     await new Promise(resolve => server.close(resolve));

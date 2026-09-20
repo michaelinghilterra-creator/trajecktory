@@ -99,6 +99,16 @@ states:
     description: "Role evaluated and determined to be a poor fit: signal noise, wrong level, wrong domain"
     dashboard_group: not_a_fit
 
+  # Passed folds SKIP, Not a Fit, Discarded and Closed (Definitions v1 section 3): you are out, whether
+  # before or after applying. Accepted today and written by nothing yet; the four labels above stay
+  # canonical until the migration (docs: Passed Status Migration Plan). No aliases on purpose:
+  # normalize-statuses must not rewrite the four labels into Passed before the data step.
+  - id: passed
+    label: Passed
+    aliases: []
+    description: You are out. Replaces SKIP, Not a Fit, Discarded and Closed; whether you applied comes from the evidence, not the status
+    dashboard_group: passed
+
   - id: no_response
     label: No Response
     aliases: [no response, ghosted, no reply, ghost]

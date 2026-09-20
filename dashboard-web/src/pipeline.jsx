@@ -1220,7 +1220,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
   } else if (stIdx >= 1 && stIdx < window.FUNNEL_ORDER.length - 1) {
     const next = window.FUNNEL_ORDER[stIdx + 1];
     primary = [{ id: next, label: `Move to ${next}`, cls: 'primary', check: true }];
-  } else if (['SKIP', 'Rejected', 'Closed', 'Discarded', 'Not a Fit', 'No Response'].includes(st)) {
+  } else if (['SKIP', 'Rejected', 'Closed', 'Discarded', 'Passed', 'Not a Fit', 'No Response'].includes(st)) {
     primary = [{ id: 'reopen', label: 'Reopen → Evaluated', cls: 'primary', check: true }];
     // Re-queue a near-threshold auto-discard (a noisy 2.9, just under the 3.0 cut)
     // for a fresh evaluation instead of hardening it as a permanent reject (7.5).
@@ -2318,7 +2318,7 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
       // funnel statuses (the advance CTA sets id = next canonical status) + closers map to themselves
       Applied: 'Applied', Offer: 'Offer',
       'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview',
-      SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
+      SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', Passed: 'Passed', 'No Response': 'No Response',
     };
     const next = MAP[actionId];
     if (!next) return;
