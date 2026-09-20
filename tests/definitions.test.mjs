@@ -53,7 +53,7 @@ function problemsIn(source) {
 check(problemsIn("if (app.status === 'Ghosted') {}").length === 1, 'scanner flags an undefined name on the right of ===');
 check(problemsIn("if ('Ghosted' !== app.status) {}").length === 1, 'scanner flags an undefined name on the left');
 check(problemsIn("if (nextStatus == 'Zzz Nope') {}").length === 1, 'scanner flags a nextStatus comparison');
-check(problemsIn("if (app.status === 'Passed') {}").length === 1, 'scanner flags a planned status that is not live');
+check(problemsIn("if (app.status === 'Passed') {}").length === 0, 'scanner accepts Passed now that it is live');
 check(problemsIn("if (app.status === 'Applied') {}").length === 0, 'scanner accepts a defined application status');
 check(problemsIn("if (c.status === 'Bounced') {}").length === 0, 'scanner accepts a defined contact status');
 check(problemsIn("if (job.status === 'running') {}").length === 0, 'scanner ignores lowercase job states');
@@ -75,7 +75,10 @@ check(!defs.ACTIVE_STATUSES.includes('Evaluated'), 'Evaluated is not active');
 check(sameSet(defs.EMPLOYER_END_STATES, ['Rejected', 'No Response']), 'the employer end states are Rejected and No Response');
 check(sameSet(defs.RETIRING_STATUSES, ['SKIP', 'Not a Fit', 'Discarded', 'Closed']), 'the retiring statuses are SKIP, Not a Fit, Discarded and Closed');
 check(defs.APPLICATION_STATUSES.filter(s => s.group === 'retiring').every(s => s.retiresInto === 'Passed'), 'every retiring status folds into Passed');
-check(sameSet(defs.PLANNED_STATUSES, ['Passed']) && !defs.ALL_APPLICATION_STATUSES.includes('Passed'), 'Passed is planned and not a live status');
+check(defs.PLANNED_STATUSES.length === 0 && defs.ALL_APPLICATION_STATUSES.includes('Passed'), 'Passed is a live status and nothing is planned');
+check(!defs.EMPLOYER_END_STATES.includes('Passed') && !defs.ACTIVE_STATUSES.includes('Passed') && !defs.LADDER.includes('Passed'), 'Passed is neither an employer end state nor active nor on the ladder');
+const passedState = doc.states.find(s => s.label === 'Passed');
+check(passedState && (passedState.aliases || []).length === 0, 'states.yml carries Passed with no aliases, so the four old labels are not rewritten into it');
 check(new Set(defs.ALL_APPLICATION_STATUSES).size === defs.ALL_APPLICATION_STATUSES.length, 'no application status is defined twice');
 
 // The server sets agree, except for the listed divergences.

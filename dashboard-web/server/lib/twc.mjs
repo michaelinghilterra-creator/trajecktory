@@ -49,10 +49,10 @@ import { readAppNotes } from './notes.mjs';
 import { readEvents, TWC_EVENT_TYPES, TWC_EVENT_METHODS } from './twc-events.mjs';
 import { getIdentity } from './profile.mjs';
 import { generateText, draftModel } from './anthropic.mjs';
-import { TWC_OVERRIDES_PATH } from '../config.mjs';
+import { TWC_OVERRIDES_PATH, DATA_DIR } from '../config.mjs';
 import { readInterviewRecords } from './interview-events.mjs';
 import { interviewKey, interviewState } from '../../../lib/interview-store.mjs';
-import { localToday } from '../../../lib/log-writes.mjs';
+import { localToday, logWritesEnabled } from '../../../lib/log-writes.mjs';
 
 const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const safe = (fn, dflt) => { try { return fn(); } catch { return dflt; } };
@@ -88,10 +88,11 @@ const RESULT_BY_STATUS = {
   'No Response': 'No reply',
   Closed: 'Other',
   Discarded: 'Other',
+  Passed: 'Other',
   'Not a Fit': 'Other',
   SKIP: 'Other',
 };
-function resultForStatus(status) { return RESULT_BY_STATUS[status] || 'Other'; }
+export function resultForStatus(status) { return RESULT_BY_STATUS[status] || 'Other'; }
 
 export const TWC_KINDS = ['application', 'interview', 'followup', 'outreach', 'event'];
 const TWC_RESULTS = new Set(['Submitted job application', 'Sent a résumé', 'Interviewed', 'Hired', 'Not hired', 'No reply', 'Other']);
@@ -194,7 +195,7 @@ export const TWC_CSV_HEADERS = [
  * open-ended). One row per application (deduped), per interview event, and per
  * follow-up touch, joined to the cached employer directory for address/phone.
  */
-export function buildActivities({ from, to, identity, interviewRecords, today } = {}) {
+export function buildActivities({ from, to, identity, interviewRecords, today, strictInterviews } = {}) {
   const apps = safe(parseApplicationsMd, []);
   const byId = new Map(apps.map(a => [String(a.id), a]));
   const applyDates = safe(readApplyDates, {}) || {};
@@ -204,9 +205,12 @@ export function buildActivities({ from, to, identity, interviewRecords, today } 
   const appNotes = safe(readAppNotes, {}) || {};
   const overrides = readTwcOverrides();
   const candidateIdentity = identity || getIdentity();
-  // D-1 and D-3: an interview line with a recorded interview event is counted only when it was held and
-  // has evidence, and it is dated by the day it was held. A line with no recording keeps its old rules
-  // (and shows up in the export warning) until its evidence is recorded.
+  // D-1 and D-3: an interview line counts only when it has a recorded interview event that says it was held with
+  // evidence, and it is dated by the day it was held. With the event store on (strict), a line with no recording is
+  // not counted; it is listed in `unrecordedInterviews` so the export gate can ask about it. With the store off there
+  // is nowhere to keep evidence, so a line keeps its old rules.
+  const strict = strictInterviews ?? safe(() => logWritesEnabled(DATA_DIR), false);
+  const unrecorded = [];
   const records = interviewRecords || safe(readInterviewRecords, new Map());
   const todayYmd = today || localToday();
 
@@ -279,7 +283,7 @@ export function buildActivities({ from, to, identity, interviewRecords, today } 
   const activities = [];
 
   // 1) Applications — one row per app that ever reached Applied (or beyond).
-  const voidStatuses = new Set(['Not a Fit', 'SKIP', 'Discarded', 'Closed']);
+  const voidStatuses = new Set(['Not a Fit', 'SKIP', 'Discarded', 'Closed', 'Passed']);
   const appliedEventIndex = new Map();
   const sameDayVoids = new Set();
   events.forEach((e, index) => {
@@ -387,6 +391,10 @@ export function buildActivities({ from, to, identity, interviewRecords, today } 
     if (!isYmd(date)) return;
     const company = (app && app.company) || (event && event.company) || '';
     emittedInterviews.add(key);
+    if (strict) {
+      unrecorded.push({ appId, stage, date, company });
+      return;
+    }
     const emp = empFor(company);
     const dateSource = override
       ? 'Interview date set by override'
@@ -658,6 +666,8 @@ export function buildActivities({ from, to, identity, interviewRecords, today } 
       || (a.company || '').localeCompare(b.company || '')
       || a.kind.localeCompare(b.kind));
   result.overrideWarnings = overrideWarnings;
+  result.unrecordedInterviews = unrecorded;
+  result.strictInterviews = strict;
   return result;
 }
 
@@ -674,15 +684,22 @@ export function buildActivities({ from, to, identity, interviewRecords, today } 
 export function interviewGateLines(activities, records, today) {
   const lines = [...records.values()];
   const seen = new Set(lines.map((record) => interviewKey(record.application_id, record.stage)));
-  for (const activity of activities) {
-    if (activity.kind !== 'interview' || activity.evidenced !== false) continue;
-    const stage = String(activity.activity || '').replace(/^Interview:\s*/, '');
-    if (seen.has(interviewKey(activity.appId, stage))) continue;
-    const numeric = Number(activity.appId);
-    const id = Number.isInteger(numeric) ? numeric : activity.appId;
-    lines.push(activity.date > today
-      ? { id, stage, scheduled_for: activity.date, evidence: [] }
-      : { id, stage, held_on: activity.date, slot_end: `${activity.date}T23:59:59Z`, evidence: [] });
+  // Lines the log still takes from the old rules (store off), and lines it left out because they have no
+  // recording (store on).
+  const legacy = [
+    ...activities.filter((activity) => activity.kind === 'interview' && activity.evidenced === false)
+      .map((activity) => ({ appId: activity.appId, stage: String(activity.activity || '').replace(/^Interview:\s*/, ''), date: activity.date })),
+    ...(activities.unrecordedInterviews || []),
+  ];
+  for (const { appId, stage, date } of legacy) {
+    const key = interviewKey(appId, stage);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const numeric = Number(appId);
+    const id = Number.isInteger(numeric) ? numeric : appId;
+    lines.push(date > today
+      ? { id, stage, scheduled_for: date, evidence: [] }
+      : { id, stage, held_on: date, slot_end: `${date}T23:59:59Z`, evidence: [] });
   }
   return lines;
 }

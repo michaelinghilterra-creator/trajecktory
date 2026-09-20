@@ -1,7 +1,7 @@
-// D-11: what to look at before a Work Search log for a date range is sent. This is the WARNING form of the
-// export gate: it lists unconfirmed interviews, scheduled interviews and status mismatches inside the range
-// and never blocks the export. It becomes blocking only after the interview lines have their evidence and
-// the owner approves the switch (decision of 2026-09-19).
+// D-11: what to look at before a Work Search log for a date range is sent: unconfirmed interviews, scheduled
+// interviews and rejections a status missed, inside the range. With the event store on (strict D-1, approved by the
+// owner on 2026-09-20) the gate is BLOCKING: the export route refuses until the items are resolved or the person
+// says to download anyway. With the store off there is nowhere to keep evidence, so it only warns.
 import { parseApplicationsMd } from './applications.mjs';
 import { readAppNotes } from './notes.mjs';
 import { buildActivities, interviewGateLines } from './twc.mjs';
@@ -13,10 +13,10 @@ import { isCalendarDate } from '../../../lib/interview-dates.mjs';
 import { localToday } from '../../../lib/log-writes.mjs';
 
 /**
- * { from, to, today, warn_only: true, count, other_replies_in_range, warnings: [{ type, id, stage?, date?, reasons?, mismatch_type?, company, role }] }.
+ * { from, to, today, blocking, warn_only, count, other_replies_in_range, warnings: [{ type, id, stage?, date?, reasons?, mismatch_type?, company, role }] }.
  * Throws a TypeError naming the argument when the range is not two real dates in order.
  */
-export function twcGateWarnings({ from, to, today = localToday(), interviewRecords } = {}) {
+export function twcGateWarnings({ from, to, today = localToday(), interviewRecords, strictInterviews } = {}) {
   if (!isCalendarDate(from)) throw new TypeError('from');
   if (!isCalendarDate(to)) throw new TypeError('to');
   if (from > to) throw new TypeError('from');
@@ -24,7 +24,7 @@ export function twcGateWarnings({ from, to, today = localToday(), interviewRecor
   const records = interviewRecords || readInterviewRecords();
   const applications = parseApplicationsMd();
   const byId = new Map(applications.map((app) => [String(app.id), app]));
-  const activities = buildActivities({ interviewRecords: records, today });
+  const activities = buildActivities({ interviewRecords: records, today, strictInterviews });
   const interviews = interviewGateLines(activities, records, today);
   // Only a rejection that the status missed is a warning. A plain reply on a No Response application is mostly a
   // receipt or an acknowledgement the reply classifier cannot tell from a person, so it is counted, not listed.
@@ -32,7 +32,7 @@ export function twcGateWarnings({ from, to, today = localToday(), interviewRecor
   const mismatches = allMismatches.filter((mismatch) => mismatch.type === 'rejection_after_no_response');
   const otherReplies = allMismatches.filter((mismatch) => mismatch.dated_on >= from && mismatch.dated_on <= to && mismatch.type !== 'rejection_after_no_response').length;
 
-  // rows stay empty: only the blockers matter here, and a warning never withholds anything.
+  // rows stay empty: only the blockers matter here.
   const gate = gateTwcExport({ range: { from, to }, today, interviews, mismatches, rows: [] });
   const lineByKey = new Map(interviews.map((line) => [interviewKey(line.id, line.stage), line]));
   const warnings = gate.blockers.map((blocker) => {
@@ -41,5 +41,6 @@ export function twcGateWarnings({ from, to, today = localToday(), interviewRecor
     const date = line ? (line.held_on ?? line.scheduled_for) : undefined;
     return { ...blocker, ...(date !== undefined && { date }), company: app?.company ?? '', role: app?.role ?? '' };
   });
-  return { from, to, today, warn_only: true, count: warnings.length, warnings, other_replies_in_range: otherReplies };
+  const blocking = activities.strictInterviews === true;
+  return { from, to, today, blocking, warn_only: !blocking, count: warnings.length, warnings, other_replies_in_range: otherReplies };
 }

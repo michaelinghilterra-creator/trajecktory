@@ -41,11 +41,9 @@ check(d.text.endsWith('\n2030-03-05'), 'a message with no subject is listed by i
 d = dialogFor({ allowed: false, reason: 'must_be_set_by_hand' }, CO);
 check(d.kind === 'confirm_by_hand' && d.text === 'Mark Zorblax Widgetry as No Response yourself?' && d.needsDate === false, 'the by hand confirmation names the company');
 
-d = dialogFor({ allowed: false, reason: 'passed_not_live', suggest: 'Discarded' }, CO);
-check(d.kind === 'use_other' && d.needsDate === false && d.text === 'Use Discarded instead.', 'Passed is redirected to the suggested status');
 d = dialogFor({ allowed: false, reason: 'withdrawal_is_not_rejection', suggest: 'Discarded' }, CO);
 check(d.kind === 'use_other' && d.text === 'Use Discarded instead.', 'a withdrawal is redirected to the suggested status');
-d = dialogFor({ allowed: false, reason: 'passed_not_live', suggest: null }, CO);
+d = dialogFor({ allowed: false, reason: 'withdrawal_is_not_rejection', suggest: null }, CO);
 check(d.kind === 'blocked' && d.needsDate === false, 'a redirect with nothing to suggest is blocked, not "Use null instead"');
 
 d = dialogFor({ allowed: false, reason: 'something_new' }, CO);
@@ -59,8 +57,8 @@ d = dialogFor(real, CO);
 check(d.kind === 'read_first' && d.text.includes('2030-03-05 thanks for your time'), 'a real guard verdict for No Response is shown with the message');
 d = dialogFor(evaluateStatusChange({ to: 'Rejected', messages: [] }), CO);
 check(d.kind === 'ask_phone_date', 'a real guard verdict for Rejected asks for a phone date');
-d = dialogFor(evaluateStatusChange({ to: 'Passed' }), CO);
-check(d.kind === 'use_other' && d.text === 'Use Discarded instead.', 'a real guard verdict for Passed redirects to Discarded');
+d = dialogFor(evaluateStatusChange({ to: 'Rejected', messages: [], withdrawn: true }), CO);
+check(d.kind === 'use_other' && d.text === 'Use Discarded instead.', 'a real guard verdict for a withdrawal redirects to Discarded');
 
 console.log(`status-guard-dialog: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

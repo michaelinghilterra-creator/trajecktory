@@ -551,7 +551,7 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
     // funnel statuses (advance CTA / stage track emit the canonical status) map to themselves
     Applied: 'Applied', Offer: 'Offer',
     'Phone Screen': 'Phone Screen', '1st Interview': '1st Interview', '2nd Interview': '2nd Interview', '3rd Interview': '3rd Interview',
-    SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', 'No Response': 'No Response',
+    SKIP: 'SKIP', 'Not a Fit': 'Not a Fit', Closed: 'Closed', Rejected: 'Rejected', Discarded: 'Discarded', Passed: 'Passed', 'No Response': 'No Response',
   };
   const ACTIVE = ['Evaluated', 'Applied', ...window.INTERVIEW_STAGES, 'Offer'];
   // onAction here is app.jsx's handleAction(app, status, silent, reachedStage,
