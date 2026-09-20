@@ -15,6 +15,7 @@ import { cleanProse } from '../lib/text-hygiene.mjs';
 import { getIdentity } from '../lib/profile.mjs';
 import { loadProfileContext } from '../lib/insights.mjs';
 import { buildActivities, weeklyCounts, employersInActivities, toTwcCsv, enrichEmployers, ENRICH_MAX } from '../lib/twc.mjs';
+import { twcGateWarnings } from '../lib/twc-gate.mjs';
 import { readEvents, addEvent, deleteEvent } from '../lib/twc-events.mjs';
 import { getArchetypeRules } from '../lib/profile.mjs';
 
@@ -211,6 +212,20 @@ router.get('/api/setup/twc', (req, res) => {
       overrideWarnings: activities.overrideWarnings || 0,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/setup/twc/gate?from=&to= — D-11, the warning form of the export gate: what to look at before this
+// range is sent (unconfirmed or scheduled interviews, status mismatches). Read only; it never blocks the export.
+router.get('/api/setup/twc/gate', (req, res) => {
+  try {
+    const from = isoOrUndef(req.query.from);
+    const to = isoOrUndef(req.query.to);
+    if (!from || !to) return res.status(400).json({ error: 'from and to are required as YYYY-MM-DD' });
+    res.json(twcGateWarnings({ from, to }));
+  } catch (err) {
+    if (err instanceof TypeError) return res.status(400).json({ error: `Invalid ${err.message}` });
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Manual TWC activities that are not represented by an application or message.

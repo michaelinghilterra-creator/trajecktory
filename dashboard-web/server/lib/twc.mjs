@@ -50,6 +50,9 @@ import { readEvents, TWC_EVENT_TYPES, TWC_EVENT_METHODS } from './twc-events.mjs
 import { getIdentity } from './profile.mjs';
 import { generateText, draftModel } from './anthropic.mjs';
 import { TWC_OVERRIDES_PATH } from '../config.mjs';
+import { readInterviewRecords } from './interview-events.mjs';
+import { interviewKey, interviewState } from '../../../lib/interview-store.mjs';
+import { localToday } from '../../../lib/log-writes.mjs';
 
 const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const safe = (fn, dflt) => { try { return fn(); } catch { return dflt; } };
@@ -191,7 +194,7 @@ export const TWC_CSV_HEADERS = [
  * open-ended). One row per application (deduped), per interview event, and per
  * follow-up touch, joined to the cached employer directory for address/phone.
  */
-export function buildActivities({ from, to, identity } = {}) {
+export function buildActivities({ from, to, identity, interviewRecords, today } = {}) {
   const apps = safe(parseApplicationsMd, []);
   const byId = new Map(apps.map(a => [String(a.id), a]));
   const applyDates = safe(readApplyDates, {}) || {};
@@ -201,6 +204,11 @@ export function buildActivities({ from, to, identity } = {}) {
   const appNotes = safe(readAppNotes, {}) || {};
   const overrides = readTwcOverrides();
   const candidateIdentity = identity || getIdentity();
+  // D-1 and D-3: an interview line with a recorded interview event is counted only when it was held and
+  // has evidence, and it is dated by the day it was held. A line with no recording keeps its old rules
+  // (and shows up in the export warning) until its evidence is recorded.
+  const records = interviewRecords || safe(readInterviewRecords, new Map());
+  const todayYmd = today || localToday();
 
   // Earliest dashboard-logged "Applied" event per app — the fallback apply date
   // when apply-dates.json has no entry.
@@ -351,6 +359,29 @@ export function buildActivities({ from, to, identity } = {}) {
     const key = `${appId}|${normalizeStage(stage)}`;
     if (emittedInterviews.has(key)) return;
     const app = byId.get(String(appId));
+    const record = records.get(interviewKey(appId, stage));
+    if (record) {
+      emittedInterviews.add(key);
+      const state = interviewState(record, todayYmd);
+      if (state.state !== 'counted') return;
+      const company = (app && app.company) || (event && event.company) || '';
+      const emp = empFor(company);
+      activities.push({
+        kind: 'interview',
+        date: record.held_on, week: twcWeekStart(record.held_on), dateApprox: false,
+        activity: `Interview: ${stage}`,
+        role: (app && app.role) || '', company,
+        employerAddress: (emp && emp.hqAddress) || '',
+        employerWebPage: webPage(app, emp),
+        employerPhone: (emp && emp.phone) || '',
+        contact: '', method: '', result: 'Interviewed',
+        note: 'Interview held, with evidence on record',
+        appId,
+        evidenced: true,
+        evidenceRefs: record.evidence.map((item) => item.ref).filter(Boolean),
+      });
+      return;
+    }
     const debriefDate = debriefDates.get(key);
     const date = override ? override.date : (debriefDate || (event && event.date));
     if (!isYmd(date)) return;
@@ -373,6 +404,7 @@ export function buildActivities({ from, to, identity } = {}) {
       contact: '', method: '', result: 'Interviewed',
       note: joinNotes(dateSource, override && override.note),
       appId,
+      evidenced: false,
     });
   };
 
@@ -384,6 +416,10 @@ export function buildActivities({ from, to, identity } = {}) {
   }
   for (const override of interviewOverrides.values()) {
     addInterview({ appId: override.appId, stage: override.stage, override });
+  }
+  // A recorded interview line with no status change or override behind it still counts once held.
+  for (const record of records.values()) {
+    addInterview({ appId: record.application_id, stage: record.stage });
   }
 
   // 3) Follow-ups from follow-ups.md — one row per dated touch. This is the only
@@ -630,6 +666,27 @@ export function buildActivities({ from, to, identity } = {}) {
 // dashboard can show WHAT made up the week — applications vs LinkedIn networking
 // vs follow-ups vs interviews — not just the total. `count` is retained (it is
 // the sum of byKind) so an older client keeps working. Sorted by week ascending.
+/**
+ * D-11: the interview lines the export gate looks at. Every recorded line, plus every line the Work Search
+ * log still takes from the old rules (no recorded event), shaped as an interview record: a past line with
+ * no evidence, a future line scheduled.
+ */
+export function interviewGateLines(activities, records, today) {
+  const lines = [...records.values()];
+  const seen = new Set(lines.map((record) => interviewKey(record.application_id, record.stage)));
+  for (const activity of activities) {
+    if (activity.kind !== 'interview' || activity.evidenced !== false) continue;
+    const stage = String(activity.activity || '').replace(/^Interview:s*/, '');
+    if (seen.has(interviewKey(activity.appId, stage))) continue;
+    const numeric = Number(activity.appId);
+    const id = Number.isInteger(numeric) ? numeric : activity.appId;
+    lines.push(activity.date > today
+      ? { id, stage, scheduled_for: activity.date, evidence: [] }
+      : { id, stage, held_on: activity.date, slot_end: `${activity.date}T23:59:59Z`, evidence: [] });
+  }
+  return lines;
+}
+
 export function weeklyCounts(activities) {
   const map = new Map();
   const zero = () => TWC_KINDS.reduce((o, k) => (o[k] = 0, o), {});
