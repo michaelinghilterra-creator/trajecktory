@@ -14,6 +14,7 @@
  *     paused:     false,          // true when a reply on any channel auto-pauses
  *     pausedAt:   null,           // "YYYY-MM-DD" | null
  *     completedAt: null,          // "YYYY-MM-DD" | null (all steps done or abandoned)
+ *     firstChannel: "linkedin",   // optional; mixed sequences only
  *   }
  *
  * HITL guarantee: nothing auto-sends. The sequence records what was drafted and
@@ -130,6 +131,21 @@ function addDays(fromDate, n) {
   return d.toISOString().slice(0, 10);
 }
 
+// Which channel the sequence's own NEXT touch expects, given its current state and
+// template. Falls back to the template's whole-sequence channel for an
+// older single-channel template that has no per-touch channel field.
+function expectedNextChannel(entry, template) {
+  const step = entry?.step ?? 0;
+  if (template?.channel === 'mixed' && step === 0) return 'either';
+
+  const touch = template?.touches?.[step];
+  const channel = (touch?.channel || template?.channel || '').toLowerCase();
+  if (channel !== 'other') return channel;
+  if (entry?.firstChannel === 'linkedin') return 'email';
+  if (entry?.firstChannel === 'email') return 'linkedin';
+  return '';
+}
+
 // Start a sequence for a contact. Idempotent if the same sequenceId is already
 // active: returns the existing state without overwriting. Returns the new state
 // entry and the first touch template so the caller can generate a draft.
@@ -165,7 +181,7 @@ function startSequence(source, id, sequenceId, startDate) {
 
 // Record that step N was completed (a draft was sent). Advances the clock to the
 // next step's due date, or marks completedAt if the sequence is done.
-function advanceSequence(source, id, date) {
+function advanceSequence(source, id, date, usedChannel) {
   const key = seqKey(source, id);
   const data = readSequences();
   const entry = data[key];
@@ -177,6 +193,12 @@ function advanceSequence(source, id, date) {
   const today = date || new Date().toISOString().slice(0, 10);
   const nextStep = entry.step + 1;
   const nextTouch = template.touches[nextStep];
+
+  const normalizedUsedChannel = String(usedChannel || '').toLowerCase();
+  if (entry.step === 0 && template.channel === 'mixed'
+    && ['linkedin', 'email'].includes(normalizedUsedChannel)) {
+    entry.firstChannel = normalizedUsedChannel;
+  }
 
   entry.step = nextStep;
   entry.paused = false;
@@ -203,6 +225,23 @@ function pauseSequence(source, id, date) {
   const today = date || new Date().toISOString().slice(0, 10);
   entry.paused = true;
   entry.pausedAt = today;
+  data[key] = entry;
+  writeSequences(data);
+  return entry;
+}
+
+// End a sequence immediately, regardless of which step it was on (e.g. a LinkedIn
+// acceptance hands the contact to a different, separate messaging track).
+function completeSequence(source, id, date) {
+  const key = seqKey(source, id);
+  const data = readSequences();
+  const entry = data[key];
+  if (!entry || entry.completedAt) return null;
+  const today = date || new Date().toISOString().slice(0, 10);
+  entry.paused = false;
+  entry.pausedAt = null;
+  entry.completedAt = today;
+  entry.nextStepDue = null;
   data[key] = entry;
   writeSequences(data);
   return entry;
@@ -248,6 +287,7 @@ function getAllTemplates() {
 }
 
 export {
-  startSequence, advanceSequence, pauseSequence, resumeSequence,
+  startSequence, advanceSequence, pauseSequence, completeSequence, resumeSequence,
+  expectedNextChannel,
   getSequence, getActiveSequences, getTemplate, getAllTemplates,
 };

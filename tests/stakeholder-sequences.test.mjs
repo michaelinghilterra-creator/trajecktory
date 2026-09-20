@@ -37,8 +37,8 @@ check(
 );
 check(
   sequences.every(sequence => sequence.channel !== 'mixed'
-    || sequence.touches.every(touch => ['email', 'linkedin'].includes(touch.channel))),
-  'a mixed sequence gives every touch its own email or linkedin channel',
+    || sequence.touches.every(touch => ['email', 'linkedin', 'other'].includes(touch.channel))),
+  'a mixed sequence gives every touch its own email, linkedin or other channel',
 );
 check(
   sequences.every(sequence => sequence.channel === 'mixed'

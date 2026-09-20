@@ -183,9 +183,9 @@
         {
           "step": 2,
           "dayOffset": 1,
-          "channel": "email",
-          "label": "Applied, introducing myself",
-          "tone": "Brief and professional. Mention the specific role and that you just applied. One concrete proof point, not a list. Low-friction ask: confirm the application was received or clarify the next step. Do not reference the LinkedIn request sent the day before. Under 70 words."
+          "channel": "other",
+          "label": "Applied, introducing myself (whichever channel touch 1 did not use)",
+          "tone": "Mention the specific role and that you just applied. Do not reference whichever channel's touch already went out the day before. If this is an email: brief and professional, one concrete proof point (not a list), low-friction ask - confirm the application was received or clarify the next step, under 70 words. If this is a LinkedIn connection note instead (touch 1 was the email): under 300 characters, one sentence on the role, one sentence on why you're reaching out, sign off with first name only, NO em dashes."
         },
         {
           "step": 3,

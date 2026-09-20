@@ -24,6 +24,7 @@ const { setLinkedInStatus, readLinkedInMap } = await import('../dashboard-web/se
 const { saveConnections } = await import('../dashboard-web/server/lib/linkedin-referrals.mjs');
 const { writeTTCorrespondence } = await import('../dashboard-web/server/lib/target-talent.mjs');
 const { isLinkedInEntry, isLinkedInSubject } = await import('../dashboard-web/server/lib/channels.mjs');
+const { getSequence, startSequence } = await import('../dashboard-web/server/lib/sequences.mjs');
 
 let passed = 0, failed = 0;
 const check = (cond, msg) => { if (cond) { console.log(`  ✅ ${msg}`); passed++; } else { console.log(`  ❌ ${msg}`); failed++; } };
@@ -49,6 +50,27 @@ check(readLinkedInMap()['1']?.state === 'Connected', 'sidecar flipped to Connect
 check(readLinkedInMap()['1']?.updated === '2023-05-18', 'acceptance date parsed from "Connected On"');
 check(readLinkedInMap()['2']?.state === 'Invite Pending', 'name+company-only match is NOT auto-flipped');
 check(readLinkedInMap()['3']?.state === 'Invite Pending', 'shared name at a different company is NOT touched');
+
+// A detected acceptance completes an active application cadence. A second exact
+// match with no sequence proves the defensive completion hook is a harmless no-op.
+setLinkedInStatus(900101, 'Invite Pending', '2030-01-01');
+setLinkedInStatus(900102, 'Invite Pending', '2030-01-01');
+startSequence('ta', 900101, 'application-day-0-1-5-12', '2030-01-01');
+const sequenceAcceptanceRows = [
+  { id: 900101, first: 'Ava', last: 'Example', company: 'Sequence Labs', linkedin: 'linkedin.com/in/ava-sequence-example', email: '' },
+  { id: 900102, first: 'Noah', last: 'Example', company: 'No Sequence Works', linkedin: 'linkedin.com/in/noah-no-sequence-example', email: '' },
+];
+const sequenceConnections = [
+  { first: 'Ava', last: 'Example', url: 'https://www.linkedin.com/in/ava-sequence-example/', company: 'Sequence Labs', position: 'Recruiter', on: '2 January 2030' },
+  { first: 'Noah', last: 'Example', url: 'https://www.linkedin.com/in/noah-no-sequence-example/', company: 'No Sequence Works', position: 'Recruiter', on: '3 January 2030' },
+];
+const sequenceFlips = detectAcceptances({ connections: sequenceConnections, taRows: sequenceAcceptanceRows }).flipped;
+check(sequenceFlips.length === 2, 'acceptance detection succeeds for contacts with and without sequences');
+check(getSequence('ta', 900101)?.completedAt === '2030-01-02'
+  && getSequence('ta', 900101)?.nextStepDue === null,
+  'a detected LinkedIn acceptance completes the active sequence');
+check(getSequence('ta', 900102) === null && readLinkedInMap()['900102']?.state === 'Connected',
+  'a detected acceptance with no sequence still flips the contact without throwing');
 
 // ── computePendingAcceptances ─────────────────────────────────────────────────
 saveConnections(connections);
