@@ -2611,6 +2611,7 @@ const SETUP_ICONS = {
   guide:      'M2 4h7a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H2z M22 4h-7a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5H22z',
   pitch:      'M21 11.5a8.38 8.38 0 0 1-9 8.5 8.38 8.38 0 0 1-4-1L3 21l1.5-5a8.38 8.38 0 0 1-1-4 8.5 8.5 0 0 1 17 0z',
   twc:        'M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22z M12 6v6l4 2',
+  store:      'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6 M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6',
   changelog:  'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h6',
   about:      'M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22z M12 16v-4 M12 8h.01',
 };
@@ -2631,6 +2632,7 @@ const SETUP_SUBTABS = [
   { id: 'guide',     label: 'Day-to-day guide',       icon: 'guide' },
   { id: 'pitch',     label: 'Tell Me About Yourself', icon: 'pitch' },
   { id: 'twc',       label: 'Activity Tracker',       icon: 'twc' },
+  { id: 'store',     label: 'Data storage',           icon: 'store' },
   { id: 'changelog', label: 'Change Log',             icon: 'changelog' },
   { id: 'about',     label: 'About',                  icon: 'about' },
 ];
@@ -2655,6 +2657,7 @@ window.SetupTab = function SetupTab({ toast, setTab }) {
       {view === 'guide'     && window.DayToDayGuidePanel && <window.DayToDayGuidePanel />}
       {view === 'pitch'     && <TellMeAboutYouPanel />}
       {view === 'twc'       && <TwcPanel toast={toast} />}
+      {view === 'store'     && <DataStoragePanel />}
       {view === 'changelog' && <ChangelogPanel />}
       {view === 'about'     && <AboutPanel />}
     </div>
@@ -3154,6 +3157,127 @@ function ChangelogPanel() {
 }
 
 // ─── About trajecktory ───────────────────────────────────────────────────────
+// ─── Data storage: what the event store would change, before anyone turns it on ────────
+// Read-only. The button runs the dry run; nothing is written. Turning the store on is a command
+// line step done with the person present, so this screen never offers to do it.
+function DataStoragePanel() {
+  const [status, setStatus] = useState(null);
+  const [report, setReport] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [showBytes, setShowBytes] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/setup/event-store/status').then(r => r.json()).then(setStatus).catch(() => {});
+  }, []);
+
+  const runCheck = () => {
+    setBusy(true); setError(''); setReport(null);
+    fetch('/api/setup/event-store/preview', { method: 'POST' })
+      .then(async r => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.error || 'The check could not run.');
+        setReport(body);
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setBusy(false));
+  };
+
+  const on = status && status.switch === 'on';
+  // An older database is stale while the switch is off, so turning it on again re-imports from the files.
+  const needsReimport = status && !on && status.database_present;
+  const badBytes = report ? (report.byte_checks || []).filter(c => !c.match) : [];
+  const checks = report ? (report.checks || []) : [];
+  const ready = report && report.ok;
+
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="ta-head">
+        <div>
+          <h1>Data storage</h1>
+          <div className="sub">How trajecktory keeps your records, and what would change if you switched to the event store.</div>
+        </div>
+      </div>
+
+      <div className="card padded-lg col" style={{ gap: 10 }}>
+        <div className="card-head"><span className="card-title"><span className="dot" style={{ background: 'var(--accent)' }} />Right now</span></div>
+        <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+          {!status && 'Loading...'}
+          {status && !on && <>Your records are kept in plain files on this computer, and every save writes those files directly. The event store is <b>off</b>.</>}
+          {status && on && <>The event store is <b>on</b>{status.flipped_at ? ` (since ${String(status.flipped_at).slice(0, 10)})` : ''}. Saves go through a change log, and your files are rebuilt from it.</>}
+        </div>
+      </div>
+
+      <div className="card padded-lg col" style={{ gap: 12 }}>
+        <div className="card-head"><span className="card-title"><span className="dot" style={{ background: 'var(--accent)' }} />What would change</span></div>
+        <div className="dim" style={{ fontSize: 12, lineHeight: 1.55 }}>
+          This runs a practice import against a temporary copy. It reads every file, checks that each one can be rebuilt exactly as it is,
+          and changes nothing. It takes about ten seconds.
+        </div>
+        <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+          <button type="button" className="btn primary" onClick={runCheck} disabled={busy}>{busy ? 'Checking every file...' : 'Check what would change'}</button>
+          {error && <span style={{ fontSize: 12, color: 'var(--red, #ef4444)' }}>{error}</span>}
+        </div>
+
+        {report && (
+          <div className="col" style={{ gap: 12 }}>
+            <div style={{ padding: '10px 12px', borderRadius: 8, fontSize: 13, lineHeight: 1.5, background: ready ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)' }}>
+              {ready
+                ? <><b>Ready.</b> Every check passes. {report.events != null ? `${report.events.toLocaleString()} events would be imported.` : ''}</>
+                : <><b>Not ready.</b> Nothing was changed. The reasons are below.</>}
+            </div>
+            {(report.errors || []).length > 0 && (
+              <div className="col" style={{ gap: 4 }}>
+                {report.errors.map((line, i) => <div key={i} style={{ fontSize: 12, lineHeight: 1.5 }}>{line}</div>)}
+              </div>
+            )}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>What stays the same</div>
+              {(report.will_not_change || []).map((line, i) => <div key={i} className="dim" style={{ fontSize: 12, lineHeight: 1.55 }}>{line}</div>)}
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>What would be added</div>
+              {(report.will_add || []).map((line, i) => <div key={i} className="dim" style={{ fontSize: 12, lineHeight: 1.55 }}>{line}</div>)}
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Checks</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {checks.map((c, i) => (
+                  <span key={i} className="mono" style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: c.match ? 'rgba(34,197,94,0.14)' : 'rgba(239,68,68,0.14)' }}>
+                    {c.match ? '✓' : '✗'} {c.name}
+                  </span>
+                ))}
+              </div>
+              <div className="dim" style={{ fontSize: 12, marginTop: 6 }}>
+                {(report.byte_checks || []).length - badBytes.length} of {(report.byte_checks || []).length} files can be rebuilt byte for byte.
+                {badBytes.length > 0 && (
+                  <> <button type="button" className="btn sm" onClick={() => setShowBytes(v => !v)}>{showBytes ? 'Hide' : 'Show'} the {badBytes.length} that cannot</button></>
+                )}
+              </div>
+              {showBytes && badBytes.map((c, i) => <div key={i} className="mono dim" style={{ fontSize: 11 }}>{c.file}</div>)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="card padded-lg col" style={{ gap: 8 }}>
+        <div className="card-head"><span className="card-title"><span className="dot" style={{ background: 'var(--accent)' }} />Turning it on or off</span></div>
+        <div className="dim" style={{ fontSize: 12, lineHeight: 1.6 }}>
+          This screen only checks. Switching is done from a terminal, with trajecktory and every script stopped, so nothing can write while it happens.
+          It backs up your data folder first, imports, verifies again, and only then turns the store on.
+        </div>
+        <div className="mono" style={{ fontSize: 11, lineHeight: 1.7 }}>
+          node scripts/event-store.mjs flip --apply{needsReimport ? ' --reimport' : ''} --no-other-writers<br />
+          node scripts/event-store.mjs rollback --apply --no-other-writers
+        </div>
+        <div className="dim" style={{ fontSize: 12, lineHeight: 1.6 }}>
+          The second command turns it back off. It touches nothing else, because your files are correct either way.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AboutPanel() {
   const [version, setVersion] = useState('');
   useEffect(() => {

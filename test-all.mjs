@@ -652,6 +652,7 @@ for (const suite of [
   'tests/bulk-no-response-guard.test.mjs',
   'tests/data-review.test.mjs',
   'tests/report-data-review.test.mjs',
+  'tests/event-store-route.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);
