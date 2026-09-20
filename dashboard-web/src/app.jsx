@@ -477,6 +477,9 @@ function App() {
       if (fi >= window.FUNNEL_ORDER.indexOf("Phone Screen")) reachedStage = app.status;
     }
 
+    // E-5: a Rejected or No Response change is checked first, so nothing is shown as saved that the server
+    // would refuse. The rest of the handler runs once the person has answered any question.
+    const proceed = (guard) => {
     // Build notes update (prefix-tag) only if reachedStage was set
     let nextNotes;
     if (reachedStage) {
@@ -491,6 +494,7 @@ function App() {
     setDrawerApp(d => d && d.id === app.id ? { ...d, status: canonicalStatus, ...(nextNotes !== undefined && { notes: nextNotes }) } : d);
     // Persist to applications.md
     const body = { status: canonicalStatus, company: app.company };
+    if (guard) body.guard = guard;
     if (nextNotes !== undefined) body.notes = nextNotes;
     if (eventDate) body.eventDate = eventDate;
     window.tjkMutate(`/api/applications/${app.id}`, {
@@ -511,6 +515,15 @@ function App() {
       const suffix = reachedStage ? ` (reached ${reachedStage})` : "";
       toast(`${verb} ${app.company}${suffix}`, newStatus === "Applied" || newStatus === "Offer" ? "success" : newStatus === "SKIP" || newStatus === "Discarded" || newStatus === "Closed" || newStatus === "Not a Fit" || newStatus === "Rejected" ? "warn" : null);
     }
+    };
+    if ((canonicalStatus === "Rejected" || canonicalStatus === "No Response") && app.status !== canonicalStatus) {
+      window.tjkGuardStatus(app, canonicalStatus, { interactive: !silent }).then(g => {
+        if (g.ok) proceed(g.guard);
+        else if (g.reason) toast(g.reason, "error");
+      });
+      return;
+    }
+    proceed();
   }, [toast]);
 
   // The app-level drawer now renders PipelineDrawer (same as Pipeline/Follow-Ups),

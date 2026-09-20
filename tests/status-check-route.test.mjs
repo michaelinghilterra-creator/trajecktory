@@ -64,6 +64,9 @@ try {
 
   r = await get('/api/applications/900001/status-check?to=No%20Response&byHand=1');
   check(r.body.allowed === false && r.body.reason === 'employer_message_exists' && r.body.show_first.length === 1, 'No Response is refused when a rejection is on record, and the message is listed');
+  check(r.body.dialog.kind === 'read_first' && r.body.dialog.text.includes('Zorblax Widgetry'), 'the answer carries the words to show');
+  r = await get('/api/applications/900001/status-check?to=Applied');
+  check(r.body.allowed === true && r.body.dialog.kind === 'proceed', 'an allowed change carries a proceed dialog');
 
   r = await get('/api/applications/900003/status-check?to=No%20Response');
   check(r.body.allowed === false && r.body.reason === 'must_be_set_by_hand', 'No Response without the by hand flag is refused');
