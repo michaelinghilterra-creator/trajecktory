@@ -50,6 +50,11 @@ const recorded = ev({ application_id: '900007', type: 'interview_recorded', payl
 list = undoableActions([scheduled, recorded]);
 check(list.length === 1 && list[0].event_id === scheduled.id && list[0].member_ids.join() === String(recorded.id) && list[0].undoable, 'a status change into an interview stage and its schedule are one action');
 
+// E-7: excluding a weekly-review item is a standalone action, with no members.
+const excluded = ev({ type: 'review_item_excluded', application_id: '900008', payload: { item_kind: 'scheduled', item_key: 'interview|900008|phone screen', reason: 'Traveling.' } });
+list = undoableActions([excluded]);
+check(list.length === 1 && list[0].member_ids.length === 0 && list[0].undoable, 'excluding a review item is listed on its own and undoable');
+
 // Not made through the dashboard: never listed.
 const imported = ev({ source: 'import', application_id: '900005' });
 const script = ev({ source: 'cli', application_id: '900005' });
