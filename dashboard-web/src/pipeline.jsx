@@ -2252,7 +2252,13 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
   // Drawer action handlers — primary actions advance status via API PATCH
   const advance = async (a, newStatus, eventDate) => {
     try {
-      const body = { status: newStatus };
+      // The four old close actions all store Passed, with the reason the person chose (Passed Status
+      // Migration Plan). window.passedReasonForAction is shared with app.jsx's handleAction, so the two
+      // status-change paths cannot drift the way they did before this existed.
+      const passedReason = window.passedReasonForAction(newStatus);
+      const canonicalStatus = passedReason ? 'Passed' : newStatus;
+      const body = { status: canonicalStatus };
+      if (passedReason) body.passedReason = passedReason;
       if (eventDate) body.eventDate = eventDate;
       // E-5: Rejected and No Response are checked first and may ask the person a question.
       if ((newStatus === 'Rejected' || newStatus === 'No Response') && a.status !== newStatus) {
@@ -2285,7 +2291,8 @@ window.PipelineTab = function PipelineTab({ apps, view, setView, filters, setFil
         return;
       }
       // Update local app object for instant visual feedback
-      a.status = newStatus;
+      a.status = canonicalStatus;
+      a.passedReason = passedReason || null;
       setDrawerApp({ ...a });
       // Lift the change to the parent so every list view (All / Table / Overview)
       // re-reads the server, not just the drawer. Without this the in-place

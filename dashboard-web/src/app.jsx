@@ -462,9 +462,9 @@ function App() {
   // `eventDate` (optional): when the change actually happened (booked/notified).
   //   Omitted, the server dates the event today, which is what it always did.
   const handleAction = useCallback((app, newStatus, silent, reachedStage, eventDate) => {
-    // The four old close actions all store Passed, with the reason the person chose (Passed Status Migration Plan).
-    const PASSED_ACTIONS = { SKIP: "skip", "Not a Fit": "not_a_fit", Closed: "posting_closed", Discarded: "discarded", Passed: "discarded" };
-    const passedReason = PASSED_ACTIONS[newStatus];
+    // The four old close actions all store Passed, with the reason the person chose (Passed Status Migration
+    // Plan). window.passedReasonForAction is shared with Pipeline's own advance() in pipeline.jsx.
+    const passedReason = window.passedReasonForAction(newStatus);
     const canonicalStatus = passedReason ? "Passed" : newStatus;
 
     // Auto-attribute the exit stage: when a row goes Rejected / No Response from an
