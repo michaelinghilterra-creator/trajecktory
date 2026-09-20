@@ -1,6 +1,6 @@
 {
   "name": "trajecktory",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "description": "AI-driven job-search pipeline with a local dashboard",
   "scripts": {
     "doctor": "node doctor.mjs",
