@@ -1,13 +1,13 @@
 // D-1 and D-10 actions on the event store: confirm that an interview was held (owner confirmation is evidence,
 // Definitions v1.1), and void a recording. Both need the event store on. A void keeps the original event in
-// the log; projections skip it. Only interview recordings can be voided here; other event types wait for the
-// void projection in the render path.
+// the log; the rendered files and the interview lines skip it. Only interview recordings can be voided from
+// here for now; the projection handles a void of any event that wrote to a file.
 import express from 'express';
 import { DATA_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { isInterviewStage } from '../lib/statuses.mjs';
 import { recordInterview } from '../lib/interview-events.mjs';
-import { appendEvents } from '../../../lib/event-store.mjs';
+import { appendEventsWithEffects } from '../../../lib/legacy-files.mjs';
 import { isCalendarDate } from '../../../lib/interview-dates.mjs';
 import { INTERVIEW_EVENT_TYPE, INTERVIEW_DEFINITIONS_VERSION } from '../../../lib/interview-store.mjs';
 import { VOID_REASON_CODES, buildVoidEvent } from '../../../lib/void-events.mjs';
@@ -65,7 +65,7 @@ router.post('/api/events/:id/void', (req, res) => {
     let renderPending = {};
     let ids;
     try {
-      ids = withLogWrite(DATA_DIR, (store) => appendEvents(store, [event]));
+      ids = withLogWrite(DATA_DIR, (store) => appendEventsWithEffects(store, [event]));
     } catch (error) {
       renderPending = renderPendingResponse(error, 'event void');
     }

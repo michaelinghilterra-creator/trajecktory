@@ -659,6 +659,7 @@ for (const suite of [
   'tests/interview-store.test.mjs',
   'tests/twc-interview-evidence.test.mjs',
   'tests/event-actions-route.test.mjs',
+  'tests/void-projection.test.mjs',
   'tests/status-guard-dialog.test.mjs',
   'tests/ghosted-removed.test.mjs',
   'tests/data-review.test.mjs',
