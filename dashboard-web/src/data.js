@@ -73,6 +73,14 @@ window.isInterviewStage = (s) => window.INTERVIEW_STAGES.includes(s);
 // notes). oldStatus() gives the label a row would have had, for the few views that still tell the four apart
 // (a closed posting is not a role you turned down). Mirrors oldLabel() in lib/passed.mjs. Other statuses pass through.
 window.PASSED_OLD_LABEL = { not_a_fit: "Not a Fit", skip: "SKIP", posting_closed: "Closed", discarded: "Discarded", withdrew: "Discarded", low_score: "Discarded" };
+// The reverse direction: the four old close actions all write Passed with the reason the person chose.
+// window.passedReasonForAction(status) returns the reason for one of the four (Passed itself defaults to
+// "discarded"), or undefined for anything else, so callers can tell a close action from an ordinary one with
+// `const reason = window.passedReasonForAction(newStatus); const canonicalStatus = reason ? "Passed" : newStatus;`
+// Single source for both status-change code paths (app.jsx's handleAction and Pipeline's own advance), so they
+// cannot drift the way they did before this existed (one translated to Passed, the other wrote the old label).
+window.PASSED_ACTIONS = { SKIP: "skip", "Not a Fit": "not_a_fit", Closed: "posting_closed", Discarded: "discarded", Passed: "discarded" };
+window.passedReasonForAction = (status) => window.PASSED_ACTIONS[status];
 // A status chip matches a row by its status or, for a Passed row, by the old label its reason maps to, so the
 // Skip, Not a Fit, Discarded and Closed chips keep finding the same rows after a row becomes Passed.
 window.statusMatches = (app, status) => !!app && (app.status === status || (app.status === "Passed" && window.oldStatus(app) === status));

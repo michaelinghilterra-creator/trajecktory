@@ -11,12 +11,14 @@ import { evaluateStatusChange } from '../../../lib/status-guards.mjs';
 import { dialogFor } from '../../../lib/status-guard-dialog.mjs';
 import { assignSplitTest, splitTestSummary } from '../lib/split-test.mjs';
 import { pushObsidianNote } from '../lib/obsidian.mjs';
-import { ALL_STATUSES } from '../lib/statuses.mjs';
+import { ALL_STATUSES, INTERVIEW_STAGES } from '../lib/statuses.mjs';
 import { mdToHtml, escapeHtml } from '../lib/html.mjs';
 import { isRequeueableDiscard } from '../../../lib/discard.mjs';
 import { PASSED_REASONS, passedReasonOf, withPassedReason, stripPassedReason } from '../../../lib/passed.mjs';
 import { canonicalUrl } from '../../../lib/identity.mjs';
-import { logWriteRouteError, logWritesEnabled, renderPendingResponse, withLogWrite } from '../../../lib/log-writes.mjs';
+import { recordInterview } from '../lib/interview-events.mjs';
+import { buildScheduleFields, scheduleNote, CHANNELS, ORGANIZER_TYPES } from '../../../lib/interview-schedule.mjs';
+import { localToday, logWriteRouteError, logWritesEnabled, renderPendingResponse, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
 
@@ -181,6 +183,36 @@ router.patch('/api/applications/:id', (req, res) => {
       if (status === 'Rejected' && !when && verdict.dated_on && verdict.dated_on <= new Date().toISOString().slice(0, 10)) when = verdict.dated_on;
     }
 
+    // E-1: moving INTO an interview stage asks for the date and time (required), who runs it, and the
+    // channel; the record is dated to the scheduled day and marked scheduled, and nothing counts until it is
+    // held (D-1). The status becomes that stage immediately regardless (2026-09-19: the stage shows the
+    // pipeline truth). With the event store off there is nowhere to keep the record, so nothing is required
+    // yet (phase in, as with D-1 strict).
+    let scheduleFields = null;
+    const enteringInterviewStage = status !== undefined && INTERVIEW_STAGES.includes(status) && (!prevRow || prevRow.status !== status);
+    if (enteringInterviewStage && logWritesEnabled(DATA_DIR)) {
+      const s = req.body.schedule;
+      if (!s || typeof s !== 'object') {
+        return res.status(400).json({ error: 'schedule is required to move into an interview stage: date, time, organizerName, organizerType, channel.' });
+      }
+      let built;
+      try {
+        built = buildScheduleFields({ date: s.date, time: s.time, durationMinutes: s.durationMinutes });
+      } catch (error) {
+        return res.status(400).json({ error: `Invalid schedule.${error.message}` });
+      }
+      if (typeof s.organizerName !== 'string' || !s.organizerName.trim()) {
+        return res.status(400).json({ error: 'schedule.organizerName is required' });
+      }
+      if (!ORGANIZER_TYPES.includes(s.organizerType)) {
+        return res.status(400).json({ error: `schedule.organizerType must be one of: ${ORGANIZER_TYPES.join(', ')}` });
+      }
+      if (!CHANNELS.includes(s.channel)) {
+        return res.status(400).json({ error: `schedule.channel must be one of: ${CHANNELS.join(', ')}` });
+      }
+      scheduleFields = { ...built, note: scheduleNote(s) };
+    }
+
     const updates = {};
     if (status !== undefined) updates.status = status;
     if (notes !== undefined) updates.notes = notes;
@@ -198,6 +230,15 @@ router.patch('/api/applications/:id', (req, res) => {
       const patched = patchRowInMd(id, updates, { company, eventDate: when });
       ok = patched;
       if (patched && status === 'Applied') recordApplyDate(id, when, { force: !!when });
+      // Reentrant: patchRowInMd above already opened the log write for this data dir, so this call reuses
+      // the same transaction rather than opening a second one.
+      if (patched && scheduleFields) {
+        recordInterview({
+          application_id: id, stage: status, booked_on: localToday(), recorded_on: localToday(),
+          scheduled_for: scheduleFields.scheduled_for, slot_end: scheduleFields.slot_end,
+          evidence: [], note: scheduleFields.note, source: 'dashboard',
+        }, DATA_DIR);
+      }
       return patched;
     };
     let renderPending = {};

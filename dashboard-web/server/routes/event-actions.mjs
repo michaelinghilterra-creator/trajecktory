@@ -6,13 +6,14 @@ import express from 'express';
 import { DATA_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
-import { recordInterview } from '../lib/interview-events.mjs';
+import { recordInterview, readInterviewRecords } from '../lib/interview-events.mjs';
 import { appendEventsWithEffects } from '../../../lib/legacy-files.mjs';
 import { undoableActions, REPLY_EVENT_TYPE } from '../../../lib/event-undo.mjs';
-import { deleteNote } from '../lib/notes.mjs';
+import { addNote, deleteNote } from '../lib/notes.mjs';
 import { readSync, writeSync } from '../lib/google.mjs';
 import { isCalendarDate } from '../../../lib/interview-dates.mjs';
-import { INTERVIEW_EVENT_TYPE, INTERVIEW_DEFINITIONS_VERSION } from '../../../lib/interview-store.mjs';
+import { INTERVIEW_EVENT_TYPE, INTERVIEW_DEFINITIONS_VERSION, interviewKey } from '../../../lib/interview-store.mjs';
+import { buildScheduleFields, isOutcomeDue, OUTCOME_TYPES, RESULT_TYPES, OUTCOME_LABELS } from '../../../lib/interview-schedule.mjs';
 import { VOID_REASON_CODES, buildVoidEvent } from '../../../lib/void-events.mjs';
 import { localToday, logWriteRouteError, logWritesEnabled, renderPendingResponse, withLogRead, withLogWrite } from '../../../lib/log-writes.mjs';
 
@@ -96,7 +97,7 @@ function describeAction(action, apps) {
   const p = action.payload || {};
   const what = action.type === 'status_changed' ? `Status ${p.from || '?'} to ${p.to || '?'}`
     : action.type === REPLY_EVENT_TYPE ? `Reply logged${p.status_flip ? `, status set to ${p.status_flip}` : ''}`
-      : action.type === INTERVIEW_EVENT_TYPE ? 'Interview recorded'
+      : action.type === INTERVIEW_EVENT_TYPE ? (p.held_on ? `${p.stage} held ${p.held_on}` : p.note === 'rescheduled' ? `${p.stage} rescheduled to ${p.scheduled_for}` : `${p.stage} scheduled for ${p.scheduled_for}`)
         : action.type;
   return { ...action, company: app ? app.company : null, role: app ? app.role : null, summary: what };
 }
@@ -151,6 +152,103 @@ router.post('/api/events/:id/undo', (req, res) => {
       }
     }
     res.json({ ok: true, event_ids: ids, note_removed: noteRemoved, ...renderPending });
+  } catch (error) {
+    if (error instanceof TypeError) return res.status(400).json({ error: `Invalid ${error.message}` });
+    logWriteRouteError(res, error);
+  }
+});
+
+// ── E-2: what happened to a scheduled interview ─────────────────────────────────
+// GET /api/interviews/pending-outcome — scheduled interviews with no outcome yet, each flagged `due` once its
+// slot has been over for 30 minutes (D-2). A missed prompt is simply still `due` whenever the app is next
+// opened, including the next morning, so no separate re-ask schedule is kept.
+router.get('/api/interviews/pending-outcome', (req, res) => {
+  try {
+    if (!logWritesEnabled(DATA_DIR)) return res.json({ enabled: false, items: [] });
+    const records = [...readInterviewRecords(DATA_DIR).values()].filter((r) => r.scheduled_for && !r.held_on);
+    const apps = (() => { try { return parseApplicationsMd(); } catch { return []; } })();
+    const now = Date.now();
+    const items = records.map((r) => {
+      const app = apps.find((a) => String(a.id) === String(r.application_id));
+      return {
+        appId: r.id, stage: r.stage, scheduledFor: r.scheduled_for, slotEnd: r.slot_end,
+        company: app ? app.company : null, role: app ? app.role : null,
+        due: isOutcomeDue({ slot_end: r.slot_end, now }),
+      };
+    }).sort((a, b) => String(a.slotEnd).localeCompare(String(b.slotEnd)));
+    res.json({ enabled: true, items });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/interviews/outcome  { appId, stage, outcome, heldOn?, result?, newDate?, newTime? }
+// held: records held_on with an owner confirmation (evidence) and the chosen result; the client opens the
+// debrief. rescheduled: a new scheduled recording, keeping the earlier one in history (D-1). Everything else
+// (cancelled_by_employer, withdrew, no_show, dropped) means the conversation did not happen: the scheduled
+// recording is voided (D-10) so it stops counting or listing, and a plain note keeps why.
+router.post('/api/interviews/outcome', (req, res) => {
+  try {
+    const { appId, stage, outcome, heldOn, result, newDate, newTime, durationMinutes } = req.body || {};
+    const id = parseInt(appId, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'appId is required' });
+    const wanted = typeof stage === 'string' ? stage.replace(/\s+/g, ' ').trim().toLowerCase() : '';
+    const canonicalStage = INTERVIEW_STAGES.find((label) => label.toLowerCase() === wanted);
+    if (!canonicalStage) return res.status(400).json({ error: 'stage must be an interview stage' });
+    if (!OUTCOME_TYPES.includes(outcome)) return res.status(400).json({ error: `outcome must be one of: ${OUTCOME_TYPES.join(', ')}` });
+    if (!logWritesEnabled(DATA_DIR)) return res.status(409).json({ error: 'The event store is off, so there is nothing to record an outcome against.' });
+    const record = readInterviewRecords(DATA_DIR).get(interviewKey(id, canonicalStage));
+    if (!record || !record.scheduled_for || record.held_on) {
+      return res.status(404).json({ error: 'No pending scheduled interview for this application and stage.' });
+    }
+
+    if (outcome === 'held') {
+      if (!isCalendarDate(heldOn)) return res.status(400).json({ error: 'heldOn must be a real date as YYYY-MM-DD' });
+      const today = localToday();
+      if (heldOn > today) return res.status(400).json({ error: 'heldOn cannot be in the future' });
+      if (!RESULT_TYPES.includes(result)) return res.status(400).json({ error: `result must be one of: ${RESULT_TYPES.join(', ')}` });
+      const ids = recordInterview({
+        application_id: id, stage: canonicalStage, booked_on: record.booked_on, recorded_on: today, scheduled_for: record.scheduled_for,
+        held_on: heldOn, evidence: [{ kind: 'owner_confirmation', confirmed_on: today, ref: `owner-confirmation:${id}:${canonicalStage}:${heldOn}` }],
+        note: `outcome_result:${result}`, source: 'dashboard',
+      });
+      return res.json({ ok: true, event_ids: ids, debrief: true });
+    }
+
+    if (outcome === 'rescheduled') {
+      let built;
+      try {
+        built = buildScheduleFields({ date: newDate, time: newTime, durationMinutes });
+      } catch (error) {
+        return res.status(400).json({ error: `Invalid reschedule.${error.message}` });
+      }
+      const ids = recordInterview({
+        application_id: id, stage: canonicalStage, booked_on: record.booked_on, recorded_on: localToday(), scheduled_for: built.scheduled_for,
+        slot_end: built.slot_end, evidence: [], note: 'rescheduled', source: 'dashboard',
+      });
+      return res.json({ ok: true, event_ids: ids });
+    }
+
+    const event = buildVoidEvent({
+      target_event_id: record.event_id,
+      reason_code: 'not_held',
+      evidence_ref: 'owner',
+      actor: 'owner',
+      occurred_on: localToday(),
+      definitions_version: INTERVIEW_DEFINITIONS_VERSION,
+    });
+    let renderPending = {};
+    let event_ids;
+    try {
+      event_ids = withLogWrite(DATA_DIR, (store) => {
+        const ids = appendEventsWithEffects(store, [event]);
+        addNote(id, `### Interview outcome (${localToday()})\n${canonicalStage}: ${OUTCOME_LABELS[outcome]}`);
+        return ids;
+      });
+    } catch (error) {
+      renderPending = renderPendingResponse(error, 'interview outcome');
+    }
+    res.json({ ok: true, event_ids, voided: record.event_id, ...renderPending });
   } catch (error) {
     if (error instanceof TypeError) return res.status(400).json({ error: `Invalid ${error.message}` });
     logWriteRouteError(res, error);

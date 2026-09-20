@@ -44,6 +44,12 @@ const logOnly = { id: nextId++, ...buildReplyAttachedEvent({ application_id: 900
 list = undoableActions([logOnly]);
 check(list.length === 1 && list[0].member_ids.length === 0, 'a log only reply is a single event');
 
+// E-1: a status change into an interview stage that also schedules it is one action with the schedule event.
+const scheduled = ev({ application_id: '900007', payload: { from: 'Applied', to: 'Phone Screen' } });
+const recorded = ev({ application_id: '900007', type: 'interview_recorded', payload: { stage: 'Phone Screen', scheduled_for: '2030-04-01' } });
+list = undoableActions([scheduled, recorded]);
+check(list.length === 1 && list[0].event_id === scheduled.id && list[0].member_ids.join() === String(recorded.id) && list[0].undoable, 'a status change into an interview stage and its schedule are one action');
+
 // Not made through the dashboard: never listed.
 const imported = ev({ source: 'import', application_id: '900005' });
 const script = ev({ source: 'cli', application_id: '900005' });

@@ -260,6 +260,8 @@ function TodayView({ today, streak, prefs, setPrefs, activeTaskId, setActiveTask
 
       <StreakStrip streak={streak} />
 
+      {window.InterviewOutcomeCard && <window.InterviewOutcomeCard />}
+
       {cal && cal.canReadCalendar && (
         <div className="card" style={{ padding: 14 }}>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: cal.events.length ? 10 : 0 }}>
