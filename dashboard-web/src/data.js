@@ -73,6 +73,9 @@ window.isInterviewStage = (s) => window.INTERVIEW_STAGES.includes(s);
 // notes). oldStatus() gives the label a row would have had, for the few views that still tell the four apart
 // (a closed posting is not a role you turned down). Mirrors oldLabel() in lib/passed.mjs. Other statuses pass through.
 window.PASSED_OLD_LABEL = { not_a_fit: "Not a Fit", skip: "SKIP", posting_closed: "Closed", discarded: "Discarded", withdrew: "Discarded", low_score: "Discarded" };
+// A status chip matches a row by its status or, for a Passed row, by the old label its reason maps to, so the
+// Skip, Not a Fit, Discarded and Closed chips keep finding the same rows after a row becomes Passed.
+window.statusMatches = (app, status) => !!app && (app.status === status || (app.status === "Passed" && window.oldStatus(app) === status));
 window.oldStatus = (app) => (app && app.status === "Passed" ? (window.PASSED_OLD_LABEL[app.passedReason] || "Discarded") : (app && app.status));
 
 window.STATUSES = ["Evaluated","Applied",...window.INTERVIEW_STAGES,"Offer","Rejected","Discarded","SKIP","Closed","Not a Fit","Passed","No Response"];
@@ -174,7 +177,7 @@ window.reachedStage = (app) => {
 // other denominator in the app. Asking appReached(a, "Evaluated") instead scored
 // every evaluated-then-declined row as never-evaluated and printed a 100%
 // evaluate-to-apply conversion.
-window.enteredFunnel = (app) => app && app.status !== "Closed";
+window.enteredFunnel = (app) => app && window.oldStatus(app) !== "Closed";
 
 // Did this app reach `stage` (either currently at it, advanced past it,
 // or got tagged `[reached: <stage-or-later>]` after closure)?

@@ -316,7 +316,7 @@ const ALL_ENTRIES_STATUSES = window.STATUSES;
 
 function applyFilters(apps, filters, search) {
   return apps.filter(a => {
-    if (filters.statuses.length && !filters.statuses.includes(a.status)) return false;
+    if (filters.statuses.length && !filters.statuses.some(s => window.statusMatches(a, s))) return false;
     if (filters.archetype && a.archetype !== filters.archetype) return false;
     if (filters.scoreMin && (a.score == null || a.score < filters.scoreMin)) return false;
     if (filters.dateFrom && (!a.date || a.date < filters.dateFrom)) return false;
@@ -337,7 +337,11 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
   // One pass over apps instead of one filter per status on every render/keystroke.
   const statusCounts = useMemoP(() => {
     const m = {};
-    for (const a of apps) m[a.status] = (m[a.status] || 0) + 1;
+    for (const a of apps) {
+      m[a.status] = (m[a.status] || 0) + 1;
+      // a Passed row also counts under the old label its reason maps to (see window.statusMatches)
+      if (a.status === 'Passed') { const old = window.oldStatus(a); m[old] = (m[old] || 0) + 1; }
+    }
     return m;
   }, [apps]);
   return (

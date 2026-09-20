@@ -53,6 +53,7 @@ import { TWC_OVERRIDES_PATH, DATA_DIR } from '../config.mjs';
 import { readInterviewRecords } from './interview-events.mjs';
 import { interviewKey, interviewState } from '../../../lib/interview-store.mjs';
 import { localToday, logWritesEnabled } from '../../../lib/log-writes.mjs';
+import { oldLabel } from '../../../lib/passed.mjs';
 
 const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const safe = (fn, dflt) => { try { return fn(); } catch { return dflt; } };
@@ -162,8 +163,11 @@ function isSelfActivity(contact, identity) {
     || (ownEmail && raw.toLowerCase().includes(ownEmail)));
 }
 
-function applicationDetailNote(status) {
-  return resultForStatus(status) === 'Other' && status ? `Status: ${status}` : '';
+// The detail column keeps saying which of the four old closes it was (a Passed row reads as its old label), so the
+// CSV a person sends does not change wording when a row moves to Passed.
+export function applicationDetailNote(status, notes) {
+  const label = oldLabel(status, notes);
+  return resultForStatus(label) === 'Other' && label ? `Status: ${label}` : '';
 }
 
 function isPostingSpecificCanonical(canonical) {
@@ -333,7 +337,7 @@ export function buildActivities({ from, to, identity, interviewRecords, today, s
       note: joinNotes(
         approx ? 'Apply date estimated from the evaluation date' : '',
         override.note,
-        applicationDetailNote(app.status),
+        applicationDetailNote(app.status, app.notes),
       ),
       appId: app.id,
     });
