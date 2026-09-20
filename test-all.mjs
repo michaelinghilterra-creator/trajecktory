@@ -654,6 +654,7 @@ for (const suite of [
   'tests/passed-alias.test.mjs',
   'tests/passed.test.mjs',
   'tests/passed-writers.test.mjs',
+  'tests/passed-reason-shared.test.mjs',
   'tests/passed-merge.test.mjs',
   'tests/reply-guards.test.mjs',
   'tests/reply-prompts-route.test.mjs',
