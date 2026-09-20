@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.5.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.4.0...v4.5.0) (2026-09-20)
+
+
+### Features
+
+* ask for the schedule before an interview stage, and what happened after ([#373](https://github.com/michaelinghilterra-creator/trajecktory/issues/373)) ([92a150d](https://github.com/michaelinghilterra-creator/trajecktory/commit/92a150d874704a3f8597b4569a7a09fe37af52ce))
+
 ## [4.4.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.3.0...v4.4.0) (2026-09-20)
 
 
