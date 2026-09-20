@@ -2830,6 +2830,7 @@ function TwcPanel({ toast }) {
   const [enriching, setEnriching] = useState(false);
   const [progress, setProgress] = useState(null);
   const [loggedEvents, setLoggedEvents] = useState([]);
+  const [gate, setGate] = useState(null);
   const [eventSaving, setEventSaving] = useState(false);
   const [eventForm, setEventForm] = useState({
     date: twcYmd(today), type: TWC_EVENT_TYPES[0], organizer: '', contact: '',
@@ -2858,12 +2859,33 @@ function TwcPanel({ toast }) {
         if (!r.ok || d.error) throw new Error(d.error || 'Could not load logged activities.');
         return Array.isArray(d.events) ? d.events : [];
       }),
+      // D-11: what to look at before this range is sent. A warning only; a failure here never hides the log.
+      fetch(`/api/setup/twc/gate?from=${from}&to=${to}`).then(r => (r.ok ? r.json() : null)).catch(() => null),
     ])
-      .then(([report, events]) => { setData(report); setLoggedEvents(events); })
+      .then(([report, events, gateReport]) => { setData(report); setLoggedEvents(events); setGate(gateReport); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }
   useEffect(() => { generate(); }, []); // initial load on the default fortnight
+
+  // D-1: the person says an interview was held. Saved as an owner confirmation, then the log is rebuilt.
+  async function confirmHeld(warning) {
+    try {
+      const r = await window.tjkMutate('/api/interviews/confirm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appId: warning.id, stage: warning.stage, heldOn: warning.date }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || 'Could not save that.');
+      toast && toast('Saved: ' + warning.company + ', ' + warning.stage + ' held on ' + warning.date, 'success');
+      generate();
+    } catch (e) { toast && toast(e.message, 'error'); }
+  }
+  const gateNotes = {
+    unconfirmed_interview: 'Interview with no evidence that it was held. It counts once you confirm it.',
+    scheduled_in_range: 'Interview scheduled, not held yet. It counts once it has happened.',
+    status_mismatch: 'Marked No Response, but the employer wrote back. Read the reply and fix the status.',
+  };
 
   const employers = data?.employers || [];
   const uncached = employers.filter(e => !e.cached);
@@ -2948,6 +2970,20 @@ function TwcPanel({ toast }) {
           <a className="btn sm" href={`/api/setup/twc/export?from=${from}&to=${to}`} download>Download CSV</a>
         </div>
       </div>
+
+      {gate && gate.count > 0 && (
+        <div className="card padded-lg col" style={{ gap: 8, borderLeft: '3px solid var(--orange, #f59e0b)' }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{gate.count} thing{gate.count === 1 ? '' : 's'} to look at before you send this</div>
+          <div className="dim" style={{ fontSize: 12, lineHeight: 1.5 }}>The download still works. These are warnings so the log says only what you can back up.</div>
+          {gate.warnings.map((w, i) => (
+            <div key={i} className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
+              <span className="mono" style={{ minWidth: 220 }}>{[w.company, w.stage].filter(Boolean).join(' | ') || ('#' + w.id)}{w.date ? ' ' + w.date : ''}</span>
+              <span className="dim" style={{ flex: 1, minWidth: 220 }}>{gateNotes[w.type] || w.type}</span>
+              {w.type === 'unconfirmed_interview' && w.date && <button type="button" className="btn sm" onClick={() => confirmHeld(w)}>It was held</button>}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="card padded-lg col" style={{ gap: 10 }}>
         <div className="card-head">
@@ -3173,6 +3209,7 @@ function WeeklyReviewPanel() {
   const [weeks, setWeeks] = useState(4);
   const [review, setReview] = useState(null);
   const [error, setError] = useState('');
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     setReview(null); setError('');
@@ -3183,7 +3220,21 @@ function WeeklyReviewPanel() {
         setReview(body);
       })
       .catch(e => setError(e.message));
-  }, [weeks]);
+  }, [weeks, reload]);
+
+  // D-1: the person says the interview was held. Saved as an owner confirmation, then the review is rebuilt.
+  const confirmHeld = async (item) => {
+    try {
+      const r = await window.tjkMutate('/api/interviews/confirm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appId: item.application_id, stage: item.stage, heldOn: item.date }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error || 'Could not save that.');
+      if (window.tjkToast) window.tjkToast('Saved: ' + (item.company || '#' + item.application_id) + ', ' + item.stage + ' held on ' + item.date, 'success');
+      setReload(n => n + 1);
+    } catch (e) { if (window.tjkToast) window.tjkToast(e.message, 'error'); }
+  };
 
   const describe = (item) => {
     const who = [item.company, item.role].filter(Boolean).join(' | ');
@@ -3229,7 +3280,10 @@ function WeeklyReviewPanel() {
               <div style={{ fontSize: 12, fontWeight: 600 }}>{g.title} ({week[g.key].length})</div>
               <div className="dim" style={{ fontSize: 11.5, marginBottom: 4 }}>{g.note}</div>
               {week[g.key].map((item, i) => (
-                <div key={i} className="mono" style={{ fontSize: 11, lineHeight: 1.6 }}>{item.date || item.dated_on || ''} {describe(item)}</div>
+                <div key={i} className="mono" style={{ fontSize: 11, lineHeight: 1.6 }}>
+                  {item.date || item.dated_on || ''} {describe(item)}
+                  {g.key === 'unconfirmed_interviews' && item.date && <button type="button" className="btn sm" style={{ marginLeft: 8 }} onClick={() => confirmHeld(item)}>It was held</button>}
+                </div>
               ))}
             </div>
           ))}

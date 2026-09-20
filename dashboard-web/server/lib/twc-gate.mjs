@@ -6,13 +6,14 @@ import { parseApplicationsMd } from './applications.mjs';
 import { readAppNotes } from './notes.mjs';
 import { buildActivities, interviewGateLines } from './twc.mjs';
 import { readInterviewRecords } from './interview-events.mjs';
+import { interviewKey } from '../../../lib/interview-store.mjs';
 import { gateTwcExport } from '../../../lib/export-gate.mjs';
 import { statusMismatchReport } from '../../../lib/data-review.mjs';
 import { isCalendarDate } from '../../../lib/interview-dates.mjs';
 import { localToday } from '../../../lib/log-writes.mjs';
 
 /**
- * { from, to, today, warn_only: true, count, warnings: [{ type, id, stage?, reasons?, mismatch_type?, company, role }] }.
+ * { from, to, today, warn_only: true, count, warnings: [{ type, id, stage?, date?, reasons?, mismatch_type?, company, role }] }.
  * Throws a TypeError naming the argument when the range is not two real dates in order.
  */
 export function twcGateWarnings({ from, to, today = localToday(), interviewRecords } = {}) {
@@ -29,9 +30,12 @@ export function twcGateWarnings({ from, to, today = localToday(), interviewRecor
 
   // rows stay empty: only the blockers matter here, and a warning never withholds anything.
   const gate = gateTwcExport({ range: { from, to }, today, interviews, mismatches, rows: [] });
+  const lineByKey = new Map(interviews.map((line) => [interviewKey(line.id, line.stage), line]));
   const warnings = gate.blockers.map((blocker) => {
     const app = byId.get(String(blocker.id));
-    return { ...blocker, company: app?.company ?? '', role: app?.role ?? '' };
+    const line = blocker.stage === undefined ? undefined : lineByKey.get(interviewKey(blocker.id, blocker.stage));
+    const date = line ? (line.held_on ?? line.scheduled_for) : undefined;
+    return { ...blocker, ...(date !== undefined && { date }), company: app?.company ?? '', role: app?.role ?? '' };
   });
   return { from, to, today, warn_only: true, count: warnings.length, warnings };
 }
