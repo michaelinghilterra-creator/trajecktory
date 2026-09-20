@@ -15,6 +15,9 @@ import { addNote, findNoteByMsgId } from '../lib/notes.mjs';
 import { readApplyDates } from '../lib/sidecars.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
+import { evaluateReplyAttachment } from '../../../lib/reply-guards.mjs';
+import { buildReplyAttachedEvent } from '../../../lib/event-undo.mjs';
+import { appendEventsWithEffects } from '../../../lib/legacy-files.mjs';
 import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 export const router = express.Router();
@@ -408,6 +411,24 @@ router.get('/api/google/replies', async (req, res) => {
   }
 });
 
+// GET /api/google/replies/unmatched — E-4: messages the person parked because no application fits, or because they
+// could not tell which one. Each carries its evidence (sender, subject, date, snippet) and the applications that could
+// fit right now, so it can be attached later with an explicit pick. Nothing here is attached until the person does it.
+router.get('/api/google/replies/unmatched', (req, res) => {
+  try {
+    const parked = readSync().unmatchedReplies || {};
+    const apps = (() => { try { return parseApplicationsMd(); } catch { return []; } })();
+    const applyDates = readApplyDates();
+    const items = Object.entries(parked).map(([msgId, entry]) => {
+      const ranked = rankCandidateApps(entry.company || '', apps, { emailDate: entry.date, subject: entry.subject, applyDates });
+      return { msgId, ...entry, suggestions: ranked.candidates };
+    }).sort((a, b) => String(b.parkedOn || '').localeCompare(String(a.parkedOn || '')));
+    res.json({ count: items.length, items });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/google/replies/:msgId/:action — record a reply against a specific
 // application. `action` is one of: log (note only), rejected, or an
 // interview stage label. Always logs the note to app-notes.json; the status ones
@@ -421,7 +442,12 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     // Best-effort: the log/status may already be written, so a sync failure must not 500.
     const markHandled = (rec) => {
-      try { const s = readSync(); s.handledReplies = s.handledReplies || {}; s.handledReplies[msgId] = rec; writeSync(s); }
+      try {
+        const s = readSync(); s.handledReplies = s.handledReplies || {}; s.handledReplies[msgId] = rec;
+        // A message that is attached, dismissed or marked not job-related leaves the unmatched list.
+        if (rec.action !== 'unmatched' && s.unmatchedReplies) delete s.unmatchedReplies[msgId];
+        writeSync(s);
+      }
       catch { /* hiding is best-effort */ }
     };
 
@@ -446,6 +472,23 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
       return res.json({ ok: true, notRelated: true });
     }
 
+    // E-4: park the message on the unmatched list, with its evidence and no application. It is hidden from the sweep
+    // until the person attaches it (or dismisses it) from that list.
+    if (action === 'unmatched') {
+      try {
+        const s = readSync();
+        s.unmatchedReplies = s.unmatchedReplies || {};
+        s.unmatchedReplies[msgId] = {
+          from: from || '', subject: subject || '', date: date || null, threadId: threadId || null,
+          snippet: String(snippet || bodyPreview || '').slice(0, 400), company: company || '', parkedOn: today,
+        };
+        s.handledReplies = s.handledReplies || {};
+        s.handledReplies[msgId] = { action: 'unmatched', appId: null, date: today };
+        writeSync(s);
+      } catch (error) { return res.status(500).json({ error: error.message }); }
+      return res.json({ ok: true, unmatched: true });
+    }
+
     const id = parseInt(appId, 10);
     if (Number.isNaN(id)) return res.status(400).json({ error: 'appId is required (which application this reply belongs to).' });
     const alreadyLoggedOn = findNoteByMsgId(msgId);
@@ -464,11 +507,31 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
       message = parseGmailMessage(await getMessage({ id: msgId, accessToken }));
     } catch { /* request fields are the fallback when Gmail is unavailable */ }
 
+    // E-3: ask before attaching. More than one application at this employer needs an explicit pick, and a message
+    // older than the application or an automated one needs an acknowledgement (or log it as neutral / dismiss it).
+    {
+      const apps = (() => { try { return parseApplicationsMd(); } catch { return []; } })();
+      const row = apps.find(a => a.id === id && (!company || a.company === company)) || apps.find(a => a.id === id);
+      const verdict = evaluateReplyAttachment({
+        message: { date: message.date || date, subject: message.subject || subject, body: message.text || bodyPreview || snippet },
+        apply_date: readApplyDates()[String(id)] || null,
+        candidate_count: row ? rankCandidateApps(row.company, apps).candidates.length : 1,
+        pick_confirmed: req.body?.pickConfirmed === true,
+        acknowledged: req.body?.acknowledged === true,
+      });
+      if (!verdict.allowed) {
+        const text = verdict.reason === 'pick_required'
+          ? 'More than one application at this employer fits this message. Pick the one it is about.'
+          : 'This message is older than the application or looks automated. Confirm to log it, log it as neutral, or dismiss it.';
+        return res.status(409).json({ error: text, guard: verdict });
+      }
+    }
+
     const sender = extractEmail(message.from) || from || '';
     const header = `${sender}: ${message.subject || subject || '(no subject)'} [${sentiment || 'neutral'}]`;
     const fullBody = String(message.text || bodyPreview || snippet || '').trim();
     let saved;
-    const save = () => {
+    const save = (store) => {
       const noteHistory = addNote(
         id,
         `### Reply logged (${today})\n${header}${fullBody ? `\n\n${fullBody}` : ''}`,
@@ -480,6 +543,13 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
       else if (action !== 'log') {
         saved = { invalid: true, alreadyLogged: noteHistory.added === false };
         return saved;
+      }
+      // E-6: record the attachment as one event, before the status flip it may cause, so an undo can find both.
+      if (store && noteHistory.added !== false) {
+        appendEventsWithEffects(store, [buildReplyAttachedEvent({
+          application_id: id, msg_id: msgId, note_timestamp: noteHistory.at(-1)?.timestamp || null, action,
+          sentiment: sentiment || 'neutral', status_flip: statusFlip, occurred_on: today,
+        })]);
       }
       if (statusFlip) patchRowInMd(id, { status: statusFlip }, { company });
 
