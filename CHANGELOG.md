@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.0.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.0.2...v4.0.3) (2026-09-20)
+
+
+### Bug Fixes
+
+* **followups:** remove the 45 day ghosted feature, the expired tile and the application reminder ([#361](https://github.com/michaelinghilterra-creator/trajecktory/issues/361)) ([5725e3c](https://github.com/michaelinghilterra-creator/trajecktory/commit/5725e3c8b7c781b9211fcf3143ea8809a5eedac4))
+
 ## [4.0.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.0.1...v4.0.2) (2026-09-19)
 
 
