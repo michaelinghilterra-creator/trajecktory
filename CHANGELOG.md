@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.4.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.3.0...v4.4.0) (2026-09-20)
+
+
+### Features
+
+* ask before a reply is attached, keep unmatched replies, and undo changes ([#371](https://github.com/michaelinghilterra-creator/trajecktory/issues/371)) ([0456697](https://github.com/michaelinghilterra-creator/trajecktory/commit/0456697e7e0ae0130f2518317f888a6e4260b7cf))
+
 ## [4.3.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.2.0...v4.3.0) (2026-09-20)
 
 
