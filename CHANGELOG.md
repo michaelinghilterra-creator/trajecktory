@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.1.0...v4.2.0) (2026-09-20)
+
+
+### Features
+
+* count only recorded interviews, hold the export on open items, accept Passed ([#367](https://github.com/michaelinghilterra-creator/trajecktory/issues/367)) ([60c8777](https://github.com/michaelinghilterra-creator/trajecktory/commit/60c877753d1a010df516585e844844314ca176da))
+
 ## [4.1.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.0.4...v4.1.0) (2026-09-20)
 
 
