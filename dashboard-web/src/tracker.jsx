@@ -10,7 +10,7 @@ window.TrackerTab = function TrackerTab({ apps, onOpen, search }) {
 
   const filtered = useMemoT(() => {
     return apps.filter(a => {
-      if (filters.statuses.length && !filters.statuses.includes(a.status)) return false;
+      if (filters.statuses.length && !filters.statuses.some(s => window.statusMatches(a, s))) return false;
       if (filters.archetypes.length && !filters.archetypes.includes(a.archetype)) return false;
       if (filters.scoreMin && a.score < filters.scoreMin) return false;
       if (search) {
@@ -63,7 +63,7 @@ window.TrackerTab = function TrackerTab({ apps, onOpen, search }) {
 
   // Status breakdown counts
   const breakdown = useMemoT(() => {
-    return ALL_STATUSES.map(s => ({ s, n: apps.filter(a => a.status === s).length, meta: window.STATUS_META[s] || {} })).filter(x => x.n > 0);
+    return ALL_STATUSES.map(s => ({ s, n: apps.filter(a => window.statusMatches(a, s)).length, meta: window.STATUS_META[s] || {} })).filter(x => x.n > 0);
   }, [apps]);
 
   return (

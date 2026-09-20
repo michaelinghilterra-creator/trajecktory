@@ -316,7 +316,7 @@ const ALL_ENTRIES_STATUSES = window.STATUSES;
 
 function applyFilters(apps, filters, search) {
   return apps.filter(a => {
-    if (filters.statuses.length && !filters.statuses.includes(a.status)) return false;
+    if (filters.statuses.length && !filters.statuses.some(s => window.statusMatches(a, s))) return false;
     if (filters.archetype && a.archetype !== filters.archetype) return false;
     if (filters.scoreMin && (a.score == null || a.score < filters.scoreMin)) return false;
     if (filters.dateFrom && (!a.date || a.date < filters.dateFrom)) return false;
@@ -337,7 +337,11 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
   // One pass over apps instead of one filter per status on every render/keystroke.
   const statusCounts = useMemoP(() => {
     const m = {};
-    for (const a of apps) m[a.status] = (m[a.status] || 0) + 1;
+    for (const a of apps) {
+      m[a.status] = (m[a.status] || 0) + 1;
+      // a Passed row also counts under the old label its reason maps to (see window.statusMatches)
+      if (a.status === 'Passed') { const old = window.oldStatus(a); m[old] = (m[old] || 0) + 1; }
+    }
     return m;
   }, [apps]);
   return (
@@ -1225,7 +1229,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     // Re-queue a near-threshold auto-discard (a noisy 2.9, just under the 3.0 cut)
     // for a fresh evaluation instead of hardening it as a permanent reject (7.5).
     // Reopen just flips the status; Re-evaluate puts it back in the eval queue.
-    if (st === 'Discarded' && typeof app.score === 'number' && app.score >= 2.5 && app.score < 3.0) {
+    if (window.oldStatus(app) === 'Discarded' && typeof app.score === 'number' && app.score >= 2.5 && app.score < 3.0) {
       primary.push({ id: 'requeue', label: 'Re-evaluate', cls: 'ghost' });
     }
   }
