@@ -16,6 +16,7 @@ import { getIdentity } from '../lib/profile.mjs';
 import { loadProfileContext } from '../lib/insights.mjs';
 import { buildActivities, weeklyCounts, employersInActivities, toTwcCsv, enrichEmployers, ENRICH_MAX } from '../lib/twc.mjs';
 import { twcGateWarnings } from '../lib/twc-gate.mjs';
+import { localToday } from '../../../lib/log-writes.mjs';
 import { readEvents, addEvent, deleteEvent } from '../lib/twc-events.mjs';
 import { getArchetypeRules } from '../lib/profile.mjs';
 
@@ -214,8 +215,8 @@ router.get('/api/setup/twc', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/setup/twc/gate?from=&to= — D-11, the warning form of the export gate: what to look at before this
-// range is sent (unconfirmed or scheduled interviews, status mismatches). Read only; it never blocks the export.
+// GET /api/setup/twc/gate?from=&to= — D-11, the export gate: what to look at before this range is sent
+// (unconfirmed or scheduled interviews, status mismatches). Read only. `blocking` says whether the export refuses.
 router.get('/api/setup/twc/gate', (req, res) => {
   try {
     const from = isoOrUndef(req.query.from);
@@ -257,12 +258,23 @@ router.get('/api/setup/twc/export', (req, res) => {
   try {
     const from = isoOrUndef(req.query.from);
     const to = isoOrUndef(req.query.to);
+    // D-11: with the event store on, an export with unresolved interview or status items is refused (409) until
+    // they are resolved or the person confirms with acknowledged=1. An open ended range is checked as everything to today.
+    if (req.query.acknowledged !== '1') {
+      const gate = twcGateWarnings({ from: from || '1970-01-01', to: to || localToday() });
+      if (gate.blocking && gate.count > 0) {
+        return res.status(409).json({ error: 'This log has items that need a look before it is sent.', blocked: true, gate });
+      }
+    }
     const csv = toTwcCsv(buildActivities({ from, to }));
     const stamp = (s) => (s ? String(s) : 'all');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="Work_Search_Log_${stamp(from)}_to_${stamp(to)}.csv"`);
     res.send(csv);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    if (err instanceof TypeError) return res.status(400).json({ error: `Invalid ${err.message}` });
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/setup/twc/enrich  { companies: [names] } — web-search each un-cached

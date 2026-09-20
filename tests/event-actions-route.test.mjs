@@ -53,6 +53,7 @@ const post = (url, body) => fetch(`${base}${url}`, {
 }).then(async response => ({ status: response.status, body: await response.json() }));
 const identity = { fullName: 'Rowan Vale', email: 'rowan@example.test' };
 const interviewRows = () => buildActivities({ identity }).filter(a => a.kind === 'interview');
+const unrecordedRows = () => buildActivities({ identity }).unrecordedInterviews;
 
 console.log('event-actions-route.test.mjs');
 try {
@@ -84,7 +85,7 @@ try {
   check(readInterviewRecords(sandbox).size === 0, 'nothing was recorded by the refused requests');
 
   // Before confirming: the line is on the old rules.
-  check(interviewRows().length === 1 && interviewRows()[0].evidenced === false && interviewRows()[0].date === daysBack(10), 'before confirming, the line is taken from the status change');
+  check(interviewRows().length === 0 && unrecordedRows().length === 1 && unrecordedRows()[0].date === daysBack(10), 'before confirming, with the store on, the line is not counted and is listed as having no recording');
 
   // Confirming.
   r = await post('/api/interviews/confirm', { appId: 900001, stage: 'Phone Screen', heldOn: daysBack(8) });
@@ -113,7 +114,7 @@ try {
   const newest = readInterviewRecords(sandbox).get(interviewKey(900001, 'Phone Screen')).event_id;
   r = await post(`/api/events/${newest}/void`, { reason: 'not_held' });
   check(r.status === 200, 'voiding the newest recording is accepted');
-  check(readInterviewRecords(sandbox).size === 0 && interviewRows()[0].evidenced === false, 'with every recording voided, the line falls back to the old rules');
+  check(readInterviewRecords(sandbox).size === 0 && interviewRows().length === 0 && unrecordedRows().length === 1, 'with every recording voided, the line is not counted again and is listed as having no recording');
   const verify = openEventStore(path.join(sandbox, 'trajecktory.db'));
   const all = readEvents(verify);
   const undone = all.filter(event => event.type === 'event_undone');
