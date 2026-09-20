@@ -104,6 +104,7 @@ function dependencies(item, extra = {}) {
     backupsDir: item.backupsDir,
     getOwnerName: () => 'Example Personone',
     now: () => new Date('2030-03-04T05:06:07.000Z'),
+    findOtherWriters: () => [],
     ...extra,
   };
 }
