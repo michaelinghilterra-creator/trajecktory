@@ -19,6 +19,9 @@ fs.writeFileSync(path.join(tmp, 'applications.md'), [
   app(900004, 'Zorblax Widgetry', 'Example Flange Engineer'),
   app(900005, 'Quennox Ratchet Works', 'Example Pulley Director'),
   app(900006, 'Vantrix Sprocketry', 'Example Gear Planner', 'No Response'),
+  app(900007, 'Zorblax Widgetry', 'Example Widget Planner', 'No Response'),
+  app(900008, 'Quennox Ratchet Works', 'Example Cog Planner', 'No Response'),
+  app(900009, 'Vantrix Sprocketry', 'Example Flange Planner', 'No Response'),
 ].join('\n') + '\n');
 fs.writeFileSync(path.join(tmp, 'apply-dates.json'), JSON.stringify({ 900001: '2030-01-05', 900002: '2030-01-05', 900003: '2030-01-05', 900004: '2030-01-05', 900005: '2030-01-05' }, null, 2) + '\n');
 fs.writeFileSync(path.join(tmp, 'status-events.tsv'),
@@ -29,6 +32,9 @@ fs.writeFileSync(path.join(tmp, 'status-events.tsv'),
   + '900004\t2030-06-10\tPhone Screen\tZorblax Widgetry\t2030-06-10\n');
 fs.writeFileSync(path.join(tmp, 'app-notes.json'), JSON.stringify({
   900006: [{ timestamp: '2030-03-15T15:00:00.123Z', text: '### Reply logged (2030-03-15)\nexample.personone@example.test: We will not be moving forward with your application [negative]\n\nInvented rejection body.' }],
+  900008: [{ timestamp: '2030-03-17T15:00:00.123Z', text: '### Reply logged (2030-03-17)\nexample.personone@example.test: thanks for your time, let us know a good time to talk [positive]\n\nInvented reply body.' }],
+  900009: [{ timestamp: '2030-05-17T15:00:00.123Z', text: '### Reply logged (2030-05-17)\nexample.personone@example.test: thanks for your time, let us know a good time to talk [positive]\n\nInvented reply body.' }],
+  900007: [{ timestamp: '2030-03-16T15:00:00.123Z', text: '### Reply logged (2030-03-16)\nexample.personone@example.test: thanks for your time, let us know a good time to talk [positive]\n\nInvented reply body.' }],
 }, null, 2) + '\n');
 
 let passed = 0;
@@ -103,6 +109,7 @@ const records = recordsOf(events);
   check(keys.length === 5, 'five lines are checked: four recorded ones and the one still on the old rules');
   const old = gateLines.find(l => l.id === 900002);
   check(old && old.held_on === '2030-03-06' && old.evidence.length === 0, 'an old rule line is checked as held with no evidence');
+  check(old.stage === 'Phone Screen', 'an old rule line keeps its stage text exactly, with no leading space');
   const future = interviewGateLines([{ kind: 'interview', evidenced: false, appId: '900009', activity: 'Interview: Phone Screen', date: '2030-07-01' }], new Map(), TODAY);
   check(future[0].scheduled_for === '2030-07-01' && future[0].held_on === undefined, 'an old rule line dated after today is checked as scheduled');
   check(interviewGateLines([{ kind: 'interview', evidenced: true, appId: '900001', activity: 'Interview: Phone Screen', date: '2030-03-08' }, { kind: 'application', appId: '1' }], new Map(), TODAY).length === 0, 'counted lines and other kinds add nothing');
@@ -113,6 +120,7 @@ const records = recordsOf(events);
   check(gate.warn_only === true && gate.count === gate.warnings.length, 'the gate is a warning and never blocks');
   check(types.join() === 'status_mismatch:900006,unconfirmed_interview:900002,unconfirmed_interview:900003', 'the range lists the line with no recording, the held line with no evidence and a No Response that has a rejection on record');
   const mismatch = gate.warnings.find(w => w.id === 900006);
+  check(gate.other_replies_in_range === 2, 'plain replies on No Response applications inside the range are counted, not listed, and one outside the range is not counted');
   check(mismatch.mismatch_type === 'rejection_after_no_response' && mismatch.company === 'Vantrix Sprocketry', 'a status mismatch warning names its type and company');
   const first = gate.warnings.find(w => w.id === 900003);
   check(first.company === 'Vantrix Sprocketry' && first.role === 'Example Sprocket Designer' && first.stage === 'Phone Screen' && first.reasons.join() === 'no_evidence', 'a warning names the company, role, stage and reason');

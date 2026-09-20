@@ -13,7 +13,7 @@ import { isCalendarDate } from '../../../lib/interview-dates.mjs';
 import { localToday } from '../../../lib/log-writes.mjs';
 
 /**
- * { from, to, today, warn_only: true, count, warnings: [{ type, id, stage?, date?, reasons?, mismatch_type?, company, role }] }.
+ * { from, to, today, warn_only: true, count, other_replies_in_range, warnings: [{ type, id, stage?, date?, reasons?, mismatch_type?, company, role }] }.
  * Throws a TypeError naming the argument when the range is not two real dates in order.
  */
 export function twcGateWarnings({ from, to, today = localToday(), interviewRecords } = {}) {
@@ -26,7 +26,11 @@ export function twcGateWarnings({ from, to, today = localToday(), interviewRecor
   const byId = new Map(applications.map((app) => [String(app.id), app]));
   const activities = buildActivities({ interviewRecords: records, today });
   const interviews = interviewGateLines(activities, records, today);
-  const mismatches = statusMismatchReport(applications.map((app) => ({ id: app.id, status: app.status })), readAppNotes()).mismatches;
+  // Only a rejection that the status missed is a warning. A plain reply on a No Response application is mostly a
+  // receipt or an acknowledgement the reply classifier cannot tell from a person, so it is counted, not listed.
+  const allMismatches = statusMismatchReport(applications.map((app) => ({ id: app.id, status: app.status })), readAppNotes()).mismatches;
+  const mismatches = allMismatches.filter((mismatch) => mismatch.type === 'rejection_after_no_response');
+  const otherReplies = allMismatches.filter((mismatch) => mismatch.dated_on >= from && mismatch.dated_on <= to && mismatch.type !== 'rejection_after_no_response').length;
 
   // rows stay empty: only the blockers matter here, and a warning never withholds anything.
   const gate = gateTwcExport({ range: { from, to }, today, interviews, mismatches, rows: [] });
@@ -37,5 +41,5 @@ export function twcGateWarnings({ from, to, today = localToday(), interviewRecor
     const date = line ? (line.held_on ?? line.scheduled_for) : undefined;
     return { ...blocker, ...(date !== undefined && { date }), company: app?.company ?? '', role: app?.role ?? '' };
   });
-  return { from, to, today, warn_only: true, count: warnings.length, warnings };
+  return { from, to, today, warn_only: true, count: warnings.length, warnings, other_replies_in_range: otherReplies };
 }

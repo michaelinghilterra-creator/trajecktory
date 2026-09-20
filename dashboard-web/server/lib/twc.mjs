@@ -676,7 +676,7 @@ export function interviewGateLines(activities, records, today) {
   const seen = new Set(lines.map((record) => interviewKey(record.application_id, record.stage)));
   for (const activity of activities) {
     if (activity.kind !== 'interview' || activity.evidenced !== false) continue;
-    const stage = String(activity.activity || '').replace(/^Interview:s*/, '');
+    const stage = String(activity.activity || '').replace(/^Interview:\s*/, '');
     if (seen.has(interviewKey(activity.appId, stage))) continue;
     const numeric = Number(activity.appId);
     const id = Number.isInteger(numeric) ? numeric : activity.appId;

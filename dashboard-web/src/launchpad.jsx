@@ -2982,6 +2982,9 @@ function TwcPanel({ toast }) {
               {w.type === 'unconfirmed_interview' && w.date && <button type="button" className="btn sm" onClick={() => confirmHeld(w)}>It was held</button>}
             </div>
           ))}
+          {gate.other_replies_in_range > 0 && (
+            <div className="dim" style={{ fontSize: 11.5 }}>{gate.other_replies_in_range} more application{gate.other_replies_in_range === 1 ? ' is' : 's are'} marked No Response with a reply on record in this range. Most are receipts, so they are not listed here.</div>
+          )}
         </div>
       )}
 

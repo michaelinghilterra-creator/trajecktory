@@ -5,7 +5,7 @@
 import express from 'express';
 import { DATA_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
-import { isInterviewStage } from '../lib/statuses.mjs';
+import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
 import { recordInterview } from '../lib/interview-events.mjs';
 import { appendEventsWithEffects } from '../../../lib/legacy-files.mjs';
 import { isCalendarDate } from '../../../lib/interview-dates.mjs';
@@ -22,7 +22,10 @@ router.post('/api/interviews/confirm', (req, res) => {
     const { appId, stage, heldOn } = req.body || {};
     const id = parseInt(appId, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'appId is required' });
-    if (typeof stage !== 'string' || !isInterviewStage(stage)) return res.status(400).json({ error: 'stage must be an interview stage' });
+    // Capitalization and spacing do not matter; the stored stage is the canonical label.
+    const wanted = typeof stage === 'string' ? stage.replace(/\s+/g, ' ').trim().toLowerCase() : '';
+    const canonicalStage = INTERVIEW_STAGES.find((label) => label.toLowerCase() === wanted);
+    if (!canonicalStage) return res.status(400).json({ error: 'stage must be an interview stage' });
     if (!isCalendarDate(heldOn)) return res.status(400).json({ error: 'heldOn must be a real date as YYYY-MM-DD' });
     const today = localToday();
     if (heldOn > today) return res.status(400).json({ error: 'heldOn cannot be in the future' });
@@ -30,10 +33,10 @@ router.post('/api/interviews/confirm', (req, res) => {
     if (!logWritesEnabled(DATA_DIR)) return res.status(409).json({ error: 'The event store is off, so interview evidence cannot be kept yet.' });
     const ids = recordInterview({
       application_id: id,
-      stage,
+      stage: canonicalStage,
       recorded_on: today,
       held_on: heldOn,
-      evidence: [{ kind: 'owner_confirmation', confirmed_on: today, ref: `owner-confirmation:${id}:${stage}:${heldOn}` }],
+      evidence: [{ kind: 'owner_confirmation', confirmed_on: today, ref: `owner-confirmation:${id}:${canonicalStage}:${heldOn}` }],
       source: 'dashboard',
     });
     res.json({ ok: true, event_ids: ids });

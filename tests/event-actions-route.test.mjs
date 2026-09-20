@@ -123,6 +123,10 @@ try {
   verify.db.close();
   r = await post(`/api/events/${voidEventId}/void`, { reason: 'wrong_record' });
   check(r.status === 400, 'a void event itself cannot be voided here');
+
+  // The stage may be typed loosely; the stored one is the canonical label.
+  r = await post('/api/interviews/confirm', { appId: 900001, stage: '  phone   SCREEN ', heldOn: daysBack(8) });
+  check(r.status === 200 && readInterviewRecords(sandbox).get(interviewKey(900001, 'Phone Screen')).stage === 'Phone Screen' && readInterviewRecords(sandbox).size === 1, 'a loosely typed stage is stored as the canonical label and replaces the same line');
 } finally {
   await new Promise(resolve => server.close(resolve));
 }
