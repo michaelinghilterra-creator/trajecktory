@@ -214,7 +214,7 @@ export const OUTREACH_DEFAULTS = Object.freeze({
   // Cool-off after someone accepts a LinkedIn connection before the "just
   // connected, send the ask" card surfaces. Asking a brand-new connection to flag
   // your application the day after they accept reads as hounding; let the
-  // relationship breathe first. Counted in business days. 0 surfaces immediately.
+  // relationship breathe first. Counted in calendar days. 0 surfaces immediately.
   connectedCooloffDays: 5,
   coldOutreachCap: Object.freeze({ linkedin: 3, email: 3 }),
   perCompanyPerDay: 3,

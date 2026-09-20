@@ -2611,6 +2611,7 @@ const SETUP_ICONS = {
   guide:      'M2 4h7a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H2z M22 4h-7a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5H22z',
   pitch:      'M21 11.5a8.38 8.38 0 0 1-9 8.5 8.38 8.38 0 0 1-4-1L3 21l1.5-5a8.38 8.38 0 0 1-1-4 8.5 8.5 0 0 1 17 0z',
   twc:        'M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22z M12 6v6l4 2',
+  review:     'M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
   store:      'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6 M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6',
   changelog:  'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h6',
   about:      'M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22z M12 16v-4 M12 8h.01',
@@ -2632,6 +2633,7 @@ const SETUP_SUBTABS = [
   { id: 'guide',     label: 'Day-to-day guide',       icon: 'guide' },
   { id: 'pitch',     label: 'Tell Me About Yourself', icon: 'pitch' },
   { id: 'twc',       label: 'Activity Tracker',       icon: 'twc' },
+  { id: 'review',    label: 'Weekly review',          icon: 'review' },
   { id: 'store',     label: 'Data storage',           icon: 'store' },
   { id: 'changelog', label: 'Change Log',             icon: 'changelog' },
   { id: 'about',     label: 'About',                  icon: 'about' },
@@ -2657,6 +2659,7 @@ window.SetupTab = function SetupTab({ toast, setTab }) {
       {view === 'guide'     && window.DayToDayGuidePanel && <window.DayToDayGuidePanel />}
       {view === 'pitch'     && <TellMeAboutYouPanel />}
       {view === 'twc'       && <TwcPanel toast={toast} />}
+      {view === 'review'    && <WeeklyReviewPanel />}
       {view === 'store'     && <DataStoragePanel />}
       {view === 'changelog' && <ChangelogPanel />}
       {view === 'about'     && <AboutPanel />}
@@ -3157,6 +3160,85 @@ function ChangelogPanel() {
 }
 
 // ─── About trajecktory ───────────────────────────────────────────────────────
+// ─── Weekly review: what to look at before a Work Search report is made ────────────────
+// Read only. Lists, week by week (Sunday to Saturday), the items that need a person's eye. It changes nothing.
+const REVIEW_GROUPS = [
+  { key: 'unconfirmed_interviews', title: 'Interviews with no evidence', note: 'The line cites no evidence that resolves. It should not count until it does.' },
+  { key: 'scheduled', title: 'Scheduled, not held', note: 'Arranged but dated after today. Nothing counts until it is held.' },
+  { key: 'newer_messages', title: 'Employer message newer than the status', note: 'The newest employer message came after the last status change. Read it and decide.' },
+  { key: 'unmatched_replies', title: 'Replies that cannot be placed', note: 'Reply matching cannot place these on the application they sit on.' },
+];
+
+function WeeklyReviewPanel() {
+  const [weeks, setWeeks] = useState(4);
+  const [review, setReview] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setReview(null); setError('');
+    fetch('/api/setup/weekly-review?weeks=' + weeks)
+      .then(async r => {
+        const body = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(body.error || 'The review could not be built.');
+        setReview(body);
+      })
+      .catch(e => setError(e.message));
+  }, [weeks]);
+
+  const describe = (item) => {
+    const who = [item.company, item.role].filter(Boolean).join(' | ');
+    const what = item.stage || item.kind || item.problem || '';
+    return (who || ('#' + item.application_id)) + (what ? ' - ' + String(what).replace(/_/g, ' ') : '');
+  };
+
+  return (
+    <div className="col" style={{ gap: 16 }}>
+      <div className="ta-head">
+        <div>
+          <h1>Weekly review</h1>
+          <div className="sub">What to look at before you make a Work Search report. Nothing here changes your records.</div>
+        </div>
+        <label className="row" style={{ gap: 8, alignItems: 'center', fontSize: 12 }}>
+          Weeks shown
+          <select value={weeks} onChange={e => setWeeks(Number(e.target.value))}>
+            {[2, 4, 8, 12].map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+      </div>
+
+      {error && <div className="card padded-lg" style={{ fontSize: 13, color: 'var(--red, #ef4444)' }}>{error}</div>}
+      {!review && !error && <div className="card padded-lg" style={{ fontSize: 13 }}>Loading...</div>}
+
+      {review && (
+        <div style={{ padding: '10px 12px', borderRadius: 8, fontSize: 13, background: review.needs_review === 0 ? 'rgba(34,197,94,0.12)' : 'rgba(245,158,11,0.14)' }}>
+          {review.needs_review === 0
+            ? <><b>Nothing to review</b> in these weeks.</>
+            : <><b>{review.needs_review}</b> item{review.needs_review === 1 ? '' : 's'} to look at across these weeks. Newest week first.</>}
+        </div>
+      )}
+
+      {review && [...review.weeks].reverse().map(week => (
+        <div key={week.from} className="card padded-lg col" style={{ gap: 10 }}>
+          <div className="card-head">
+            <span className="card-title"><span className="dot" style={{ background: week.needs_review ? 'var(--orange, #f59e0b)' : 'var(--green, #22c55e)' }} />{week.from} to {week.to}</span>
+            <span className="mono dim" style={{ fontSize: 11 }}>{week.needs_review} to review</span>
+          </div>
+          {week.needs_review === 0 && <div className="dim" style={{ fontSize: 12 }}>Nothing to review this week.</div>}
+          {REVIEW_GROUPS.filter(g => week[g.key].length > 0).map(g => (
+            <div key={g.key}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>{g.title} ({week[g.key].length})</div>
+              <div className="dim" style={{ fontSize: 11.5, marginBottom: 4 }}>{g.note}</div>
+              {week[g.key].map((item, i) => (
+                <div key={i} className="mono" style={{ fontSize: 11, lineHeight: 1.6 }}>{item.date || item.dated_on || ''} {describe(item)}</div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── Data storage: what the event store would change, before anyone turns it on ────────
 // Read-only. The button runs the dry run; nothing is written. Turning the store on is a command
 // line step done with the person present, so this screen never offers to do it.

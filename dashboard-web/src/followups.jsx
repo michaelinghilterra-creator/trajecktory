@@ -78,16 +78,13 @@ function ChannelBadge({ channel }) {
   );
 }
 
-// Bucket by days since last touch. Tiered thresholds (Applied 10d, Interview
-// 3d) mean items can arrive on this list well under 14d, so the
-// buckets start at 0d and step up from there.
-// `days` is BUSINESS days (weekends excluded), so the labels say so — a "45+"
-// here is ~9 calendar weeks, and reading it as calendar days undersells the gap.
+// Bucket by calendar days since last touch. Interview stages go stale after 3d,
+// so items can arrive on this list well under 14d and the buckets start at 0d.
 function ageBucket(days) {
-  if (days >= 45) return { key: '45d+',  label: '45+ business days: likely ghosted',   color: '#ef4444' };
-  if (days >= 21) return { key: '21-45d', label: '21-45 business days: write-off',       color: '#f59e0b' };
-  if (days >= 10) return { key: '10-21d', label: '10-21 business days: aging, push hard', color: '#a78bfa' };
-  return                  { key: '0-10d', label: '0-10 business days: fresh stale',        color: '#60a5fa' };
+  if (days >= 45) return { key: '45d+',  label: '45+ days: going cold',    color: '#ef4444' };
+  if (days >= 21) return { key: '21-45d', label: '21-45 days: write-off',       color: '#f59e0b' };
+  if (days >= 10) return { key: '10-21d', label: '10-21 days: aging, push hard', color: '#a78bfa' };
+  return                  { key: '0-10d', label: '0-10 days: fresh stale',        color: '#60a5fa' };
 }
 
 // ─── Follow-Ups Overview ─────────────────────────────────────────────────
@@ -169,7 +166,7 @@ function FUOverview({ items, thresholds, taThreshold, onOpen, compact }) {
       <div className="card" style={{ padding: 20 }}>
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>No contacts going quiet.</div>
         <div className="dim" style={{ fontSize: 12 }}>
-          People you've already reached surface here once they cross {taThreshold || 14} business days with no reply.
+          People you've already reached surface here once they cross {taThreshold || 14} days with no reply.
           Applications awaiting a response live in <b>Pipeline → Awaiting response</b>.
         </div>
       </div>
@@ -231,7 +228,7 @@ function FUOverview({ items, thresholds, taThreshold, onOpen, compact }) {
           </div>
           <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
             {(bucketCounts['45d+'] || 0) > 0
-              ? `${bucketCounts['45d+']} in the 45d+ bucket (likely ghosted), close them out.`
+              ? `${bucketCounts['45d+']} in the 45d+ bucket (going cold), decide what to do with each.`
               : (bucketCounts['21-45d'] || 0) > 0
                 ? 'Work the 21-45d bucket next. Last fair window to recover them.'
                 : 'Stale queue is fresh. Every item is recoverable.'}
@@ -298,7 +295,7 @@ function FUOverview({ items, thresholds, taThreshold, onOpen, compact }) {
 }
 
 window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, apps = [], toast, chromeless }) {
-  const [data, setData]       = useStateF({ thresholds: { Applied: 7, 'Phone Screen': 3, '1st Interview': 3, '2nd Interview': 3, '3rd Interview': 3 }, taThreshold: 14, ghostDays: 45, warm: [], cold: [], snoozed: [], ghostedCandidates: [] });
+  const [data, setData]       = useStateF({ thresholds: { 'Phone Screen': 3, '1st Interview': 3, '2nd Interview': 3, '3rd Interview': 3 }, taThreshold: 14, warm: [], cold: [], snoozed: [] });
   const [loading, setLoading] = useStateF(true);
   const [selected, setSelected] = useStateF(null); // app id (only for 'app' source rows)
   const [statusFilter, setStatusFilter] = useStateF([]);
@@ -366,7 +363,6 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
 
   const warm = data.warm || [];
   const cold = data.cold || [];
-  const ghosted = data.ghostedCandidates || [];
   // Applied roles with no contact at the company — the "find a contact" nudge.
   const contactlessApps = data.contactlessApps || [];
   const unthreadedApps = data.unthreadedApps || [];
@@ -428,15 +424,6 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
       window.tjkToast && window.tjkToast(days >= 300 ? `Muted: no decision-maker to chase at ${a.company}` : `Snoozed ${a.company} for ${days} days`, 'success');
     }).catch(() => {});
   };
-  const archiveGhosted = (ids) => {
-    if (!ids.length) return;
-    if (!window.confirm(`Archive ${ids.length} ghosted application${ids.length === 1 ? '' : 's'} to "No Response"?\n\nThey'll leave the active pipeline but still count as applications-with-no-reply in your analytics.`)) return;
-    window.tjkMutate('/api/followups/archive-ghosted', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids }),
-    }).then(() => load()).catch(() => {});
-  };
-
   // The current base list depends on the subview: cold for "Applications out",
   // warm otherwise (overview KPIs describe the urgent queue).
   const baseItems = subView === 'cold' ? cold : warm;

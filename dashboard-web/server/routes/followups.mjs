@@ -3,13 +3,13 @@ import fs from 'fs';
 import path from 'path';
 import { DATA_DIR, ROOT_DIR } from '../config.mjs';
 import { resolveReportPath } from '../lib/safe-path.mjs';
-import { parseApplicationsMd, patchRowInMd } from '../lib/applications.mjs';
+import { parseApplicationsMd } from '../lib/applications.mjs';
 import { parseReport } from '../parser.mjs';
 import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute, isMuted, readMute } from '../lib/sidecars.mjs';
 import { generateText, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeGhostedCandidates, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, canInfluenceHire, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, GHOST_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, canInfluenceHire, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo } from '../lib/followups.mjs';
 
 // Different contacts per COMPANY the queue surfaces as actionable per day. Reaching
 // more than this at one company in a day reads as blasting; the overflow is HELD
@@ -302,11 +302,9 @@ router.get('/api/followups/stale', (req, res) => {
       thresholds: STALE_THRESHOLD_BY_STATUS,
       taThreshold: TA_STALE_THRESHOLD_DAYS,         // legacy alias
       contactThreshold: CONTACT_STALE_THRESHOLD_DAYS, // unified contact threshold
-      ghostDays: GHOST_DAYS,
       warm,
       cold,
       snoozed,
-      ghostedCandidates: computeGhostedCandidates(),
       // Applied roles with no contact at the company — "find a contact" nudge.
       // Sorted by apply date descending; each row has: source:'app', id, company,
       // role, status, applyDate, score. Empty array when all applied companies
@@ -443,34 +441,6 @@ router.post('/api/followups/unmute', (req, res) => {
     if (id == null || `${id}`.trim() === '') return res.status(400).json({ error: 'id required' });
     setMute(id, false, source);
     res.json({ ok: true, source, id: String(id), muted: false });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// POST /api/followups/archive-ghosted — bulk-set ghosted apps to "No Response".
-// Honest terminal state for "applied, company never replied"; counts in the
-// analytics denominator as a non-response (unlike Discarded). body: { ids: number[] }
-router.post('/api/followups/archive-ghosted', (req, res) => {
-  try {
-    const { ids } = req.body || {};
-    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids[] required' });
-    const apps = parseApplicationsMd();
-    let archived = 0;
-    for (const raw of ids) {
-      const id = parseInt(raw, 10);
-      if (isNaN(id)) continue;
-      const app = apps.find(a => a.id === id);
-      // Only archive apps still in Applied — never override a real signal that
-      // arrived since the candidate list was computed.
-      if (!app || app.status !== 'Applied') continue;
-      // patchRowInMd logs the status event itself; logging again here wrote two
-      // identical rows for every archived app and inflated the event count.
-      if (patchRowInMd(id, { status: 'No Response' }, { company: app.company })) {
-        // Muting is moot once terminal; clear any lingering mute.
-        setMute(id, false);
-        archived++;
-      }
-    }
-    res.json({ ok: true, archived });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

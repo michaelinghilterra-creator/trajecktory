@@ -4,7 +4,7 @@ import { DATA_DIR, FOLLOWUPS_MD, LINKEDIN_SSI_DIR } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, matchByCompany, getNewBaselineId } from './target-talent.mjs';
 import { readApplyDates, readMute, parseStatusEvents } from './sidecars.mjs';
-import { INTERVIEW_STAGES, isInterviewStage, OUTREACH_ELIGIBLE_STATUSES, makeApplyAnchor } from './statuses.mjs';
+import { INTERVIEW_STAGES, isInterviewStage, OUTREACH_ELIGIBLE_STATUSES } from './statuses.mjs';
 import { isSendable } from '../../../lib/email-verify.mjs';
 import { normalizeCompany } from '../../../lib/identity.mjs';
 import { isLinkedInEntry } from './channels.mjs';
@@ -21,23 +21,15 @@ import { randomUUID } from 'node:crypto';
 import { appendEventsWithEffects, tableRows } from '../../../lib/legacy-files.mjs';
 import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
 
-// Per-status stale thresholds (days since last touch). Tier reflects how
-// quickly each stage cools: post-interview windows are tight, while cold Applied
-// gets the longest leash.
-// Applied is intentionally generous (7 business days, ~10 calendar): chasing a
-// cold portal application 2 days after applying just manufactures noise.
+// Per-status stale thresholds (calendar days since last touch). Only interview
+// stages have one: post-interview windows are tight. An application that has not
+// been answered has no reminder at all (Definitions v1 section 3).
 const STALE_THRESHOLD_BY_STATUS = {
-  Applied:   7,
-  // Interview rounds cool fast — chase within a few business days of going quiet.
   'Phone Screen':  3,
   '1st Interview': 3,
   '2nd Interview': 3,
   '3rd Interview': 3,
 };
-
-// An Applied application with no reply this many CALENDAR days after applying is
-// treated as ghosted — a candidate to archive to the "No Response" outcome.
-const GHOST_DAYS = 45;
 
 // Is this contact's email actually usable for outreach? This defers to the ONE
 // send gate (isSendable in email-verify.mjs): only a verified-deliverable state
@@ -140,28 +132,18 @@ function _daysAgo(iso) {
   return Math.floor((Date.now() - d.getTime()) / 86400000);
 }
 
-// Business days (Mon-Fri) elapsed since `iso`, weekends excluded. Used for
-// follow-up cadence so a Friday apply isn't "overdue" by Monday. Counts each
-// weekday AFTER the anchor date up to and including today; same-day = 0.
-// Weekends only — no holiday calendar.
-function _businessDaysAgo(iso) {
+// Calendar days elapsed since `iso` (a YYYY-MM-DD date), counted from LOCAL midnight; same day = 0.
+// "Today" must be local midnight, not the UTC date: `toISOString().slice(0,10)` is already
+// tomorrow during the US evening, which inflated the day count and tripped thresholds a day
+// early. (cadence.mjs documents the same hazard.)
+function _calendarDaysAgo(iso) {
   if (!iso) return null;
   const start = new Date(iso + 'T00:00:00');
   if (isNaN(start.getTime())) return null;
-  // "today" must be LOCAL midnight, not the UTC date: `toISOString().slice(0,10)`
-  // is already tomorrow during the US evening, which inflated the day count and
-  // tripped stale thresholds a day early. (cadence.mjs documents the same hazard.)
   const n = new Date();
   const today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
   if (today <= start) return 0;
-  let count = 0;
-  const cur = new Date(start);
-  while (cur < today) {
-    cur.setDate(cur.getDate() + 1);
-    const dow = cur.getDay(); // 0 Sun … 6 Sat
-    if (dow !== 0 && dow !== 6) count++;
-  }
-  return count;
+  return Math.round((today - start) / 86400000);
 }
 
 // Build the stale-apps list with per-row coaching from cadence rules
@@ -179,9 +161,8 @@ function computeStaleApps() {
   // sort each app's follow-ups by date desc
   for (const list of followupsByApp.values()) list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-  const TRACKED_STATUSES = ['Applied', ...INTERVIEW_STAGES];
+  const TRACKED_STATUSES = INTERVIEW_STAGES;
   const CAP_BY_STATUS = {
-    Applied: 2,
     'Phone Screen': 1, '1st Interview': 1, '2nd Interview': 1, '3rd Interview': 1,
   };
 
@@ -215,9 +196,9 @@ function computeStaleApps() {
     const fuCount = fus.length;
     const baseAnchor = enteredOn || appliedOn;
     const lastTouchDate = fus[0]?.date || baseAnchor;
-    // Cadence is measured in BUSINESS days (weekends excluded).
-    const daysSinceLastTouch = _businessDaysAgo(lastTouchDate);
-    const daysSinceApply = _businessDaysAgo(appliedOn);
+    // Cadence is measured in calendar days.
+    const daysSinceLastTouch = _calendarDaysAgo(lastTouchDate);
+    const daysSinceApply = _calendarDaysAgo(appliedOn);
     const statusThreshold = STALE_THRESHOLD_BY_STATUS[a.status] ?? 14;
     if (daysSinceLastTouch == null || daysSinceLastTouch < statusThreshold) continue;
 
@@ -306,7 +287,7 @@ function computeStaleTA() {
     if (!TA_TRACKED_STATUSES.includes(c.status)) continue;
     if (!c.lastTouch) continue;
     if (!eligible.has(normalizeCompany(c.company))) continue;
-    const daysSinceLastTouch = _businessDaysAgo(c.lastTouch); // business days (weekends excluded)
+    const daysSinceLastTouch = _calendarDaysAgo(c.lastTouch);
     if (daysSinceLastTouch == null || daysSinceLastTouch < TA_STALE_THRESHOLD_DAYS) continue;
 
     // Count prior outbound nudges by walking the correspondence log.
@@ -389,7 +370,7 @@ function contactChannelBucket(contact) {
 //
 // `computeStaleTA()` keeps its no-argument signature for backward compatibility.
 // This function is the target state and supersedes it in the route.
-const CONTACT_STALE_THRESHOLD_DAYS = 14; // calendar-threshold before we check business-days
+const CONTACT_STALE_THRESHOLD_DAYS = 14; // calendar days
 const CONTACT_FU_CAP = 1;               // nudge cap; more than one follow-up burns warm contacts
 // Active-thread statuses that carry a real follow-up clock. 'Connected' (invite
 // accepted, no ongoing message thread) and dead-end states (Dormant/Bounced/
@@ -413,7 +394,7 @@ function computeStaleContacts({ apps } = {}) {
     if (!c.lastTouch) return;
     if (!eligible.has(normalizeCompany(company))) return;
 
-    const daysSinceLastTouch = _businessDaysAgo(c.lastTouch);
+    const daysSinceLastTouch = _calendarDaysAgo(c.lastTouch);
     if (daysSinceLastTouch == null || daysSinceLastTouch < CONTACT_STALE_THRESHOLD_DAYS) return;
 
     const corr = readTTCorrespondence(c.id);
@@ -473,61 +454,6 @@ function computeStaleContacts({ apps } = {}) {
 
   return stale;
 }
-
-// Ghosted applications: status still Applied, applied > GHOST_DAYS calendar days
-// ago, no advancement to Responded / an interview round (implied by status === 'Applied').
-// These are candidates for the one-click "archive to No Response" bulk action so
-// the user clears the backlog honestly instead of closing things prematurely.
-// The apply anchor comes from the ONE shared rule, `makeApplyAnchor` in
-// statuses.mjs: the MINIMUM of the earliest logged Applied event and the recorded
-// apply date, with the tracker Date column only when neither sidecar has the row.
-//
-// This function used to carry its own strict-priority copy (apply-date, else
-// event, else row date), which returned the apply-date even when the event was
-// earlier. Three different anchor rules existed in the tree at once and this was
-// the loosest, which mattered because this list gates a bulk destructive write:
-// an over-count here archives real, live applications.
-//
-// The migration was held back until it could be measured rather than assumed.
-// Measured 2026-08-23 against live data: 14 candidates before, 14 after, none
-// added and none removed. The rule is now consistent at no behavioural cost.
-//
-// The tracker Date fallback is the EVALUATION date (see the apply-date store
-// comment in sidecars.mjs), which on self-sourced rows routinely predates the
-// real application by days, so anchoring on it can declare a row ghosted before
-// it has actually been silent for GHOST_DAYS. It stays as a last resort rather
-// than dropping the row, and every candidate carries `anchorSource` so the UI can
-// disclose which are estimates instead of presenting all of them as measured.
-function computeGhostedCandidates() {
-  const apps = parseApplicationsMd();
-  const applyDates = readApplyDates();
-  const events = (() => { try { return parseStatusEvents(); } catch { return []; } })();
-  const applyAnchor = makeApplyAnchor({ applyDates, events });
-  const out = [];
-  for (const a of apps) {
-    if (a.status !== 'Applied') continue;
-    const { date: appliedOn, source } = applyAnchor(a);
-    // `both` means the two sidecars agreed or the earlier of them won. Either way
-    // it is a measured date, so it is reported as such rather than as an estimate.
-    const anchorSource = source === 'both' ? 'apply-date' : (source || 'row-date');
-    const days = _daysAgo(appliedOn);
-    if (days == null || days < GHOST_DAYS) continue;
-    out.push({
-      id: a.id,
-      company: a.company,
-      role: a.role,
-      status: a.status,
-      score: a.score,
-      applyDate: appliedOn,
-      daysSinceApply: days,
-      anchorSource,
-      estimated: anchorSource === 'row-date',
-    });
-  }
-  out.sort((x, y) => y.daysSinceApply - x.daysSinceApply);
-  return out;
-}
-
 
 // ─── LinkedIn connect queue ───────────────────────────────────────────────
 // The fallback channel for people we cannot email but can still reach: a real
@@ -942,7 +868,7 @@ function _followupRank(r) {
   // rows (no prior self-touch) get a neutral middle so importance decides their
   // slot rather than floating them to either extreme.
   const d = r.companyOutreach?.selfLastTouch?.date;
-  const days = d ? _businessDaysAgo(d) : null;
+  const days = d ? _calendarDaysAgo(d) : null;
   score += (days == null) ? 15 : Math.min(days, 60) * 0.5;
   return score;
 }
@@ -971,7 +897,7 @@ function computeFollowupQueue(opts = {}) {
     ...computeBothQueue(opts).map(r => ({ ...r, channel: 'both' })),
   ];
   const staleEnough = date => {
-    const days = _businessDaysAgo(String(date || '').slice(0, 10));
+    const days = _calendarDaysAgo(String(date || '').slice(0, 10));
     return days != null && days >= CONTACT_STALE_THRESHOLD_DAYS;
   };
   for (const row of opts.excludeReferrals === true ? [] : books.referrals) {
@@ -1215,7 +1141,7 @@ function computeJustConnectedQueue({ taRows, referralRows, influencers, apps } =
   const touchIdx = buildCompanyTouchIndex(books);
   const today = _localToday();
   // Hold a fresh acceptance out of the queue for a cool-off so the first ask does
-  // not land the day after they connect. Business days, user-configurable.
+  // not land the day after they connect. Calendar days, user-configurable.
   const cooloffDays = getOutreachPolicy().connectedCooloffDays;
   const out = [];
   for (const row of ta) {
@@ -1226,7 +1152,7 @@ function computeJustConnectedQueue({ taRows, referralRows, influencers, apps } =
     // Cool-off: with a known connect date, stay quiet until it is old enough. A
     // missing date still surfaces (below) rather than risk hiding a real cue.
     if (connectedOn && cooloffDays > 0) {
-      const age = _businessDaysAgo(connectedOn);
+      const age = _calendarDaysAgo(connectedOn);
       if (age != null && age < cooloffDays) continue;
     }
     // Not yet messaged since connecting: no Sent LinkedIn entry dated on/after the
@@ -1439,11 +1365,11 @@ function countWithheldContacts({ taRows } = {}) {
 
 export {
   parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
-  computeGhostedCandidates, channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
+  channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
   computeFollowupQueue, computeReferralFollowups, _followupRank,
   _companyOutreachFor,
   influenceRank, canInfluenceHire, isHighValueContact, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts,
   computeJustConnectedQueue,
-  GHOST_DAYS, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
+  STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 
