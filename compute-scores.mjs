@@ -27,14 +27,14 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs';
-import { deriveScore, loadScoringWeights, SCORE_DIMENSIONS, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL } from './lib/score.mjs';
+import { deriveScore, loadScoringWeights, SCORE_DIMENSIONS, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL, compCeiling } from './lib/score.mjs';
 
 const round1 = (n) => Math.round(n * 10) / 10;
 
 // Pure core: given a report's markdown, return the derivation outcome and (when
 // derivable) the rewritten markdown. No file I/O, so it is unit-tested directly.
 //   reason: 'not-v1' | 'no-keyed-dims' | 'not-derivable' | 'ok'
-export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel } = {}) {
+export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, compMinimum } = {}) {
   if (!hasV1Frontmatter(md)) return { ok: false, reason: 'not-v1' };
   let parsed;
   try { parsed = parseV1(md); } catch { return { ok: false, reason: 'not-v1' }; }
@@ -58,7 +58,20 @@ export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel } 
 
   // A hard ceiling (a location you will not work, visa you cannot get) caps the
   // headline no matter how well the rest scores. The eval sets it; the code enforces it.
-  const ceiling = typeof data.scoreCeiling === 'number' && Number.isFinite(data.scoreCeiling) ? data.scoreCeiling : null;
+  //
+  // EXCEPT for comp. "Is this band below the floor" is arithmetic, and models get
+  // the direction wrong (see tests/comp-ceiling.test.mjs). When the report says
+  // WHY it capped and that reason is comp, the authored number is discarded and
+  // recomputed from compensation.minimum. An eval that emits no ceilingReason is
+  // left exactly as before, so no historical report is silently rescored.
+  let ceiling = typeof data.scoreCeiling === 'number' && Number.isFinite(data.scoreCeiling) ? data.scoreCeiling : null;
+  let ceilingSource = ceiling === null ? null : 'authored';
+  const reason = typeof data.ceilingReason === 'string' ? data.ceilingReason : '';
+  if (reason && /\b(comp|pay|salary|base|band|floor|OTE)\b/i.test(reason)) {
+    const cc = compCeiling(data.summary && data.summary.compStated, { minimum: compMinimum });
+    ceiling = cc.ceiling;
+    ceilingSource = `comp:${cc.reason}`;
+  }
   const res = deriveScore(dimsForScore, { weights, redFlagPenalty, ceiling });
   if (!res.derivable) return { ok: false, reason: 'not-derivable', score: data.score ?? null };
 
