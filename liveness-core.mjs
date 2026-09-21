@@ -89,7 +89,7 @@ export function classifyLiveness({ status = 0, finalUrl = '', bodyText = '', app
 const WORKDAY_HOST_RX = /^https?:\/\/([^./]+)\.(wd\d+)\.myworkdayjobs\.com(\/[^?#]*)?/i;
 const LOCALE_SEG_RX = /^[a-z]{2}-[A-Za-z]{2}$/;   // en-US, fr-FR, en-GB, …
 
-// The trailing "_RNNNNN" (or "_JR-000627-1", "_2025-02593") of the last path
+// The trailing "_RNNNNN" (or "_JR-900002-1", "_2025-02593") of the last path
 // segment is the requisition id. It always follows the LAST underscore — Workday
 // slugifies the title with dashes, never underscores.
 function reqIdFromPath(path = '') {
@@ -137,8 +137,8 @@ export function parseWorkdayUrl(url) {
 
 /**
  * Extract the CXS career-site name from a Workday BOARD/careers url (the shape
- * portals.yml stores, e.g. https://zendesk.wd1.myworkdayjobs.com/zendesk or
- * https://datarobot.wd1.myworkdayjobs.com/en-US/DataRobot_External_Careers).
+ * portals.yml stores, e.g. https://zorblax.wd1.myworkdayjobs.com/zorblax or
+ * https://quennox.wd1.myworkdayjobs.com/en-US/Quennox_External_Careers).
  * Returns the site name (leading xx-XX locale dropped, first path segment) or
  * null. Kept separate from parseWorkdayUrl because that one requires a /job/
  * path; a careers_url has no /job/ segment. Used to build gate-pipeline's
