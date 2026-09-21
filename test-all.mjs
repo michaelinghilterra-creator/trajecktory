@@ -550,6 +550,7 @@ for (const suite of [
   'tests/cadence-offsets.test.mjs',
   'tests/sequences-advance-route.test.mjs',
   'tests/local-dates.test.mjs',
+  'tests/no-utc-today.test.mjs',
   'tests/sequence-panel-refresh.test.mjs',
   'tests/influence-predicate.test.mjs',
   'tests/unthreaded-apps.test.mjs',
