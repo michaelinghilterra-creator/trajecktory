@@ -29,7 +29,7 @@ const TONE = 'Invented sequence tone for testing.';
 
 const routePacket = buildPacketFromFields({
   kind: 'ta_dm', name: 'Avery Example', role: 'Recruiter', company: 'Acme',
-  sender: { fullName: 'Jordan Example', firstName: 'Jordan', cv: 'Fixture CV.', voiceRules: 'Be precise.' },
+  sender: { fullName: 'Personthree Example', firstName: 'Personthree', cv: 'Fixture CV.', voiceRules: 'Be precise.' },
 });
 const taEmailPacket = { ...routePacket, kind: 'ta_email', surfaceId: 'ta_email' };
 

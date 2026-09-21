@@ -153,7 +153,7 @@ try {
   check(response.status === 200 && response.body.status === 'Applied',
     'a cadence storage failure does not fail an application PATCH');
   response = await post('/api/tt-reconcile/bulk-add', 'POST', { contacts: [{
-    company: 'Import Works', first: 'Morgan', last: 'Example', title: 'Recruiter',
+    company: 'Import Works', first: 'Persontwo', last: 'Example', title: 'Recruiter',
     linkedin: 'https://linkedin.example/imported-error',
   }] });
   check(response.status === 200 && response.body.written === 1,

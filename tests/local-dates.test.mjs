@@ -45,16 +45,16 @@ const thawClock = () => { globalThis.Date = RealDate; };
 console.log('local-dates.test.mjs');
 
 // Date arithmetic: day 5 and day 12 must land exactly N calendar days after the day-0 send in every zone,
-// including across a US spring-forward (2026-03-08) and for zones ahead of UTC.
+// including across a US spring-forward (2030-03-10) and for zones ahead of UTC.
 for (const zone of ['America/Chicago', 'Asia/Tokyo', 'UTC']) {
   process.env.TZ = zone;
   const id = 951000 + Math.abs([...zone].reduce((n, c) => n + c.charCodeAt(0), 0));
-  startSequence('ta', id, CADENCE, '2026-03-06');
-  advanceSequence('ta', id, '2026-03-06', 'email');
-  let state = advanceSequence('ta', id, '2026-03-07', 'linkedin');
-  check(state.entry.nextStepDue === '2026-03-11', `${zone}: day 5 is due 5 days after the day-0 send across the DST change`);
-  state = advanceSequence('ta', id, '2026-03-11', 'email');
-  check(state.entry.nextStepDue === '2026-03-18', `${zone}: day 12 is due 12 days after the day-0 send`);
+  startSequence('ta', id, CADENCE, '2030-03-08');
+  advanceSequence('ta', id, '2030-03-08', 'email');
+  let state = advanceSequence('ta', id, '2030-03-09', 'linkedin');
+  check(state.entry.nextStepDue === '2030-03-13', `${zone}: day 5 is due 5 days after the day-0 send across the DST change`);
+  state = advanceSequence('ta', id, '2030-03-13', 'email');
+  check(state.entry.nextStepDue === '2030-03-20', `${zone}: day 12 is due 12 days after the day-0 send`);
 }
 
 // Defaults: with no date supplied, every sequence write uses the local date, not the UTC one.
@@ -73,11 +73,11 @@ try {
   // A detected LinkedIn acceptance with no Connected On date falls back to the local date.
   const { setLinkedInStatus } = await import('../dashboard-web/server/lib/tt-linkedin.mjs');
   const { detectAcceptances } = await import('../dashboard-web/server/lib/linkedin-acceptance.mjs');
-  setLinkedInStatus(953001, 'Invite Pending', '2029-12-31');
-  startSequence('ta', 953001, CADENCE, '2029-12-31');
+  setLinkedInStatus(953001, 'Invite Pending', '2030-01-01');
+  startSequence('ta', 953001, CADENCE, '2030-01-01');
   detectAcceptances({
-    connections: [{ first: 'Ava', last: 'Example', url: 'https://www.linkedin.com/in/ava-local-dates-example/', company: 'Example Works', on: '' }],
-    taRows: [{ id: 953001, first: 'Ava', last: 'Example', company: 'Example Works', linkedin: 'linkedin.com/in/ava-local-dates-example', email: '' }],
+    connections: [{ first: 'Personone', last: 'Example', url: 'https://www.linkedin.com/in/personone-local-dates-example/', company: 'Example Works', on: '' }],
+    taRows: [{ id: 953001, first: 'Personone', last: 'Example', company: 'Example Works', linkedin: 'linkedin.com/in/personone-local-dates-example', email: '' }],
   });
   check(getSequence('ta', 953001).completedAt === '2030-01-01', 'an acceptance without a Connected On date completes the sequence on the local date');
 } finally {
