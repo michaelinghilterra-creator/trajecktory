@@ -18,12 +18,13 @@ import { parseTargetTalentMd } from './target-talent.mjs';
 import { loadConnections } from './linkedin-referrals.mjs';
 import { linkedinKey } from './contact-identity.mjs';
 import { completeSequence } from './sequences.mjs';
+import { localToday } from '../../../lib/log-writes.mjs';
 
 // Name/company normalizer: lowercase, alphanumerics only. Matches routes/referrals
 // resolveReferralLink so twin-matching and acceptance-matching agree.
 export const normName = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-const _todayYmd = () => new Date().toISOString().slice(0, 10);
+const _todayYmd = () => localToday();
 
 const _MONTHS = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
 

@@ -23,7 +23,7 @@ import { INFLUENCE_TIERS, resolveInfluenceTier } from '../../../lib/influence-ti
 import { classifyInbound } from '../../../lib/inbound-classify.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
-import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { localToday, logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 
 function sequenceTone(contactId) {
   try {
@@ -190,14 +190,19 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     if (!subject || !body) return res.status(400).json({ error: 'subject and body required' });
 
     const messages = readTTCorrespondence(id);
-    const ts = timestamp || new Date().toISOString().replace('T', ' ').slice(0, 16);
+    // Local wall-clock, not UTC: every downstream `ts.slice(0, 10)` (sequence advance, connect log, invite
+    // pending) and the Date.parse readers treat this as the user's own date, and a UTC stamp made an
+    // evening send land on tomorrow.
+    const sentAt = new Date();
+    const ts = timestamp
+      || `${localToday(sentAt)} ${String(sentAt.getHours()).padStart(2, '0')}:${String(sentAt.getMinutes()).padStart(2, '0')}`;
     const message = { timestamp: ts, direction, channel, subject: subject.trim(), body: body.trim() };
     messages.push(message);
     const isHumanReply = direction === 'Received' && classifyInbound(message) === 'human';
 
     // Auto-advance status — never regress. A Sent follow-up after a Reply
     // came in must not knock status back from Replied → Sent.
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const TT_STAGE = { 'Not Contacted': 0, '': 0, 'Drafted': 1, 'Sent': 2, 'Replied': 3, 'Meeting Scheduled': 4, 'Connected': 5 };
     const curStage = TT_STAGE[r.status || ''] ?? 0;
     let newStatus = r.status;

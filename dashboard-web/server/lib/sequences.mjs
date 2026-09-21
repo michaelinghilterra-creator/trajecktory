@@ -26,6 +26,7 @@ import path from 'path';
 import { ROOT_DIR, DATA_DIR } from '../config.mjs';
 import { INFLUENCE_RANK } from '../../../lib/influence-tier.mjs';
 import { normalizeForMatch } from '../../../lib/scan-core.mjs';
+import { localToday } from '../../../lib/log-writes.mjs';
 
 const SUGGESTED_SEQUENCE_IDS = Object.freeze({
   principal: 'cold-intro-principal',
@@ -126,8 +127,8 @@ function seqKey(source, id) { return `${source}:${id}`; }
 
 // Compute the calendar date N days from `fromDate` (YYYY-MM-DD).
 function addDays(fromDate, n) {
-  const d = new Date(fromDate + 'T00:00:00');
-  d.setDate(d.getDate() + n);
+  const d = new Date(fromDate + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
@@ -156,7 +157,7 @@ function startSequence(source, id, sequenceId, startDate) {
   const template = templates.find(t => t.id === sequenceId);
   if (!template) throw new Error(`Unknown sequence: ${sequenceId}`);
 
-  const today = startDate || new Date().toISOString().slice(0, 10);
+  const today = startDate || localToday();
   const firstTouch = template.touches[0];
   const nextDue = addDays(today, firstTouch?.dayOffset ?? 0);
 
@@ -190,7 +191,7 @@ function advanceSequence(source, id, date, usedChannel, opts) {
   const template = templates.find(t => t.id === entry.sequenceId);
   if (!template) throw new Error(`Template not found: ${entry.sequenceId}`);
 
-  const today = date || new Date().toISOString().slice(0, 10);
+  const today = date || localToday();
   let nextStep = entry.step + 1;
 
   const normalizedUsedChannel = String(usedChannel || '').toLowerCase();
@@ -245,7 +246,7 @@ function pauseSequence(source, id, date) {
   const data = readSequences();
   const entry = data[key];
   if (!entry || entry.completedAt) return null;
-  const today = date || new Date().toISOString().slice(0, 10);
+  const today = date || localToday();
   entry.paused = true;
   entry.pausedAt = today;
   data[key] = entry;
@@ -260,7 +261,7 @@ function completeSequence(source, id, date) {
   const data = readSequences();
   const entry = data[key];
   if (!entry || entry.completedAt) return null;
-  const today = date || new Date().toISOString().slice(0, 10);
+  const today = date || localToday();
   entry.paused = false;
   entry.pausedAt = null;
   entry.completedAt = today;
