@@ -34,13 +34,15 @@ list = undoableActions([applied, applyDate, rejected, voidRej]);
 check(list.length === 1 && list[0].event_id === applied.id && list[0].undoable, 'an undone change leaves the list and unblocks the older one');
 
 // A reply that also flipped the status is one action with its status event.
-const reply = { id: nextId++, ...buildReplyAttachedEvent({ application_id: 900003, msg_id: 'm900001', note_timestamp: '2030-03-10T10:00:00.000Z', action: 'rejected', status_flip: 'Rejected', occurred_on: '2030-03-10' }) };
+const reply = { id: nextId++, ...buildReplyAttachedEvent({ application_id: 900003, msg_id: 'm900001', note_text: 'Invented reply note.', note_meta: { msgId: 'm900001' }, action: 'rejected', status_flip: 'Rejected', occurred_on: '2030-03-10' }) };
 const flip = ev({ application_id: '900003', payload: { to: 'Rejected' } });
 list = undoableActions([reply, flip]);
-check(reply.type === REPLY_EVENT_TYPE && list.length === 1 && list[0].event_id === reply.id && list[0].member_ids.join() === String(flip.id) && list[0].undoable, 'a reply and the status it flipped are one action');
+check(reply.type === REPLY_EVENT_TYPE && reply.payload.legacy_effects.length === 1 && reply.payload.note_timestamp
+  && list.length === 1 && list[0].event_id === reply.id && list[0].member_ids.join() === String(flip.id) && list[0].undoable,
+'a reply owns its note effect and the status it flipped is part of the same action');
 
 // A reply that only logs has no members.
-const logOnly = { id: nextId++, ...buildReplyAttachedEvent({ application_id: 900004, msg_id: 'm900002', note_timestamp: 't', action: 'log', occurred_on: '2030-03-10' }) };
+const logOnly = { id: nextId++, ...buildReplyAttachedEvent({ application_id: 900004, msg_id: 'm900002', note_text: 'Invented log-only note.', action: 'log', occurred_on: '2030-03-10' }) };
 list = undoableActions([logOnly]);
 check(list.length === 1 && list[0].member_ids.length === 0, 'a log only reply is a single event');
 

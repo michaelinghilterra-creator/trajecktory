@@ -570,6 +570,8 @@ for (const [name, failure] of [
     'BYTES MATCH twc-events.json (absent)',
     'BYTES MATCH twc-overrides.json (absent)',
     'BYTES MATCH contact-links.json (absent)',
+    'BYTES MATCH app-notes.json (absent)',
+    'BYTES MATCH google-sync.json (absent)',
   ];
   const lines = result.stdout.trimEnd().split(/\r?\n/);
   const firstExpected = lines.indexOf('TRACKER MATCH');
