@@ -147,3 +147,23 @@ scoring:
   # Most points subtracted when red flags are severe. The model rates red-flag
   # cleanliness 0-5 (5 = clean); a 0 subtracts this whole amount from the average.
   redFlagPenalty: 1.5
+  # The lowest title you would accept. Any JD title at or above this rung is a FULL
+  # level match and its `level` dimension is floored to its max -- an in-scope title
+  # is never a "downlevel". Ambiguous senior-IC titles (Lead, Principal, Staff) are
+  # left to the evaluator's judgment rather than auto-floored.
+  minimum_level: "Manager"
+  # Titles where a level word is a MODIFIER of a function rather than a statement of
+  # seniority. "Product Manager" contains the whole word "Manager", so without this
+  # list it satisfies minimum_level and gets floored to a perfect level match -- which
+  # happened to an explicit IC role. A match here is treated as ambiguous: neither
+  # promoted nor rejected, the evaluator's own rating stands.
+  # Retune for your field. A Marketing Manager or Community Manager often DOES manage
+  # people, so they are deliberately not listed; add them only if that is not true in
+  # your market. An empty list switches the policy off entirely.
+  non_management_titles:
+    - "Product Manager"
+    - "Program Manager"
+    - "Project Manager"
+    - "Account Manager"
+    - "Engagement Manager"
+    - "Customer Success Manager"

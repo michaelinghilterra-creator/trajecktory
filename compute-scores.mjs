@@ -34,7 +34,7 @@ const round1 = (n) => Math.round(n * 10) / 10;
 // Pure core: given a report's markdown, return the derivation outcome and (when
 // derivable) the rewritten markdown. No file I/O, so it is unit-tested directly.
 //   reason: 'not-v1' | 'no-keyed-dims' | 'not-derivable' | 'ok'
-export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, compMinimum } = {}) {
+export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, compMinimum, nonManagementTitles } = {}) {
   if (!hasV1Frontmatter(md)) return { ok: false, reason: 'not-v1' };
   let parsed;
   try { parsed = parseV1(md); } catch { return { ok: false, reason: 'not-v1' }; }
@@ -53,7 +53,7 @@ export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, c
   // applyLevelFloor strips "(reports to Director…)"-style context so a role that
   // merely reports to a Director is not misread as one.
   const detectedLevel = (data.levelMatch && data.levelMatch.jdLevel) || (data.summary && data.summary.seniority) || null;
-  const floor = applyLevelFloor(gs, detectedLevel, minimumLevel);
+  const floor = applyLevelFloor(gs, detectedLevel, minimumLevel, nonManagementTitles);
   const dimsForScore = floor.dims;
 
   // A hard ceiling (a location you will not work, visa you cannot get) caps the
