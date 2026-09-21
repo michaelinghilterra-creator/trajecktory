@@ -172,6 +172,7 @@
       "label": "Application day 0/1/5/12 (mixed channel)",
       "scenario": "You just submitted a job application and found a contact for the role. Day 0 sends on whichever channel is available first (LinkedIn preferred when both exist, not a hard rule). Day 1 only fires when the contact has both channels and only one was used on day 0 - it sends the other. No further LinkedIn touches go out on this sequence after day 0 until the connection is accepted (handled outside the sequence engine: acceptance completes it and hands the contact to referral communications instead). Days 5 and 12 are email-only follow-ups regardless of LinkedIn status. No day 14 - the existing follow-up queue picks up from there if the contact is still active.",
       "channel": "mixed",
+      "offsetsFrom": "firstTouch",
       "touches": [
         {
           "step": 1,

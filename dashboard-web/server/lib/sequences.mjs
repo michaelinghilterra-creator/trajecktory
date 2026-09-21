@@ -181,7 +181,7 @@ function startSequence(source, id, sequenceId, startDate) {
 
 // Record that step N was completed (a draft was sent). Advances the clock to the
 // next step's due date, or marks completedAt if the sequence is done.
-function advanceSequence(source, id, date, usedChannel) {
+function advanceSequence(source, id, date, usedChannel, opts) {
   const key = seqKey(source, id);
   const data = readSequences();
   const entry = data[key];
@@ -191,8 +191,7 @@ function advanceSequence(source, id, date, usedChannel) {
   if (!template) throw new Error(`Template not found: ${entry.sequenceId}`);
 
   const today = date || new Date().toISOString().slice(0, 10);
-  const nextStep = entry.step + 1;
-  const nextTouch = template.touches[nextStep];
+  let nextStep = entry.step + 1;
 
   const normalizedUsedChannel = String(usedChannel || '').toLowerCase();
   if (entry.step === 0 && template.channel === 'mixed'
@@ -200,12 +199,36 @@ function advanceSequence(source, id, date, usedChannel) {
     entry.firstChannel = normalizedUsedChannel;
   }
 
+  if (entry.step === 0 && template.offsetsFrom === 'firstTouch') {
+    entry.anchorDate = today;
+  }
+
   entry.step = nextStep;
   entry.paused = false;
   entry.pausedAt = null;
 
+  if (opts?.available && template.touches[nextStep]) {
+    const expected = expectedNextChannel(entry, template);
+    if (['email', 'linkedin'].includes(expected) && !opts.available[expected]) {
+      for (let candidate = nextStep + 1; candidate < template.touches.length; candidate++) {
+        const candidateEntry = { ...entry, step: candidate };
+        const candidateChannel = expectedNextChannel(candidateEntry, template);
+        if (['email', 'linkedin'].includes(candidateChannel) && opts.available[candidateChannel]) {
+          nextStep = candidate;
+          entry.step = candidate;
+          break;
+        }
+      }
+    }
+  }
+
+  const nextTouch = template.touches[nextStep];
+
   if (nextTouch) {
-    entry.nextStepDue = addDays(today, nextTouch.dayOffset);
+    const dueFrom = template.offsetsFrom === 'firstTouch' && entry.anchorDate
+      ? entry.anchorDate
+      : today;
+    entry.nextStepDue = addDays(dueFrom, nextTouch.dayOffset);
   } else {
     entry.completedAt = today;
     entry.nextStepDue = null;
@@ -289,5 +312,5 @@ function getAllTemplates() {
 export {
   startSequence, advanceSequence, pauseSequence, completeSequence, resumeSequence,
   expectedNextChannel,
-  getSequence, getActiveSequences, getTemplate, getAllTemplates,
+  readSequences, getSequence, getActiveSequences, getTemplate, getAllTemplates,
 };

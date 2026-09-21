@@ -7,7 +7,7 @@ import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
-import { appendFollowupRow, parseFollowupsMd } from '../lib/followups.mjs';
+import { appendFollowupRow, contactChannelBucket, parseFollowupsMd } from '../lib/followups.mjs';
 import { logConnect } from '../lib/connects.mjs';
 import { isLinkedInInvite } from '../lib/channels.mjs';
 import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES } from '../lib/tt-linkedin.mjs';
@@ -238,7 +238,12 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
           const expected = expectedNextChannel(active, template);
           const sentChannel = channel === 'LinkedIn' ? 'linkedin' : 'email';
           if (expected && (expected === 'either' || expected === sentChannel)) {
-            try { advanceSequence('ta', id, ts.slice(0, 10), sentChannel); } catch { /* template or entry vanished mid-request, safe to ignore */ }
+            const available = contactChannelBucket(r);
+            try {
+              advanceSequence('ta', id, ts.slice(0, 10), sentChannel, {
+                available: { email: available.hasEmail, linkedin: available.hasLinkedIn },
+              });
+            } catch { /* template or entry vanished mid-request, safe to ignore */ }
           }
         }
       }

@@ -19,6 +19,7 @@ import { canonicalUrl } from '../../../lib/identity.mjs';
 import { recordInterview } from '../lib/interview-events.mjs';
 import { buildScheduleFields, scheduleNote, CHANNELS, ORGANIZER_TYPES } from '../../../lib/interview-schedule.mjs';
 import { localToday, logWriteRouteError, logWritesEnabled, renderPendingResponse, withLogWrite } from '../../../lib/log-writes.mjs';
+import { startCadences } from '../lib/cadence-start.mjs';
 
 export const router = express.Router();
 
@@ -276,8 +277,19 @@ router.patch('/api/applications/:id', (req, res) => {
         .catch(() => { /* pushObsidianNote already logs; never surfaces here */ });
     }
 
+    let cadenceStarted = 0;
+    if (becomingApplied && updated) {
+      try {
+        const cadence = startCadences({ scope: { company: updated.company } });
+        cadenceStarted = cadence.started || 0;
+        if (cadence.error) console.warn(`[cadence] failed to start for ${updated.company}: ${cadence.error}`);
+      } catch (err) {
+        console.warn(`[cadence] failed to start for ${updated.company}: ${err.message}`);
+      }
+    }
+
     const response = renderPending.render_pending ? { id, ...updates } : (updated || { id, ...updates });
-    res.json({ ...response, ...renderPending });
+    res.json({ ...response, ...renderPending, ...(cadenceStarted > 0 ? { cadenceStarted } : {}) });
   } catch (err) {
     logWriteRouteError(res, err);
   }
