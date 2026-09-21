@@ -641,6 +641,7 @@ for (const suite of [
   'tests/obsidian-prep.test.mjs',
   'tests/obsidian-postfix.test.mjs',
   'tests/prune-gated.test.mjs',
+  'tests/followups-auto-refresh.test.mjs',
   'tests/sequence-tone-wiring.test.mjs',
   'tests/sequence-tone.test.mjs',
   'tests/local-dates-decisions.test.mjs',
