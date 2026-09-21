@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.7.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.6.0...v4.7.0) (2026-09-21)
+
+
+### Features
+
+* **data:** make app-notes.json event-store-backed ([#379](https://github.com/michaelinghilterra-creator/trajecktory/issues/379)) ([779cd01](https://github.com/michaelinghilterra-creator/trajecktory/commit/779cd01785e8eaeea84032845b1cd47e7aa9be0c))
+* **outreach:** add the day 0/1/5/12 application cadence ([#378](https://github.com/michaelinghilterra-creator/trajecktory/issues/378)) ([760b415](https://github.com/michaelinghilterra-creator/trajecktory/commit/760b415139aea081f9e5aa61a2a81fdb7deda0d5))
+* **release:** add a release-time dry run against real user-layer data ([#377](https://github.com/michaelinghilterra-creator/trajecktory/issues/377)) ([21d8e43](https://github.com/michaelinghilterra-creator/trajecktory/commit/21d8e43184e546b6b8cf9d713c30b9a095899c8c))
+
+
+### Bug Fixes
+
+* **test:** stop event-actions-route.test.mjs from hardcoding a timezone ([#380](https://github.com/michaelinghilterra-creator/trajecktory/issues/380)) ([24d00fc](https://github.com/michaelinghilterra-creator/trajecktory/commit/24d00fc084a622ad8314ba31ec365a1dc9c8370a))
+
 ## [4.6.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.5.0...v4.6.0) (2026-09-20)
 
 
