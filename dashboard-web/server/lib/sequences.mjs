@@ -310,8 +310,22 @@ function getAllTemplates() {
   return loadTemplates();
 }
 
+// Tone guidance for the sequence's next touch when a draft on `channel` ('linkedin' or 'email') matches what
+// that touch expects. Empty when there is no live sequence, or when the next touch expects the OTHER specific
+// channel (the draft is off-sequence, so the touch's tone does not apply). A touch may carry a per-channel
+// `tones` map; `tone` is the fallback.
+function toneForNextTouch(entry, template, channel) {
+  if (!entry || entry.completedAt || entry.paused || !template) return '';
+  const touch = (template.touches || []).find((t) => t.step === entry.step + 1);
+  if (!touch) return '';
+  const want = String(channel || '').toLowerCase();
+  const expected = expectedNextChannel(entry, template);
+  if (expected && expected !== 'either' && want && expected !== want) return '';
+  return touch.tones?.[want] || touch.tone || '';
+}
+
 export {
   startSequence, advanceSequence, pauseSequence, completeSequence, resumeSequence,
-  expectedNextChannel,
+  expectedNextChannel, toneForNextTouch,
   readSequences, getSequence, getActiveSequences, getTemplate, getAllTemplates,
 };

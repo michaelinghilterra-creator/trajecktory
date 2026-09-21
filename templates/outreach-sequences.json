@@ -179,6 +179,7 @@
           "dayOffset": 0,
           "channel": "linkedin",
           "label": "Connection note",
+          "tones": { "email": "Brief and professional, under 70 words. Mention the specific role you just applied to, give one concrete proof point (not a list), and make one low-friction ask: confirm the application was received or clarify the next step. Sign off with first name only. NO em dashes." },
           "tone": "Under 300 characters. Mention the specific role you just applied to. One sentence on why you're reaching out to them specifically. Sign off with first name only. NO em dashes."
         },
         {
