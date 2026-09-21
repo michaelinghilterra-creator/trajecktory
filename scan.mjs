@@ -23,6 +23,7 @@ import yaml from 'js-yaml';
 import { buildTitleFilter, buildLocationFilter, normalizeUrl, scoreOffer } from './lib/scan-core.mjs';
 import { sanitizeCell } from './lib/sanitize-cell.mjs';
 import { updateCoverage } from './lib/scan-coverage.mjs';
+import { localToday } from './lib/local-date.mjs';
 const parseYaml = yaml.load;
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -570,7 +571,7 @@ async function main() {
   const seenUrls = loadSeenUrls(maxHistoryDays);
 
   // 4. Fetch all APIs
-  const date = new Date().toISOString().slice(0, 10);
+  const date = localToday();
   let totalFound = 0;
   let totalFiltered = 0;
   let totalGeoBlocked = 0;

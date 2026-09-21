@@ -415,7 +415,7 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
 // bundle:false, so this file cannot import that module — which is precisely why
 // it must not re-implement it. The server decides; this renders.
 function buildTriageRows(cards) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = window.localToday();
   const rows = [];
   for (const c of (cards || [])) {
     if (!c || !c.url) continue;
@@ -980,7 +980,7 @@ function exportCSV(rows) {
   const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.href = url; link.download = `pipeline_${new Date().toISOString().slice(0, 10)}.csv`;
+  link.href = url; link.download = `pipeline_${window.localToday()}.csv`;
   document.body.appendChild(link); link.click(); document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }

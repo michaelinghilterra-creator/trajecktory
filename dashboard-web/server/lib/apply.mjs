@@ -17,6 +17,7 @@ import {
   reviewFailureReason,
   weightedScore,
 } from '../../../lib/outreach-rubric.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 const applyJobs = new Map();
 
@@ -61,7 +62,7 @@ function applyFileContext(row) {
   const id          = getIdentity();
   // Resume/cover filenames carry the user's name (from profile.yml); spaces → "_".
   const nameSlug    = (id.fullName || 'Candidate').replace(/\s+/g, '_');
-  const today       = new Date().toISOString().slice(0, 10);
+  const today       = localToday();
   const todayUS     = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }).replace(/\//g, '-');
   const todayFormal = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   return { slug, companySlug, projectRoot, id, nameSlug, today, todayUS, todayFormal };
@@ -73,7 +74,7 @@ function applyFileContext(row) {
 // then mark the job done with no asset paths.
 async function runByoApplyJob(jobId, row) {
   const projectRoot = ROOT_DIR;
-  const today        = new Date().toISOString().slice(0, 10);
+  const today        = localToday();
   const todayFormal  = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const errors = [];
 

@@ -38,7 +38,7 @@ export function parseConnectedOn(on) {
   m = s.match(/^([A-Za-z]{3,})\s+(\d{1,2}),?\s+(\d{4})$/);              // May 18, 2023
   if (m) { const mo = _MONTHS[m[1].slice(0, 3).toLowerCase()]; if (mo) return `${m[3]}-${mo}-${m[2].padStart(2, '0')}`; }
   const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  return isNaN(d.getTime()) ? null : localToday(d);
 }
 
 function _pendingContacts(taRows) {

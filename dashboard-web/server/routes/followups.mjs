@@ -29,6 +29,7 @@ import { findSubmittedApplication } from '../lib/statuses.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
 import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 export const router = express.Router();
 
@@ -47,7 +48,7 @@ router.post('/api/followups/reconcile-sent-invites', (req, res) => {
     const taRows = parseTargetTalentMd();
     const invites = parseSentInvites(text);
     const { matched, ambiguous, unmatched } = matchSentInvites(invites, taRows);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const label = (c) => ({ id: c.id, name: `${c.first || ''} ${c.last || ''}`.trim(), company: c.company || '' });
     const newlyMarked = [], alreadyRecorded = [];
     const reconcileWrites = () => {
@@ -460,7 +461,7 @@ router.post('/api/followups', (req, res) => {
     const apps = parseApplicationsMd();
     const app = apps.find(a => a.id === parseInt(appNum, 10));
     if (!app) return res.status(404).json({ error: `Application #${appNum} not found` });
-    const touchDate = date || new Date().toISOString().slice(0, 10);
+    const touchDate = date || localToday();
     const crossLogged = [];
     let n;
     const save = () => {
@@ -482,7 +483,7 @@ router.post('/api/followups', (req, res) => {
           const messages = readTTCorrespondence(id);
           messages.push({ timestamp: ts, direction: 'Sent', subject, body });
           writeTTCorrespondence(id, messages);
-          const today = new Date().toISOString().slice(0, 10);
+          const today = localToday();
           const advanceable = ['Not Contacted', 'Drafted', 'New', ''];
           const newStatus = advanceable.includes(taRow.status || '') ? 'Sent' : taRow.status;
           runLogWriteTestHook('before-followups-contact-row');

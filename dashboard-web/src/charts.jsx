@@ -183,7 +183,7 @@ window.Timeline = function Timeline({ apps, days = 28, height = 160 }) {
     const counts = {};
     const lists = {};
     for (let i = 0; i < days; i++) {
-      const d = new Date(window.TODAY); d.setUTCDate(d.getUTCDate() - (days - 1 - i));
+      const d = new Date(`${window.localToday()}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - (days - 1 - i));
       const k = d.toISOString().slice(0, 10);
       counts[k] = 0; lists[k] = [];
     }
@@ -432,7 +432,7 @@ window.Velocity = function Velocity({ apps, windowDays = 7, color = "var(--cyan)
     const lists = {};
     const totalDays = points_to_plot + windowDays;
     for (let i = 0; i < totalDays; i++) {
-      const d = new Date(window.TODAY); d.setUTCDate(d.getUTCDate() - (totalDays - 1 - i));
+      const d = new Date(`${window.localToday()}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - (totalDays - 1 - i));
       const k = d.toISOString().slice(0,10);
       counts[k] = 0; lists[k] = [];
     }

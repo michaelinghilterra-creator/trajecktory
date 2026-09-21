@@ -16,6 +16,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { normalizeStatus, classifyOutcome, OUTCOMES, zeroOutcomeCounts, conversionRate } from './lib/outcome.mjs';
 import { parseTracker as parseTrackerMd } from './lib/tracker.mjs';
+import { localToday } from './lib/local-date.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 const APPS_FILE = existsSync(join(CAREER_OPS, 'data/applications.md'))
@@ -398,7 +399,7 @@ function analyze() {
     metadata: {
       total: enriched.length,
       dateRange: { from: dates[0], to: dates[dates.length - 1] },
-      analysisDate: new Date().toISOString().split('T')[0],
+      analysisDate: localToday(),
       byOutcome: Object.fromEntries(
         OUTCOMES.map(o => [o, enriched.filter(e => e.outcome === o).length])
       ),

@@ -415,7 +415,7 @@ function stripSourceTag(notes) {
 // follows for dropped additions.
 const sourceLogRows = [];
 function logSourceFlip(action, num, company, role, url) {
-  sourceLogRows.push([new Date().toISOString().slice(0, 10), action, num, company, role, url]
+  sourceLogRows.push([localToday(), action, num, company, role, url]
     .map(v => String(v ?? '').replace(/[\t\r\n]+/g, ' ')).join('\t'));
 }
 function flushSourceLog() {

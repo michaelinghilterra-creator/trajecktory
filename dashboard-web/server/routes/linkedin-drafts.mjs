@@ -22,6 +22,7 @@ import { getProfile } from '../../../lib/outreach-rubric.mjs';
 import { resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
 import { buildPacket, buildPacketFromFields } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 export const router = express.Router();
 
@@ -522,7 +523,7 @@ router.post('/api/linkedin-drafts/archive-contact', (req, res) => {
     const rows = parseTargetTalentMd();
     const row = rows.find(r => String(r.id) === String(id));
     if (!row) return res.status(404).json({ error: 'Contact not found.' });
-    const date = new Date().toISOString().slice(0, 10);
+    const date = localToday();
     const existing = (row.notes || '').trim();
     const notes = `${existing ? existing + ' · ' : ''}Archived ${date}: ${reasonText}`;
     const ok = updateTTLine(Number(id), { status: 'Archived', notes });

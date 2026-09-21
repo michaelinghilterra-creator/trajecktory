@@ -24,6 +24,7 @@ import { classifyInbound } from '../../../lib/inbound-classify.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
 import { localToday, logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { localStamp } from '../../../lib/local-date.mjs';
 
 function sequenceTone(contactId) {
   try {
@@ -193,9 +194,7 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     // Local wall-clock, not UTC: every downstream `ts.slice(0, 10)` (sequence advance, connect log, invite
     // pending) and the Date.parse readers treat this as the user's own date, and a UTC stamp made an
     // evening send land on tomorrow.
-    const sentAt = new Date();
-    const ts = timestamp
-      || `${localToday(sentAt)} ${String(sentAt.getHours()).padStart(2, '0')}:${String(sentAt.getMinutes()).padStart(2, '0')}`;
+    const ts = timestamp || localStamp();
     const message = { timestamp: ts, direction, channel, subject: subject.trim(), body: body.trim() };
     messages.push(message);
     const isHumanReply = direction === 'Received' && classifyInbound(message) === 'human';

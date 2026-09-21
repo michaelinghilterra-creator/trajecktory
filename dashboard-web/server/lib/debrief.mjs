@@ -1,4 +1,5 @@
 import { INTERVIEW_STAGES, reachedStage } from './statuses.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 // ── Interview-round debriefs ─────────────────────────────────────────────────
 // A debrief is a structured, timestamped app-note capturing what happened in an
@@ -92,7 +93,7 @@ function debriefTemplate(stage, { company = '', role = '', date = '' } = {}) {
 function formatDebriefNote(stage, fields = {}, { date = '', company = '', role = '' } = {}) {
   const { outcome, objection, reason, answeredBy, hm, landed, change, intel, next, body } = fields;
   const ctx = [company, role].filter(Boolean).join(' | ');
-  const out = [`### Debrief: ${stage} (${date || new Date().toISOString().slice(0, 10)})`];
+  const out = [`### Debrief: ${stage} (${date || localToday()})`];
   if (ctx) out.push(`_${ctx}_`);
   const field = (label, val) => {
     if (val && String(val).trim()) out.push('', `**${label}:** ${String(val).trim()}`);

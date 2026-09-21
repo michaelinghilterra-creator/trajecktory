@@ -227,7 +227,7 @@ async function main() {
       const r = await verifyOne(c.address, key);
       if (!r) { tally.error++; }
       else {
-        editsByFile[c.fk].set(c.id, { state: r.state, source, date: new Date().toISOString().slice(0, 10), score: r.score });
+        editsByFile[c.fk].set(c.id, { state: r.state, source, date: localToday(), score: r.score });
         tally[r.state] = (tally[r.state] || 0) + 1;
       }
     } catch (e) { tally.error++; if (/rate limit/i.test(e.message)) { say(`\n   ⚠️  ${e.message} — stopping early with ${i} done.`); break; } }
