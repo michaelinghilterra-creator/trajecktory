@@ -9,7 +9,7 @@ import { hasV1Frontmatter, parseV1, v1ToCheatsheet } from '../v1-loader.mjs';
 import { snoozeToday, snoozeDateIn, readSnooze, writeSnooze, pruneSnooze, SNOOZE_KINDS, setMute, isMuted, readMute } from '../lib/sidecars.mjs';
 import { generateText, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
-import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleContacts, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, canInfluenceHire, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo } from '../lib/followups.mjs';
+import { parseFollowupsMd, appendFollowupRow, computeStaleApps, computeDueSequenceContacts, computeEmailQueue, computeBothQueue, computeFollowupQueue, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts, canInfluenceHire, STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, _daysAgo } from '../lib/followups.mjs';
 
 // Different contacts per COMPANY the queue surfaces as actionable per day. Reaching
 // more than this at one company in a day reads as blasting; the overflow is HELD
@@ -196,7 +196,7 @@ router.get('/api/followups/stale', (req, res) => {
 
     const rawStaleApps = computeStaleApps();
     const apps = rawStaleApps.map(it => ({ source: 'app', ...it }));
-    const contacts = computeStaleContacts();
+    const contacts = computeDueSequenceContacts();
     const merged = [...apps, ...contacts].sort((a, b) => {
       if (a.coachLevel !== b.coachLevel) {
         return a.coachLevel === 'give-up' ? -1 : 1;
@@ -301,7 +301,6 @@ router.get('/api/followups/stale', (req, res) => {
     res.json({
       thresholds: STALE_THRESHOLD_BY_STATUS,
       taThreshold: TA_STALE_THRESHOLD_DAYS,         // legacy alias
-      contactThreshold: CONTACT_STALE_THRESHOLD_DAYS, // unified contact threshold
       warm,
       cold,
       snoozed,

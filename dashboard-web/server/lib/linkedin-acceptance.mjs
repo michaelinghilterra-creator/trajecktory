@@ -17,6 +17,7 @@ import { readLinkedInMap, setLinkedInStatus } from './tt-linkedin.mjs';
 import { parseTargetTalentMd } from './target-talent.mjs';
 import { loadConnections } from './linkedin-referrals.mjs';
 import { linkedinKey } from './contact-identity.mjs';
+import { completeSequence } from './sequences.mjs';
 
 // Name/company normalizer: lowercase, alphanumerics only. Matches routes/referrals
 // resolveReferralLink so twin-matching and acceptance-matching agree.
@@ -62,6 +63,7 @@ export function detectAcceptances({ connections, taRows } = {}) {
     if (!c) continue;
     const date = parseConnectedOn(c.on) || _todayYmd();
     setLinkedInStatus(t.id, 'Connected', date);
+    try { completeSequence('ta', t.id, date); } catch { /* no active sequence, safe to ignore */ }
     flipped.push({ id: t.id, name: `${t.first || ''} ${t.last || ''}`.trim(), company: t.company || '', date });
   }
   return { flipped };

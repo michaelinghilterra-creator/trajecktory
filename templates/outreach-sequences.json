@@ -168,6 +168,42 @@
       ]
     },
     {
+      "id": "application-day-0-1-5-12",
+      "label": "Application day 0/1/5/12 (mixed channel)",
+      "scenario": "You just submitted a job application and found a contact for the role. Day 0 sends on whichever channel is available first (LinkedIn preferred when both exist, not a hard rule). Day 1 only fires when the contact has both channels and only one was used on day 0 - it sends the other. No further LinkedIn touches go out on this sequence after day 0 until the connection is accepted (handled outside the sequence engine: acceptance completes it and hands the contact to referral communications instead). Days 5 and 12 are email-only follow-ups regardless of LinkedIn status. No day 14 - the existing follow-up queue picks up from there if the contact is still active.",
+      "channel": "mixed",
+      "touches": [
+        {
+          "step": 1,
+          "dayOffset": 0,
+          "channel": "linkedin",
+          "label": "Connection note",
+          "tone": "Under 300 characters. Mention the specific role you just applied to. One sentence on why you're reaching out to them specifically. Sign off with first name only. NO em dashes."
+        },
+        {
+          "step": 2,
+          "dayOffset": 1,
+          "channel": "other",
+          "label": "Applied, introducing myself (whichever channel touch 1 did not use)",
+          "tone": "Mention the specific role and that you just applied. Do not reference whichever channel's touch already went out the day before. If this is an email: brief and professional, one concrete proof point (not a list), low-friction ask - confirm the application was received or clarify the next step, under 70 words. If this is a LinkedIn connection note instead (touch 1 was the email): under 300 characters, one sentence on the role, one sentence on why you're reaching out, sign off with first name only, NO em dashes."
+        },
+        {
+          "step": 3,
+          "dayOffset": 5,
+          "channel": "email",
+          "label": "First follow-up",
+          "tone": "Short check-in. Add one new concrete detail or proof point, not a repeat of the first message. Ask one low-friction question about timing or next steps. Under 60 words."
+        },
+        {
+          "step": 4,
+          "dayOffset": 12,
+          "channel": "email",
+          "label": "Final follow-up",
+          "tone": "Graceful last touch for this sequence. Acknowledge this is a follow-up without sounding impatient. Leave the door open with no pressure. Under 40 words."
+        }
+      ]
+    },
+    {
       "id": "post-apply-warm-followup",
       "label": "Post-application warm follow-up (applied, no contact yet)",
       "scenario": "You have applied to a role but have no specific contact. This sequence surfaces in the stale engine as a nudge to find a contact, then provides a template once one is found.",
