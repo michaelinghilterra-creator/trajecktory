@@ -101,7 +101,7 @@ writeTTCorrespondence(10, [{ timestamp: '2023-06-05 10:00', direction: 'Sent', c
 const q2 = computeJustConnectedQueue({ taRows: taRows2, apps });
 check(!q2.map(r => r.id).includes(10), 'a LinkedIn DM sent after connecting drops the contact from the queue');
 
-// ── Regression (the Patricia bug): a LinkedIn DM logged WITHOUT a proper channel
+// ── Regression (the Persontwo bug): a LinkedIn DM logged WITHOUT a proper channel
 //    tag — the pre-fix writer stored channel=Email with subject "LinkedIn message",
 //    and some Saturday entries came through as uppercase "LINKEDIN" — must STILL
 //    count as a LinkedIn touch. Otherwise the warm queue can't see it and re-pitches

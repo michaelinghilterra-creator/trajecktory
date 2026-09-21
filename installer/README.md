@@ -145,8 +145,8 @@ the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 > pipeline broke and multiplied Claude usage). The confusing in-dashboard **First
 > Evaluation step is removed** from Setup, and **Sign in to Claude** moved to the sidebar
 > next to the commands that use it. v1.7.7 made the **API Scan show its full funnel**
-> instead of just the new count, so a scan that adds 0 new offers reads as "14,338 found,
-> 14,264 below your title filter, 28 already tracked" rather than looking broken. v1.7.6
+> instead of just the new count, so a scan that adds 0 new offers reads as "1,200 found,
+> 1,150 below your title filter, 30 already tracked" rather than looking broken. v1.7.6
 > fixed the run-6 VM feedback: the "Claude usage or limit
 > pressure" warning now fires only on a real rate-limit or overload signal (HTTP
 > 429/529, `overloaded_error`) instead of any job description that merely mentions

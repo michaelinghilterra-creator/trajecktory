@@ -29,15 +29,15 @@
 
 | JD Requirement (inferred from title + adjacent posting) | CV Evidence |
 |---|---|
-| Build revenue systems for predictable growth | Quarterly reporting infrastructure ($60M scope), qualification framework rollout, territory model |
-| AI applied to GTM / revenue workflows | "Account scoring model using AI-assisted scoring logic, pattern analysis, and model validation" |
-| CRM strategy | Dual-CRM stack, 5,000+ records enriched |
-| Reporting / dashboards | Semantic model governance across 3 regions, 4 dashboards, 40 users |
-| KPI baselines / scorecards | First commercial KPI baseline (deal size, win rate, velocity) |
+| Build revenue systems for predictable growth | Quarterly reporting infrastructure ($45M scope), qualification framework rollout, territory model |
+| AI applied to GTM / revenue workflows | "Account scoring model using rule-based scoring logic, trend analysis, and validation" |
+| CRM strategy | Two-ledger stack, 700+ records cleaned |
+| Reporting / dashboards | Standards governance across 2 regions, 3 dashboards, 25 users |
+| KPI baselines / scorecards | First example throughput baseline (cycle time, yield, scrap rate) |
 | Cross-functional partnership | Quota model co-owned with Finance, matrix mgmt across 2 BUs |
 | Vertical domain match | **Gap**, Contoso is logistics software, not AI tooling |
 | Billing systems ownership | **Gap**, billing/invoicing side not in CV; commercial revenue ops yes |
-| Process design at scale | Territory model + partner motion + dual-CRM enrichment workflows |
+| Process design at scale | Territory model + partner motion + two-ledger cleanup workflows |
 
 **Gaps & Mitigation:**
 1. **Vertical domain** (medium), not a hard blocker for a systems/AI role. Mitigate: "the operating model translates. Multi-region, matrixed experience at Contoso maps to this company's multi-segment complexity."
@@ -81,43 +81,43 @@ No salary on JD. Remote-friendly posture keeps the band national. **Comp Score: 
 1. **AI-assisted account scoring model:**
    - **S:** Account prioritization at Contoso was ad hoc; the field lacked ranked target accounts.
    - **T:** Redesign the scoring model with AI assistance.
-   - **A:** Used pattern analysis plus AI-assisted scoring logic for a multi-factor model: ARR adjustments, vertical spend, regional calibration, validation.
-   - **R:** Ranked top-100 target set per region across 3 regions.
+   - **A:** Used pattern analysis plus AI-assisted scoring logic for a multi-factor model: seasonality adjustments, plant spend, seasonal calibration, validation.
+   - **R:** Ranked top-40 target set per plant across 2 plants.
    - **Maps to:** the "& AI" component of the role.
 
-2. **5 days to 8 hours:**
+2. **6 days to 2 days:**
    - **S:** Manual quarterly reporting.
    - **T:** Compress and standardize.
-   - **A:** Engineered a reporting system, 20-slide package, semantic standards.
-   - **R:** 5d to 8h, 40 users, $60M oversight.
+   - **A:** Engineered a reporting system, 12-slide package, naming standards.
+   - **R:** 6d to 2d, 25 users, $45M oversight.
    - **Maps to:** revenue systems / reporting infrastructure.
 
 3. **Qualification framework rollout:**
    - **S:** Inconsistent qualification across 2 BUs.
    - **T:** Build a measurable commercial framework.
-   - **A:** Mapped to CRM fields, deployed across 30 sellers, KPI baseline.
-   - **R:** First commercial KPI baseline.
+   - **A:** Mapped to CRM fields, deployed across 18 sellers, throughput baseline.
+   - **R:** First example throughput baseline.
    - **Maps to:** systems for predictable growth.
 
-4. **Dual-CRM enrichment (5K records):**
-   - **S:** Two CRMs running simultaneously, 5,000+ records suspect.
+4. **Two-ledger cleanup (700 records):**
+   - **S:** Two ledgers running simultaneously, 700+ records suspect.
    - **T:** Enrich and validate.
    - **A:** Enrichment logic, structured validation workbooks.
    - **R:** Cleaner targeting, prospecting readiness.
    - **Maps to:** CRM strategy + data integrity.
 
 5. **Territory model redesign:**
-   - **S:** 12-person generalist team.
+   - **S:** 9-person generalist team.
    - **T:** Restructure for accountability.
-   - **A:** 3 motions with motion-specific KPIs.
-   - **R:** $7M sourced pipeline.
+   - **A:** 3 lanes with lane-specific KPIs.
+   - **R:** $2M sourced pipeline.
    - **Maps to:** operating model design.
 
 6. **Reporting governance:**
-   - **S:** Inconsistent reporting across 3 regions.
+   - **S:** Inconsistent reporting across 2 regions.
    - **T:** Enterprise governance.
-   - **A:** Semantic standards, phased dashboard roadmap, release cadence.
-   - **R:** 4 dashboards, 40 users, zero disruption.
+   - **A:** Naming standards, staged rollout plan, review cadence.
+   - **R:** 3 dashboards, 25 users, zero disruption.
    - **Maps to:** reporting systems at scale.
 
 **Case study:** Lead with the AI-assisted account scoring model. It is the most direct proof of the "& AI" hook and rare among RevOps Director candidates.

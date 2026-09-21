@@ -98,12 +98,12 @@ const improveWithResearch = buildImprovePrompt('ta_email', {
   subject: 'Original subject',
   body: 'Generic praise to improve.',
   fixes: ['Replace generic praise with the verified deployment fact.'],
-  companyResearch: 'Northwind Data serves 12,000 organizations, including 95 of the Fortune 100.',
+  companyResearch: 'Northwind Data serves 4,321 organizations, including 17 of the Example 500.',
   recipientRole: 'Chief People Officer',
   recipientTier: 'exec',
 });
 check(improveWithResearch.includes('== COMPANY RESEARCH (verified, use for personalization) ==')
-  && improveWithResearch.includes('Northwind Data serves 12,000 organizations')
+  && improveWithResearch.includes('Northwind Data serves 4,321 organizations')
   && improveWithResearch.includes('== RECIPIENT AND OPENING ==')
   && improveWithResearch.includes("Recipient's title: Chief People Officer"),
 'improve prompt renders supplied company research and recipient context');

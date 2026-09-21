@@ -416,7 +416,7 @@ async function main() {
 
   // Never skip a company silently. A name match with a different slug is either
   // an ATS migration (correctly skipped — the old board is dead) or two real
-  // companies sharing a name (Fetch pet insurance vs. Fetch Package), which
+  // companies sharing a name (Zorblax pet insurance vs. Zorblax Package), which
   // only a human can tell apart. Print both so the call is visible.
   if (skipped.length) {
     console.log(`\n⚠️  ${skipped.length} candidate${skipped.length === 1 ? '' : 's'} matched a tracked company by name but with a different board — not registered:`);

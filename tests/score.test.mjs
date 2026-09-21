@@ -156,8 +156,8 @@ fs.rmSync(tmp, { recursive: true, force: true });
 check(DEFAULT_MINIMUM_LEVEL === 'Manager', 'the default minimum accepted level is Manager');
 
 // leadTitle strips trailing context so a role that REPORTS to a Director is not read
-// as one — the exact bug the Propel "Lead (reports to Director…)" title would trigger.
-check(leadTitle('Lead (reports to Director of Strategy & Operations)') === 'Lead', 'leadTitle drops "(reports to Director…)" context');
+// as one — the exact bug an "Example Cog Lead (reports to Director…)" title would trigger.
+check(leadTitle('Lead (reports to Director of Widget Operations)') === 'Lead', 'leadTitle drops "(reports to Director…)" context');
 check(leadTitle('Senior Manager, GTM Strategy') === 'Senior Manager', 'leadTitle keeps the title, drops the trailing comma clause');
 check(leadTitle('VP / Head of Revenue') === 'VP', 'leadTitle splits on a slash separator');
 
@@ -167,7 +167,7 @@ check(levelRank('Director') === 2 && levelRank('Senior Director') === 2 && level
 check(levelRank('VP of RevOps') === 3 && levelRank('Chief Revenue Officer') === 3, 'VP / C-level rank highest');
 check(levelRank('Analyst') === 0 && levelRank('Associate') === 0, 'IC titles rank below Manager');
 check(levelRank('Lead') === null && levelRank('Principal') === null && levelRank('Staff Engineer') === null, 'ambiguous senior-IC titles are unclassified (not auto-promoted)');
-check(levelRank('Lead (reports to Director of Strategy & Operations)') === null, 'a Lead that reports to a Director is still unclassified, not a Director');
+check(levelRank('Lead (reports to Director of Widget Operations)') === null, 'a Lead that reports to a Director is still unclassified, not a Director');
 
 // applyLevelFloor raises the level dimension only for in-scope titles.
 const dimsSM = [{ key: 'fit', val: 4 }, { key: 'level', val: 3, max: 5 }, { key: 'northStar', val: 4 }];
@@ -177,7 +177,7 @@ check(floored.dims.find(d => d.key === 'level').val === 5, 'the floored level di
 check(dimsSM.find(d => d.key === 'level').val === 3, 'applyLevelFloor is pure — the input dims are not mutated');
 const notFloored = applyLevelFloor(dimsSM, 'Analyst');
 check(notFloored.floored === false && notFloored.dims.find(d => d.key === 'level').val === 3, 'a below-Manager title leaves the level rating alone');
-const leadNotFloored = applyLevelFloor(dimsSM, 'Lead (reports to Director of Strategy & Operations)');
+const leadNotFloored = applyLevelFloor(dimsSM, 'Lead (reports to Director of Widget Operations)');
 check(leadNotFloored.floored === false, 'a contaminated "Lead (reports to Director…)" title is NOT floored');
 const already5 = applyLevelFloor([{ key: 'level', val: 5, max: 5 }], 'VP');
 check(already5.floored === false, 'an already-maxed level dimension is not re-floored (idempotent)');

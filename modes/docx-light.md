@@ -86,8 +86,8 @@ the master changes structurally.
      reframe the master summary's remaining sentences to the JD using its
      vocabulary; do NOT invent skills, do NOT lengthen it, and do NOT add proof
      points the master summary does not already contain. For non-BI archetypes, the
-     candidate's BI signature line ("Operates on a single test for every
-     dashboard...") becomes supporting evidence, not the lead — it may move
+     candidate's BI signature line (the closing sentence of the master
+     summary) becomes supporting evidence, not the lead — it may move
      down or be cut if a stronger archetype-aligned close exists.
    - `areas_of_expertise`: 12 comma-separated phrases, ~50 words / ~410
      chars total. **Lead with the archetype's `aoe_priority` phrases** (in
@@ -97,8 +97,8 @@ the master changes structurally.
    (object: `{ "title": ..., "subtitle_secondary": ..., "summary": ...,
    "areas_of_expertise": ... }`).
 7. Compose the company slug: short company name, no spaces, preserve
-   internal capitalization (e.g. `Gartner`, `RealPage`, `DuckCreek`,
-   `Snowflake`, `Stripe`). Drop "Inc.", "LLC", "Corp", suffix punctuation.
+   internal capitalization (e.g. `Zorblax`, `QuennoxRatchet`, `ExampleCo`,
+   `Widgetry`). Drop "Inc.", "LLC", "Corp", suffix punctuation.
    Hyphenate only if the brand itself contains a hyphen (e.g. `T-Mobile`).
 8. Run:
    ```bash
@@ -133,7 +133,7 @@ Before writing the four swap strings, verify:
 ## Output
 
 - File: `output/{FirstName}_{LastName}_Resume_{Company}_{MM-DD-YYYY}_light.docx`
-- Example: `output/Jordan_Avery_Resume_Gartner_06-05-2026_light.docx`
+- Example: `output/Example_Personone_Resume_Zorblax_06-05-2030_light.docx`
 - Tracker update: same convention as before — flip the PDF column to ✅
   if the offer is already logged. (Column header is historical — it tracks
   "tailored CV generated", DOCX or otherwise.)

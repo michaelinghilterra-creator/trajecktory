@@ -105,16 +105,16 @@ check(parseSentInvites(urlText).some(p => p.handle === 'some-handle'),
 
 // ── matchSentInvites ─────────────────────────────────────────────────────────
 const ta = [
-  { id: 554, first: 'Dana', last: 'Whitfield', company: 'Northwind', linkedin: 'https://www.linkedin.com/in/dana-reyes/' },
-  { id: 900, first: 'Priya', last: 'Nadeau', company: 'Northwind', linkedin: '' },
+  { id: 900001, first: 'Dana', last: 'Whitfield', company: 'Northwind', linkedin: 'https://www.linkedin.com/in/dana-reyes/' },
+  { id: 900002, first: 'Priya', last: 'Nadeau', company: 'Northwind', linkedin: '' },
 ];
 const m1 = matchSentInvites(parsed, ta);
-check(m1.matched.find(x => x.contact.id === 554) && m1.matched.find(x => x.contact.id === 900),
+check(m1.matched.find(x => x.contact.id === 900001) && m1.matched.find(x => x.contact.id === 900002),
   'matches Dana (parenthetical name) and Priya to their contacts');
 
 // URL/handle match is definitive even with a different display name.
 const m2 = matchSentInvites([{ name: 'D. R. Whitfield', headline: '', handle: 'dana-reyes' }], ta);
-check(m2.matched.length === 1 && m2.matched[0].contact.id === 554,
+check(m2.matched.length === 1 && m2.matched[0].contact.id === 900001,
   'profile-handle match wins even when the display name differs');
 
 // Ambiguity: two same-name contacts, no company tiebreak → reported, NOT applied.

@@ -75,7 +75,7 @@ check(isInbound('[inbound] recruiter reached out') === true, 'an [inbound] tag i
 check(isOutbound('[outbound] I messaged the hiring manager') === true, 'an [outbound] tag is detected');
 check(isInbound('[outbound] note') === false, 'an outbound row is not read as inbound');
 check(isOutbound('[inbound] note') === false, 'an inbound row is not read as outbound');
-// Prose must never be mistaken for a tag. This row exists in the real tracker:
+// Prose must never be mistaken for a tag. A row like this can exist:
 // its note says "Recruiter-inbound" in prose and it went untagged for months, so a
 // substring match would have silently classified it while the split stayed wrong.
 check(isInbound('[self-sourced] Recruiter-inbound — exempt from auto-discard') === false,

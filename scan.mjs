@@ -12,7 +12,7 @@
  * Usage:
  *   node scan.mjs                        # scan all enabled companies
  *   node scan.mjs --dry-run              # preview without writing files
- *   node scan.mjs --company Cohere       # scan a single company
+ *   node scan.mjs --company Zorblax       # scan a single company
  *   node scan.mjs --max-age-days 30      # stricter age filter (default: 60)
  *   node scan.mjs --no-age-filter        # disable age filter entirely
  */

@@ -51,7 +51,7 @@ converter for the Full Report tab. The structured tabs read **only** from frontm
 ### Role summary
 ```json
 "summary": {
-  "archetypeDetected": "Director / VP of Revenue Operations",
+  "archetypeDetected": "Director / VP of Example Operations",
   "function": "Revenue Operations",
   "seniority": "VP (reports to President)",
   "remote": "On-site required — SF Bay Area",

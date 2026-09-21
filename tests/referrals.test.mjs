@@ -26,9 +26,9 @@ assert.ok(REFERRAL_STATUSES.includes('Not Asked'));
 assert.ok(REFERRAL_STATUSES.includes('Applied w/ Referral'));
 ok('statuses derive from states.yml (Not Asked .. Applied w/ Referral)');
 
-assert.equal(referralTitle('Talent Recruiter · connected 29 Jul 2026'), 'Talent Recruiter');
+assert.equal(referralTitle('Talent Recruiter · connected 29 Jul 2030'), 'Talent Recruiter');
 assert.equal(referralTitle('Chief People Officer'), 'Chief People Officer');
-assert.equal(referralTitle('connected 29 Jul 2026'), '');
+assert.equal(referralTitle('connected 29 Jul 2030'), '');
 assert.equal(referralTitle(''), '');
 ok('referral title comes from the first Notes segment and ignores connected metadata');
 

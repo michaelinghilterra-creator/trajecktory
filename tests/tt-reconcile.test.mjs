@@ -62,15 +62,15 @@ check(!needCos.includes('Acme Labs'), 'Acme not flagged — closed + already has
 check(!needCos.includes('Prospectus'), 'Prospectus not flagged — Evaluated only, not applied yet (no contact spent pre-application)');
 check(!needCos.includes('Limbo Co'), 'Limbo Co not flagged — Evaluated only, even though it has no NEW contact need beyond its existing one');
 
-check(normCompany('ADT, Inc.') === 'adt', 'normCompany strips punctuation, legal suffix, lowercases');
+check(normCompany('Zorblax, Inc.') === 'zorblax', 'normCompany strips punctuation, legal suffix, lowercases');
 check(normCompany('') === '', 'normCompany handles empty');
 // Suffix + " — City" variants must normalize to the same key so a contact at
-// "Stripe, Inc." reconciles against applications logged under "Stripe".
-check(normCompany('Stripe') === normCompany('Stripe, Inc.'), 'normCompany matches legal-suffix variant');
-check(normCompany('Grow Therapy') === normCompany('Grow Therapy — New York'), 'normCompany drops " — City" suffix');
+// "Zorblax, Inc." reconciles against applications logged under "Zorblax".
+check(normCompany('Zorblax') === normCompany('Zorblax, Inc.'), 'normCompany matches legal-suffix variant');
+check(normCompany('Quennox Ratchet Works') === normCompany('Quennox Ratchet Works — New York'), 'normCompany drops " — City" suffix');
 // Distinct companies must stay distinct, and a suffix token inside a word is kept.
-check(normCompany('Stripe') !== normCompany('Square'), 'normCompany keeps distinct companies distinct');
-check(normCompany('Costco') === 'costco', 'normCompany does not strip a suffix inside a word');
+check(normCompany('Zorblax') !== normCompany('Quennox'), 'normCompany keeps distinct companies distinct');
+check(normCompany('Quennoxco') === 'quennoxco', 'normCompany does not strip a suffix inside a word');
 
 // --- Mode-scoped archive ---
 const talentArchive = reconcilePreview(apps, ttRows, { mode: 'talent' });

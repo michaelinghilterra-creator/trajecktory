@@ -27,7 +27,7 @@ const block1 = ['Gamma one CCCC', 'Delta two DDDD', 'Epsilon three EEEE'];
 const chars = (a) => a.reduce((s, t) => s + t.length, 0);
 
 const xml =
-  headPara('Michael Example') +
+  headPara('Example Personone') +
   headPara('Director, Example Role') +
   block0.map(listPara).join('') +
   headPara('Manager, Example Role') +

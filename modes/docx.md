@@ -117,14 +117,14 @@ archetype rather than the BI-default master.
   reframe the remaining sentences of the MASTER summary through the JD's lens
   (reorder and reword its existing points), staying within the master length
   and adding no detail the master summary does not already contain. The candidate's
-  signature line ("Operates on a single test for every dashboard...") may
+  signature line (the closing sentence of the master summary) may
   be replaced or repositioned if a better JD-tailored closing exists in the
   candidate's real experience. Rebuild the Areas of Expertise list around
   the JD's top requirements, leading with the archetype's `aoe_priority`
   phrases, not the candidate's BI-default emphasis.
 - **Step 7 (company slug)**: short company name, no spaces, preserve
-  internal capitalization (e.g. `Gartner`, `RealPage`, `DuckCreek`,
-  `Snowflake`, `Stripe`). Drop "Inc.", "LLC", "Corp", suffix punctuation.
+  internal capitalization (e.g. `Zorblax`, `QuennoxRatchet`, `ExampleCo`,
+  `Widgetry`). Drop "Inc.", "LLC", "Corp", suffix punctuation.
   Hyphenate only if the brand itself contains a hyphen (e.g. `T-Mobile`).
 - **Step 8 (filename)**: write to
   `output/{FirstName}_{LastName}_Resume_{Company}_{MM-DD-YYYY}.docx`.
@@ -152,7 +152,7 @@ summary and areas_of_expertise) still applies.
 ## Output
 
 - File: `output/{FirstName}_{LastName}_Resume_{Company}_{MM-DD-YYYY}.docx`
-- Example: `output/Jordan_Avery_Resume_Gartner_06-05-2026.docx`
+- Example: `output/Example_Personone_Resume_Zorblax_06-05-2030.docx`
 - Tracker update: flip PDF column to ✅ if the offer is already logged.
 
 ## Requirements

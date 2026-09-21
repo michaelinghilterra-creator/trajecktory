@@ -64,7 +64,7 @@ All commands run from your trajecktory project folder (the directory that contai
 ```powershell
 node scan.mjs                        # Scan all companies via API — adds new roles to pipeline.md
 node scan.mjs --dry-run              # Preview what would be found without saving anything
-node scan.mjs --company "Cohere"     # Scan just one specific company
+node scan.mjs --company "Zorblax Widgetry"     # Scan just one specific company
 node scan.mjs --max-age-days 30      # Only return jobs posted in the last 30 days
 node scan.mjs --no-age-filter        # Return all jobs regardless of age
 ```

@@ -52,9 +52,9 @@ try {
   // report for the same job. Duplicated, not lost.
   rpt(9303, 'Acme', 'Director, Glassblowing Standards', 'https://jobs.example.com/acme/1');
   // 9304 — no row, not archived, distinct URL, TSV survives. A RECOVERABLE loss.
-  rpt(9304, 'Cinder', 'VP Lighthouse Maintenance', 'https://jobs.example.com/cinder/4');
+  rpt(9304, 'Cinder', 'VP Beacon Maintenance', 'https://jobs.example.com/cinder/4');
   writeFileSync(join(sb, 'batch/tracker-additions/merged/9304-cinder.tsv'),
-    ['9304', '2026-07-01', 'Cinder', 'VP Lighthouse Maintenance', 'Evaluated', '4.0/5', '❌', 'x', 'y'].join('\t') + '\n');
+    ['9304', '2026-07-01', 'Cinder', 'VP Beacon Maintenance', 'Evaluated', '4.0/5', '❌', 'x', 'y'].join('\t') + '\n');
   // 9305 — same, but no TSV. A loss that cannot be replayed.
   rpt(9305, 'Dunlin', 'Director, Topiary Logistics', 'https://jobs.example.com/dunlin/5');
   // 9306 — its number is shared by TWO TSVs from different companies. The one
@@ -142,7 +142,7 @@ try {
 
   console.log('\n5. Metadata for adjudication');
   const c = r.lost.find(l => l.num === 9304);
-  check(c.company === 'Cinder' && c.role === 'VP Lighthouse Maintenance',
+  check(c.company === 'Cinder' && c.role === 'VP Beacon Maintenance',
     'company and role are surfaced so the user can decide without opening files');
   check(c.url === 'https://jobs.example.com/cinder/4', 'the posting URL is surfaced');
 

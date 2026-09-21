@@ -5,7 +5,7 @@
  *
  * The bug it exists for: merge-tracker writes that copy only for rows flowing
  * through a merge, so re-deriving a report after its row merged leaves the two
- * diverged permanently. 195 rows drifted that way when the level-floor policy
+ * diverged permanently. Many rows drifted that way when the level-floor policy
  * shipped and every one moved upward.
  *
  * All fixtures are invented. Never copy a real company or job title out of

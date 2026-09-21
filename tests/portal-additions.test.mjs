@@ -75,7 +75,7 @@ const wrap = (arr) => `some agent prose\n${START_MARKER}\n${JSON.stringify(arr)}
 
 // ── name sanitization ────────────────────────────────────────────────────────
 {
-  check(sanitizeCompanyName('Acme, Inc. (A-LIGN) & Co') === 'Acme, Inc. (A-LIGN) & Co', 'keeps real-company punctuation');
+  check(sanitizeCompanyName('Acme, Inc. (Z-WIDGET) & Co') === 'Acme, Inc. (Z-WIDGET) & Co', 'keeps real-company punctuation');
   check(!/[\r\n]/.test(sanitizeCompanyName('Bad\nName')), 'strips newlines');
   check(!sanitizeCompanyName('# comment start').startsWith('#'), 'strips a YAML-hostile leading #');
   check(!sanitizeCompanyName('key: value').includes(':'), 'removes colons (no accidental YAML mapping)');

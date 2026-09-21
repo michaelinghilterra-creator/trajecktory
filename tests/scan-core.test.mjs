@@ -50,9 +50,9 @@ check(normalizeUrl('https://apply.workable.com/northwind/j/BA4D0137BF/') === 'ht
 // A Greenhouse job id is a globally-unique posting identity, so any URL that
 // carries one canonicalizes to a single `gh:{id}` key — collapsing the branded
 // (?gh_jid=N) and raw-board (greenhouse.io/.../jobs/N) forms of ONE requisition
-// that share no host or path (JD #1226/#1234 dupe, 2026-07-30). The id must
+// that share no host or path (JD #900001/#900002 dupe, 2030-07-30). The id must
 // survive tracking params and apply segments, and two different ids must NOT
-// collapse (the shared-path-proxy audit, 2026-07-15).
+// collapse (the shared-path-proxy audit, 2030-07-15).
 check(normalizeUrl('https://contoso.com/company/careers/open-positions/job?gh_jid=4001001001') === 'gh:4001001001',
   'a gh_jid URL canonicalizes to its gh:{id} key');
 check(normalizeUrl('https://contoso.com/company/careers/open-positions/job?gh_jid=1111') !==
@@ -86,7 +86,7 @@ check(normalizeForMatch('Sales & Marketing') === 'sales marketing',
   'drops " & "');
 check(normalizeForMatch('') === '', 'empty stays empty');
 // Spelled-out "Vice President" folds to "vp" so one "VP of X" positive covers
-// both forms (audit 2026-07-15: a "Vice President, Data & Insights" posting was
+// both forms (a past audit: a spelled-out "Vice President" posting was
 // invisible to the "VP of Data & Insights" positive).
 check(normalizeForMatch('Vice President, Data & Insights') === 'vp data insights',
   '"Vice President" folds to "vp"');
@@ -129,8 +129,8 @@ check(wb('Java Director') === false, 'negative "java" still drops a standalone "
 // The declarative function x seniority matrix replaces the ~200-line hand-listed
 // positive block. functions_bare pass at any level; functions_ranked need a
 // seniority word adjacent (either order, optional modifier between). Validated
-// against 857 real scanned titles: 0 coverage lost, 33 previously-missed roles
-// recovered. When a matrix is present the flat positive list is IGNORED.
+// against a large corpus of scanned titles: no coverage lost, previously
+// missed roles recovered. When a matrix is present the flat positive list is IGNORED.
 const mf = buildTitleFilter({
   matrix: {
     seniority: ['director', 'vp', 'manager', 'head'],
@@ -149,8 +149,8 @@ check(mf('Director, Global Sales Enablement') === true, 'matrix: optional modifi
 check(mf('Director of Marketing') === false, 'matrix: a seniority with an unlisted function is rejected');
 
 // ── buildTitleFilter: "Associate Director" is director-tier, not junior ────────
-// The "associate" IC-negative was vetoing real "Associate Director, Revenue
-// Operations" roles (audit 2026-08-22). promoteSeniorCompounds drops "associate"
+// The "associate" IC-negative was vetoing real "Associate Director"
+// roles (a past audit). promoteSeniorCompounds drops "associate"
 // when it directly precedes a seniority word, so the compound is judged by its
 // real rank; a standalone "Associate" is still blocked.
 const af = buildTitleFilter({
@@ -352,10 +352,10 @@ check(noRegion('Columbus, OH') === true,    'no region configured: any real city
 check(noRegion('Plano, TX') === true,       'no region configured: metro_allow still passes');
 check(noRegion('New York, NY') === false,   'no region configured: hard_no still blocks (needs no origin)');
 
-// ── proximity matching (added 2026-08-23) ────────────────────────────────────
+// ── proximity matching (added later) ────────────────────────────────────
 // Strict literal adjacency required the seniority word to touch the function
 // phrase, so real 3.3+ roles were dropped whenever a qualifier sat between them.
-// Audit found 19 of 93 strong self-sourced roles rejected by the filter.
+// An audit found many strong self-sourced roles rejected by the filter.
 const prox = buildTitleFilter({
   matrix: {
     seniority: ['manager', 'sr manager', 'director', 'sr director', 'senior director', 'vp'],

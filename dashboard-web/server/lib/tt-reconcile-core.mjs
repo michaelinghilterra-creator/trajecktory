@@ -21,7 +21,7 @@ import { isAtCap } from './contact-search-attempts.mjs';
 
 export function normCompany(s) {
   // Drop a " — City" / " - City" suffix and common legal suffixes before
-  // stripping non-alphanumerics, so "Stripe" and "Stripe, Inc." normalize to the
+  // stripping non-alphanumerics, so "Zorblax" and "Zorblax, Inc." normalize to the
   // same key. This stays an EXACT match on the normalized form (not loose token
   // matching), so it fixes suffix variants without risking archiving a contact
   // whose company only loosely resembles a dead application's company.
