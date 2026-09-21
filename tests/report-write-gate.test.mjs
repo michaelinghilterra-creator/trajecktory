@@ -3,7 +3,7 @@
  * report-write-gate.test.mjs — pins the write-time report syntax gate.
  *
  * A report's JSON frontmatter is a single blob emitted by a model, and until this
- * gate existed nothing parsed it between the model and the disk. Report 1869
+ * gate existed nothing parsed it between the model and the disk. Report 9001
  * closed the `leadStory` OBJECT with `],` instead of `},`; that one character made
  * the frontmatter unparseable, and because every reader parses all reports in one
  * pass, the single bad file took down the whole read until a health check found it.
@@ -37,7 +37,7 @@ const good = wrap(JSON.stringify({ schema: 'trajecktory-report/v1', id: 9001, ur
 // ── the happy path stays quiet ───────────────────────────────────────────────
 check(validateReportMarkdown(good, 'reports/9001-ok.md').ok, 'a well-formed v1 report passes');
 
-// ── the exact 1869 failure: object closed with a square bracket ──────────────
+// ── the exact 9001 failure: object closed with a square bracket ──────────────
 const bracketMismatch = [
   '---',
   '{',
@@ -54,7 +54,7 @@ const bracketMismatch = [
   '',
 ].join('\n');
 const bm = validateReportMarkdown(bracketMismatch, 'reports/9002-bad.md');
-check(!bm.ok, 'an object closed with "]," is rejected (the report 1869 failure)');
+check(!bm.ok, 'an object closed with "]," is rejected (the report 9001 failure)');
 check(/line 8/.test(bm.error), 'the error names the FILE line, not a byte offset into the frontmatter');
 check(/\],/.test(bm.error), 'the error shows the offending line so it can be found without counting bytes');
 check(/9002-bad\.md/.test(bm.error), 'the error names the report it came from');
@@ -111,7 +111,7 @@ fs.writeFileSync(okReport, good);
 const okRun = runHook({ tool_name: 'Write', tool_input: { file_path: 'reports/9101-hook-ok.md' } });
 check(okRun.out === '' && okRun.code === 0, 'hook stays silent on a valid report');
 
-// The report 1869 shape, end to end through the hook.
+// The report 9001 shape, end to end through the hook.
 const badReport = path.join(REPORTS, '9102-hook-bad.md');
 fs.writeFileSync(badReport, bracketMismatch);
 const badRun = runHook({ tool_name: 'Write', tool_input: { file_path: 'reports/9102-hook-bad.md' } });

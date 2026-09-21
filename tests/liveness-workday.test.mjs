@@ -37,20 +37,20 @@ check(contoso?.externalPath === '/job/Remote-New-York-United-States-of-America/D
   'short-form: externalPath starts at /job/');
 
 const full = parseWorkdayUrl(
-  'https://datarobot.wd1.myworkdayjobs.com/en-US/DataRobot_External_Careers/job/VP--Revenue-Operations---Strategy_R-102632'
+  'https://zorblax.wd1.myworkdayjobs.com/en-US/Zorblax_External_Careers/job/VP--Example-Operations---Strategy_R-900001'
 );
-check(full?.siteFromUrl === 'DataRobot_External_Careers',
+check(full?.siteFromUrl === 'Zorblax_External_Careers',
   'full-form: extracts site, dropping the en-US locale segment');
-check(full?.reqId === 'R-102632',
-  'full-form: requisition id keeps internal dashes (R-102632)');
-check(full?.externalPath === '/job/VP--Revenue-Operations---Strategy_R-102632',
+check(full?.reqId === 'R-900001',
+  'full-form: requisition id keeps internal dashes (R-900001)');
+check(full?.externalPath === '/job/VP--Example-Operations---Strategy_R-900001',
   'full-form: externalPath excludes locale + site prefix');
 
 const dashedReq = parseWorkdayUrl(
-  'https://alkami.wd12.myworkdayjobs.com/job/US-Remote/Director--Go-To-Market-Financial-Planning---Analysis_JR-000627-1'
+  'https://quennox.wd12.myworkdayjobs.com/job/US-Remote/Director--Example-Sprocket-Planning---Analysis_JR-900002-1'
 );
-check(dashedReq?.reqId === 'JR-000627-1',
-  'requisition id after the LAST underscore only (JR-000627-1)');
+check(dashedReq?.reqId === 'JR-900002-1',
+  'requisition id after the LAST underscore only (JR-900002-1)');
 
 check(parseWorkdayUrl('https://contoso.wd1.myworkdayjobs.com/contoso') === null,
   'board / careers-home URL (no /job/) → null (use Playwright)');
@@ -67,11 +67,11 @@ check(parseWorkdayUrl(
 
 check(workdaySiteFromCareersUrl('https://contoso.wd1.myworkdayjobs.com/contoso') === 'contoso',
   'careers_url: bare site path → site');
-check(workdaySiteFromCareersUrl('https://alkami.wd12.myworkdayjobs.com/Alkami') === 'Alkami',
-  'careers_url: preserves site-name casing (Alkami)');
-check(workdaySiteFromCareersUrl('https://datarobot.wd1.myworkdayjobs.com/en-US/DataRobot_External_Careers') === 'DataRobot_External_Careers',
+check(workdaySiteFromCareersUrl('https://quennox.wd12.myworkdayjobs.com/Quennox') === 'Quennox',
+  'careers_url: preserves site-name casing (Quennox)');
+check(workdaySiteFromCareersUrl('https://zorblax.wd1.myworkdayjobs.com/en-US/Zorblax_External_Careers') === 'Zorblax_External_Careers',
   'careers_url: drops leading en-US locale, returns the real site (not "en-US")');
-check(workdaySiteFromCareersUrl('https://adobe.wd5.myworkdayjobs.com/external_experienced/') === 'external_experienced',
+check(workdaySiteFromCareersUrl('https://zorblax.wd5.myworkdayjobs.com/external_experienced/') === 'external_experienced',
   'careers_url: trailing slash tolerated');
 check(workdaySiteFromCareersUrl('https://jobs.lever.co/acme') === null,
   'careers_url: non-Workday host → null');

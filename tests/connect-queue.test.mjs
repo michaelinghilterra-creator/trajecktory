@@ -75,7 +75,7 @@ const taRows = [
   // This is the current-status gate: the opportunity is dead, so stop chasing
   // contacts for it even though the company was once at Applied. (Under the old
   // reached-based gate this contact WOULD have surfaced forever.)
-  ta({ id: 11, first: 'Kit', last: 'Ramsey', title: 'Recruiter', company: 'Ridgeline Legal',
+  ta({ id: 11, first: 'Kit', last: 'Ramsey', title: 'Recruiter', company: 'Zorblax Legal',
        linkedin: 'linkedin.com/in/kit-ramsey-ex', status: 'Not Contacted' }),
 ];
 
@@ -90,7 +90,7 @@ const apps = [
   { company: 'Meridian AI',        status: 'Applied' },
   { company: 'Solstice Data',      status: 'Applied' },       // ta:9 excluded by status, not gate
   { company: 'Nimbus Health',      status: 'Evaluated' },     // ta:10 excluded by the gate (pre-application)
-  { company: 'Ridgeline Legal',    status: 'Rejected' },      // ta:11 excluded by the gate (dead opportunity)
+  { company: 'Zorblax Legal',    status: 'Rejected' },      // ta:11 excluded by the gate (dead opportunity)
 ];
 
 // ── computeConnectQueue ──────────────────────────────────────────────────────
@@ -152,11 +152,11 @@ check(/Thanks, Jordan$/.test(trimmed.text), 'sign-off is preserved after trimmin
 const prompt = buildConnectPrompt({
   senderName: 'Jordan Example', senderFirst: 'Jordan', senderHeadline: 'RevOps Leader',
   recipientName: 'Robin Achebe', recipientFirst: 'Robin', recipientRole: 'Managing Director',
-  recipientCompany: 'Halcyon Partners', guidance: 'places GTM / RevOps leaders',
+  recipientCompany: 'Quennox Partners', guidance: 'places GTM / RevOps leaders',
   cvExcerpt: '(cv)', tone: 'Warm', toneText: 'Be warm.', targetMax: 280,
 });
 check(prompt.includes('Robin Achebe'), 'prompt names the recipient');
-check(prompt.includes('Halcyon Partners'), 'prompt includes recipient company when provided');
+check(prompt.includes('Quennox Partners'), 'prompt includes recipient company when provided');
 check(prompt.includes('places GTM / RevOps leaders'), 'prompt carries the caller-composed guidance');
 check(prompt.includes('280 characters'), 'prompt states the target character cap');
 check(prompt.includes('No em dashes.'), 'prompt keeps the August no-em-dash hard rule');

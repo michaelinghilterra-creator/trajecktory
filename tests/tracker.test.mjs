@@ -111,7 +111,7 @@ check(TRACKER_COLUMNS[9] === 'notes' && TRACKER_COLUMNS[10] === 'url', 'notes st
 
 // ── formatTrackerLine — the write side ─────────────────────────────────────────
 // Rows used to be written with hand-rolled template literals, so any '|' inside a
-// field became a column delimiter. Row #1125 hit this in the field: notes ending
+// field became a column delimiter. A real row hit this in the field: notes ending
 // "…remote | [self-sourced]" had the tag stripped, and the orphaned pipe left an
 // 11-cell row that the dashboard parsed with a truncated Notes column.
 const roundTrip = {
@@ -135,7 +135,7 @@ check(rtUrl.notes === 'clean note', 'url round-trip leaves notes intact');
 
 // The regression: a pipe anywhere in a field must not create a cell.
 const piped = parseTrackerLine(formatTrackerLine({
-  ...roundTrip, notes: 'IC role, $100K–$120K remote | [self-sourced]',
+  ...roundTrip, notes: 'Example note, $10K–$20K remote | [self-sourced]',
 }));
 check(piped.cellCount === 11, 'pipe in notes does NOT add a cell (stripped-source-tag regression)');
 check(!piped.notes.includes('|'), 'pipe in notes is neutralized');
@@ -164,8 +164,8 @@ check(sanitizeTrackerCell(null) === '', 'sanitizeTrackerCell handles null');
 
 // hasStrayPipe: telling "no URL on this row" apart from "a pipe shifted the row".
 // Both leave `url` null, and conflating them made the dashboard parser warn that
-// notes may be truncated on 62 rows of a real tracker where nothing was lost.
-// 58 of those carried the em dash formatTrackerLine itself writes for an empty
+// notes may be truncated on many rows of a real tracker where nothing was lost.
+// most of those carried the em dash formatTrackerLine itself writes for an empty
 // url cell, so the canonical writer was producing rows the reader called broken.
 console.log('\nhasStrayPipe');
 const strayBase = '| 9001 | 2020-01-01 | Acme | Lead | 4.0/5 | Applied | ✅ | — | [9001](reports/9001-a.md) | notes ';

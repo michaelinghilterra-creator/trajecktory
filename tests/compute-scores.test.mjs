@@ -138,7 +138,7 @@ const ran = deriveReportScore(leveledReport('Analyst', 3), { weights: BALANCED }
 check(ran.ok && ran.score === 3.8 && !ran.scoreBasis.levelFloor, `a below-Manager title keeps the model level rating (got ${ran.score}, want 3.8)`);
 
 // Contamination guard: "Lead (reports to Director…)" must NOT be read as a Director.
-const rlead = deriveReportScore(leveledReport('Lead (reports to Director of Strategy & Operations)', 3), { weights: BALANCED });
+const rlead = deriveReportScore(leveledReport('Lead (reports to Director of Widget Operations)', 3), { weights: BALANCED });
 check(rlead.ok && rlead.score === 3.8 && !rlead.scoreBasis.levelFloor, 'a Lead that reports to a Director is not floored (title contamination guarded)');
 
 console.log(`\n${passed} passed, ${failed} failed`);
