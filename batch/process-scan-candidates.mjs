@@ -4,6 +4,7 @@ import yaml from 'js-yaml';
 import { canonicalUrl, normalizeCompany, sameRole } from '../lib/identity.mjs';
 import { parseTracker } from '../lib/tracker.mjs';
 import { buildTitleFilter } from '../lib/scan-core.mjs';
+import { localToday } from '../lib/local-date.mjs';
 
 const candidates = JSON.parse(fs.readFileSync('batch/scan-candidates.json', 'utf8'));
 const portals = yaml.load(fs.readFileSync('portals.yml', 'utf8'));
@@ -43,7 +44,7 @@ for (const c of candidates) {
   out.added.push({ ...c });
 }
 
-const today = new Date().toISOString().slice(0,10);
+const today = localToday();
 
 // Append to pipeline.md under Pendientes (or 'Pending'). Find the right section.
 let pipe = fs.readFileSync('data/pipeline.md', 'utf8');

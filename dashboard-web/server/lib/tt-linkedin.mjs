@@ -87,7 +87,7 @@ export function setLinkedInStatus(id, state, date) {
         const key = String(id);
         const effect = state === 'Not Connected'
           ? { file: 'tt-linkedin.json', op: 'json_delete', key }
-          : { file: 'tt-linkedin.json', op: 'json_set', key, value: { state, updated: date || new Date().toISOString().slice(0, 10) } };
+          : { file: 'tt-linkedin.json', op: 'json_set', key, value: { state, updated: date || localToday() } };
         appendEventsWithEffects(store, [{
           type: 'legacy_record', occurred_on: localToday(), source: 'dashboard', definitions_version: 'v1',
           payload: {
@@ -108,7 +108,7 @@ export function setLinkedInStatus(id, state, date) {
   if (state === 'Not Connected') {
     delete map[key];
   } else {
-    map[key] = { state, updated: date || new Date().toISOString().slice(0, 10) };
+    map[key] = { state, updated: date || localToday() };
   }
   writeMap(map);
   return state;

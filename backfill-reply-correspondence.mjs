@@ -27,6 +27,7 @@ import {
   extractEmail, matchAddress, readSync, logReplyToContact, MAX_CORR_BODY,
 } from './dashboard-web/server/lib/google.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence } from './dashboard-web/server/lib/target-talent.mjs';
+import { localStamp } from './lib/local-date.mjs';
 
 const APPLY = process.argv.includes('--apply');
 
@@ -39,7 +40,7 @@ const REPLYISH = new Set(['log', 'rejected', 'Phone Screen', '1st Interview', '2
 function corrTs(date) {
   const t = date ? Date.parse(date) : NaN;
   const ms = Number.isNaN(t) ? Date.now() : t;
-  return new Date(ms).toISOString().replace('T', ' ').slice(0, 16);
+  return localStamp(new Date(ms));
 }
 
 // Dedup keys. A reply may already be on the card from earlier manual logging,

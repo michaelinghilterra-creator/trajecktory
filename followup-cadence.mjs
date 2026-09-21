@@ -15,6 +15,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTracker as parseTrackerMd } from './lib/tracker.mjs';
+import { localToday } from './lib/local-date.mjs';
 
 const CAREER_OPS = dirname(fileURLToPath(import.meta.url));
 const APPS_FILE = existsSync(join(CAREER_OPS, 'data/applications.md'))
@@ -73,7 +74,7 @@ function normalizeStatus(raw) {
 
 // --- Date helpers ---
 function today() {
-  return new Date(new Date().toISOString().split('T')[0]);
+  return new Date(localToday());
 }
 
 function parseDate(dateStr) {
@@ -262,7 +263,7 @@ function analyze() {
 
   return {
     metadata: {
-      analysisDate: now.toISOString().split('T')[0],
+      analysisDate: localToday(now),
       totalTracked: apps.length,
       actionable: entries.length,
       overdue: entries.filter(e => e.urgency === 'overdue').length,

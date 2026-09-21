@@ -3,6 +3,7 @@
 import { patchRowInMd, parseApplicationsMd } from './dashboard-web/server/lib/applications.mjs';
 import { appendFollowupRow } from './dashboard-web/server/lib/followups.mjs';
 import { ALL_STATUSES } from './dashboard-web/server/lib/statuses.mjs';
+import { localToday } from './lib/local-date.mjs';
 
 const HELP = `Usage:
   node agent-edit.mjs application --id <num> [--company <name>] [--status <status>] [--role <title>] [--note <text>] [--append-note <text>] [--event-date <YYYY-MM-DD>] [--json]
@@ -46,7 +47,7 @@ function validateDate(value, flag) {
   if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
     throw new Error(`${flag} must be a real calendar date in YYYY-MM-DD format`);
   }
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   if (value < '2000-01-01' || value > today) {
     throw new Error(`${flag} must be between 2000-01-01 and ${today}`);
   }

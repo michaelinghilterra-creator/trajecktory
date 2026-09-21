@@ -45,7 +45,7 @@ copyFileSync(join(ROOT, 'lib/identity.mjs'), join(sandbox, 'lib/identity.mjs'));
 // merge-tracker now checks off pipeline rows through lib/pipeline.mjs (the single
 // check-off owner), so the sandbox copy needs it too.
 copyFileSync(join(ROOT, 'lib/pipeline.mjs'), join(sandbox, 'lib/pipeline.mjs'));
-for (const m of ['log-writes.mjs', 'event-store.mjs', 'event-store-switch.mjs', 'legacy-files.mjs', 'atomic-write.mjs', 'void-events.mjs', 'passed.mjs']) {
+for (const m of ['log-writes.mjs', 'local-date.mjs', 'event-store.mjs', 'event-store-switch.mjs', 'legacy-files.mjs', 'atomic-write.mjs', 'void-events.mjs', 'passed.mjs']) {
   copyFileSync(join(ROOT, 'lib', m), join(sandbox, 'lib', m));
 }
 // merge-tracker.mjs loads templates/states.yml at startup for canonical states +
@@ -255,7 +255,7 @@ function runMerge(seedRows, caseMap, extraFiles = {}) {
   mkdirSync(join(sb, 'lib'), { recursive: true });
   for (const m of [
     'discard.mjs', 'tracker.mjs', 'scan-core.mjs', 'identity.mjs', 'pipeline.mjs',
-    'log-writes.mjs', 'event-store.mjs', 'event-store-switch.mjs', 'legacy-files.mjs', 'atomic-write.mjs', 'void-events.mjs', 'passed.mjs',
+    'log-writes.mjs', 'local-date.mjs', 'event-store.mjs', 'event-store-switch.mjs', 'legacy-files.mjs', 'atomic-write.mjs', 'void-events.mjs', 'passed.mjs',
   ]) {
     copyFileSync(join(ROOT, 'lib', m), join(sb, 'lib', m));
   }

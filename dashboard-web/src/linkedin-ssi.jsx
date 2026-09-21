@@ -404,7 +404,7 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
   const ACTIVITY_TYPES = ["Commented", "Posted", "Messaged", "Responded", "Reposted", "Connection request"];
   const typeColor = (t) => ({ Commented: "var(--accent)", Posted: "var(--blue)", Messaged: "var(--cyan)", Responded: "var(--green)", Reposted: "var(--orange)", "Connection request": "var(--accent-2)" }[t] || "var(--text-mute)");
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = window.localToday();
   const [type, setType] = useState("Commented");
   const [date, setDate] = useState(today);
   const [influencerId, setInfluencerId] = useState("");
@@ -418,7 +418,7 @@ function ActivityView({ influencers, engagementLog, setEngagementLog }) {
 
   const reset = () => {
     setType("Commented");
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(window.localToday());
     setInfluencerId("");
     setTopic("");
     setMessage("");
@@ -1012,7 +1012,7 @@ function InfluencerDrawer({ influencer, influencers, engagementLog, setEngagemen
   // the current tab instead of snapping to Overview, so a multi-step flow (log their
   // reply, then draft yours) is not interrupted.
   const logToTimeline = async ({ actionType, topic, message, responseReceived, connectionMade, notes = "", statusUpdates = {}, stay = false }) => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = window.localToday();
     const res = await window.tjkMutate("/api/linkedin-ssi/engagement-log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

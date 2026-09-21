@@ -53,7 +53,7 @@ function logConnect({ name = '', source = '', id = null, date = null } = {}) {
       })();
       const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.connects) ? parsed.connects : []);
       const entry = {
-        date: date || new Date().toISOString().slice(0, 10),
+        date: date || localToday(),
         name: String(name).slice(0, 120),
         source: String(source).slice(0, 40),
       };
@@ -76,7 +76,7 @@ function logConnect({ name = '', source = '', id = null, date = null } = {}) {
   }
   const list = readConnects() || [];
   const entry = {
-    date: date || new Date().toISOString().slice(0, 10),
+    date: date || localToday(),
     name: String(name).slice(0, 120),
     source: String(source).slice(0, 40),
   };

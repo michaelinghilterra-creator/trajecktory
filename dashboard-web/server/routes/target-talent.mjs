@@ -1,13 +1,13 @@
 import express from 'express';
 import { DATA_DIR, ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
-import { advanceSequence, expectedNextChannel, pauseSequence, getSequence, getTemplate } from '../lib/sequences.mjs';
+import { advanceSequence, expectedNextChannel, pauseSequence, getSequence, getTemplate, toneForNextTouch } from '../lib/sequences.mjs';
 import { generateText, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine, findRelatedApps, matchByCompany, crossLogAppNums, TT_STATUSES } from '../lib/target-talent.mjs';
 import { buildReplyPrompt, lastReceived, collapseRe, lastSent, buildFollowupFromSentPrompt } from '../lib/reply-draft.mjs';
-import { appendFollowupRow, parseFollowupsMd } from '../lib/followups.mjs';
+import { appendFollowupRow, contactChannelBucket, parseFollowupsMd } from '../lib/followups.mjs';
 import { logConnect } from '../lib/connects.mjs';
 import { isLinkedInInvite } from '../lib/channels.mjs';
 import { setLinkedInStatus, markInvitePending, isLinkedInState, LINKEDIN_STATES } from '../lib/tt-linkedin.mjs';
@@ -23,16 +23,13 @@ import { INFLUENCE_TIERS, resolveInfluenceTier } from '../../../lib/influence-ti
 import { classifyInbound } from '../../../lib/inbound-classify.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
-import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { localToday, logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { localStamp } from '../../../lib/local-date.mjs';
 
-function sequenceTone(contactId) {
+function sequenceTone(contactId, channel) {
   try {
     const seq = getSequence('ta', contactId);
-    if (!seq || seq.completedAt || seq.paused) return '';
-    const tpl = getTemplate(seq.sequenceId);
-    if (!tpl) return '';
-    const touch = tpl.touches.find(t => t.step === seq.step + 1);
-    return touch?.tone || '';
+    return seq ? toneForNextTouch(seq, getTemplate(seq.sequenceId), channel) : '';
   } catch { return ''; }
 }
 
@@ -190,14 +187,17 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
     if (!subject || !body) return res.status(400).json({ error: 'subject and body required' });
 
     const messages = readTTCorrespondence(id);
-    const ts = timestamp || new Date().toISOString().replace('T', ' ').slice(0, 16);
+    // Local wall-clock, not UTC: every downstream `ts.slice(0, 10)` (sequence advance, connect log, invite
+    // pending) and the Date.parse readers treat this as the user's own date, and a UTC stamp made an
+    // evening send land on tomorrow.
+    const ts = timestamp || localStamp();
     const message = { timestamp: ts, direction, channel, subject: subject.trim(), body: body.trim() };
     messages.push(message);
     const isHumanReply = direction === 'Received' && classifyInbound(message) === 'human';
 
     // Auto-advance status — never regress. A Sent follow-up after a Reply
     // came in must not knock status back from Replied → Sent.
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const TT_STAGE = { 'Not Contacted': 0, '': 0, 'Drafted': 1, 'Sent': 2, 'Replied': 3, 'Meeting Scheduled': 4, 'Connected': 5 };
     const curStage = TT_STAGE[r.status || ''] ?? 0;
     let newStatus = r.status;
@@ -238,7 +238,12 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
           const expected = expectedNextChannel(active, template);
           const sentChannel = channel === 'LinkedIn' ? 'linkedin' : 'email';
           if (expected && (expected === 'either' || expected === sentChannel)) {
-            try { advanceSequence('ta', id, ts.slice(0, 10), sentChannel); } catch { /* template or entry vanished mid-request, safe to ignore */ }
+            const available = contactChannelBucket(r);
+            try {
+              advanceSequence('ta', id, ts.slice(0, 10), sentChannel, {
+                available: { email: available.hasEmail, linkedin: available.hasLinkedIn },
+              });
+            } catch { /* template or entry vanished mid-request, safe to ignore */ }
           }
         }
       }
@@ -312,18 +317,19 @@ export function buildTargetTalentAugustPrompt(packet, {
   stageGuidance = '', sequenceTone: tone = '', threadState = '',
 } = {}) {
   const staged = !!interviewStage && interviewStage !== 'general';
+  const toneLine = tone ? `SEQUENCE TONE: ${tone}` : '';
   if (channel === 'email') {
-    return staged
-      ? buildAugustPromptWithGuidance(packet, { guidance: [stageGuidance] })
+    return staged || toneLine
+      ? buildAugustPromptWithGuidance(packet, { guidance: [staged ? stageGuidance : '', toneLine] })
       : buildAugustPrompt(packet);
   }
   const threaded = mode === 'reply' || mode === 'followup-sent';
-  if (!threaded && !staged) return buildAugustPrompt(packet);
+  if (!threaded && !staged && !toneLine) return buildAugustPrompt(packet);
   return buildAugustPromptWithGuidance(packet, {
     messageIntent: threaded ? intentGuidance : '',
     guidance: [
       staged ? stageGuidance : '',
-      tone ? `SEQUENCE TONE: ${tone}` : '',
+      toneLine,
       threadState ? `THREAD STATE: ${threadState}` : '',
     ],
   });
@@ -384,7 +390,7 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
       const packet = buildPacket({ source: 'ta', id, kind: 'ta_dm' });
       const prompt = buildTargetTalentAugustPrompt(packet, {
         channel: 'linkedin', mode, interviewStage, intentGuidance, stageGuidance,
-        sequenceTone: sequenceTone(id), threadState: thread.stateLine,
+        sequenceTone: sequenceTone(id, 'linkedin'), threadState: thread.stateLine,
       });
       const result = parseDraftText(await generateText(prompt, {
         model: draftModel(), maxTokens: 900, label: `draft:${packet.surfaceId}`,
@@ -469,7 +475,7 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
 
     const packet = buildPacket({ source: 'ta', id, kind: 'ta_email' });
     const prompt = buildTargetTalentAugustPrompt(packet, {
-      channel: 'email', interviewStage, stageGuidance,
+      channel: 'email', interviewStage, stageGuidance, sequenceTone: sequenceTone(id, 'email'),
     });
     const result = parseDraftText(await generateText(prompt, {
       model: draftModel(), maxTokens: 900, label: `draft:${packet.surfaceId}`,

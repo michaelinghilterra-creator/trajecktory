@@ -8,6 +8,7 @@ import {
   makeApplyAnchor,
   makeFurthestIdx,
 } from './statuses.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 const DAY_MS = 86400000;
 const pct = (numerator, denominator) => denominator
@@ -17,7 +18,7 @@ const pct = (numerator, denominator) => denominator
 function toYmd(today) {
   if (typeof today === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(today)) return today;
   const date = today instanceof Date ? today : new Date(today);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+  return Number.isNaN(date.getTime()) ? null : localToday(date);
 }
 
 function daysBetween(from, to) {

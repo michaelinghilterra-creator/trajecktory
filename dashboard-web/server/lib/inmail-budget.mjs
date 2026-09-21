@@ -11,6 +11,7 @@
 import fs from 'fs';
 import path from 'path';
 import { DATA_DIR } from '../config.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 // DATA_DIR, never ROOT_DIR + 'data'. See tests/data-dir-sandbox.test.mjs.
 const FILE = path.join(DATA_DIR, 'inmail-usage.json');
@@ -18,7 +19,7 @@ const ALLOTMENT = 15;   // LinkedIn Premium monthly default
 const CAP = 99;         // generous ceiling for reconcile (rollover accumulates)
 
 const thisMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localToday();
 
 function read() { try { return JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return null; } }
 function write(o) { try { fs.mkdirSync(path.dirname(FILE), { recursive: true }); fs.writeFileSync(FILE, JSON.stringify(o, null, 2)); } catch { /* best effort */ } }

@@ -29,6 +29,7 @@ import { buildCompanyIndex, addCompanyToIndex, findKnownCompany, buildPortalsEnt
 import { canonicalUrl } from './lib/identity.mjs';
 import { sanitizeCell } from './lib/sanitize-cell.mjs';
 import { buildTitleFilter } from './lib/scan-core.mjs';
+import { localToday } from './lib/local-date.mjs';
 
 const DRY_RUN   = process.argv.includes('--dry-run');
 const VERBOSE   = process.argv.includes('--verbose');
@@ -316,7 +317,7 @@ async function searchMuse(level, titleOk, seenUrls) {
 // ─── Main ───────────────────────────────────────────────────────────
 
 async function main() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const activePhases = ['Phase 1 (pipeline registration)', BRAVE_KEY && 'Phase 2 (Brave Search)', MUSE_KEY && 'Phase 3 (Muse API)'].filter(Boolean);
   console.log(`\n🔍 discover.mjs${DRY_RUN ? ' [dry-run]' : ''} — ${today}`);
   console.log(`   Active: ${activePhases.join(', ')}\n`);

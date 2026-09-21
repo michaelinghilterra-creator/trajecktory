@@ -4,6 +4,7 @@ import path from 'path';
 import { ROOT_DIR, DATA_DIR, APPS_MD } from '../config.mjs';
 import { canonicalUrl, buildDecidedIndex, findDecided, buildDecidedRoleIndex, findDecidedRole } from '../../../lib/identity.mjs';
 import { markDone, sourceUrlOf } from '../../../lib/pipeline.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 export const router = express.Router();
 
@@ -164,7 +165,7 @@ router.post('/api/triage/dismiss', (req, res) => {
     if (!loadDismissed().has(canonicalUrl(url))) {
       const file = DISMISSED_TSV();
       const header = fs.existsSync(file) ? '' : 'url\tdate\n';
-      const date = new Date().toISOString().slice(0, 10);
+      const date = localToday();
       fs.appendFileSync(file, `${header}${url}\t${date}\n`, 'utf8');
     }
     checkOffPipelineRow(url); // stop the dismissed role from re-clogging the triage queue

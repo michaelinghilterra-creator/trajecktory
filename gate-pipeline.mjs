@@ -25,6 +25,7 @@ import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness, workdaySiteFro
 import { isSafeLivenessUrl } from './lib/safe-url.mjs';
 import { buildDecidedIndex, findDecided, buildActiveRoleIndex, findActiveRepost } from './lib/identity.mjs';
 import { appendGateHistory } from './lib/gate-history.mjs';
+import { localToday } from './lib/local-date.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(__dirname, 'data/pipeline.md');
@@ -33,7 +34,7 @@ const APPS = join(__dirname, 'data/applications.md');
 const MERGE_DROPS = join(__dirname, 'data/merge-drops.tsv');
 const GATE_HISTORY = join(__dirname, 'data/gate-history.tsv');
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const todayISO = () => localToday();
 
 // Append repost-suppression rows to the audit log (header written once). A
 // suppression the user cannot inspect is the exact failure this guard fixes, so

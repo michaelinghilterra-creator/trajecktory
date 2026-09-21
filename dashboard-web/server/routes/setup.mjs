@@ -7,6 +7,7 @@ import { modelsState, validateSetting } from '../lib/pricing.mjs';
 import { checkWorkspaceTrust, trustWorkspace } from '../lib/workspace-trust.mjs';
 import { APPLICATIONS_TEMPLATE_CSV, CONTACTS_TEMPLATE_CSV } from '../lib/csv.mjs';
 import { record as recordActivation, readActivation, summarizeActivation, setActivationEnabled } from '../lib/activation.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 export const router = express.Router();
 
@@ -656,7 +657,7 @@ function portalsPath() { return path.join(SETUP_ROOT, 'portals.yml'); }
 function backupPortalsOncePerDay() {
   const src = portalsPath();
   if (!fs.existsSync(src)) return;
-  const day = new Date().toISOString().slice(0, 10);
+  const day = localToday();
   const dest = `${src}.bak-${day}-dashboard`;
   if (!fs.existsSync(dest)) fs.copyFileSync(src, dest);
 }

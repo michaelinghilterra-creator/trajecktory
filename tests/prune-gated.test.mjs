@@ -42,7 +42,7 @@ function runCase({ text, gateRows, scanText, args = [], histories = true }) {
   mkdirSync(dataDir, { recursive: true });
   mkdirSync(libDir, { recursive: true });
   copyFileSync(join(ROOT, 'prune-gated.mjs'), join(sandbox, 'prune-gated.mjs'));
-  for (const module of ['identity.mjs', 'pipeline.mjs', 'tracker.mjs']) {
+  for (const module of ['identity.mjs', 'local-date.mjs', 'pipeline.mjs', 'tracker.mjs']) {
     copyFileSync(join(ROOT, 'lib', module), join(libDir, module));
   }
   writeFileSync(pipelinePath, text, 'utf8');

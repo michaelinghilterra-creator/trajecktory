@@ -13,6 +13,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { localToday } from './lib/local-date.mjs';
 
 const SCAN_HISTORY_PATH = 'data/scan-history.tsv';
 
@@ -59,7 +60,7 @@ const remaining = rows.filter(line => {
   return true;
 });
 
-console.log(`Cutoff: ${new Date(cutoffMs).toISOString().slice(0, 10)} (${days} days ago)`);
+console.log(`Cutoff: ${localToday(new Date(cutoffMs))} (${days} days ago)`);
 console.log(`Rows before: ${rows.filter(l => l.trim()).length}`);
 console.log(`Pruned:      ${pruned}`);
 console.log(`Kept:        ${kept}`);

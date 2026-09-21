@@ -15,6 +15,7 @@ import { mergeStakeholderAdditions, validateStakeholder, knownDomainKey } from '
 import { readReconcileDismissed, addReconcileDismissed } from '../lib/sidecars.mjs';
 import { readAttempts, recordAttempt, writeAttempts } from '../lib/contact-search-attempts.mjs';
 import { currentBatch } from '../lib/pricing.mjs';
+import { startCadences } from '../lib/cadence-start.mjs';
 
 export const router = express.Router();
 
@@ -178,6 +179,14 @@ async function verifyEmailsInBackground(written, toWrite, hkey, mkey) {
       budget -= 1;
       if (found.found && found.verify) updateTTLine(written[i].id, { email: setVerifyTag(found.email, found.verify) });
     } catch { /* leave without an address; the LinkedIn fallback covers it */ }
+  }
+  if (written.length) {
+    try {
+      const cadence = startCadences({ scope: { contactIds: written.map(row => row.id) } });
+      if (cadence.error) console.warn(`[cadence] failed after email verification: ${cadence.error}`);
+    } catch (err) {
+      console.warn(`[cadence] failed after email verification: ${err.message}`);
+    }
   }
 }
 
@@ -603,6 +612,14 @@ router.post('/api/tt-reconcile/bulk-add', async (req, res) => {
     if (toWrite.length) setNewBaselineId(maxTTId());
     const written = appendTTRows(toWrite);   // [{id}], in the same order as toWrite
     if (written.length) addReconcileDismissed(toWrite.map(dismissKey));
+    if (written.length) {
+      try {
+        const cadence = startCadences({ scope: { contactIds: written.map(row => row.id) } });
+        if (cadence.error) console.warn(`[cadence] failed after contact add: ${cadence.error}`);
+      } catch (err) {
+        console.warn(`[cadence] failed after contact add: ${err.message}`);
+      }
+    }
 
     const hkey = loadEnvKey('HUNTER_API_KEY');
     const mkey = loadEnvKey('MILLIONVERIFIER_API_KEY');
@@ -636,6 +653,14 @@ router.post('/api/tt-reconcile/bulk-import', (req, res) => {
     const existingKeys = new Set(existing.map(r => `${normCompany(r.company)}|${(r.last || '').toLowerCase()}|${(r.first || '').toLowerCase()}`));
     const toWrite = rows.filter(c => !existingKeys.has(`${normCompany(c.company)}|${(c.last || '').toLowerCase()}|${(c.first || '').toLowerCase()}`));
     const written = appendTTRows(toWrite);
+    if (written.length) {
+      try {
+        const cadence = startCadences({ scope: { contactIds: written.map(row => row.id) } });
+        if (cadence.error) console.warn(`[cadence] failed after contact import: ${cadence.error}`);
+      } catch (err) {
+        console.warn(`[cadence] failed after contact import: ${err.message}`);
+      }
+    }
     res.json({ ok: true, parsed: rows.length, imported: written.length, duplicates: rows.length - written.length });
   } catch (err) {
     res.status(500).json({ error: err.message });

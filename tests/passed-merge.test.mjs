@@ -22,7 +22,7 @@ mkdirSync(join(sandbox, 'templates'), { recursive: true });
 mkdirSync(join(sandbox, 'reports'), { recursive: true });
 mkdirSync(join(sandbox, 'dashboard-web/server'), { recursive: true });
 copyFileSync(join(ROOT, 'merge-tracker.mjs'), join(sandbox, 'merge-tracker.mjs'));
-for (const m of ['discard.mjs', 'tracker.mjs', 'scan-core.mjs', 'identity.mjs', 'pipeline.mjs', 'log-writes.mjs', 'event-store.mjs', 'event-store-switch.mjs', 'legacy-files.mjs', 'atomic-write.mjs', 'void-events.mjs', 'passed.mjs']) {
+for (const m of ['discard.mjs', 'tracker.mjs', 'scan-core.mjs', 'identity.mjs', 'pipeline.mjs', 'log-writes.mjs', 'local-date.mjs', 'event-store.mjs', 'event-store-switch.mjs', 'legacy-files.mjs', 'atomic-write.mjs', 'void-events.mjs', 'passed.mjs']) {
   copyFileSync(join(ROOT, 'lib', m), join(sandbox, 'lib', m));
 }
 copyFileSync(join(ROOT, 'templates/states.yml'), join(sandbox, 'templates/states.yml'));

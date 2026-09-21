@@ -4,6 +4,7 @@ import { parseApplicationsMd } from '../lib/applications.mjs';
 import { readAppNotes, addNote } from '../lib/notes.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
 import { pendingDebriefs, debriefTemplate, formatDebriefNote, isDebriefFor } from '../lib/debrief.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 export const router = express.Router();
 
@@ -86,7 +87,7 @@ router.get('/api/interview/debriefs/template', (req, res) => {
       const app = parseApplicationsMd().find(a => a.id === id);
       if (app) { company = app.company; role = app.role; }
     }
-    const date = new Date().toISOString().slice(0, 10);
+    const date = localToday();
     res.json({ stage, template: debriefTemplate(stage, { company, role, date }) });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -105,7 +106,7 @@ router.post('/api/interview/debriefs/:id', (req, res) => {
       return res.status(400).json({ error: `Provide an interview stage (one of: ${INTERVIEW_STAGES.join(', ')}). Got: ${stage}` });
     }
     const app = parseApplicationsMd().find(a => a.id === id);
-    const date = new Date().toISOString().slice(0, 10);
+    const date = localToday();
     let note;
     if (text && String(text).trim()) {
       note = isDebriefFor(text, stage)

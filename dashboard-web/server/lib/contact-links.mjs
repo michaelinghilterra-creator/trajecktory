@@ -75,14 +75,14 @@ export function readPins() {
 
 export function pinTogether(refA, refB, note = '') {
   return writePins(
-    pins => { pins[refA] = { with: refB, by: 'manual', at: new Date().toISOString().slice(0, 10), note: String(note || '') }; },
+    pins => { pins[refA] = { with: refB, by: 'manual', at: localToday(), note: String(note || '') }; },
     { type: 'people_merged', refs: [refA, refB], note },
   );
 }
 
 export function pinAlone(ref) {
   return writePins(
-    pins => { pins[ref] = { alone: true, at: new Date().toISOString().slice(0, 10) }; },
+    pins => { pins[ref] = { alone: true, at: localToday() }; },
     { type: 'people_kept_separate', refs: [ref], note: '' },
   );
 }

@@ -21,6 +21,8 @@ import { resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finishOptionsFor, wrapReferralDraft } from '../../../lib/outreach-voice.mjs';
 import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
+import { localStamp } from '../../../lib/local-date.mjs';
 
 export const router = express.Router();
 
@@ -308,8 +310,8 @@ router.post('/api/referrals/:id/correspondence', (req, res) => {
     }
     const ref = parseReferralsMd().find(r => r.id === id);
     if (!ref) return res.status(404).json({ error: 'Referral not found' });
-    const today = new Date().toISOString().slice(0, 10);
-    const stamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    const today = localToday();
+    const stamp = localStamp();
     const entry = { timestamp: stamp, direction, channel, subject: String(subject || '(no subject)').trim() || '(no subject)', body: String(body || '').trim() || '(no body)' };
     const link = resolveReferralLink(ref, parseTargetTalentMd());
     const save = () => {

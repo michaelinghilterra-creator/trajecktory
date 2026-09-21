@@ -5,7 +5,7 @@
 // so you see at a glance whether a touch is overdue, due now, or whether
 // it's time to give up entirely.
 
-const { useState: useStateF, useEffect: useEffectF, useMemo: useMemoF } = React;
+const { useState: useStateF, useEffect: useEffectF, useMemo: useMemoF, useRef: useRefF } = React;
 
 const FOLLOWUP_TIER_LABELS = Object.freeze({
   hm: 'Hiring manager',
@@ -326,6 +326,23 @@ window.FollowupsTab = function FollowupsTab({ onAction, openTaContact, search, a
       .catch(() => setLoading(false));
   };
   useEffectF(() => { load(); }, []);
+
+  // Background refresh with no spinner: a sequence step that comes due at midnight, or a sequence advanced
+  // from another tab, should appear without a manual reload. Refetch when the tab becomes visible again
+  // after 5 minutes away, and every 10 minutes while it stays visible. Its own throttle, not the Gmail check's.
+  const lastLoadedRef = useRefF(Date.now());
+  useEffectF(() => {
+    const quiet = () => {
+      lastLoadedRef.current = Date.now();
+      fetch('/api/followups/stale').then(r => r.json()).then(d => { if (d && !d.error) setData(d); }).catch(() => {});
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastLoadedRef.current > 5 * 60 * 1000) quiet();
+    };
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') quiet(); }, 10 * 60 * 1000);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
+  }, []);
 
   // Contacts the send gate is withholding because their address was never checked.
   // A short queue is ambiguous on its own: it can mean a quiet week or a missing

@@ -3,6 +3,7 @@ import fs from 'fs';
 import { render as renderObsidianCompanion, extractJsonFromSourceReport } from '../../../scripts/render-obsidian-companion.mjs';
 import { getObsidianAppliedFolder } from './profile.mjs';
 import { resolveReportPath } from './safe-path.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 // Render a schema-v1 source report into clean Obsidian Markdown. Falls back to
 // the raw report text when the report has no v1 frontmatter (legacy reports).
@@ -73,7 +74,7 @@ async function pushObsidianNote({ row, appliedDate, reportText, fallbackHeader }
 
   const ymd = (appliedDate && /^\d{4}-\d{2}-\d{2}$/.test(appliedDate))
     ? appliedDate
-    : new Date().toISOString().slice(0, 10);
+    : localToday();
   const [y, m, d] = ymd.split('-');
   const dateMDY = `${m}-${d}-${y}`;
   const dateFormal = new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-US', {

@@ -213,7 +213,7 @@ if (idsList) {
   const header = [
     `# Applications Archive — ${archiveTag}`,
     '',
-    `Archived from applications.md on ${new Date().toISOString().slice(0,10)}.`,
+    `Archived from applications.md on ${localToday()}.`,
     `${move.length} entries archived by ID (surgical archive).`,
     `Restore with: node archive-discarded.mjs --restore-tag ${archiveTag}`,
     '',
@@ -290,7 +290,7 @@ const archiveLabel = noscore ? 'SKIP/Discarded N/A-score scanner noise' : 'Disca
 const header = [
   `# Applications Archive — ${date} (${archiveLabel})`,
   '',
-  `Archived from applications.md on ${new Date().toISOString().slice(0,10)}.`,
+  `Archived from applications.md on ${localToday()}.`,
   `These ${move.length} entries were noise from ${date} (scanner hits never worth pursuing).`,
   `Restore with: node archive-discarded.mjs --restore ${date}${noscore ? ' --noscore' : ''}`,
   '',

@@ -26,6 +26,7 @@ import path from 'path';
 import { ROOT_DIR, DATA_DIR } from '../config.mjs';
 import { INFLUENCE_RANK } from '../../../lib/influence-tier.mjs';
 import { normalizeForMatch } from '../../../lib/scan-core.mjs';
+import { localToday } from '../../../lib/log-writes.mjs';
 
 const SUGGESTED_SEQUENCE_IDS = Object.freeze({
   principal: 'cold-intro-principal',
@@ -126,8 +127,8 @@ function seqKey(source, id) { return `${source}:${id}`; }
 
 // Compute the calendar date N days from `fromDate` (YYYY-MM-DD).
 function addDays(fromDate, n) {
-  const d = new Date(fromDate + 'T00:00:00');
-  d.setDate(d.getDate() + n);
+  const d = new Date(fromDate + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
@@ -156,7 +157,7 @@ function startSequence(source, id, sequenceId, startDate) {
   const template = templates.find(t => t.id === sequenceId);
   if (!template) throw new Error(`Unknown sequence: ${sequenceId}`);
 
-  const today = startDate || new Date().toISOString().slice(0, 10);
+  const today = startDate || localToday();
   const firstTouch = template.touches[0];
   const nextDue = addDays(today, firstTouch?.dayOffset ?? 0);
 
@@ -181,7 +182,7 @@ function startSequence(source, id, sequenceId, startDate) {
 
 // Record that step N was completed (a draft was sent). Advances the clock to the
 // next step's due date, or marks completedAt if the sequence is done.
-function advanceSequence(source, id, date, usedChannel) {
+function advanceSequence(source, id, date, usedChannel, opts) {
   const key = seqKey(source, id);
   const data = readSequences();
   const entry = data[key];
@@ -190,9 +191,8 @@ function advanceSequence(source, id, date, usedChannel) {
   const template = templates.find(t => t.id === entry.sequenceId);
   if (!template) throw new Error(`Template not found: ${entry.sequenceId}`);
 
-  const today = date || new Date().toISOString().slice(0, 10);
-  const nextStep = entry.step + 1;
-  const nextTouch = template.touches[nextStep];
+  const today = date || localToday();
+  let nextStep = entry.step + 1;
 
   const normalizedUsedChannel = String(usedChannel || '').toLowerCase();
   if (entry.step === 0 && template.channel === 'mixed'
@@ -200,12 +200,36 @@ function advanceSequence(source, id, date, usedChannel) {
     entry.firstChannel = normalizedUsedChannel;
   }
 
+  if (entry.step === 0 && template.offsetsFrom === 'firstTouch') {
+    entry.anchorDate = today;
+  }
+
   entry.step = nextStep;
   entry.paused = false;
   entry.pausedAt = null;
 
+  if (opts?.available && template.touches[nextStep]) {
+    const expected = expectedNextChannel(entry, template);
+    if (['email', 'linkedin'].includes(expected) && !opts.available[expected]) {
+      for (let candidate = nextStep + 1; candidate < template.touches.length; candidate++) {
+        const candidateEntry = { ...entry, step: candidate };
+        const candidateChannel = expectedNextChannel(candidateEntry, template);
+        if (['email', 'linkedin'].includes(candidateChannel) && opts.available[candidateChannel]) {
+          nextStep = candidate;
+          entry.step = candidate;
+          break;
+        }
+      }
+    }
+  }
+
+  const nextTouch = template.touches[nextStep];
+
   if (nextTouch) {
-    entry.nextStepDue = addDays(today, nextTouch.dayOffset);
+    const dueFrom = template.offsetsFrom === 'firstTouch' && entry.anchorDate
+      ? entry.anchorDate
+      : today;
+    entry.nextStepDue = addDays(dueFrom, nextTouch.dayOffset);
   } else {
     entry.completedAt = today;
     entry.nextStepDue = null;
@@ -222,7 +246,7 @@ function pauseSequence(source, id, date) {
   const data = readSequences();
   const entry = data[key];
   if (!entry || entry.completedAt) return null;
-  const today = date || new Date().toISOString().slice(0, 10);
+  const today = date || localToday();
   entry.paused = true;
   entry.pausedAt = today;
   data[key] = entry;
@@ -237,7 +261,7 @@ function completeSequence(source, id, date) {
   const data = readSequences();
   const entry = data[key];
   if (!entry || entry.completedAt) return null;
-  const today = date || new Date().toISOString().slice(0, 10);
+  const today = date || localToday();
   entry.paused = false;
   entry.pausedAt = null;
   entry.completedAt = today;
@@ -286,8 +310,22 @@ function getAllTemplates() {
   return loadTemplates();
 }
 
+// Tone guidance for the sequence's next touch when a draft on `channel` ('linkedin' or 'email') matches what
+// that touch expects. Empty when there is no live sequence, or when the next touch expects the OTHER specific
+// channel (the draft is off-sequence, so the touch's tone does not apply). A touch may carry a per-channel
+// `tones` map; `tone` is the fallback.
+function toneForNextTouch(entry, template, channel) {
+  if (!entry || entry.completedAt || entry.paused || !template) return '';
+  const touch = (template.touches || []).find((t) => t.step === entry.step + 1);
+  if (!touch) return '';
+  const want = String(channel || '').toLowerCase();
+  const expected = expectedNextChannel(entry, template);
+  if (expected && expected !== 'either' && want && expected !== want) return '';
+  return touch.tones?.[want] || touch.tone || '';
+}
+
 export {
   startSequence, advanceSequence, pauseSequence, completeSequence, resumeSequence,
-  expectedNextChannel,
-  getSequence, getActiveSequences, getTemplate, getAllTemplates,
+  expectedNextChannel, toneForNextTouch,
+  readSequences, getSequence, getActiveSequences, getTemplate, getAllTemplates,
 };

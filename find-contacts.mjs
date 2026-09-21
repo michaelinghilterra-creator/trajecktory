@@ -109,7 +109,7 @@ export async function findAndVerify(company, first, last, hkey, mkey, domain) {
   }
   return {
     found: true, email: cand.email, score: cand.score,
-    verify: { state: verdict.state, source: 'mv', date: new Date().toISOString().slice(0, 10), score: verdict.score },
+    verify: { state: verdict.state, source: 'mv', date: localToday(), score: verdict.score },
   };
 }
 

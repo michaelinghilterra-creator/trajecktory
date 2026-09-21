@@ -220,6 +220,8 @@ window.appReached = (app, stage) => {
 window.appResponded = (app) => window.appReached(app, "Phone Screen") || app.status === "Rejected";
 
 window.TODAY = new Date();
+// The user's own calendar date. Never toISOString().slice(0, 10): that is the UTC date, tomorrow in the US evening.
+window.localToday = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 window.daysAgo = (iso) => Math.floor((window.TODAY - new Date(iso)) / 86400000);
 
 // Keyboard-activate helper for elements that act as buttons but cannot BE a
