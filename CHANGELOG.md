@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.8.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.7.0...v4.8.0) (2026-09-21)
+
+
+### Features
+
+* **outreach:** start the application cadence automatically and use the local date everywhere ([#382](https://github.com/michaelinghilterra-creator/trajecktory/issues/382)) ([8380c5e](https://github.com/michaelinghilterra-creator/trajecktory/commit/8380c5e033f78a6971c9a0e98c8c5c2527e404be))
+
 ## [4.7.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.6.0...v4.7.0) (2026-09-21)
 
 
