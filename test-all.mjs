@@ -643,6 +643,7 @@ for (const suite of [
   'tests/prune-gated.test.mjs',
   'tests/followups-auto-refresh.test.mjs',
   'tests/sequence-tone-wiring.test.mjs',
+  'tests/sequence-tone-route.test.mjs',
   'tests/sequence-tone.test.mjs',
   'tests/local-dates-decisions.test.mjs',
   'tests/interview-stage.test.mjs',

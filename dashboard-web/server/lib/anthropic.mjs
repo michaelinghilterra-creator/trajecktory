@@ -124,6 +124,10 @@ export async function generateText(prompt, opts = {}) {
   // TJK_FAKE_LLM_SEQ accepts a JSON array of strings and returns them in call order;
   // once exhausted it falls back to TJK_FAKE_LLM_TEXT. Sequence state resets per process.
   if (process.env.TJK_FAKE_LLM || process.env.TJK_FAKE_LLM_SEQ) {
+    // Optional capture of the prompts a route sent, one JSON line each, so a test can assert on what reached the model.
+    if (process.env.TJK_FAKE_LLM_PROMPT_LOG) {
+      try { fs.appendFileSync(process.env.TJK_FAKE_LLM_PROMPT_LOG, `${JSON.stringify({ label: opts.label || '', prompt })}\n`); } catch { /* capture is best effort */ }
+    }
     return nextFakeLlmResponse();
   }
   const { system, model, maxTokens = 1024, tools, label, ...rest } = opts;
