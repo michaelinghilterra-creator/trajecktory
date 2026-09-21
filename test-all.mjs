@@ -693,6 +693,8 @@ for (const suite of [
     pass(`${suite} passed`);
   } catch (e) {
     fail(`${suite} FAILED — run "node ${suite}" for details`);
+    const out = `${e.stdout || ''}${e.stderr || ''}`.trim();
+    if (out) console.log(out.split('\n').map(line => `    ${line}`).join('\n'));
   }
 }
 
