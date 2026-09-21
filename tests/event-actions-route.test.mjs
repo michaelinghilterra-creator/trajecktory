@@ -3,13 +3,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeSandbox } from './helpers/sandbox.mjs';
+import { localToday } from '../lib/log-writes.mjs';
 
 const sandbox = makeSandbox('event-actions-route');
 process.env.TJK_DATA_DIR = sandbox;
 
-const centralToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+// The route under test stamps dates with lib/log-writes.mjs's localToday, which reads the
+// machine's own local clock (getFullYear/getMonth/getDate), not any fixed IANA zone. Anchoring
+// this test to a hardcoded 'America/Chicago' "today" broke on any machine whose local date
+// differs from Central's right now - true for part of every day on a UTC CI runner - so this
+// uses the same function the route itself uses instead of a second, drifting notion of "today".
 const daysBack = (n) => {
-  const [y, m, d] = centralToday().split('-').map(Number);
+  const [y, m, d] = localToday().split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d - n)).toISOString().slice(0, 10);
 };
 
@@ -91,7 +96,7 @@ try {
   r = await post('/api/interviews/confirm', { appId: 900001, stage: 'Phone Screen', heldOn: daysBack(8) });
   check(r.status === 200 && r.body.ok === true && r.body.event_ids.length === 1, 'confirming records one event');
   const record = readInterviewRecords(sandbox).get(interviewKey(900001, 'Phone Screen'));
-  check(record && record.held_on === daysBack(8) && record.evidence.length === 1 && record.evidence[0].kind === 'owner_confirmation' && record.evidence[0].confirmed_on === centralToday(), 'the record holds the held day and an owner confirmation dated today');
+  check(record && record.held_on === daysBack(8) && record.evidence.length === 1 && record.evidence[0].kind === 'owner_confirmation' && record.evidence[0].confirmed_on === localToday(), 'the record holds the held day and an owner confirmation dated today');
   check(interviewRows().length === 1 && interviewRows()[0].evidenced === true && interviewRows()[0].date === daysBack(8), 'the log now counts the line, dated by the day it was held');
   const eventId = r.body.event_ids[0];
 
