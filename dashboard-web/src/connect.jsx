@@ -981,7 +981,7 @@ window.EmailQueueTab = function EmailQueueTab({ toast }) {
 // you're on and when the next is due. Each step is a DRAFT you approve — nothing
 // auto-sends (HITL). Reads GET /api/sequences/:source/:id and the template library,
 // and drives start / advance / pause / resume. Usable from any contact.
-window.SequencePanel = function SequencePanel({ source, id, toast }) {
+window.SequencePanel = function SequencePanel({ source, id, toast, refreshKey }) {
   const [state, setState] = useStateCq(undefined);   // undefined = loading, null = none, obj = active
   const [templates, setTemplates] = useStateCq(null);
   const [pick, setPick] = useStateCq('');
@@ -998,7 +998,7 @@ window.SequencePanel = function SequencePanel({ source, id, toast }) {
     fetch('/api/sequences/templates').then(r => r.json())
       .then(d => { const t = (d && d.templates) || []; setTemplates(t); if (t[0]) setPick(t[0].id); })
       .catch(() => setTemplates([]));
-  }, [source, id]);
+  }, [source, id, refreshKey]);
 
   const post = (path, body) => {
     setBusy(true); setErr(null);

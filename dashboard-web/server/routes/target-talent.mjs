@@ -1,7 +1,7 @@
 import express from 'express';
 import { DATA_DIR, ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
-import { pauseSequence, getSequence, getTemplate } from '../lib/sequences.mjs';
+import { advanceSequence, expectedNextChannel, pauseSequence, getSequence, getTemplate } from '../lib/sequences.mjs';
 import { generateText, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
@@ -230,6 +230,17 @@ router.post('/api/target-talent/:id/correspondence', (req, res) => {
       // after the contact row update, before any connect or follow-up writes.
       if (isHumanReply) {
         try { pauseSequence('ta', id, today); } catch { /* no active sequence, safe to ignore */ }
+      }
+      if (direction === 'Sent') {
+        const active = getSequence('ta', id);
+        if (active && !active.paused && !active.completedAt) {
+          const template = getTemplate(active.sequenceId);
+          const expected = expectedNextChannel(active, template);
+          const sentChannel = channel === 'LinkedIn' ? 'linkedin' : 'email';
+          if (expected && (expected === 'either' || expected === sentChannel)) {
+            try { advanceSequence('ta', id, ts.slice(0, 10), sentChannel); } catch { /* template or entry vanished mid-request, safe to ignore */ }
+          }
+        }
       }
       if (direction === 'Sent' && (channel === 'LinkedIn' || isLinkedInInvite(subject))) {
         logConnect({ name: `${r.first || ''} ${r.last || ''}`.trim(), source: 'ta', id, date: ts.slice(0, 10) });

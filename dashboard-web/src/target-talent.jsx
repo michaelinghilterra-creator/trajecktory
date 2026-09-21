@@ -725,6 +725,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
   const gradeGenerationRef = useRef(0);
   const sideBySideTaRef = useRef(null);
   const [draftBlock, setDraftBlock] = useState(null);
+  const [sequenceRefreshKey, setSequenceRefreshKey] = useState(0);
   // Which surface the draft is for. Email drafts assemble a greeting + signature;
   // LinkedIn notes are short and stand alone (no signature, no "Hi Name,").
   const [outChannel, setOutChannel] = useState("Email");
@@ -1064,6 +1065,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         improveAbortRef.current?.abort();
         gradeAbortRef.current?.abort();
         gradeGenerationRef.current++;
+        if (msg.direction === "Sent") setSequenceRefreshKey(key => key + 1);
         load(); onUpdate?.(); setLogModal(null); showDraft(null); setProposedDraft(null);
       });
   };
@@ -1271,7 +1273,7 @@ function ContactPanel({ id, onClose, onUpdate, embedded = false, cfg = CONTACT_C
         {cfg.features.sequence && (
           <div className="ds-section">
             <div className="ds-label"><TIcon d={TI.spark} size={12} /> Outreach sequence</div>
-            {window.SequencePanel && <window.SequencePanel source={cfg.sequenceSource} id={data.id} toast={typeof toast !== "undefined" ? toast : undefined} />}
+            {window.SequencePanel && <window.SequencePanel source={cfg.sequenceSource} id={data.id} toast={typeof toast !== "undefined" ? toast : undefined} refreshKey={sequenceRefreshKey} />}
           </div>
         )}
         {/* Related apps */}

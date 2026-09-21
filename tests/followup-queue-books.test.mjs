@@ -19,6 +19,7 @@ const verified = { state: 'ok' };
 const ta = (id, first, last, company, extra = {}) => ({ id, first, last, company, title: 'Recruiter', status: 'Not Contacted', linkedin: `https://linkedin.com/in/${first.toLowerCase()}-${last.toLowerCase()}`, email: '', verified: { state: 'unverified' }, ...extra });
 const referral = (id, name, status, extra = {}) => ({ id, name, status, where: 'No Requisition Inc', target: 'Operator', linkedin: `https://linkedin.com/in/${name.toLowerCase().replace(/\s+/g, '-')}`, email: '', verified: { state: 'unverified' }, ...extra });
 const old = '2020-01-02';
+const today = new Date().toLocaleDateString('en-CA');
 
 console.log('followup-queue-books.test.mjs');
 
@@ -87,7 +88,27 @@ check(unknownRow && !Object.hasOwn(unknownRow, 'linkedinStatus'), 'contacts abse
 fs.writeFileSync(path.join(tmp, 'target-talent.md'), [
   '| 30 | Live Co | Invite | Pending |  | Recruiter |  |  |  |  |  | https://linkedin.com/in/pending-invite | Sent | 2020-01-02 |  |  |',
   '| 32 | Live Co | State | Unknown |  | Recruiter |  |  |  |  |  | https://linkedin.com/in/unknown-state | Sent | 2020-01-02 |  |  |',
+  `| 33 | Live Co | Channel | Dual |  | Recruiter |  |  |  |  | dual@example.test [v:ok:test:${today}:90] | https://linkedin.com/in/dual-channel | Sent | 2020-01-02 |  |  |`,
 ].join('\n'));
+fs.writeFileSync(path.join(tmp, 'contact-sequences.json'), JSON.stringify({
+  'ta:32': {
+    sequenceId: 'application-day-0-1-5-12',
+    startedAt: old,
+    step: 0,
+    nextStepDue: old,
+    paused: false,
+    completedAt: null,
+  },
+  'ta:33': {
+    sequenceId: 'application-day-0-1-5-12',
+    startedAt: old,
+    step: 2,
+    nextStepDue: old,
+    paused: false,
+    completedAt: null,
+    firstChannel: 'linkedin',
+  },
+}));
 queue = computeContactFollowups({
   taRows: [
     { ...pendingTa, status: 'Sent', lastTouch: old },
@@ -96,10 +117,15 @@ queue = computeContactFollowups({
   referralRows: [], influencers: [],
   apps: [{ company: 'Live Co', status: 'Applied' }], pins: {}, staleApps: [],
 });
-check(!queue.some(row => row.source === 'ta' && row.id === 30 && row.queueReason === 'Went quiet'),
-  'went-quiet queue hides contacts whose LinkedIn invite is pending');
-check(queue.some(row => row.source === 'ta' && row.id === 32 && row.queueReason === 'Went quiet'),
-  'went-quiet queue still includes equivalent contacts without a pending invite');
+check(!queue.some(row => row.source === 'ta' && row.id === 30 && row.queueReason === 'Sequence due'),
+  'sequence-due queue hides contacts without an active due sequence');
+check(queue.some(row => row.source === 'ta' && row.id === 32 && row.queueReason === 'Sequence due'),
+  'sequence-due queue includes an equivalent contact with a due step');
+const emailStepCard = queue.find(row => row.source === 'ta' && row.id === 33 && row.queueReason === 'Sequence due');
+check(emailStepCard?.channel === 'email',
+  'dual-channel contact due for an email-only step keeps email as the final card channel');
+check(emailStepCard?.isHighValue === true,
+  'dual-channel sequence card still derives high-value status from channel availability');
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
 // ── a connected contact is never treated as a first touch ────────────────────

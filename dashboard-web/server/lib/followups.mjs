@@ -17,6 +17,7 @@ import { buildTimeline } from './contact-timeline.mjs';
 import { parseConnectedOn } from './linkedin-acceptance.mjs';
 import { INFLUENCE_RANK, DEFAULT_TIER } from '../../../lib/influence-tier.mjs';
 import { getOutreachPolicy } from './profile.mjs';
+import { expectedNextChannel, getActiveSequences, getTemplate } from './sequences.mjs';
 import { randomUUID } from 'node:crypto';
 import { appendEventsWithEffects, tableRows } from '../../../lib/legacy-files.mjs';
 import { localToday, logWritesEnabled, withLogWrite } from '../../../lib/log-writes.mjs';
@@ -349,8 +350,7 @@ function computeStaleTA() {
 // Per-CONTACT classifier; not the same as channelFor() which is per-company.
 // channelFor() continues to drive the warm/cold split in computeStaleApps()
 // (aggregating across all contacts at a company). This one drives per-contact
-// routing in computeStaleContacts() and will later gate bucket-3 multithread
-// logic for high-priority contacts (item 5 of the design).
+// sequence routing and gates bucket-3 multithread logic.
 function contactChannelBucket(contact) {
   const hasEmail    = isSendable(contact);
   const hasLinkedIn = !!((contact.linkedin || '').trim());
@@ -363,96 +363,69 @@ function contactChannelBucket(contact) {
 }
 
 // ─── Unified contact-keyed stale engine ──────────────────────────────────────
-// The contact-centric model: the cadence clock lives on the CONTACT (their
-// lastTouch), not on the application. This covers both the target-talent and
-// recruiter books. Only contacts at companies with a CURRENTLY-LIVE application
-// surface — a contact at a dead opportunity (Rejected, Discarded…) is noise.
-//
-// `computeStaleTA()` keeps its no-argument signature for backward compatibility.
-// This function is the target state and supersedes it in the route.
-const CONTACT_STALE_THRESHOLD_DAYS = 14; // calendar days
-const CONTACT_FU_CAP = 1;               // nudge cap; more than one follow-up burns warm contacts
-// Active-thread statuses that carry a real follow-up clock. 'Connected' (invite
-// accepted, no ongoing message thread) and dead-end states (Dormant/Bounced/
-// Blocked/Archived) are excluded: they have no thread to keep warm.
-const CONTACT_TRACKED_STATUSES = new Set(['Sent', 'Replied', 'Meeting Scheduled']);
-
-function computeStaleContacts({ apps } = {}) {
+// Sequence-due contacts replace the old flat contact-staleness clock. Only an
+// actionable due step at a company with a live application surfaces here.
+function computeDueSequenceContacts({ apps } = {}) {
   const appList = apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })();
   const eligible = outreachEligibleCompanies(appList);
 
   let taContacts = [];
   try { taContacts = parseTargetTalentMd(); } catch { /* */ }
+  const byId = new Map(taContacts.map(c => [String(c.id), c]));
+  const today = _localToday();
 
-  const stale = [];
-  const liMap = readLinkedInMap() ?? {};
+  const due = [];
+  for (const active of getActiveSequences()) {
+    const sepIndex = active.key.indexOf(':');
+    const source = active.key.slice(0, sepIndex);
+    const id = active.key.slice(sepIndex + 1);
+    if (source !== 'ta') continue;
+    if (active.paused) continue;
+    if (!active.nextStepDue || active.nextStepDue > today) continue;
 
-  const processContact = (c, source) => {
-    if (liMap[String(c.id)]?.state === 'Invite Pending') return;
-    const company = c.company;
-    if (!CONTACT_TRACKED_STATUSES.has(c.status)) return;
-    if (!c.lastTouch) return;
-    if (!eligible.has(normalizeCompany(company))) return;
+    const c = byId.get(id);
+    if (!c) continue;
+    if (c.status === 'Archived') continue;
+    if (!eligible.has(normalizeCompany(c.company))) continue;
 
-    const daysSinceLastTouch = _calendarDaysAgo(c.lastTouch);
-    if (daysSinceLastTouch == null || daysSinceLastTouch < CONTACT_STALE_THRESHOLD_DAYS) return;
+    const template = getTemplate(active.sequenceId);
+    if (!template) continue;
+    const nextTouch = template.touches[active.step];
+    if (!nextTouch) continue;
 
-    const corr = readTTCorrespondence(c.id);
-    const sentCount = corr.filter(m => m.direction === 'Sent').length;
-    const fuCount = Math.max(0, sentCount - 1); // first send = original touch, not a follow-up
-    const overCap = fuCount >= CONTACT_FU_CAP;
+    const b = contactChannelBucket(c);
+    const expected = expectedNextChannel(active, template);
+    if (expected === 'linkedin' && !b.hasLinkedIn) continue;
+    if (expected === 'email' && !b.hasEmail) continue;
+    if (expected === 'either' && !b.hasEmail && !b.hasLinkedIn) continue;
 
-    let coachVerdict, coachLevel;
-    if (overCap) {
-      coachVerdict = `Already nudged ${fuCount}×. Let this contact cool.`;
-      coachLevel = 'give-up';
-    } else if (fuCount === 0) {
-      coachVerdict = `${daysSinceLastTouch}d since last touch · time to keep warm.`;
-      coachLevel = 'overdue';
-    } else {
-      coachVerdict = `${daysSinceLastTouch}d since the nudge · final ping.`;
-      coachLevel = 'overdue';
-    }
-
-    stale.push({
-      source,
-      id: c.id,
-      company: company || '',
-      role: c.title || '',
+    due.push({
+      source, id: c.id,
+      company: c.company || '', role: c.title || '',
       score: null,
       status: c.status,
       applyDate: null,
       lastTouchDate: c.lastTouch,
-      daysSinceLastTouch,
+      daysSinceLastTouch: _calendarDaysAgo(c.lastTouch),
       daysSinceApply: null,
-      fuCount,
-      cap: CONTACT_FU_CAP,
-      coachVerdict,
-      coachLevel,
-      klass: 'warm',           // engaged threads are always warm
+      fuCount: active.step,
+      cap: template.touches.length,
+      coachVerdict: `${nextTouch.label || 'Next touch'} due (day ${nextTouch.dayOffset}).`,
+      coachLevel: 'overdue',
+      klass: 'warm',
       muted: false,
-      ...(() => { const b = contactChannelBucket(c); return { channelBucket: b.bucket, hasEmail: b.hasEmail, hasLinkedIn: b.hasLinkedIn, channel: b.hasEmail ? 'email' : b.hasLinkedIn ? 'linkedin' : 'none' }; })(),
+      channelBucket: b.bucket, hasEmail: b.hasEmail, hasLinkedIn: b.hasLinkedIn,
+      channel: expected === 'either' ? (b.hasLinkedIn ? 'linkedin' : 'email') : expected,
       sector: null,
       notes: c.notes || '',
       followups: [],
-      taFirst: c.first || '',
-      taLast: c.last || '',
-      taEmail: c.email || '',
-      linkedin: c.linkedin || '',
-      // Hiring-principal flag: true when the contact carries the [principal] tag
-      // in their notes (TA contacts only; recruiter contacts are never principals).
-      isPrincipal: source === 'ta' ? (c.isPrincipal ?? false) : false,
+      taFirst: c.first || '', taLast: c.last || '', taEmail: c.email || '', linkedin: c.linkedin || '',
+      isPrincipal: c.isPrincipal ?? false,
     });
-  };
+  }
 
-  for (const c of taContacts) processContact(c, 'ta');
-
-  stale.sort((a, b) => {
-    if (a.coachLevel !== b.coachLevel) return a.coachLevel === 'give-up' ? -1 : 1;
-    return b.daysSinceLastTouch - a.daysSinceLastTouch;
-  });
-
-  return stale;
+  due.sort((a, b) => b.daysSinceLastTouch - a.daysSinceLastTouch);
+  return due;
 }
 
 // ─── LinkedIn connect queue ───────────────────────────────────────────────
@@ -883,6 +856,7 @@ function _bestScoreByCompany(apps) {
   }
   return map;
 }
+const REFERRAL_FOLLOWUP_THRESHOLD_DAYS = 14;
 function computeFollowupQueue(opts = {}) {
   const books = _bothBooks(opts);
   const appList = opts.apps ?? (() => { try { return parseApplicationsMd(); } catch { return []; } })();
@@ -898,7 +872,7 @@ function computeFollowupQueue(opts = {}) {
   ];
   const staleEnough = date => {
     const days = _calendarDaysAgo(String(date || '').slice(0, 10));
-    return days != null && days >= CONTACT_STALE_THRESHOLD_DAYS;
+    return days != null && days >= REFERRAL_FOLLOWUP_THRESHOLD_DAYS;
   };
   for (const row of opts.excludeReferrals === true ? [] : books.referrals) {
     const reason = QUEUE_POLICY_BY_STORE.referral.reason(row);
@@ -1241,11 +1215,9 @@ function computeContactFollowups(opts = {}) {
   for (const r of computeStaleAppContacts({ staleApps: opts.staleApps })) {
     put({ ...r, daysSinceLastTouch: r.staleDays ?? null, coachLevel: r.coachLevel || 'overdue', queueReason: 'App going stale' });
   }
-  // 3) Already-reached contacts gone quiet — normalize taFirst/taLast/taEmail to
-  //    the card's name/firstName/email, and compute a proper channel (the stale
-  //    builder prioritizes email and never emits 'both', which the card needs).
-  for (const r of computeStaleContacts(opts)) {
-    const channel = r.hasEmail && r.hasLinkedIn ? 'both' : r.hasEmail ? 'email' : r.hasLinkedIn ? 'linkedin' : 'none';
+  // 3) Contacts with a due sequence step — normalize taFirst/taLast/taEmail to
+  //    the card's name/firstName/email and preserve the step's required channel.
+  for (const r of computeDueSequenceContacts(opts)) {
     put({
       source: r.source, id: r.id,
       name: `${r.taFirst || ''} ${r.taLast || ''}`.trim() || '(no name)',
@@ -1253,12 +1225,12 @@ function computeContactFollowups(opts = {}) {
       role: r.role || '', title: r.role || '',
       company: r.company || '',
       email: r.taEmail || '', linkedin: r.linkedin || '',
-      channel, isHighValue: !!(r.hasEmail && r.hasLinkedIn),
+      channel: r.channel, isHighValue: !!(r.hasEmail && r.hasLinkedIn),
       isPrincipal: !!r.isPrincipal,
       status: r.status,
       coachVerdict: r.coachVerdict, coachLevel: r.coachLevel,
       daysSinceLastTouch: r.daysSinceLastTouch, staleDays: r.daysSinceLastTouch,
-      queueReason: 'Went quiet',
+      queueReason: 'Sequence due',
     });
   }
 
@@ -1364,12 +1336,12 @@ function countWithheldContacts({ taRows } = {}) {
 }
 
 export {
-  parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeStaleContacts,
+  parseFollowupsMd, appendFollowupRow, computeStaleApps, computeStaleTA, computeDueSequenceContacts,
   channelFor, contactChannelBucket, computeConnectQueue, computeEmailQueue, computeBothQueue,
   computeFollowupQueue, computeReferralFollowups, _followupRank,
   _companyOutreachFor,
   influenceRank, canInfluenceHire, isHighValueContact, computeContactlessApps, computeUnthreadedApps, computeStaleAppContacts, computeContactFollowups, countWithheldContacts,
   computeJustConnectedQueue,
-  STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, CONTACT_STALE_THRESHOLD_DAYS, _daysAgo,
+  STALE_THRESHOLD_BY_STATUS, TA_STALE_THRESHOLD_DAYS, _daysAgo,
 };
 

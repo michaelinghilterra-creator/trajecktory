@@ -32,8 +32,18 @@ check(
   'every sequence has a non-empty label, scenario and channel',
 );
 check(
-  sequences.every(sequence => ['email', 'linkedin'].includes(sequence.channel)),
-  'every sequence channel is email or linkedin',
+  sequences.every(sequence => ['email', 'linkedin', 'mixed'].includes(sequence.channel)),
+  'every sequence channel is email, linkedin or mixed',
+);
+check(
+  sequences.every(sequence => sequence.channel !== 'mixed'
+    || sequence.touches.every(touch => ['email', 'linkedin', 'other'].includes(touch.channel))),
+  'a mixed sequence gives every touch its own email, linkedin or other channel',
+);
+check(
+  sequences.every(sequence => sequence.channel === 'mixed'
+    || sequence.touches.every(touch => touch.channel === undefined)),
+  'a single-channel sequence does not also set a per-touch channel',
 );
 
 for (const sequence of sequences) {
