@@ -692,6 +692,21 @@ node reconcile-triage.mjs --apply
 #     dimensions) are left untouched. Verified: --all touches zero of them.
 node compute-scores.mjs --all --apply
 
+# 3b-ii. REQUIRED, and it must follow 3b immediately. Re-deriving a report can MOVE
+#     its headline, and the tracker Score cell does not follow on its own. Without
+#     this step the drift is merely detected by verify-score-drift at step 7,
+#     printed for a human, and then persists forever if nobody acts on it. That is
+#     not hypothetical: 16 rows sat drifted for eleven days across two separate
+#     resyncs that never touched them, because detection was the only thing wired
+#     up. Detection without a remediation step is how a guard becomes decoration.
+#     Dry-run first and READ IT: this overwrites Score cells, and data/applications.md
+#     is gitignored, so git history is NOT a rollback path (the script writes its own
+#     .bak-scores-* backup). Use --only <ids> or --only-file <path> to write a subset
+#     when some rows are drifted for a reason you have not yet diagnosed — a drifted
+#     row is evidence, and resyncing it destroys the symptom rather than fixing it.
+node resync-tracker-scores.mjs            # dry run, read the diff
+node resync-tracker-scores.mjs --apply
+
 # 3c. Text hygiene on the agent-authored reports: strip invisible/zero-width
 #     Unicode and fold AI-prose tells (em dashes, curly quotes) that the eval
 #     subprocess emits. Reports are written by the agent, so they never pass
@@ -709,8 +724,21 @@ node verify-actionable.mjs --apply
 # 6. Health check the dashboard data — MANDATORY, read output before declaring done
 node verify-reports.mjs
 
-# 7. Scoring drift guard: a derived report's headline must equal its tracker Score
+# 7. Scoring drift guard: a derived report's headline must equal its tracker Score.
+#    If 3b-ii ran, this is a no-op. A non-zero count here means either the resync
+#    was skipped or something wrote a Score cell without re-reading its report.
+#    The remedy is resync-tracker-scores.mjs, NOT hand-editing the cell.
 node verify-score-drift.mjs
+
+# 7b. The OTHER half of the same question, and neither guard substitutes for the
+#     other. Step 7 compares the tracker cell against the report headline; both can
+#     agree perfectly while the headline disagrees with the dimension ratings
+#     underneath it, and then nothing anywhere notices. A batch of 15 reports drifted
+#     exactly that way and step 7 called them clean. This compares each headline
+#     against its own globalScore. Remedy is compute-scores.mjs --all --apply,
+#     followed by 3b-ii, because restamping moves headlines and the tracker must
+#     then follow.
+node verify-report-derivation.mjs
 
 # 8. Numbering guard: a report's filename must match its own frontmatter id, and
 #    no two currently-linked reports may claim the same number. Does NOT flag a
