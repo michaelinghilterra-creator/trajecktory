@@ -1,7 +1,7 @@
 import express from 'express';
 import { DATA_DIR, ROOT_DIR } from '../config.mjs';
 import { parseApplicationsMd } from '../lib/applications.mjs';
-import { advanceSequence, expectedNextChannel, pauseSequence, getSequence, getTemplate } from '../lib/sequences.mjs';
+import { advanceSequence, expectedNextChannel, pauseSequence, getSequence, getTemplate, toneForNextTouch } from '../lib/sequences.mjs';
 import { generateText, readProjectFile, readVoiceRules, draftModel } from '../lib/anthropic.mjs';
 import { finishDraft } from '../lib/finish-draft.mjs';
 import { generateWithRubric } from '../lib/draft-grader.mjs';
@@ -26,14 +26,10 @@ import { buildAugustPrompt, buildAugustPromptWithGuidance, parseDraftText, finis
 import { localToday, logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 import { localStamp } from '../../../lib/local-date.mjs';
 
-function sequenceTone(contactId) {
+function sequenceTone(contactId, channel) {
   try {
     const seq = getSequence('ta', contactId);
-    if (!seq || seq.completedAt || seq.paused) return '';
-    const tpl = getTemplate(seq.sequenceId);
-    if (!tpl) return '';
-    const touch = tpl.touches.find(t => t.step === seq.step + 1);
-    return touch?.tone || '';
+    return seq ? toneForNextTouch(seq, getTemplate(seq.sequenceId), channel) : '';
   } catch { return ''; }
 }
 
@@ -321,18 +317,19 @@ export function buildTargetTalentAugustPrompt(packet, {
   stageGuidance = '', sequenceTone: tone = '', threadState = '',
 } = {}) {
   const staged = !!interviewStage && interviewStage !== 'general';
+  const toneLine = tone ? `SEQUENCE TONE: ${tone}` : '';
   if (channel === 'email') {
-    return staged
-      ? buildAugustPromptWithGuidance(packet, { guidance: [stageGuidance] })
+    return staged || toneLine
+      ? buildAugustPromptWithGuidance(packet, { guidance: [staged ? stageGuidance : '', toneLine] })
       : buildAugustPrompt(packet);
   }
   const threaded = mode === 'reply' || mode === 'followup-sent';
-  if (!threaded && !staged) return buildAugustPrompt(packet);
+  if (!threaded && !staged && !toneLine) return buildAugustPrompt(packet);
   return buildAugustPromptWithGuidance(packet, {
     messageIntent: threaded ? intentGuidance : '',
     guidance: [
       staged ? stageGuidance : '',
-      tone ? `SEQUENCE TONE: ${tone}` : '',
+      toneLine,
       threadState ? `THREAD STATE: ${threadState}` : '',
     ],
   });
@@ -393,7 +390,7 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
       const packet = buildPacket({ source: 'ta', id, kind: 'ta_dm' });
       const prompt = buildTargetTalentAugustPrompt(packet, {
         channel: 'linkedin', mode, interviewStage, intentGuidance, stageGuidance,
-        sequenceTone: sequenceTone(id), threadState: thread.stateLine,
+        sequenceTone: sequenceTone(id, 'linkedin'), threadState: thread.stateLine,
       });
       const result = parseDraftText(await generateText(prompt, {
         model: draftModel(), maxTokens: 900, label: `draft:${packet.surfaceId}`,
@@ -478,7 +475,7 @@ router.post('/api/target-talent/:id/draft', async (req, res) => {
 
     const packet = buildPacket({ source: 'ta', id, kind: 'ta_email' });
     const prompt = buildTargetTalentAugustPrompt(packet, {
-      channel: 'email', interviewStage, stageGuidance,
+      channel: 'email', interviewStage, stageGuidance, sequenceTone: sequenceTone(id, 'email'),
     });
     const result = parseDraftText(await generateText(prompt, {
       model: draftModel(), maxTokens: 900, label: `draft:${packet.surfaceId}`,
