@@ -789,9 +789,9 @@ Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slu
 A company that changes ATS keeps its name and gets a new board slug. Match it on
 the slug alone and it looks brand new, so discovery appends a second
 `tracked_companies` row pointing at the old board — which now 404s and will scan
-forever, returning nothing. This happened on 2026-07-15 to **EliseAI**
-(Greenhouse `meetelise` → Ashby `eliseai`) and **Grow Therapy** (Greenhouse
-`growtherapy` → Ashby `grow-therapy`). Grow Therapy's surviving row even
+forever, returning nothing. This happened to two companies, for example **Zorblax Widgetry**
+(Greenhouse `zorblaxold` → Ashby `zorblax`) and **Quennox Ratchet Works**
+(Greenhouse `quennoxold` → Ashby `quennox-ratchet-works`). One surviving row even
 documented the migration in its `notes` — but notes are prose, and no code reads
 prose.
 
@@ -806,8 +806,8 @@ That distinction matters, so do not collapse it:
 | `name` | Same name, different board | Skip the append, but **print it** |
 
 A name match is either a migration (correctly skipped) or two real companies
-sharing a name — Greenhouse `fetch` is Fetch pet insurance and Lever
-`fetchpackage` is Fetch Package delivery, both live, both worth scanning. Only a
+sharing a name — Greenhouse `zorblax` is Zorblax pet insurance and Lever
+`zorblaxpackage` is Zorblax Package delivery, both live, both worth scanning. Only a
 human can tell those apart, so surface every one instead of dropping it. When
 two entries really are different companies, give them distinguishable names.
 
