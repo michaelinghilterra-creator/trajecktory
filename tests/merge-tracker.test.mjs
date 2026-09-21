@@ -524,14 +524,14 @@ check(!D6.mergedTsvs.includes('9251-soylent.tsv'),
 // An invisible row does not dedup, so a re-eval of one is added as a SECOND row.
 const D7 = runMerge(
   [seedRow(9260, 'Vandelay', 'Sr Director Herbarium Tooling', '3.51/5',
-    'https://vandelay.wd108.myworkdayjobs.com/job/Northern-California-USA---Remote/Sr-Director-Herbarium_R12274-1')],
+    'https://vandelay.wd108.myworkdayjobs.com/job/Example-City-USA---Remote/Sr-Director-Herbarium_R900001-1')],
   {
     '9261-vandelay.tsv': tsv(['9261', '2030-07-22', 'Vandelay', 'Sr Director Herbarium Tooling',
       'Evaluated', '4.31/5', '❌', '[9261](reports/9261-vandelay-2030-07-22.md)', 'Re-eval of the same req']),
   },
   {
     'reports/9261-vandelay-2030-07-22.md':
-      rpt('https://vandelay.wd108.myworkdayjobs.com/job/Northern-California-USA---Remote/Sr-Director-Herbarium_R12274-1'),
+      rpt('https://vandelay.wd108.myworkdayjobs.com/job/Example-City-USA---Remote/Sr-Director-Herbarium_R900001-1'),
   },
 );
 

@@ -218,8 +218,8 @@ check(idxSrc.indexOf('Forbidden: unexpected Host') < idxSrc.indexOf('app.use(cor
   'the Host check is mounted ahead of CORS (and therefore ahead of every route)');
 
 // ── C11: a bounce flip requires per-contact confirmation ──────────────────────
-// Route logic (google.mjs scan-bounces); verified live in the audit (28 bounces, 0
-// flipped). Assert the guard is present so it cannot be quietly removed.
+// Route logic (google.mjs scan-bounces); verified live in the audit (several bounces,
+// none flipped). Assert the guard is present so it cannot be quietly removed.
 const gSrc = read('dashboard-web/server/routes/google.mjs');
 check(/confirmSet/.test(gSrc) && /req\.body\?\.confirm/.test(gSrc), 'the bounce apply reads an explicit confirm list');
 check(/if \(!confirmSet\.has\(key\)\) continue/.test(gSrc), 'and skips any contact the user did not confirm by key');

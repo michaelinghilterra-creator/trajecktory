@@ -70,7 +70,7 @@ const seed = [
   '|---|------|---------|------|-------|--------|-----|--------|--------|-------|',
   L(9001, 'Acme', 'Director, Glassblowing Standards', 'v1 frontmatter report', '9001-acme-2026-07-01.md'),
   L(9002, 'Borealis', 'Head of Herbarium Curation', 'legacy URL header', '9002-borealis-2026-07-01.md'),
-  L(9003, 'Cinder', 'VP Lighthouse Maintenance', 'placeholder url', '9003-cinder-2026-07-01.md'),
+  L(9003, 'Cinder', 'VP Beacon Maintenance', 'placeholder url', '9003-cinder-2026-07-01.md'),
   L(9004, 'Dunlin', 'Director, Topiary Logistics', 'report has no url', '9004-dunlin-2026-07-01.md'),
   L(9005, 'Eider', 'Manager, Bookbinding Workflow', 'report file is missing', '9005-eider-2026-07-01.md'),
   // Already backfilled — must be left exactly as-is (idempotency).

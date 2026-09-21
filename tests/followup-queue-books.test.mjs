@@ -161,7 +161,7 @@ console.log('\nconnected contacts are not first touches');
   check(alreadyInvited(emailOnly) === false, 'an email-only touch does not count as a LinkedIn invite');
 
   const emailWithSentStatus = { source: 'ta', id: 9, status: 'Sent', companyOutreach: { selfLastTouch: { channel: 'email', date: '2026-08-01', direction: 'Sent' } } };
-  check(alreadyInvited(emailWithSentStatus) === false, 'email touch with Sent status is not a LinkedIn invite (the Meagan bug)');
+  check(alreadyInvited(emailWithSentStatus) === false, 'email touch with Sent status is not a LinkedIn invite (the Personone bug)');
 
   const linkedinTouch = { source: 'ta', id: 7, status: 'Not Contacted', companyOutreach: { selfLastTouch: { channel: 'linkedin', date: '2026-08-01', direction: 'Sent' } } };
   check(alreadyInvited(linkedinTouch) === true, 'a LinkedIn touch counts as already invited');

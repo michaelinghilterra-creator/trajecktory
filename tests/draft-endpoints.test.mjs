@@ -31,7 +31,7 @@ fs.mkdirSync(path.dirname(reportAbsolute), { recursive: true });
 fs.writeFileSync(reportAbsolute, `${fence}\n${JSON.stringify({
   schema: 'trajecktory-report/v1',
   id: 77,
-  summary: { companyBrief: 'Acme serves 12,000 organizations and supports 87,654 deployments, including 95 of the Fortune 100.' },
+  summary: { companyBrief: 'Acme serves 12,000 organizations and supports 87,654 deployments, including 17 of the Example 500.' },
 }, null, 2)}\n${fence}\n# Report body\nBody fallback should not win.\n`, 'utf8');
 fs.writeFileSync(path.join(sandbox, 'applications.md'),
   `| 77 | 2026-01-01 | Acme | Engineer | 4.5/5 | Applied | | | [77](${reportRelative}) | | https://jobs.example.com/acme/77 |\n` +

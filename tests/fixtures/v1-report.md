@@ -56,18 +56,18 @@
     },
     {
       "req": "2+ years partnering with senior GTM leaders at a $50M+ org",
-      "evidence": "Revenue Operations lead supporting the VP Sales and 3 regional managers at Contoso ($60M ARR); partnered directly with Finance on quota and capacity models",
+      "evidence": "Revenue Operations lead supporting the VP Sales and 3 regional managers at Contoso ($45M ARR); partnered directly with Finance on quota and capacity models",
       "strength": "moderate",
-      "note": "Contoso is $60M ARR, at the lower bound of the range named in the JD"
+      "note": "Contoso is $45M ARR, at the lower bound of the range named in the JD"
     },
     {
       "req": "Demonstrated team leadership",
-      "evidence": "12-person revenue operations and analytics team (2 leads, 10 analysts) plus a 3-person matrixed enablement group",
+      "evidence": "9-person revenue operations and analytics team (2 leads, 7 analysts) plus a 3-person matrixed enablement group",
       "strength": "strong"
     },
     {
       "req": "Deep GTM process knowledge",
-      "evidence": "Qualification framework rollout across 30 sellers in 2 business units; territory redesign into 3 specialized motions; pipeline inspection review built with sales leadership",
+      "evidence": "Qualification framework rollout across 18 sellers in 2 business units; territory redesign into 3 specialized motions; pipeline inspection review built with sales leadership",
       "strength": "strong"
     },
     {
@@ -77,7 +77,7 @@
     },
     {
       "req": "Execute transformation programs and GTM initiatives",
-      "evidence": "Territory redesign, qualification framework rollout, CRM data quality cleanup (5K records), account scoring model rebuild, all still running after handoff",
+      "evidence": "Territory redesign, qualification framework rollout, CRM data quality cleanup (700 records), account scoring model rebuild, all still running after handoff",
       "strength": "strong"
     },
     {
@@ -110,7 +110,7 @@
     {
       "gap": "Contoso at the low end of the stated org-size range",
       "blocker": "Nice-to-have",
-      "mitigation": "Frame as 'multi-region complexity at $60M ARR across 3 regions, 4 leaders, 2 business units'. The operational scale reads better than the revenue figure alone."
+      "mitigation": "Frame as 'multi-region complexity at $45M ARR across 2 regions, 4 leaders, 2 business units'. The operational scale reads better than the revenue figure alone."
     },
     {
       "gap": "No graduate degree",
@@ -131,12 +131,12 @@
   "sellSenior": [
     {
       "claim": "Open with proof-of-scale, not just title",
-      "proof": "Ran revenue operations for $60M ARR across 3 regions: 4 dashboards, 2 business units, 4 senior stakeholders",
+      "proof": "Ran revenue operations for $45M ARR across 2 regions: 4 dashboards, 2 business units, 4 senior stakeholders",
       "phrase": "My title was Director; my reporting footprint was what most RevOps functions report into."
     },
     {
       "claim": "Demonstrate the advisory and operational duality",
-      "proof": "Built the qualification framework for 30 sellers and delivered the weekly pipeline inspection data those same leaders used to decide coverage",
+      "proof": "Built the qualification framework for 18 sellers and delivered the weekly pipeline inspection data those same leaders used to decide coverage",
       "phrase": "I did not just advise on the strategy. I built the operating layer that made it measurable."
     },
     {
@@ -169,7 +169,7 @@
     {
       "section": "Professional Summary",
       "current": "Opens with 'Freight Operations Director' and logistics framing",
-      "change": "Reframe the opening line: 'Revenue Operations executive who turns pipeline data into sales leader decisions.' Keep the $60M context and the qualification framework proof point.",
+      "change": "Reframe the opening line: 'Revenue Operations executive who turns pipeline data into sales leader decisions.' Keep the $45M context and the qualification framework proof point.",
       "why": "RevOps hiring managers want an operator identity, not an analytics architect. Reorder the framing without losing the data-and-sales duality."
     },
     {
@@ -186,7 +186,7 @@
     },
     {
       "section": "Analytics role bullets",
-      "current": "Leads with team size (12-person)",
+      "current": "Leads with team size (9-person)",
       "change": "Add a framing line linking territory execution to the quarterly forecast cadence",
       "why": "The JD calls out managing operating cadences, so connect the territory KPIs to forecast visibility"
     }
@@ -195,7 +195,7 @@
     {
       "section": "Headline",
       "current": "Regional Freight Operations Director | Network Analytics | Scorecards",
-      "change": "Director, Revenue Operations | GTM Strategy | Pipeline & Forecast Execution | $60M ARR",
+      "change": "Director, Revenue Operations | GTM Strategy | Pipeline & Forecast Execution | $45M ARR",
       "why": "RevOps keywords surface in recruiter searches; pipeline/forecast language matches the JD"
     },
     {
@@ -215,34 +215,34 @@
     {
       "title": "Qualification Framework Rollout at Scale",
       "req": "Execute transformation programs for GTM leaders",
-      "S": "Contoso had no consistent qualification framework across 30 sellers in 2 business units. Each leader used their own logic, which made pipeline inspection unreliable for the VP Sales.",
+      "S": "Contoso had no consistent qualification framework across 18 sellers in 2 business units. Each leader used their own logic, which made pipeline inspection unreliable for the VP Sales.",
       "T": "Deploy one qualification framework and establish a shared performance baseline so pipeline inspection could run in real time",
-      "A": "Mapped qualification stages to CRM fields; designed the KPI baseline (average deal size $22K, win rate 24%, velocity $95K) with sales leadership; built the reporting layer used by 4 leaders",
-      "R": "30 sellers working from a common framework; the VP Sales and regional managers using the pipeline view for weekly coverage decisions",
+      "A": "Mapped qualification stages to CRM fields; designed the KPI baseline (average cycle time 6 days, yield 91%, scrap rate 3%) with sales leadership; built the reporting layer used by 4 leaders",
+      "R": "18 sellers working from a common framework; the VP Sales and regional managers using the pipeline view for weekly coverage decisions",
       "reflection": "The hard part was not the build. It was getting two business unit leaders to agree on shared definitions. A framework nobody owns becomes shelfware, so I made each leader a named steward of their segment KPIs."
     },
     {
       "title": "Operating Cadence Design, Territory Model",
       "req": "Manage operating cadences and drive GTM initiatives",
-      "S": "The sales team was a generalist org with no differentiated KPIs per motion. New logo, expansion, and partner deals were all measured the same way, which created accountability gaps.",
+      "S": "The sales team was a generalist org with no differentiated KPIs per motion. Alpha, beta, and gamma deals were all measured the same way, which created accountability gaps.",
       "T": "Restructure into specialized motions with distinct KPIs and a weekly operating cadence tied to the leader each supported",
-      "A": "Designed 3 motions (New Logo, Expansion, Partner) with dedicated ownership, purpose-built KPI frameworks, and a weekly cadence reviewed with the VP Sales",
-      "R": "$7M in pipeline sourced during tenure; each motion's metrics became the basis for the VP's weekly review",
+      "A": "Designed 3 motions (Alpha, Beta, Gamma) with dedicated ownership, purpose-built KPI frameworks, and a weekly cadence reviewed with the VP Sales",
+      "R": "$2M in pipeline sourced during tenure; each motion's metrics became the basis for the VP's weekly review",
       "reflection": "Specialization creates accountability and also creates silos. I kept a weekly cross-motion sync to share learnings, otherwise you optimize each motion in isolation and miss the handoff breaks."
     },
     {
       "title": "Pipeline Inspection for Senior Leadership",
       "req": "Partner with GTM leaders and manage pipeline health",
-      "S": "Quarterly reviews ran on ad hoc analysis compiled by hand by each regional lead. There was no consistent source of truth and prep took 5 days.",
+      "S": "Quarterly reviews ran on ad hoc analysis compiled by hand by each regional lead. There was no consistent source of truth and prep took 6 days.",
       "T": "Build one pipeline inspection layer covering 5 commercial domains that the VP Sales and 3 regional managers could read in real time",
       "A": "Architected the carrier analytics surface; replaced ad hoc spreadsheet analysis with a live reporting layer; trained each leader on their segment view",
-      "R": "4 leaders using the view weekly for coverage decisions; quarterly prep compressed from 5 days to 8 hours",
+      "R": "4 leaders using the view weekly for coverage decisions; quarterly prep compressed from 6 days to 2 days",
       "reflection": "Leaders do not resist data. They resist data that does not answer the question they actually have. I spent a week on listening sessions before writing a single measure."
     },
     {
       "title": "CRM Data Quality Cleanup (Cross-Functional)",
       "req": "Cross-functional collaboration across Finance, Marketing, and Product",
-      "S": "5,000+ accounts and contacts had degraded targeting accuracy after two years of inconsistent enrichment. The field was working from stale territory data.",
+      "S": "700+ accounts and contacts had degraded targeting accuracy after two years of inconsistent enrichment. The field was working from stale territory data.",
       "T": "Restore data integrity to support targeting and prospecting accuracy",
       "A": "Designed enrichment logic with structured validation workbooks; aligned Sales, Marketing, and Ops on field definitions; executed across the full addressable market list",
       "R": "Improved targeting accuracy and prospecting readiness; became the foundation for the account scoring rebuild that followed",
@@ -251,9 +251,9 @@
     {
       "title": "Quarterly Leadership Package",
       "req": "Align strategy with execution and communicate to senior leadership",
-      "S": "The quarterly package was inconsistent across regions: different definitions, different visuals, different timing. Leadership had no stable view of $60M ARR.",
+      "S": "The quarterly package was inconsistent across regions: different definitions, different visuals, different timing. Leadership had no stable view of $45M ARR.",
       "T": "Standardize one quarterly package across 3 regions with consistent definitions, clean visuals, and a repeatable production cadence",
-      "A": "Applied scripted automation to compress production from 5 days to 8 hours; produced a 20-slide package with standardized definitions and consistent structure",
+      "A": "Applied scripted automation to compress production from 6 days to 2 days; produced a 12-slide package with standardized definitions and consistent structure",
       "R": "No disruption to reporting cycles after launch; VP Sales, Finance, and regional managers on a single source of truth; still in use at handoff",
       "reflection": "The slide count is a symptom. What mattered was that Finance stopped relitigating the definitions every cycle. That argument disappeared after the second quarter."
     }
@@ -261,7 +261,7 @@
   "leadStory": {
     "title": "Qualification Framework Rollout + Pipeline Inspection",
     "reason": "Mirrors the mandate directly: transformation at scale plus an operating cadence that enables real-time decisions for sales leaders. Shows both the advisory and systems-builder dimensions in one story.",
-    "script": "The problem was not that leaders did not know the framework. It was that nobody had made it operational. I built the CRM field mapping, the KPI baseline, and the reporting layer that turned a methodology into a weekly habit for 30 sellers and 4 leaders."
+    "script": "The problem was not that leaders did not know the framework. It was that nobody had made it operational. I built the CRM field mapping, the KPI baseline, and the reporting layer that turned a methodology into a weekly habit for 18 sellers and 4 leaders."
   },
   "redFlagQs": [
     {

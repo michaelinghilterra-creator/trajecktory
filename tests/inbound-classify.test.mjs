@@ -24,7 +24,7 @@ const cases = [
   ['', 'I am on vacation until the end of the month.', 'auto-reply'],
   ['', 'Ada Vance is no longer with Northwind. Please contact someone else.', 'departure'],
   ['', 'I am no longer at the company as of last month.', 'departure'],
-  ['Automatic reply: your note', 'Jordan Lee has left the company. Please use the team inbox.', 'departure'],
+  ['Automatic reply: your note', 'Example Personone has left the company. Please use the team inbox.', 'departure'],
   ['', 'Thanks for reaching out. I am not the lead on this role, so I will pass it on.', 'human'],
   ['', 'Sorry for the slow reply, I was out of the office last week. Happy to chat Thursday.', 'human'],
   ['', "Let's connect. Are you free Tuesday?", 'human'],
