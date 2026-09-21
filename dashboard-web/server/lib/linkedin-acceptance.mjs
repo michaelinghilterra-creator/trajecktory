@@ -18,12 +18,13 @@ import { parseTargetTalentMd } from './target-talent.mjs';
 import { loadConnections } from './linkedin-referrals.mjs';
 import { linkedinKey } from './contact-identity.mjs';
 import { completeSequence } from './sequences.mjs';
+import { localToday } from '../../../lib/log-writes.mjs';
 
 // Name/company normalizer: lowercase, alphanumerics only. Matches routes/referrals
 // resolveReferralLink so twin-matching and acceptance-matching agree.
 export const normName = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-const _todayYmd = () => new Date().toISOString().slice(0, 10);
+const _todayYmd = () => localToday();
 
 const _MONTHS = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
 
@@ -37,7 +38,7 @@ export function parseConnectedOn(on) {
   m = s.match(/^([A-Za-z]{3,})\s+(\d{1,2}),?\s+(\d{4})$/);              // May 18, 2023
   if (m) { const mo = _MONTHS[m[1].slice(0, 3).toLowerCase()]; if (mo) return `${m[3]}-${mo}-${m[2].padStart(2, '0')}`; }
   const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  return isNaN(d.getTime()) ? null : localToday(d);
 }
 
 function _pendingContacts(taRows) {

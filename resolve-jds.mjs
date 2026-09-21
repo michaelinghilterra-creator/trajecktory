@@ -27,6 +27,7 @@ import { parsePostingUrl, fetchJdText } from './lib/ats-jd.mjs';
 import { workdaySiteFromCareersUrl } from './liveness-core.mjs';
 import { updatePipelineRows } from './lib/pipeline.mjs';
 import { appendGateHistory } from './lib/gate-history.mjs';
+import { localToday } from './lib/local-date.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(__dirname, 'data/pipeline.md');
@@ -51,7 +52,7 @@ function saveFailCounts(counts) {
   writeFileSync(FAIL_COUNTS, JSON.stringify(counts, null, 2), 'utf8');
 }
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
+const todayISO = () => localToday();
 const normCompany = (s) => String(s || '').toLowerCase()
   .replace(/[,.]?\s*(inc|llc|ltd|corp|corporation|co|company|holdings?|group|technologies|technology|software|systems|solutions|international|usa|plc|pbc)\.?$/gi, '')
   .replace(/[^a-z0-9]+/g, ' ').trim();

@@ -19,6 +19,7 @@ import { evaluateReplyAttachment } from '../../../lib/reply-guards.mjs';
 import { buildReplyAttachedEvent } from '../../../lib/event-undo.mjs';
 import { appendEventsWithEffects } from '../../../lib/legacy-files.mjs';
 import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 export const router = express.Router();
 
@@ -224,7 +225,7 @@ router.post('/api/google/scan-bounces', async (req, res) => {
     const taRows = parseTargetTalentMd();
     const { bounces } = scanDecisions({ messages: raws, taRows });
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     // SECURITY (CWE-345): a bounce is classified purely from attacker-controllable
     // email content, so a spoofed "undeliverable" naming a real contact must not
     // silently mark them dead. On apply, flip ONLY the contacts the user explicitly
@@ -322,7 +323,7 @@ router.post('/api/google/apply-bounce', (req, res) => {
     const row = taRows.find(r => r.id === numId);
     if (!row) return res.status(404).json({ error: `Contact ${numId} not found` });
     if (row.verified?.state === 'bounced') return res.json({ ok: true, alreadyBounced: true, flipped: 0 });
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     const newCell = setVerifyTag(row.email, { state: 'bounced', source: 'gmail', date: today });
     const ok = updateTTLine(numId, { email: newCell, status: 'Bounced' });
     if (!ok) return res.status(500).json({ error: `Failed to update contact ${numId}` });
@@ -439,7 +440,7 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
   try {
     const { msgId, action } = req.params;
     const { appId, company, contact, sentiment, from, subject, snippet, bodyPreview, date, threadId } = req.body || {};
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localToday();
     // Best-effort: the log/status may already be written, so a sync failure must not 500.
     const markHandled = (rec) => {
       try {

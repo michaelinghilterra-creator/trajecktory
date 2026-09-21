@@ -20,8 +20,10 @@
 import express from 'express';
 import {
   startSequence, advanceSequence, pauseSequence, resumeSequence,
-  getSequence, getAllTemplates,
+  expectedNextChannel, getSequence, getTemplate, getAllTemplates,
 } from '../lib/sequences.mjs';
+import { contactChannelBucket } from '../lib/followups.mjs';
+import { parseTargetTalentMd } from '../lib/target-talent.mjs';
 
 export const router = express.Router();
 
@@ -69,13 +71,35 @@ router.post('/api/sequences/:source/:id/start', (req, res) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
-// POST /api/sequences/:source/:id/advance  { date? }
+// POST /api/sequences/:source/:id/advance  { date?, channel? }
 router.post('/api/sequences/:source/:id/advance', (req, res) => {
   const contact = parseContact(req, res);
   if (!contact) return;
   try {
-    const { date } = req.body || {};
-    const result = advanceSequence(contact.source, contact.id, date);
+    const { date, channel: requestedChannel } = req.body || {};
+    const talent = contact.source === 'ta'
+      ? parseTargetTalentMd().find(row => Number(row.id) === contact.id)
+      : null;
+    let result;
+    if (talent) {
+      let channel;
+      if (requestedChannel != null) {
+        channel = String(requestedChannel).toLowerCase();
+        if (!['linkedin', 'email'].includes(channel)) {
+          return res.status(400).json({ error: 'channel must be linkedin or email' });
+        }
+      }
+      const { hasEmail, hasLinkedIn } = contactChannelBucket(talent);
+      const available = { email: hasEmail, linkedin: hasLinkedIn };
+      const state = getSequence(contact.source, contact.id);
+      const template = getTemplate(state?.sequenceId);
+      if (!channel && expectedNextChannel(state, template) === 'either') {
+        channel = hasLinkedIn ? 'linkedin' : 'email';
+      }
+      result = advanceSequence(contact.source, contact.id, date, channel, { available });
+    } else {
+      result = advanceSequence(contact.source, contact.id, date);
+    }
     res.json({ ok: true, ...result });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });

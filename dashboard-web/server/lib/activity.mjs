@@ -29,6 +29,7 @@
 import { readApplyDates } from './sidecars.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { FUNNEL_ORDER } from './statuses.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 // ISO week start (Monday) for a YYYY-MM-DD string, returned as YYYY-MM-DD.
 // Parsed as UTC deliberately: a local-time parse shifts a date-only string across
@@ -52,8 +53,8 @@ const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
  */
 export function actionSeries({ days = 60, today = new Date() } = {}) {
   const applyDates = readApplyDates();
-  const end = today.toISOString().slice(0, 10);
-  const start = new Date(today.getTime() - (days - 1) * 86400000).toISOString().slice(0, 10);
+  const end = localToday(today);
+  const start = new Date(new Date(`${end}T00:00:00Z`).getTime() - (days - 1) * 86400000).toISOString().slice(0, 10);
 
   const counts = new Map();
   let dated = 0;

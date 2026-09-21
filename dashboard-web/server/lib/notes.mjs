@@ -3,6 +3,7 @@ import { APP_NOTES_PATH, DATA_DIR } from '../config.mjs';
 import { logWritesEnabled, openDataStore, withLogWrite } from '../../../lib/log-writes.mjs';
 import { activeLegacyFileEvents, appendEventsWithEffects, renderLegacyFile } from '../../../lib/legacy-files.mjs';
 import { buildVoidEvent } from '../../../lib/void-events.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 // ── Per-application interview/meeting notes ──────────────────────────────────
 // An append-only, timestamped log kept OUT of applications.md (which stays a
@@ -95,7 +96,7 @@ function deleteNote(appId, timestamp) {
         reason_code: 'erroneous_entry',
         evidence_ref: 'owner',
         actor: 'owner',
-        occurred_on: new Date().toISOString().slice(0, 10),
+        occurred_on: localToday(),
         definitions_version: 'v1',
       })]));
     }

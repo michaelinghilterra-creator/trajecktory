@@ -12,6 +12,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { localToday } from '../lib/local-date.mjs';
 
 // The Obsidian companion folder is machine-specific, so it comes from the
 // environment rather than a hardcoded path. Set OBSIDIAN_VAULT_DIR to your
@@ -111,7 +112,7 @@ function render(report, opts = {}) {
   sections.push('type: company-research');
   sections.push(`status: ${status}`);
   sections.push(`created: ${date}`);
-  sections.push(`updated: ${new Date().toISOString().slice(0, 10)}`);
+  sections.push(`updated: ${localToday()}`);
   sections.push('tags: [job-search, company-research]');
   sections.push('---');
   sections.push('');

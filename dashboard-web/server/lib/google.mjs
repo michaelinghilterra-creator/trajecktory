@@ -30,6 +30,8 @@ import { classifyBounce } from '../../../lib/bounce-parse.mjs';
 import { normalizeCompany, sameRole } from '../../../lib/identity.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from './target-talent.mjs';
 import { parseReferralsMd, readReferralCorrespondence, writeReferralCorrespondence, updateReferralLine, resolveReferralLink } from './referrals.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
+import { localStamp } from '../../../lib/local-date.mjs';
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -820,12 +822,12 @@ function replyStatusUpdate(status, today) {
   return null; // terminal / archived / unknown — do not touch the status line
 }
 
-// Email Date headers are RFC 2822; the correspondence store uses 'YYYY-MM-DD HH:MM'.
+// Email Date headers are RFC 2822; the correspondence store uses local wall-clock 'YYYY-MM-DD HH:MM'.
 // Normalize, falling back to now for an absent or unparseable date.
 function normalizeCorrTimestamp(date) {
   const t = date ? Date.parse(date) : NaN;
   const ms = Number.isNaN(t) ? Date.now() : t;
-  return new Date(ms).toISOString().replace('T', ' ').slice(0, 16);
+  return localStamp(new Date(ms));
 }
 
 // Append a Received correspondence entry to a matched contact ({ source:'ta', id })
@@ -852,7 +854,7 @@ function logReplyToContact(contact, { subject, body, timestamp, advanceStatus = 
     subject: String(subject || '(no subject)').trim() || '(no subject)',
     body: storedBody,
   };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   if (contact.source === 'ta') {
     const r = parseTargetTalentMd().find(x => x.id === id);
     if (!r) return false;

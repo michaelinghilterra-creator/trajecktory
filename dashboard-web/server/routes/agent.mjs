@@ -16,6 +16,7 @@ import { checkWorkspaceTrust } from '../lib/workspace-trust.mjs';
 import { record as recordActivation } from '../lib/activation.mjs';
 import { issueJd } from '../../../next-jd.mjs';
 import { validateReportMarkdown } from '../v1-loader.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 export const router = express.Router();
 
@@ -1113,7 +1114,7 @@ async function runAgent(jobId, mode, target) {
         const mergeDiscovery = async (resultText) => {
           try {
             const { companies, errors } = parsePortalAdditions(resultText || '');
-            const m = await mergePortalAdditions(path.join(ROOT_DIR, 'portals.yml'), companies, { today: new Date().toISOString().slice(0, 10) });
+            const m = await mergePortalAdditions(path.join(ROOT_DIR, 'portals.yml'), companies, { today: localToday() });
             m.parseErrors = errors;
             m.rolesAdded = m.entries.length ? await scanNewCompanies(m.entries) : 0;
             return m;

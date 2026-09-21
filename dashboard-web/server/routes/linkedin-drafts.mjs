@@ -22,6 +22,8 @@ import { getProfile } from '../../../lib/outreach-rubric.mjs';
 import { resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
 import { buildPacket, buildPacketFromFields } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
+import { getSequence, getTemplate, toneForNextTouch } from '../lib/sequences.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 export const router = express.Router();
 
@@ -79,12 +81,13 @@ function resolveRecipient(source, id) {
   return null;
 }
 
-export function mergeConnectPacketContext(packet, { tone = '', reason = '', angleGuidance = '', referralTarget = '' } = {}) {
+export function mergeConnectPacketContext(packet, { tone = '', reason = '', angleGuidance = '', referralTarget = '', sequenceTone = '' } = {}) {
   const additions = [
     reason ? `Reason: ${reason}` : '',
     angleGuidance ? `Angle guidance: ${angleGuidance}` : '',
     referralTarget ? `Referral target: ${referralTarget}` : '',
     tone ? `Tone guidance: ${toneInstruction(tone)}` : '',
+    sequenceTone ? `Sequence tone: ${sequenceTone}` : '',
   ].filter(Boolean);
   if (!additions.length) return packet;
   return {
@@ -306,6 +309,14 @@ router.get('/api/linkedin-drafts/connect-queue', (req, res) => {
   }
 });
 
+function connectNoteSequenceTone(source, id) {
+  if (source !== 'ta' || id == null) return '';
+  try {
+    const seq = getSequence('ta', id);
+    return seq ? toneForNextTouch(seq, getTemplate(seq.sequenceId), 'linkedin') : '';
+  } catch { return ''; }
+}
+
 // POST /api/linkedin-drafts/connect-note — draft a <=300-char LinkedIn connection
 // note for a GENERIC recipient. Pass { source, id } to draft for a queue member
 // (a TA contact), or raw { name, role, company, reason, firstName } for an
@@ -386,6 +397,7 @@ router.post('/api/linkedin-drafts/connect-note', async (req, res) => {
     const packet = resolved?.id != null && ['ta', 'referral'].includes(src)
       ? mergeConnectPacketContext(basePacket, {
         tone,
+        sequenceTone: connectNoteSequenceTone(src, resolved?.id),
         reason: suppliedReason,
         angleGuidance: angle ? guidance : '',
         referralTarget: src === 'referral' ? resolved?.reason || '' : '',
@@ -522,7 +534,7 @@ router.post('/api/linkedin-drafts/archive-contact', (req, res) => {
     const rows = parseTargetTalentMd();
     const row = rows.find(r => String(r.id) === String(id));
     if (!row) return res.status(404).json({ error: 'Contact not found.' });
-    const date = new Date().toISOString().slice(0, 10);
+    const date = localToday();
     const existing = (row.notes || '').trim();
     const notes = `${existing ? existing + ' · ' : ''}Archived ${date}: ${reasonText}`;
     const ok = updateTTLine(Number(id), { status: 'Archived', notes });

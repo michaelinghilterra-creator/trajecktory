@@ -18,6 +18,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { canonicalUrl } from './lib/identity.mjs';
 import { parsePipelineRow } from './lib/pipeline.mjs';
+import { localToday } from './lib/local-date.mjs';
 
 const PIPELINE_PATH = 'data/pipeline.md';
 const GATE_HISTORY_PATH = 'data/gate-history.tsv';
@@ -45,7 +46,7 @@ if (!existsSync(PIPELINE_PATH)) {
 }
 
 const cutoffMs = Date.now() - days * 86400000;
-const cutoffDate = new Date(cutoffMs).toISOString().slice(0, 10);
+const cutoffDate = localToday(new Date(cutoffMs));
 
 // Build date lookups: gate-history (preferred) and scan-history (fallback)
 const gateDates = new Map();

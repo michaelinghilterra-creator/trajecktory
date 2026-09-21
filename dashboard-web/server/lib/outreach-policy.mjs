@@ -4,6 +4,7 @@ import { DATA_DIR } from '../config.mjs';
 import { summarizeThread, outreachCapState, isChannelCapped } from './correspondence-context.mjs';
 import { isLinkedInEntry, isLinkedInInvite } from './channels.mjs';
 import { OUTREACH_DEFAULTS } from './profile.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
 
 const DAY_MS = 86400000;
 const day = value => String(value || '').slice(0, 10);
@@ -50,7 +51,7 @@ export function canContact({ timeline = [], channel = 'email', source = '', comp
   const p = normalizedPolicy(policy);
   if (p.enabled === false) return { allowed: true, blocks: [], nextEligible: null };
   const events = Array.isArray(timeline) ? timeline : [];
-  const today = now.toISOString().slice(0, 10);
+  const today = localToday(now);
   const wanted = channelKey(channel);
   const sent = events.filter(e => e.direction === 'Sent');
   const blocks = [];
