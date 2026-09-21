@@ -22,6 +22,7 @@ fs.writeFileSync(path.join(sandbox, 'app-notes.json'), '{}\n');
 fs.writeFileSync(path.join(sandbox, 'event-store.json'), JSON.stringify({ writes: 'on', flipped_at: '2030-03-01T00:00:00.000Z' }));
 
 const { openEventStore, readEvents } = await import('../lib/event-store.mjs');
+const { renderLegacyFile } = await import('../lib/legacy-files.mjs');
 const { importDataFolder } = await import('../lib/import/import-data-folder.mjs');
 {
   const out = path.join(sandbox, 'fixture-output');
@@ -60,6 +61,12 @@ const files = ['applications.md', 'status-events.tsv', 'apply-dates.json', 'app-
 const snapshot = () => Object.fromEntries(files.map(f => [f, fs.readFileSync(path.join(sandbox, f), 'utf8')]));
 const sameFiles = (a, b) => files.every(f => a[f] === b[f]);
 const allEvents = () => { const st = openEventStore(path.join(sandbox, 'trajecktory.db')); const e = readEvents(st); st.close(); return e; };
+const projectedNotes = () => {
+  const st = openEventStore(path.join(sandbox, 'trajecktory.db'));
+  const text = renderLegacyFile(st, 'app-notes.json');
+  st.close();
+  return text ? JSON.parse(text) : {};
+};
 // The parsed tracker is cached on the file time; writes in the same millisecond would look unchanged, so move it on.
 let tick = Date.now();
 const statusOf = (id) => { tick += 2000; fs.utimesSync(path.join(sandbox, 'applications.md'), tick / 1000, tick / 1000); return parseApplicationsMd().find(r => r.id === id)?.status; };
@@ -103,15 +110,23 @@ try {
   const syncPath = path.join(sandbox, 'google-sync.json');
   r = await send('POST', '/api/google/replies/m900001/rejected', { appId: 900003, company: 'Quennox Ratchet Works', from: 'Example Personone <example.personone@quennox.example>', subject: 'Your application', bodyPreview: 'Invented rejection.', date: '2030-03-12T10:00:00Z' });
   if (r.status !== 200) console.log(JSON.stringify(r.body).slice(0, 300));
-  check(r.status === 200 && statusOf(900003) === 'Rejected' && JSON.parse(fs.readFileSync(path.join(sandbox, 'app-notes.json'), 'utf8'))['900003']?.length === 1, 'the reply is logged and the status flipped');
+  check(r.status === 200 && statusOf(900003) === 'Rejected' && projectedNotes()['900003']?.length === 1, 'the reply note is projected from the event and the status flipped');
   list = await recent();
   check(list.actions.length === 1 && list.actions[0].type === 'reply_attached' && list.actions[0].undoable && list.actions[0].member_ids.length === 1 && /Reply logged, status set to Rejected/.test(list.actions[0].summary), 'the reply and its status flip are one action');
-  r = await send('POST', `/api/events/${list.actions[0].event_id}/undo`, { reason: 'wrong_record' });
+  const replyEventId = list.actions[0].event_id;
+  const loggedReply = allEvents().find((event) => event.id === replyEventId);
+  check(loggedReply?.payload?.legacy_effects?.some((effect) => effect.file === 'app-notes.json' && effect.op === 'json_nested_append'), 'the reply event itself owns the note effect');
+  r = await send('POST', `/api/events/${replyEventId}/undo`, { reason: 'wrong_record' });
   check(r.status === 200 && r.body.note_removed === true, 'undoing the reply removes the note');
   check(statusOf(900003) === 'Applied', 'the status is back');
   check(!JSON.parse(fs.readFileSync(syncPath, 'utf8')).handledReplies?.m900001, 'the message is no longer marked handled, so the sweep shows it again');
   const after = snapshot();
-  check(after['applications.md'] === beforeReply['applications.md'] && after['status-events.tsv'] === beforeReply['status-events.tsv'] && !JSON.parse(after['app-notes.json'])['900003'], 'the tracker and status events are exactly as before, and the note is gone');
+  const history = allEvents();
+  check(after['applications.md'] === beforeReply['applications.md'] && after['status-events.tsv'] === beforeReply['status-events.tsv']
+    && !projectedNotes()['900003']
+    && history.some((event) => event.id === replyEventId)
+    && history.some((event) => event.type === 'event_undone' && event.corrects_event_id === replyEventId),
+  'the note is void-suppressed in the projection while its original event remains recoverable');
 
   // Refusals.
   r = await send('POST', '/api/events/1/undo', {});
