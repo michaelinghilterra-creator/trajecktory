@@ -118,7 +118,17 @@ const lastDay = buildWeeklyReview({ today: '2030-03-16', weekCount: 1, interview
   { appId: 4, stage: 'Phone Screen', date: '2030-03-16', evidence_ok: false },
   { appId: 5, stage: 'Phone Screen', date: '2030-03-17', evidence_ok: false },
 ] });
-check(lastDay.weeks[0].unconfirmed_interviews.map((i) => i.application_id).join() === '4' && lastDay.weeks[0].scheduled.length === 0, 'the last day of a week counts and the day after it does not');
+check(lastDay.weeks[0].unconfirmed_interviews.map((i) => i.application_id).join() === '4', 'the last day of a week counts and the day after it does not');
+// This used to also assert `scheduled.length === 0`, which was asserting the bug:
+// today is a Saturday, so an interview arranged for the NEXT day fell outside the
+// week window and was dropped. A scheduled line is always dated after today, so
+// week-filtering could only ever discard it, and how much it discarded depended on
+// which weekday the review ran. Scheduled lines now attach to the current week.
+check(lastDay.weeks[0].scheduled.map((i) => i.application_id).join() === '5', 'an interview arranged for tomorrow is scheduled, not dropped for falling outside the week');
+const farOut = buildWeeklyReview({ today: '2030-03-16', weekCount: 1, interviews: [
+  { appId: 6, stage: 'Phone Screen', date: '2030-04-30', evidence_ok: false },
+] });
+check(farOut.weeks[0].scheduled.map((i) => i.application_id).join() === '6', 'an interview arranged six weeks out still appears, rather than vanishing past the current Saturday');
 check(buildWeeklyReview({ today: '2030-03-13', interviews: [{ appId: 1, stage: 'Phone Screen', date: '2030-01-01', evidence_ok: false }] }).needs_review === 0, 'an item outside the shown weeks is not counted');
 
 // A line recorded in the event store can say directly which bucket it is in (needed for a held date entered
