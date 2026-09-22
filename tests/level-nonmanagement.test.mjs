@@ -36,7 +36,7 @@ function section(n) { console.log(`\n${n}`); }
 section('THE REGRESSION: <function> Manager is not management');
 for (const t of ['Product Manager', 'Senior Product Manager', 'IC Product Manager',
   'Program Manager', 'Project Manager', 'Account Manager',
-  'Engagement Manager', 'Customer Success Manager']) {
+  'Engagement Manager', 'Customer Success Manager', 'Renewals Manager']) {
   check(levelRank(t) === null, `${t} -> null (got ${levelRank(t)})`);
 }
 check(levelRank('IC Product Manager, reporting to Manager, Revenue Operations') === null,
