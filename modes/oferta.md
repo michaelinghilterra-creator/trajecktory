@@ -21,6 +21,13 @@ The report file is **JSON frontmatter + a narrative markdown body**, not freefor
   "url": "...",
   "score": <DERIVED, do NOT author this; compute-scores.mjs computes it from globalScore>,
   "scoreCeiling": <optional 0-5 hard cap; set ONLY when a blocker must keep the score low>,
+  "ceilingBasis": <REQUIRED whenever scoreCeiling is set. One of: "comp" | "location" |
+                   "level" | "buildDepth" | "requirement" | "visa" | "other".
+                   This DECLARES which blocker caused the cap. Do not leave the code to
+                   infer it from your prose: a location cap whose reason mentions "base
+                   pay" was once silently replaced by a comp recomputation, discarding a
+                   real blocker. Only "comp" causes the number to be recomputed.>,
+  "ceilingReason": <one short sentence naming the blocker, for a human reader>,
   "domain": "...",
   "summary":          { ... },     // Block A → see "summary" in schema
   "recommendation":   "...",

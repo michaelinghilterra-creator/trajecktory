@@ -60,14 +60,28 @@ export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, c
   // headline no matter how well the rest scores. The eval sets it; the code enforces it.
   //
   // EXCEPT for comp. "Is this band below the floor" is arithmetic, and models get
-  // the direction wrong (see tests/comp-ceiling.test.mjs). When the report says
-  // WHY it capped and that reason is comp, the authored number is discarded and
-  // recomputed from compensation.minimum. An eval that emits no ceilingReason is
-  // left exactly as before, so no historical report is silently rescored.
+  // the direction wrong (see tests/comp-ceiling.test.mjs). When a report says its
+  // cap is a COMP cap, the authored number is discarded and recomputed from
+  // compensation.minimum.
+  //
+  // WHICH cap it is must be declared, never inferred from prose. This first
+  // matched /\b(comp|pay|salary|base|band|floor|OTE)\b/ against ceilingReason,
+  // which is wrong in both directions: a LOCATION cap whose reason mentions "base
+  // pay" would be silently replaced by a comp computation, and an evaluator can
+  // steer around the pattern by choosing different words. One did exactly that and
+  // said so, which is how this was found. Attribution by substring over free text
+  // is the same defect as levelRank matching "Manager" inside "Product Manager".
+  //
+  // ceilingBasis is the declaration: "comp" | "location" | "level" | "buildDepth"
+  // | "requirement" | "other". Only "comp" triggers recomputation.
+  //
+  // A report with a ceiling but NO ceilingBasis keeps its authored number
+  // untouched. That is deliberate: every historical report predates this field,
+  // and guessing their basis from prose is the very thing being removed.
   let ceiling = typeof data.scoreCeiling === 'number' && Number.isFinite(data.scoreCeiling) ? data.scoreCeiling : null;
   let ceilingSource = ceiling === null ? null : 'authored';
-  const reason = typeof data.ceilingReason === 'string' ? data.ceilingReason : '';
-  if (reason && /\b(comp|pay|salary|base|band|floor|OTE)\b/i.test(reason)) {
+  const basis = typeof data.ceilingBasis === 'string' ? data.ceilingBasis.trim().toLowerCase() : '';
+  if (basis === 'comp') {
     const cc = compCeiling(data.summary && data.summary.compStated, { minimum: compMinimum });
     ceiling = cc.ceiling;
     ceilingSource = `comp:${cc.reason}`;
