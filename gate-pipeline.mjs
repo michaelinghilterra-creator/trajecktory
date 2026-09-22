@@ -24,6 +24,7 @@ import yaml from 'js-yaml';
 import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness, workdaySiteFromCareersUrl } from './liveness-core.mjs';
 import { isSafeLivenessUrl } from './lib/safe-url.mjs';
 import { buildDecidedIndex, findDecided, buildActiveRoleIndex, findActiveRepost } from './lib/identity.mjs';
+import { sourceUrlFromSnapshot } from './lib/snapshot-url.mjs';
 import { appendGateHistory } from './lib/gate-history.mjs';
 import { localToday } from './lib/local-date.mjs';
 
@@ -68,17 +69,50 @@ const lines = text.split('\n');
 // Each pending line looks like:
 //   - [ ] https://...                                  (bare URL)
 //   - [ ] https://... | Company | Role                 (with metadata)
-const PENDING_RX = /^(\s*-\s*\[ \]\s+)(https?:\/\/[^\s|]+)(\s.*)?$/;
+//   - [ ] local:jds/foo.md | Company | Role            (snapshot; URL inside the file)
+//
+// resolve-jds.mjs REPOINTS a row from its URL to local:jds/<file>.md so the eval
+// agents can read SPA postings that a plain fetch renders blank. That rewrite made
+// this gate structurally blind: the pattern accepted only http(s), so a fully
+// resolved queue matched ZERO rows and the gate printed "nothing to gate" and exited
+// 0. Two documented workflow steps cancelled each other out, and the one that lost
+// is the step AGENTS.md calls the most important in the batch.
+//
+// It failed SILENTLY, reporting success, which is why it survived: a gate that finds
+// nothing looks exactly like a queue with nothing wrong. Found 2026-09-22 with 107
+// rows pending, every one of them resolved, and the gate reporting all clear.
+//
+// The URL is not lost, only moved: resolve-jds.mjs writes a "**Source URL:**" line
+// into every snapshot. Recover it from there and gate that.
+const PENDING_RX = /^(\s*-\s*\[ \]\s+)(https?:\/\/[^\s|]+|local:[^\s|]+)(\s.*)?$/;
 
 const pending = [];
+const unresolvable = [];
 for (let i = 0; i < lines.length; i++) {
   const m = lines[i].match(PENDING_RX);
   if (m) {
     // Pipeline lines carry "| Company | Role" metadata after the URL. Parse it
     // for the repost guard's company+role hint (empty when a bare URL).
     const meta = (m[3] || '').split('|').map(s => s.trim()).filter(Boolean);
-    pending.push({ idx: i, prefix: m[1], url: m[2], suffix: m[3] || '', company: meta[0] || '', role: meta[1] || '' });
+    let url = m[2];
+    if (url.startsWith('local:')) {
+      const recovered = sourceUrlFromSnapshot(url);
+      if (!recovered) {
+        // Fail OPEN: a snapshot with no recoverable URL stays pending and is
+        // reported, never silently gated as dead. Discarding a live posting
+        // costs a job; keeping a dead one costs a single evaluation.
+        unresolvable.push({ idx: i, ref: url, company: meta[0] || '' });
+        continue;
+      }
+      url = recovered;
+    }
+    pending.push({ idx: i, prefix: m[1], url, suffix: m[3] || '', company: meta[0] || '', role: meta[1] || '' });
   }
+}
+
+if (unresolvable.length) {
+  console.log(`\n${unresolvable.length} snapshot(s) carry no recoverable Source URL, left pending:`);
+  for (const u of unresolvable.slice(0, 10)) console.log(`  ${u.ref}  ${u.company}`);
 }
 
 if (pending.length === 0) {
