@@ -683,6 +683,27 @@ node gate-pipeline.mjs
 #     default; --apply to write.
 node reconcile-triage.mjs --apply
 
+# 2c. OPTIONAL, and inert unless TJK_SPARK_URL is set in .env. Score every pending
+#     row on your own local model and drop the ones below TJK_SPARK_THRESHOLD, so
+#     the batch never spends a Claude evaluation on them. The local number is a
+#     FILTERING decision, not a score: nothing is written to reports/, pipeline.md
+#     or applications.md, only a discard row in triage-results.tsv plus a
+#     'prefiltered' row in gate-history.tsv and the raw output under
+#     data/spark-prefilter/<date>/ so any discard can be replayed or reversed.
+#     Runs AFTER 1b (the model has no web access, so it reads local:jds/ snapshots),
+#     AFTER 2 (never spend a discard decision on a posting already gated dead) and
+#     AFTER 2b (or handled rows get re-filtered every run).
+#     It REPLACES the Haiku triage pass for this queue — both write to
+#     triage-results.tsv, which dedups on URL, so running both means one silently
+#     drops the other's work. modes/triage.md remains the interactive path and the
+#     fallback when the endpoint is down.
+#     Dry-run by default. Read the audit sample it prints before committing.
+node spark-prefilter.mjs --apply
+
+# 2d. REQUIRED if 2c wrote anything: check off the rows it just discarded, or they
+#     stay "- [ ]" and the batch evaluates exactly what the filter just declined.
+node reconcile-triage.mjs --apply
+
 # 3. Run the batch (only "- [ ]" items get evaluated; "- [!]" are skipped)
 #    via /trajecktory pipeline in your CLI
 

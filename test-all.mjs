@@ -452,6 +452,7 @@ for (const suite of [
   'tests/scan-coverage.test.mjs',
   'tests/resolve-jds.test.mjs',
   'tests/gate-history.test.mjs',
+  'tests/spark-prefilter.test.mjs',
   'tests/event-store.test.mjs',
   'tests/event-store-perf.test.mjs',
   'tests/legacy-files.test.mjs',
