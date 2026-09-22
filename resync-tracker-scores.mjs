@@ -91,9 +91,20 @@ export function replaceScoreCell(line, newCell) {
  * Pure planner. `rows` are raw lines; `loadReport(relPath) -> md|null`.
  * Returns { checked, changes:[{num, company, from, to, line, newLine}], skipped }.
  */
-export function planScoreResync(lines, loadReport) {
+/**
+ * planScoreResync(lines, loadReport, { only })
+ *
+ * `only` restricts the plan to a set of report/tracker numbers. It exists because
+ * all-or-nothing forced a bad choice: after a restamp touched 10 rows, 16 OTHER
+ * rows were also out of sync for an unrelated and undiagnosed reason, and the only
+ * way to finish the 10 was to also overwrite the 16. That would not have fixed the
+ * 16 — it would have destroyed the evidence that something is wrong with them.
+ * Drift is information, so a subset resync has to be expressible.
+ */
+export function planScoreResync(lines, loadReport, { only } = {}) {
+  const limit = only == null ? null : new Set([...only].map(n => String(n).trim()).filter(Boolean));
   const changes = [];
-  let checked = 0, legacy = 0, noReport = 0;
+  let checked = 0, legacy = 0, noReport = 0, filtered = 0;
   for (const line of lines) {
     const row = parseTrackerLine(line);
     if (!row) continue;
@@ -125,14 +136,30 @@ export function planScoreResync(lines, loadReport) {
         throw new Error(`row #${row.num}: field "${k}" changed (${row[k]} -> ${after[k]}), aborting`);
       }
     }
+    // Filter AFTER the field-integrity check above, so a row excluded by --only is
+    // still validated rather than silently unexamined.
+    if (limit && !limit.has(String(row.num))) { filtered++; continue; }
     changes.push({ num: row.num, company: row.company, from: row.score, to: fmtScore(data.score), line, newLine });
   }
-  return { checked, changes, skipped: { legacy, noReport } };
+  return { checked, changes, skipped: { legacy, noReport, filtered } };
+}
+
+// --only 2922,2923  or  --only-file path (one id per line, # comments allowed)
+function parseOnly(argv) {
+  const i = argv.indexOf('--only');
+  if (i > -1 && argv[i + 1]) return argv[i + 1].split(/[,\s]+/).filter(Boolean);
+  const f = argv.indexOf('--only-file');
+  if (f > -1 && argv[f + 1]) {
+    return fs.readFileSync(argv[f + 1], 'utf-8')
+      .split(/\r?\n/).map(l => l.replace(/#.*$/, '').trim()).filter(Boolean);
+  }
+  return null;
 }
 
 function main() {
   const apply = process.argv.includes('--apply');
   const jsonOut = process.argv.includes('--json');
+  const only = parseOnly(process.argv);
   if (!fs.existsSync(APPS)) {
     console.error(`No tracker at ${APPS}`);
     process.exit(1);
@@ -145,8 +172,13 @@ function main() {
   };
 
   let plan;
-  try { plan = planScoreResync(lines, loadReport); }
+  try { plan = planScoreResync(lines, loadReport, { only }); }
   catch (err) { console.error(`ABORTED: ${err.message}`); process.exit(1); }
+
+  if (only && !jsonOut) {
+    console.log(`\nSCOPED to ${only.length} id(s): ${only.join(' ')}`);
+    console.log(`Rows out of sync but NOT in scope are left alone deliberately.`);
+  }
 
   if (jsonOut) {
     console.log(JSON.stringify({

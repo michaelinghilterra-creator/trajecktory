@@ -146,4 +146,44 @@ scoring:
   # northStar 0.29, level 0.18, location 0.12.
   # Most points subtracted when red flags are severe. The model rates red-flag
   # cleanliness 0-5 (5 = clean); a 0 subtracts this whole amount from the average.
+  # Build-depth ceilings, keyed by the buildDepth rating (0-5). A rating not
+  # listed adds no ceiling from this dimension, and an explicit null means the
+  # same. These values ARE the shipped policy: the model rates the dimension and
+  # the code sets the cap, so retuning is a config edit rather than a prompt edit.
+  #
+  # MEASURED 2026-09-22 before you consider loosening these: softening them does
+  # NOT buy recall. On two natural-base-rate holdout slices the recall gain was
+  # exactly zero (71% either way) while correlation fell and false positives rose.
+  # On stratified slices the gain was 2 points against a 15 point run-to-run
+  # spread, i.e. noise. The ceiling fires on about one role in seven and only one
+  # of those was genuinely strong.
+  #
+  # WARNING: if you run a pre-filter (spark-prefilter.mjs), lowering a cap BELOW
+  # its threshold silently converts kept roles into discards, because a capped
+  # role sits exactly ON the line rather than under it. Raising a cap is safe.
+  build_depth_ceilings:
+    0: 2.0   # not a version of the target role at all; sits below auto-discard
+    1: 2.0
+    2: 3.0   # a real role with a real build lean; stays visible for a human call
   redFlagPenalty: 1.5
+  # The lowest title you would accept. Any JD title at or above this rung is a FULL
+  # level match and its `level` dimension is floored to its max -- an in-scope title
+  # is never a "downlevel". Ambiguous senior-IC titles (Lead, Principal, Staff) are
+  # left to the evaluator's judgment rather than auto-floored.
+  minimum_level: "Manager"
+  # Titles where a level word is a MODIFIER of a function rather than a statement of
+  # seniority. "Product Manager" contains the whole word "Manager", so without this
+  # list it satisfies minimum_level and gets floored to a perfect level match -- which
+  # happened to an explicit IC role. A match here is treated as ambiguous: neither
+  # promoted nor rejected, the evaluator's own rating stands.
+  # Retune for your field. A Marketing Manager or Community Manager often DOES manage
+  # people, so they are deliberately not listed; add them only if that is not true in
+  # your market. An empty list switches the policy off entirely.
+  non_management_titles:
+    - "Product Manager"
+    - "Program Manager"
+    - "Project Manager"
+    - "Account Manager"
+    - "Engagement Manager"
+    - "Customer Success Manager"
+    - "Renewals Manager"

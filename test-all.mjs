@@ -452,6 +452,7 @@ for (const suite of [
   'tests/scan-coverage.test.mjs',
   'tests/resolve-jds.test.mjs',
   'tests/gate-history.test.mjs',
+  'tests/spark-prefilter.test.mjs',
   'tests/event-store.test.mjs',
   'tests/event-store-perf.test.mjs',
   'tests/legacy-files.test.mjs',
@@ -692,6 +693,13 @@ for (const suite of [
   'tests/data-review.test.mjs',
   'tests/report-data-review.test.mjs',
   'tests/event-store-route.test.mjs',
+  // Scoring guards added 2026-09-21/22. This list is explicit, NOT auto-discovered:
+  // a suite that is not named here never runs, and its absence looks exactly like
+  // a passing run. All four below sat unregistered until that was noticed.
+  'tests/comp-ceiling.test.mjs',
+  'tests/level-nonmanagement.test.mjs',
+  'tests/gate-local-snapshot.test.mjs',
+  'tests/ceiling-basis.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);

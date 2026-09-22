@@ -27,14 +27,14 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs';
-import { deriveScore, loadScoringWeights, SCORE_DIMENSIONS, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL } from './lib/score.mjs';
+import { deriveScore, loadScoringWeights, SCORE_DIMENSIONS, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL, compCeiling, buildDepthCeiling } from './lib/score.mjs';
 
 const round1 = (n) => Math.round(n * 10) / 10;
 
 // Pure core: given a report's markdown, return the derivation outcome and (when
 // derivable) the rewritten markdown. No file I/O, so it is unit-tested directly.
 //   reason: 'not-v1' | 'no-keyed-dims' | 'not-derivable' | 'ok'
-export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel } = {}) {
+export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, compMinimum, nonManagementTitles, buildDepthCeilings } = {}) {
   if (!hasV1Frontmatter(md)) return { ok: false, reason: 'not-v1' };
   let parsed;
   try { parsed = parseV1(md); } catch { return { ok: false, reason: 'not-v1' }; }
@@ -53,12 +53,47 @@ export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel } 
   // applyLevelFloor strips "(reports to Director…)"-style context so a role that
   // merely reports to a Director is not misread as one.
   const detectedLevel = (data.levelMatch && data.levelMatch.jdLevel) || (data.summary && data.summary.seniority) || null;
-  const floor = applyLevelFloor(gs, detectedLevel, minimumLevel);
+  const floor = applyLevelFloor(gs, detectedLevel, minimumLevel, nonManagementTitles);
   const dimsForScore = floor.dims;
 
   // A hard ceiling (a location you will not work, visa you cannot get) caps the
   // headline no matter how well the rest scores. The eval sets it; the code enforces it.
-  const ceiling = typeof data.scoreCeiling === 'number' && Number.isFinite(data.scoreCeiling) ? data.scoreCeiling : null;
+  //
+  // EXCEPT for comp. "Is this band below the floor" is arithmetic, and models get
+  // the direction wrong (see tests/comp-ceiling.test.mjs). When a report says its
+  // cap is a COMP cap, the authored number is discarded and recomputed from
+  // compensation.minimum.
+  //
+  // WHICH cap it is must be declared, never inferred from prose. This first
+  // matched /\b(comp|pay|salary|base|band|floor|OTE)\b/ against ceilingReason,
+  // which is wrong in both directions: a LOCATION cap whose reason mentions "base
+  // pay" would be silently replaced by a comp computation, and an evaluator can
+  // steer around the pattern by choosing different words. One did exactly that and
+  // said so, which is how this was found. Attribution by substring over free text
+  // is the same defect as levelRank matching "Manager" inside "Product Manager".
+  //
+  // ceilingBasis is the declaration: "comp" | "location" | "level" | "buildDepth"
+  // | "requirement" | "other". "comp" and "buildDepth" trigger recomputation,
+  // because both are arithmetic over something already in the report: a stated
+  // band against the configured floor, and a 0-5 rating against the configured
+  // tiers. The rest are judgment and keep the authored number.
+  //
+  // A report with a ceiling but NO ceilingBasis keeps its authored number
+  // untouched. That is deliberate: every historical report predates this field,
+  // and guessing their basis from prose is the very thing being removed.
+  let ceiling = typeof data.scoreCeiling === 'number' && Number.isFinite(data.scoreCeiling) ? data.scoreCeiling : null;
+  let ceilingSource = ceiling === null ? null : 'authored';
+  const basis = typeof data.ceilingBasis === 'string' ? data.ceilingBasis.trim().toLowerCase() : '';
+  if (basis === 'comp') {
+    const cc = compCeiling(data.summary && data.summary.compStated, { minimum: compMinimum });
+    ceiling = cc.ceiling;
+    ceilingSource = `comp:${cc.reason}`;
+  } else if (basis === 'builddepth') {
+    const bd = gs.find((d) => d && d.key === 'buildDepth');
+    const bc = buildDepthCeiling(bd && (bd.val ?? bd.score), { ceilings: buildDepthCeilings });
+    ceiling = bc.ceiling;
+    ceilingSource = `buildDepth:${bc.reason}`;
+  }
   const res = deriveScore(dimsForScore, { weights, redFlagPenalty, ceiling });
   if (!res.derivable) return { ok: false, reason: 'not-derivable', score: data.score ?? null };
 

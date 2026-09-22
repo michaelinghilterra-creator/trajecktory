@@ -30,6 +30,7 @@ These files contain your personal data, customizations, and work product. Update
 | `data/cadence.json`, `data/cadence-log.json` | Your Today-tab weekly cadence and its completion log |
 | `data/todos.json` | Your to-do list |
 | `data/release-notes-cache.json` | Cached GitHub release notes for the Change Log tab (6h TTL). Pure cache: delete it any time and it refetches, or falls back to `CHANGELOG.md` offline. |
+| `data/spark-prefilter/<date>/*.json` | Raw output from your local pre-filter model, one file per scored posting. This is what makes a discard replayable and reversible: the decision can be re-derived against a changed `config/profile.yml` without paying for the inference again. Holds real employer names and posting URLs, so it is covered by the wholesale `data/*` ignore and must stay that way. Safe to delete, at the cost of that audit trail. |
 | `writing-samples/*` | Your personal writing samples for style calibration |
 | `reports/*` | Your evaluation reports |
 | `output/*` | Your generated PDFs |
