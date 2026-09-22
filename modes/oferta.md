@@ -133,12 +133,12 @@ Emit `globalScore` as **keyed** objects (the `key` is what the code matches to a
     evidence the job is bigger than its title (a wider multi-level band, heavy variable
     comp, or a genuinely more senior role), not a bonus. If the role really sits two rungs
     up, that is a ceiling, the same as any requirement they plainly lack.
-  - **Build depth trip.** If `buildDepth` is **0 or 1**, set `scoreCeiling` to **2.0**.
-    This is not a version of the target role at all, and 2.0 sits below the auto-discard
-    threshold so the role leaves the queue. If `buildDepth` is **2**, set `scoreCeiling`
-    to **3.0**. This is a real role with a real build lean, and 3.0 keeps it visible below
-    the apply target so a human can still override it deliberately. Ratings 3, 4, or 5
-    add no ceiling from this dimension.
+  - **Build depth trip.** Rate `buildDepth` honestly against the 0-5 anchors above and set
+    `ceilingBasis` to `"buildDepth"`. **Do not author the number.** `compute-scores.mjs`
+    computes the cap from `scoring.build_depth_ceilings` in `config/profile.yml`, the same
+    way it computes the comp cap: mapping a rating to a ceiling is arithmetic, and keeping
+    it in one place means retuning the policy is a config edit rather than an edit to two
+    separate prompts that can drift apart.
 - Give **`evidence` for every rating** (one phrase). The drawer shows it; it is what makes
   a rating auditable.
 - **Do NOT write a headline `score` yourself.** Leave a placeholder; the post-eval step

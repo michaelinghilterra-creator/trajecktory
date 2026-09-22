@@ -27,14 +27,14 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs';
-import { deriveScore, loadScoringWeights, SCORE_DIMENSIONS, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL, compCeiling } from './lib/score.mjs';
+import { deriveScore, loadScoringWeights, SCORE_DIMENSIONS, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL, compCeiling, buildDepthCeiling } from './lib/score.mjs';
 
 const round1 = (n) => Math.round(n * 10) / 10;
 
 // Pure core: given a report's markdown, return the derivation outcome and (when
 // derivable) the rewritten markdown. No file I/O, so it is unit-tested directly.
 //   reason: 'not-v1' | 'no-keyed-dims' | 'not-derivable' | 'ok'
-export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, compMinimum, nonManagementTitles } = {}) {
+export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, compMinimum, nonManagementTitles, buildDepthCeilings } = {}) {
   if (!hasV1Frontmatter(md)) return { ok: false, reason: 'not-v1' };
   let parsed;
   try { parsed = parseV1(md); } catch { return { ok: false, reason: 'not-v1' }; }
@@ -73,7 +73,10 @@ export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, c
   // is the same defect as levelRank matching "Manager" inside "Product Manager".
   //
   // ceilingBasis is the declaration: "comp" | "location" | "level" | "buildDepth"
-  // | "requirement" | "other". Only "comp" triggers recomputation.
+  // | "requirement" | "other". "comp" and "buildDepth" trigger recomputation,
+  // because both are arithmetic over something already in the report: a stated
+  // band against the configured floor, and a 0-5 rating against the configured
+  // tiers. The rest are judgment and keep the authored number.
   //
   // A report with a ceiling but NO ceilingBasis keeps its authored number
   // untouched. That is deliberate: every historical report predates this field,
@@ -85,6 +88,11 @@ export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, c
     const cc = compCeiling(data.summary && data.summary.compStated, { minimum: compMinimum });
     ceiling = cc.ceiling;
     ceilingSource = `comp:${cc.reason}`;
+  } else if (basis === 'builddepth') {
+    const bd = gs.find((d) => d && d.key === 'buildDepth');
+    const bc = buildDepthCeiling(bd && (bd.val ?? bd.score), { ceilings: buildDepthCeilings });
+    ceiling = bc.ceiling;
+    ceilingSource = `buildDepth:${bc.reason}`;
   }
   const res = deriveScore(dimsForScore, { weights, redFlagPenalty, ceiling });
   if (!res.derivable) return { ok: false, reason: 'not-derivable', score: data.score ?? null };

@@ -38,6 +38,9 @@ const CFG = {
   // the first draft of this file, as it did for tests/comp-ceiling.test.mjs.
   compMinimum: 120000,
   nonManagementTitles: [],
+  // Invented tiers, deliberately NOT the shipped ones, so a case here proves the
+  // cap came from config rather than from a default that happens to agree.
+  buildDepthCeilings: { 0: 1.5, 1: 1.5, 2: 2.5 },
 };
 
 // A strong role: without any ceiling this derives well above 4.
@@ -86,10 +89,41 @@ section('THE REGRESSION: a non-comp ceiling whose PROSE mentions pay is NOT reco
 }
 {
   const s = score({
+    scoreCeiling: 2.0, ceilingBasis: 'requirement',
+    ceilingReason: 'Requires an admin certification the CV lacks. Comp is above floor.',
+  });
+  check(s === 2, `requirement cap survives prose mentioning comp and floor (got ${s})`);
+}
+
+section('a declared BUILD DEPTH ceiling is recomputed from the rating, not authored');
+{
+  // The base fixture rates buildDepth 5, which is outside the configured tiers,
+  // so declaring the basis must REMOVE the authored cap rather than honour it.
+  // This case used to assert the opposite; the tiers moved into config on
+  // 2026-09-22 and mapping a rating to a cap is arithmetic, like comp.
+  const s = score({
     scoreCeiling: 2.0, ceilingBasis: 'buildDepth',
     ceilingReason: 'Hands-on implementation is the majority mandate. Comp is above floor.',
   });
-  check(s === 2, `buildDepth cap survives prose mentioning comp and floor (got ${s})`);
+  check(s === 5, `a rating of 5 adds no ceiling, discarding the authored 2.0 (got ${s})`);
+}
+{
+  // Same declaration, a rating that IS in the tiers. 1.5 is this file's invented
+  // tier, not the shipped 2.0, which is how we know it came from config.
+  const s = score({
+    scoreCeiling: 4.0, ceilingBasis: 'buildDepth',
+    ceilingReason: 'Builder seat wearing a leadership title.',
+    globalScore: [
+      { key: 'fit', dim: 'Fit', val: 5, max: 5 },
+      { key: 'northStar', dim: 'North Star', val: 5, max: 5 },
+      { key: 'level', dim: 'Level', val: 5, max: 5 },
+      { key: 'comp', dim: 'Comp', val: 5, max: 5 },
+      { key: 'location', dim: 'Location', val: 5, max: 5 },
+      { key: 'buildDepth', dim: 'Build', val: 1, max: 5 },
+      { key: 'redFlags', dim: 'Red Flags', val: 5, max: 5 },
+    ],
+  });
+  check(s === 1.5, `a rating of 1 takes the CONFIGURED tier, not the authored 4.0 (got ${s})`);
 }
 
 section('a declared COMP ceiling IS recomputed from the band');
