@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.9.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.8.0...v4.9.0) (2026-09-22)
+
+
+### Features
+
+* compute scoring ceilings in code and add an optional local pre-filter ([#385](https://github.com/michaelinghilterra-creator/trajecktory/issues/385)) ([d441538](https://github.com/michaelinghilterra-creator/trajecktory/commit/d44153841925ec5cd8e9a0c6d2729ac8d368225e))
+
 ## [4.8.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.7.0...v4.8.0) (2026-09-21)
 
 
