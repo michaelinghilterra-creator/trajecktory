@@ -20,8 +20,10 @@
 import fs from 'fs';
 import path from 'path';
 import { LINKEDIN_SSI_DIR } from '../config.mjs';
-import { parseTargetTalentMd } from './target-talent.mjs';
-import { parseReferralsMd } from './referrals.mjs';
+import { parseTargetTalentMd, readTTCorrespondence } from './target-talent.mjs';
+import { parseReferralsMd, readReferralCorrespondence } from './referrals.mjs';
+import { readLinkedInMap } from './tt-linkedin.mjs';
+import { readEngagementLog } from './engagement-log.mjs';
 import { contactRef, resolvePeople } from './contact-identity.mjs';
 import { readPins } from './contact-links.mjs';
 import { buildTimeline, buildDisplayTimeline, personLastTouch } from './contact-timeline.mjs';
@@ -46,7 +48,20 @@ export function getPersonContext(source, id, opts = {}) {
       .find(candidate => candidate.refs.includes(ref));
     if (!person) return null;
 
-    const timelineOpts = opts.timelineOpts || {};
+    // The three views each rebuild the timeline, so read each store once and share it.
+    const base = opts.timelineOpts || {};
+    const correspondence = new Map();
+    const timelineOpts = {
+      ...base,
+      linkedinMap: base.linkedinMap || readLinkedInMap(),
+      engagementLog: base.engagementLog || readEngagementLog(),
+      readCorrespondence: base.readCorrespondence || ((src, row, ref) => {
+        if (!correspondence.has(ref)) {
+          correspondence.set(ref, src === 'ta' ? readTTCorrespondence(row.id) : src === 'referral' ? readReferralCorrespondence(row.id) : []);
+        }
+        return correspondence.get(ref);
+      }),
+    };
     return {
       person,
       timeline: buildTimeline(person, timelineOpts),

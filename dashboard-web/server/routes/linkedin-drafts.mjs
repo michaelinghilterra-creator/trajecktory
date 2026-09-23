@@ -9,6 +9,7 @@ import { finishDraft } from '../lib/finish-draft.mjs';
 import { loadCompanyResearch } from '../lib/report-research.mjs';
 import { loadInfluencer, toneInstruction, fitConnectNote } from '../lib/linkedin-ssi.mjs';
 import { computeConnectQueue, computeBothQueue } from '../lib/followups.mjs';
+import { cachedRead } from '../lib/data-generation.mjs';
 import { parseTargetTalentMd, updateTTLine, readTTCorrespondence, findRelatedApps } from '../lib/target-talent.mjs';
 import { parseReferralsMd, referralTitle } from '../lib/referrals.mjs';
 import { getLinkedInStatus } from '../lib/tt-linkedin.mjs';
@@ -302,7 +303,7 @@ router.post('/api/linkedin-ssi/generate-connect-request', async (req, res) => {
 // address bounced, is org-blocked, or was never verifiable. TA contacts.
 router.get('/api/linkedin-drafts/connect-queue', (req, res) => {
   try {
-    res.json({ queue: computeConnectQueue() });
+    res.json({ queue: cachedRead('linkedin-drafts/connect-queue', () => computeConnectQueue()) });
   } catch (err) {
     console.error('connect-queue error:', err);
     res.status(500).json({ error: err.message });
