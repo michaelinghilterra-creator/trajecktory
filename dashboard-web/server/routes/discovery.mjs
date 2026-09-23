@@ -27,7 +27,7 @@ function cachedScanHistoryFirstSeen(file) {
   if (scanHistoryCache && scanHistoryCache.mtimeMs === stat.mtimeMs && scanHistoryCache.size === stat.size) {
     return scanHistoryCache.index;
   }
-  let text = '';
+  let text;
   try { text = fs.readFileSync(file, 'utf8'); } catch { return {}; }
   const index = scanHistoryFirstSeen(text);
   scanHistoryCache = { mtimeMs: stat.mtimeMs, size: stat.size, index };
