@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.9.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.9.0...v4.9.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* speed up slow dashboard endpoints and stop the bounce scan erasing reply dismissals ([#387](https://github.com/michaelinghilterra-creator/trajecktory/issues/387)) ([e399eea](https://github.com/michaelinghilterra-creator/trajecktory/commit/e399eeae036acb8b2ee03167bec027613daec595))
+
 ## [4.9.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.8.0...v4.9.0) (2026-09-22)
 
 
