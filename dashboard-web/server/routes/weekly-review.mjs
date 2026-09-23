@@ -17,6 +17,7 @@ import { readReviewResolutions, excludeReviewItem } from '../lib/review-events.m
 import { interviewKey, interviewState } from '../../../lib/interview-store.mjs';
 import { REVIEW_ITEM_KINDS, reviewItemKey } from '../../../lib/review-resolutions.mjs';
 import { localToday, logWritesEnabled } from '../../../lib/log-writes.mjs';
+import { cachedRead } from '../lib/data-generation.mjs';
 
 const DEFAULT_WEEKS = 4;
 const MAX_WEEKS = 12;
@@ -122,7 +123,8 @@ router.get('/api/setup/weekly-review', (req, res) => {
     if (!Number.isInteger(raw) || raw < 1 || raw > MAX_WEEKS) {
       return res.status(400).json({ error: `weeks must be a whole number from 1 to ${MAX_WEEKS}` });
     }
-    res.json(buildReviewForData({ weekCount: raw }));
+    const today = centralToday();
+    res.json(cachedRead(`setup/weekly-review:${raw}:${today}`, () => buildReviewForData({ today, weekCount: raw })));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

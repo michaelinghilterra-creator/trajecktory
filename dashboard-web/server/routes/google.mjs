@@ -284,13 +284,16 @@ router.post('/api/google/scan-bounces', async (req, res) => {
 
     // Advance the cursor over everything fetched (cap the history so the file
     // cannot grow without bound). A dry run leaves the cursor untouched.
+    // Re-read before writing: `sync` is seconds old after the Gmail fetches, and
+    // writing it back would erase any dismissal recorded in the meantime.
     if (!dryRun) {
-      sync.seenMessageIds = [...new Set([
-        ...sync.seenMessageIds,
+      const latest = readSync();
+      latest.seenMessageIds = [...new Set([
+        ...latest.seenMessageIds,
         ...fresh.map(m => m.id).filter(id => !heldBack.has(id)),
       ])].slice(-3000);
-      sync.lastCheckedAt = new Date().toISOString();
-      writeSync(sync);
+      latest.lastCheckedAt = new Date().toISOString();
+      writeSync(latest);
     }
 
     res.json({

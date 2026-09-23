@@ -16,6 +16,7 @@ import { loadEnvKey } from '../../../verify-contacts.mjs';
 import { findAndVerify, hunterSearchesLeft } from '../../../find-contacts.mjs';
 import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { computeReferralFollowups } from '../lib/followups.mjs';
+import { cachedRead } from '../lib/data-generation.mjs';
 import { snoozeToday, readSnooze, writeSnooze, pruneSnooze, isMuted } from '../lib/sidecars.mjs';
 import { resolveInfluenceTier } from '../../../lib/influence-tier.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
@@ -66,7 +67,7 @@ router.get('/api/referrals/followups', (req, res) => {
     const snooze = readSnooze();
     if (pruneSnooze(snooze)) writeSnooze(snooze);
     const today = snoozeToday();
-    const queue = computeReferralFollowups().filter(it => {
+    const queue = cachedRead('referrals/followups', () => computeReferralFollowups()).filter(it => {
       const until = snooze[it.source]?.[String(it.id)];
       return !(until && until > today) && !isMuted(it.id, it.source);
     });
