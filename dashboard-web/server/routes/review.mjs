@@ -7,6 +7,7 @@ import { REVIEW_LOG_PATH } from '../config.mjs';
 import { logConnect, readConnects } from '../lib/connects.mjs';
 import { actionSeries, applicationCohorts } from '../lib/activity.mjs';
 import { referralConversion } from '../lib/insights.mjs';
+import { cachedRead } from '../lib/data-generation.mjs';
 
 export const router = express.Router();
 
@@ -14,8 +15,10 @@ export const router = express.Router();
 // evaluation, for the dashboard tracking view. Same numbers the CLI reviews.
 router.get('/api/metrics/weekly', (req, res) => {
   try {
-    const { weekStart, weekEnd, metrics } = collectWeeklyMetrics(new Date());
-    res.json({ weekStart, weekEnd, metrics, floors: evaluateFloors(metrics), referralConversion: referralConversion() });
+    res.json(cachedRead('metrics/weekly', () => {
+      const { weekStart, weekEnd, metrics } = collectWeeklyMetrics(new Date());
+      return { weekStart, weekEnd, metrics, floors: evaluateFloors(metrics), referralConversion: referralConversion() };
+    }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

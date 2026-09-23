@@ -16,6 +16,7 @@ import { getIdentity } from '../lib/profile.mjs';
 import { loadProfileContext } from '../lib/insights.mjs';
 import { buildActivities, weeklyCounts, employersInActivities, toTwcCsv, enrichEmployers, ENRICH_MAX } from '../lib/twc.mjs';
 import { twcGateWarnings } from '../lib/twc-gate.mjs';
+import { cachedRead } from '../lib/data-generation.mjs';
 import { localToday } from '../../../lib/log-writes.mjs';
 import { readEvents, addEvent, deleteEvent } from '../lib/twc-events.mjs';
 import { getArchetypeRules } from '../lib/profile.mjs';
@@ -202,16 +203,18 @@ router.get('/api/setup/twc', (req, res) => {
   try {
     const from = isoOrUndef(req.query.from);
     const to = isoOrUndef(req.query.to);
-    const activities = buildActivities({ from, to });
-    res.json({
-      from: from || null,
-      to: to || null,
-      count: activities.length,
-      activities,
-      weeks: weeklyCounts(activities),
-      employers: employersInActivities(activities),
-      overrideWarnings: activities.overrideWarnings || 0,
-    });
+    res.json(cachedRead(`setup/twc:${from || ''}:${to || ''}`, () => {
+      const activities = buildActivities({ from, to });
+      return {
+        from: from || null,
+        to: to || null,
+        count: activities.length,
+        activities,
+        weeks: weeklyCounts(activities),
+        employers: employersInActivities(activities),
+        overrideWarnings: activities.overrideWarnings || 0,
+      };
+    }));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -222,7 +225,7 @@ router.get('/api/setup/twc/gate', (req, res) => {
     const from = isoOrUndef(req.query.from);
     const to = isoOrUndef(req.query.to);
     if (!from || !to) return res.status(400).json({ error: 'from and to are required as YYYY-MM-DD' });
-    res.json(twcGateWarnings({ from, to }));
+    res.json(cachedRead(`setup/twc/gate:${from}:${to}`, () => twcGateWarnings({ from, to })));
   } catch (err) {
     if (err instanceof TypeError) return res.status(400).json({ error: `Invalid ${err.message}` });
     res.status(500).json({ error: err.message });

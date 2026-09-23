@@ -28,8 +28,10 @@ import { reconcileInviteStatus } from '../lib/invite-status-reconcile.mjs';
 import { findSubmittedApplication } from '../lib/statuses.mjs';
 import { buildPacket } from '../../../lib/outreach-packet.mjs';
 import { buildAugustPrompt, parseDraftText, finishOptionsFor } from '../../../lib/outreach-voice.mjs';
-import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
+import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogRead, withLogWrite } from '../../../lib/log-writes.mjs';
 import { localToday } from '../../../lib/local-date.mjs';
+import { readPins } from '../lib/contact-links.mjs';
+import { cachedRead, cacheStamp, stampIsFresh } from '../lib/data-generation.mjs';
 
 export const router = express.Router();
 
@@ -132,7 +134,7 @@ router.get('/api/followups/queue', (req, res) => {
     const snooze = readSnooze();
     if (pruneSnooze(snooze)) writeSnooze(snooze);
     const today = snoozeToday();
-    const queue = computeFollowupQueue({ excludeReferrals: true }).filter(it => {
+    const queue = cachedRead('followups/queue', () => computeFollowupQueue({ excludeReferrals: true })).filter(it => {
       const until = snooze[it.source]?.[String(it.id)];
       return !(until && until > today) && !isMuted(it.id, it.source);
     });
@@ -147,7 +149,7 @@ router.get('/api/followups/queue', (req, res) => {
 // you haven't emailed yet. Working it logs verified email touches (the floor).
 router.get('/api/followups/email-queue', (req, res) => {
   try {
-    res.json({ queue: computeEmailQueue() });
+    res.json({ queue: cachedRead('followups/email-queue', () => computeEmailQueue()) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -159,7 +161,7 @@ router.get('/api/followups/email-queue', (req, res) => {
 // until both channels are touched or a reply pauses it.
 router.get('/api/followups/both-queue', (req, res) => {
   try {
-    res.json({ queue: computeBothQueue() });
+    res.json({ queue: cachedRead('followups/both-queue', () => computeBothQueue()) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -169,12 +171,18 @@ router.get('/api/followups/both-queue', (req, res) => {
 // per-contact star + filter on the TA table, see isHighValueContact
 // in lib/followups.mjs and the isHighValue flag on the contact list endpoints.)
 
+// Every nav tab change asks for the stale list, and building it takes seconds of
+// synchronous work that stalls every other request. Reuse the last clean result
+// until the data changes, the day rolls over, or it is a minute old.
+let staleCache = null;
+
 // GET /api/followups/stale — computed stale list with coaching.
 // Merges applications.md (Applied/Responded/Interview) with per-contact stale
 // items from target-talent.md. Each row is tagged with
 // `source: 'app' | 'ta'`.
 router.get('/api/followups/stale', (req, res) => {
   try {
+    if (staleCache && stampIsFresh(staleCache.stamp)) return res.json(staleCache.body);
     let renderPending = {};
     let handEdited = {};
     // Self-heal the LinkedIn status axis from our own correspondence before building
@@ -195,161 +203,175 @@ router.get('/api/followups/stale', (req, res) => {
       // Every other self-heal failure stays best-effort and silent.
     }
 
-    const rawStaleApps = computeStaleApps();
-    const apps = rawStaleApps.map(it => ({ source: 'app', ...it }));
-    const contacts = computeDueSequenceContacts();
-    const merged = [...apps, ...contacts].sort((a, b) => {
-      if (a.coachLevel !== b.coachLevel) {
-        return a.coachLevel === 'give-up' ? -1 : 1;
-      }
-      return b.daysSinceLastTouch - a.daysSinceLastTouch;
-    });
-
-    // Partition out snoozed alerts. A snooze defers the alert until its date;
-    // expired ones are pruned here so they auto-resurface.
-    const snooze = readSnooze();
-    if (pruneSnooze(snooze)) writeSnooze(snooze);
-    const today = snoozeToday();
-    const snoozedUntil = (it) => snooze[it.source]?.[String(it.id)];
-
-    // Split the non-snoozed items into WARM (the urgent queue + nav badge) and
-    // COLD ("Applications out": cold portal apps with no usable channel, or
-    // muted). klass is computed in the lib; muted items are forced cold.
-    const warm = [];
-    const cold = [];
-    const snoozed = [];
-    for (const it of merged) {
-      const until = snoozedUntil(it);
-      if (until && until > today) { snoozed.push({ ...it, snoozeUntil: until }); continue; }
-      if (it.klass === 'cold') cold.push(it);
-      else warm.push(it);
-    }
-
-    // Single source of truth for the Follow-Ups tab, snooze-partitioned the same
-    // way as warm/cold: a snoozed contact leaves the active list and surfaces in
-    // the Snoozed section (where it can be un-snoozed) until its date passes.
-    const contactFollowups = [];
-    const snoozedContactFollowups = [];
-    for (const it of computeContactFollowups({ staleApps: rawStaleApps })) {
-      if (isMuted(it.id, it.source)) continue;
-      const until = snoozedUntil(it);
-      if (until && until > today) snoozedContactFollowups.push({ ...it, snoozeUntil: until });
-      else contactFollowups.push(it);
-    }
-
-    // Flag each contact server-side (single source of truth the client renders from,
-    // instead of re-deriving these in FollowupQueueTab):
-    //   - inmailBlocked: a LinkedIn follow-up to an already-invited non-connection you
-    //     cannot send with 0 InMail credits. Keyed on the SAME alreadyInvited signal the
-    //     send button uses, so a pending-'Sent' invite no longer slips the gate.
-    //   - heldDaily: the per-company daily cap — at most PER_COMPANY_PER_DAY DIFFERENT
-    //     contacts per company per day; the rest are held (flagged, not dropped) and
-    //     rotate in on a later day. Assigned in priority order over the (pre-sorted)
-    //     list so the best contacts fill each company's slots.
-    // Order matters: inmailBlocked first (a blocked row does not spend a daily slot).
-    const inmailBudget = getInmailBudget();
-    const inmailOut = inmailBudget.remaining === 0;
-    const outreachPolicy = getOutreachPolicy();
-    const companySlots = new Map();
-    for (const c of contactFollowups) {
-      const companyKey = String(c.company || '').trim().toLowerCase();
-      const seeded = c.companyOutreach?.companyContactsSentToday || 0;
-      const used = companySlots.has(companyKey) ? companySlots.get(companyKey) : seeded;
-      const context = getPersonContext(c.source, c.id);
-      const slt = c.companyOutreach?.selfLastTouch;
-      const alreadyInvited = slt?.channel === 'linkedin' || (slt?.channel !== 'email' && new Set(['Sent', 'Replied', 'Meeting Scheduled']).has(c.status));
-      const canInfluence = canInfluenceHire(c);
-      const decision = canContact({
-        timeline: context?.timeline || [],
-        channel: c.channel,
-        source: c.source,        // decides whether the per-company cap applies
-        company: c.company,
-        companyTouches: {
-          count: used,
-          selfSentToday: !!c.companyOutreach?.selfSentToday,
-          influentialSentToday: !!c.companyOutreach?.influentialSentToday,
-        },
-        canInfluence,
-        inmail: {
-          exhausted: inmailOut,
-          alreadyInvited,
-          freeDm: !!c.freeDm,
-          remaining: inmailBudget.remaining,
-          canInfluence,
-        },
-        policy: outreachPolicy,
-        now: new Date(),
-      });
-      c.blocks = decision.blocks;
-      c.nextEligible = decision.nextEligible;
-      c.inmailBlocked = decision.blocks.some(b => b.rule === 'inmailBudget');
-      c.inmailReserved = decision.blocks.some(b => b.rule === 'inmailReserve');
-      c.heldDaily = decision.blocks.some(b => b.rule === 'perCompanyPerDay');
-      c.heldStakeholderGap = decision.blocks.some(b => b.rule === 'sameDayStakeholderGap');
-      c.capped = decision.blocks.some(b => b.rule === 'coldOutreachCap');
-      if (decision.allowed) companySlots.set(companyKey, used + 1);
-    }
-
-    // Actionable now: the subset the queue actually surfaces — not held by the
-    // per-company daily cap, not out-of-InMail-blocked, not resting at the cold-outreach
-    // cap. This is what the nav badge and the Follow-ups subtab count, so an "alert"
-    // means something you can send right now, not the whole backlog.
-    const actionableCount = contactFollowups.filter(c => c.blocks.length === 0).length;
-    const withheldDailyCount = contactFollowups.filter(c => c.heldDaily).length;
-    const inmailBlockedCount = contactFollowups.filter(c => c.inmailBlocked).length;
-    const inmailReservedCount = contactFollowups.filter(c => c.inmailReserved).length;
-
-    res.json({
-      thresholds: STALE_THRESHOLD_BY_STATUS,
-      taThreshold: TA_STALE_THRESHOLD_DAYS,         // legacy alias
-      warm,
-      cold,
-      snoozed,
-      // Applied roles with no contact at the company — "find a contact" nudge.
-      // Sorted by apply date descending; each row has: source:'app', id, company,
-      // role, status, applyDate, score. Empty array when all applied companies
-      // already have at least one contact row. Snoozed/muted nudges (the user
-      // checked and there is no reachable contact) are partitioned out using the
-      // 'contactless' snooze bucket so companies like these stop re-alerting.
-      contactlessApps: computeContactlessApps().filter(it => {
-        const until = snooze.contactless?.[String(it.id)];
-        return !(until && until > today);
-      }),
-      // Live applications with talent coverage but nobody who can influence the
-      // hiring decision. This is separate from contactlessApps because the user
-      // has mapped the company, but still needs a decision-maker thread. Its own
-      // snooze bucket lets that nudge be deferred without hiding another one.
-      unthreadedApps: computeUnthreadedApps().filter(it => {
-        const until = snooze.stakeholder?.[String(it.id)];
-        return !(until && until > today);
-      }),
-      // People-first: applications going stale at companies where you HAVE a
-      // contact. Surfaces the specific person to ping (with an "app going stale"
-      // signal) instead of a company card. Company-only stale apps are covered by
-      // contactlessApps above; muted apps are excluded in the compute.
-      staleAppContacts: computeStaleAppContacts({ staleApps: rawStaleApps }),
-      // Single source of truth for the Follow-Ups tab (badge + overview + queue):
-      // every CONTACT worth a touch, deduped, contacts-only, snooze-partitioned
-      // above. The warm/cold/staleAppContacts fields stay for Pipeline → Awaiting
-      // response and the Find-a-contact nudge, which need the app-level view.
-      actionableCount,
-      // Counts behind the "N held for later" / "N waiting on InMail" affordances. Each
-      // held contact is FLAGGED (heldDaily / inmailBlocked / inmailReserved) on contactFollowups, not
-      // removed, so the client can reveal them via "Show" and nothing is silently lost.
-      withheldDailyCount,
-      inmailBlockedCount,
-      inmailReservedCount,
-      perCompanyPerDay: outreachPolicy.perCompanyPerDay,
-      contactFollowups,
-      snoozedContactFollowups,
-      // Deprecated alias: legacy readers expect `items` to be the badge list.
-      items: warm,
-      ...renderPending,
-      ...handEdited,
-    });
+    // Stamped after the self-heal so its own write does not invalidate the result.
+    const stamp = cacheStamp();
+    const build = () => buildStaleBody(renderPending, handEdited);
+    const body = logWritesEnabled(DATA_DIR) ? withLogRead(DATA_DIR, build) : build();
+    const clean = !Object.keys(renderPending).length && !Object.keys(handEdited).length;
+    staleCache = clean ? { body, stamp } : null;
+    res.json(body);
   }
   catch (err) { logWriteRouteError(res, err); }
 });
+
+// Reads only, so it can share one event-store read scope: each correspondence file
+// renders once per rebuild instead of once per lookup. The self-heal write above
+// must stay outside that scope, or its re-render would reuse pre-write projections.
+function buildStaleBody(renderPending, handEdited) {
+  const rawStaleApps = computeStaleApps();
+  const apps = rawStaleApps.map(it => ({ source: 'app', ...it }));
+  const contacts = computeDueSequenceContacts();
+  const merged = [...apps, ...contacts].sort((a, b) => {
+    if (a.coachLevel !== b.coachLevel) {
+      return a.coachLevel === 'give-up' ? -1 : 1;
+    }
+    return b.daysSinceLastTouch - a.daysSinceLastTouch;
+  });
+
+  // Partition out snoozed alerts. A snooze defers the alert until its date;
+  // expired ones are pruned here so they auto-resurface.
+  const snooze = readSnooze();
+  if (pruneSnooze(snooze)) writeSnooze(snooze);
+  const today = snoozeToday();
+  const snoozedUntil = (it) => snooze[it.source]?.[String(it.id)];
+
+  // Split the non-snoozed items into WARM (the urgent queue + nav badge) and
+  // COLD ("Applications out": cold portal apps with no usable channel, or
+  // muted). klass is computed in the lib; muted items are forced cold.
+  const warm = [];
+  const cold = [];
+  const snoozed = [];
+  for (const it of merged) {
+    const until = snoozedUntil(it);
+    if (until && until > today) { snoozed.push({ ...it, snoozeUntil: until }); continue; }
+    if (it.klass === 'cold') cold.push(it);
+    else warm.push(it);
+  }
+
+  // Single source of truth for the Follow-Ups tab, snooze-partitioned the same
+  // way as warm/cold: a snoozed contact leaves the active list and surfaces in
+  // the Snoozed section (where it can be un-snoozed) until its date passes.
+  const contactFollowups = [];
+  const snoozedContactFollowups = [];
+  for (const it of computeContactFollowups({ staleApps: rawStaleApps })) {
+    if (isMuted(it.id, it.source)) continue;
+    const until = snoozedUntil(it);
+    if (until && until > today) snoozedContactFollowups.push({ ...it, snoozeUntil: until });
+    else contactFollowups.push(it);
+  }
+
+  // Flag each contact server-side (single source of truth the client renders from,
+  // instead of re-deriving these in FollowupQueueTab):
+  //   - inmailBlocked: a LinkedIn follow-up to an already-invited non-connection you
+  //     cannot send with 0 InMail credits. Keyed on the SAME alreadyInvited signal the
+  //     send button uses, so a pending-'Sent' invite no longer slips the gate.
+  //   - heldDaily: the per-company daily cap — at most PER_COMPANY_PER_DAY DIFFERENT
+  //     contacts per company per day; the rest are held (flagged, not dropped) and
+  //     rotate in on a later day. Assigned in priority order over the (pre-sorted)
+  //     list so the best contacts fill each company's slots.
+  // Order matters: inmailBlocked first (a blocked row does not spend a daily slot).
+  const inmailBudget = getInmailBudget();
+  const inmailOut = inmailBudget.remaining === 0;
+  const outreachPolicy = getOutreachPolicy();
+  const companySlots = new Map();
+  const contextStores = { ta: parseTargetTalentMd(), referrals: parseReferralsMd(), pins: readPins() };
+  for (const c of contactFollowups) {
+    const companyKey = String(c.company || '').trim().toLowerCase();
+    const seeded = c.companyOutreach?.companyContactsSentToday || 0;
+    const used = companySlots.has(companyKey) ? companySlots.get(companyKey) : seeded;
+    const context = getPersonContext(c.source, c.id, contextStores);
+    const slt = c.companyOutreach?.selfLastTouch;
+    const alreadyInvited = slt?.channel === 'linkedin' || (slt?.channel !== 'email' && new Set(['Sent', 'Replied', 'Meeting Scheduled']).has(c.status));
+    const canInfluence = canInfluenceHire(c);
+    const decision = canContact({
+      timeline: context?.timeline || [],
+      channel: c.channel,
+      source: c.source,        // decides whether the per-company cap applies
+      company: c.company,
+      companyTouches: {
+        count: used,
+        selfSentToday: !!c.companyOutreach?.selfSentToday,
+        influentialSentToday: !!c.companyOutreach?.influentialSentToday,
+      },
+      canInfluence,
+      inmail: {
+        exhausted: inmailOut,
+        alreadyInvited,
+        freeDm: !!c.freeDm,
+        remaining: inmailBudget.remaining,
+        canInfluence,
+      },
+      policy: outreachPolicy,
+      now: new Date(),
+    });
+    c.blocks = decision.blocks;
+    c.nextEligible = decision.nextEligible;
+    c.inmailBlocked = decision.blocks.some(b => b.rule === 'inmailBudget');
+    c.inmailReserved = decision.blocks.some(b => b.rule === 'inmailReserve');
+    c.heldDaily = decision.blocks.some(b => b.rule === 'perCompanyPerDay');
+    c.heldStakeholderGap = decision.blocks.some(b => b.rule === 'sameDayStakeholderGap');
+    c.capped = decision.blocks.some(b => b.rule === 'coldOutreachCap');
+    if (decision.allowed) companySlots.set(companyKey, used + 1);
+  }
+
+  // Actionable now: the subset the queue actually surfaces — not held by the
+  // per-company daily cap, not out-of-InMail-blocked, not resting at the cold-outreach
+  // cap. This is what the nav badge and the Follow-ups subtab count, so an "alert"
+  // means something you can send right now, not the whole backlog.
+  const actionableCount = contactFollowups.filter(c => c.blocks.length === 0).length;
+  const withheldDailyCount = contactFollowups.filter(c => c.heldDaily).length;
+  const inmailBlockedCount = contactFollowups.filter(c => c.inmailBlocked).length;
+  const inmailReservedCount = contactFollowups.filter(c => c.inmailReserved).length;
+
+  return {
+    thresholds: STALE_THRESHOLD_BY_STATUS,
+    taThreshold: TA_STALE_THRESHOLD_DAYS,         // legacy alias
+    warm,
+    cold,
+    snoozed,
+    // Applied roles with no contact at the company — "find a contact" nudge.
+    // Sorted by apply date descending; each row has: source:'app', id, company,
+    // role, status, applyDate, score. Empty array when all applied companies
+    // already have at least one contact row. Snoozed/muted nudges (the user
+    // checked and there is no reachable contact) are partitioned out using the
+    // 'contactless' snooze bucket so companies like these stop re-alerting.
+    contactlessApps: computeContactlessApps().filter(it => {
+      const until = snooze.contactless?.[String(it.id)];
+      return !(until && until > today);
+    }),
+    // Live applications with talent coverage but nobody who can influence the
+    // hiring decision. This is separate from contactlessApps because the user
+    // has mapped the company, but still needs a decision-maker thread. Its own
+    // snooze bucket lets that nudge be deferred without hiding another one.
+    unthreadedApps: computeUnthreadedApps().filter(it => {
+      const until = snooze.stakeholder?.[String(it.id)];
+      return !(until && until > today);
+    }),
+    // People-first: applications going stale at companies where you HAVE a
+    // contact. Surfaces the specific person to ping (with an "app going stale"
+    // signal) instead of a company card. Company-only stale apps are covered by
+    // contactlessApps above; muted apps are excluded in the compute.
+    staleAppContacts: computeStaleAppContacts({ staleApps: rawStaleApps }),
+    // Single source of truth for the Follow-Ups tab (badge + overview + queue):
+    // every CONTACT worth a touch, deduped, contacts-only, snooze-partitioned
+    // above. The warm/cold/staleAppContacts fields stay for Pipeline → Awaiting
+    // response and the Find-a-contact nudge, which need the app-level view.
+    actionableCount,
+    // Counts behind the "N held for later" / "N waiting on InMail" affordances. Each
+    // held contact is FLAGGED (heldDaily / inmailBlocked / inmailReserved) on contactFollowups, not
+    // removed, so the client can reveal them via "Show" and nothing is silently lost.
+    withheldDailyCount,
+    inmailBlockedCount,
+    inmailReservedCount,
+    perCompanyPerDay: outreachPolicy.perCompanyPerDay,
+    contactFollowups,
+    snoozedContactFollowups,
+    // Deprecated alias: legacy readers expect `items` to be the badge list.
+    items: warm,
+    ...renderPending,
+    ...handEdited,
+  };
+}
 
 // POST /api/followups/snooze — defer a stale alert.
 //   body: { source: 'app' | 'ta' | 'contactless' | 'stakeholder' | 'referral' | 'influencer', id, days? = 14 }
