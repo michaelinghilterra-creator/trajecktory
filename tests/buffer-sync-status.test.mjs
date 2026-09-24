@@ -19,7 +19,7 @@ fs.writeFileSync(path.join(sandbox, 'buffer-token.json'), JSON.stringify({ token
 
 const post = (id, status, bufferId) => ({
   id, title: id, text: `Example post ${id}`, lane: 'professional', channel: 'linkedin',
-  status, scheduledFor: '2026-01-06T14:00:00.000Z', buffer: { id: bufferId },
+  status, scheduledFor: '2030-01-08T14:00:00.000Z', buffer: { id: bufferId },
 });
 const postsFile = path.join(sandbox, 'posts.json');
 fs.writeFileSync(postsFile, JSON.stringify({
