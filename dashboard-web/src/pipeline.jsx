@@ -2040,11 +2040,11 @@ function DiscoveryInbox({ inbox, onReload }) {
   }, [inbox, sortKey, sortDir]);
   if (!inbox) return <div className="card padded-lg dim" style={{ fontSize: 12 }}>Loading discovery queue…</div>;
   const cols = [
+    { k: 'dateAdded', label: 'Added', w: 100 },
     { k: 'company', label: 'Company', w: '15%' },
     { k: 'title', label: 'Title', w: '27%' },
-    { k: 'dateAdded', label: 'Added', w: 100 },
-    { k: 'discoveryStatus', label: 'Status' },
     { k: 'url', label: 'URL', w: 100 },
+    { k: 'discoveryStatus', label: 'Status' },
   ];
   const oneLine = { fontSize: 10.5, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
   return (
@@ -2075,15 +2075,15 @@ function DiscoveryInbox({ inbox, onReload }) {
               {rows.length === 0 && <tr><td colSpan={cols.length}><div className="no-data" style={{ padding: 30, textAlign: 'center' }}>Nothing waiting. Run a scan to find new roles.</div></td></tr>}
               {rows.map((row, index) => (
                 <tr key={`${row.discoveryStatus}:${row.url || index}`}>
+                  <td className="t-date">{row.dateAdded}</td>
                   <td className="t-co-cell"><span className="co-name">{row.company || 'Unknown'}</span></td>
                   <td className="t-role" title={row.title || undefined}>{row.title || 'Untitled role'}</td>
-                  <td className="t-date">{row.dateAdded}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{row.url && <a className="link" href={window.safeHref(row.url)} target="_blank" rel="noreferrer">Open JD ↗</a>}</td>
                   <td>
                     <DiscoBadge label={row.discoveryStatus} color={row.discoveryStatus === 'Gated' ? 'var(--red)' : 'var(--accent)'} title={row.reason || row.discoveryStatus} />
                     {row.discoveryStatus === 'Gated' && <div className="dim" style={oneLine} title={row.reason || undefined}>{row.reason || 'gated'}</div>}
                     {row.discoveryStatus === 'Pending' && row.readable && <div className="dim" style={oneLine}>readable</div>}
                   </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{row.url && <a className="link" href={window.safeHref(row.url)} target="_blank" rel="noreferrer">Open JD ↗</a>}</td>
                 </tr>
               ))}
             </tbody>
