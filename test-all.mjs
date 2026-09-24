@@ -700,6 +700,7 @@ for (const suite of [
   'tests/level-nonmanagement.test.mjs',
   'tests/gate-local-snapshot.test.mjs',
   'tests/ceiling-basis.test.mjs',
+  'tests/buffer-sync-status.test.mjs',
 ]) {
   if (!fileExists(suite)) {
     warn(`${suite} missing — skipped`);
