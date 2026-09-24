@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.9.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.9.1...v4.9.2) (2026-09-24)
+
+
+### Bug Fixes
+
+* mark posts published when Buffer reports them sent ([#389](https://github.com/michaelinghilterra-creator/trajecktory/issues/389)) ([edca766](https://github.com/michaelinghilterra-creator/trajecktory/commit/edca76657a572a1115d915e90d7c1c4cc466d05d))
+
 ## [4.9.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.9.0...v4.9.1) (2026-09-23)
 
 
