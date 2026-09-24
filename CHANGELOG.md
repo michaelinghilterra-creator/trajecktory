@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.9.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.9.2...v4.9.3) (2026-09-24)
+
+
+### Bug Fixes
+
+* keep Discovery inbox rows on one line ([#391](https://github.com/michaelinghilterra-creator/trajecktory/issues/391)) ([4aafbff](https://github.com/michaelinghilterra-creator/trajecktory/commit/4aafbff8be380b3e23fc4b22ea0ce0c7ffd34098))
+
 ## [4.9.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.9.1...v4.9.2) (2026-09-24)
 
 
