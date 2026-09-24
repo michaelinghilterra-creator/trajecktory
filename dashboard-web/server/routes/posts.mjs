@@ -206,6 +206,8 @@ router.post('/api/posts/pull-metrics', async (req, res) => {
       try {
         const m = await fetchPostMetrics(p.buffer.id);
         if (!m.found) { results.push({ id: p.id, title: p.title, status: 'gone', message: 'Post not found on Buffer (deleted there?).' }); continue; }
+        // Buffer publishes on its own schedule, so this sync is the only place we learn a post went out.
+        if (m.status === 'sent' && p.status !== 'published') updatePost(p.id, { status: 'published' });
         if (m.filled === 0) {
           results.push({ id: p.id, title: p.title, status: 'pending', bufferStatus: m.status, message: m.status === 'sent' ? 'Sent; Buffer has not reported metrics yet (up to ~24h).' : `Not published yet (${m.status}).` });
           continue;
