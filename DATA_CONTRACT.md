@@ -31,6 +31,7 @@ These files contain your personal data, customizations, and work product. Update
 | `data/todos.json` | Your to-do list |
 | `data/release-notes-cache.json` | Cached GitHub release notes for the Change Log tab (6h TTL). Pure cache: delete it any time and it refetches, or falls back to `CHANGELOG.md` offline. |
 | `data/spark-prefilter/<date>/*.json` | Raw output from your local pre-filter model, one file per scored posting. This is what makes a discard replayable and reversible: the decision can be re-derived against a changed `config/profile.yml` without paying for the inference again. Holds real employer names and posting URLs, so it is covered by the wholesale `data/*` ignore and must stay that way. Safe to delete, at the cost of that audit trail. |
+| `data/spark-prefilter/holdback.tsv` | Postings the pre-filter scored below its threshold but kept for a full evaluation anyway (`TJK_SPARK_HOLDBACK_RATE`), one row per posting. It is the only record of which evaluations came from would-be discards, so it is how the filter's misses are measured. Real posting URLs, covered by the `data/*` ignore. |
 | `writing-samples/*` | Your personal writing samples for style calibration |
 | `reports/*` | Your evaluation reports |
 | `output/*` | Your generated PDFs |

@@ -690,6 +690,9 @@ node reconcile-triage.mjs --apply
 #     AFTER 2 (never spend a discard decision on a posting already gated dead) and
 #     AFTER 2b (or handled rows get re-filtered every run).
 #     data/triage-results.tsv is the pre-filter's append-only discard log.
+#     A share of would-be discards (TJK_SPARK_HOLDBACK_RATE, default 0.1) is left
+#     pending on purpose and logged to data/spark-prefilter/holdback.tsv, so the
+#     filter's misses get evaluated and can be measured.
 #     Dry-run by default. Read the audit sample it prints before committing.
 node spark-prefilter.mjs --apply
 
