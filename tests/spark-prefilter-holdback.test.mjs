@@ -68,10 +68,9 @@ console.log('spark-prefilter-holdback.test.mjs');
   check(holdbackFraction(urlA) === holdbackFraction(urlB),
     'tracking param and trailing slash give identical values');
 
-  // Different URLs can give different fractions
-  const urlC = 'https://a.example/j/2';
-  check(holdbackFraction(urlA) !== holdbackFraction(urlC) || holdbackFraction(urlA) === holdbackFraction(urlC),
-    'different URLs produce a fraction (deterministic)');
+  // Near-identical URLs must not collapse onto one value
+  check(holdbackFraction('https://a.example/j/1') !== holdbackFraction('https://a.example/j/2'),
+    'URLs differing only in a trailing id give different values');
 }
 
 // ── Rate close to target ──────────────────────────────────────────────────
@@ -119,6 +118,18 @@ console.log('spark-prefilter-holdback.test.mjs');
   }
   check(noOverlap, 'no id appears in both dropped and heldBack');
 
+  // The decision belongs to the posting URL, not to the row id or anything else
+  const heldBackIdsExact = rows.filter(r => holdbackFraction(r.sourceUrl) < 0.3).map(r => r.id).sort();
+  check(JSON.stringify([...heldBackIds].sort()) === JSON.stringify(heldBackIdsExact),
+    'heldBack is exactly the rows whose URL fraction is below the rate');
+  const sameUrl = [
+    { id: 'first-run', sourceUrl: 'https://quennox.example/j/77' },
+    { id: 'second-run', sourceUrl: 'https://quennox.example/j/77?utm_source=feed' },
+  ];
+  const sameSplit = splitHoldback(sameUrl, 0.5);
+  check(sameSplit.heldBack.length === 0 || sameSplit.heldBack.length === 2,
+    'one posting seen under two row ids gets one decision, not two');
+
   // Rate 0: nothing is held back
   const { dropped: d0, heldBack: hb0 } = splitHoldback(rows, 0);
   check(hb0.length === 0, 'rate 0 holds back nothing');
@@ -131,7 +142,7 @@ console.log('spark-prefilter-holdback.test.mjs');
 
   // Deterministic decision regardless of row position
   const rows2 = [...rows].reverse();
-  const { dropped: d2, heldBack: _hb2 } = splitHoldback(rows2, 0.3);
+  const { dropped: d2 } = splitHoldback(rows2, 0.3);
   const d2Ids = new Set(d2.map(r => r.id));
   for (const r of rows) {
     const inDropped1 = droppedIds.has(r.id);
@@ -162,6 +173,7 @@ console.log('spark-prefilter-holdback.test.mjs');
     rows.push({ id: `safety-${i}`, sourceUrl: `https://jobs.zorblax.example/safety/${i}`, score: 1.5, data: { company: 'Zorblax Widgetry', role: 'Example Bolt Title' } });
   }
   const { dropped, heldBack } = splitHoldback(rows, 0.5);
+  check(heldBack.length > 0 && dropped.length > 0, 'the safety fixture has rows on both sides, so the next check is not vacuous');
   const triage = discardRows(dropped, 2.0);
   const heldBackUrls = new Set(heldBack.map(r => r.sourceUrl));
   let safetyOk = true;
@@ -211,6 +223,7 @@ console.log('spark-prefilter-holdback.test.mjs');
   const file3 = join(dir, 'tab-model.tsv');
   appendHoldbackLog(file3, [{ sourceUrl: 'https://jobs.zorblax.example/p/20', score: 1.5 }], date, { threshold: 2.0, model: 'model\twith\ttabs' });
   const lines = readFileSync(file3, 'utf8').split('\n').filter(l => l.length > 0);
+  check(lines.length === 2, 'the tab fixture wrote the header and exactly one data line');
   for (let i = 1; i < lines.length; i++) {
     check(lines[i].split('\t').length === 5, `data line ${i} has exactly 5 tab-separated fields`);
   }
