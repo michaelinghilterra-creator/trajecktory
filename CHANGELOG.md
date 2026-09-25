@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.2.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.1.0...v5.2.0) (2026-09-25)
+
+
+### Features
+
+* hold back a share of Spark pre-filter discards for full evaluation ([#397](https://github.com/michaelinghilterra-creator/trajecktory/issues/397)) ([13d11fc](https://github.com/michaelinghilterra-creator/trajecktory/commit/13d11fc584ed4d5943f6b0a282f2dc20ba8f79b2))
+
 ## [5.1.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.0.0...v5.1.0) (2026-09-25)
 
 
