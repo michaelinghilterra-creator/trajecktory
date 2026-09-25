@@ -69,7 +69,7 @@ const GATE_HISTORY = join(DATA_DIR, 'gate-history.tsv');
 const THRESHOLD = Number(process.env.TJK_SPARK_THRESHOLD || 2.0);
 
 // The rationale prefix is a provenance marker, and it is load-bearing: it is how a
-// later reader tells a row this script wrote from a row the triage agent wrote.
+// later reader can identify rows written by this pre-filter.
 // Keep it byte-identical — `grep -c` over it is a valid count of prefiltered rows.
 const RATIONALE_PREFIX = 'Spark pre-filter, below T=';
 
@@ -219,7 +219,7 @@ async function main() {
     console.log(`\nENDPOINT FAILED on ${endpointErrors.length} of ${items.length} rows:`);
     console.log(`  ${endpointErrors[0].reason}`);
     console.log(`\nNothing written. Every row stays pending. Check the endpoint at ${SPARK_URL},`);
-    console.log('or run the Claude triage pass instead: /trajecktory triage');
+    console.log('or skip the optional pre-filter and evaluate the queue directly.');
     return;
   }
 

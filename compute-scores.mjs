@@ -131,11 +131,17 @@ export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, c
   const newMd = `---\n${JSON.stringify(newData, null, 2)}\n---\n${body}`;
   return {
     ok: true, reason: 'ok', score: res.score, prevScore: data.score ?? null,
-    changed: res.score !== data.score || data.scoreSource !== 'derived', newMd, scoreBasis,
+    changed: newMd !== md, newMd, scoreBasis,
   };
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
+export function writeReportIfChanged(file, originalMd, result, writer = fs.writeFileSync) {
+  if (result.newMd === originalMd) return false;
+  writer(file, result.newMd);
+  return true;
+}
+
 function isMain() {
   try { return path.resolve(process.argv[1]) === fileURLToPath(import.meta.url); } catch { return false; }
 }
@@ -160,7 +166,7 @@ function main() {
     process.exit(2);
   }
 
-  let derived = 0, skipped = 0, wrote = 0;
+  let derived = 0, skipped = 0, wrote = 0, unchanged = 0;
   for (const file of targets) {
     let md;
     try { md = fs.readFileSync(file, 'utf8'); }
@@ -176,15 +182,17 @@ function main() {
     derived++;
     const verb = apply ? 'set' : 'would set';
     console.log(`  ${apply ? '✓' : '·'} ${path.basename(file)}: ${verb} score ${r.score} (was ${r.prevScore ?? 'unset'}) [derived]`);
-    if (apply) {
-      try { fs.writeFileSync(file, r.newMd); wrote++; }
+    if (apply && r.changed) {
+      try { if (writeReportIfChanged(file, md, r)) wrote++; else unchanged++; }
       catch (e) { console.error(`    ✗ write failed: ${e.message}`); }
+    } else if (apply) {
+      unchanged++;
     }
   }
 
   if (!printScore) {
     const mode = apply ? 'applied' : 'dry run';
-    console.log(`\n${derived} derivable, ${skipped} left as-is, ${wrote} written (${mode}).`);
+    console.log(`\n${derived} derivable, ${skipped} left as-is, ${wrote} written, ${unchanged} unchanged (${mode}).`);
     if (!apply && derived > 0) console.log('Re-run with --apply to write.');
   }
 }

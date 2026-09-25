@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // auto-discard-low.mjs — retroactively flip status from Evaluated → Discarded
-// for any tracker entry with score < 3.0. Run once after enabling the
+// for any tracker entry with score below AUTO_DISCARD_SCORE. Run once after enabling the
 // auto-discard rule in merge-tracker.mjs to clean up the existing tracker.
 //
 // Usage:
 //   node auto-discard-low.mjs              # show what would change
 //   node auto-discard-low.mjs --apply      # actually rewrite applications.md
 //
-// Adds "auto-discarded: score X < 3.0" prefix to the notes column.
+// Adds an auto-discard reason with the score and current threshold to notes.
 
 import fs from 'fs';
 import path from 'path';
@@ -66,7 +66,7 @@ for (const line of lines) {
 }
 
 if (changes.length === 0) {
-  console.log('✅ No Evaluated entries with score <3.0 found.');
+  console.log(`✅ No Evaluated entries with score below ${AUTO_DISCARD_SCORE.toFixed(1)} found.`);
   process.exit(0);
 }
 

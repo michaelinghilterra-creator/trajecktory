@@ -77,7 +77,7 @@ const CHAPTERS = [
           <li><b>Open Today.</b> It shows the one or two things that actually matter right now, plus your to-dos.</li>
           <li><b>Clear what is overdue.</b> Follow-Ups surfaces the threads about to go cold, with the nudge
           already drafted. Send the ones that are ready.</li>
-          <li><b>Look at new roles.</b> Run a Scan, let Triage rank them, and deep-dive only the strongest.</li>
+          <li><b>Look at new roles.</b> Run a Scan, review the queue, and evaluate only the strongest.</li>
           <li><b>Tailor and track one.</b> Pick the best fit, let trajecktory tailor a resume and cover letter,
           and move it into your Pipeline.</li>
         </ul>
@@ -106,29 +106,27 @@ const CHAPTERS = [
     ),
   },
   {
-    id: 'workflow', mk: '04', label: 'Finding roles: Scan & Triage', title: 'How new jobs arrive: Scan, Triage, Evaluate',
+    id: 'workflow', mk: '04', label: 'Finding roles: Scan & Evaluate', title: 'How new jobs arrive: Scan, Gate, Evaluate',
     body: (
       <>
         <p className="dg-lead">New roles come in through the sidebar <b>Workflow</b>. It is a short pipeline, and
         each step is cheaper than the one after it, on purpose, so you never spend on a role before it has earned it.</p>
-        <Shot src="workflow.png" alt="The sidebar workflow: Scan, Triage, Evaluate"
+        <Shot src="workflow.png" alt="The sidebar workflow: Scan, Gate, Evaluate"
           caption="The workflow runs top to bottom. Free steps first, paid reasoning last, so nothing costs you until it is worth reading." />
         <ul>
           <li><b>API Scan</b> is free and uses no AI. It reads the job boards (Greenhouse, Ashby, Lever,
           SmartRecruiters, Workable) for the companies you track and pulls fresh postings.</li>
           <li><b>Agent Scan</b> searches the open web with Claude for postings the boards miss. It runs on your
           Claude plan.</li>
-          <li><b>Triage</b> scores your best pipeline matches cheaply so you deep-dive only the strongest, rather
-          than paying for a full read on every one.</li>
+          <li><b>Liveness Gate</b> removes closed and unreadable postings before evaluation.</li>
           <li><b>Evaluate</b> reads each role against your CV and writes the full report. This is the expensive,
           careful step, which is why it comes last and runs in small batches.</li>
         </ul>
-        <Why>Dead postings are liveness-checked out before any AI spend, and a role is Triaged before it is
-        Evaluated. That ordering is the whole cost-control story: a big scan is free, a quick rank is cheap, and
-        the deep read only happens on the handful you chose.</Why>
+        <Why>Dead postings are liveness-checked out before evaluation. A big scan is free, and the careful read
+        happens only on the roles you choose to evaluate.</Why>
         <Tip>Postings on modern career sites (Ashby, Workday, SmartRecruiters) are JavaScript apps that a plain
         reader sees as blank. trajecktory snapshots the real job description through the site's own API first, so
-        Triage and Evaluate actually read the role instead of skipping it.</Tip>
+        Evaluate can read the role instead of skipping it.</Tip>
       </>
     ),
   },
@@ -326,7 +324,7 @@ const CHAPTERS = [
         <Shot src="models-cost.png" alt="Setup: Models & cost panel"
           caption="Pick which Claude model runs each step, see an approximate cost per run, and flip billing between your plan and an optional API key." />
         <ul>
-          <li>Choose the Claude model for each step (Triage, Agent Scan, Evaluate, Insights, Drafts). The defaults
+          <li>Choose the Claude model for each step (Agent Scan, Evaluate, Insights, Drafts). The defaults
           are the cheaper, calibrated choices, so most people never touch this.</li>
           <li>An optional Anthropic API key is a faster path. When you switch billing to it, the whole workflow
           (not just the writing features) bills your key. It is never required, and you can add or remove it any time.</li>
@@ -384,7 +382,7 @@ const CHAPTERS = [
         <p className="dg-lead">If you remember nothing else, remember this.</p>
         <ul>
           <li>Start in <b>Today</b> and <b>Pipeline</b>. Add the other tabs as your search grows.</li>
-          <li>Let roles flow in through <b>Scan</b> and <b>Triage</b>, and only Evaluate the strongest.</li>
+          <li>Let roles flow in through <b>Scan</b>, then evaluate only the strongest.</li>
           <li>Read a report top-down: the score answers "worth it," the tabs hold the evidence.</li>
           <li>Chase warm threads in <b>Follow-Ups</b> before they go cold. That is the highest-value habit.</li>
           <li>Work the people in <b>Network</b> and build visibility in <b>Social</b>. Warm beats cold.</li>

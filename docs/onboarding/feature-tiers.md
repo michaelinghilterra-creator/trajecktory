@@ -13,7 +13,7 @@ faster path you can switch on or off without deleting it:
 
 - **Claude subscription** (Pro/Max, via a one-time `claude login`): the rolling
   5-hour usage quota, no per-token dollar cost. By default it powers everything:
-  onboarding, Agent Scan, Triage, Evaluate, and every AI writing draft (cover
+  onboarding, Agent Scan, Evaluate, and every AI writing draft (cover
   letters, CV tailoring, TA outreach, follow-ups, LinkedIn, and the
   Insights report).
 - **Anthropic API key** (optional, pasted into the dashboard): billed per token on
@@ -31,28 +31,26 @@ Claude model for each workflow step and see an approximate cost per run:
 
 | Step | Model choices | Default |
 |---|---|---|
-| Triage | Haiku, Sonnet | Haiku |
 | Agent Scan | Haiku, Sonnet, Opus | Haiku |
 | Evaluate (batch) | Sonnet, Opus, Haiku | Sonnet |
 | Insights | Sonnet, Opus | Sonnet |
 | Drafts & Outreach | Haiku, Sonnet | Haiku |
 
 The defaults are the cheaper, calibrated choices. Each option shows a rough `~$/run`
-estimate, plus an "Estimated total per full run (Triage + Evaluate batch)" and a small
+estimate, plus an "Estimated total per full run (Agent Scan + Evaluate batch)" and a small
 "Recent runs (estimated cost)" table. Those dollar figures apply only to the API-key
 path; on the Claude plan there is no per-token cost. They are estimates derived from
 Claude Code token counts, not your Anthropic invoice. When billing is set to your API
-key, the whole workflow (scan, triage, evaluate, insights, and drafts) bills the key,
+key, the whole workflow (scan, evaluate, insights, and drafts) bills the key,
 so it does show up in your Anthropic console — set your spending ceiling there.
 
 A **"Bill workflow & drafts to"** toggle switches between **API key** and **Claude
 plan**. Setting it to **Claude plan** routes the whole workflow plus drafts to the
 flat subscription (no per-token cost) even while your key stays saved, and also uses
 the leaner plan workflow. Flip it back to **API key** any time. (The old "Deep mode
-(Opus)" checkbox is gone: choose Opus for Evaluate here instead, or click a per-role
-**Deep dive** on a triage card for a one-off Opus run.)
+(Opus)" checkbox is gone: choose Opus for Evaluate here instead.)
 
-Env keys behind the panel (for reference): `TJK_TRIAGE_MODEL`, `TJK_SCAN_MODEL`,
+Env keys behind the panel (for reference): `TJK_SCAN_MODEL`,
 `TJK_EVAL_MODEL`, `TJK_INSIGHTS_MODEL`, `TJK_DRAFT_MODEL`, `TJK_BILLING_MODE`
 (`key`/`plan`), and the batch sizes `TJK_EVAL_BATCH` (plan, default 5) /
 `TJK_EVAL_BATCH_KEY` (key, default 10).
@@ -66,7 +64,6 @@ Claude Pro/Max account. Everything here runs with no API key.
 |---|---|---|
 | Onboarding / Launchpad setup | Parse CV, draft profile, roles, narrative, location, companies | Claude subscription (runs in your Claude Desktop, on whatever model it is set to) |
 | API Scan | Finds postings from Greenhouse / Ashby / Lever job boards for your tracked companies | Pure Node, no Claude, no cost |
-| Triage | Cheap first-pass scoring of your best pipeline matches, so you deep-dive only the strongest | Claude subscription, defaults to Haiku |
 | Agent Scan | Web-searches the open web for new postings (Claude's WebSearch) | Claude subscription, defaults to Haiku |
 | Expand Coverage (Phase 1) | Registers companies already sitting in your pipeline into your tracked list | Pure Node, no cost |
 | Evaluate Pipeline | Scores each JD and writes the full report (Overview, CV Match, Comp, Interview, Customize, Legitimacy) | Claude subscription, defaults to Sonnet |
@@ -76,15 +73,14 @@ Claude Pro/Max account. Everything here runs with no API key.
 | All dashboard views + report drawer | Pipeline, Overview, Insights, Follow-Ups, reading reports | Pure display, no cost |
 
 Onboarding is the heaviest one-time subscription burn, because each setup paste runs
-a full Claude pass in the user's own Claude Desktop. Steady-state use (scan, triage,
+a full Claude pass in the user's own Claude Desktop. Steady-state use (scan and
 evaluate) is much lighter.
 
 **First-run scaling.** Discovery (scan) is broad and free, but Evaluate processes a
 **batch per run** (5 on the plan, 10 on the API-key path) rather than every pending
 posting, so a new user with hundreds of scanned roles does not burn their whole quota
-at once. On the plan, Triage scores the top matches cheaply first (Haiku), and you
-click **Deep dive** on the strongest to write a full Sonnet report. Change the batch
-size in Models & cost or with `TJK_EVAL_BATCH` in `dashboard-web/.env`.
+at once. Review the queue and evaluate the strongest roles. Change the batch size
+in Models & cost or with `TJK_EVAL_BATCH` in `dashboard-web/.env`.
 
 ## Tier 2: add an Anthropic API key (optional, a faster path)
 
@@ -92,8 +88,7 @@ Pasted into the dashboard's **AI draft key** field (Launchpad, Optional boosters
 Billed per token on your API account, separate from the 5-hour quota. **You do not
 need it:** every feature below already runs on your Claude subscription. Adding a key
 (and setting billing to it in Models & cost) just runs them on the key instead, which
-is a bit faster and switches the sidebar to the fuller "power" workflow (Agent Scan
-plus a batch Evaluate, in place of the plan's Triage-first flow).
+is a bit faster and enables larger Evaluate batches.
 
 | Feature | What it does | Default model |
 |---|---|---|

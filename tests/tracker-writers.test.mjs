@@ -80,7 +80,7 @@ console.log('\n1. Low score flips, and the reason lands in Notes (not Report)');
 {
   const r = A.byId(10);
   check(r.status === 'Passed', `status flipped to Passed (got "${r.status}")`);
-  check(/^\[passed: low_score\] auto-discarded: score 2\.4 < 3\.0/.test(r.notes), `reason prepended to NOTES behind the passed tag: "${r.notes}"`);
+  check(/^\[passed: low_score\] auto-discarded: score 2\.4 < 3\.5/.test(r.notes), `reason prepended to NOTES behind the passed tag: "${r.notes}"`);
   check(r.notes.includes('thin scope'), 'original note preserved after the reason');
   // The regression: index 9 was Report, so the reason used to be written there.
   check(r.report === '[10](reports/10-lowco.md)', `Report cell untouched: "${r.report}"`);

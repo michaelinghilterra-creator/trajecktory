@@ -1,13 +1,10 @@
 #!/usr/bin/env node
-// reconcile-triage.mjs — check off pipeline.md rows already covered by
-// data/triage-results.tsv (or a full evaluation already in applications.md).
+// reconcile-triage.mjs — check off pipeline.md rows recorded in the optional
+// Spark pre-filter discard log (or already fully evaluated in applications.md).
 //
-// Thin CLI over lib/reconcile-triage.mjs + lib/pipeline.mjs. Triage
-// deliberately never checks off a pipeline row itself (see modes/triage.md),
-// so an already-scored role sits in the queue as "- [ ]" until Deep Dive
-// eventually evaluates it — which most low scores never reach. Run this after
-// a triage batch (or anytime) to keep the queue's unchecked count meaning
-// "genuinely unscored", not "scored, just never marked".
+// Thin CLI over lib/reconcile-triage.mjs + lib/pipeline.mjs. Run it after the
+// optional pre-filter to keep the unchecked count limited to roles still eligible
+// for evaluation.
 //
 // Dry-run by default. Pass --apply to write. Idempotent — running it twice
 // with nothing new to reconcile is a no-op.
@@ -39,6 +36,6 @@ if (!flipped.length) {
   process.exit(0);
 }
 
-console.log(`${APPLY ? 'Flipped' : 'Would flip'} ${flipped.length} already-triaged row(s) "- [ ]" → "- [x]":`);
+console.log(`${APPLY ? 'Flipped' : 'Would flip'} ${flipped.length} discarded or evaluated row(s) "- [ ]" → "- [x]":`);
 for (const r of flipped) console.log(`  ${r.url.slice(0, 78)}  (${r.reason})`);
 console.log(APPLY ? `\n✓ Wrote ${PIPELINE}.` : '\n(dry run — re-run with --apply to write)');

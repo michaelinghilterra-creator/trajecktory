@@ -172,7 +172,7 @@ lifting; you mostly review and confirm.
    and Scan run, on your own Claude plan. No Anthropic API key is required; adding one is only an
    optional, faster path for the writing features.
 6. **Run your first search.** From the sidebar: API Scan (free, no AI) pulls fresh roles from the job
-   boards, then Triage scores the best fits. Review the scored roles, deep-dive the strongest, let trajecktory tailor a
+   boards, then the liveness gate removes dead postings before evaluation. Review the queue, evaluate the strongest roles, and let trajecktory tailor a
    resume and cover letter, and track it. It schedules the follow-ups.
 
 Fuller walkthrough: **[docs/onboarding/first-run.md](docs/onboarding/first-run.md)**. Illustrated

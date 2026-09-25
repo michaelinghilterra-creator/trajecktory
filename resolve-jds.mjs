@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// resolve-jds.mjs — JD snapshot gate. Runs BEFORE triage/evaluate.
+// resolve-jds.mjs — JD snapshot gate. Runs before evaluation.
 //
-// The triage and deep-eval agents read a posting by fetching its page. Modern ATS
+// Evaluation agents read a posting by fetching its page. Modern ATS
 // posting pages (Ashby, Workday, SmartRecruiters, Greenhouse-embedded, Workable)
 // render nothing to a plain fetch, so those roles were silently skipped. But the
 // JD is available over each platform's public JSON API. This gate walks every
@@ -20,6 +20,7 @@
 // Exit code: 0 always (an unresolved posting is not a script error).
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { createHash } from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import yaml from 'js-yaml';
@@ -28,18 +29,18 @@ import { workdaySiteFromCareersUrl } from './liveness-core.mjs';
 import { updatePipelineRows } from './lib/pipeline.mjs';
 import { appendGateHistory } from './lib/gate-history.mjs';
 import { localToday } from './lib/local-date.mjs';
+import { canonicalUrl, sourceUrlFromSnapshot } from './lib/identity.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PIPELINE = join(__dirname, 'data/pipeline.md');
 const PORTALS = join(__dirname, 'portals.yml');
-const JDS_DIR = join(__dirname, 'jds');
 const FAIL_COUNTS = join(__dirname, 'data/resolve-fail-counts.json');
 const GATE_HISTORY = join(__dirname, 'data/gate-history.tsv');
 
 // A "recognized ATS but couldn't fetch" result might be a transient blip (network,
 // rate limit) — give it one more run before gating. An "unrecognized platform" is a
 // structural fact about that URL, not a fluke; it will never resolve on its own, so
-// it gates immediately (0 retries). Both are read by the batch triage/deep-dive
+// it gates immediately (0 retries). Both are read by the batch evaluation
 // agents, which otherwise burn a full LLM round re-discovering the same dead end
 // every time it happens to be at the top of the queue.
 const RETRY_LIMIT = 1; // 1 retry = gate on the 2nd consecutive failure
@@ -59,6 +60,40 @@ const normCompany = (s) => String(s || '').toLowerCase()
 
 const kebab = (s) => String(s || '').toLowerCase()
   .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+
+const shortHash = (value) => createHash('sha256').update(String(value || '')).digest('hex').slice(0, 10);
+
+function postingSuffix(desc, url) {
+  const id = desc?.id || desc?.shortcode || desc?.reqId;
+  if (id) return kebab(String(id)) || shortHash(canonicalUrl(url));
+  return shortHash(canonicalUrl(url));
+}
+
+export function snapshotFileForPosting({ row, desc, rootDir }) {
+  const stem = kebab(`${row.company}-${row.title}`) || `jd-${kebab(desc?.ats) || 'posting'}`;
+  const base = `${stem}-${postingSuffix(desc, row.url)}`;
+  let candidate = base;
+  let collision = 0;
+
+  while (true) {
+    const file = `jds/${candidate}.md`;
+    const full = join(rootDir, file);
+    if (!existsSync(full)) return { file, reused: false };
+    if (sourceUrlFromSnapshot(`local:${file}`, rootDir) === row.url) return { file, reused: true };
+    collision++;
+    candidate = `${base}-${shortHash(canonicalUrl(row.url))}${collision === 1 ? '' : `-${collision}`}`;
+  }
+}
+
+export function saveSnapshot({ row, desc, text, rootDir, pulledDate = todayISO() }) {
+  const selected = snapshotFileForPosting({ row, desc, rootDir });
+  if (selected.reused) return selected;
+  const dir = join(rootDir, 'jds');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(join(rootDir, selected.file),
+    `# ${row.title} - ${row.company}\n\n**Source URL:** ${row.url}\n**ATS:** ${desc.ats}\n**Pulled via ATS API:** ${pulledDate}\n\n---\n\n${text}\n`, 'utf8');
+  return selected;
+}
 
 // Build company-name → { greenhouseBoard, workdaySite } hints from portals.yml so
 // a Greenhouse gh_jid on a company domain, or a Workday URL missing its career
@@ -135,7 +170,6 @@ async function main() {
 
   const pending = md.split('\n').map(parsePendingRow).filter(Boolean);
   const resolved = new Map();     // url -> local:jds/… (for the repoint)
-  const usedSlugs = new Set();
   const report = { resolved: [], alreadyLocal: 0, unrecognized: [], failed: [] };
 
   for (const row of pending) {
@@ -148,18 +182,12 @@ async function main() {
       const { text } = await fetchJdText(desc, { boardHint: hint.greenhouseBoard, workdaySiteHints: hint.workdaySite ? [hint.workdaySite] : [] });
       if (!text || text.length < 200) throw new Error(`JD too short (${(text || '').length} chars)`);
 
-      let slug = kebab(`${row.company}-${row.title}`) || `jd-${desc.ats}`;
-      if (usedSlugs.has(slug)) slug = `${slug}-${(desc.id || desc.shortcode || desc.reqId || '').toString().slice(-8) || usedSlugs.size}`;
-      usedSlugs.add(slug);
-
-      const file = `jds/${slug}.md`;
-      if (!dryRun) {
-        if (!existsSync(JDS_DIR)) mkdirSync(JDS_DIR, { recursive: true });
-        writeFileSync(join(__dirname, file),
-          `# ${row.title} — ${row.company}\n\n**Source URL:** ${row.url}\n**ATS:** ${desc.ats}\n**Pulled via ATS API:** ${todayISO()}\n\n---\n\n${text}\n`, 'utf8');
-      }
+      const selected = dryRun
+        ? snapshotFileForPosting({ row, desc, rootDir: __dirname })
+        : saveSnapshot({ row, desc, text, rootDir: __dirname });
+      const { file } = selected;
       resolved.set(row.url, `local:${file}`);
-      report.resolved.push({ company: row.company, title: row.title, ats: desc.ats, chars: text.length, file });
+      report.resolved.push({ company: row.company, title: row.title, ats: desc.ats, chars: text.length, file, reused: selected.reused });
     } catch (e) {
       // url is REQUIRED here: computeGating keys the retry/gate counter by r.url,
       // so a failed row without it never advances past retry 1 and never gates
@@ -170,7 +198,7 @@ async function main() {
 
   if (!dryRun && resolved.size) writeFileSync(PIPELINE, repointPipeline(md, resolved), 'utf8');
 
-  // ── gate persistently-unreadable rows so the triage/deep-dive agents stop
+  // ── gate persistently-unreadable rows so evaluation agents stop
   // re-discovering them every run. Unrecognized platform gates immediately (it is
   // never going to resolve without a human pasting the JD). A recognized-ATS fetch
   // failure gets one retry (its previous count from a prior resolve-jds run) before

@@ -51,7 +51,7 @@ async function main() {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: SCALE });
   const page = await ctx.newPage();
-  setMode({ dataMode: 'populated', stateMode: 'ready', showTriage: false });
+  setMode({ dataMode: 'populated', stateMode: 'ready' });
   await installMocks(page);
   // Posts endpoint is newer than installMocks; mock it here with invented drafts.
   await page.route('**/api/posts', (route) =>
