@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.1.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.0.0...v5.1.0) (2026-09-25)
+
+
+### Features
+
+* rotate Expand Coverage search queries ([#395](https://github.com/michaelinghilterra-creator/trajecktory/issues/395)) ([c2a64fe](https://github.com/michaelinghilterra-creator/trajecktory/commit/c2a64fe294cafa0b3142760ece906d854a5151f8))
+
 ## [5.0.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.9.3...v5.0.0) (2026-09-25)
 
 
