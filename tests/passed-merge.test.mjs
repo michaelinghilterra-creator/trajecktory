@@ -53,7 +53,7 @@ const rowOf = (num) => rows.find(l => l.startsWith(`| ${num} |`)) || '';
 const cell = (line, i) => (line.split('|')[i] || '').trim();
 
 console.log('passed-merge.test.mjs');
-check(cell(rowOf(900202), 6) === 'Passed' && /^\[passed: low_score\] auto-discarded: score 2\.1 < 3\.0/.test(cell(rowOf(900202), 10)), 'a new low score row is written as Passed with the low_score reason');
+check(cell(rowOf(900202), 6) === 'Passed' && /^\[passed: low_score\] auto-discarded: score 2\.1 < 3\.5/.test(cell(rowOf(900202), 10)), 'a new low score row is written as Passed with the low_score reason');
 check(cell(rowOf(900204), 6) === 'Passed' && /^\[passed: discarded\] auto-discarded: agent recommends against/.test(cell(rowOf(900204), 10)), 'a recommends against row is written as Passed with the discarded reason');
 check(cell(rowOf(900201), 6) === 'Passed' && /^\[passed: not_a_fit\] Re-eval/.test(cell(rowOf(900201), 10)), 're-evaluating a Passed row that stays Passed keeps its reason');
 check(rows.filter(l => l.startsWith('| 9002')).length === 3, 'no row was lost or added twice');

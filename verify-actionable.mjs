@@ -1,16 +1,6 @@
 #!/usr/bin/env node
-// verify-actionable.mjs — liveness-check every Evaluated entry in the
-// tracker. Anything that comes back "expired" gets auto-flipped to
-// Discarded with reason "posting closed". Run before every dashboard
-// session to make sure the "Action Required" list is real.
-//
-// Usage:
-//   node verify-actionable.mjs              # check + show what would change
-//   node verify-actionable.mjs --apply      # actually flip statuses in applications.md
-//   node verify-actionable.mjs --score 4    # only verify entries with score >= 4 (faster)
-//
-// Uses check-liveness.mjs under the hood. Exit code 0 if all clean,
-// 1 if anything stale was found.
+// Check every Evaluated tracker entry and optionally move confirmed dead or
+// non-actionable postings to Passed. Dry run is the default.
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { execFileSync } from 'child_process';
@@ -28,36 +18,27 @@ const APPS = join(DATA_DIR, 'applications.md');
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
 const scoreThreshold = args.includes('--score') ? parseFloat(args[args.indexOf('--score') + 1]) : 0;
+const confirmDelayArg = args.includes('--confirm-delay') ? Number(args[args.indexOf('--confirm-delay') + 1]) : 20;
+if (!Number.isFinite(confirmDelayArg) || confirmDelayArg < 0) {
+  console.error('--confirm-delay must be a non-negative number of seconds.');
+  process.exit(2);
+}
+const confirmDelayMs = confirmDelayArg * 1000;
 
-// Parse Evaluated entries with score >= threshold
-// Fresh install has no tracker yet — nothing to verify, so exit clean.
 if (!existsSync(APPS)) {
   console.log('All checked entries are still live (no applications.md yet).');
   process.exit(0);
 }
+
 const baseText = readFileSync(APPS, 'utf8');
 const lines = baseText.split('\n');
 const targets = [];
 for (let idx = 0; idx < lines.length; idx++) {
   const line = lines[idx];
-  // Read rows with the canonical parser. The hand-rolled version this replaces
-  // was wrong three ways, all of them silent:
-  //   1. it skipped any line containing '---', which a Workday posting URL can
-  //      contain (/job/Northern-California-USA---Remote/), hiding live rows;
-  //   2. it destructured by position and was never updated for the Resume
-  //      column, so it read Resume as the report link and the report link as
-  //      notes — meaning the [self-sourced] exemption below could never match
-  //      and a JD the user chose themselves could be auto-discarded;
-  //   3. its URL regex only matched the legacy **URL:** header, so it was blind
-  //      to every report written in the v1 JSON frontmatter format.
-  // urlForRow reads the row's own url cell and falls back to the report,
-  // handling both report formats.
   const row = parseTrackerLine(line);
-  if (!row) continue;
-  if (row.status !== 'Evaluated') continue;
+  if (!row || row.status !== 'Evaluated') continue;
   const score = parseFloat((String(row.score).match(/[\d.]+/) || [])[0]) || 0;
   if (score < scoreThreshold) continue;
-  // Skip self-sourced/referral — user explicitly wants those
   if (/\[self-sourced\]|\[referral:|\[cowork\]/i.test(row.notes || '')) continue;
   const url = urlForRow(row, __dirname);
   if (!url || !/^https?:\/\//.test(url) || /^https?:\/\/(www\.)?example\.com/.test(url)) continue;
@@ -69,44 +50,38 @@ if (targets.length === 0) {
   process.exit(0);
 }
 
-console.log(`Checking ${targets.length} Evaluated entries for liveness...\n`);
-
-// Run check-liveness.mjs on the batch of URLs
-const urls = targets.map(t => t.url);
-let livenessOutput;
-try {
-  livenessOutput = execFileSync('node', [join(__dirname, 'check-liveness.mjs'), ...urls], {
-    encoding: 'utf8',
-    timeout: 5 * 60 * 1000, // 5 min max
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-} catch (err) {
-  // Non-zero exit = some URLs flagged; output is still on stdout
-  livenessOutput = err.stdout || '';
-}
-
-// Parse liveness output — check-liveness.mjs prints "<icon> <status>    <url>"
-// per URL (active / expired / uncertain). We treat both "expired" and
-// "uncertain" as actionable: expired = dead link, uncertain = no apply
-// button visible (most likely a listing page, not a real posting).
-const expired = [];
-const outLines = livenessOutput.split('\n');
-for (const t of targets) {
-  // Find the line containing the URL — the status word is on the same line, before the URL
-  const statusLine = outLines.find(l => l.includes(t.url));
-  if (!statusLine) continue;
-  // Extract status word: position 0-3 is icon+space, then status word
-  if (/\b(expired|uncertain)\b/i.test(statusLine) && !/\bactive\b/i.test(statusLine)) {
-    expired.push({ ...t, livenessStatus: /expired/i.test(statusLine) ? 'expired' : 'uncertain' });
+function runLiveness(checkTargets) {
+  let output;
+  try {
+    output = execFileSync('node', [join(__dirname, 'check-liveness.mjs'), ...checkTargets.map(t => t.url)], {
+      encoding: 'utf8',
+      timeout: 5 * 60 * 1000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (err) {
+    output = err.stdout || '';
   }
+  const outLines = output.split('\n');
+  return checkTargets.map(t => {
+    const statusLine = outLines.find(line => line.includes(t.url));
+    if (!statusLine) return { ...t, livenessStatus: 'unknown' };
+    if (/\bactive\b/i.test(statusLine)) return { ...t, livenessStatus: 'active' };
+    if (/\bexpired\b/i.test(statusLine)) return { ...t, livenessStatus: 'expired' };
+    if (/\buncertain\b/i.test(statusLine)) return { ...t, livenessStatus: 'uncertain' };
+    return { ...t, livenessStatus: 'unknown' };
+  });
 }
+
+console.log(`Checking ${targets.length} Evaluated entries for liveness...\n`);
+const expired = runLiveness(targets)
+  .filter(t => t.livenessStatus === 'expired' || t.livenessStatus === 'uncertain');
 
 if (expired.length === 0) {
-  console.log('✅ All checked entries are still live.');
+  console.log('All checked entries are still live.');
   process.exit(0);
 }
 
-console.log(`⚠️  ${expired.length} entries point to dead or non-actionable postings:\n`);
+console.log(`${expired.length} entries point to dead or non-actionable postings:\n`);
 console.log('  ID    Score  Status      Company                       Role');
 console.log('  ----  -----  ---------   ------------------------       ----');
 for (const t of expired) {
@@ -114,19 +89,35 @@ for (const t of expired) {
 }
 
 if (!apply) {
-  console.log('\nRun with --apply to flip these to Passed in applications.md');
+  console.log('\nRun with --apply to confirm and flip these to Passed in applications.md');
   process.exit(1);
 }
 
-// Flip statuses
-const expiredIds = new Set(expired.map(e => e.id));
+if (confirmDelayMs > 0) {
+  console.log(`\nWaiting ${confirmDelayArg} seconds before confirming ${expired.length} liveness verdict${expired.length === 1 ? '' : 's'}...`);
+  await new Promise(resolve => setTimeout(resolve, confirmDelayMs));
+}
+
+const secondResults = runLiveness(expired);
+const secondById = new Map(secondResults.map(t => [t.id, t.livenessStatus]));
+const confirmed = expired.filter(t => secondById.get(t.id) === t.livenessStatus);
+const unconfirmed = expired.filter(t => secondById.get(t.id) !== t.livenessStatus).map(t => ({
+  ...t,
+  confirmationStatus: secondById.get(t.id) || 'unknown',
+}));
+
+if (unconfirmed.length > 0) {
+  console.log('\nUnconfirmed, kept as Evaluated:');
+  for (const t of unconfirmed) {
+    console.log(`  #${t.id} ${t.company}: first ${t.livenessStatus}, confirmation ${t.confirmationStatus}`);
+  }
+}
+
+const confirmedIds = new Set(confirmed.map(e => e.id));
 const newLines = lines.map(line => {
-  // Read and write through lib/tracker.mjs. Hand-indexing line.split('|') here
-  // used the legacy 9-column offsets, so the discard reason was prepended to the
-  // Report cell rather than the notes.
   const row = parseTrackerLine(line);
-  if (!row || !expiredIds.has(row.num)) return line;
-  const found = expired.find(e => e.id === row.num);
+  if (!row || !confirmedIds.has(row.num)) return line;
+  const found = confirmed.find(e => e.id === row.num);
   const statusLabel = found?.livenessStatus === 'uncertain' ? 'no apply control visible' : 'posting closed/expired';
   const reason = `auto-discarded: ${statusLabel}`;
   return formatTrackerLine({
@@ -137,7 +128,7 @@ const newLines = lines.map(line => {
 });
 
 const newText = newLines.join('\n');
-if (logWritesEnabled(DATA_DIR)) {
+if (confirmed.length > 0 && logWritesEnabled(DATA_DIR)) {
   try {
     writeTableText({
       dataDir: DATA_DIR,
@@ -174,14 +165,15 @@ if (logWritesEnabled(DATA_DIR)) {
   } catch (error) {
     if (error.code === 'RENDER_FAILED') {
       console.warn(`Warning: ${error.message}`);
-      console.log(`\n✅ Flipped ${expired.length} entries to Passed.`);
+      console.log(`\nFlipped ${confirmed.length} entries to Passed; ${unconfirmed.length} unconfirmed.`);
     } else {
       console.error(error.message);
     }
     process.exit(1);
   }
-} else {
+} else if (confirmed.length > 0) {
   writeFileSync(APPS, newText);
 }
-console.log(`\n✅ Flipped ${expired.length} entries to Passed.`);
+
+console.log(`\nFlipped ${confirmed.length} entries to Passed; ${unconfirmed.length} unconfirmed.`);
 process.exit(0);

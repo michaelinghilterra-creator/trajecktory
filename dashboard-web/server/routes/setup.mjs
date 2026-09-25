@@ -277,7 +277,7 @@ router.post('/api/setup/anthropic-key', (req, res) => {
 
 // ── Per-section model selection + cost ────────────────────────────────────────
 // The Models & Cost settings let the user pick which model runs each workflow
-// section (Triage / Agent Scan / Evaluate / Insights / Drafts) and tune the
+// section (Agent Scan / Evaluate / Insights / Drafts) and tune the
 // Evaluate batch size, with approximate per-run costs. Selections persist as
 // TJK_* keys in dashboard-web/.env via the same writeEnvKey mechanism as the API
 // key (so a change takes effect on the next run with no restart). pricing.mjs is

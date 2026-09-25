@@ -72,14 +72,6 @@ export function resolveModelId(alias) {
 // they exist to rank choices and show relative cost, not to bill.
 export const SECTIONS = [
   {
-    key: 'triage', label: 'Triage', envKey: 'TJK_TRIAGE_MODEL',
-    hint: 'Cheap first-pass scoring of the pipeline top.',
-    options: ['haiku', 'sonnet'], default: 'haiku',
-    tokensPerUnit: 10_000, split: { in: 0.9, out: 0.1 },
-    unitLabel: 'role', unitsPerRun: 15,
-    warn: { sonnet: 'Sonnet costs more; Haiku is calibrated faithful for triage.' },
-  },
-  {
     key: 'scan', label: 'Agent Scan', envKey: 'TJK_SCAN_MODEL',
     hint: 'Widens the pipeline via Claude web search.',
     options: ['haiku', 'sonnet', 'opus'], default: 'haiku',
@@ -239,7 +231,7 @@ export function validateSetting(section, value) {
 
 // Build the full payload for GET /api/setup/models: current selections, allowed
 // options, per-option run-cost estimates, batch knobs, pricing, and a full-run
-// total (Triage + Evaluate batch). `evalBatch` is the effective batch size to
+// total (Agent Scan + Evaluate batch). `evalBatch` is the effective batch size to
 // price Evaluate at (the key-path size when a key is present, else the plan size).
 export function modelsState({ keyPresent, evalBatch } = {}) {
   // Effective "is the API key being used" = a key is saved AND billing is set to
@@ -252,8 +244,8 @@ export function modelsState({ keyPresent, evalBatch } = {}) {
   const effEvalBatch = evalBatch != null ? evalBatch : (hasKey ? batchKey : batchPlan);
 
   // SINGLE-RAIL: the billing toggle picks the rail and the WHOLE workflow bills it.
-  // In key mode (hasKey) every step bills the API key — Triage, Agent Scan, and
-  // Evaluate via `claude -p` (Claude Code bills the key whenever it sees it), plus
+  // In key mode (hasKey) every step bills the API key — Agent Scan and Evaluate
+  // via `claude -p` (Claude Code bills the key whenever it sees it), plus
   // Insights and Drafts via the SDK. In plan mode / no key, nothing bills the key
   // and every step runs on the flat Claude subscription. So billsTo is uniform
   // across steps: it follows the rail, not the step.
@@ -271,12 +263,12 @@ export function modelsState({ keyPresent, evalBatch } = {}) {
     };
   });
 
-  // Full-run estimate = a Triage pass + an Evaluate batch at their current models.
-  const triage = sections.find((x) => x.key === 'triage');
+  // Full-run estimate = an Agent Scan plus an Evaluate batch at current models.
+  const scan = sections.find((x) => x.key === 'scan');
   const evalS = sections.find((x) => x.key === 'eval');
-  // totalPerRun represents a batch pipeline run (triage + eval + scan). Drafting
+  // totalPerRun represents a scan + evaluation batch. Drafting
   // and grading are interactive, not part of the batch, so they are excluded.
-  const totalPerRun = triage.costs[triage.current] + evalS.costs[evalS.current];
+  const totalPerRun = scan.costs[scan.current] + evalS.costs[evalS.current];
 
   return {
     hasKey,
@@ -292,7 +284,7 @@ export function modelsState({ keyPresent, evalBatch } = {}) {
     pricing: PRICING,
     totalPerRun,
     note: hasKey
-      ? 'Billing set to your API key: the ENTIRE workflow bills your key while this is on — Triage, Agent Scan, and Evaluate (via claude -p), plus Insights and Drafts. $ figures are local estimates from token counts, not your invoice; set your real ceiling in your Anthropic console. Switch billing to your Claude plan to stop charging the key.'
+      ? 'Billing set to your API key: the ENTIRE workflow bills your key while this is on — Agent Scan and Evaluate (via claude -p), plus Insights and Drafts. $ figures are local estimates from token counts, not your invoice; set your real ceiling in your Anthropic console. Switch billing to your Claude plan to stop charging the key.'
       : (keyPresent
           ? 'Billing set to your Claude plan: NOTHING bills your saved API key — the whole workflow runs on your subscription (no per-token cost). $ figures are estimates of what the API-key path would cost, not real charges.'
           : 'No API key set: the whole workflow runs on your Claude subscription (no per-token cost). $ figures are estimates of what the API-key path would cost.'),

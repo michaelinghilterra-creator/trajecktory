@@ -57,9 +57,8 @@ repo [README](../../README.md).
    most people can skip this and come back later.
 
 7. **Run your first search.** From the left sidebar: **API Scan** (free, no AI)
-   pulls fresh roles from Greenhouse, Ashby, and Lever, then **Triage** scores the
-   best-fit ones cheaply (the API-key workflow uses **Agent Scan** and **Evaluate**
-   instead). Review the scored roles, deep-dive the strongest for a full A-F report,
+   pulls fresh roles from Greenhouse, Ashby, and Lever. Use **Liveness Gate** to
+   remove closed postings, then **Evaluate** the strongest roles for a full A-F report,
    let trajecktory tailor an ATS resume and cover letter, and track it. From there
    it schedules follow-ups so nothing goes stale.
 

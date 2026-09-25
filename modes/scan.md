@@ -23,6 +23,8 @@ Read `portals.yml`, which contains:
 - `tracked_companies`: Specific companies with `careers_url` for direct navigation
 - `title_filter`: matrix, negative, and seniority_boost settings for title filtering
 
+Before scanning, run `node list-companies.mjs` once to get the tracked company list as `name<TAB>slug`. Use that output instead of grepping `portals.yml` repeatedly.
+
 ## Discovery strategy (3 tiers)
 
 ### Tier 1 — Direct Playwright (PRIMARY)

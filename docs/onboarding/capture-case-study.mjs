@@ -307,7 +307,7 @@ const json = (route, body, status = 200) => route.fulfill({ status, contentType:
 
 async function main() {
   mkdirSync(OUT, { recursive: true });
-  setMode({ dataMode: 'populated', stateMode: 'started', showTriage: false });
+  setMode({ dataMode: 'populated', stateMode: 'started' });
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 2 });
@@ -535,7 +535,6 @@ async function main() {
     if (await score.count()) await score.click();
   });
   await capture('44-pipeline-provisional.png', async () => {
-    await changeMode({ showTriage: true });
     await navigate('Pipeline');
     await clickExact('Roles');
   });

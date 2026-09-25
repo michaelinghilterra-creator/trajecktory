@@ -1,7 +1,7 @@
 // routes/discovery.mjs — the Discovery Inbox endpoint.
 //
 // WHY: the dashboard's Pipeline views read only evaluated rows (applications.md)
-// plus triage-scored rows, so a freshly discovered role that is still a pending
+// plus Spark pre-filter discard rows, so a freshly discovered role that is pending
 // "- [ ]" line in data/pipeline.md, or one gated to "- [!]", appeared in NO view
 // and looked "lost". This endpoint exposes the raw discovery queue so found /
 // pending / gated are all visible, with the gate reason on every dead row.

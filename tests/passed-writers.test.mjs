@@ -16,9 +16,9 @@ fs.writeFileSync(applicationsPath,
   '|---|------|---------|------|-------|--------|-----|--------|--------|-------|-----|\n' +
   row(900001, 'Zorblax Widgetry', 'Example Flange Engineer', 'Evaluated', '3.4/5', 'Wrong level') +
   row(900002, 'Quennox Ratchet Works', 'Example Gear Manager', 'Evaluated', '3.6/5') +
-  row(900003, 'Vantrix Sprocketry', 'Example Sprocket Designer', 'Passed', '2.8/5', '[passed: low_score] auto-discarded: score 2.8 < 3.0.') +
+  row(900003, 'Vantrix Sprocketry', 'Example Sprocket Designer', 'Passed', '3.2/5', '[passed: low_score] auto-discarded: score 3.2 < 3.5.') +
   row(900004, 'Zorblax Widgetry', 'Example Widget Planner', 'Passed', '2.8/5', '[passed: posting_closed] gone') +
-  row(900005, 'Quennox Ratchet Works', 'Example Cog Lead', 'Discarded', '2.8/5', 'auto-discarded: score 2.8 < 3.0.'),
+  row(900005, 'Quennox Ratchet Works', 'Example Cog Lead', 'Discarded', '3.2/5', 'auto-discarded: score 3.2 < 3.5.'),
   'utf8');
 
 let passed = 0;
@@ -81,7 +81,7 @@ try {
   // Readers that need the old distinction.
   check(isRequeueableDiscard({ status: rowOf(900003).status, score: rowOf(900003).score, notes: rowOf(900003).notes }) === true, 'a near threshold low_score Passed row can be re-queued, as Discarded could');
   check(isRequeueableDiscard({ status: rowOf(900004).status, score: rowOf(900004).score, notes: rowOf(900004).notes }) === false, 'a posting_closed Passed row cannot, as Closed could not');
-  check(isRequeueableDiscard({ status: 'Discarded', score: 2.8, notes: '' }) === true, 'a legacy Discarded row still can');
+  check(isRequeueableDiscard({ status: 'Discarded', score: 3.2, notes: '' }) === true, 'a legacy Discarded row still can');
   check(isPostingClosed(rowOf(900004)) && !isPostingClosed(rowOf(900003)) && !isPostingClosed(rowOf(900005)), 'the closed posting reads as closed from its parsed row');
 } finally {
   await new Promise(resolve => server.close(resolve));

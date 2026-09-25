@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import { ROOT_DIR, DATA_DIR, APPS_MD } from '../config.mjs';
 import { reconcileHandled } from '../../../lib/pipeline.mjs';
 import { reconcileTriageResults } from '../../../lib/reconcile-triage.mjs';
-import { parseTriageOutput, appendTriageResults, START_MARKER, END_MARKER } from '../../../lib/triage-results.mjs';
 import { parsePortalAdditions, mergePortalAdditions, START_MARKER as PORTAL_START, END_MARKER as PORTAL_END } from '../../../lib/portal-additions.mjs';
 import { scanDiscoveryStalled } from '../../../lib/scan-stall.mjs';
 import { buildScanDiscoverySummary, logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
@@ -17,6 +16,7 @@ import { record as recordActivation } from '../lib/activation.mjs';
 import { issueJd } from '../../../next-jd.mjs';
 import { validateReportMarkdown } from '../v1-loader.mjs';
 import { localToday } from '../../../lib/local-date.mjs';
+import { agentTail } from '../lib/agent-summary.mjs';
 
 export const router = express.Router();
 
@@ -51,7 +51,7 @@ function evictOldJobs() {
 // pipeline.md write, no matter how their spawns overlap. The ONE writer that CAN
 // race a parent write is `scan` (scan.mjs appends from a CHILD process). So the
 // safe rule is: `scan` is fully exclusive; the other modes are single-flight per
-// mode but may overlap each other — a deep-dive or triage can run alongside a
+  // mode but may overlap each other — a deep evaluation can run alongside a
 // rolling Evaluate. `activeAgents` tracks in-flight modes; it is deliberately
 // separate from job.status, which blips to 'done' between rolling batches and
 // would otherwise read as "nothing running" mid-chain.
@@ -120,10 +120,6 @@ loadPersistedJobs();
 const _evictTimer = setInterval(evictOldJobs, 30 * 60 * 1000);
 if (_evictTimer.unref) _evictTimer.unref();
 
-function agentTail(output) {
-  return (output || '').trim().split('\n').slice(-3).join('\n');
-}
-
 function claudeErrorMessage(e) {
   if (e && e.code === 'ENOENT') {
     return 'Claude Code CLI not found. Make sure `claude` is installed and on your PATH, then retry.';
@@ -159,8 +155,7 @@ const PRESSURE_WARNING = 'Anthropic returned a transient rate-limit or overload 
 // is the one switch: when true, every `claude -p` spawn KEEPS the key and bills it
 // (Claude Code bills the key whenever it sees it); when false, every spawn strips
 // the key and runs on the flat Claude plan. That key-strip lives at the spawn (see
-// `billsKey` in runClaudeAgent), so it covers ALL modes — Triage and Agent Scan
-// included — not just the Evaluate paths.
+// `billsKey` in runClaudeAgent), so it covers Agent Scan as well as Evaluate.
 //
 // effectivePower is the NARROWER question of the key rail's THROUGHPUT boost (a
 // bigger Evaluate batch + bounded parallelism), which only applies to the full
@@ -224,7 +219,8 @@ function rollMax() {
 let rollingStop = false;
 
 // Self-heal the pending queue after a batch: check off any pipeline row already
-// evaluated, dismissed, staged, deferred to needs-manual, or triage-scored, so
+// evaluated, dismissed, staged, deferred to needs-manual, or discarded by the
+// optional Spark pre-filter, so
 // the next batch sees real remaining work instead of re-evaluating the same
 // top-of-queue rows. Both passes are best-effort and idempotent; a reconcile
 // failure never breaks a run. Called between rolling batches AND once in the
@@ -375,9 +371,7 @@ function dashboardConstraints(mode, opts) {
   // NO-QUESTIONS is not politeness, it is a correctness requirement. This runs
   // under `claude -p` with nobody attached, so a clarifying question is not a
   // pause — it is the end of the run. The agent emits the question, exits 0, and
-  // every artifact it was asked for goes unwritten. A tester's first triage died
-  // exactly this way (2026-07-21): the agent stopped to ask which kind of role to
-  // prioritize, waited for an answer that could never come, and scored nothing.
+  // every artifact it was asked for goes unwritten.
   const noQuestions =
     ' You are running headless and there is NO human here to reply, so never ask a ' +
     'clarifying question, never ask for confirmation, and never stop to wait for input — ' +
@@ -424,18 +418,12 @@ function dashboardConstraints(mode, opts) {
       ' Do NOT edit data/pipeline.md at all — checking off evaluated, deferred, and already-decided rows is handled deterministically after the run, so an in-prompt edit is both unnecessary and unsafe when this run parallelizes across the batch.' +
       ' Record every evaluation as a single line nine column TSV in batch/tracker-additions/ and do not edit data/applications.md directly. Always write the report to reports/ even for a low score so the result is visible. Write each report in the trajecktory-report/v1 format (JSON frontmatter then narrative body) and you MUST populate the optional frontmatter sections so the dashboard drawer is complete, not just the score: include customizationCV and customizationLI (the CV and LinkedIn personalization plan), starStories plus a leadStory (interview prep, with the single story to lead with), and a legitimacy object with a tier and signals. Base EVERY section only on the JD text you actually fetched — never fabricate or infer missing content from search results. Legitimacy is assessed from the fetched posting (freshness, description quality, reposting, prompt-injection); set verification to unconfirmed (no live browser). If you could not fetch the posting, it does not belong here at all — it goes to data/needs-manual-jd.tsv per the rule above, not into a report. When done, the user will run Merge Tracker to fold your TSVs into the pipeline.' + snapshotJd;
   }
-  // NOTE ON THE DEDUP SENTENCES BELOW (scan + triage): they are belt-and-braces,
+  // NOTE ON THE DEDUP SENTENCE BELOW: it is belt-and-braces,
   // NOT the guarantee. A prose instruction to an LLM is advisory — it was dropped
   // from the scan prompt entirely at one point and nobody noticed, because
-  // nothing tests a prompt. The enforced checks are gate-pipeline.mjs (before
-  // tokens are spent) and the triage route's filter (before cards are shown),
-  // both using lib/identity.mjs. Keep these sentences anyway: a scan that skips
+  // nothing tests a prompt. The enforced check is gate-pipeline.mjs before
+  // evaluation tokens are spent. Keep this sentence anyway: a scan that skips
   // a duplicate up front is cheaper than one that adds it and gets it filtered.
-  //
-  // The triage "SKIP any URL already in data/applications.md" line below shipped
-  // for months as a guaranteed no-op: applications.md had no URL column, so the
-  // set it matched against was empty. It became true only when that column
-  // landed. Do not "clean up" this now-working instruction.
   if (mode === 'scan') {
     const cap = limit > 0 ? ` TEST MODE (TJK_TEST_LIMIT=${limit}): list at most ${limit} new companies in the block, then stop.` : '';
     return ' ' + common + ' Your FIRST and mandatory step is to run `node scan.mjs` from the repo root ONCE. That script IS the entire ATS API tier: it hits every tracked_companies Greenhouse/Ashby/Lever board, applies the portals.yml title_filter, dedups against data/scan-history.tsv + data/pipeline.md + data/applications.md, and writes every new live posting into data/pipeline.md itself — all zero-token. Do NOT WebFetch ATS boards by hand, do NOT re-implement the title filter, and do NOT write any test/helper script (buildTitleFilter and the whole API tier already live in scan.mjs); doing so wastes the turn budget for no gain.' +
@@ -447,29 +435,10 @@ function dashboardConstraints(mode, opts) {
       ` ${PORTAL_END}` +
       ` Put this block FIRST in your final response, before any prose summary, so a long summary cannot push it past the response length limit and truncate it. If you found no genuinely new companies, still emit the two markers with an empty array [] between them so the run records cleanly. Skip the Playwright tier entirely.` + cap;
   }
-  if (mode === 'triage') {
-    const tcap = parseInt(process.env.TJK_TRIAGE_MAX, 10) || 15;
-    const n = limit > 0 ? Math.min(limit, tcap) : tcap;
-    return ' ' + common + ` Triage only — do NOT run a full evaluation. Score the TOP ${n} unchecked URLs from the top of data/pipeline.md (they are ordered best-fit first). Before scoring, SKIP any URL that already appears in data/applications.md (it already has an evaluation), in data/triage-dismissed.tsv (the user dismissed it), OR in data/triage-results.tsv (a PRIOR triage run already scored it), and take the next unchecked URLs instead, so you never re-triage a role that is already evaluated, dismissed, or scored. For each URL that survives that filter, read the JD: if the row is a local:jds/<file> snapshot path (not an http(s) URL), read that file DIRECTLY with the Read tool and do NOT WebFetch it, resolving the path relative to the repo root (your current working directory) so local:jds/foo.md means the file jds/foo.md, NOT data/jds/foo.md (the jds/ snapshot directory sits at the repo root, not beside data/pipeline.md, which merely lists the row); otherwise read the JD with WebFetch first and WebSearch as a fallback. Skip only rows you genuinely cannot read. Then give a 0.0-5.0 fit score and a one-sentence rationale using the rubric and anti-inflation calibration in the triage mode (most roles are NOT 4+; reserve 4+ for genuine strong fits on archetype AND level AND location).` +
-      ` Do NOT write to data/triage-results.tsv yourself, and do NOT use Bash, Write, or Edit on it at all — the dashboard server appends your results deterministically after you finish, which is more reliable than a direct file edit across a long run. Instead, output every role you scored this run as a single valid JSON array between these two exact marker lines, each marker on its own line with nothing else on that line, and the array using standard double-quote JSON syntax (never single quotes, never a markdown code fence around it):` +
-      ` ${START_MARKER}` +
-      ` ${END_MARKER}` +
-      ` Between those two marker lines, put one JSON object per scored role, as an array. Each object needs exactly five keys: url (the posting URL, string), company (string), title (string), score (a number from 0.0 to 5.0), and rationale (one sentence, string). Use real double-quote characters around every string, standard JSON syntax throughout.` +
-      ` Put this block FIRST in your final response, before any summary or commentary — your response has a length limit, and if the block comes last a long summary can push it past that limit and cut the array off mid-write, which loses every score in the run even though you actually did the work. Write the block complete and correct, THEN add a short summary after it if you want. Omit any role you could not read rather than guessing a field. If you scored zero roles this run (everything was a duplicate or unreadable), still emit the markers with an empty array between them so the run is recorded as complete rather than ambiguous. Do NOT write a report, do NOT generate a PDF, do NOT write a tracker-additions TSV, and do NOT check off the pipeline.md checkboxes. Stop after ${n}.`;
-  }
   if (mode === 'deep') {
     const tgt = (opts && opts.url) || '';
     const [num] = reserveReportNumbers(1);
-    // isPasteOrigin is false for a "Deep dive" run against an existing
-    // local:jds/ snapshot (resolve-jds.mjs wrote it off a scanner hit; the user
-    // never pasted anything, they just asked for a deeper eval on a triage
-    // card), true for a genuine paste-box submission (raw URL or pasted JD
-    // text). The prompt used to assert paste-box origin unconditionally, which
-    // mistagged every scanner-originated Deep dive as [self-sourced] — see the
-    // isPasteOrigin comment where target is built, above.
-    const sourceLine = opts && opts.isPasteOrigin
-      ? ' This posting was entered directly by the user (the dashboard paste box), not found by a scan, so set the tracker note to include [self-sourced].'
-      : ' This posting came from the scanner (a triage card, not a user paste) — do NOT write [self-sourced] in the tracker note.';
+    const sourceLine = ' This posting was entered directly by the user (the dashboard paste box), not found by a scan, so set the tracker note to include [self-sourced].';
     return ' ' + common + ` Report number is PRE-RESERVED for this run: ${num}. Use it as the report filename number ({num}-{slug}-{date}.md) and the matching tracker id. Do NOT run node next-jd.mjs; numbering is handled for you here.` + ` Deep evaluation of ONE posting only: ${tgt}. Read its job description with WebFetch first and WebSearch as a fallback (for a local:jds/ path, read that file directly, resolving it relative to the repo root (your current working directory) so local:jds/foo.md means the file jds/foo.md, NOT data/jds/foo.md; that snapshot begins with a "**Source URL:**" line — use that real posting URL as the URL in the report frontmatter and the tracker row, never the local: path). Produce the FULL A-G evaluation as a report in reports/ using the trajecktory-report/v1 format (JSON frontmatter then narrative) and populate every section: summary, cvMatch, gaps, levelMatch, comp, customizationCV, customizationLI, starStories with a leadStory, and a legitimacy object with a tier and signals (Playwright is unavailable here, so assess legitimacy from the fetched page and set verification to unconfirmed). Record the evaluation as a single nine-column TSV in batch/tracker-additions/.` + sourceLine + ` Evaluate ONLY this one posting — do not scan for or evaluate any other URL. If it cannot be read, say so and stop.` + snapshotJd;
   }
   return '';
@@ -479,26 +448,15 @@ function dashboardConstraints(mode, opts) {
 // A clean exit is not evidence of work. `claude -p` exits 0 when it emits a
 // clarifying question and stops (there is no human here to answer it), when the
 // workspace is untrusted and its web tools were silently stripped, or when it
-// simply decides there is nothing to do. The dashboard used to append "Triage
-// scored." on the exit code alone, so a run that wrote nothing still reported
-// success — beta report 2026-07-21: data/triage-results.tsv did not exist on
-// disk and the UI said Triage scored, so the user went hunting for results that
-// were never written and concluded the product was broken.
+// simply decides there is nothing to do.
 //
 // Fingerprint the artifact the mode is supposed to produce BEFORE the run and
 // compare AFTER. Size and file count, never mtime: a rewrite that appends
 // nothing is not progress, and mtime moves when the agent merely touches a file.
 //
 // Writing nothing is NOT automatically an error — a scan whose hits are all
-// duplicates, or a triage whose URLs are all already evaluated, legitimately
-// writes nothing. So this does not fail the run. It only refuses to claim
-// success, which is the part that was actually broken.
-// NOTE: 'triage' is deliberately ABSENT here. It used to be file-size-probed
-// like scan/pipeline/deep, but the agent no longer writes triage-results.tsv at
-// all (see lib/triage-results.mjs) -- the server parses structured output from
-// the agent's final response and appends deterministically. wroteSomething for
-// triage is therefore computed directly from that append's real return value in
-// runAgent(), not from a before/after probe.
+// duplicates legitimately writes nothing. So this does not fail the run. It only
+// refuses to claim success, which is the part that was actually broken.
 const AGENT_ARTIFACTS = {
   scan:     { noun: 'new postings',  probe: () => fileSize('data/pipeline.md') },
   // Count staged AND merged TSVs: the dashboard auto-runs Merge right after a
@@ -600,7 +558,7 @@ function reportWriteIssue(block) {
   // Some CLI versions elide very large tool inputs from the stream. Nothing to
   // check in flight — the close-time pass reads it off disk instead.
   if (typeof content !== 'string') return null;
-  const v = validateReportMarkdown(content, rel);
+  const v = validateReportMarkdown(content, rel, { shape: true });
   return v.ok ? null : v.error;
 }
 
@@ -640,7 +598,7 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     const isWin = process.platform === 'win32';
     // PREFLIGHT: an untrusted workspace makes `claude -p` drop this project's
     // permissions.allow list. --permission-mode acceptEdits below re-grants Write
-    // and Edit but NOT WebSearch/WebFetch, which every scan/triage/eval prompt
+    // and Edit but NOT WebSearch/WebFetch, which scan/evaluation prompts
     // depends on to read a posting. The CLI degrades silently — it warns once on
     // stderr and then runs to "completion" with nothing to read — so refuse the
     // run up front rather than bill the user for a job that cannot succeed.
@@ -664,8 +622,7 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     const slash = mode === 'deep' ? 'pipeline' : mode;
     const prompt = `/trajecktory ${slash}.${dashboardConstraints(mode, target)}`;
     // Per-section model, chosen in the Models & Cost settings (persisted as TJK_*
-    // env keys, see server/lib/pricing.mjs). Defaults: Triage=Haiku (calibrated
-    // faithful to Sonnet, r≈0.89 / 100% recall of strong roles), Agent Scan=Haiku
+    // env keys, see server/lib/pricing.mjs). Defaults: Agent Scan=Haiku
     // (synthesis over web results — the cheap default on an unbounded step),
     // Evaluate=Sonnet (the tuned scorer; the cost driver). The legacy shared
     // TJK_AGENT_MODEL is honored as a fallback for the split keys.
@@ -675,12 +632,10 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     // eval-throughput boost, pipeline/deep only).
     const billsKey = apiKeyActive();
     // A per-request model override drives the Opus "deep mode" toggle (pipeline /
-    // deep only). Triage stays on its calibrated Haiku regardless.
+    // deep only).
     const reqModel = ((target && target.model) || '').trim();
     let rawModelPref;
-    if (mode === 'triage') {
-      rawModelPref = (process.env.TJK_TRIAGE_MODEL || 'haiku').trim();
-    } else if (mode === 'scan') {
+    if (mode === 'scan') {
       rawModelPref = (process.env.TJK_SCAN_MODEL || process.env.TJK_AGENT_MODEL || 'haiku').trim();
     } else {
       // pipeline / deep — the Evaluate step. reqModel is the Opus deep-mode override.
@@ -768,8 +723,8 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
     let child;
     // SINGLE-RAIL: keep the key in the `claude -p` environment iff this run bills
     // the key (key saved AND billing = key). Claude Code bills the key whenever it
-    // sees it, so keeping it is what actually moves the whole workflow — Triage and
-    // Agent Scan included — onto the key. In plan mode the key is stripped, so the
+    // sees it, so keeping it is what actually moves Agent Scan and Evaluate onto
+    // the key. In plan mode the key is stripped, so the
     // run bills the flat Claude subscription and nothing touches the key.
     const claudeEnv = { ...process.env };
     if (!billsKey) delete claudeEnv.ANTHROPIC_API_KEY;
@@ -937,7 +892,7 @@ function runClaudeAgent(jobId, mode, target, opts = {}) {
       // a later Edit. Re-read what actually landed on disk and let that decide.
       for (const rel of touchedReports) {
         try {
-          const v = validateReportMarkdown(fs.readFileSync(path.join(ROOT_DIR, rel), 'utf8'), rel);
+          const v = validateReportMarkdown(fs.readFileSync(path.join(ROOT_DIR, rel), 'utf8'), rel, { shape: true });
           if (v.ok) reportIssues.delete(rel); else reportIssues.set(rel, v.error);
         } catch (e) {
           // Written then renamed or removed is not a syntax failure — only a real
@@ -1054,7 +1009,7 @@ async function scanNewCompanies(entries) {
 async function runAgent(jobId, mode, target) {
   agentJobs.set(jobId, { mode, status: 'running', activity: 'Starting agent…', toolCalls: [], toolCount: 0, output: '', startedAt: Date.now(),
     // Progress meter: pipeline has a known batch size; deep is a single eval; scan
-    // and triage are open-ended, so they show elapsed only (progressTotal null).
+    // is open-ended, so it shows elapsed only (progressTotal null).
     progressTotal: mode === 'pipeline' ? pipelineEvalTotal(effectivePower(target, mode)) : (mode === 'deep' ? 1 : null), evaluationsDone: 0 });
   persistJobs();   // capture the running record immediately so a restart can mark it interrupted
   const before = probeArtifacts(mode);
@@ -1068,33 +1023,13 @@ async function runAgent(jobId, mode, target) {
   if (res.logRecord) scanLogRecords.push(res.logRecord);
   if (mode === 'pipeline') res = await rollPipeline(jobId, target, res);
 
-  // TRIAGE: the agent never touches triage-results.tsv itself (see
-  // lib/triage-results.mjs's file header for why). It emits its scores as a
-  // structured JSON block in its final response; the server parses and
-  // appends here, deterministically, append-only. This is computed BEFORE the
-  // generic wroteSomething logic below because triage's own truth is this
-  // append's real return value, not a before/after file-size probe (removed
-  // from AGENT_ARTIFACTS for this mode on purpose).
-  let triageAppend = null;
-  let triageParseErrors = [];
-  if (mode === 'triage' && res.ok) {
-    try {
-      const { rows, errors } = parseTriageOutput(res.result || '');
-      triageParseErrors = errors;
-      triageAppend = appendTriageResults(path.join(DATA_DIR, 'triage-results.tsv'), rows);
-    } catch (e) {
-      triageParseErrors = [`append failed: ${(e && e.message) || e}`];
-      triageAppend = { appended: 0, skippedDuplicate: 0 };
-    }
-  }
-
   // SCAN discovery: the agent no longer writes portals.yml (the shared eval
   // sandbox denies it, and its WebSearch invents phantom companies/roles). It
   // emits discovered companies as a structured PORTAL_ADDITIONS block; the server
   // validates them (ATS allow-list + safe slug + live-board check), CONSTRUCTS
   // every careers_url/api from the slug so no supplied host is ever fetched, and
   // merges them deterministically — then scans those new boards for real live
-  // roles. Same agent-emits-structured-output / server-writes pattern as triage.
+  // roles. The agent emits structured output and the server performs the write.
   let portalMerge = null;
   let scanRetried = false;
   let scanStalled = false;
@@ -1166,21 +1101,19 @@ async function runAgent(jobId, mode, target) {
 
   // Only claim work when the artifact grew. `before === null` means we have no
   // probe for this mode, so fall back to trusting the exit code rather than
-  // inventing a failure. Triage is the one exception: its probe was removed,
-  // so its truth is triageAppend.appended directly. Scan is a second exception:
+  // inventing a failure. Scan is the exception:
   // growing portals.yml (more companies tracked for every future free scan) is
   // real work even when no posting lands in pipeline.md this instant, so a run
   // that added companies must not report "wrote nothing".
   const grew = before === null || (probeArtifacts(mode) ?? 0) > before;
-  const wroteSomething = mode === 'triage'
-    ? !!(triageAppend && triageAppend.appended > 0)
-    : mode === 'scan'
-      ? (grew || !!(portalMerge && (portalMerge.added > 0 || portalMerge.rolesAdded > 0)))
-      : grew;
+  const wroteSomething = mode === 'scan'
+    ? (grew || !!(portalMerge && (portalMerge.added > 0 || portalMerge.rolesAdded > 0)))
+    : grew;
 
   // SELF-HEALING (the permanent fix for the recurring "queue clogged" bug): after
   // EVERY run, check off any pipeline row that is already evaluated, dismissed,
-  // staged, deferred, or triage-scored. This does not depend on any single writer
+  // staged, deferred, or discarded by the optional Spark pre-filter. This does
+  // not depend on any single writer
   // (the LLM's in-prompt check-off, merge-tracker, the dismiss route) having
   // worked — whichever one misfired, the queue self-corrects here. Same helper the
   // rolling chain calls between batches, so there is one reconcile implementation.
@@ -1216,27 +1149,6 @@ async function runAgent(jobId, mode, target) {
       count: job.rollTotal != null ? job.rollTotal : job.evaluationsDone,
       detail: !res.ok ? 'error' : (wroteSomething ? 'ok' : 'empty'),
     });
-  }
-
-  // Triage gets its own summary, separate from the generic AGENT_ARTIFACTS
-  // path below (which no longer covers 'triage' — see the note where it's
-  // defined): the real, honest count is triageAppend's return value, not a
-  // guess from file size, and it's worth surfacing skippedDuplicate and any
-  // parse errors too so a run that silently produced nothing usable is visible
-  // instead of looking identical to a run that scored zero *new* roles.
-  if (mode === 'triage' && res.ok) {
-    const job = agentJobs.get(jobId) || {};
-    if (wroteSomething) {
-      const dupNote = triageAppend.skippedDuplicate ? ` (${triageAppend.skippedDuplicate} already scored, skipped)` : '';
-      agentJobs.set(jobId, { ...job, summary: `${job.summary ? job.summary + ' · ' : ''}Triage appended ${triageAppend.appended} score${triageAppend.appended === 1 ? '' : 's'}${dupNote}.` });
-    } else {
-      const why = triageParseErrors.length
-        ? `Could not persist any scores: ${triageParseErrors.slice(0, 3).join('; ')}${triageParseErrors.length > 3 ? '…' : ''}`
-        : (triageAppend && triageAppend.skippedDuplicate
-          ? `All ${triageAppend.skippedDuplicate} scored role(s) this run were already in triage-results.tsv.`
-          : 'No triage scores were produced this run.');
-      agentJobs.set(jobId, { ...job, summary: why, warning: job.warning || WROTE_NOTHING_WHY });
-    }
   }
 
   if (res.ok && !wroteSomething && AGENT_ARTIFACTS[mode]) {
@@ -1280,14 +1192,9 @@ async function runAgent(jobId, mode, target) {
     const note = 'Evaluations written. Run Merge Tracker to add them to your pipeline.';
     agentJobs.set(jobId, { ...job, summary: job.summary ? `${job.summary} · ${note}` : note });
   }
-  if (mode === 'triage' && res.ok && wroteSomething) {
-    const job = agentJobs.get(jobId) || {};
-    const note = 'Triage scored. Open the triage cards to deep-dive the ones worth a full report.';
-    agentJobs.set(jobId, { ...job, summary: job.summary ? `${job.summary} · ${note}` : note });
-  }
-  // Deep dive auto-promotes: fold the new eval into applications.md right away
-  // so the triage row flips to a real Evaluated entry in one click (no separate
-  // Merge step). Falls back to the manual-merge note if merge-tracker fails.
+  // Deep evaluation auto-promotes: fold the new evaluation into applications.md
+  // right away (no separate Merge step). Falls back to the manual-merge note if
+  // merge-tracker fails.
   // `wroteSomething` gates this too: with no new TSV there is nothing to merge,
   // and running merge-tracker anyway would report "complete and merged" over an
   // evaluation that was never written.
@@ -1295,8 +1202,7 @@ async function runAgent(jobId, mode, target) {
     // runClaudeAgent already flipped this job to 'done'. Flip it back to
     // 'running' BEFORE the merge so the single-flight guard keeps blocking other
     // agent runs while merge-tracker rewrites applications.md, and so the UI
-    // poller (which keys off 'done') only retires the triage row once the real
-    // Evaluated row actually exists.
+    // poller (which keys off 'done') only completes once the Evaluated row exists.
     const j0 = agentJobs.get(jobId) || {};
     agentJobs.set(jobId, { ...j0, status: 'running', activity: 'Merging into your pipeline…' });
     const merged = await runMergeTracker();
@@ -1311,7 +1217,7 @@ async function runAgent(jobId, mode, target) {
 // POST /api/agent/:mode — start a headless Claude Code job (scan | pipeline)
 router.post('/api/agent/:mode', (req, res) => {
   const mode = req.params.mode;
-  if (!['scan', 'pipeline', 'triage', 'deep'].includes(mode)) {
+  if (!['scan', 'pipeline', 'deep'].includes(mode)) {
     return res.status(400).json({ error: `Unknown agent mode: ${mode}` });
   }
   // Admission control (see admitAgent): scan is exclusive; other modes are
@@ -1334,30 +1240,14 @@ router.post('/api/agent/:mode', (req, res) => {
       // double-quoted Windows-cmd prompt wrapper specifically, so reject them too
       // (a real URL never contains a literal " or ` — those are percent-encoded).
       //
-      // A "local:jds/<slug>.md" snapshot path is ALSO a valid target: resolve-jds
-      // writes these for SPA-hosted postings and triage records them, so a Deep dive
-      // on such a card arrives here as "local:jds/acme-vp-revops.md". The deep
-      // prompt reads a local:jds/ path directly (and the paste path constructs the
-      // same shape at line ~740), so accept it. Constrained to a FLAT filename
-      // (no "/" after jds/, so no "../" traversal) of safe slug chars ending in .md.
       const isHttp = /^https?:\/\/[^\s]+$/i.test(url);
-      const isLocalJd = /^local:jds\/[A-Za-z0-9._-]+\.md$/.test(url);
       if (/["`]/.test(url)) {
-        return res.status(400).json({ error: 'Provide a valid http(s) URL or local:jds/ path (no quote or backtick characters).' });
+        return res.status(400).json({ error: 'Provide a valid http(s) URL (no quote or backtick characters).' });
       }
-      if (/[\x00-\x1f]/.test(url) || (!isHttp && !isLocalJd)) {
-        return res.status(400).json({ error: 'Provide a valid http(s) URL or a local:jds/ path.' });
+      if (/[\x00-\x1f]/.test(url) || !isHttp) {
+        return res.status(400).json({ error: 'Provide a valid http(s) URL.' });
       }
-      // isLocalJd means this "Deep dive" is targeting a snapshot that ALREADY
-      // existed before this request — written by resolve-jds.mjs off a scanner
-      // hit and surfaced on a triage card, never by the user. Only a raw http(s)
-      // URL typed into the paste box is a genuine user-initiated origin here; a
-      // local: target is scanner-origin no matter how deep an eval you run on it.
-      // Getting this wrong is what mistagged a scanner-found role pair and, per
-      // verify-pipeline.mjs, a long tail of older rows self-sourced:
-      // the prompt below used to assert paste-box origin unconditionally for
-      // BOTH cases.
-      target = { url, isPasteOrigin: isHttp };
+      target = { url };
     } else {
       try {
         const company = String(req.body?.company || '').trim();
@@ -1367,8 +1257,7 @@ router.post('/api/agent/:mode', (req, res) => {
         const abs = path.join(ROOT_DIR, rel);
         fs.mkdirSync(path.dirname(abs), { recursive: true });
         fs.writeFileSync(abs, `# ${title || 'Pasted role'}${company ? ' — ' + company : ''}\n\n${jd}\n`, 'utf8');
-        // Pasted JD text: always a genuine user origin.
-        target = { url: `local:${rel}`, isPasteOrigin: true };
+        target = { url: `local:${rel}` };
       } catch (e) {
         return res.status(500).json({ error: 'Could not save the pasted JD: ' + e.message });
       }
@@ -1376,7 +1265,7 @@ router.post('/api/agent/:mode', (req, res) => {
   }
   // Power runs (pipeline + deep) route the eval through the user's API key when one
   // is present: bigger/parallel batch off the flat plan quota. An optional model
-  // override drives the Opus "deep mode" toggle. Scan/triage stay plan-side (cheap).
+  // override drives the Opus "deep mode" toggle. Scan stays on its configured model.
   if (mode === 'pipeline' || mode === 'deep') {
     const power = !!(req.body && req.body.power);
     const model = String((req.body && req.body.model) || '').trim();

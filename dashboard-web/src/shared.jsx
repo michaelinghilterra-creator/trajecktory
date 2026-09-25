@@ -126,7 +126,7 @@ window.DraftScoreBadge = function DraftScoreBadge({ review, reviewOf, pending, o
 
   // The fixes lead, the score follows. Calibration measured the inline score
   // running about ten points high with only a moderate rank correlation, so it
-  // earns a triage cue and not a headline. The fixes quote the draft directly
+  // earns a review cue and not a headline. The fixes quote the draft directly
   // and are actionable whatever the number says.
   const fixes = (review && review.topFixes) || [];
 
@@ -523,24 +523,6 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   const [claudeLoginMsg, setClaudeLoginMsg] = useState('');
   const [trust, setTrust] = useState({ ok: true, message: '', losing: [] });
   const [trustBusy, setTrustBusy] = useState(false);
-  const [triageCards, setTriageCards] = useState([]);   // [{ url, company, title, score, rationale, date }]
-  // Triaged postings that already have a tracker row. Shown as a collapsed count
-  // rather than dropped, so a wrong suppression is visible instead of silent.
-  const [triageSuppressed, setTriageSuppressed] = useState([]);
-  const [deepJobs, setDeepJobs] = useState({});         // { url: { status, error } }
-  // URLs the user dismissed (× control) or that auto-cleared after a completed
-  // deep dive. Persisted so a reload doesn't resurrect a spent card.
-  const [dismissed, setDismissed] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('trj.triageDismissed') || '[]')); }
-    catch { return new Set(); }
-  });
-  const persistDismissed = (set) => { try { localStorage.setItem('trj.triageDismissed', JSON.stringify([...set])); } catch {} };
-  // localStorage is only the optimistic hide; the server records the dismissal in
-  // data/triage-dismissed.tsv so the card stays gone across restarts and browsers.
-  const dismissCard = (url) => {
-    setDismissed(prev => { const next = new Set(prev); next.add(url); persistDismissed(next); return next; });
-    window.tjkMutate('/api/triage/dismiss', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) }).catch(() => {});
-  };
   const [pasteVal, setPasteVal] = useState('');
   const [pasteBusy, setPasteBusy] = useState(false);
   const [pasteMsg, setPasteMsg] = useState('');
@@ -552,9 +534,8 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // while the confirm is open; null when closed. The one paid, walk-away step
   // (batch Evaluate) gets an "evaluate N for ~$X" confirm before it spends.
   const [spendGate, setSpendGate] = useState(null);
-  // Advanced steps (Triage, Agent Scan, Expand Coverage, and the manual
-  // housekeeping) collapse under a disclosure (Slice 7.5). The default flow is
-  // just Scan → Liveness Gate → Evaluate; triage is optional, not the front door.
+  // Manual housekeeping steps collapse under an Advanced disclosure (Slice 7.5).
+  // The default flow remains Scan, Liveness Gate, then Evaluate.
   const [showAdvanced, setShowAdvanced] = useState(false);
   const pollersRef = useRef({});
 
@@ -613,21 +594,6 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     }).catch(() => setClaudeLoginMsg('Could not open the sign-in window.'));
   }
 
-  // Triage cards: the Haiku triage agent writes data/triage-results.tsv. Load on
-  // mount and refresh after a triage run completes.
-  const loadTriage = () => fetch('/api/triage/results').then(r => r.json()).then(d => {
-    const cards = d.cards || [];
-    setTriageCards(cards);
-    setTriageSuppressed(d.suppressed || []);
-    // Prune dismissed URLs no longer present in the latest results so storage
-    // stays tidy and a posting that cycled out then returns can reappear.
-    setDismissed(prev => {
-      const urls = new Set(cards.map(c => c.url));
-      const next = new Set([...prev].filter(u => urls.has(u)));
-      if (next.size !== prev.size) persistDismissed(next);
-      return next;
-    });
-  }).catch(() => {});
   // How many URLs are waiting to be evaluated (unchecked "- [ ]" in pipeline.md).
   // Shown on the Evaluate step so the user sees the queue depth without me telling them.
   const loadPending = () => fetch('/api/pipeline/pending').then(r => r.json()).then(d => setPendingCount(d.pending)).catch(() => {});
@@ -635,41 +601,11 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // stitching a JD from search results; the user confirms live + pastes the JD.
   const loadNeedsManual = () => fetch('/api/pipeline/needs-manual').then(r => r.json()).then(d => setNeedsManual(d.items || [])).catch(() => {});
   const resolveNeedsManual = (url) => window.tjkMutate('/api/pipeline/needs-manual/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) }).then(() => loadNeedsManual()).catch(() => {});
-  useEffect(() => { loadTriage(); loadPending(); loadNeedsManual(); }, []);
+  useEffect(() => { loadPending(); loadNeedsManual(); }, []);
   // Clear any in-flight pollers (agent steps, deep dives, paste) on unmount.
   useEffect(() => () => { Object.values(pollersRef.current).forEach(clearInterval); }, []);
 
-  // Deep dive: full A-G Sonnet eval of one posting (a triage card or a pasted JD).
-  function triggerDeep(card) {
-    setDeepJobs(d => ({ ...d, [card.url]: { status: 'running' } }));
-    window.tjkMutate('/api/agent/deep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: card.url, company: card.company, title: card.title, power: hasKey || undefined }) })
-      .then(r => r.json().then(b => ({ ok: r.ok, b })))
-      .then(({ ok, b }) => {
-        if (!ok || b.error || !b.jobId) { setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: b.error || 'failed to start' } })); return; }
-        const key = 'deep-' + card.url;
-        const poll = setInterval(() => {
-          fetch(`/api/agent/status/${b.jobId}`).then(r => r.status === 404 ? { status: 'interrupted' } : r.json()).then(job => {
-            if (job.status === 'done' || job.status === 'error' || job.status === 'interrupted') {
-              clearInterval(poll); delete pollersRef.current[key];
-              setDeepJobs(d => ({ ...d, [card.url]: job.status === 'interrupted'
-                ? { status: 'error', error: 'Interrupted. The dashboard restarted. Retry.' }
-                : { status: job.status, error: job.error } }));
-              if (job.status === 'done') {
-                onDataChanged && onDataChanged();
-                // The report now exists; the triage card is spent. Show
-                // "✓ Report ready" briefly, then auto-remove so the user
-                // doesn't try to re-trigger the same deep dive.
-                setTimeout(() => dismissCard(card.url), 1500);
-              }
-            }
-          }).catch(() => { clearInterval(poll); delete pollersRef.current[key]; setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: 'Interrupted. The dashboard restarted. Retry.' } })); });
-        }, 2000);
-        pollersRef.current[key] = poll;
-      })
-      .catch(e => setDeepJobs(d => ({ ...d, [card.url]: { status: 'error', error: e.message } })));
-  }
-
-  // Paste a JD (URL or full text) → deep eval, skipping triage (self-sourced).
+  // Paste a JD (URL or full text) for a self-sourced deep evaluation.
   function submitPaste() {
     const v = pasteVal.trim();
     if (!v) return;
@@ -699,9 +635,8 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
 
   // Default flow (Slice 7.5): the three daily scans (Expand Coverage → API Scan →
   // Agent Scan) → Liveness Gate → Evaluate, identical on both rails (only who-pays
-  // differs). Evaluate rolls through the queue in batches, so it IS the filter —
-  // triage is no longer the front door and, with the manual housekeeping, lives
-  // under Advanced. The `section` field is metadata only; DEFAULT_ORDER /
+  // differs). Evaluate rolls through the queue in batches and owns scoring. The
+  // `section` field is metadata only; DEFAULT_ORDER /
   // ADVANCED_ORDER below decide what shows where.
   const STEPS = [
     { id: 'discover',  label: 'Expand Coverage',     hint: 'Register new companies',    type: 'auto'   },
@@ -711,9 +646,8 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     { id: 'gate',      label: 'Liveness Gate',       hint: 'Drop dead URLs first',      type: 'auto'   },
     { id: 'cli-eval',  label: 'Evaluate',            hint: 'Full reports, rolling',      type: 'agent', mode: 'pipeline',
       command: '/trajecktory pipeline' },
+    { id: 'derive',    label: 'Derive Scores',       hint: 'Compute report scores',       type: 'auto'   },
     // ── Advanced (collapsed by default) ─────────────────────────────────────────
-    { id: 'triage',    label: 'Triage',              hint: 'Haiku pre-filter (optional)', type: 'agent', mode: 'triage',
-      command: '/trajecktory triage', section: 'advanced' },
     { id: 'merge',     label: 'Merge Tracker',       hint: 'TSVs → applications.md',     type: 'auto',  section: 'advanced' },
     { id: 'verify',    label: 'Verify Actionable',   hint: 'Safety-net dead links',      type: 'auto',  section: 'advanced' },
     { id: 'health',    label: 'Health Check',        hint: 'Report parser drift',        type: 'auto',  section: 'advanced' },
@@ -741,7 +675,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     pollersRef.current[key] = poll;
   }
 
-  // Wire an Evaluate/Scan/Triage step's poller into the jobs state. Also used to
+  // Wire an Evaluate or Scan step's poller into the jobs state. Also used to
   // re-attach to a run still in flight after a page reload (see the mount effect).
   function attachAgentPoll(step, jobId) {
     pollAgentJob(jobId, step.id, {
@@ -753,12 +687,11 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           setJobs(j => ({ ...j, [step.id]: job }));
           if (job.status === 'done') {
             onDataChanged && onDataChanged();
-            if (step.id === 'triage') loadTriage();
-            // A finished Evaluate batch auto-runs its housekeeping (Merge → Health;
+            // A finished Evaluate batch auto-runs its housekeeping (Derive, Merge, Health;
             // Verify is intentionally excluded — see runPostEvalChain), then shows a
             // plain one-line summary so the count never moves without a visible reason.
             if (step.id === 'cli-eval') {
-              runPostEvalChain();
+              runPostEvalChain(jobId);
               Promise.all([
                 fetch('/api/pipeline/pending').then(r => r.json()).catch(() => ({})),
                 fetch('/api/pipeline/needs-manual').then(r => r.json()).catch(() => ({})),
@@ -803,12 +736,19 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
     });
   }
 
-  // Post-Evaluate housekeeping chain: merge tracker → health. Verify Actionable is
+  // Post-Evaluate housekeeping chain: derive scores, merge tracker, health. Verify Actionable is
   // deliberately NOT auto-run: it cannot detect closures on Workday/Ashby SPAs (its
   // liveness check returns inconclusive and keeps the row), so it silently culled
   // some live rows while missing dead ones, and the count drops it caused read as a
   // bug. Run it by hand from the sidebar if you want a dead-link sweep.
-  async function runPostEvalChain() {
+  async function runPostEvalChain(evaluateJobId) {
+    const claim = await window.tjkMutate('/api/workflow/post-eval', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ evaluateJobId }),
+    }).then(r => r.json()).catch(() => ({ error: 'claim-failed' }));
+    if (claim.skipped === 'already-ran' || claim.error) return;
+    if (await runAutoStepAsync('derive') === 'error') return;
     if (await runAutoStepAsync('merge') === 'error') return;
     await runAutoStepAsync('health');
   }
@@ -862,7 +802,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
       // Pre-eval spend gate (7.3): the batch Evaluate step is the one paid,
       // walk-away action, so confirm "N for ~$X" before it spends — unless the
       // user opted out for this session. Deep Dive / paste carry their own single
-      // cost and are gated elsewhere; other agent steps (scan/triage) are free.
+      // cost and are gated elsewhere; Agent Scan is free.
       if (step.mode === 'pipeline' && !opts.bypassGate && sessionStorage.getItem('trj.skipSpendGate') !== '1') {
         openSpendGate(step);
         return;
@@ -937,36 +877,31 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   // The step buttons stay single-flight per the (conservative) UI: while any agent
   // step runs, the other step buttons are disabled.
   const anyAgentRunning = STEPS.some(s => s.type === 'agent' && jobs[s.id]?.status === 'running');
-  // Slice 7.4: a pasted-JD deep-dive may run ALONGSIDE a rolling Evaluate (or a
-  // triage) — the server only makes `scan` exclusive and allows one deep at a
+  // Slice 7.4: a pasted-JD deep-dive may run alongside a rolling Evaluate. The
+  // server only makes `scan` exclusive and allows one deep at a
   // time. So the paste box is gated on a running scan or another in-flight deep,
   // NOT on the pipeline chain that used to lock everything out.
   const scanRunning = jobs['cli-scan']?.status === 'running';
-  const deepBusy = scanRunning || pasteBusy || Object.values(deepJobs).some(d => d?.status === 'running');
-  // Merge/Verify/Health consume Evaluate Pipeline's output. Keep them disabled
+  const deepBusy = scanRunning || pasteBusy;
+  // Derive/Merge/Verify/Health consume Evaluate Pipeline's output. Keep them disabled
   // while Evaluate is still running so clicking ahead doesn't show "0 to review".
   const evalRunning = jobs['cli-eval']?.status === 'running';
-  const POST_EVAL = ['merge', 'verify', 'health'];
-  // Cards the user hasn't dismissed (and that haven't auto-cleared post-deep-dive).
-  const visibleTriage = triageCards.filter(c => !dismissed.has(c.url));
-
+  const POST_EVAL = ['derive', 'merge', 'verify', 'health'];
   // ONE flow, both rails (Slice 7.5): the three daily scans in the order they are
   // run — Expand Coverage (register new companies) → API Scan (free ATS sweep) →
   // Agent Scan (widen via Claude search) — then Liveness Gate → Evaluate. The
   // three scans complement each other and run every session, so all three are
   // front-and-centre; only who-pays/batch-size differ by rail (handled server-
-  // side). A finished Evaluate auto-runs Merge → Health (runPostEvalChain), so
+  // side). A finished Evaluate auto-runs Derive, Merge, Health (runPostEvalChain), so
   // those stay out of the default list.
   const DEFAULT_ORDER  = ['discover', 'api-scan', 'cli-scan', 'gate', 'cli-eval'];
-  // Triage is now an optional pre-filter (not the front door), and Merge/Verify/
-  // Health are the manual housekeeping the auto-chain normally runs — all behind
-  // an Advanced disclosure. Nothing is removed, just demoted from the default path.
-  const ADVANCED_ORDER = ['triage', 'merge', 'verify', 'health'];
+  // Merge, Verify, and Health are manual housekeeping steps behind Advanced.
+  const ADVANCED_ORDER = ['merge', 'verify', 'health'];
   const stepById = Object.fromEntries(STEPS.map(s => [s.id, s]));
   const defaultSteps  = DEFAULT_ORDER.map(id => stepById[id]).filter(Boolean);
   const advancedSteps = ADVANCED_ORDER.map(id => stepById[id]).filter(Boolean);
   // Auto-reveal Advanced if one of its steps has a job (running/just-finished), so
-  // a triage or Agent Scan run is never hidden behind a collapsed section.
+  // a housekeeping run is never hidden behind a collapsed section.
   const advancedOpen = showAdvanced || advancedSteps.some(s => jobs[s.id]);
 
   // Re-attach on mount: after a reload (or a server restart) the sidebar starts
@@ -976,7 +911,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
   useEffect(() => {
     fetch('/api/agent/active').then(r => r.json()).then(list => {
       if (!Array.isArray(list)) return;
-      const MODE_STEP = { pipeline: 'cli-eval', scan: 'cli-scan', triage: 'triage' };
+      const MODE_STEP = { pipeline: 'cli-eval', scan: 'cli-scan' };
       const seen = new Set();
       for (const job of list) {                 // list is newest-first
         const stepId = MODE_STEP[job.mode];
@@ -1016,7 +951,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
 
       {/* Workspace trust — Claude Code silently ignores this project's
           permissions.allow list until the folder is trusted, which costs the
-          agent WebFetch and WebSearch and makes Scan/Triage burn money reading
+          agent WebFetch and WebSearch and makes Scan burn money reading
           nothing. Agent runs are blocked while this shows, so it is a hard stop
           rather than advice. The fix flips a security flag, so it stays behind an
           explicit click. */}
@@ -1025,7 +960,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           <div style={{ color: 'var(--warn, #ffb020)', fontWeight: 600 }}>⚠ Folder not trusted by Claude Code</div>
           <div style={{ marginTop: 4, color: 'var(--text-mute)', lineHeight: 1.45 }}>
             {trust.losing?.length
-              ? `The agent cannot use ${trust.losing.join(' or ')}, so Scan and Triage cannot read job postings. Runs are blocked until this is fixed.`
+              ? `The agent cannot use ${trust.losing.join(' or ')}, so Scan cannot read job postings. Runs are blocked until this is fixed.`
               : 'This project’s permission settings are being ignored. Runs are blocked until this is fixed.'}
           </div>
           <button onClick={fixWorkspaceTrust} disabled={trustBusy}
@@ -1075,8 +1010,6 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
                   <span className="workflow-hint">
                     {step.id === 'cli-eval' && pendingCount != null
                       ? `${step.hint} · ${pendingCount} waiting`
-                      : step.id === 'triage' && visibleTriage.length > 0
-                      ? `${step.hint} · ${visibleTriage.length} ranked`
                       : step.hint}
                   </span>
                 </span>
@@ -1210,7 +1143,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
               {defaultSteps.map((step, idx) => renderStep(step, `${idx + 1}. ${step.label.replace(/^\d+\.\s*/, '')}`))}
             </div>
             <button type="button" onClick={() => setShowAdvanced(v => !v)}
-              title="Optional steps: Triage, Agent Scan, Expand Coverage, and manual housekeeping"
+              title="Optional manual housekeeping steps"
               style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderTop: '1px solid var(--border)', color: 'var(--text-mute)', fontSize: 11, padding: '7px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ fontSize: 9 }}>{advancedOpen ? '▾' : '▸'}</span> Advanced
             </button>
@@ -1222,13 +1155,6 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           </>
         );
       })()}
-
-      {/* The triage PRE-FILTER card list used to render here. It was removed: the
-          same ranked postings already appear as rows in Pipeline → Active/All
-          (built independently in pipeline.jsx), and the sidebar copy never
-          refetched after a deep dive, so spent cards lingered until a reload. The
-          live ranked count now rides on the Triage step's subtitle above; the
-          results live in the Pipeline tabs, which clear themselves on deep dive. */}
 
       {evalSummary && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1269,7 +1195,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
           style={{ width: '100%', marginTop: 6, background: 'none', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: (deepBusy || !pasteVal.trim()) ? 'not-allowed' : 'pointer', opacity: (deepBusy || !pasteVal.trim()) ? 0.5 : 1 }}>
           {pasteBusy ? 'Evaluating…' : 'Evaluate (Sonnet) ⧉'}
         </button>
-        <div style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.4 }}>{pasteMsg || 'Self-sourced → full deep eval, skips triage.'}</div>
+        <div style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 4, lineHeight: 1.4 }}>{pasteMsg || 'Self-sourced full evaluation.'}</div>
       </div>
 
       {/* Pre-eval spend gate (7.3). The one paid, walk-away step confirms before it

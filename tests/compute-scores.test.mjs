@@ -9,7 +9,7 @@
  *
  * Run: node tests/compute-scores.test.mjs   (exit 0 = pass, 1 = fail)
  */
-import { deriveReportScore } from '../compute-scores.mjs';
+import { deriveReportScore, writeReportIfChanged } from '../compute-scores.mjs';
 
 let passed = 0, failed = 0;
 const check = (c, m) => { if (c) { console.log(`  ✅ ${m}`); passed++; } else { console.log(`  ❌ ${m}`); failed++; } };
@@ -52,6 +52,10 @@ check(r.prevScore === 0 && r.changed === true, 'the authored placeholder is repo
 // round-trips: feeding the output back in is stable (idempotent)
 const r2 = deriveReportScore(r.newMd, { weights: BALANCED });
 check(r2.ok && r2.score === 4.2, 'derivation is idempotent (re-running yields the same score)');
+check(r2.changed === false && r2.newMd === r.newMd, 'an unchanged derived report is identified without a rewrite');
+let writeCalls = 0;
+check(writeReportIfChanged('example.md', r.newMd, r2, () => { writeCalls++; }) === false && writeCalls === 0,
+  'the writer is not called when report content is unchanged');
 
 // ── a hard ceiling in the report caps the derived score ──────────────────────
 const ceilingReport = keyedReport(0).replace('"score": 0,', '"score": 0,\n  "scoreCeiling": 1.5,');

@@ -4,7 +4,7 @@
  * that decides whether a low-fit evaluation silently leaves the pipeline.
  *
  * Replaces the orphaned, drifted test-auto-discard.mjs. The threshold is
- * `score < 3.0` (raised from <= 2.5 on 2026-08-22); the cowork/self-sourced/
+ * `score < 3.5`; the cowork/self-sourced/
  * referral exemptions still apply. These tests assert the ACTUAL merge-tracker
  * behavior against the single source of truth (lib/discard.mjs AUTO_DISCARD_SCORE).
  *
@@ -30,16 +30,17 @@ function check(cond, msg) {
 
 console.log('discard.test.mjs');
 
-// ── Threshold boundary: score < 3.0 is discarded, 3.0 is kept ───────────────────
-check(AUTO_DISCARD_SCORE === 3.0, 'threshold is 3.0');
-check(shouldAutoDiscard({ status: 'Evaluated', score: '3.0/5', notes: '' }) === false,
-  'score 3.0 is KEPT (strictly-below boundary)');
-check(shouldAutoDiscard({ status: 'Evaluated', score: '2.9/5', notes: '' }) === true,
-  'score 2.9 is discarded (below 3.0)');
-check(shouldAutoDiscard({ status: 'Evaluated', score: '2.5/5', notes: '' }) === true,
-  'score 2.5 is discarded');
-check(shouldAutoDiscard({ status: 'Evaluated', score: '3.1/5', notes: '' }) === false,
-  'score 3.1 is kept');
+// Threshold boundary: score below 3.5 is discarded, 3.5 is kept.
+// The boundary is strict: the threshold is kept and the next tenth is discarded.
+check(AUTO_DISCARD_SCORE === 3.5, 'threshold is 3.5');
+check(shouldAutoDiscard({ status: 'Evaluated', score: `${AUTO_DISCARD_SCORE}/5`, notes: '' }) === false,
+  'score at the threshold is KEPT');
+check(shouldAutoDiscard({ status: 'Evaluated', score: `${AUTO_DISCARD_SCORE - 0.1}/5`, notes: '' }) === true,
+  'score just below the threshold is discarded');
+check(shouldAutoDiscard({ status: 'Evaluated', score: `${REQUEUE_FLOOR}/5`, notes: '' }) === true,
+  'score at the requeue floor is discarded');
+check(shouldAutoDiscard({ status: 'Evaluated', score: `${AUTO_DISCARD_SCORE + 0.1}/5`, notes: '' }) === false,
+  'score above the threshold is kept');
 check(shouldAutoDiscard({ status: 'Evaluated', score: '4.2/5', notes: '' }) === false,
   'score 4.2 is kept');
 
@@ -60,6 +61,10 @@ check(isExemptFromAutoDiscard('mid-sentence [self-sourced] note') === true,
   'self-sourced detected anywhere in notes');
 check(isExemptFromAutoDiscard('plain note') === false,
   'no tag means not exempt');
+check(isExemptFromAutoDiscard('[reinstated] recovered report') === false,
+  'reinstated tag is not exempt');
+check(shouldAutoDiscard({ status: 'Evaluated', score: '3.4/5', notes: '[reinstated] recovered report' }) === true,
+  'low-score reinstated row is still auto-discarded');
 
 // ── recommendsAgainst phrases ─────────────────────────────────────────────────
 check(shouldAutoDiscard({ status: 'Evaluated', score: '4.8/5', notes: 'Hard no on location' }) === true,
@@ -88,15 +93,15 @@ check(shouldAutoDiscard({ status: 'Evaluated', score: 'n/a', notes: 'do not appl
 // ── Re-queueable near-threshold discard (Slice 7.5) ─────────────────────────────
 // A Discarded row scored in [REQUEUE_FLOOR, AUTO_DISCARD_SCORE) is eligible for a
 // one-click re-evaluate; anything else is not.
-check(REQUEUE_FLOOR === 2.5, 'requeue floor is 2.5');
-check(isRequeueableDiscard({ status: 'Discarded', score: 2.9 }) === true, '2.9 Discarded is re-queueable');
-check(isRequeueableDiscard({ status: 'Discarded', score: 2.5 }) === true, '2.5 (the floor) is re-queueable');
-check(isRequeueableDiscard({ status: 'Discarded', score: 2.4 }) === false, '2.4 is below the floor — not re-queueable');
-check(isRequeueableDiscard({ status: 'Discarded', score: 3.0 }) === false, '3.0 is at the cut (kept, not discarded) — not re-queueable');
-check(isRequeueableDiscard({ status: 'Discarded', score: 3.2 }) === false, 'an above-cut score is not re-queueable');
-check(isRequeueableDiscard({ status: 'Evaluated', score: 2.9 }) === false, 'a live (non-Discarded) status is never re-queued this way');
-check(isRequeueableDiscard({ status: 'Rejected', score: 2.9 }) === false, 'a company rejection is not a near-threshold auto-discard');
-check(isRequeueableDiscard({ status: 'Discarded', score: '2.8/5' }) === true, 'accepts a raw score cell');
+check(REQUEUE_FLOOR === 3.0, 'requeue floor is 3.0');
+check(isRequeueableDiscard({ status: 'Discarded', score: AUTO_DISCARD_SCORE - 0.1 }) === true, 'a near-threshold discard is re-queueable');
+check(isRequeueableDiscard({ status: 'Discarded', score: REQUEUE_FLOOR }) === true, 'the floor is re-queueable');
+check(isRequeueableDiscard({ status: 'Discarded', score: REQUEUE_FLOOR - 0.1 }) === false, 'a score below the floor is not re-queueable');
+check(isRequeueableDiscard({ status: 'Discarded', score: AUTO_DISCARD_SCORE }) === false, 'the cut is not re-queueable');
+check(isRequeueableDiscard({ status: 'Discarded', score: AUTO_DISCARD_SCORE + 0.2 }) === false, 'an above-cut score is not re-queueable');
+check(isRequeueableDiscard({ status: 'Evaluated', score: AUTO_DISCARD_SCORE - 0.1 }) === false, 'a live status is never re-queued this way');
+check(isRequeueableDiscard({ status: 'Rejected', score: AUTO_DISCARD_SCORE - 0.1 }) === false, 'a company rejection is not a near-threshold auto-discard');
+check(isRequeueableDiscard({ status: 'Discarded', score: `${REQUEUE_FLOOR + 0.2}/5` }) === true, 'accepts a raw score cell');
 check(isRequeueableDiscard({ status: 'Discarded', score: 'n/a' }) === false, 'an unparseable score is not re-queueable');
 
 console.log(`\n${passed} passed, ${failed} failed`);

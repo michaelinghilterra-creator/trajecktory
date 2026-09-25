@@ -63,7 +63,7 @@ AI-powered job search, run from a local dashboard: pipeline tracking, offer scor
 | `data/applications.md` | Application tracker |
 | `data/pipeline.md` | Inbox of pending URLs |
 | `data/scan-history.tsv` | Scanner dedup history |
-| `data/triage-results.tsv` | Fast-triage scores (`lib/triage-results.mjs` is the single append-only writer — see the "One true batch workflow" liveness-gate step and `node reconcile-triage.mjs`) |
+| `data/triage-results.tsv` | Optional Spark pre-filter discard log (`lib/triage-results.mjs` is the single append-only writer; `node reconcile-triage.mjs` checks discarded rows off) |
 | `data/gate-history.tsv` | Durable audit trail of every `gate-pipeline.mjs` liveness verdict (live/dead/uncertain/decided/repost), independent of `pipeline.md` — `lib/gate-history.mjs` is the single append-only writer. Exists because `pipeline.md` used to be the ONLY record of a liveness disposition; losing that file (as happened once) meant losing every verdict ever computed, not just the queue. |
 | `portals.yml` | Query and company config |
 | `templates/cv-master.docx` | **CV master template (default).** The user's Word resume. Tailored CVs are produced by copying this file and surgically swapping the top four slots (title, 3-keyword subtitle, summary, areas of expertise) in `word/document.xml`. Every other byte is preserved exactly. To update the master, edit it in Word and resync `cv.md`. |
@@ -650,7 +650,7 @@ When spawning headless workers for batch processing, use the appropriate command
 - Report numbering: obtain the number from the persistent counter — run `node next-jd.mjs` (prints the next number; `--pad` for 3-digit zero-padded). NEVER compute "max existing + 1" by hand: report files get pruned, so a hand-computed max reuses numbers across different companies and drifts away from the tracker id. The counter is monotonic, never reused, and keeps the report number == the tracker id.
 - **RULE: BEFORE every batch run, run `node gate-pipeline.mjs`** to liveness-check every pending URL in `data/pipeline.md`. Dead URLs get flipped from `- [ ]` to `- [!]` with a closure reason, so the batch agent skips them entirely. This is the most important step — without it, you spend Claude tokens evaluating dead postings (a 60-URL batch can be 80%+ dead from WebSearch index staleness). The gate runs Playwright in the parent process where it works correctly (sub-agents cannot use Playwright).
 - **RULE: After each batch of evaluations, run `node merge-tracker.mjs`** to merge tracker additions and avoid duplications.
-- **RULE: After every batch merge, run `node verify-actionable.mjs --apply`** as a safety net to catch any dead URLs that slipped past the pre-batch gate (e.g., postings that closed between gate-time and apply-time). Auto-flips Evaluated→Discarded for any URL that no longer accepts applications.
+- **RULE: After every batch merge, run `node verify-actionable.mjs --apply`** as a safety net to catch any dead URLs that slipped past the pre-batch gate (e.g., postings that closed between gate-time and apply-time). Auto-flips Evaluated to Passed for any URL that no longer accepts applications.
 
 **The one true batch workflow:**
 
@@ -658,7 +658,7 @@ When spawning headless workers for batch processing, use the appropriate command
 # 1. (Optional) Scan portals for new candidates
 node scan.mjs
 
-# 1b. Snapshot SPA-hosted JDs to jds/ so triage/eval can READ them. Ashby, Workday,
+# 1b. Snapshot SPA-hosted JDs to jds/ so evaluation can READ them. Ashby, Workday,
 #     SmartRecruiters, Lever and embedded-Greenhouse posting pages are JS apps that
 #     a plain fetch renders blank, so the agents ("skip any you cannot read") drop
 #     every role on them. This pulls each pending posting's JD via its ATS API and
@@ -666,21 +666,17 @@ node scan.mjs
 #     Also gates rows that are structurally unreadable: an unrecognized-platform
 #     posting (no public JD API) gates immediately, a recognized-ATS fetch failure
 #     (e.g. a 404) gets one retry on the next run before gating. Without this, a
-#     dead/unreadable posting sits at the top of the queue and burns a full triage
-#     round every time it re-surfaces. Gated rows still show up as "- [!]" in
+#     dead/unreadable posting sits at the top of the queue and burns an evaluation
+#     attempt every time it re-surfaces. Gated rows still show up as "- [!]" in
 #     data/pipeline.md with a reason — nothing is silently dropped.
 node resolve-jds.mjs
 
 # 2. REQUIRED: liveness-gate the pipeline BEFORE spending LLM tokens
 node gate-pipeline.mjs
 
-# 2b. If a triage pass (mode: triage) has run against this queue, reconcile it
-#     so already-scored rows stop showing as unchecked. Triage deliberately never
-#     checks off a pipeline row itself (see modes/triage.md), so a role that's
-#     already been triage-scored — or already has a full evaluation in
-#     applications.md from an earlier session — otherwise sits open forever and
-#     gets re-verified as a duplicate on every subsequent run. Dry-run by
-#     default; --apply to write.
+# 2b. Reconcile the optional Spark pre-filter discard log so discarded rows stop
+#     showing as unchecked. Rows already represented by a full evaluation are
+#     also handled. Dry-run is the default; use the apply flag to write.
 node reconcile-triage.mjs --apply
 
 # 2c. OPTIONAL, and inert unless TJK_SPARK_URL is set in .env. Score every pending
@@ -693,10 +689,7 @@ node reconcile-triage.mjs --apply
 #     Runs AFTER 1b (the model has no web access, so it reads local:jds/ snapshots),
 #     AFTER 2 (never spend a discard decision on a posting already gated dead) and
 #     AFTER 2b (or handled rows get re-filtered every run).
-#     It REPLACES the Haiku triage pass for this queue — both write to
-#     triage-results.tsv, which dedups on URL, so running both means one silently
-#     drops the other's work. modes/triage.md remains the interactive path and the
-#     fallback when the endpoint is down.
+#     data/triage-results.tsv is the pre-filter's append-only discard log.
 #     Dry-run by default. Read the audit sample it prints before committing.
 node spark-prefilter.mjs --apply
 
@@ -743,7 +736,7 @@ node merge-tracker.mjs
 node verify-actionable.mjs --apply
 
 # 6. Health check the dashboard data — MANDATORY, read output before declaring done
-node verify-reports.mjs
+node health-check.mjs
 
 # 7. Scoring drift guard: a derived report's headline must equal its tracker Score.
 #    If 3b-ii ran, this is a no-op. A non-zero count here means either the resync
@@ -963,6 +956,9 @@ Guarded by `tests/tracker.test.mjs` and `tests/tracker-writers.test.mjs`.
 | `SKIP` | Doesn't fit, don't apply |
 | `Closed` | Job posting closed before you could act (distinct from Discarded; excluded from analytics denominators) |
 | `Not a Fit` | Role evaluated and determined a poor fit (signal noise, wrong level, wrong domain) |
+| `Passed` | You are out. Replaces SKIP, Not a Fit, Discarded and Closed; whether you applied comes from the evidence, not the status |
+
+Migration note: `Passed` is written today by auto-discard through `lib/discard.mjs`, `merge-tracker.mjs`, and `auto-discard-low.mjs`, and by `verify-actionable.mjs`. The four legacy labels are still accepted.
 
 **RULES:**
 - No markdown bold (`**`) in status field

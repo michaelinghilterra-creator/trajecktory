@@ -223,7 +223,8 @@
     <div class="col">
       <ol class="do compact">
         <li><b>API Scan</b> is free and uses no AI at all. It asks the Greenhouse, Ashby and Lever job boards directly what is open at the companies you track.</li>
-        <li><b>Triage</b> has Claude read the most promising ones cheaply and score them. They appear as a list underneath. This is the next page.</li>
+        <li><b>Liveness Gate</b> removes closed or unreadable postings before evaluation.</li>
+        <li><b>Evaluate</b> reads the selected roles against your CV and writes full reports.</li>
         <li><b>Merge Tracker</b> is free. It moves the scored rows into your <b>Pipeline</b> tab.</li>
         <li><b>Verify Actionable</b> is free. It quietly drops postings that have since closed.</li>
         <li><b>Health Check</b> is free. A final all-clear.</li>
@@ -264,64 +265,6 @@
   </div>
 
   <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 3, Using trajecktory day to day</span><span>4 / 27</span></div>
-</section>
-
-<!-- ============ P5 - TRIAGE ============ -->
-<section class="page">
-  <div class="kicker">Finding roles</div>
-  <h1 class="h1">Triage: deciding what is worth reading</h1>
-  <p class="lead" style="margin-top:6px">Triage is a cheap first pass. Claude skims the postings and
-  gives each a rough score, so you can spend your real attention on the few that deserve it. The
-  scores appear as cards under the Workflow steps.</p>
-
-  <div class="row" style="align-items:flex-start">
-    <div class="col" style="flex:0 0 2.3in; text-align:center">
-      <div class="shot" style="display:inline-block; border:1px solid var(--line); border-radius:8px; overflow:hidden; box-shadow:0 4px 14px rgba(40,30,70,.1)">
-        <img src="captures/g3-triage.png" alt="Scored triage cards under the workflow steps" style="width:2.3in; display:block">
-      </div>
-      <div class="small" style="margin-top:4px">Scored cards, best first.</div>
-    </div>
-    <div class="col">
-      <div class="card" style="padding:9px 11px; margin-bottom:7px">
-        <div class="kicker" style="margin-bottom:4px">Three things you can do with a card</div>
-        <div class="small"><b>Deep dive</b> writes the full report for that one role, and it lands in
-        your Pipeline.<br>
-        <b>open JD</b> shows you the posting itself, so you can judge for yourself.<br>
-        <b>&#10005; dismiss</b> removes it for good.</div>
-      </div>
-      <div class="small" style="color:var(--muted)">A triage score is written as <b>~4.6</b> with a
-      tilde, and its box has a dashed edge. That is the app being honest that this is a quick guess,
-      not the considered score you get from a Deep dive.</div>
-    </div>
-  </div>
-
-  <div class="callout tip"><span class="ic">&#9432;</span>
-    <b>Triage is a <span class="tier plan">Claude plan</span> feature.</b> Add an API key and bill to
-    it, and this panel disappears entirely, replaced by a batch <b>Evaluate</b> step. Page 21 lays out
-    that trade honestly.</div>
-
-  <div class="callout note"><span class="ic">&#128065;</span>
-    <b>"&#9656; 3 already evaluated (hidden)" means nothing is lost.</b> Cards for jobs you have already
-    decided on are folded away, because re-reading a decision you made last month is not work. Click the
-    little arrow to see exactly what was hidden and why: each one is listed with its number, where it got to,
-    and the company, like <b>#087 Applied &middot; Acme Corp &middot; Director of Operations</b>. The count
-    at the top of the panel is the number you can actually act on.</div>
-
-  <div class="pro">
-    <span class="lbl">Pro tip</span>
-    Be ruthless with <b>&#10005; dismiss</b>. A dismissal is remembered properly, so the same job will not
-    come back next scan even if the link picks up a tracking tag or an <b>/apply</b> on the end and looks
-    new. A short list you actually work beats a long list you avoid.
-  </div>
-
-  <div class="why">
-    <span class="lbl">Why not just read everything</span>
-    A full evaluation is the expensive part, in time and in Claude usage. Triage exists so that cost
-    is only ever spent on roles that already look right: skim everything, deep dive a handful, apply
-    to fewer.
-  </div>
-
-  <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 3, Using trajecktory day to day</span><span>5 / 27</span></div>
 </section>
 
 <!-- ============ P6 - PIPELINE OVERVIEW ============ -->
@@ -415,11 +358,6 @@
     leaves your search term alone, so a forgotten search is the usual culprit. Press
     <span class="kbd">/</span> to jump straight to it.
   </div>
-
-  <div class="callout note"><span class="ic">&#128161;</span>
-    <b>Rows with a dashed score and no number.</b> Those are triage results that have not been deep
-    dived yet, sitting in the list as a reminder. They are not clickable, and their buttons live
-    inside the row itself.</div>
 
   <div class="foot"><span><span class="b">trajecktory</span> onboarding &middot; Guide 3, Using trajecktory day to day</span><span>7 / 27</span></div>
 </section>
@@ -581,8 +519,7 @@
 
   <div class="pro">
     <span class="lbl">Pro tip</span>
-    A <b>triage</b> score is not this score: the tilde guess (<b>~4.6</b>, dashed box) is a cheap pre-filter
-    for what to read fully, not comparable to this. And a few <b>older reports</b> predate the engine, so they
+    A few <b>older reports</b> predate the engine, so they
     carry a marker saying their bars are reasoning, not arithmetic. Open this panel once, early, and you will
     trust a 4.6 and skip a 3.3 without second-guessing.
   </div>
@@ -1236,8 +1173,8 @@
     <div class="col card" style="padding:10px 12px; background:var(--ok-bg); border-color:#a7e8c4">
       <div class="kicker" style="margin-bottom:5px; color:var(--ok)">On your Claude plan alone</div>
       <div class="small">
-        <b>Triage</b>, and a scored card list you review by hand.<br>
-        <b>Deep dive</b> one role at a time, or paste a job link to evaluate it on the spot.<br>
+        Scan for roles and evaluate in small batches.<br>
+        Paste a job link to evaluate it on the spot.<br>
         Every AI draft: resumes, cover letters, outreach, follow-ups.<br>
         The full <b>Insights</b> analysis.<br>
         Model choices shown as <i>fast</i>, <i>balanced</i>, <i>deepest</i>.
@@ -1249,7 +1186,6 @@
         Four extra buttons: <b>Agent Scan</b>, <b>Liveness Gate</b>, <b>Evaluate (Batch)</b> and
         <b>Expand Coverage</b>.<br>
         <b>Evaluate</b> writes 10 reports per run instead of 5, and works on several at once.<br>
-        The triage card list disappears.<br>
         Model choices shown as dollar estimates per run.
       </div>
     </div>
@@ -1262,11 +1198,9 @@
 
   <div class="why">
     <span class="lbl">What actually gets charged to the key</span>
-    Only <b>Insights</b> and the writing drafts reliably bill your key. Triage, Agent Scan and Evaluate
-    run on your Claude subscription even with a key saved, which is why the app labels each step
-    <span class="tier plan">subscription</span> or <span class="tier key">API key</span> rather than
-    leaving you to guess. If you were expecting a key to move the heavy scanning off your plan, it
-    does not.
+    The billing switch selects one rail for the whole workflow. On the API-key rail, Agent Scan,
+    Evaluate, Insights, and writing drafts bill the key; on the Claude-plan rail, they run on your
+    subscription.
   </div>
 
   <div class="callout ok"><span class="ic">&#9829;</span>
@@ -1298,13 +1232,6 @@
     your own machine, not from your Anthropic invoice. Since the scanning and evaluating usually run
     on your Claude subscription anyway, most of what you see here will never appear on an Anthropic
     bill at all.</div>
-
-  <div class="pro">
-    <span class="lbl">Pro tip</span>
-    Leave <b>Triage</b> on Haiku. It is the cheapest model and it has been checked against the full
-    scoring rubric for exactly this job, so paying more here buys you almost nothing. If you want to
-    spend more anywhere, spend it on <b>Evaluate</b>, which writes the reports you actually read.
-  </div>
 
   <div class="why">
     <span class="lbl">Why there is a "Bill to" switch at all</span>
@@ -1351,8 +1278,6 @@
       <div class="stuck"><b>A role you applied to is still "Evaluated".</b> The status only changes
       once the document generation finishes. If it failed, the role stays put on purpose. Look for the
       red message, then try again.</div>
-      <div class="stuck"><b>The score column shows a tilde and a dashed box.</b> That is a triage
-      guess, not a full evaluation. Run <b>Deep dive</b> on it for the real one.</div>
       <div class="stuck"><b>Insights says the sample is thin.</b> It is being honest. Come back after
       a few more applications have had time to get responses.</div>
     </div>

@@ -13,7 +13,10 @@
  * Run: node tests/resolve-jds.test.mjs   (exit 0 = pass, 1 = fail)
  */
 import { htmlToText, parsePostingUrl, fetchJdText } from '../lib/ats-jd.mjs';
-import { buildHintIndex, parsePendingRow, repointPipeline, computeGating } from '../resolve-jds.mjs';
+import { buildHintIndex, parsePendingRow, repointPipeline, computeGating, saveSnapshot } from '../resolve-jds.mjs';
+import { readFileSync, rmSync } from 'fs';
+import { join } from 'path';
+import { makeSandbox } from './helpers/sandbox.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -95,6 +98,26 @@ check(out.includes('- [ ] local:jds/contoso-som.md | Contoso | Sales Operations 
   'repoint replaces the whole URL token — no trailing #open-roles');
 check(!/local:jds\/contoso-som\.md[#&]/.test(out), 'no fragment glued to the local path');
 check(out.includes('- [ ] https://untouched.example/x | Other | Role'), 'unresolved rows are left untouched');
+
+// Snapshot filenames carry posting identity, not just company and title.
+{
+  const dir = makeSandbox('resolve-jds-identity');
+  try {
+    const row1 = { url: 'https://jobs.ashbyhq.com/acme/req-one', company: 'Acme', title: 'Widget Keeper' };
+    const row2 = { url: 'https://jobs.ashbyhq.com/acme/req-two', company: 'Acme', title: 'Widget Keeper' };
+    const first = saveSnapshot({ row: row1, desc: { ats: 'ashby', id: 'req-one' }, text: 'First invented description.', rootDir: dir, pulledDate: '2030-01-01' });
+    const second = saveSnapshot({ row: row2, desc: { ats: 'ashby', id: 'req-two' }, text: 'Second invented description.', rootDir: dir, pulledDate: '2030-01-01' });
+    check(first.file !== second.file, 'same company and title with different posting ids produce different files');
+    check(readFileSync(join(dir, first.file), 'utf8').includes('First invented description.'), 'the first posting snapshot is not overwritten');
+    check(readFileSync(join(dir, second.file), 'utf8').includes('Second invented description.'), 'the second posting snapshot is stored separately');
+
+    const again = saveSnapshot({ row: row1, desc: { ats: 'ashby', id: 'req-one' }, text: 'Replacement text must not land.', rootDir: dir, pulledDate: '2030-01-02' });
+    check(again.reused && again.file === first.file, 'rerunning the same posting reuses its snapshot file');
+    check(!readFileSync(join(dir, first.file), 'utf8').includes('Replacement text'), 'reusing a snapshot does not overwrite its contents');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 // ── fetchJdText with an injected fetch stub (no network) ─────────────────────
 const stub = (payloads) => async (url) => {

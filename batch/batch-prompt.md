@@ -254,7 +254,7 @@ score" rule. Set the field, do not fudge the dimension ratings.
 | Title regression to a **sub-Manager individual-contributor** title (Analyst, Coordinator, Specialist, Representative, "individual contributor") when candidate is Director+ | **2.0** | Career step backward. **Manager and above (Manager, Senior Manager, Director, Senior Director, Head, VP, C-level) is IN SCOPE and a FULL level match — NEVER apply this ceiling to those.** Search scope is open from Manager up; `applyLevelFloor` in `score.mjs` floors the `level` dim to 5 for any Manager+ title, so capping the headline here would contradict it. |
 | `buildDepth` rated low | *computed by code* | Rate the dimension against the 0-5 anchors above and set `ceilingBasis: "buildDepth"`. Do NOT author the number: `compute-scores.mjs` reads the tiers from `scoring.build_depth_ceilings` in `config/profile.yml`, so the policy lives in one place instead of in two prompts that drift apart. |
 
-**Reasoning:** Auto-discard fires below 3.0. A 3.2 on a Barcelona-required role is
+**Reasoning:** Auto-discard fires below 3.5. A 3.2 on a Barcelona-required role is
 misleading. Setting `scoreCeiling: 1.5` caps the derived headline so the number matches
 the verdict. If you would write "HARD DISQUALIFIER" or "do not apply", set `scoreCeiling`
 to 1.5.

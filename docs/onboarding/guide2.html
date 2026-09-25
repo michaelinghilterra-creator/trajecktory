@@ -844,8 +844,7 @@
   <div class="kicker">Using trajecktory: the AI steps</div>
   <h1 class="h1">Sign in to Claude (one time)</h1>
   <p class="lead" style="margin-top:8px">The Claude-powered Workflow steps need a one-time sign-in: on the
-  default Claude-plan setup that is <b>Triage</b> and the deep-dive evaluations; with an API key it is
-  <b>Agent Scan</b> and <b>Evaluate</b>. The free steps never need it. The sign-in control lives in the left
+  default setup that is <b>Agent Scan</b> and <b>Evaluate</b>. The free steps never need it. The sign-in control lives in the left
   sidebar, at the top of the <b>Workflow</b> section.</p>
 
   <div class="row" style="align-items:flex-start">
@@ -918,9 +917,7 @@
   <h1 class="h1">The Workflow, one step at a time</h1>
   <p class="lead" style="margin-top:6px">In the sidebar, the <b>Workflow</b> section lists the steps that find
   and score jobs. You run them <b>one at a time</b>: click a step, let it finish, then click the next (there is
-  no "run everything" button, on purpose). What you see depends on your setup: by <b>default</b>, on your Claude
-  plan, you get a short flow built around <b>Triage</b>. Add an API key and bill to it, and the sidebar switches
-  to the fuller <b>power</b> flow (see the note below).</p>
+  no "run everything" button, on purpose).</p>
 
   <div class="row" style="align-items:flex-start">
     <div class="col" style="flex:0 0 2.3in; text-align:center">
@@ -932,8 +929,8 @@
     <div class="col">
       <ol class="do compact">
         <li><b>API Scan</b> (free): checks the Greenhouse, Ashby, and Lever job boards for your tracked companies.</li>
-        <li><b>Triage</b> (needs sign-in): Claude does a cheap first pass and scores your best matches. They appear as a scored list right below the steps.</li>
-        <li><b>Deep dive</b> the strong ones: on any scored card, click <span class="click">Deep dive</span> to write a full report for that role. (You can also paste a job link or JD into the box below to evaluate it on the spot.)</li>
+        <li><b>Liveness Gate</b> (free): removes closed or unreadable postings before evaluation.</li>
+        <li><b>Evaluate</b> (needs sign-in): reads selected roles against your CV and writes full reports. You can also paste a job link or JD into the box below to evaluate it on the spot.</li>
         <li><b>Merge Tracker</b> (free): folds the scored rows into your <b>Pipeline</b> tab.</li>
         <li><b>Verify Actionable</b> (free): a safety check that drops dead links.</li>
         <li><b>Health Check</b> (free): a final all-clear.</li>
@@ -942,9 +939,9 @@
   </div>
 
   <div class="callout note"><span class="ic">&#9889;</span>
-    <b>The power flow (with an API key).</b> If you save a key and set billing to it in <b>Models &amp; cost</b>,
-    the sidebar swaps Triage for the full pipeline: API Scan, <b>Agent Scan</b> (Claude web search), Liveness
-    Gate, <b>Evaluate (Batch)</b> (full reports for your best-fit postings; a meter shows "Evaluated 3 of 5"),
+    <b>The API-key rail.</b> If you save a key and set billing to it in <b>Models &amp; cost</b>,
+    the workflow remains API Scan, <b>Agent Scan</b> (Claude web search), Liveness Gate,
+    <b>Evaluate (Batch)</b> (full reports for your best-fit postings; a meter shows "Evaluated 3 of 5"),
     Merge Tracker, Verify Actionable, Health Check, and Expand Coverage. Same idea: run each in turn.
     <br><br><b>What the key does and does not do.</b> It unlocks that longer step list and a bigger Evaluate
     batch. It is <b>not</b> what pays for these steps: scanning and evaluating still run on your Claude plan,
@@ -952,7 +949,7 @@
     the sidebar itself. Only <b>Insights</b> and <b>Drafts</b> reliably bill the key.</div>
 
   <div class="callout warn"><span class="ic">&#9888;</span>
-    <b>Always finish with Merge Tracker.</b> Scoring a role (a Triage deep-dive, or an Evaluate batch) writes
+    <b>Always finish with Merge Tracker.</b> Evaluating a role writes
     the report; <b>Merge Tracker</b> is what folds those rows into your <b>Pipeline</b> tab, so do not skip it.
     While a scoring step runs, the steps below it wait their turn, then light up when it finishes. Results
     appear on their own as each step completes.</div>
@@ -1113,7 +1110,7 @@
 
   <div class="callout tip"><span class="ic">&#9432;</span>
     <b>Models &amp; cost, in Setup.</b> The Launchpad's <b>Optional boosters</b> include a <b>Models &amp; cost</b>
-    panel. There you pick which Claude model runs each step (Triage, Agent Scan, Evaluate, Insights, Drafts) and
+    panel. There you pick which Claude model runs each step (Agent Scan, Evaluate, Insights, Drafts) and
     see a rough cost per run, and a <b>"Bill workflow &amp; drafts to"</b> toggle sends everything to your
     <b>Claude plan</b> (no per-token cost) or to your <b>API key</b>. Cheaper models are the defaults, so you can
     safely leave it alone.</div>

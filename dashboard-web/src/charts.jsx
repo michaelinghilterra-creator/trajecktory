@@ -629,7 +629,7 @@ window.Sankey = function Sankey({ apps }) {
   // Per-rung flow, fully derived from window.FUNNEL_ORDER so the interview ladder
   // is never re-hardcoded. Columns left → right:
   //   Col 0: Archetypes (source)
-  //   Col 1: Evaluated (entered funnel) + Dismissed + Backfill Closed (triage)
+  //   Col 1: Evaluated (entered funnel) + Dismissed + Backfill Closed
   //   Col i+1 (i = 1..N-1): "reached rung i" main node (Applied … Offer)
   //   Col i+2 (i = 0..N-2): Lost @ rung i + Live-in rung i — share the next main col
   //
@@ -750,7 +750,7 @@ window.Sankey = function Sankey({ apps }) {
 
   // Columns derived from the funnel ladder: archetype source + one per rung.
   const SANKEY_STAGES = window.FUNNEL_ORDER;
-  const COL_SHORT = { "Evaluated": "TRIAGED", "Applied": "APPLIED", "Phone Screen": "SCREEN", "1st Interview": "1ST", "2nd Interview": "2ND", "3rd Interview": "3RD", "Offer": "OFFER" };
+  const COL_SHORT = { "Evaluated": "EVALUATED", "Applied": "APPLIED", "Phone Screen": "SCREEN", "1st Interview": "1ST", "2nd Interview": "2ND", "3rd Interview": "3RD", "Offer": "OFFER" };
   const colHeaders = ["ARCHETYPE", ...SANKEY_STAGES.map(s => COL_SHORT[s] || s.toUpperCase())];
 
   const W = 1280, H = 480;

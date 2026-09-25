@@ -544,5 +544,21 @@ console.log('\n17. New rows record their URL from the start');
 check(cols(D1.rowsFor('Fabrikam')[0])[10].startsWith('https://jobs.example.com/fabrikam/'),
   `new row carries the posting url: got "${cols(D1.rowsFor('Fabrikam')[0])[10]}"`);
 
-console.log(`\n📊 merge-tracker fixtures: ${passed} passed, ${failed} failed`);
+const reinstated = runMerge([], {
+  '900270-reinstated.tsv': tsv(['900270', '2030-07-22', 'ReinstatedCo', 'Director, Invented Systems',
+    'Evaluated', '4.01/5', '?', '[900270](reports/900270-reinstated-2030-07-22.md)',
+    '[reinstated] restored from an old report']),
+}, {
+  'reports/900270-reinstated-2030-07-22.md':
+    rpt('https://example.test/reinstated/900270'),
+});
+
+console.log('\n19. Reinstated source tag is preserved');
+{
+  const note = cols(reinstated.rowsFor('ReinstatedCo')[0] || '')[NOTES] || '';
+  check(note === '[reinstated] restored from an old report', `reinstated note is unchanged: "${note}"`);
+  check(!/\[self-sourced\]/.test(note), 'reinstated row is not stamped self-sourced');
+}
+
+console.log(`\nmerge-tracker fixtures: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

@@ -23,8 +23,7 @@ import { chromium } from 'playwright';
 import yaml from 'js-yaml';
 import { classifyLiveness, parseWorkdayUrl, checkWorkdayLiveness, workdaySiteFromCareersUrl } from './liveness-core.mjs';
 import { isSafeLivenessUrl } from './lib/safe-url.mjs';
-import { buildDecidedIndex, findDecided, buildActiveRoleIndex, findActiveRepost } from './lib/identity.mjs';
-import { sourceUrlFromSnapshot } from './lib/snapshot-url.mjs';
+import { buildDecidedIndex, findDecided, buildActiveRoleIndex, findActiveRepost, sourceUrlFromSnapshot } from './lib/identity.mjs';
 import { appendGateHistory } from './lib/gate-history.mjs';
 import { localToday } from './lib/local-date.mjs';
 
@@ -96,7 +95,7 @@ for (let i = 0; i < lines.length; i++) {
     const meta = (m[3] || '').split('|').map(s => s.trim()).filter(Boolean);
     let url = m[2];
     if (url.startsWith('local:')) {
-      const recovered = sourceUrlFromSnapshot(url);
+      const recovered = sourceUrlFromSnapshot(url, __dirname);
       if (!recovered) {
         // Fail OPEN: a snapshot with no recoverable URL stays pending and is
         // reported, never silently gated as dead. Discarding a live posting

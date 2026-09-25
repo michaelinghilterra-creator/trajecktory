@@ -34,10 +34,6 @@ const section = (n) => console.log(`\n${n}`);
 // depends on the repo's own jds/ contents and never creates a temp directory.
 const readFrom = (files) => (p) => {
   const key = String(p).replace(/\\/g, '/').split('/').pop();
-  // Must carry .code: sourceUrlFromSnapshot deliberately swallows only real
-  // file-read errors and rethrows anything else, so that a programming mistake
-  // cannot masquerade as "no URL found". A codeless Error here would (correctly)
-  // propagate rather than become a null.
   if (!(key in files)) { const e = new Error('ENOENT'); e.code = 'ENOENT'; throw e; }
   return files[key];
 };
@@ -73,11 +69,11 @@ section('the LABELLED url wins over any other url in the body');
     === 'https://jobs.lever.co/beta/9f8e7d', 'the labelled line wins over earlier and later URLs');
 }
 
-section('fallback to the first bare URL when unlabelled');
+section('an unlabelled URL is not posting identity');
 {
   const files = { 'c.md': '# Gamma\n\nhttps://jobs.ashbyhq.com/gamma/abc-123\n\nBody.\n' };
-  check(sourceUrlFromSnapshot('local:jds/c.md', readFrom(files))
-    === 'https://jobs.ashbyhq.com/gamma/abc-123', 'bare URL used when no label present');
+  check(sourceUrlFromSnapshot('local:jds/c.md', readFrom(files)) === null,
+    'a bare body URL is ignored when no URL header labels it');
 }
 
 section('FAILS OPEN — null, never a wrong URL');
@@ -86,6 +82,11 @@ section('FAILS OPEN — null, never a wrong URL');
   check(sourceUrlFromSnapshot('local:jds/d.md', readFrom(files)) === null, 'no URL anywhere -> null');
   check(sourceUrlFromSnapshot('local:jds/missing.md', readFrom(files)) === null, 'unreadable file -> null');
   check(sourceUrlFromSnapshot('', readFrom(files)) === null, 'empty ref -> null');
+}
+{
+  const brokenReader = () => { throw new Error('unexpected reader failure'); };
+  check(sourceUrlFromSnapshot('local:jds/reader-error.md', brokenReader) === null,
+    'every snapshot read error returns null');
 }
 {
   // A null must leave the row PENDING. Gating it as dead on an unreadable

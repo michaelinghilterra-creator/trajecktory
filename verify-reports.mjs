@@ -137,9 +137,9 @@ for (const file of files) {
 }
 
 // ── Pipeline queue invariant ─────────────────────────────────────────────────
-// The recurring "triage wrote nothing" bug was always the same shape: a pipeline
+// The recurring queue-clog bug was always the same shape: a pipeline
 // row for an ALREADY evaluated-or-dismissed posting sat "- [ ]" open and clogged
-// the triage window. Assert it can't: no open row may be already-handled. This is
+// the evaluation window. Assert it can't: no open row may be already-handled. This is
 // dry-run (reports only, never rewrites), and turns silent drift into a loud, same-
 // day failure of the mandatory health check instead of a mystery a week later.
 const queue = reconcileHandled(path.join(__dirname, 'data/pipeline.md'), {

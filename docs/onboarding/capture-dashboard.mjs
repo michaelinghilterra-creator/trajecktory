@@ -115,7 +115,6 @@ const STAGE = {
 const MODELS_STATE = {
   hasKey: false, keyPresent: true, billingMode: 'plan',
   sections: [
-    { key: 'triage', label: 'Triage', hint: 'Cheap first-pass scoring of the pipeline top.', options: ['haiku', 'sonnet'], default: 'haiku', warn: { sonnet: 'Sonnet costs more; Haiku is calibrated faithful for triage.' }, unitLabel: 'role', unitsPerRun: 15, current: 'haiku', costs: { haiku: 0.02, sonnet: 0.05 } },
     { key: 'scan', label: 'Agent Scan', hint: 'Widens the pipeline via Claude web search.', options: ['haiku', 'sonnet', 'opus'], default: 'haiku', warn: {}, unitLabel: 'role found', unitsPerRun: 10, current: 'haiku', costs: { haiku: 0.03, sonnet: 0.08, opus: 0.14 } },
     { key: 'eval', label: 'Evaluate (batch)', hint: 'Full A-G reports. The cost driver.', options: ['sonnet', 'opus', 'haiku'], default: 'sonnet', warn: { haiku: 'Scoring rubric is NOT validated at Haiku (quality may drop).' }, unitLabel: 'eval', unitsPerRun: 5, current: 'sonnet', costs: { sonnet: 0.19, opus: 0.32, haiku: 0.06 } },
     { key: 'insights', label: 'Insights', hint: 'On-demand strategy narrative over pre-computed metrics.', options: ['sonnet', 'opus'], default: 'sonnet', warn: {}, unitLabel: 'run', unitsPerRun: 1, current: 'sonnet', costs: { sonnet: 0.05, opus: 0.09 } },
@@ -131,13 +130,6 @@ const MODELS_STATE = {
   // shipped app rather than paraphrasing it.
   note: 'Billing set to your Claude plan: your saved API key is not charged. $ figures are estimates of what the API-key path would cost, not real charges.',
 };
-
-// Synthetic Haiku-triage cards for the sidebar plan flow (scored list under the steps).
-const TRIAGE = { cards: [
-  { url: 'https://jobs.example.com/1', score: 4.6, company: 'Northwind Analytics', title: 'VP, Revenue Operations', rationale: 'Strong title + comp match; remote-friendly.' },
-  { url: 'https://jobs.example.com/2', score: 4.1, company: 'Globex Health', title: 'Director, GTM Operations', rationale: 'Adjacent role, good industry fit.' },
-  { url: 'https://jobs.example.com/3', score: 3.4, company: 'Initech Cloud', title: 'Sr. Manager, Sales Ops', rationale: 'A notch junior; worth a look.' },
-] };
 
 const PITCH = {
   pitch: "I'm a supply-chain analytics leader with about ten years turning scattered carrier data into a performance picture an operations team will actually act on. Most recently, as Director of Analytics at a mid-market logistics company, I rebuilt carrier scorecarding and lane costing so claims recovery improved by roughly a fifth. What I love is the seam between the measurement and the planners who live under it. I'm looking for a Director or VP role where I can own that end to end.",
@@ -603,16 +595,11 @@ const DEBRIEFS_PENDING = { pending: [
 ] };
 
 let stateMode = 'firstrun'; // 'firstrun' | 'started' | 'ready'
-// 'empty'      → a genuinely fresh install: no triage results, no to-dos, no
+// 'empty'      → a genuinely fresh install: no to-dos, no
 //                cadence, so no sidebar badges. This is what the first-run
 //                screenshot must show, because the guide says "it starts empty".
 // 'populated'  → the Today / Interview tabs, where content is the whole point.
 let dataMode = 'empty';
-// Triage rows are provisional and sort to the top of the Pipeline tables, which
-// is correct behaviour but crowds out the real rows in a teaching screenshot.
-// The guide has its own page for triage, so it is served only where it is the
-// subject.
-let showTriage = true;
 const EMPTY_STREAK = { current: 0, best: 0, last7: Array.from({ length: 7 }, (_, i) => ({ date: `2026-07-${13 + i}`, pct: null, rest: true })) };
 
 async function installMocks(page) {
@@ -639,7 +626,6 @@ async function installMocks(page) {
   });
   await page.route('**/api/system/version', route => json(route, { version: '2.12.0' }));
   await page.route('**/api/claude-status', route => json(route, { signedIn: false }));
-  await page.route('**/api/triage/results', route => json(route, (dataMode === 'empty' || !showTriage) ? { cards: [] } : TRIAGE));
   await page.route('**/api/agent/cost-history', route => json(route, []));
   await page.route('**/api/agent/active', route => json(route, {}));
   // Pin the updater to "current". A fresh install has nothing to update, and an
@@ -867,9 +853,8 @@ async function main() {
     clip: { x: 0, y: 0, width: VIEWPORT.width, height: 640 } });
   console.log('  saved dash-firstrun-full.png (top 640px)');
 
-  // sidebar Workflow — the default Claude-plan flow. Clip to the steps (drop the
-  // triage cards + paste box below) so the image stays compact for the guide's
-  // side-by-side layout; the guide text covers triage + Deep dive.
+  // Sidebar Workflow. Clip to the steps so the image stays compact for the
+  // guide's side-by-side layout.
   try {
     const wf = page.locator('.workflow-panel').first();
     await wf.scrollIntoViewIfNeeded();
@@ -993,28 +978,6 @@ async function main() {
   await page.goto(BASE, { waitUntil: 'networkidle' });
   await page.waitForTimeout(900);
 
-  // The sidebar workflow WITH its scored triage cards below the steps. This is
-  // the plan-flow view; an API-key user never sees this panel at all.
-  // Just the scored cards, not the whole workflow panel. The full panel is ~1480px
-  // tall against 406px wide, which is over eight inches at page width and blew
-  // straight through the bottom of the page.
-  try {
-    const wf = page.locator('.workflow-panel').first();
-    await wf.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(400);
-    const box = await wf.boundingBox();
-    const headTop = await page.evaluate(() => {
-      const n = [...document.querySelectorAll('.workflow-panel *')]
-        .find(x => /^TRIAGE\b/i.test(x.textContent.trim()) && x.children.length === 0);
-      return n ? n.getBoundingClientRect().top : null;
-    });
-    const y = headTop != null ? Math.max(0, headTop - 8) : box.y + 560;
-    const height = Math.min(660, Math.ceil(box.y + box.height - y));
-    await page.screenshot({ path: resolve(OUT, 'g3-triage.png'),
-      clip: { x: Math.floor(box.x), y: Math.floor(y), width: Math.ceil(box.width), height } });
-    console.log(`  saved g3-triage.png (cards only, ${height}px)`);
-  } catch (e) { console.log('  g3 triage skip:', e.message); }
-
   await page.waitForTimeout(900);
 
   try {
@@ -1036,7 +999,6 @@ async function main() {
   // ---- Guide 3 captures -----------------------------------------------------
   // Every one of these renders from the single APPS fixture above.
   try {
-    showTriage = false;
     await page.reload({ waitUntil: 'networkidle' });
     await page.waitForTimeout(600);
     await clickNav(page, 'Pipeline');
@@ -1060,7 +1022,6 @@ async function main() {
     // Open the row the CHEATSHEET fixture actually describes. The mock serves the
     // same report for every id, so opening any other row would pair a VP RevOps
     // write-up with a different company and title, which a careful reader spots.
-    // Triage rows are also non-interactive (cursor:default), so match on both.
     await page.evaluate(() => {
       const rows = [...document.querySelectorAll('tbody tr')]
         .filter(r => getComputedStyle(r).cursor === 'pointer');
@@ -1246,7 +1207,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 export function setMode(opts = {}) {
   if (opts.dataMode !== undefined) dataMode = opts.dataMode;
   if (opts.stateMode !== undefined) stateMode = opts.stateMode;
-  if (opts.showTriage !== undefined) showTriage = opts.showTriage;
 }
 
 export { installMocks, clickNav, BASE, VIEWPORT, SCALE };

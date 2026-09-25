@@ -2,8 +2,8 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { makeSandbox } from './helpers/sandbox.mjs';
+import { fileURLToPath, pathToFileURL } from 'url';
+import { makeRepoSandbox } from './helpers/sandbox.mjs';
 
 const dimensions = [
   'relevance', 'personalization', 'evidence', 'earned_ask', 'clarity',
@@ -47,12 +47,18 @@ process.env.TJK_FAKE_LLM_SEQ = JSON.stringify([
   partialGrade(7),
 ]);
 
-const sandbox = makeSandbox('draft-improve');
-process.env.TJK_DATA_DIR = sandbox;
-const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+const sandbox = makeRepoSandbox(ROOT, 'draft-improve');
+fs.cpSync(path.join(ROOT, 'dashboard-web', 'server'), path.join(sandbox, 'dashboard-web', 'server'), { recursive: true });
+fs.cpSync(path.join(ROOT, 'lib'), path.join(sandbox, 'lib'), { recursive: true });
+fs.cpSync(path.join(ROOT, 'templates'), path.join(sandbox, 'templates'), { recursive: true });
+fs.symlinkSync(path.join(ROOT, 'dashboard-web', 'node_modules'), path.join(sandbox, 'dashboard-web', 'node_modules'), 'junction');
+const dataDir = path.join(sandbox, 'data');
+fs.mkdirSync(dataDir, { recursive: true });
+process.env.TJK_DATA_DIR = dataDir;
 const reportName = `draft-improve-research-${process.pid}-${Date.now()}.md`;
 const reportRelative = `reports/${reportName}`;
-const reportAbsolute = path.join(root, reportRelative);
+const reportAbsolute = path.join(sandbox, reportRelative);
 const fence = '-'.repeat(3);
 fs.mkdirSync(path.dirname(reportAbsolute), { recursive: true });
 fs.writeFileSync(reportAbsolute, `${fence}\n${JSON.stringify({
@@ -60,12 +66,12 @@ fs.writeFileSync(reportAbsolute, `${fence}\n${JSON.stringify({
   id: 77,
   summary: { companyBrief: 'Acme serves 12,000 organizations.' },
 }, null, 2)}\n${fence}\n# Acme research\n`, 'utf8');
-fs.writeFileSync(path.join(sandbox, 'applications.md'),
+fs.writeFileSync(path.join(dataDir, 'applications.md'),
   `| 77 | 2026-01-01 | Acme | Engineer | 4.5/5 | Applied | | | [77](${reportRelative}) | | https://jobs.example.com/acme/77 |\n`,
   'utf8');
 
 const express = (await import('express')).default;
-const { router } = await import('../dashboard-web/server/routes/drafts.mjs');
+const { router } = await import(pathToFileURL(path.join(sandbox, 'dashboard-web', 'server', 'routes', 'drafts.mjs')).href);
 const app = express();
 app.use(express.json());
 app.use(router);

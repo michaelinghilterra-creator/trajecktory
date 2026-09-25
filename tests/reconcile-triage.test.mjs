@@ -14,7 +14,7 @@
  */
 
 import { buildTriageIndex, buildTrackedIdIndex, alreadyHandledByTriage, reconcileTriageResults } from '../lib/reconcile-triage.mjs';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { makeSandbox } from './helpers/sandbox.mjs';
@@ -48,8 +48,8 @@ const triageIndex = buildTriageIndex(TRIAGE_TSV);
 const trackedIds = buildTrackedIdIndex(APPLICATIONS_MD);
 
 // ── buildTriageIndex ─────────────────────────────────────────────────────
-check(triageIndex.urls.has('https://job-boards.greenhouse.io/acme/jobs/1'), 'indexes the exact scored URL');
-check(triageIndex.keys.has('acme::director, sprocket operations'), 'indexes company::title lowercase key');
+check(triageIndex.urls.has('gh:1'), 'indexes the canonical scored URL');
+check(triageIndex.keys.has('acme::director, sprocket operations'), 'indexes company and title lowercase key');
 check(triageIndex.titles.has('chief widget wrangling officer'), 'indexes title alone');
 
 // ── buildTrackedIdIndex ──────────────────────────────────────────────────
@@ -59,15 +59,20 @@ check(!trackedIds.has('9999'), 'does not invent an id that is not present');
 // ── alreadyHandledByTriage: layer 1, exact URL ───────────────────────────
 {
   const row = { url: 'https://job-boards.greenhouse.io/acme/jobs/1', rest: ' | Acme | Director, Sprocket Operations' };
-  check(alreadyHandledByTriage(row, { triageIndex, trackedIds }) === 'exact URL already in triage-results.tsv', 'exact URL match is the strongest, first-checked signal');
+  check(alreadyHandledByTriage(row, { triageIndex, trackedIds }) === null, 'a score at the threshold stays open');
+}
+{
+  const row = { url: 'https://x.example/umbrella-corp-cfo-role?utm_source=test', rest: ' | Umbrella Corp | Chief Financial Officer - Regional' };
+  const reason = alreadyHandledByTriage(row, { triageIndex, trackedIds });
+  check(reason && reason.includes('0.5') && reason.includes('below'), 'a canonical URL match below the threshold is discarded with its score');
 }
 
 // ── layer 2: exact company+title, survives a DIFFERENT url (the
 // resolve-jds.mjs repoint-after-scoring shape from the real incident) ────
 {
-  const row = { url: 'local:jds/acme-director-sprocket-ops.md', rest: ' | Acme | Director, Sprocket Operations' };
+  const row = { url: 'local:jds/umbrella-cfo.md', rest: ' | Umbrella Corp | Chief Financial Officer - Regional' };
   const reason = alreadyHandledByTriage(row, { triageIndex, trackedIds });
-  check(reason === 'exact company+title match', 'company+title match survives a URL that differs from the one it was originally scored under');
+  check(reason && reason.includes('company and title match'), 'a low company and title match survives URL representation drift');
 }
 {
   // A DIFFERENT role at the same company must NOT be treated as covered —
@@ -80,17 +85,18 @@ check(!trackedIds.has('9999'), 'does not invent an id that is not present');
 
 // ── layer 3: blank-company numbered-batch rows, title embeds company ────
 {
-  const row = { url: 'local:jds/1200-globex.md', rest: ' | | Chief Widget Wrangling Officer' };
-  check(alreadyHandledByTriage(row, { triageIndex, trackedIds }) === 'exact title match (company field blank)', 'blank-company row matches on exact title alone');
+  const row = { url: 'local:jds/1200-umbrella.md', rest: ' | | Chief Financial Officer - Regional' };
+  const reason = alreadyHandledByTriage(row, { triageIndex, trackedIds });
+  check(reason && reason.includes('title match with blank company'), 'blank-company row with a low score matches on exact title alone');
 }
 {
   const row = { url: 'local:jds/1201-globex.md', rest: ' | | Chief Widget Wrangling Officer — Globex' };
   const reason = alreadyHandledByTriage(row, { triageIndex, trackedIds });
-  check(reason === 'title substring match (company embedded in title text)', 'blank-company row with company embedded IN the title text matches via substring');
+  check(reason === null, 'an above-threshold title substring stays open');
 }
 {
   const row = { url: 'local:jds/1202-globex.md', rest: ' | | Globex — Chief Widget Wrangling Officer' };
-  check(alreadyHandledByTriage(row, { triageIndex, trackedIds }) !== null, 'substring match works with the company prefix on either side of the title');
+  check(alreadyHandledByTriage(row, { triageIndex, trackedIds }) === null, 'an above-threshold title stays open with either title ordering');
 }
 {
   // Guard: a short generic title must not substring-match everything.
@@ -133,6 +139,7 @@ check(!trackedIds.has('9999'), 'does not invent an id that is not present');
       '# Pipeline',
       '',
       '- [ ] https://job-boards.greenhouse.io/acme/jobs/1 | Acme | Director, Sprocket Operations',
+      '- [ ] https://x.example/umbrella-corp-cfo-role?utm_source=test | Umbrella Corp | Chief Financial Officer - Regional',
       '- [ ] https://brandnew.example/job/1 | Brand New Co | Totally Fresh Role',
       '- [x] https://already.example/done | Done Co | Closed Role',
       '',
@@ -140,14 +147,15 @@ check(!trackedIds.has('9999'), 'does not invent an id that is not present');
 
     // Dry run: reports what WOULD flip, writes nothing.
     const dry = reconcileTriageResults(pipelinePath, { triageResultsPath: triagePath, appsPath, apply: false });
-    check(dry.flipped.length === 1, 'dry run reports exactly the one scored-but-open row');
+    check(dry.flipped.length === 1, 'dry run reports exactly the one below-threshold row');
     check(readFileSync(pipelinePath, 'utf8').includes('- [ ] https://job-boards.greenhouse.io/acme/jobs/1'), 'dry run does NOT mutate the file');
 
     // Apply: flips the scored row, leaves the new one open.
     const res = reconcileTriageResults(pipelinePath, { triageResultsPath: triagePath, appsPath, apply: true });
     check(res.changed === 1, 'apply flips exactly one row');
     const after = readFileSync(pipelinePath, 'utf8');
-    check(after.includes('- [x] https://job-boards.greenhouse.io/acme/jobs/1'), 'the triage-scored row is now checked off');
+    check(after.includes('- [ ] https://job-boards.greenhouse.io/acme/jobs/1'), 'the threshold score stays open');
+    check(after.includes('- [x] https://x.example/umbrella-corp-cfo-role?utm_source=test'), 'the below-threshold row is checked off');
     check(after.includes('- [ ] https://brandnew.example/job/1'), 'the genuinely new row stays open');
 
     // Idempotent: a second apply is a no-op.
@@ -157,6 +165,36 @@ check(!trackedIds.has('9999'), 'does not invent an id that is not present');
     // Missing triage file: empty result, never a throw.
     const missing = reconcileTriageResults(pipelinePath, { triageResultsPath: join(dir, 'nope.tsv'), appsPath, apply: true });
     check(missing.changed === 0 && missing.flipped.length === 0, 'a missing triage-results.tsv yields an empty result, not a throw');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// A local snapshot and an evaluated tracker report share the posting URL.
+{
+  const dir = makeSandbox('tt-reconcile-snapshot');
+  try {
+    const pipelinePath = join(dir, 'pipeline.md');
+    const triagePath = join(dir, 'triage-results.tsv');
+    const appsPath = join(dir, 'applications.md');
+    const reportsDir = join(dir, 'reports');
+    const jdsDir = join(dir, 'jds');
+    mkdirSync(reportsDir);
+    mkdirSync(jdsDir);
+    const postingUrl = 'https://jobs.example.test/acme/req-701';
+    writeFileSync(join(jdsDir, 'acme-widget-keeper-old-name.md'), `# Widget Keeper\n\n**Source URL:** ${postingUrl}\n`);
+    writeFileSync(join(reportsDir, '900001-acme-2030-01-01.md'), `---json\n{"url":"${postingUrl}"}\n---\n`);
+    writeFileSync(appsPath, [
+      '| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes | URL |',
+      '|---|------|---------|------|-------|--------|-----|--------|--------|-------|-----|',
+      '| 900001 | 2030-01-01 | Acme | Widget Keeper | 4.1/5 | Applied | no | no | [900001](reports/900001-acme-2030-01-01.md) | note | |',
+    ].join('\n'));
+    writeFileSync(triagePath, 'url\tcompany\ttitle\tscore\trationale\tdate\n');
+    writeFileSync(pipelinePath, '- [ ] local:jds/acme-widget-keeper-old-name.md | Acme | Widget Keeper\n');
+
+    const res = reconcileTriageResults(pipelinePath, { triageResultsPath: triagePath, appsPath, apply: true });
+    check(res.changed === 1, 'a local snapshot matching an evaluated report URL is reconciled');
+    check(readFileSync(pipelinePath, 'utf8').startsWith('- [x] local:jds/'), 'the evaluated local snapshot row is checked off');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

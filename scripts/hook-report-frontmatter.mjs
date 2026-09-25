@@ -94,7 +94,7 @@ try {
   const { validateReportMarkdown } = await import(
     new URL('../dashboard-web/server/v1-loader.mjs', import.meta.url)
   );
-  verdict = validateReportMarkdown(md, `reports/${rel}`);
+  verdict = validateReportMarkdown(md, `reports/${rel}`, { shape: true });
 } catch {
   // The validator moved or the checkout is partial. Not the writer's problem.
   quiet();
@@ -104,13 +104,19 @@ if (!verdict || verdict.ok) quiet();
 // decision:"block" feeds `reason` back to the model and lets the turn continue, so
 // the agent that wrote the report is the one that repairs it, while the run is
 // still live and the content is still in context.
-process.stdout.write(JSON.stringify({
-  decision: 'block',
-  reason:
-    `The report you just wrote has broken JSON frontmatter and cannot be loaded by the dashboard.\n\n` +
+const reason = verdict.kind === 'shape'
+  ? `The report you just wrote parses, but it does not match the report schema.\n\n` +
+    `${verdict.error}\n\n` +
+    `Fix the listed fields in place in reports/${rel} following templates/report-schema-v1.md. ` +
+    `Do not continue to the next step, including compute-scores and the tracker TSV, until the report passes.`
+  : `The report you just wrote has broken JSON frontmatter and cannot be loaded by the dashboard.\n\n` +
     `${verdict.error}\n\n` +
     `Fix that line in reports/${rel} now. The frontmatter must be one JSON object between the "---" fences, ` +
-    `carrying "schema": "trajecktory-report/v1". Do not continue to the next step until it parses.`,
-  systemMessage: `Report frontmatter is malformed and was flagged for repair: ${verdict.error}`,
+    `carrying "schema": "trajecktory-report/v1". Do not continue to the next step until it parses.`;
+
+process.stdout.write(JSON.stringify({
+  decision: 'block',
+  reason,
+  systemMessage: `Report frontmatter failed the write gate and was flagged for repair: ${verdict.error}`,
 }));
 process.exit(0);

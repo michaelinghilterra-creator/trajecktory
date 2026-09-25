@@ -12,7 +12,7 @@
  * agent's output looks plausible either way.
  *
  * This cannot verify the model OBEYS the instruction. Only the deterministic
- * gates can do that (gate-pipeline.mjs, and the triage route filter). What it
+ * gates can do that (gate-pipeline.mjs). What it
  * verifies is that the instruction is still THERE, which is the part that
  * silently regressed.
  *
@@ -103,59 +103,20 @@ check(/outputTail:\s*\(resultText \|\| job\.output \|\| ''\)\.slice\(-2000\)/.te
 check(/jobId,\s*\n\s*mode,/.test(src),
   'agent-run records include the job id');
 
-const triage = branch('triage');
-check(triage.length > 0, 'triage-mode prompt branch exists');
-check(/SKIP any URL that already appears in data\/applications\.md/.test(triage),
-  'triage prompt still instructs skipping already-evaluated URLs');
-check(/triage-dismissed\.tsv/.test(triage),
-  'triage prompt still instructs skipping user-dismissed URLs');
-
-// Triage queues are frequently local:jds/ snapshots (resolve-jds repoints every
-// SPA-hosted posting to one). The agent must read those DIRECTLY, and must
-// resolve the path against the REPO ROOT. Without the base-dir statement the
-// Haiku agent non-deterministically guessed data/jds/ (pipeline.md lives in
-// data/), found nothing on disk, and scored 0/N on an otherwise-fine queue
-// (reproduced 2026-08-14). Pin both halves so this cannot silently regress.
-check(/local:jds/.test(triage),
-  'triage prompt handles local:jds snapshot rows (read directly, not WebFetch)');
-check(/data\/jds/.test(triage),
-  'triage prompt disambiguates the local:jds base path from data/jds');
-
-// The same disambiguation must live in the mode file, which the interactive
-// (non-dashboard) triage path reads instead of this prompt.
-const triageMode = readFileSync(join(ROOT, 'modes/triage.md'), 'utf8');
-check(/local:jds/.test(triageMode) && /data\/jds/.test(triageMode),
-  'modes/triage.md disambiguates the local:jds base path from data/jds');
-
-// The deep-dive branch receives the SAME local:jds paths (a triage card can be
-// deep-dived) and carries the same base-dir ambiguity. It runs on a stronger
-// model and never reproduced the 0-score bug, but the clause costs nothing and
-// closes the latent hole.
+// Pasted JD text is persisted as a local:jds snapshot. The agent must resolve
+// that path against the repository root.
 const deep = branch('deep');
 check(deep.length > 0, 'deep-mode prompt branch exists');
 check(/local:jds/.test(deep) && /data\/jds/.test(deep),
   'deep prompt disambiguates the local:jds base path from data/jds');
 
-// Source origin must be CONDITIONAL, never asserted outright. A "Deep dive" on a
-// triage card targets a local:jds snapshot that resolve-jds.mjs wrote off a
-// scanner hit — the user pasted nothing — so a prompt that always claims paste-box
-// origin mistags those rows [self-sourced], which wrongly exempts them from the
-// low-score auto-discard and corrupts the source mix. Only a raw http(s) URL or
-// pasted JD text is a real user origin, which is what opts.isPasteOrigin encodes.
-check(/isPasteOrigin/.test(deep),
-  'deep prompt branches its source line on opts.isPasteOrigin');
-check(/do NOT write \[self-sourced\]/.test(deep),
-  'deep prompt has a scanner-origin branch that suppresses the [self-sourced] tag');
-check(!/tracker-additions\/\.\s*This posting was entered directly by the user/.test(deep),
-  'deep prompt does not assert paste-box origin unconditionally');
+check(/set the tracker note to include \[self-sourced\]/.test(deep),
+  'direct deep evaluation records paste-box origin');
 
 // The enforced half. If these move, the prompt sentences above stop being
 // belt-and-braces and become the only defense again.
 const gate = readFileSync(join(ROOT, 'gate-pipeline.mjs'), 'utf8');
 check(/identity\.mjs/.test(gate), 'gate-pipeline imports the shared identity module');
-
-const triageRoute = readFileSync(join(ROOT, 'dashboard-web/server/routes/triage.mjs'), 'utf8');
-check(/identity\.mjs/.test(triageRoute), 'triage route imports the shared identity module');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

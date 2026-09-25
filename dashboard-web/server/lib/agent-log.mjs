@@ -112,7 +112,7 @@ function costOf(rec) { return typeof rec.cost === 'number' ? rec.cost : 0; }
 // deterministic and independent of the reader's timezone. `from`/`to` are
 // inclusive `YYYY-MM-DD` bounds compared lexically (ISO dates sort as strings).
 // Each day carries { date, cost, machineTimeMs, machineTimeApiMs, runs, byMode }
-// where byMode splits the same figures per mode (scan / pipeline / triage / deep).
+// where byMode splits the same figures per mode (scan / pipeline / deep).
 // Days are returned oldest-first; the caller orders for display.
 export function rollupByDay(records, { from, to } = {}) {
   const byDate = new Map();

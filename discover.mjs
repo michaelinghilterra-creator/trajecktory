@@ -30,6 +30,9 @@ import { canonicalUrl } from './lib/identity.mjs';
 import { sanitizeCell } from './lib/sanitize-cell.mjs';
 import { buildTitleFilter } from './lib/scan-core.mjs';
 import { localToday } from './lib/local-date.mjs';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import { loadEnvKey as loadEnvKeyFromPaths } from './lib/env-key.mjs';
 
 const DRY_RUN   = process.argv.includes('--dry-run');
 const VERBOSE   = process.argv.includes('--verbose');
@@ -38,7 +41,9 @@ const PORTALS_PATH  = 'portals.yml';
 const PIPELINE_PATH = 'data/pipeline.md';
 const HISTORY_PATH  = 'data/scan-history.tsv';
 const APPS_PATH     = 'data/applications.md';
-const ENV_PATH      = 'dashboard-web/.env';
+const SCRIPT_ROOT   = path.dirname(fileURLToPath(import.meta.url));
+const ENV_PATH      = path.join(SCRIPT_ROOT, 'dashboard-web', '.env');
+const ROOT_ENV_PATH = path.join(SCRIPT_ROOT, '.env');
 
 // Fresh install may not have data/ yet — ensure it so pipeline.md / scan-history
 // writes don't ENOENT on the directory.
@@ -50,12 +55,7 @@ const TEST_LIMIT = parseInt(process.env.TJK_TEST_LIMIT, 10) || 0;
 
 // ─── Load API keys from .env file ──────────────────────────────────
 
-function loadEnvKey(key) {
-  if (!existsSync(ENV_PATH)) return '';
-  const env = readFileSync(ENV_PATH, 'utf8');
-  const m = env.match(new RegExp(`^${key}=(.+)$`, 'm'));
-  return m?.[1]?.trim() || '';
-}
+const loadEnvKey = key => loadEnvKeyFromPaths(key, [ENV_PATH, ROOT_ENV_PATH]);
 
 const BRAVE_KEY = process.env.BRAVE_API_KEY || loadEnvKey('BRAVE_API_KEY');
 const MUSE_KEY  = loadEnvKey('MUSE_API_KEY');
@@ -385,7 +385,7 @@ async function main() {
         phase2Jobs.push({ url: parsed.url, company: slugToName(parsed.slug), title });
         added++;
       }
-      console.log(`${added} new`);
+      console.log(`${results.length} results, ${added} new`);
       if (i < braveQueries.length - 1) await sleep(1200);
     }
   }
@@ -461,7 +461,12 @@ async function main() {
   console.log('\n✨ Discovery complete.\n');
 }
 
-main().catch(err => {
+function isMain() {
+  try { return path.resolve(process.argv[1]) === fileURLToPath(import.meta.url); }
+  catch { return false; }
+}
+
+if (isMain()) main().catch(err => {
   console.error('\n❌ discover.mjs error:', err.message);
   process.exit(1);
 });

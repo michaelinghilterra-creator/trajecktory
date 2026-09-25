@@ -48,6 +48,8 @@ process.env.TJK_GRADE_MODEL = 'haiku';
 check(currentModel('grade') === 'haiku', 'TJK_GRADE_MODEL selects haiku');
 delete process.env.TJK_GRADE_MODEL;
 check(SECTIONS.some((section) => section.key === 'grade'), 'grade section exists');
+check(!SECTIONS.some((section) => section.key === 'triage' || section.envKey === 'TJK_TRIAGE_MODEL'),
+  'removed triage mode has no model setting');
 
 // ── validateSetting for version settings ────────────────────────────────────
 {

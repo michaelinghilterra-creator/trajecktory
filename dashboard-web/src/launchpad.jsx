@@ -475,7 +475,7 @@ function LpSummaryBox({ id, configured }) {
 // a table of real recent-run costs. Reads/writes /api/setup/models (persists TJK_*
 // to .env) and /api/agent/cost-history. Self-contained: manages its own state.
 const LP_TIER = { haiku: 'fast · cheapest', sonnet: 'balanced', opus: 'deepest · priciest' };
-const LP_MODE_LABEL = { pipeline: 'Evaluate', deep: 'Deep eval', scan: 'Agent Scan', triage: 'Triage' };
+const LP_MODE_LABEL = { pipeline: 'Evaluate', deep: 'Deep eval', scan: 'Agent Scan' };
 function lpUsd(n) {
   if (n == null || isNaN(n)) return '-';
   return n < 0.01 ? `$${n.toFixed(3)}` : `$${n.toFixed(2)}`;
@@ -538,12 +538,12 @@ function ModelsCostPanel() {
     <div>
       <h3 style={{ margin: '0 0 4px', fontSize: 16, color: 'var(--text)' }}>Models &amp; cost</h3>
       <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.6 }}>
-        Choose which Claude model runs each step. The billing toggle below picks one rail and the <strong>whole workflow bills it</strong>: with <strong>Claude plan</strong> selected, every step (Triage, Agent Scan, Evaluate, Insights, Drafts) runs on your subscription with no per-token charge; with <strong>API key</strong> selected, every step bills your key. Cheaper defaults are already applied; every step stays overridable.
+        Choose which Claude model runs each step. The billing toggle below picks one rail and the <strong>whole workflow bills it</strong>: with <strong>Claude plan</strong> selected, every step (Agent Scan, Evaluate, Insights, Drafts) runs on your subscription with no per-token charge; with <strong>API key</strong> selected, every step bills your key. Cheaper defaults are already applied; every step stays overridable.
       </p>
       <div style={{ fontSize: 12, marginBottom: 14, padding: '8px 12px', borderRadius: 'var(--r-ctl)',
         background: showCost ? 'rgba(34,197,94,0.07)' : 'var(--panel-2)', border: `1px solid ${showCost ? 'rgba(34,197,94,0.22)' : 'var(--border)'}`,
         color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        {showCost ? '● API-key mode. The whole workflow bills your API key — Triage, Agent Scan, Evaluate, Insights, and Drafts. Set your ceiling in your Anthropic console. '
+        {showCost ? '● API-key mode. The whole workflow bills your API key — Agent Scan, Evaluate, Insights, and Drafts. Set your ceiling in your Anthropic console. '
           : state.keyPresent ? '○ Billing: Claude plan. Nothing bills your saved key; the whole workflow runs on your subscription. '
           : '○ No API key. The whole workflow runs on your Claude subscription (no per-token cost). '}
         {state.note}
@@ -707,7 +707,7 @@ function ModelsCostPanel() {
             </tfoot>
           </table>
           <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.5 }}>
-            These runs are Triage, Agent Scan, and Evaluate. Machine time is wall-clock per run (hover a row for the scan/evaluate split). Cost is a local token estimate from token counts, not your Anthropic invoice.
+            These runs are Agent Scan and Evaluate. Machine time is wall-clock per run (hover a row for the scan/evaluate split). Cost is a local token estimate from token counts, not your Anthropic invoice.
           </div>
         </div>
       )}

@@ -12,20 +12,36 @@
  * Fixtures are invented contacts at .example handles — no real personal data.
  */
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { makeSandbox } from './helpers/sandbox.mjs';
+import { fileURLToPath, pathToFileURL } from 'url';
+import { makeRepoSandbox } from './helpers/sandbox.mjs';
 
 process.env.TJK_FAKE_LLM = '1';
 // Most draft handlers JSON.parse the model output, so the stub is a JSON object.
 process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({ subject: 'Stub subject', body: 'Stub body for the smoke test.' });
-const sandbox = makeSandbox("drafts");
-process.env.TJK_DATA_DIR = sandbox;
-const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+const sandbox = makeRepoSandbox(ROOT, 'drafts');
+fs.cpSync(path.join(ROOT, 'dashboard-web', 'server'), path.join(sandbox, 'dashboard-web', 'server'), { recursive: true });
+fs.cpSync(path.join(ROOT, 'lib'), path.join(sandbox, 'lib'), { recursive: true });
+fs.cpSync(path.join(ROOT, 'templates'), path.join(sandbox, 'templates'), { recursive: true });
+const configDir = path.join(sandbox, 'config');
+fs.mkdirSync(configDir, { recursive: true });
+fs.writeFileSync(path.join(configDir, 'profile.yml'), [
+  'candidate:',
+  '  full_name: "Example Personone"',
+  '  email: "example.personone@example.test"',
+  '',
+].join('\n'), 'utf8');
+for (const script of ['verify-contacts.mjs', 'find-contacts.mjs']) {
+  fs.copyFileSync(path.join(ROOT, script), path.join(sandbox, script));
+}
+fs.symlinkSync(path.join(ROOT, 'dashboard-web', 'node_modules'), path.join(sandbox, 'dashboard-web', 'node_modules'), 'junction');
+const dataDir = path.join(sandbox, 'data');
+fs.mkdirSync(dataDir, { recursive: true });
+process.env.TJK_DATA_DIR = dataDir;
 const reportName = `lap-j-research-${process.pid}-${Date.now()}.md`;
 const reportRelative = `reports/${reportName}`;
-const reportAbsolute = path.join(root, reportRelative);
+const reportAbsolute = path.join(sandbox, reportRelative);
 const fence = '-'.repeat(3);
 fs.mkdirSync(path.dirname(reportAbsolute), { recursive: true });
 fs.writeFileSync(reportAbsolute, `${fence}\n${JSON.stringify({
@@ -33,12 +49,12 @@ fs.writeFileSync(reportAbsolute, `${fence}\n${JSON.stringify({
   id: 77,
   summary: { companyBrief: 'Acme serves 12,000 organizations and supports 87,654 deployments, including 17 of the Example 500.' },
 }, null, 2)}\n${fence}\n# Report body\nBody fallback should not win.\n`, 'utf8');
-fs.writeFileSync(path.join(sandbox, 'applications.md'),
+fs.writeFileSync(path.join(dataDir, 'applications.md'),
   `| 77 | 2026-01-01 | Acme | Engineer | 4.5/5 | Applied | | | [77](${reportRelative}) | | https://jobs.example.com/acme/77 |\n` +
   '| 78 | 2026-02-01 | EvalCo | Platform Lead | 4.0/5 | Evaluated | | | | | https://jobs.example.com/evalco/78 |\n' +
   '| 79 | 2026-03-01 | NoFitCo | Data Lead | 3.0/5 | Not a Fit | | | | | https://jobs.example.com/nofitco/79 |\n',
   'utf8');
-fs.writeFileSync(path.join(sandbox, 'follow-ups.md'),
+fs.writeFileSync(path.join(dataDir, 'follow-ups.md'),
   '# Follow-Ups\n\n| # | app# | date | company | role | channel | contact | notes |\n' +
   '|---|------|------|---------|------|---------|---------|-------|\n' +
   '| 1 | 77 | 2026-01-08 | Acme | Engineer | Email | Hiring team | First follow-up |\n' +
@@ -48,7 +64,7 @@ fs.writeFileSync(path.join(sandbox, 'follow-ups.md'),
 // Minimal target-talent.md so parseTargetTalentMd finds a contact (appendTTRows does
 // not create the file). Columns per the parser: id|company|last|first|salute|title|
 // city|state|zip|phone|email|linkedin|status|lastTouch|notes|website.
-fs.writeFileSync(path.join(sandbox, 'target-talent.md'),
+fs.writeFileSync(path.join(dataDir, 'target-talent.md'),
   '# Target Talent\n\n' +
   '| # | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |\n' +
   '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n' +
@@ -56,16 +72,17 @@ fs.writeFileSync(path.join(sandbox, 'target-talent.md'),
   'utf8');
 
 const express = (await import('express')).default;
-const { router: linkedinDrafts, mergeConnectPacketContext } = await import('../dashboard-web/server/routes/linkedin-drafts.mjs');
-const { router: targetTalent, buildTargetTalentAugustPrompt } = await import('../dashboard-web/server/routes/target-talent.mjs');
-const { router: referrals, buildReferralAugustPrompt } = await import('../dashboard-web/server/routes/referrals.mjs');
-const { router: draftsRouter } = await import('../dashboard-web/server/routes/drafts.mjs');
-const { router: followups } = await import('../dashboard-web/server/routes/followups.mjs');
-const { buildConnectPrompt } = await import('../dashboard-web/server/lib/linkedin-ssi.mjs');
-const { buildPacket, buildPacketFromFields, renderFactBlock } = await import('../lib/outreach-packet.mjs');
-const { buildAugustPrompt, wrapReferralDraft } = await import('../lib/outreach-voice.mjs');
-const { appendReferralRows } = await import('../dashboard-web/server/lib/referrals.mjs');
-const { setLinkedInStatus } = await import('../dashboard-web/server/lib/tt-linkedin.mjs');
+const sandboxModule = (relative) => pathToFileURL(path.join(sandbox, relative)).href;
+const { router: linkedinDrafts, mergeConnectPacketContext } = await import(sandboxModule('dashboard-web/server/routes/linkedin-drafts.mjs'));
+const { router: targetTalent, buildTargetTalentAugustPrompt } = await import(sandboxModule('dashboard-web/server/routes/target-talent.mjs'));
+const { router: referrals, buildReferralAugustPrompt } = await import(sandboxModule('dashboard-web/server/routes/referrals.mjs'));
+const { router: draftsRouter } = await import(sandboxModule('dashboard-web/server/routes/drafts.mjs'));
+const { router: followups } = await import(sandboxModule('dashboard-web/server/routes/followups.mjs'));
+const { buildConnectPrompt } = await import(sandboxModule('dashboard-web/server/lib/linkedin-ssi.mjs'));
+const { buildPacket, buildPacketFromFields, renderFactBlock } = await import(sandboxModule('lib/outreach-packet.mjs'));
+const { buildAugustPrompt, wrapReferralDraft } = await import(sandboxModule('lib/outreach-voice.mjs'));
+const { appendReferralRows } = await import(sandboxModule('dashboard-web/server/lib/referrals.mjs'));
+const { setLinkedInStatus } = await import(sandboxModule('dashboard-web/server/lib/tt-linkedin.mjs'));
 
 // Contact 1 accepted the invite (exercises the free-DM followup-message path); one
 // referral for the referral drafter.
@@ -451,11 +468,11 @@ const outreachRouteFiles = [
   'dashboard-web/server/routes/referrals.mjs',
   'dashboard-web/server/routes/followups.mjs',
 ];
-const outreachRouteSource = outreachRouteFiles.map((file) => fs.readFileSync(path.join(root, file), 'utf8')).join('\n');
+const outreachRouteSource = outreachRouteFiles.map((file) => fs.readFileSync(path.join(ROOT, file), 'utf8')).join('\n');
 check((outreachRouteSource.match(/generateText\(prompt, \{\s*model: draftModel\(\), maxTokens: 900, label: `draft:\$\{packet\.surfaceId\}`/g) || []).length === 8,
   'all eight outreach draft paths use the rated August model-call envelope');
-const liFollowupSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/linkedin-drafts.mjs'), 'utf8');
-const targetTalentSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/target-talent.mjs'), 'utf8');
+const liFollowupSource = fs.readFileSync(path.join(ROOT, 'dashboard-web/server/routes/linkedin-drafts.mjs'), 'utf8');
+const targetTalentSource = fs.readFileSync(path.join(ROOT, 'dashboard-web/server/routes/target-talent.mjs'), 'utf8');
 const liFollowupBlock = liFollowupSource.slice(
   liFollowupSource.indexOf("router.post('/api/linkedin-drafts/followup-message'"),
   liFollowupSource.indexOf("router.post('/api/linkedin-drafts/archive-contact'"),
@@ -469,14 +486,14 @@ const augustFixturePrompt = buildAugustPrompt(buildPacketFromFields({
 }));
 check((augustFixturePrompt.match(/CV:\nFixture CV\./g) || []).length === 1,
   'LinkedIn follow-up supplies the CV exactly once through the shared fact packet');
-const augustVoiceSource = fs.readFileSync(path.join(root, 'lib/outreach-voice.mjs'), 'utf8');
+const augustVoiceSource = fs.readFileSync(path.join(ROOT, 'lib/outreach-voice.mjs'), 'utf8');
 check(!augustVoiceSource.includes('A soft redirect ask is allowed')
   && !augustVoiceSource.includes('Name the ${role(packet)} role after that opener'),
   'shared August instructions contain no Lap 7 tier-ask or applied-role additions');
 check(augustVoiceSource.includes('THIS IS NOT A NEW CONNECTION REQUEST. The invite is already out.')
   && augustVoiceSource.includes('Write a purposeful message. Do not write "I would like to connect".'),
   'both not-connected LinkedIn DM surfaces use the tested August state instructions');
-const referralSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/referrals.mjs'), 'utf8');
+const referralSource = fs.readFileSync(path.join(ROOT, 'dashboard-web/server/routes/referrals.mjs'), 'utf8');
 check((referralSource.match(/\$\{referralAsk\(appliedRole\)\}/g) || []).length === 2
   && !referralSource.includes('tierAsk(')
   && referralSource.includes('A good ask here is to flag his application for the ${appliedRole} role to the hiring manager'),
@@ -484,9 +501,9 @@ check((referralSource.match(/\$\{referralAsk\(appliedRole\)\}/g) || []).length =
 
 const nonReferralPromptSources = [
   liFollowupSource,
-  fs.readFileSync(path.join(root, 'dashboard-web/server/lib/linkedin-ssi.mjs'), 'utf8'),
+  fs.readFileSync(path.join(ROOT, 'dashboard-web/server/lib/linkedin-ssi.mjs'), 'utf8'),
   targetTalentSource,
-  fs.readFileSync(path.join(root, 'dashboard-web/server/routes/followups.mjs'), 'utf8'),
+  fs.readFileSync(path.join(ROOT, 'dashboard-web/server/routes/followups.mjs'), 'utf8'),
 ];
 check(nonReferralPromptSources.every((source) => source.includes('buildAugustPrompt'))
   && !augustVoiceSource.includes('Do NOT pitch a job-search tool or job-search article'),
@@ -502,7 +519,7 @@ check(augustFixturePrompt.includes('Use only these facts. Do not invent or infer
   && !outreachRouteSource.includes('recent funding/news'),
   'outreach grounding comes from the shared tested fact-packet guardrail');
 
-const draftsSource = fs.readFileSync(path.join(root, 'dashboard-web/server/routes/drafts.mjs'), 'utf8');
+const draftsSource = fs.readFileSync(path.join(ROOT, 'dashboard-web/server/routes/drafts.mjs'), 'utf8');
 check(/const contextOptions = draftGradeContext\(gradeContext\)/.test(draftsSource)
   && /gradeIndependently\(body, surfaceId,[\s\S]*?\.\.\.contextOptions/.test(draftsSource),
   '/api/drafts/review uses the shared validated grading context');

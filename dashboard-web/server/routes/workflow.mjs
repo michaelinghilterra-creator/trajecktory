@@ -64,6 +64,24 @@ router.post('/api/pipeline/needs-manual/resolve', (req, res) => {
 // into a job record the frontend polls.
 
 const workflowJobs = new Map();
+export const postEvalChains = new Map();
+
+export function claimPostEvalChain(evaluateJobId, chains = postEvalChains, now = Date.now) {
+  const id = String(evaluateJobId || '').trim();
+  if (!id) return { error: 'evaluateJobId required' };
+  const existing = chains.get(id);
+  if (existing) return { skipped: 'already-ran', run: existing };
+  const run = { evaluateJobId: id, startedAt: now() };
+  chains.set(id, run);
+  return { started: true, run };
+}
+
+router.post('/api/workflow/post-eval', (req, res) => {
+  const result = claimPostEvalChain(req.body && req.body.evaluateJobId);
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
 router.post('/api/workflow/:step', (req, res) => {
   const step = req.params.step;
   // hasOwn, not a bare lookup: WORKFLOW_STEPS is an object literal, so it
