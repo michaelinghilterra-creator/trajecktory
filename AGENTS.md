@@ -863,6 +863,10 @@ This applies to the agent-driven merge path too (the Launchpad "companies" step
 in `dashboard-web/server/lib/setup.mjs`), not just `discover.mjs`. Guarded by
 `tests/portals.test.mjs`.
 
+Expand Coverage rotates Brave searches through a pool generated from the title
+filter matrix plus configured ATS search queries. The persisted cursor advances
+the pool on each completed run so successive scans cover different title slices.
+
 ### Posting identity is the canonical URL (RULE)
 
 Company + role **cannot** distinguish two requisitions. A single employer can post

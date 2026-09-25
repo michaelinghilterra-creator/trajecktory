@@ -10,8 +10,8 @@
  *
  *   Phase 2 (if BRAVE_API_KEY in env): Brave Search API — proactive site:
  *   searches for new ATS job URLs; new URLs → pipeline.md, new slugs → portals.yml.
- *   Queries are built at runtime from portals.yml `search_queries` (the enabled
- *   ATS-board ones), so Brave coverage tracks the active archetypes automatically.
+ *   Queries rotate through title-filter matrix combinations plus configured ATS
+ *   searches, so successive runs cover different role and seniority slices.
  *
  *   Phase 3 (if MUSE_API_KEY in dashboard-web/.env): The Muse API — fetches
  *   Director/VP-level jobs from Business & Strategy / Data & Analytics /
@@ -33,21 +33,24 @@ import { localToday } from './lib/local-date.mjs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import { loadEnvKey as loadEnvKeyFromPaths } from './lib/env-key.mjs';
+import { buildPool, nextSlice } from './lib/discover-queries.mjs';
+import { loadCursor, saveCursor } from './lib/discover-rotation.mjs';
 
 const DRY_RUN   = process.argv.includes('--dry-run');
 const VERBOSE   = process.argv.includes('--verbose');
 
 const PORTALS_PATH  = 'portals.yml';
-const PIPELINE_PATH = 'data/pipeline.md';
-const HISTORY_PATH  = 'data/scan-history.tsv';
-const APPS_PATH     = 'data/applications.md';
 const SCRIPT_ROOT   = path.dirname(fileURLToPath(import.meta.url));
+const DATA_DIR      = process.env.TJK_DATA_DIR ? path.resolve(process.env.TJK_DATA_DIR) : path.join(SCRIPT_ROOT, 'data');
+const PIPELINE_PATH = path.join(DATA_DIR, 'pipeline.md');
+const HISTORY_PATH  = path.join(DATA_DIR, 'scan-history.tsv');
+const APPS_PATH     = path.join(DATA_DIR, 'applications.md');
 const ENV_PATH      = path.join(SCRIPT_ROOT, 'dashboard-web', '.env');
 const ROOT_ENV_PATH = path.join(SCRIPT_ROOT, '.env');
 
 // Fresh install may not have data/ yet — ensure it so pipeline.md / scan-history
 // writes don't ENOENT on the directory.
-mkdirSync('data', { recursive: true });
+mkdirSync(DATA_DIR, { recursive: true });
 
 // TEST CAP (temporary): when TJK_TEST_LIMIT is set, cap how many new jobs get
 // registered, so a test run stays cheap. Inert in production (env var unset).
@@ -59,26 +62,13 @@ const loadEnvKey = key => loadEnvKeyFromPaths(key, [ENV_PATH, ROOT_ENV_PATH]);
 
 const BRAVE_KEY = process.env.BRAVE_API_KEY || loadEnvKey('BRAVE_API_KEY');
 const MUSE_KEY  = loadEnvKey('MUSE_API_KEY');
+const configuredPerRun = process.env.TJK_DISCOVER_QUERIES_PER_RUN || loadEnvKey('TJK_DISCOVER_QUERIES_PER_RUN');
+const DISCOVER_QUERIES_PER_RUN = parseInt(configuredPerRun, 10) > 0 ? parseInt(configuredPerRun, 10) : 12;
 
 // ─── Brave search queries (Phase 2) ────────────────────────────────
-// Single source of truth: Brave queries are built at runtime from portals.yml
-// `search_queries` (the same list the agent scan flow uses), NOT a separate
-// hardcoded list — so the web-search path never drifts from the active
-// archetypes. Dropped tracks (enabled: false) are excluded automatically;
-// newly-added tracks appear here as soon as they're added to portals.yml.
-//
-// We feed Brave only the queries that target an ATS board (Greenhouse/Ashby/
-// Lever): those are the only results parseAtsUrl() can turn into usable job
-// URLs. Aggregator queries (Remotive, The Muse, etc.) are left to Phase 3 and
-// the agent scan flow.
-const ATS_SITE_RE = /greenhouse\.io|ashbyhq\.com|lever\.co/i;
-
-function buildBraveQueries(portals) {
-  return (portals.search_queries || [])
-    .filter(q => q && q.enabled !== false && q.query && ATS_SITE_RE.test(q.query))
-    .map(q => q.query);
-}
-
+// Queries come from the title filter matrix and the configured ATS searches.
+// Non-ATS queries remain with their existing consumers because parseAtsUrl()
+// cannot turn those results into usable job URLs.
 // ─── Muse query config (Phase 3) ───────────────────────────────────
 // Note: Muse's category filter is non-functional (always returns 0).
 // Only level=Senior Level works. We scan 10 pages (200 jobs) and rely
@@ -329,7 +319,9 @@ async function main() {
   const portalsRaw    = readFileSync(PORTALS_PATH, 'utf8');
   const portals       = yaml.load(portalsRaw);
   const titleOk       = buildTitleFilter(portals.title_filter);
-  const braveQueries  = buildBraveQueries(portals);
+  const bravePool     = buildPool(portals);
+  const braveRotation = nextSlice(bravePool, loadCursor(DATA_DIR), DISCOVER_QUERIES_PER_RUN);
+  const braveQueries  = braveRotation.queries;
   const trackedCos    = portals.tracked_companies || [];
   const companyIndex  = buildCompanyIndex(trackedCos);
   const seenUrls      = loadSeenUrls();
@@ -361,7 +353,8 @@ async function main() {
   const phase2Entries = [];
 
   if (BRAVE_KEY && braveQueries.length) {
-    console.log(`\n🌐 Phase 2: Brave Search (${braveQueries.length} ATS queries from portals.yml)...`);
+    console.log(`Brave rotation: queries ${braveRotation.from}-${braveRotation.to} of ${braveRotation.total}`);
+    console.log(`\n🌐 Phase 2: Brave Search (${braveQueries.length} rotated ATS queries)...`);
     for (let i = 0; i < braveQueries.length; i++) {
       process.stdout.write(`   [${i + 1}/${braveQueries.length}] `);
       let results;
@@ -388,6 +381,7 @@ async function main() {
       console.log(`${results.length} results, ${added} new`);
       if (i < braveQueries.length - 1) await sleep(1200);
     }
+    if (!DRY_RUN) saveCursor(DATA_DIR, braveRotation.nextCursor);
   }
 
   // ── Phase 3: Muse API ───────────────────────────────────────────────
