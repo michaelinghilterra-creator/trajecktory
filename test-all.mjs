@@ -450,6 +450,7 @@ for (const suite of [
   'tests/probe-board-migrations.test.mjs',
   'tests/agent-summary.test.mjs',
   'tests/discover-env.test.mjs',
+  'tests/discover-queries.test.mjs',
   'tests/health-check.test.mjs',
   'tests/verify-actionable.test.mjs',
   'tests/no-live-dir-writes.test.mjs',
