@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.9.3...v5.0.0) (2026-09-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* the Triage workflow step, the /trajecktory triage mode and the TJK_TRIAGE_MODEL setting are removed.
+
+### Features
+
+* report shape gate, 3.5 discard line, and Triage removal ([#393](https://github.com/michaelinghilterra-creator/trajecktory/issues/393)) ([7c7360c](https://github.com/michaelinghilterra-creator/trajecktory/commit/7c7360c8c8cdaf9395fb24e121fa0286a326878d))
+
 ## [4.9.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v4.9.2...v4.9.3) (2026-09-24)
 
 
