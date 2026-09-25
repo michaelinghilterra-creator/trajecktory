@@ -31,6 +31,12 @@ The frontmatter is **JSON between two `---` lines** (not YAML). Reasons:
 The body below the closing `---` is rendered verbatim by the existing markdown→HTML
 converter for the Full Report tab. The structured tabs read **only** from frontmatter.
 
+## Write-time gate
+
+Reports dated on or after 2026-09-26 are shape-checked on write by `validateReportShape`.
+The gate rejects object-map `globalScore` values, string items in object arrays, and non-canonical legitimacy tiers.
+Older reports are exempt.
+
 ## Required top-level fields
 
 | Field | Type | Notes |

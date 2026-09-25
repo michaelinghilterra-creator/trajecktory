@@ -74,7 +74,6 @@ export const SYSTEM_PATHS = [
   'modes/interview-prep.md',
   'modes/patterns.md',
   'modes/runsheet.md',
-  'modes/triage.md',
   'modes/de/',
   'modes/fr/',
   'modes/ja/',
@@ -93,6 +92,8 @@ export const SYSTEM_PATHS = [
   // install would call a script that is not there and every evaluation would fail at
   // the scoring step. Same class as the render-runsheet.mjs / verify-no-pii.mjs hazards.
   'compute-scores.mjs',
+  'health-check.mjs',
+  'list-companies.mjs',
   // Spawned by dashboard-web/server/routes/agent.mjs after every pipeline/deep run
   // (Tier-B text hygiene over reports/ and interview-prep/), and invoked in
   // CLAUDE.md's batch workflow. Root script, so the bare lib/ and dashboard-web/

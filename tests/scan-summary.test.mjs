@@ -13,7 +13,7 @@
  *
  * Run: node tests/scan-summary.test.mjs   (exit 0 = pass, 1 = fail)
  */
-import { scanSummary } from '../dashboard-web/server/lib/workflow.mjs';
+import { scanSummary, verifySummary, WORKFLOW_STEPS } from '../dashboard-web/server/lib/workflow.mjs';
 
 let passed = 0, failed = 0;
 const check = (cond, msg) => { if (cond) { console.log(`  ✅ ${msg}`); passed++; } else { console.log(`  ❌ ${msg}`); failed++; } };
@@ -53,6 +53,10 @@ const healthy = [
 const s3 = scanSummary(healthy);
 check(/^2 new/.test(s3), 'healthy case: leads with new-offer count');
 check(/1,200 found/.test(s3), 'healthy case: shows the funnel total');
+check(WORKFLOW_STEPS.derive.cmd === 'node compute-scores.mjs --all --apply', 'derive step runs the score computation');
+check(WORKFLOW_STEPS.gate.cmd.includes('reconcile-triage.mjs --apply'), 'gate reconciles Spark pre-filter discard rows');
+check(WORKFLOW_STEPS.health.cmd === 'node health-check.mjs', 'health step uses the aggregate runner');
+check(verifySummary('Flipped 2 entries') === 'Passed 2 dead links', 'verify summary uses the Passed state');
 check(!/⚠/.test(s3), 'healthy case: no warning marker');
 
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed} passed, ${failed} failed`);

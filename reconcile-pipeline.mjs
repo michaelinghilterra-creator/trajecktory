@@ -8,7 +8,7 @@
 //
 // WHY: three things put a "- [ ]" row in the queue but historically only ONE
 // (Evaluate → merge-tracker) ever checked one back off, so dismissed and some
-// evaluated rows piled up and clogged the triage top-15 window. The dashboard now
+// evaluated rows piled up and clogged the evaluation queue. The dashboard now
 // runs this automatically after every agent run; this CLI is the manual/backfill
 // entry point and what the batch workflow can call.
 //

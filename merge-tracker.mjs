@@ -439,7 +439,7 @@ function enforceSource(reportLink, notes, num, company, role) {
     return cleaned;
   }
   // Not in pipeline.md → self-sourced. Tag it unless already source-tagged.
-  if (/\[self-sourced\]|\[referral:/i.test(notes || '')) return notes;
+  if (/\[(?:self-sourced|reinstated|cowork)\]|\[referral:/i.test(notes || '')) return notes;
   const tagged = notes ? `[self-sourced] ${notes}` : '[self-sourced]';
   console.log(`   ↳ source: tagged [self-sourced] (not in pipeline.md) (${label})`);
   logSourceFlip('added-self-sourced', num, company, role, u);

@@ -4,14 +4,14 @@ const WORKFLOW_STEPS = {
   'discover':   { cmd: 'node discover.mjs',                   label: 'Expand Coverage',  summarize: discoverSummary },
   // Scan for new postings, then immediately snapshot any SPA-hosted JDs
   // (Ashby/Workday/SmartRecruiters/embedded-Greenhouse) to jds/ and repoint the
-  // pipeline entry to local:jds/…. Without this, triage and eval "skip any you
-  // cannot read" and silently drop every role on those platforms. Chained here so
-  // it is automatic before Triage runs — see resolve-jds.mjs.
+  // pipeline entry to local:jds/…. Without this, evaluation can skip unreadable
+  // roles on those platforms. See resolve-jds.mjs.
   'api-scan':   { cmd: 'node scan.mjs && node resolve-jds.mjs', label: 'API Scan',       summarize: scanSummary },
-  'gate':       { cmd: 'node gate-pipeline.mjs',              label: 'Liveness Gate',    summarize: gateSummary },
+  'gate':       { cmd: 'node gate-pipeline.mjs && node reconcile-triage.mjs --apply', label: 'Liveness Gate', summarize: gateSummary },
+  'derive':     { cmd: 'node compute-scores.mjs --all --apply', label: 'Derive Scores',   summarize: tailLines },
   'merge':      { cmd: 'node merge-tracker.mjs',              label: 'Merge Tracker',    summarize: tailLines },
   'verify':     { cmd: 'node verify-actionable.mjs --apply',  label: 'Verify Actionable',summarize: verifySummary },
-  'health':     { cmd: 'node verify-reports.mjs',             label: 'Health Check',     summarize: tailLines },
+  'health':     { cmd: 'node health-check.mjs',               label: 'Health Check',     summarize: tailLines },
 };
 
 function discoverSummary(output) {
@@ -93,7 +93,7 @@ function gateSummary(output) {
 function verifySummary(output) {
   if (/All checked entries are still live/i.test(output)) return 'All Evaluated entries still live';
   const m = output.match(/Flipped (\d+) entries/);
-  return m ? `Discarded ${m[1]} dead links` : tailLines(output);
+  return m ? `Passed ${m[1]} dead links` : tailLines(output);
 }
 
 

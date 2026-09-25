@@ -90,7 +90,7 @@ Filename: "powershell.exe"; \
 
 [Code]
 // The Anthropic API-key prompt was removed from the installer: the core flow
-// (Scan / Triage / Evaluate) runs on the user's Claude sign-in and needs no key,
+// (Scan / Evaluate) runs on the user's Claude sign-in and needs no key,
 // and the prompt was a common first-run stumbling point. The key is now an
 // optional in-dashboard "unlock power features" card (resume / cover / outreach
 // drafts, Brave/Muse discovery, contact auto-discovery).

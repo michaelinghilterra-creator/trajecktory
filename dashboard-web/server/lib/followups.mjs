@@ -462,7 +462,7 @@ function _hasLinkedIn(row) {
 // in the queues forever (its furthest rung was still Applied), so a dead
 // opportunity kept surfacing contacts to chase. Current-status gating drops it
 // the moment the row goes terminal, including No Response. Evaluated-only and
-// Triage-only companies never qualify (no live app).
+// Queue-only companies never qualify (no live application).
 // Matched on the normalized company name (the one identity engine).
 function outreachEligibleCompanies(apps) {
   const set = new Set();

@@ -12,7 +12,7 @@ import { ROOT_DIR } from '../config.mjs';
 // on stderr and drops the allow list — then keeps running.
 //
 // That silent degradation is the whole reason this module exists. Agent Scan and
-// Triage spawn `claude -p` with --permission-mode acceptEdits, which re-grants
+// Agent runs spawn `claude -p` with --permission-mode acceptEdits, which re-grants
 // Write and Edit but NOT WebSearch and WebFetch. Both agent prompts are built
 // around "read the JD with WebFetch first and WebSearch as a fallback", so an
 // untrusted workspace produces a run that burns turns and real money, reports
@@ -96,7 +96,7 @@ export function checkWorkspaceTrust(dir = ROOT_DIR, cfgPath = claudeConfigPath()
     reason: present ? 'not-trusted' : 'missing',
     message:
       `This folder is not marked as trusted for Claude Code, so its ${allow.length} permission ` +
-      `settings are ignored and the agent loses ${lost}. Scan and Triage read job descriptions ` +
+    `settings are ignored and the agent loses ${lost}. Scan and Evaluate read job descriptions ` +
       `with those tools, so a run would cost money and score almost nothing. Fix it once in ` +
       `Setup, or set projects["${trustKey}"].hasTrustDialogAccepted to true in ${cfgPath}.`,
   };

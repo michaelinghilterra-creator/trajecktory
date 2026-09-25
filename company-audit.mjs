@@ -11,10 +11,11 @@
 //   - For each company in applications.md, calculate avg score, max score, count
 //   - Flag a company as "chronic underperformer" if:
 //     * 3+ evaluations exist AND
-//     * max score < 3.0 (no evaluation ever cleared the apply threshold)
+//     * max score below AUTO_DISCARD_SCORE (no evaluation cleared the apply threshold)
 //   - Use --apply to set `enabled: false` on flagged companies in portals.yml
 
 import fs from 'fs';
+import { AUTO_DISCARD_SCORE } from './lib/discard.mjs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -48,7 +49,7 @@ for (const [company, scores] of byCompany.entries()) {
   if (scores.length < minEvals) continue;
   const max = Math.max(...scores);
   const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-  if (max < 3.0) {
+  if (max < AUTO_DISCARD_SCORE) {
     underperformers.push({ company, evals: scores.length, max, avg: avg.toFixed(2) });
   }
 }
@@ -62,7 +63,7 @@ if (underperformers.length === 0) {
   process.exit(0);
 }
 
-console.log(`⚠️  ${underperformers.length} chronic underperformers (max score never cleared 3.0):\n`);
+console.log(`⚠️  ${underperformers.length} chronic underperformers (max score never cleared ${AUTO_DISCARD_SCORE.toFixed(1)}):\n`);
 console.log('  Max  | Avg  | Evals | Company');
 console.log('  -----|------|-------|--------');
 for (const u of underperformers) {

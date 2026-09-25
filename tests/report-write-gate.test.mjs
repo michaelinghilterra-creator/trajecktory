@@ -17,14 +17,14 @@
  *
  * Run: node tests/report-write-gate.test.mjs   (exit 0 = pass, 1 = fail)
  */
-import { validateReportMarkdown, hasV1Frontmatter } from '../dashboard-web/server/v1-loader.mjs';
+import { validateReportMarkdown, validateReportShape, hasV1Frontmatter } from '../dashboard-web/server/v1-loader.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { makeRepoSandbox } from './helpers/sandbox.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const REPORTS = path.join(ROOT, 'reports');
 
 let passed = 0, failed = 0;
 const check = (c, m) => { if (c) { console.log(`  ✅ ${m}`); passed++; } else { console.log(`  ❌ ${m}`); failed++; } };
@@ -34,8 +34,82 @@ console.log('report-write-gate.test.mjs');
 const wrap = (json) => `---\n${json}\n---\n# Narrative body\n`;
 const good = wrap(JSON.stringify({ schema: 'trajecktory-report/v1', id: 9001, url: 'https://example.com/job', leadStory: { title: 't', reason: 'r', script: 's' } }, null, 2));
 
+const validShapeData = {
+  schema: 'trajecktory-report/v1',
+  id: 900001,
+  company: 'Example Co',
+  role: 'Example Director',
+  domain: 'Example Software',
+  url: 'https://example.com/jobs/900001',
+  date: '2030-01-01',
+  jdSnapshot: 'jds/900001-example-co.md',
+  globalScore: [
+    { key: 'fit', dim: 'Fit', val: 4, max: 5, evidence: 'Relevant example experience' },
+    { key: 'northStar', dim: 'North Star', val: 4, max: 5, evidence: 'Matches the example target' },
+    { key: 'level', dim: 'Level', val: 4, max: 5, evidence: 'Scope matches the example level' },
+    { key: 'comp', dim: 'Comp', val: 3, max: 5, evidence: 'Example range is disclosed' },
+    { key: 'location', dim: 'Location', val: 5, max: 5, evidence: 'Example role is remote' },
+    { key: 'buildDepth', dim: 'Build Depth', val: 4, max: 5, evidence: 'Example work includes building' },
+    { key: 'redFlags', dim: 'Red Flags', val: 5, max: 5, evidence: 'No example warning signs' },
+  ],
+  comp: { stated: 'Example range not disclosed', sources: [], walkaway: 100 },
+  legitimacy: { tier: 'High Confidence', signals: [] },
+};
+const validShaped = wrap(JSON.stringify(validShapeData, null, 2));
+const changed = (patch) => ({ ...validShapeData, ...patch });
+
 // ── the happy path stays quiet ───────────────────────────────────────────────
 check(validateReportMarkdown(good, 'reports/9001-ok.md').ok, 'a well-formed v1 report passes');
+
+check(validateReportShape(validShapeData).ok, 'the exported shape validator accepts a complete canonical report');
+check(validateReportMarkdown(validShaped, 'reports/900001-shaped.md', { shape: true }).ok, 'a fully shaped report passes the opt-in gate');
+
+const mapShapeData = changed({ globalScore: { fit: 3, level: 5 } });
+const mapShape = wrap(JSON.stringify(mapShapeData));
+const mapVerdict = validateReportMarkdown(mapShape, 'reports/900002-map.md', { shape: true });
+check(!mapVerdict.ok && mapVerdict.kind === 'shape' && /object map/.test(mapVerdict.error), 'an object-map globalScore fails with an explicit object map error');
+
+const listedVerdict = validateReportMarkdown(wrap(JSON.stringify(changed({ comp: { listed: '$100K' } }))), 'reports/900003-comp.md', { shape: true });
+check(!listedVerdict.ok && /rename "listed" to "stated"/.test(listedVerdict.error), 'comp.listed fails with a rename-to-stated instruction');
+
+const summaryVerdict = validateReportMarkdown(wrap(JSON.stringify(changed({ summary: 'text' }))), 'reports/900004-summary.md', { shape: true });
+check(!summaryVerdict.ok && /summary:.*expected an object/.test(summaryVerdict.error), 'summary as a string fails');
+const cvMatchVerdict = validateReportMarkdown(wrap(JSON.stringify(changed({ cvMatch: ['text'] }))), 'reports/900005-cv.md', { shape: true });
+check(!cvMatchVerdict.ok && /cvMatch:.*array of objects/.test(cvMatchVerdict.error), 'cvMatch string items fail');
+const signalsVerdict = validateReportMarkdown(wrap(JSON.stringify(changed({ legitimacy: { tier: 'High Confidence', signals: ['text'] } }))), 'reports/900006-signals.md', { shape: true });
+check(!signalsVerdict.ok && /legitimacy\.signals:.*array of objects/.test(signalsVerdict.error), 'legitimacy signal strings fail');
+const tierVerdict = validateReportMarkdown(wrap(JSON.stringify(changed({ legitimacy: { tier: 'Tier 1', signals: [] } }))), 'reports/900007-tier.md', { shape: true });
+check(!tierVerdict.ok && /legitimacy\.tier:.*Tier 1/.test(tierVerdict.error), 'a non-canonical legitimacy tier fails');
+
+const missingEvidence = structuredClone(validShapeData);
+delete missingEvidence.globalScore[0].evidence;
+check(/evidence/.test(validateReportMarkdown(wrap(JSON.stringify(missingEvidence)), 'reports/900008-evidence.md', { shape: true }).error || ''), 'a score entry missing evidence fails');
+const unknownKey = structuredClone(validShapeData);
+unknownKey.globalScore[0].key = 'culture';
+check(/canonical score key/.test(validateReportMarkdown(wrap(JSON.stringify(unknownKey)), 'reports/900009-key.md', { shape: true }).error || ''), 'an unknown globalScore key fails');
+const duplicateKey = structuredClone(validShapeData);
+duplicateKey.globalScore[1].key = 'fit';
+check(/duplicate "fit"/.test(validateReportMarkdown(wrap(JSON.stringify(duplicateKey)), 'reports/900010-duplicate.md', { shape: true }).error || ''), 'a duplicate globalScore key fails');
+const aboveMax = structuredClone(validShapeData);
+aboveMax.globalScore[0].val = 6;
+check(/0 <= val <= max/.test(validateReportMarkdown(wrap(JSON.stringify(aboveMax)), 'reports/900011-max.md', { shape: true }).error || ''), 'a score value above max fails');
+
+const exemptMap = { ...mapShapeData, date: '2020-01-01' };
+check(validateReportMarkdown(wrap(JSON.stringify(exemptMap)), 'reports/900012-old.md', { shape: true }).ok, 'a map-shaped report before the enforcement date is exempt');
+const noDateMap = { ...mapShapeData };
+delete noDateMap.date;
+check(!validateReportMarkdown(wrap(JSON.stringify(noDateMap)), 'reports/900013-no-date.md', { shape: true }).ok, 'a map-shaped report with no date is enforced');
+check(validateReportMarkdown(mapShape, 'reports/900014-no-opts.md').ok, 'the map-shaped report passes without shape opts');
+
+const manyViolations = {
+  schema: 'trajecktory-report/v1', date: '2030-01-02',
+  summary: 'bad', levelMatch: 'bad', leadStory: 'bad', comp: 'bad',
+  cvMatch: ['bad'], gaps: ['bad'], sellSenior: ['bad'], customizationCV: ['bad'],
+  customizationLI: ['bad'], starStories: ['bad'], redFlagQs: ['bad'], keywords: [1],
+  recommendation: 1, downlevelPlan: 1,
+};
+const manyVerdict = validateReportMarkdown(wrap(JSON.stringify(manyViolations)), 'reports/900015-many.md', { shape: true });
+check(!manyVerdict.ok && /\n- \.\.\.and \d+ more$/.test(manyVerdict.error), 'more than 12 shape violations produce the truncated tail');
 
 // ── the exact 9001 failure: object closed with a square bracket ──────────────
 const bracketMismatch = [
@@ -97,18 +171,26 @@ check(hasV1Frontmatter(good) && parseV1(good).data.id === 9001, 'a report the ga
 // (batch/batch-runner.sh, a plain `claude` session). Its contract is narrow and
 // easy to break by accident, so pin it: SILENCE is the success signal, and a hook
 // that crashes or chatters on an unrelated edit is worse than no hook at all.
-const HOOK = path.join(ROOT, 'scripts', 'hook-report-frontmatter.mjs');
+const hookSandbox = makeRepoSandbox(ROOT, 'report-write-gate');
+fs.mkdirSync(path.join(hookSandbox, 'scripts'), { recursive: true });
+fs.mkdirSync(path.join(hookSandbox, 'dashboard-web', 'server'), { recursive: true });
+fs.mkdirSync(path.join(hookSandbox, 'reports'), { recursive: true });
+fs.copyFileSync(path.join(ROOT, 'scripts', 'hook-report-frontmatter.mjs'), path.join(hookSandbox, 'scripts', 'hook-report-frontmatter.mjs'));
+fs.copyFileSync(path.join(ROOT, 'dashboard-web', 'server', 'v1-loader.mjs'), path.join(hookSandbox, 'dashboard-web', 'server', 'v1-loader.mjs'));
+fs.cpSync(path.join(ROOT, 'lib'), path.join(hookSandbox, 'lib'), { recursive: true });
+const HOOK = path.join(hookSandbox, 'scripts', 'hook-report-frontmatter.mjs');
+const REPORTS = path.join(hookSandbox, 'reports');
 const runHook = (payload) => {
   const r = spawnSync(process.execPath, [HOOK], {
     input: typeof payload === 'string' ? payload : JSON.stringify(payload),
-    encoding: 'utf8', cwd: ROOT,
+    encoding: 'utf8', cwd: hookSandbox,
   });
   return { out: (r.stdout || '').trim(), code: r.status };
 };
 
-const okReport = path.join(REPORTS, '9101-hook-ok.md');
-fs.writeFileSync(okReport, good);
-const okRun = runHook({ tool_name: 'Write', tool_input: { file_path: 'reports/9101-hook-ok.md' } });
+const okReport = path.join(REPORTS, '900001-hook-ok.md');
+fs.writeFileSync(okReport, validShaped);
+const okRun = runHook({ tool_name: 'Write', tool_input: { file_path: 'reports/900001-hook-ok.md' } });
 check(okRun.out === '' && okRun.code === 0, 'hook stays silent on a valid report');
 
 // The report 9001 shape, end to end through the hook.
@@ -121,6 +203,15 @@ check(parsedBad !== null, 'hook emits parseable JSON on a malformed report');
 check(parsedBad !== null && parsedBad.decision === 'block', 'hook blocks so the writing agent is told to repair it');
 check(parsedBad !== null && /line 8/.test(parsedBad.reason || ''), 'the block reason carries the file line');
 check(badRun.code === 0, 'hook exits 0 even when blocking (the JSON carries the verdict, not the exit code)');
+
+const shapeReport = path.join(REPORTS, '900016-hook-shape.md');
+fs.writeFileSync(shapeReport, mapShape);
+const shapeRun = runHook({ tool_name: 'Write', tool_input: { file_path: 'reports/900016-hook-shape.md' } });
+let parsedShape = null;
+try { parsedShape = JSON.parse(shapeRun.out); } catch { /* stays null, asserted below */ }
+check(parsedShape !== null && parsedShape.decision === 'block', 'hook blocks a shape-invalid report');
+check(parsedShape !== null && /does not match the report schema/.test(parsedShape.reason || ''), 'shape block reason explains that the parsed report misses the schema');
+check(parsedShape !== null && /templates\/report-schema-v1\.md/.test(parsedShape.reason || ''), 'shape block reason points to the report schema');
 
 // Everything below must be a silent no-op. These fire on ORDINARY edits, so any
 // output would be noise on every unrelated file an agent touches.
@@ -140,6 +231,7 @@ for (const [label, payload] of quietCases) {
 
 fs.unlinkSync(okReport);
 fs.unlinkSync(badReport);
+fs.unlinkSync(shapeReport);
 
 console.log(`\n  ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
