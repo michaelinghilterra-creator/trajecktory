@@ -40,14 +40,22 @@
  *   node spark-prefilter.mjs --limit 20   # score only the first N pending rows
  *   node spark-prefilter.mjs --audit 12   # size of the random audit sample
  *
+ * HOLDBACK: a fixed share of would-be discards (TJK_SPARK_HOLDBACK_RATE, default
+ * 0.1) is left PENDING instead, so it gets a full evaluation like any survivor.
+ * Without it, a strong role the filter wrongly drops never receives a score and
+ * no later measurement can see the miss. Held-back rows are logged to
+ * data/spark-prefilter/holdback.tsv so their evaluations can be found again.
+ * Set the rate to 0 to disable.
+ *
  * Exit code: 0 unless the script itself failed. A low or high discard rate is a
  * result, not an error.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
 import { sourceUrlFromSnapshot } from './lib/snapshot-url.mjs';
+import { canonicalUrl } from './lib/identity.mjs';
 import { appendTriageResults } from './lib/triage-results.mjs';
 import { appendGateHistory } from './lib/gate-history.mjs';
 import { readPipelineRows } from './lib/pipeline.mjs';
@@ -67,6 +75,20 @@ const GATE_HISTORY = join(DATA_DIR, 'gate-history.tsv');
 // config/profile.yml with the scoring policy. Changing it invalidates whatever
 // audit certified it.
 const THRESHOLD = Number(process.env.TJK_SPARK_THRESHOLD || 2.0);
+
+/**
+ * parseHoldbackRate(raw, dflt) -> a number in [0, 1]
+ *
+ * An unset, unparseable or out-of-range value falls back to the default rather
+ * than to 0. A typo must not silently switch off the only check that can see a
+ * wrongly discarded strong role.
+ */
+export function parseHoldbackRate(raw, dflt = 0.1) {
+  if (raw === undefined || raw === null || String(raw).trim() === '') return dflt;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 && n <= 1 ? n : dflt;
+}
+const HOLDBACK_RATE = parseHoldbackRate(process.env.TJK_SPARK_HOLDBACK_RATE);
 
 // The rationale prefix is a provenance marker, and it is load-bearing: it is how a
 // later reader can identify rows written by this pre-filter.
@@ -125,6 +147,78 @@ export function splitAtThreshold(scored, t = THRESHOLD) {
     (r.score >= t ? survivors : discarded).push(r);
   }
   return { survivors, discarded, unfiltered };
+}
+
+/**
+ * holdbackFraction(url) -> a number in [0, 1)
+ *
+ * FNV-1a over the canonical URL. Selection is keyed on the posting, not drawn per
+ * run, and that is load-bearing: a held-back row stays "- [ ]", so the next run
+ * scores it again. A per-run draw would give it a fresh 90% chance of being
+ * discarded before anyone evaluated it. Keyed on the URL, the answer never changes.
+ */
+export function holdbackFraction(url) {
+  const key = canonicalUrl(url) || String(url || '');
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  // FNV-1a alone barely moves the high bits when only the last characters differ,
+  // and ATS URLs usually differ only in a trailing id. The murmur3 finalizer
+  // spreads every input bit across the result before it is read as a fraction.
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b) >>> 0;
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35) >>> 0;
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+/**
+ * splitHoldback(discarded, rate) -> { dropped, heldBack }
+ *
+ * Every would-be discard lands in exactly one of the two. Only `dropped` may
+ * reach discardRows: a held-back row written to triage-results.tsv would be
+ * checked off by reconcile-triage.mjs and never evaluated, which defeats it.
+ */
+export function splitHoldback(discarded, rate = HOLDBACK_RATE) {
+  const dropped = [];
+  const heldBack = [];
+  for (const r of discarded) {
+    (rate > 0 && holdbackFraction(r.sourceUrl) < rate ? heldBack : dropped).push(r);
+  }
+  return { dropped, heldBack };
+}
+
+const HOLDBACK_HEADER = 'date\turl\tsparkScore\tthreshold\tmodel';
+
+/**
+ * appendHoldbackLog(file, heldBack, date, meta) -> { appended, skippedDuplicate }
+ *
+ * Append-only, one row per posting ever held back. A URL already in the file is
+ * not written again, because the same pending row is re-scored on every run until
+ * it is evaluated.
+ */
+export function appendHoldbackLog(file, heldBack, date, { threshold = THRESHOLD, model = SPARK_MODEL } = {}) {
+  const seen = new Set();
+  if (existsSync(file)) {
+    for (const line of readFileSync(file, 'utf8').split(/\r?\n/).slice(1)) {
+      const url = line.split('\t')[1];
+      if (url) seen.add(canonicalUrl(url) || url);
+    }
+  } else {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, HOLDBACK_HEADER + '\n');
+  }
+  let appended = 0, skippedDuplicate = 0;
+  const clean = (v) => String(v ?? '').replace(/[\t\r\n]+/g, ' ').trim();
+  for (const r of heldBack) {
+    const key = canonicalUrl(r.sourceUrl) || r.sourceUrl;
+    if (seen.has(key)) { skippedDuplicate++; continue; }
+    seen.add(key);
+    appendFileSync(file, [date, clean(r.sourceUrl), Number(r.score).toFixed(1), threshold, clean(model)].join('\t') + '\n');
+    appended++;
+  }
+  return { appended, skippedDuplicate };
 }
 
 /**
@@ -223,11 +317,13 @@ async function main() {
     return;
   }
 
-  const { survivors, discarded, unfiltered } = splitAtThreshold(scored, THRESHOLD);
+  const { survivors, discarded: belowT, unfiltered } = splitAtThreshold(scored, THRESHOLD);
+  const { dropped: discarded, heldBack } = splitHoldback(belowT, HOLDBACK_RATE);
   const pct = items.length ? ((discarded.length / items.length) * 100).toFixed(1) : '0.0';
   console.log(`\nscored ${items.length} in ${wall}s`);
   console.log(`  survivors   ${survivors.length}   (score >= ${THRESHOLD}, go to evaluation)`);
   console.log(`  discarded   ${discarded.length}   (${pct}% of the queue removed)`);
+  console.log(`  held back   ${heldBack.length}   (below ${THRESHOLD} but kept for evaluation, rate ${HOLDBACK_RATE})`);
   console.log(`  unfiltered  ${unfiltered.length}  (unparseable output — left pending, NOT discarded)`);
   for (const u of unfiltered) console.log(`      ${u.id} — ${u.reason}`);
   for (const s of skipped) console.log(`      ${s.url} — ${s.why}`);
@@ -254,14 +350,16 @@ async function main() {
   // without paying for the inference again. data/ is user layer and gitignored.
   const outDir = join(DATA_DIR, 'spark-prefilter', localToday());
   mkdirSync(outDir, { recursive: true });
+  const heldIds = new Set(heldBack.map((r) => r.id));
   for (const r of scored) {
     const safe = String(r.id).replace(/[\\/]/g, '_');
     writeFileSync(join(outDir, `${safe}.json`), JSON.stringify({
       id: r.id, sourceUrl: r.sourceUrl, ok: r.ok, score: r.score, reason: r.reason,
       finishReason: r.finishReason, promptTokens: r.promptTokens, completionTokens: r.completionTokens,
-      model: SPARK_MODEL, threshold: THRESHOLD, data: r.data,
+      model: SPARK_MODEL, threshold: THRESHOLD, heldBack: heldIds.has(r.id), data: r.data,
     }, null, 2));
   }
+  const hold = appendHoldbackLog(join(DATA_DIR, 'spark-prefilter', 'holdback.tsv'), heldBack, localToday());
 
   const rows = discardRows(discarded, THRESHOLD);
   const res = appendTriageResults(TRIAGE_RESULTS, rows, localToday());
@@ -276,6 +374,8 @@ async function main() {
   console.log(`\nwrote ${res.appended} discard rows to ${TRIAGE_RESULTS}` +
     (res.skippedDuplicate ? ` (${res.skippedDuplicate} already present)` : ''));
   console.log(`wrote ${gate.appended} rows to ${GATE_HISTORY}`);
+  console.log(`logged ${hold.appended} held-back rows to spark-prefilter/holdback.tsv` +
+    (hold.skippedDuplicate ? ` (${hold.skippedDuplicate} already logged)` : ''));
   console.log(`wrote ${scored.length} raw outputs to ${outDir}`);
   console.log('\nNEXT: node reconcile-triage.mjs        # dry run, confirm the count');
   console.log('      node reconcile-triage.mjs --apply # check the discarded rows off');
