@@ -15,6 +15,8 @@
  */
 
 import { isLinkedInEntry } from './channels.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
+import { weekOf } from '../../../lib/weekly-review.mjs';
 
 // Inclusive date-window test on a YYYY-MM-DD (or ISO) string.
 function inRange(dateStr, start, end) {
@@ -111,13 +113,9 @@ export function weeklyMetrics({
   };
 }
 
-// The Monday (local) of the ISO week containing `date` (a Date), as YYYY-MM-DD,
-// plus the Sunday. Kept here so the CLI and route agree on week boundaries.
+// The Sunday to Saturday week containing the local date of `date`.
+// Kept here so the CLI and route agree on week boundaries.
 export function weekBounds(date) {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const dow = d.getDay() === 0 ? 7 : d.getDay(); // Mon=1..Sun=7
-  const monday = new Date(d); monday.setDate(d.getDate() - (dow - 1));
-  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
-  const ymd = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
-  return { weekStart: ymd(monday), weekEnd: ymd(sunday) };
+  const week = weekOf(localToday(date));
+  return { weekStart: week.from, weekEnd: week.to };
 }

@@ -1,15 +1,25 @@
 import express from 'express';
 import fs from 'fs';
 import { collectWeeklyMetrics } from '../lib/weekly-collect.mjs';
-import { evaluateFloors } from '../lib/review-thresholds.mjs';
+import { evaluateFloors, FLOORS } from '../lib/review-thresholds.mjs';
 import { runWeeklyReview } from '../lib/weekly-run.mjs';
 import { REVIEW_LOG_PATH } from '../config.mjs';
 import { logConnect, readConnects } from '../lib/connects.mjs';
 import { actionSeries, applicationCohorts } from '../lib/activity.mjs';
 import { referralConversion } from '../lib/insights.mjs';
 import { cachedRead } from '../lib/data-generation.mjs';
+import { collectCoreMetrics, CORE_CACHE_KEY } from '../lib/metrics-collect.mjs';
+import { METRICS } from '../../../lib/metrics/dictionary.mjs';
 
 export const router = express.Router();
+
+router.get('/api/metrics/core', (req, res) => {
+  try {
+    res.json(cachedRead(CORE_CACHE_KEY, () => ({ ...collectCoreMetrics(), dictionary: METRICS })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET /api/metrics/weekly — the current week's leading indicators + floor
 // evaluation, for the dashboard tracking view. Same numbers the CLI reviews.
@@ -17,7 +27,18 @@ router.get('/api/metrics/weekly', (req, res) => {
   try {
     res.json(cachedRead('metrics/weekly', () => {
       const { weekStart, weekEnd, metrics } = collectWeeklyMetrics(new Date());
-      return { weekStart, weekEnd, metrics, floors: evaluateFloors(metrics), referralConversion: referralConversion() };
+      return {
+        weekStart,
+        weekEnd,
+        metrics,
+        floors: evaluateFloors(metrics),
+        floorValues: {
+          verifiedTouches: FLOORS.verifiedTouches,
+          linkedinConnects: FLOORS.linkedinConnects,
+          cadencePct: FLOORS.cadencePct,
+        },
+        referralConversion: referralConversion(),
+      };
     }));
   } catch (err) {
     res.status(500).json({ error: err.message });

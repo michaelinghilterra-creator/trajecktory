@@ -7,6 +7,7 @@
 
 import { weeklyMetrics, weekBounds } from './weekly-metrics.mjs';
 import { parseTargetTalentMd, readTTCorrespondence } from './target-talent.mjs';
+import { parseReferralsMd, readReferralCorrespondence, resolveReferralLink } from './referrals.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseFollowupsMd } from './followups.mjs';
 import { parseStatusEvents } from './sidecars.mjs';
@@ -16,6 +17,9 @@ import { readConnects } from './connects.mjs';
 import { influencerConnects, engagementsInWeek, engagementLogExists } from './engagement-log.mjs';
 import { isLinkedInEntry } from './channels.mjs';
 import { computeStreak } from './cadence.mjs';
+import { localToday } from '../../../lib/local-date.mjs';
+import { APPS_MD, FOLLOWUPS_MD } from '../config.mjs';
+import fs from 'fs';
 
 // All LinkedIn connection requests, from BOTH ledgers: linkedin-connects.json
 // (the TA/recruiter Connect queue + the manual "log a connect" button) and the
@@ -44,7 +48,17 @@ function allConnects() {
 function allCorrespondence() {
   const out = [];
   const add = (msgs) => { for (const m of (msgs || [])) out.push({ direction: m.direction, date: (m.timestamp || '').slice(0, 10), subject: m.subject || '', channel: m.channel || 'Email' }); };
-  try { for (const c of parseTargetTalentMd()) add(readTTCorrespondence(c.id)); } catch { /* apps-only env */ }
+  let taRows = [];
+  try { taRows = parseTargetTalentMd(); } catch { /* apps-only env */ }
+  for (const c of taRows) {
+    try { add(readTTCorrespondence(c.id)); } catch { /* unreadable contact */ }
+  }
+  try {
+    const referrals = parseReferralsMd().filter(row => !resolveReferralLink(row, taRows));
+    for (const c of referrals) {
+      try { add(readReferralCorrespondence(c.id)); } catch { /* unreadable contact */ }
+    }
+  } catch { /* referrals not available */ }
   return out;
 }
 
@@ -57,7 +71,9 @@ function allDebriefs() {
   for (const list of Object.values(notes || {})) {
     for (const n of (list || [])) {
       if (!DEBRIEF_HEADER_RE.test(n.text || '')) continue;
-      out.push({ date: (n.timestamp || '').slice(0, 10), hasObjection: /objection/i.test(n.text || '') });
+      const timestamp = new Date(n.timestamp);
+      if (Number.isNaN(timestamp.getTime())) continue;
+      out.push({ date: localToday(timestamp), hasObjection: /objection/i.test(n.text || '') });
     }
   }
   return out;
@@ -80,13 +96,16 @@ function deliveredReplyRatePct() {
       if (msgs.some(m => m.direction === 'Received')) repliedContacts++;
     }
   };
-  try { tally(parseTargetTalentMd(), readTTCorrespondence); } catch { /* apps-only env */ }
+  let taRows = [];
+  try { taRows = parseTargetTalentMd(); tally(taRows, readTTCorrespondence); } catch { /* apps-only env */ }
+  try { tally(parseReferralsMd().filter(row => !resolveReferralLink(row, taRows)), readReferralCorrespondence); } catch { /* referrals not available */ }
   if (sentContacts === 0) return null;
   return Math.round((repliedContacts / sentContacts) * 100);
 }
 
 // Applied rows with no follow-up logged: the WIP gauge that replaces the cap.
 function unservicedCount() {
+  if (!fs.existsSync(APPS_MD) || !fs.existsSync(FOLLOWUPS_MD)) return null;
   try {
     const apps = parseApplicationsMd();
     const fu = parseFollowupsMd();

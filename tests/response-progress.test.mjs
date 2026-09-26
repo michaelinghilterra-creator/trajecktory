@@ -62,9 +62,10 @@ check(noAnchor.population.n === 0 && noAnchor.population.noAnchor === 1,
   'an application without an anchor is outside the population');
 
 const closed = stats([app(4, '2026-05-01', 'Closed')], { 4: '2026-05-02' });
-check(closed.population.n === 0 && closed.population.closedExcluded === 1
-  && closed.silence['14'].eligible === 0 && closed.fastDecision.eligible === 0,
-  'Closed is reported and excluded from every denominator');
+check(closed.population.n === 1 && closed.population.closedExcluded === 0
+  && closed.candidateDecided === 0 && closed.silence['14'].eligible === 1
+  && closed.silence['14'].silent === 1,
+  'Closed is neither decision type and remains silent');
 
 const young = stats([app(5, '2026-07-08')], { 5: '2026-07-08' });
 check(young.silence['14'].eligible === 0 && young.silence['14'].pct === null,
@@ -99,6 +100,22 @@ check(undated.silence['14'].eligible === 0 && undated.silence['14'].undated === 
   && undated.fastDecision.eligible === 0 && undated.fastDecision.undated === 1,
   'an undated decision is disclosed and excluded from numerator and denominator');
 
+const undatedPassed = stats([app(900010, '2030-03-01', 'Passed')], { 900010: '2030-03-01' }, [], '2030-04-10');
+check(undatedPassed.silence['14'].eligible === 0 && undatedPassed.silence['14'].undated === 1
+  && undatedPassed.fastDecision.eligible === 0 && undatedPassed.fastDecision.undated === 1,
+  'an undated Passed decision uses the undated bucket instead of every cutoff');
+
+const postingClosedPassed = stats(
+  [app(900011, '2030-03-01', 'Passed', { notes: '[passed: posting_closed]' })],
+  { 900011: '2030-03-01' },
+  [],
+  '2030-04-10',
+);
+check(postingClosedPassed.candidateDecided === 0
+  && postingClosedPassed.silence['14'].eligible === 1
+  && postingClosedPassed.silence['14'].silent === 1,
+  'Passed for posting_closed remains silent rather than becoming a candidate decision');
+
 const duplicate = stats(
   [app(10, '2026-06-01', 'Rejected')],
   { 10: '2026-06-01' },
@@ -112,9 +129,22 @@ const candidateSide = stats(
   { 11: '2026-06-01', 12: '2026-06-01' },
   [event(11, '2026-06-02', 'Not a Fit'), event(12, '2026-06-02', 'SKIP')],
 );
-check(candidateSide.fastDecision.composition.candidateSide === 2
+check(candidateSide.candidateDecided === 2
+  && candidateSide.fastDecision.composition.candidateSide === 0
   && candidateSide.fastDecision.composition.employerNo === 0,
-  'Not a Fit and SKIP are candidate-side decisions, never employer noes');
+  'Not a Fit and SKIP are candidate decisions outside employer timing');
+
+const legacyCandidate = stats(
+  [app(900001, '2030-03-01', 'Passed'), app(900002, '2030-03-01', 'Closed')],
+  { 900001: '2030-03-01', 900002: '2030-03-01' },
+  [event(900001, '2030-03-02', 'passed'), event(900002, '2030-03-02', 'role closed')],
+  '2030-04-10',
+);
+check(legacyCandidate.candidateDecided === 1
+  && legacyCandidate.silence['14'].eligible === 1
+  && legacyCandidate.silence['14'].silent === 1
+  && legacyCandidate.fastDecision.composition.employerNo === 0,
+  'canonical candidate labels are excluded while a Closed alias remains silent');
 
 const advanced = stats(
   [app(13, '2026-06-01', 'Phone Screen')],

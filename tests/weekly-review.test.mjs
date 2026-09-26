@@ -23,12 +23,15 @@ console.log('weekly-review.test.mjs');
 // ── weekBounds ───────────────────────────────────────────────────────────────
 // 2026-07-23 is a Thursday → week runs Mon 2026-07-20 to Sun 2026-07-26.
 const wb = weekBounds(new Date(2026, 6, 23));
-check(wb.weekStart === '2026-07-20', `Thursday maps to its Monday (got ${wb.weekStart})`);
-check(wb.weekEnd === '2026-07-26', `week ends the following Sunday (got ${wb.weekEnd})`);
-const wbSun = weekBounds(new Date(2026, 6, 26)); // Sunday stays in the same week
-check(wbSun.weekStart === '2026-07-20', 'Sunday maps back to the same Monday');
+check(wb.weekStart === '2026-07-19', `Thursday maps to its Sunday (got ${wb.weekStart})`);
+check(wb.weekEnd === '2026-07-25', `week ends the following Saturday (got ${wb.weekEnd})`);
+const wbSun = weekBounds(new Date(2026, 6, 26));
+check(wbSun.weekStart === '2026-07-26', 'Sunday starts a new week');
 const wbMon = weekBounds(new Date(2026, 6, 20));
-check(wbMon.weekStart === '2026-07-20', 'Monday maps to itself');
+check(wbMon.weekStart === '2026-07-19', 'Monday maps back to Sunday');
+const wbLateSaturday = weekBounds(new Date(2030, 2, 9, 23, 30));
+check(wbLateSaturday.weekStart === '2030-03-03' && wbLateSaturday.weekEnd === '2030-03-09',
+  'a Saturday 23:30 local timestamp stays in the week ending that Saturday');
 
 // ── weeklyMetrics windowing + availability ───────────────────────────────────
 const start = '2026-07-20', end = '2026-07-26';
