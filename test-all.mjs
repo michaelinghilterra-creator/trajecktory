@@ -651,6 +651,7 @@ for (const suite of [
   'tests/obsidian-prep.test.mjs',
   'tests/obsidian-postfix.test.mjs',
   'tests/prune-gated.test.mjs',
+  'tests/metrics-core.test.mjs',
   'tests/spark-prefilter-holdback.test.mjs',
   'tests/spark-compare.test.mjs',
   'tests/followups-auto-refresh.test.mjs',
