@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.4.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.4.1...v5.4.2) (2026-09-27)
+
+
+### Bug Fixes
+
+* let stage descriptors outrank round numbers in prep validator ([#406](https://github.com/michaelinghilterra-creator/trajecktory/issues/406)) ([c3a523d](https://github.com/michaelinghilterra-creator/trajecktory/commit/c3a523d5edfd17296e92ceb66660d2c1b55720d7))
+
 ## [5.4.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.4.0...v5.4.1) (2026-09-27)
 
 
