@@ -259,5 +259,25 @@ for (const id of requiredIds) {
   check(metricDef(id) !== undefined, `metricDef ${id} is defined`);
 }
 
+// Applications added by a TWC correction carry no tracker id: counted weekly, never rated, never merged.
+{
+  const unlinked = computeCoreMetrics({
+    today: '2030-03-13',
+    activities: [
+      { kind: 'application', date: '2030-03-10', appId: 900001 },
+      { kind: 'application', date: '2030-03-11' },
+      { kind: 'application', date: '2030-03-12', appId: '' },
+      { kind: 'application', date: '2030-03-12', appId: null },
+    ],
+    apps: [{ id: 900001, status: 'Rejected', reached: 'Applied' }],
+  });
+  check(unlinked.thisWeek.applications === 4, 'unlinked applications count in the weekly total');
+  check(unlinked.ratedApplications === 1, 'only tracker linked applications are rated');
+  check(unlinked.unlinkedApplications === 3, 'unlinked applications are counted separately');
+  check(unlinked.results.response.all.n === 1 && unlinked.funnel[0].n === 1, 'unlinked applications stay out of rates and the funnel');
+  check(applicationOutcomes({ activities: [{ kind: 'application', date: '2030-03-11' }, { kind: 'application', date: '2030-03-12' }] }).length === 0,
+    'applications with no id are never merged into one row');
+}
+
 console.log(`metrics-core: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

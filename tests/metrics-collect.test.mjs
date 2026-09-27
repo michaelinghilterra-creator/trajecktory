@@ -99,7 +99,7 @@ console.log('metrics-collect.test.mjs');
 try {
   const result = collectCoreMetrics({ today: '2030-03-10' });
   check(JSON.stringify(Object.keys(result)) === JSON.stringify([
-    'version', 'today', 'week', 'thisWeek', 'results', 'funnel', 'weeks', 'scoreBands', 'segments',
+    'version', 'today', 'week', 'ratedApplications', 'unlinkedApplications', 'thisWeek', 'results', 'funnel', 'weeks', 'scoreBands', 'segments',
   ]), 'the core response has the stable top level keys');
   check(result.funnel[0].n === 3, 'a same day application void is not an application');
   check(result.results.response.all.k === 2 && result.results.response.all.n === 3,
@@ -133,10 +133,11 @@ try {
     check(weeklyResponse.metrics?.deliveredReplyRatePct?.value === 50,
       'weekly collection reads target talent and referral correspondence');
     check(JSON.stringify(weeklyResponse.floorValues) === JSON.stringify({
-      verifiedTouches: FLOORS.verifiedTouches,
-      linkedinConnects: FLOORS.linkedinConnects,
-      cadencePct: FLOORS.cadencePct,
-    }), 'the weekly route exposes the shared floor values');
+      verifiedTouches: FLOORS.verifiedTouches.min,
+      linkedinConnects: FLOORS.linkedinConnects.min,
+      cadencePct: FLOORS.cadencePct.min,
+    }), 'the weekly route exposes the shared floor values as plain numbers');
+    check(typeof weeklyResponse.floorValues.verifiedTouches === 'number', 'floor values are numbers the page can render');
   } finally {
     await new Promise(resolve => server.close(resolve));
   }

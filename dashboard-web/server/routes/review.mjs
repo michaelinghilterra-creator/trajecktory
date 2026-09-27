@@ -33,9 +33,9 @@ router.get('/api/metrics/weekly', (req, res) => {
         metrics,
         floors: evaluateFloors(metrics),
         floorValues: {
-          verifiedTouches: FLOORS.verifiedTouches,
-          linkedinConnects: FLOORS.linkedinConnects,
-          cadencePct: FLOORS.cadencePct,
+          verifiedTouches: FLOORS.verifiedTouches.min,
+          linkedinConnects: FLOORS.linkedinConnects.min,
+          cadencePct: FLOORS.cadencePct.min,
         },
         referralConversion: referralConversion(),
       };
