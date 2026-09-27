@@ -129,6 +129,8 @@ try {
     const coreResponse = await fetch(`${base}/api/metrics/core`).then(response => response.json());
     check(Array.isArray(coreResponse.dictionary) && coreResponse.dictionary.length > 0,
       'the core route includes the metrics dictionary');
+    check(coreResponse.reconcile?.ok === true && coreResponse.reconcile?.total === 14,
+      'the core route includes a successful 14 check reconciliation');
     const weeklyResponse = await fetch(`${base}/api/metrics/weekly`).then(response => response.json());
     check(weeklyResponse.metrics?.deliveredReplyRatePct?.value === 50,
       'weekly collection reads target talent and referral correspondence');

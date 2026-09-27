@@ -46,7 +46,6 @@ const m = weeklyMetrics({
   weekStart: start, weekEnd: end,
   correspondence,
   deliveredReplyRatePct: 18,
-  statusEvents: [{ status: 'Phone Screen', date: '2026-07-23' }, { status: 'Phone Screen', date: '2026-07-10' }, { status: 'Applied', date: '2026-07-22' }],
   debriefs: [{ date: '2026-07-23', hasObjection: true }, { date: '2026-07-23', hasObjection: false }, { date: '2026-07-01', hasObjection: true }],
   connects: [{ date: '2026-07-21' }, { date: '2026-07-25' }, { date: '2026-06-30' }],
   cadencePct: 80,
@@ -70,7 +69,17 @@ check(mixed.linkedinConnects.value === 3, 'connects come from the connects log, 
 check(m.replies.value === 1, 'replies counted within the week only');
 check(m.deliveredReplyRatePct.value === 18 && m.deliveredReplyRatePct.available, 'delivered reply rate is the injected cumulative number, not a same-week ratio');
 check(weeklyMetrics({ weekStart: start, weekEnd: end, correspondence }).deliveredReplyRatePct.available === false, 'no reply rate provided → not logged (never a same-week ratio)');
-check(m.screensBooked.value === 1, 'only in-week Phone Screen events count as screens');
+const screenMetrics = weeklyMetrics({
+  weekStart: '2030-03-10', weekEnd: '2030-03-16',
+  interviews: [
+    { application_id: 900001, state: 'counted', held_on: '2030-03-13' },
+    { application_id: 900002, state: 'unconfirmed', held_on: '2030-03-14' },
+    { application_id: 900003, state: 'counted', held_on: '2030-03-01' },
+  ],
+});
+check(screenMetrics.screensHeld.value === 1, 'only counted interview records held in the week count as screens held');
+const noStore = weeklyMetrics({ weekStart: '2030-03-10', weekEnd: '2030-03-16', interviews: null });
+check(noStore.screensHeld.available === false, 'no interview records at all reads not logged, never an available zero');
 check(m.objectionsLogged.value === 1, 'only in-week debriefs WITH an objection count');
 check(m.linkedinConnects.value === 2, 'only in-week connects count');
 check(m.cadencePct.value === 80 && m.cadencePct.available, 'cadence passed through');

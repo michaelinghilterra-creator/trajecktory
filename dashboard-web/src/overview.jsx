@@ -74,6 +74,50 @@ const overviewDate = ymd => {
   return new Date(y, (m || 1) - 1, d || 1).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 };
 
+const RECONCILE_SENTENCES = {
+  funnel_top_is_rated: 'Funnel top equals the applications every rate covers',
+  rates_share_denominator: 'All application rates use the same denominator',
+  funnel_heard_back_is_response: 'Funnel heard back equals the response count',
+  funnel_screen_is_interview_rate: 'Funnel screens equal the interview count',
+  funnel_never_grows: 'Each funnel step is no larger than the step above it',
+  funnel_conversions: 'Funnel conversion percentages match their counts',
+  positive_within_response: 'Positive responses and interviews stay within responses',
+  mature_within_all: 'Mature application groups stay within all applications',
+  warm_split_adds_up: 'Warm and not warm groups add up to all applications',
+  rates_are_consistent: 'Every rate percentage matches its numerator and denominator',
+  this_week_is_last_week_bar: 'This week tiles equal the latest weekly chart bar',
+  cohorts_are_subsets: 'Weekly cohort outcomes stay within their parent groups',
+  score_bands_within_rated: 'Score band applications stay within rated applications',
+  segments_add_up: 'Archetype and source segments add up to rated applications',
+};
+
+function ReconcileStatus({ core }) {
+  const { open, anchorProps, tipStyle, tipRef } = window.useAnchoredTip();
+  const checks = core.reconcileChecks || [];
+  if (core.reconcile?.ok) {
+    const tipId = 'overview-reconcile-tip';
+    return <div className="dim" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+      <span aria-hidden="true" style={{ color: 'var(--green)' }}>✓</span>
+      <span>All {core.reconcile.total} numbers on this page tie out</span>
+      <button {...anchorProps} type="button" className="info-dot" aria-label="About the page tie-out" aria-describedby={tipId}>i</button>
+      {open && <div id={tipId} ref={tipRef} className="tip fixed-tip" role="tooltip" style={tipStyle}>
+        <div className="tip-head"><b>Page tie-out checks</b></div>
+        {checks.map(check => <div key={check.id} className="tip-row"><span className="l">{RECONCILE_SENTENCES[check.id] || check.id}</span></div>)}
+      </div>}
+    </div>;
+  }
+
+  const failed = checks.filter(check => !check.ok);
+  return <div className="insight warn">
+    <div className="ic" aria-hidden="true">!</div>
+    <div className="tx">
+      <b>Some numbers do not tie out</b>
+      {failed.map(check => <div key={check.id}>{RECONCILE_SENTENCES[check.id] || check.id}: {check.detail}</div>)}
+      <div>Treat the affected tiles as suspect until this is fixed.</div>
+    </div>
+  </div>;
+}
+
 function MetricChartCard({ id, dict, title, insight, children }) {
   const metric = (dict || []).find(item => item.id === id);
   const tipId = `chart-tip-${id}`;
@@ -119,6 +163,7 @@ window.OverviewTab = function OverviewTab({ apps }) {
 
   return <div className="col" style={{ gap: 16 }}>
     <div className="greeting"><h1>Overview</h1><span className="sub">{window.TODAY.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · {apps.length} entries tracked</span></div>
+    <ReconcileStatus core={core} />
     <div style={{ borderLeft: '3px solid var(--accent)', padding: '10px 16px', background: 'var(--accent-bg)', borderRadius: '0 6px 6px 0' }}>
       <div style={{ fontStyle: 'italic', fontSize: 13, lineHeight: 1.55 }}>"{dailyQuote.text}"</div>
       <div style={{ color: 'var(--text-mute)', fontSize: 11, marginTop: 4 }}>{dailyQuote.author}</div>

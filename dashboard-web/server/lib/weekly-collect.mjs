@@ -10,7 +10,6 @@ import { parseTargetTalentMd, readTTCorrespondence } from './target-talent.mjs';
 import { parseReferralsMd, readReferralCorrespondence, resolveReferralLink } from './referrals.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { parseFollowupsMd } from './followups.mjs';
-import { parseStatusEvents } from './sidecars.mjs';
 import { readAppNotes } from './notes.mjs';
 import { DEBRIEF_HEADER_RE } from './debrief.mjs';
 import { readConnects } from './connects.mjs';
@@ -18,7 +17,10 @@ import { influencerConnects, engagementsInWeek, engagementLogExists } from './en
 import { isLinkedInEntry } from './channels.mjs';
 import { computeStreak } from './cadence.mjs';
 import { localToday } from '../../../lib/local-date.mjs';
-import { APPS_MD, FOLLOWUPS_MD } from '../config.mjs';
+import { interviewState } from '../../../lib/interview-store.mjs';
+import { readInterviewRecords } from './interview-events.mjs';
+import { APPS_MD, DATA_DIR, FOLLOWUPS_MD } from '../config.mjs';
+import { logWritesEnabled } from '../../../lib/log-writes.mjs';
 import fs from 'fs';
 
 // All LinkedIn connection requests, from BOTH ledgers: linkedin-connects.json
@@ -129,11 +131,21 @@ function cadenceThisWeekPct() {
 // pin a date; the route passes the real clock.
 export function collectWeeklyMetrics(now = new Date()) {
   const { weekStart, weekEnd } = weekBounds(now);
+  const today = localToday(now);
   const metrics = weeklyMetrics({
     weekStart, weekEnd,
     correspondence: allCorrespondence(),
     deliveredReplyRatePct: deliveredReplyRatePct(),
-    statusEvents: (() => { try { return parseStatusEvents().map(e => ({ status: e.status, date: (e.date || '').slice(0, 10) })); } catch { return null; } })(),
+    // With the event store off there are no interview records at all: not logged, never an available zero.
+    interviews: (() => {
+      if (!logWritesEnabled(DATA_DIR)) return null;
+      try {
+        return [...readInterviewRecords().values()].map(record => ({
+          held_on: record.held_on ?? null,
+          state: interviewState(record, today).state,
+        }));
+      } catch { return null; }
+    })(),
     debriefs: allDebriefs(),
     connects: allConnects(),
     influencerEngagements: engagementLogExists() ? engagementsInWeek(now) : null,

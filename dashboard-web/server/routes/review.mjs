@@ -10,12 +10,22 @@ import { referralConversion } from '../lib/insights.mjs';
 import { cachedRead } from '../lib/data-generation.mjs';
 import { collectCoreMetrics, CORE_CACHE_KEY } from '../lib/metrics-collect.mjs';
 import { METRICS } from '../../../lib/metrics/dictionary.mjs';
+import { reconcileCore, reconcileSummary } from '../../../lib/metrics/reconcile.mjs';
 
 export const router = express.Router();
 
 router.get('/api/metrics/core', (req, res) => {
   try {
-    res.json(cachedRead(CORE_CACHE_KEY, () => ({ ...collectCoreMetrics(), dictionary: METRICS })));
+    res.json(cachedRead(CORE_CACHE_KEY, () => {
+      const core = collectCoreMetrics();
+      const reconcileChecks = reconcileCore(core);
+      return {
+        ...core,
+        dictionary: METRICS,
+        reconcile: reconcileSummary(reconcileChecks),
+        reconcileChecks,
+      };
+    }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
