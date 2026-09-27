@@ -9,6 +9,19 @@
 (function () {
 const { useState: useStateP, useMemo: useMemoP, useEffect: useEffectP, useRef: useRefP, useCallback: useCallbackP } = React;
 
+// A render error in one drawer tab (a report field in a shape the tab does not expect) must not
+// unmount the whole dashboard. Show it in place, and reset when the role or the tab changes.
+class DrawerTabBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  componentDidUpdate(prev) { if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null }); }
+  componentDidCatch(error) { console.error('[drawer] tab render failed:', error); }
+  render() {
+    if (this.state.error) return <div className="rp-callout"><div className="rp-callout-label">This section could not be displayed</div><div className="rp-callout-body">{String(this.state.error.message || this.state.error)}</div></div>;
+    return this.props.children;
+  }
+}
+
 // ─── Status / Source / Engine metadata ─────────────────────────────────────
 const STATUS = [
   { id: 'Evaluated',     short: 'Eval',    color: 'var(--accent)', hex: '#a78bfa', rgb: '167,139,250', stage: 0, icon: '◆' },
@@ -1182,6 +1195,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
             </div>
           )}
 
+          <DrawerTabBoundary resetKey={`${app.id}:${tab}`}>
           {/* Tab content — all sourced from structured cheat-sheet (cs) */}
           {tab === 'overview' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1330,7 +1344,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                         <span className={'rp-strength ' + mr.strength}>{mr.strength === 'strong' ? '✓' : mr.strength === 'moderate' ? '~' : '!'}</span>
                         <div>
                           <div className="rp-match-req">{mr.req}</div>
-                          <div className="rp-match-ev">{mr.evidence}</div>
+                          <div className="rp-match-ev">{mr.evidence || mr.match}</div>
                           {mr.note && <div className="rp-match-note">{mr.note}</div>}
                         </div>
                       </div>
@@ -1346,7 +1360,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                     <thead><tr><th>Gap</th><th>Blocker?</th><th>Mitigation</th></tr></thead>
                     <tbody>
                       {gaps.map((g, i) => (
-                        <tr key={i}><td><b>{g.gap}</b></td><td><span className="blk">{g.blocker}</span></td><td className="dim">{g.mitigation}</td></tr>
+                        <tr key={i}><td><b>{g.gap}</b></td><td><span className="blk">{typeof g.blocker === 'boolean' ? (g.blocker ? 'yes' : 'no') : g.blocker}</span></td><td className="dim">{g.mitigation}</td></tr>
                       ))}
                     </tbody>
                   </table>
@@ -1401,7 +1415,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                 <>
                   <div className="rp-snap-grid three">
                     <div className="rp-snap"><div className="rp-snap-label">Stated OTE</div><div className="rp-snap-value sm">{comp.stated || '-'}</div>{comp.score && <div className="rp-snap-sub">{comp.score}/5 comp score</div>}</div>
-                    <div className="rp-snap"><div className="rp-snap-label">Posted vs target</div><div className="rp-snap-value mono" style={{ fontSize: 18, color: gap >= 0 ? 'var(--green)' : 'var(--red)' }}>{gap >= 0 ? '+' : '−'}{Math.abs(gap)}k</div>{app.salary != null && app.target != null && <div className="rp-snap-sub">${app.salary}k · ${app.target}k tgt</div>}</div>
+                    <div className="rp-snap"><div className="rp-snap-label">Posted vs target</div><div className="rp-snap-value sm" style={compPosition.color ? { color: compPosition.color } : undefined}>{compPosition.text}</div>{app.salary != null && <div className="rp-snap-sub">${app.salary}k posted</div>}</div>
                     {comp.walkaway && <div className="rp-snap"><div className="rp-snap-label">Walk-away</div><div className="rp-snap-value mono" style={{ fontSize: 18 }}>${comp.walkaway}k</div><div className="rp-snap-sub" style={{ color: app.salary >= comp.walkaway ? 'var(--green)' : 'var(--red)' }}>{app.salary >= comp.walkaway ? 'cleared' : 'below'}</div></div>}
                   </div>
                   {Array.isArray(comp.sources) && comp.sources.length > 0 && (
@@ -1582,6 +1596,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
           )}
 
           {tab === 'posting' && window.PostingPanel && <window.PostingPanel app={app} />}
+          </DrawerTabBoundary>
 
           {tab === 'notes' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
