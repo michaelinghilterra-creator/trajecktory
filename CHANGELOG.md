@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.4.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.4.0...v5.4.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* **pii:** match tracker terms at word edges even when they end in punctuation ([#403](https://github.com/michaelinghilterra-creator/trajecktory/issues/403)) ([b97fc64](https://github.com/michaelinghilterra-creator/trajecktory/commit/b97fc641626588a0b801a2cfcf4bf6408eaf8a5f))
+
 ## [5.4.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.3.0...v5.4.0) (2026-09-27)
 
 
