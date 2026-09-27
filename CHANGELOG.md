@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.4.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.3.0...v5.4.0) (2026-09-27)
+
+
+### Features
+
+* **dashboard:** rebuild metrics, charts and KPIs on one checked core ([#401](https://github.com/michaelinghilterra-creator/trajecktory/issues/401)) ([4e67178](https://github.com/michaelinghilterra-creator/trajecktory/commit/4e67178e9130b81788a3bb67981618bfd2b642e6))
+
 ## [5.3.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.2.0...v5.3.0) (2026-09-27)
 
 
