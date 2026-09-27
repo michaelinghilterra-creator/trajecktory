@@ -20,8 +20,8 @@ const current = evaluateFloors(currentMetrics);
 
 assert.equal(current.results.some(row => row.key === 'influencerEngagements'), false);
 assert.deepEqual(current.results, [
-  { key: 'verifiedTouches', label: 'Verified touches sent', value: 13, floor: 13, unit: '', met: true, available: true },
-  { key: 'linkedinConnects', label: 'LinkedIn connects sent', value: 49, floor: 50, unit: '', met: false, available: true },
+  { key: 'verifiedTouches', label: 'Follow-ups sent', value: 13, floor: 13, unit: '', met: true, available: true },
+  { key: 'linkedinConnects', label: 'LinkedIn connection requests sent', value: 49, floor: 50, unit: '', met: false, available: true },
   { key: 'cadencePct', label: 'Cadence adherence', value: null, floor: 70, unit: '%', met: null, available: false },
 ]);
 assert.deepEqual(current.missed, ['linkedinConnects']);

@@ -22,17 +22,69 @@ const metricEntry = (dict, id) => Array.isArray(dict)
   ? dict.find(metric => metric.id === id)
   : dict?.[id];
 
+window.honestRate = function honestRate(k, n, pct = n ? (k / n) * 100 : null) {
+  if (pct == null) return 'not logged';
+  const rounded = Math.round(pct);
+  if (k > 0 && rounded === 0) return '<1%';
+  if (k < n && rounded === 100) return '>99%';
+  return `${rounded}%`;
+};
+
+function fixedTipPosition(anchor, height = 0) {
+  if (!anchor) return {};
+  const width = Math.min(320, window.innerWidth - 16);
+  const main = document.querySelector('.main');
+  const grid = anchor.parentElement;
+  const minimum = main?.getBoundingClientRect().left ?? grid?.getBoundingClientRect().left ?? 8;
+  const left = Math.max(minimum, Math.min(anchor.left, window.innerWidth - width - 8));
+  const below = anchor.bottom + 8;
+  const top = below + height <= window.innerHeight - 8
+    ? below
+    : Math.max(8, anchor.top - height - 8);
+  return { position: 'fixed', width, maxWidth: width, left, top, transform: 'none' };
+}
+
+window.FixedTip = function FixedTip({ anchor, children, className = '' }) {
+  const ref = React.useRef(null);
+  const [style, setStyle] = React.useState(() => fixedTipPosition(anchor));
+  React.useLayoutEffect(() => {
+    if (!anchor) return;
+    setStyle(fixedTipPosition(anchor, ref.current?.offsetHeight || 0));
+  }, [anchor]);
+  return <div ref={ref} className={`tip fixed-tip ${className}`} role="tooltip" style={style}>{children}</div>;
+};
+
 window.MetricTip = function MetricTip({ id, dict, extraRows = [], tipId }) {
   const metric = metricEntry(dict, id);
+  const ref = React.useRef(null);
+  const [style, setStyle] = React.useState({});
+  React.useEffect(() => {
+    const tip = ref.current;
+    const tile = tip?.closest('.metric-kpi');
+    if (!tip || !tile) return undefined;
+    const place = () => {
+      const rect = tile.getBoundingClientRect();
+      setStyle(fixedTipPosition(rect, tip.offsetHeight || 0));
+      requestAnimationFrame(() => setStyle(fixedTipPosition(rect, tip.offsetHeight || 0)));
+    };
+    tile.addEventListener('mouseenter', place);
+    tile.addEventListener('focusin', place);
+    return () => {
+      tile.removeEventListener('mouseenter', place);
+      tile.removeEventListener('focusin', place);
+    };
+  }, []);
   if (!metric) return null;
   const rows = [
     ['Definition', metric.definition],
     ['Formula', metric.formula],
     ['Window', metric.window],
+    ['Why', metric.why],
+    ['What to do', metric.do],
     ...extraRows,
   ].filter(row => row && row[1] !== null && row[1] !== undefined && row[1] !== '');
   return (
-    <div className="tip metric-tip" id={tipId} role="tooltip">
+    <div ref={ref} className="tip metric-tip" id={tipId} role="tooltip" style={style}>
       <div className="tip-head"><b>{metric.label}</b></div>
       {rows.map(([label, value]) => (
         <div className="tip-row" key={label}><span className="l">{label}</span><span className="v">{value}</span></div>
@@ -55,7 +107,7 @@ window.MetricTile = function MetricTile({ id, dict, value, sub, rate, floor, lim
   let rateSub = null;
   if (available === false) shown = 'not logged';
   else if (rate) {
-    shown = rate.sufficient ? `${Math.round(rate.pct)}%` : `${rate.k} of ${rate.n}`;
+    shown = rate.sufficient ? window.honestRate(rate.k, rate.n, rate.pct) : `${rate.k} of ${rate.n}`;
     rateSub = rate.sufficient ? `${rate.k} of ${rate.n}` : 'too few to rate';
   }
   const numeric = typeof value === 'number' ? value : null;

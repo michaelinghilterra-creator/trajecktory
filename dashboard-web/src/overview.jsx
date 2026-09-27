@@ -68,7 +68,7 @@ const DAILY_QUOTES = [
   { text: "Act as if what you do makes a difference. It does.", author: "William James" }
 ];
 
-const overviewRate = rate => !rate ? 'not logged' : rate.sufficient ? `${Math.round(rate.pct)}%` : `${rate.k} of ${rate.n}, too few to rate`;
+const overviewRate = rate => !rate ? 'not logged' : rate.sufficient ? window.honestRate(rate.k, rate.n, rate.pct) : `${rate.k} of ${rate.n}, too few to rate`;
 const overviewDate = ymd => {
   const [y, m, d] = String(ymd || '').split('-').map(Number);
   return new Date(y, (m || 1) - 1, d || 1).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -108,10 +108,11 @@ window.OverviewTab = function OverviewTab({ apps }) {
   const prior = core.weeks?.[core.weeks.length - 2];
   const floorInsight = (value, floor) => value >= floor ? 'Floor met' : `${floor - value} to go`;
   const results = core.results || {};
-  const rateTile = (id, rate, variants = {}) => {
+  const heldAcrossWindow = (core.weeks || []).reduce((sum, row) => sum + (row.screensHeld || 0), 0);
+  const rateTile = (id, rate, variants = {}, insight) => {
     const extras = [['Applications 14+ days old', overviewRate(variants.mature)]];
     if (variants.warm) extras.push(['Warm', overviewRate(variants.warm)], ['Not tagged warm', overviewRate(variants.notWarm)]);
-    return <window.MetricTile key={id} id={id} dict={dict} rate={rate} insight={metric(id).why} extraRows={extras} />;
+    return <window.MetricTile key={id} id={id} dict={dict} rate={rate} insight={insight} extraRows={extras} />;
   };
 
   return <div className="col" style={{ gap: 16 }}>
@@ -126,17 +127,20 @@ window.OverviewTab = function OverviewTab({ apps }) {
         <window.MetricTile id="applications_week" dict={dict} value={week.applications} sub="this week" insight={`Last week: ${prior?.applications ?? 'not logged'}`} />
         <window.MetricTile id="followups_week" dict={dict} value={week.followups} floor={metric('followups_week').floor} sub={`floor ${metric('followups_week').floor}`} insight={floorInsight(week.followups, metric('followups_week').floor)} />
         <window.MetricTile id="linkedin_week" dict={dict} value={week.linkedin} floor={metric('linkedin_week').floor} sub={`floor ${metric('linkedin_week').floor}`} insight={floorInsight(week.linkedin, metric('linkedin_week').floor)} />
-        <window.MetricTile id="screens_held_week" dict={dict} value={week.screensHeld} sub={week.screensUnconfirmed > 0 ? `${week.screensUnconfirmed} unconfirmed, not counted` : 'held this week'} insight={metric('screens_held_week').why} />
-        <window.MetricTile id="unserviced" dict={dict} value={week.unserviced?.count} limit={metric('unserviced').limit} available={week.unserviced?.available === true} sub={`limit ${metric('unserviced').limit}`} insight={week.unserviced?.available && week.unserviced.count > metric('unserviced').limit ? metric('unserviced').do : metric('unserviced').why} />
+        <window.MetricTile id="screens_held_week" dict={dict} value={week.screensHeld} sub="held this week" insight={week.screensUnconfirmed > 0 ? `${week.screensUnconfirmed} unconfirmed, not counted` : `${heldAcrossWindow} held in the last 8 weeks`} />
+        <window.MetricTile id="unserviced" dict={dict} value={week.unserviced?.count} limit={metric('unserviced').limit} available={week.unserviced?.available === true} sub={`limit ${metric('unserviced').limit}`} insight={week.unserviced?.available && week.unserviced.count > metric('unserviced').limit ? metric('unserviced').do : week.unserviced?.available ? `${metric('unserviced').limit - week.unserviced.count} under the limit of ${metric('unserviced').limit}` : 'not logged'} />
       </div>
     </div>
 
     <div><h3 style={{ margin: '0 0 8px' }}>Results · all applications</h3>
+      <div className="dim" style={{ fontSize: 11, marginBottom: 8 }}>
+        Rates cover {core.ratedApplications || 0} applications with a tracker row{core.unlinkedApplications > 0 ? `, ${core.unlinkedApplications} more from the TWC evidence ledger count in weekly totals but are not rated` : ''}
+      </div>
       <div className="grid cols-4">
-        {rateTile('response_rate', results.response?.all, results.response || {})}
-        {rateTile('positive_rate', results.positive?.all, results.positive || {})}
-        {rateTile('interview_rate', results.interview?.all, results.interview || {})}
-        {rateTile('referral_rate', results.referral?.all, results.referral || {})}
+        {rateTile('response_rate', results.response?.all, results.response || {}, results.response?.mature?.sufficient ? `Applications 14+ days old: ${window.honestRate(results.response.mature.k, results.response.mature.n, results.response.mature.pct)} of ${results.response.mature.n}` : 'Applications 14+ days old: too few to rate')}
+        {rateTile('positive_rate', results.positive?.all, results.positive || {}, `${results.positive?.all?.k || 0} applications drew an invite or a positive reply`)}
+        {rateTile('interview_rate', results.interview?.all, results.interview || {}, results.interview?.all?.k > 0 ? `About 1 in ${Math.round(results.interview.all.n / results.interview.all.k)} applications reaches a held screen` : 'No held screen yet')}
+        {rateTile('referral_rate', results.referral?.all, results.referral || {}, `${results.referral?.all?.k || 0} of ${results.referral?.all?.n || 0} applications carried a referral`)}
       </div>
     </div>
 

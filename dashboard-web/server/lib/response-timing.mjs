@@ -10,6 +10,7 @@ import {
 } from './statuses.mjs';
 import { localToday } from '../../../lib/local-date.mjs';
 import { isPostingClosed } from '../../../lib/passed.mjs';
+import { buildActivities } from './twc.mjs';
 
 const DAY_MS = 86400000;
 const pct = (numerator, denominator) => denominator
@@ -42,6 +43,9 @@ export function responseProgressStats({
   today = new Date(),
   windows = [14, 30],
   fastDays = 3,
+  applicationIds = null,
+  // TWC apply dates by application id: the export's date wins over the sidecars when given.
+  applicationDates = null,
 } = {}) {
   const todayYmd = toYmd(today);
   if (!todayYmd) throw new Error('today must be a valid date');
@@ -57,11 +61,13 @@ export function responseProgressStats({
   const records = [];
   const closedExcluded = 0;
   let noAnchor = 0;
-  const anchorSources = { both: 0, event: 0, applyDate: 0, rowDate: 0 };
+  const anchorSources = { both: 0, event: 0, applyDate: 0, rowDate: 0, twc: 0 };
 
   for (const app of apps) {
+    if (applicationIds && !applicationIds.has(String(app.id))) continue;
     const postingClosed = isPostingClosed(app);
-    const anchor = applyAnchor(app);
+    const twcDate = applicationDates && applicationDates.get(String(app.id));
+    const anchor = twcDate ? { date: twcDate, source: 'twc' } : applyAnchor(app);
     if (!anchor.date) {
       noAnchor++;
       continue;
@@ -219,10 +225,18 @@ export function responseProgressStats({
 }
 
 export function readResponseProgressStats() {
+  const applications = buildActivities({ today: localToday() })
+    .filter(activity => activity.kind === 'application' && activity.appId !== undefined && activity.appId !== null && activity.appId !== '');
+  const applicationIds = new Set(applications.map(activity => String(activity.appId)));
+  // Only an exact TWC date overrides the sidecars; an estimated one (the evaluation date) stays a row date.
+  const applicationDates = new Map(applications.filter(activity => !activity.dateApprox)
+    .map(activity => [String(activity.appId), activity.date]));
   return responseProgressStats({
     apps: parseApplicationsMd(),
     applyDates: readApplyDates(),
     events: parseStatusEvents(),
     today: new Date(),
+    applicationIds,
+    applicationDates,
   });
 }

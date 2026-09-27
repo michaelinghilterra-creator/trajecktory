@@ -485,11 +485,9 @@ function ResponseProgressCard({ progress, rejTiming }) {
   const windows = [14, 30];
   const composition = progress?.fastDecision?.composition || {};
   const cohorts = progress?.cohorts || [];
-  const rateText = (value) => value == null ? 'Not enough data' : value + '%';
-  const barColor = (value) => value == null ? 'var(--border)'
-    : value >= 70 ? 'var(--red)'
-    : value >= 50 ? 'var(--yellow)'
-    : 'var(--green)';
+  const rateText = (value) => value == null ? 'Not enough data' : Math.round(value) + '%';
+  const barColor = (value) => value == null ? 'var(--border)' : 'var(--accent)';
+  const compositionTotal = Object.values(composition).reduce((sum, value) => sum + value, 0);
   const undated = Math.max(
     progress?.silence?.['14']?.undated || 0,
     progress?.silence?.['30']?.undated || 0,
@@ -522,7 +520,7 @@ function ResponseProgressCard({ progress, rejTiming }) {
                     </span>
                   </div>
                   <div style={{ height: 8, borderRadius: 8, overflow: 'hidden', background: 'var(--panel)', border: '1px solid var(--border)' }}>
-                    <div style={{ width: value == null ? 0 : value + '%', height: '100%', background: barColor(value) }} />
+                     <div style={{ width: value == null ? 0 : Math.round(value) + '%', height: '100%', background: barColor(value) }} />
                   </div>
                   <div className="mono" style={{ marginTop: 7, color: 'var(--text-mute)', fontSize: 10.5 }}>
                     {metric?.eligible || 0} mature applications{metric?.undated ? `, ${metric.undated} undated` : ''}
@@ -561,7 +559,7 @@ function ResponseProgressCard({ progress, rejTiming }) {
               ].map(([label, count, color]) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
                   <span style={{ color: 'var(--text-mute)' }}>{label}</span>
-                  <b className="mono" style={{ color }}>{count}</b>
+                   <b className="mono" style={{ color }}>{compositionTotal ? `${Math.round(count / compositionTotal * 100)}%` : '0%'}</b>
                 </div>
               ))}
             </div>
@@ -581,8 +579,8 @@ function ResponseProgressCard({ progress, rejTiming }) {
             </Insight>
           )}
           <div className="mono" style={{ marginTop: 10, color: 'var(--text-mute)', fontSize: 10.5 }}>
-            Historical rejection timing: {rejTiming && rejTiming.n > 0
-              ? `average ${rejTiming.avgDays}d, median ${rejTiming.medianDays}d, n=${rejTiming.n}${rejTiming.excluded ? `, ${rejTiming.excluded} date conflicts excluded` : ''}`
+            {rejTiming && rejTiming.n > 0
+              ? `Median ${rejTiming.medianDays} days from applying to a rejection (${rejTiming.n} ${rejTiming.n === 1 ? 'rejection' : 'rejections'})`
               : 'fills as dated rejections are recorded'}.
           </div>
         </div>
@@ -593,7 +591,7 @@ function ResponseProgressCard({ progress, rejTiming }) {
 
 function SegmentRate({ rate }) {
   if (!rate) return <span className="dim">not logged</span>;
-  const value = rate.sufficient ? `${Math.round(rate.pct)}%` : `${rate.k} of ${rate.n}`;
+  const value = rate.sufficient ? window.honestRate(rate.k, rate.n, rate.pct) : `${rate.k} of ${rate.n}`;
   const title = rate.sufficient ? `${rate.k} of ${rate.n}; 95% band ${Math.round(rate.lo)} to ${Math.round(rate.hi)}%` : 'too few to rate';
   return <span tabIndex="0" title={title}>{value}</span>;
 }
@@ -613,7 +611,7 @@ function SegmentsCard({ core }) {
     {!qualified ? <div className="no-data">No group has 10 applications yet; rates would be noise.</div> : <div className="grid cols-2">
       {groups.map(([label, segment]) => <div key={label}><div className="mono dim" style={{ fontSize: 10.5, marginBottom: 6 }}>{label}</div><table className="atbl"><thead><tr><th>{label}</th><th>n</th><th>Response rate</th><th>Interview rate</th></tr></thead><tbody>{(segment?.rows || []).map(row => <tr key={row.key}><td>{row.key}</td><td>{row.n}</td><td><SegmentRate rate={row.response} /></td><td><SegmentRate rate={row.interview} /></td></tr>)}</tbody></table></div>)}
     </div>}
-    {smallGroups > 0 && <div className="mono dim" style={{ fontSize: 10.5, marginTop: 10 }}>{smallGroups} more groups with fewer than 10 applications ({smallN} applications) are not rated</div>}
+    {smallGroups > 0 && <div className="mono dim" style={{ fontSize: 10.5, marginTop: 10 }}>{smallGroups} more {smallGroups === 1 ? 'group' : 'groups'} with fewer than 10 applications ({smallN} {smallN === 1 ? 'application' : 'applications'}) are not rated</div>}
     <div className="kpi-insight" style={{ marginTop: 8 }}>{entry?.why}</div>
     <window.MetricTip id="segments" dict={dict} tipId="pipeline-segments-tip" />
   </div>;
@@ -699,12 +697,12 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
             the active roles named in the heading above. */}
         <Kpi
           k="Silence Rate (14d)"
-          v={responseProgress?.silence?.['14']?.pct == null ? 'not logged' : responseProgress.silence['14'].pct + '%'}
+          v={responseProgress?.silence?.['14']?.pct == null ? 'not logged' : Math.round(responseProgress.silence['14'].pct) + '%'}
           sub={responseProgress
-            ? `${responseProgress.silence?.['30']?.pct == null ? '30d not mature' : `30d ${responseProgress.silence['30'].pct}%`} · n=${responseProgress.silence?.['14']?.eligible || 0}${responseProgress.silence?.['14']?.undated ? ` · ${responseProgress.silence['14'].undated} undated` : ''}`
+            ? `${responseProgress.silence?.['30']?.pct == null ? '30d not mature' : `30d ${Math.round(responseProgress.silence['30'].pct)}%`} · n=${responseProgress.silence?.['14']?.eligible || 0}${responseProgress.silence?.['14']?.undated ? ` · ${responseProgress.silence['14'].undated} undated` : ''}`
             : 'loading response cohorts'}
           icon={PI.clock}
-          color={responseProgress?.silence?.['14']?.pct >= 70 ? 'var(--red)' : 'var(--text)'}
+          color="var(--accent)"
           definition="Applied rows old enough to judge that still have no employer response."
           insight="Silence points to targeting or resume problems."
           extraRows={[["You decided first", responseProgress ? responseProgress.candidateDecided : 'not logged']]}
@@ -734,14 +732,6 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
 
       <SegmentsCard core={core} />
 
-      {/* Interview stage funnel — per-round reach + rejection-by-stage attribution */}
-      <div className="card padded-lg" style={{ marginTop: 14 }}>
-        <div className="card-head">
-          <span className="card-title">Interview Stage Funnel · where we lose them</span>
-          <span className="card-meta mono">reached per round + which round each rejection exited at</span>
-        </div>
-        {window.StageFunnel ? <window.StageFunnel /> : <div className="dim" style={{ fontSize: 12, padding: 12 }}>Stage funnel unavailable.</div>}
-      </div>
     </div>
   );
 }

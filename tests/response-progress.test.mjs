@@ -26,6 +26,7 @@ const { rejectionTimingStats, parseApplicationsMd } = await import('../dashboard
 const { responseProgressStats, readResponseProgressStats } = await import('../dashboard-web/server/lib/response-timing.mjs');
 const { makeApplyAnchor } = await import('../dashboard-web/server/lib/statuses.mjs');
 const { readApplyDates, parseStatusEvents } = await import('../dashboard-web/server/lib/sidecars.mjs');
+const { buildActivities } = await import('../dashboard-web/server/lib/twc.mjs');
 
 let passed = 0;
 let failed = 0;
@@ -170,15 +171,61 @@ check(timing.n === 1 && timing.avgDays === 10 && timing.medianDays === 10,
   'rejection timing now uses the earlier apply-date sidecar anchor');
 
 const read = readResponseProgressStats();
+const readerApplicationIds = new Set(['1']);
 const pure = responseProgressStats({
   apps: parseApplicationsMd(),
   applyDates: readApplyDates(),
   events: parseStatusEvents(),
   today: read.today,
+  applicationIds: readerApplicationIds,
+  applicationDates: new Map(buildActivities({ today: read.today })
+    .filter(activity => activity.kind === 'application' && String(activity.appId) === '1' && !activity.dateApprox)
+    .map(activity => [String(activity.appId), activity.date])),
 });
 check(JSON.stringify(read) === JSON.stringify(pure)
   && read.population && read.silence && read.fastDecision && read.cohorts && read.anchorSources,
   'the reader consumes the tracker and both sidecars and returns the pure shape');
+
+fs.writeFileSync(path.join(tmp, 'applications.md'), [
+  '# Applications Tracker', '',
+  '| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes | URL |',
+  TRACKER_SEPARATOR,
+  '| 900001 | 2030-01-02 | Zorblax Widgetry | Widget Lead | 4.0/5 | Applied | No | None | None | sent | https://example.test/900001 |',
+  '| 900002 | 2030-01-03 | Zorblax Widgetry | Widget Analyst | 4.0/5 | Applied | No | None | None | void | https://example.test/900002 |',
+  '',
+].join('\n'));
+fs.writeFileSync(path.join(tmp, 'apply-dates.json'), JSON.stringify({ 900001: '2030-01-02', 900002: '2030-01-03' }));
+fs.writeFileSync(path.join(tmp, 'status-events.tsv'), [
+  'app#\tdate\tstatus\tcompany\tlogged',
+  '900001\t2030-01-02\tApplied\tZorblax Widgetry\t2030-01-02',
+  '900002\t2030-01-03\tApplied\tZorblax Widgetry\t2030-01-03',
+  '900002\t2030-01-03\tSKIP\tZorblax Widgetry\t2030-01-03',
+  '',
+].join('\n'));
+const twcScoped = readResponseProgressStats();
+check(twcScoped.population.n === 1,
+  'the response population includes the TWC application and excludes a same day void');
+
+// An exact TWC date (an override correction) is the anchor, ahead of the sidecars.
+{
+  const corrected = responseProgressStats({
+    apps: [{ id: 900031, date: '2030-01-01', status: 'Applied', notes: '' }],
+    applyDates: { 900031: '2030-01-01' },
+    events: [],
+    today: new Date(2030, 0, 20, 12),
+    applicationDates: new Map([['900031', '2030-01-15']]),
+  });
+  check(corrected.anchorSources.twc === 1 && corrected.silence['14'].eligible === 0,
+    'a corrected TWC date anchors the application, so a row applied 5 days ago is not yet silence eligible');
+  const uncorrected = responseProgressStats({
+    apps: [{ id: 900031, date: '2030-01-01', status: 'Applied', notes: '' }],
+    applyDates: { 900031: '2030-01-01' },
+    events: [],
+    today: new Date(2030, 0, 20, 12),
+  });
+  check(uncorrected.anchorSources.twc === 0 && uncorrected.silence['14'].eligible === 1,
+    'without a TWC date the sidecar anchor applies');
+}
 
 // ── the ghosted-candidate list shares the one anchor rule ───────────────────
 // That list gates a bulk destructive "archive to No Response" write, and it used
