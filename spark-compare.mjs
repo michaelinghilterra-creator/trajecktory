@@ -20,7 +20,7 @@
  * whole box: bring one up, run it, bring the other up, run again, then compare.
  *
  * Usage:
- *   node spark-compare.mjs build-set [--size 120] [--strong 4.0] [--seed 20260927] [--force]
+ *   node spark-compare.mjs build-set [--size 120] [--strong 4.0] [--seed 20310101] [--force]
  *   node spark-compare.mjs run --label qwen3.6 [--resume] [--force] [--limit N]
  *   node spark-compare.mjs compare [labelA labelB ...] [--threshold 2.0] [--strong 4.0]
  *

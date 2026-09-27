@@ -150,27 +150,27 @@ const dims = (v) => ['fit', 'northStar', 'level', 'comp', 'location', 'buildDept
   .map((key) => ({ key, dim: key, val: v, max: 5, evidence: 'x' }))
   .concat([{ key: 'redFlags', dim: 'Red Flags', val: 5, max: 5, evidence: 'x' }]);
 const postings = [
-  { n: 901, slug: 'example-co', marker: 'STRONG', claude: 5 },
-  { n: 902, slug: 'sample-inc', marker: 'MISS', claude: 5 },   // Claude strong, stub-a scores it low
-  { n: 903, slug: 'demo-labs', marker: 'WEAK', claude: 0 },
-  { n: 904, slug: 'test-corp', marker: 'GARBAGE', claude: 5 }, // the stub answers unparseably
-  { n: 905, slug: 'fixture-ltd', marker: 'WEAK', claude: 0 },
+  { n: 900001, company: 'Zorblax Widgetry', slug: 'zorblax-widgetry', marker: 'STRONG', claude: 5 },
+  { n: 900002, company: 'Quennox Ratchet Works', slug: 'quennox-ratchet-works', marker: 'MISS', claude: 5 },   // Claude strong, stub-a scores it low
+  { n: 900003, company: 'Zorblax Widgetry 2', slug: 'zorblax-widgetry-2', marker: 'WEAK', claude: 0 },
+  { n: 900004, company: 'Quennox Ratchet Works 2', slug: 'quennox-ratchet-works-2', marker: 'GARBAGE', claude: 5 }, // the stub answers unparseably
+  { n: 900005, company: 'Zorblax Widgetry 3', slug: 'zorblax-widgetry-3', marker: 'WEAK', claude: 0 },
 ];
 for (const p of postings) {
   const jd = `jds/${p.n}-${p.slug}.md`;
   writeFileSync(join(src, jd), `# Invented posting ${p.slug}\n\nMARKER:${p.marker}\n\n${'Responsibilities include things. '.repeat(20)}`);
   const fm = {
-    schema: 'trajecktory-report/v1', id: p.n, company: p.slug, role: 'Director of Examples',
-    date: '2026-01-01', url: '', jdSnapshot: jd,
+    schema: 'trajecktory-report/v1', id: p.n, company: p.company, role: 'Director of Examples',
+    date: '2031-01-01', url: '', jdSnapshot: jd,
     summary: { seniority: 'Director', compStated: '' }, levelMatch: { jdLevel: 'Director' },
     globalScore: dims(p.claude), scoreCeiling: null, ceilingBasis: '',
   };
-  writeFileSync(join(src, 'reports', `${p.n}-${p.slug}-2026-01-01.md`), `---\n${JSON.stringify(fm, null, 2)}\n---\n\n## A) Block\n\nbody\n`);
+  writeFileSync(join(src, 'reports', `${p.n}-${p.slug}-2031-01-01.md`), `---\n${JSON.stringify(fm, null, 2)}\n---\n\n## A) Block\n\nbody\n`);
 }
 // A legacy report (no keyed dims) and a report with no snapshot: both must be skipped.
-writeFileSync(join(src, 'reports', '906-old-2026-01-01.md'), `---\n${JSON.stringify({ schema: 'trajecktory-report/v1', id: 906, jdSnapshot: 'jds/906.md', score: 4.9, globalScore: [{ dim: 'Fit', val: 5 }] })}\n---\nbody\n`);
-writeFileSync(join(src, 'jds', '906.md'), 'MARKER:STRONG ' + 'x'.repeat(400));
-writeFileSync(join(src, 'reports', '907-nosnap-2026-01-01.md'), `---\n${JSON.stringify({ schema: 'trajecktory-report/v1', id: 907, globalScore: dims(5) })}\n---\nbody\n`);
+writeFileSync(join(src, 'reports', '900006-old-2031-01-01.md'), `---\n${JSON.stringify({ schema: 'trajecktory-report/v1', id: 900006, jdSnapshot: 'jds/900006.md', score: 4.9, globalScore: [{ dim: 'Fit', val: 5 }] })}\n---\nbody\n`);
+writeFileSync(join(src, 'jds', '900006.md'), 'MARKER:STRONG ' + 'x'.repeat(400));
+writeFileSync(join(src, 'reports', '900007-nosnap-2031-01-01.md'), `---\n${JSON.stringify({ schema: 'trajecktory-report/v1', id: 900007, globalScore: dims(5) })}\n---\nbody\n`);
 
 const verdict = (v) => JSON.stringify({
   schema: 'trajecktory-report/v1', company: 'x', role: 'y',
@@ -223,7 +223,7 @@ try {
   check(r.code === 0, `build-set succeeds (exit ${r.code})`);
   const set = JSON.parse(readFileSync(join(dataDir, 'spark-compare', 'set.json'), 'utf8'));
   check(set.items.length === 5, `only the five derivable, snapshotted reports enter the set (got ${set.items.length})`);
-  check(!set.items.some((i) => i.id === 'jds/906.md'), 'a legacy report is left out unless asked for');
+  check(!set.items.some((i) => i.id === 'jds/900006.md'), 'a legacy report is left out unless asked for');
   check(set.strata.strong.population === 3, `strong stratum counted from re-derived Claude scores (got ${set.strata.strong.population})`);
 
   r = await cli(['build-set']);
@@ -257,9 +257,9 @@ try {
   const row = (name) => (r.out.split('\n').find((l) => l.startsWith(name)) || '').slice(34).trim().split(/\s+/);
   const misses = row('strong misses @T=2');
   check(misses.join() === '1,0', `strong misses: a=1, b=0 (got ${misses.join(',')})`);
-  check(/sample-inc — Director of Examples/.test(r.out), 'the strong posting a discarded is named');
+  check(/Quennox Ratchet Works — Director of Examples/.test(r.out), 'the strong posting a discarded is named');
   check(/strong postings only a discarded: 1\s+only b discarded: 0/.test(r.out), 'head to head names the difference');
-  check(!/test-corp/.test(r.out.split('head to head')[0].split('strong postings it would have discarded')[1] || ''),
+  check(!/Quennox Ratchet Works 2/.test(r.out.split('head to head')[0].split('strong postings it would have discarded')[1] || ''),
     'the unparseable posting is not listed as a discard');
 
   r = await cli(['compare', 'a', 'nosuch']);
@@ -272,7 +272,7 @@ try {
   check(!existsSync(join(src, 'data')), 'nothing written under the source root');
 
   // A snapshot rewritten after the set was built is a different prompt: skipped.
-  writeFileSync(join(src, 'jds', '901-example-co.md'), 'MARKER:WEAK ' + 'y'.repeat(400));
+  writeFileSync(join(src, 'jds', '900001-zorblax-widgetry.md'), 'MARKER:WEAK ' + 'y'.repeat(400));
   r = await cli(['run', '--label', 'c'], 'stub-b');
   check(/1 skipped \(snapshot missing or changed\)/.test(r.out), 'a changed snapshot is skipped, not re-scored');
   const runC = JSON.parse(readFileSync(join(dataDir, 'spark-compare', 'runs', 'c.json'), 'utf8'));
