@@ -109,10 +109,10 @@ function FUKpi({ label, value, sub, tone = 'neutral' }) {
   );
 }
 
-function FUBarRow({ label, n, total, color }) {
+function FUBarRow({ label, n, total, color, tip }) {
   const pct = total > 0 ? Math.round((n / total) * 100) : 0;
   return (
-    <div className="col" style={{ gap: 4 }}>
+    <div className="col" style={{ gap: 4 }} tabIndex="0" title={tip}>
       <div className="row" style={{ justifyContent: 'space-between', fontSize: 11 }}>
         <span style={{ color }}>{label}</span>
         <span className="mono dim">{n} · {pct}%</span>
@@ -223,7 +223,7 @@ function FUOverview({ items, thresholds, taThreshold, onOpen, compact }) {
           <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>By Age</div>
           <div className="col" style={{ gap: 10 }}>
             {ageOrder.filter(k => (bucketCounts[k] || 0) > 0).map(k => (
-              <FUBarRow key={k} label={k} n={bucketCounts[k] || 0} total={total} color={ageColor[k]} />
+              <FUBarRow key={k} label={k} n={bucketCounts[k] || 0} total={total} color={ageColor[k]} tip={`Contacts grouped by whole days since their last logged touch: ${ageBucket({ '0-10d': 0, '10-21d': 10, '21-45d': 21, '45d+': 45 }[k]).label}.`} />
             ))}
           </div>
           <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
@@ -239,7 +239,7 @@ function FUOverview({ items, thresholds, taThreshold, onOpen, compact }) {
           <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>By Status</div>
           <div className="col" style={{ gap: 10 }}>
             {statusOrder.filter(s => (statusCounts[s] || 0) > 0).map(s => (
-              <FUBarRow key={s} label={s} n={statusCounts[s] || 0} total={total} color={STATUS_COLOR[s]?.color || '#a1a1aa'} />
+              <FUBarRow key={s} label={s} n={statusCounts[s] || 0} total={total} color={STATUS_COLOR[s]?.color || '#a1a1aa'} tip={`Contacts whose current outreach status is ${s}.`} />
             ))}
           </div>
           <div className="mono dim" style={{ fontSize: 11, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>

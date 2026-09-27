@@ -434,6 +434,8 @@ function App() {
   // failure and simply swallowed them. Modules communicate via window.* here
   // (build.mjs runs esbuild with bundle:false), so this matches the house style.
   useEffect(() => { window.tjkToast = toast; }, [toast]);
+  // The drawer compares a posted salary with the profile's target band; same cross-file bridge as tjkToast.
+  window.tjkCompBands = compBands(setupState, tweaks);
   // E-1: any caller (this file's handleAction, or Pipeline's own advance) can ask for a schedule and await the
   // person's answer, the same cross-file bridge tjkToast uses. Resolves null if the person backs out.
   useEffect(() => {

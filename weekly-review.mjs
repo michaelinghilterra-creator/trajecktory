@@ -48,7 +48,7 @@ console.log('\nLeading indicators:');
 const li = (label, m) => console.log(`  ${label}: ${m.available ? m.value : 'not logged'}${m.source ? `   (${m.source})` : ''}`);
 li('Replies on delivered mail', metrics.replies);
 li('Delivered reply rate %', metrics.deliveredReplyRatePct);
-li('Screens booked', metrics.screensBooked);
+li('Screens held', metrics.screensHeld);
 li('Screen objections logged', metrics.objectionsLogged);
 li('Unserviced applications (WIP)', metrics.unservicedApplications);
 

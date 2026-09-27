@@ -6,8 +6,9 @@ import { parseReferralsMd } from './referrals.mjs';
 import { computeStaleApps, computeStaleTA } from './followups.mjs';
 import { parseTargetTalentMd } from './target-talent.mjs';
 import { parseStatusEvents } from './sidecars.mjs';
-import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, OUTREACH_ELIGIBLE_STATUSES, REFERRAL_STATES, isInterviewStage, makeFurthestIdx, enteredFunnel } from './statuses.mjs';
+import { ACTIVE_STATUSES, INTERVIEW_STAGES, FUNNEL_ORDER, REFERRAL_STATES, TALENT_CONTACTED, TALENT_REPLIED, RESPONSE_DECISION_BUCKETS, canonicalStatus, isInterviewStage, makeFurthestIdx, enteredFunnel } from './statuses.mjs';
 import { rateStat, MIN_SAMPLE } from './rate-confidence.mjs';
+import { isPostingClosed } from '../../../lib/passed.mjs';
 
 // DATA_DIR, never ROOT_DIR + 'data'. See tests/data-dir-sandbox.test.mjs.
 const INSIGHTS_DIR = path.resolve(DATA_DIR, 'insights');
@@ -20,12 +21,15 @@ const referralStatus = id => REFERRAL_STATES.find(state => state.id === id)?.lab
 export function referralConversion(referrals, applications) {
   const referralRows = referrals ?? parseReferralsMd();
   const appRows = applications ?? parseApplicationsMd();
-  const denominator = appRows.filter(app => OUTREACH_ELIGIBLE_STATUSES.includes(app.status)).length;
-  const referredApplications = referralRows.filter(row => row.status === referralStatus('applied_referral')).length;
+  const { furthestIdx, idxOf } = makeFurthestIdx([]);
+  const appliedIdx = idxOf('Applied');
+  const submitted = appRows.filter(app => Math.max(furthestIdx(app), idxOf(canonicalStatus(app.reached))) >= appliedIdx);
+  const denominator = submitted.length;
+  const referredApplications = submitted.filter(app => app.source === 'Referral').length;
   const introductions = referralRows.filter(row => row.status === referralStatus('intro_made')).length;
 
   return {
-    available: referralRows.length > 0,
+    available: referralRows.length > 0 || submitted.length > 0,
     referredApplications,
     introductions,
     denominator,
@@ -100,7 +104,7 @@ function buildInsightsContext() {
   const responded = apps.filter(hasResponded);
   const interview = apps.filter(hasInterview);
 
-  // Archetype performance — apply + reply rates by role family
+  // Archetype performance by role family
   const archetypes = {};
   for (const a of apps) {
     const k = a.archetype || 'Unknown';
@@ -115,11 +119,11 @@ function buildInsightsContext() {
       archetype: k,
       n: v.count,
       appliedN: v.applied,
-      responseRate: v.applied ? Math.round(v.responded / v.applied * 100) : 0,
+      screenRate: v.applied ? Math.round(v.responded / v.applied * 100) : 0,
       conf: rateStat(v.responded, v.applied),
       avgScore: v.scoreN ? +(v.scoreSum / v.scoreN).toFixed(2) : null,
     }))
-    .sort((a, b) => b.responseRate - a.responseRate);
+    .sort((a, b) => b.screenRate - a.screenRate);
 
   // Sector performance — same shape
   const sectors = {};
@@ -136,10 +140,10 @@ function buildInsightsContext() {
       sector: k,
       n: v.count,
       appliedN: v.applied,
-      responseRate: Math.round(v.responded / v.applied * 100),
+      screenRate: Math.round(v.responded / v.applied * 100),
       conf: rateStat(v.responded, v.applied),
     }))
-    .sort((a, b) => b.responseRate - a.responseRate)
+    .sort((a, b) => b.screenRate - a.screenRate)
     .slice(0, 10);
 
   // TA funnel summary.
@@ -151,10 +155,6 @@ function buildInsightsContext() {
   // vanish from numerator and denominator together. Same class of bug as counting
   // an application's live status instead of the furthest rung it ever reached.
   const taActive = taContacts.filter(c => c.status !== 'Archived');   // still the honest "open contacts" count
-  const REPLIED_SET = ['Replied', 'Meeting Scheduled', 'Connected'];
-  // Bounced is a post-send state (per the comment below), so it belongs in the
-  // "sent" denominator.
-  const TA_CONTACTED = ['Sent', 'Dormant', 'Bounced', ...REPLIED_SET];
   // Archiving OVERWRITES the outreach status in place, so an archived contact's
   // prior state is unrecoverable — but `lastTouch` survives and is only ever
   // stamped when a message actually went out. It is therefore valid evidence for
@@ -164,8 +164,8 @@ function buildInsightsContext() {
   // presenting an understated rate as measured.
   const taTouchedArchive = taContacts.filter(c =>
     c.status === 'Archived' && /^\d{4}-\d{2}-\d{2}$/.test(String(c.lastTouch || '')));
-  const taSent    = taContacts.filter(c => TA_CONTACTED.includes(c.status)).length + taTouchedArchive.length;
-  const taReplied = taContacts.filter(c => REPLIED_SET.includes(c.status)).length;
+  const taSent    = taContacts.filter(c => TALENT_CONTACTED.has(c.status)).length + taTouchedArchive.length;
+  const taReplied = taContacts.filter(c => TALENT_REPLIED.has(c.status)).length;
 
   // Stale touchpoints (apps + TA, top 15 by silence)
   const staleApps = computeStaleApps().map(it => ({ source: 'app', ...it }));
@@ -229,18 +229,18 @@ function buildInsightsMetrics(ctx) {
   if (!ctx) return null;
   const arch = ctx.archetypes || [];
   const sectors = ctx.sectors || [];
-  const overall = ctx.pipeline?.responseRate ?? 0;
+  const overall = ctx.pipeline?.responseRate;
   // "Overweight and underperforming": the cohort soaking up the most volume while
   // converting below the overall response rate. That's where to pull spend from.
   const worstArchetype = arch
-    .filter(a => a.conf?.sufficient && a.responseRate < overall)
+    .filter(a => overall != null && ctx.pipeline?.responseConf?.sufficient && a.conf?.sufficient && a.screenRate < overall)
     .sort((a, b) => b.appliedN - a.appliedN)[0] || null;
   return {
     minSample: MIN_SAMPLE,
     pipeline: {
       applied: ctx.pipeline?.applied ?? 0,
-      responseRate: ctx.pipeline?.responseRate ?? 0,
-      interviewRate: ctx.pipeline?.interviewRate ?? 0,
+      responseRate: ctx.pipeline?.responseRate ?? null,
+      interviewRate: ctx.pipeline?.interviewRate ?? null,
     },
     talent: {
       sent: ctx.talent?.sent ?? 0,
@@ -249,7 +249,7 @@ function buildInsightsMetrics(ctx) {
       conf: ctx.talent?.conf ?? null,
     },
     staleTotal: ctx.staleTotal ?? 0,
-    // archetypes/sectors arrive pre-sorted by responseRate desc. Only cohorts that
+    // archetypes and sectors arrive pre-sorted by screenRate desc. Only cohorts that
     // clear the sample gate (conf.sufficient, n >= MIN_SAMPLE) are surfaced as a
     // "top" or "worst" claim: a rate off fewer than 10 applications is noise, not a
     // winner, and featuring it is the exact false-confidence this work removes.
@@ -300,8 +300,11 @@ export function stageFunnelStats() {
   // pre-interview loss (rejected before anyone talked to you).
   const OFFER_STAGE = 'Offer';
   const rejectedAtStage = {};
+  const withdrewAtStage = {};
   for (const s of INTERVIEW_STAGES) rejectedAtStage[s] = 0;
+  for (const s of INTERVIEW_STAGES) withdrewAtStage[s] = 0;
   rejectedAtStage[OFFER_STAGE] = 0;      // lost at/after an offer (deepest reach)
+  withdrewAtStage[OFFER_STAGE] = 0;
   let rejectedPreInterview = 0;  // never advanced past Applied — lost before any screen
 
   const terminal = apps.filter(a => a.status === 'Rejected' || a.status === 'No Response');
@@ -327,6 +330,16 @@ export function stageFunnelStats() {
     else rejectedPreInterview++;
   }
 
+  const candidateStatuses = RESPONSE_DECISION_BUCKETS.candidateSide;
+  const withdrew = apps.filter(a => !isPostingClosed(a)
+    && candidateStatuses.has(canonicalStatus(a.status))
+    && furthestIdx(a) >= idxOf('Phone Screen'));
+  for (const a of withdrew) {
+    const rung = FUNNEL_ORDER[furthestIdx(a)];
+    if (rung === OFFER_STAGE) withdrewAtStage[OFFER_STAGE]++;
+    else if (isInterviewStage(rung)) withdrewAtStage[rung]++;
+  }
+
   return {
     funnelOrder: FUNNEL_ORDER,
     interviewStages: INTERVIEW_STAGES,
@@ -334,9 +347,12 @@ export function stageFunnelStats() {
     conversion,
     rejections: {
       byStage: rejectedAtStage,
+      withdrew: withdrewAtStage,
+      withdrewTotal: withdrew.length,
       preInterview: rejectedPreInterview,
       total: terminal.length,
     },
+    footnote: 'Employer losses and candidate withdrawals are attributed to the furthest rung after reaching a phone screen.',
     eventsTracked: events.length,
   };
 }

@@ -5,7 +5,7 @@
  * Run: node tests/inbound-classify.test.mjs   (exit 0 = pass, 1 = fail)
  */
 
-import { classifyInbound } from '../lib/inbound-classify.mjs';
+import { classifyInbound, isApplicationReceipt } from '../lib/inbound-classify.mjs';
 
 let passed = 0, failed = 0;
 function check(cond, msg) {
@@ -41,6 +41,26 @@ for (const [subject, body, expected] of cases) {
 for (const value of [null, {}, undefined]) {
   check(classifyInbound(value) === 'human', `${String(value)} safely defaults to human`);
 }
+
+check(isApplicationReceipt({
+  subject: 'Thank you for applying to Zorblax Widgetry',
+  body: '',
+  sentiment: 'neutral',
+}), 'a neutral thank-you-for-applying subject is an application receipt');
+check(!isApplicationReceipt({
+  subject: 'Thank you for applying to Zorblax Widgetry',
+  body: '',
+  sentiment: 'negative',
+}), 'a negative message with a receipt-like subject is not suppressed');
+check(!isApplicationReceipt({
+  subject: 'We have received your application',
+  body: 'We regret to inform you that we are not moving forward.',
+  sentiment: 'neutral',
+}), 'rejection language overrides a receipt-like subject');
+check(isApplicationReceipt({
+  subject: 'Security code for your application',
+  body: 'Use this code to finish signing in.',
+}), 'a security-code subject is an application receipt');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

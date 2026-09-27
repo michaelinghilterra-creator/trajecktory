@@ -314,6 +314,7 @@ const LP_KEYS = [
 // as improving results rather than unlocking them.
 const LP_REQUIRED = LP_SECTIONS.filter(s => s.req === 'Required').map(s => s.id);
 const LP_REFINE = LP_SECTIONS.filter(s => s.req === 'Recommended' || s.req === 'Later' || s.req === 'Optional').map(s => s.id);
+window.LP_REFINE = LP_REFINE;
 
 // ---- small presentational helpers ------------------------------------------
 

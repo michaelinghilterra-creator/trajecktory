@@ -26,6 +26,7 @@ const { rejectionTimingStats, parseApplicationsMd } = await import('../dashboard
 const { responseProgressStats, readResponseProgressStats } = await import('../dashboard-web/server/lib/response-timing.mjs');
 const { makeApplyAnchor } = await import('../dashboard-web/server/lib/statuses.mjs');
 const { readApplyDates, parseStatusEvents } = await import('../dashboard-web/server/lib/sidecars.mjs');
+const { buildActivities } = await import('../dashboard-web/server/lib/twc.mjs');
 
 let passed = 0;
 let failed = 0;
@@ -62,9 +63,10 @@ check(noAnchor.population.n === 0 && noAnchor.population.noAnchor === 1,
   'an application without an anchor is outside the population');
 
 const closed = stats([app(4, '2026-05-01', 'Closed')], { 4: '2026-05-02' });
-check(closed.population.n === 0 && closed.population.closedExcluded === 1
-  && closed.silence['14'].eligible === 0 && closed.fastDecision.eligible === 0,
-  'Closed is reported and excluded from every denominator');
+check(closed.population.n === 1 && closed.population.closedExcluded === 0
+  && closed.candidateDecided === 0 && closed.silence['14'].eligible === 1
+  && closed.silence['14'].silent === 1,
+  'Closed is neither decision type and remains silent');
 
 const young = stats([app(5, '2026-07-08')], { 5: '2026-07-08' });
 check(young.silence['14'].eligible === 0 && young.silence['14'].pct === null,
@@ -99,6 +101,22 @@ check(undated.silence['14'].eligible === 0 && undated.silence['14'].undated === 
   && undated.fastDecision.eligible === 0 && undated.fastDecision.undated === 1,
   'an undated decision is disclosed and excluded from numerator and denominator');
 
+const undatedPassed = stats([app(900010, '2030-03-01', 'Passed')], { 900010: '2030-03-01' }, [], '2030-04-10');
+check(undatedPassed.silence['14'].eligible === 0 && undatedPassed.silence['14'].undated === 1
+  && undatedPassed.fastDecision.eligible === 0 && undatedPassed.fastDecision.undated === 1,
+  'an undated Passed decision uses the undated bucket instead of every cutoff');
+
+const postingClosedPassed = stats(
+  [app(900011, '2030-03-01', 'Passed', { notes: '[passed: posting_closed]' })],
+  { 900011: '2030-03-01' },
+  [],
+  '2030-04-10',
+);
+check(postingClosedPassed.candidateDecided === 0
+  && postingClosedPassed.silence['14'].eligible === 1
+  && postingClosedPassed.silence['14'].silent === 1,
+  'Passed for posting_closed remains silent rather than becoming a candidate decision');
+
 const duplicate = stats(
   [app(10, '2026-06-01', 'Rejected')],
   { 10: '2026-06-01' },
@@ -112,9 +130,22 @@ const candidateSide = stats(
   { 11: '2026-06-01', 12: '2026-06-01' },
   [event(11, '2026-06-02', 'Not a Fit'), event(12, '2026-06-02', 'SKIP')],
 );
-check(candidateSide.fastDecision.composition.candidateSide === 2
+check(candidateSide.candidateDecided === 2
+  && candidateSide.fastDecision.composition.candidateSide === 0
   && candidateSide.fastDecision.composition.employerNo === 0,
-  'Not a Fit and SKIP are candidate-side decisions, never employer noes');
+  'Not a Fit and SKIP are candidate decisions outside employer timing');
+
+const legacyCandidate = stats(
+  [app(900001, '2030-03-01', 'Passed'), app(900002, '2030-03-01', 'Closed')],
+  { 900001: '2030-03-01', 900002: '2030-03-01' },
+  [event(900001, '2030-03-02', 'passed'), event(900002, '2030-03-02', 'role closed')],
+  '2030-04-10',
+);
+check(legacyCandidate.candidateDecided === 1
+  && legacyCandidate.silence['14'].eligible === 1
+  && legacyCandidate.silence['14'].silent === 1
+  && legacyCandidate.fastDecision.composition.employerNo === 0,
+  'canonical candidate labels are excluded while a Closed alias remains silent');
 
 const advanced = stats(
   [app(13, '2026-06-01', 'Phone Screen')],
@@ -140,15 +171,61 @@ check(timing.n === 1 && timing.avgDays === 10 && timing.medianDays === 10,
   'rejection timing now uses the earlier apply-date sidecar anchor');
 
 const read = readResponseProgressStats();
+const readerApplicationIds = new Set(['1']);
 const pure = responseProgressStats({
   apps: parseApplicationsMd(),
   applyDates: readApplyDates(),
   events: parseStatusEvents(),
   today: read.today,
+  applicationIds: readerApplicationIds,
+  applicationDates: new Map(buildActivities({ today: read.today })
+    .filter(activity => activity.kind === 'application' && String(activity.appId) === '1' && !activity.dateApprox)
+    .map(activity => [String(activity.appId), activity.date])),
 });
 check(JSON.stringify(read) === JSON.stringify(pure)
   && read.population && read.silence && read.fastDecision && read.cohorts && read.anchorSources,
   'the reader consumes the tracker and both sidecars and returns the pure shape');
+
+fs.writeFileSync(path.join(tmp, 'applications.md'), [
+  '# Applications Tracker', '',
+  '| # | Date | Company | Role | Score | Status | PDF | Resume | Report | Notes | URL |',
+  TRACKER_SEPARATOR,
+  '| 900001 | 2030-01-02 | Zorblax Widgetry | Widget Lead | 4.0/5 | Applied | No | None | None | sent | https://example.test/900001 |',
+  '| 900002 | 2030-01-03 | Zorblax Widgetry | Widget Analyst | 4.0/5 | Applied | No | None | None | void | https://example.test/900002 |',
+  '',
+].join('\n'));
+fs.writeFileSync(path.join(tmp, 'apply-dates.json'), JSON.stringify({ 900001: '2030-01-02', 900002: '2030-01-03' }));
+fs.writeFileSync(path.join(tmp, 'status-events.tsv'), [
+  'app#\tdate\tstatus\tcompany\tlogged',
+  '900001\t2030-01-02\tApplied\tZorblax Widgetry\t2030-01-02',
+  '900002\t2030-01-03\tApplied\tZorblax Widgetry\t2030-01-03',
+  '900002\t2030-01-03\tSKIP\tZorblax Widgetry\t2030-01-03',
+  '',
+].join('\n'));
+const twcScoped = readResponseProgressStats();
+check(twcScoped.population.n === 1,
+  'the response population includes the TWC application and excludes a same day void');
+
+// An exact TWC date (an override correction) is the anchor, ahead of the sidecars.
+{
+  const corrected = responseProgressStats({
+    apps: [{ id: 900031, date: '2030-01-01', status: 'Applied', notes: '' }],
+    applyDates: { 900031: '2030-01-01' },
+    events: [],
+    today: new Date(2030, 0, 20, 12),
+    applicationDates: new Map([['900031', '2030-01-15']]),
+  });
+  check(corrected.anchorSources.twc === 1 && corrected.silence['14'].eligible === 0,
+    'a corrected TWC date anchors the application, so a row applied 5 days ago is not yet silence eligible');
+  const uncorrected = responseProgressStats({
+    apps: [{ id: 900031, date: '2030-01-01', status: 'Applied', notes: '' }],
+    applyDates: { 900031: '2030-01-01' },
+    events: [],
+    today: new Date(2030, 0, 20, 12),
+  });
+  check(uncorrected.anchorSources.twc === 0 && uncorrected.silence['14'].eligible === 1,
+    'without a TWC date the sidecar anchor applies');
+}
 
 // ── the ghosted-candidate list shares the one anchor rule ───────────────────
 // That list gates a bulk destructive "archive to No Response" write, and it used
