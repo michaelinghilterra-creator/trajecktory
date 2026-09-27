@@ -6,7 +6,7 @@ set -euo pipefail
 # tracks state in batch-state.tsv for resumability.
 #
 # NOTE: This script is Claude Code-specific. It uses claude -p with
-# --dangerously-skip-permissions and --append-system-prompt-file flags
+# permission controls and --append-system-prompt-file flags
 # that are not available in other CLIs. Multi-CLI support is out of scope
 # for now — contributions welcome.
 
@@ -31,8 +31,10 @@ PARALLEL=1
 DRY_RUN=false
 RETRY_FAILED=false
 START_FROM=0
-MAX_RETRIES=2
+MAX_RETRIES="${BATCH_MAX_RETRIES:-2}"
 MIN_SCORE=0
+SANDBOX=false
+if [[ "${TJK_BATCH_SANDBOX:-0}" == "1" ]]; then SANDBOX=true; fi
 
 usage() {
   cat <<'USAGE'
@@ -48,6 +50,7 @@ Options:
   --start-from N       Start from offer ID N (skip earlier IDs)
   --max-retries N      Max retry attempts per offer (default: 2)
   --min-score N        Skip PDF/tracker for offers scoring below N (default: 0 = off)
+  --sandbox            Restrict eval workers to the dashboard sandbox policy
   -h, --help           Show this help
 
 Files:
@@ -81,6 +84,7 @@ while [[ $# -gt 0 ]]; do
     --start-from) START_FROM="$2"; shift 2 ;;
     --max-retries) MAX_RETRIES="$2"; shift 2 ;;
     --min-score) MIN_SCORE="$2"; shift 2 ;;
+    --sandbox) SANDBOX=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 1 ;;
   esac
@@ -335,6 +339,11 @@ process_offer() {
   local date
   date=$(date +%Y-%m-%d)
   local jd_file="/tmp/batch-jd-${id}.txt"
+  # A local: row already names the JD on disk. Keep the native path: the worker is a
+  # Windows program on Windows, and a POSIX /c/... path inside prompt text is not converted.
+  if [[ "$url" == local:* ]]; then
+    jd_file="${url#local:}"
+  fi
 
   echo "--- Processing offer #$id: $url (report $report_num, attempt $((retries + 1)))"
 
@@ -368,13 +377,38 @@ process_offer() {
     -e "s|{{ID}}|${esc_id}|g" \
     "$PROMPT_FILE" > "$resolved_prompt"
 
-  # Launch claude -p worker (uses default model from Claude Max subscription)
+  # Launch claude worker. WebSearch and WebFetch come from the project's .claude/settings.json.
   local exit_code=0
-  claude -p \
-    --dangerously-skip-permissions \
-    --append-system-prompt-file "$resolved_prompt" \
-    "$prompt" \
-    > "$log_file" 2>&1 || exit_code=$?
+  if [[ "$SANDBOX" == "true" ]]; then
+    local -a sandbox_args=(
+      --permission-mode acceptEdits
+      --settings "$PROJECT_DIR/dashboard-web/server/eval-agent-sandbox.settings.json"
+      --allowedTools "Bash(node compute-scores.mjs:*)"
+    )
+    if [[ "$url" == local:* ]]; then
+      # Compare in POSIX form (PROJECT_DIR is POSIX under Git Bash), pass native form to claude.
+      local jd_posix="$jd_file" jd_dir
+      if command -v cygpath >/dev/null 2>&1; then jd_posix="$(cygpath -u "$jd_file")"; fi
+      jd_dir="$(cd "$(dirname "$jd_posix")" && pwd)"
+      if [[ "$jd_dir" != "$PROJECT_DIR" && "$jd_dir" != "$PROJECT_DIR/"* ]]; then
+        if command -v cygpath >/dev/null 2>&1; then jd_dir="$(cygpath -w "$jd_dir")"; fi
+        sandbox_args+=(--add-dir "$jd_dir")
+      fi
+    fi
+    # Run from the project root, as the dashboard does: cv.md and reports/ must be inside the
+    # working directory, and the project's .claude/settings.json (WebSearch, WebFetch) must load.
+    # From batch/ every such read becomes a permission prompt nobody can answer headless.
+    (cd "$PROJECT_DIR" && claude -p "${sandbox_args[@]}" --append-system-prompt-file "$resolved_prompt" "$prompt") \
+      > "$log_file" 2>&1 || exit_code=$?
+    # A worker that stops to ask for a permission still exits 0. Without a report it did nothing.
+    if [[ $exit_code -eq 0 ]] && ! compgen -G "$PROJECT_DIR/reports/${report_num}-*.md" > /dev/null; then
+      echo "sandbox worker exited 0 without writing reports/${report_num}-*.md" >> "$log_file"
+      exit_code=3
+    fi
+  else
+    claude -p --dangerously-skip-permissions --append-system-prompt-file "$resolved_prompt" "$prompt" \
+      > "$log_file" 2>&1 || exit_code=$?
+  fi
 
   # Cleanup resolved prompt
   rm -f "$resolved_prompt"
@@ -521,12 +555,12 @@ main() {
       if [[ "$status" == "completed" ]]; then
         continue
       fi
-      # Skip failed offers that hit retry limit (unless --retry-failed)
+      # Failed offers remain bound by the retry limit in every mode.
       if [[ "$status" == "failed" ]]; then
         local retries
         retries=$(get_retries "$id")
         if (( retries >= MAX_RETRIES )); then
-          echo "SKIP #$id: failed and max retries reached (use --retry-failed to force)"
+          echo "SKIP #$id: failed and max retries reached (--retry-failed does not override the limit)"
           continue
         fi
       fi

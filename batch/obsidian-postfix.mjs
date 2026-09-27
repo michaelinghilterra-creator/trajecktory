@@ -198,12 +198,24 @@ function main() {
   }, options.apply);
 
   let moved = 0;
+  let unmoved = 0;
   if (options.apply) fs.mkdirSync(options.dest, { recursive: true });
   for (const [id, item] of manifest) {
     if (!completed.has(id)) continue;
     const sourceFile = path.resolve(item.sourceFile);
     const sourceRoot = path.resolve(options.source);
     if (path.dirname(sourceFile) !== sourceRoot || !fs.existsSync(sourceFile)) continue;
+    const reportNum = completed.get(id);
+    const reportFile = reportsIndex.get(reportNum);
+    const reportPath = reportFile ? path.join(reportsDir, reportFile) : '';
+    // A v1 report carries the URL in its JSON frontmatter; older reports use a **URL:** header.
+    const reportText = reportPath && fs.existsSync(reportPath) ? fs.readFileSync(reportPath, 'utf8') : '';
+    const validReport = /^\*\*URL:\*\*\s*\S+/m.test(reportText) || /"url"\s*:\s*"[^"\s]+"/.test(reportText);
+    if (!validReport) {
+      console.log(`not moved (no valid report): ${id}`);
+      unmoved++;
+      continue;
+    }
     const destination = availableDestination(options.dest, path.basename(sourceFile));
     if (options.apply) moveFile(sourceFile, destination);
     else console.log(`would move ${path.basename(sourceFile)}`);
@@ -215,6 +227,7 @@ function main() {
   console.log(`tracker urls fixed: ${trackerUrls}`);
   console.log(`rows re-flipped: ${reflipped}`);
   console.log(`source files moved: ${moved}`);
+  console.log(`source files unmoved: ${unmoved}`);
 }
 
 try {

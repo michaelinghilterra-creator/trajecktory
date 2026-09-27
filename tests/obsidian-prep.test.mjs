@@ -11,9 +11,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const script = path.join(root, 'batch', 'obsidian-prep.mjs');
 const flag = name => '-' + `-${name}`;
 
-function obsidian(source, title, body = '') {
+function obsidian(source, title, body = '', { company = '', created = '' } = {}) {
   const boundary = '-'.repeat(3);
-  return `${boundary}\nsource: "${source}"\ntitle: "${title}"\n${boundary}\n${body}\n`;
+  const extra = `${company ? `company: "${company}"\n` : ''}${created ? `created: "${created}"\n` : ''}`;
+  return `${boundary}\nsource: "${source}"\ntitle: "${title}"\n${extra}${boundary}\n${body}\n`;
 }
 
 function trackerRow(fields) {
@@ -80,6 +81,50 @@ test('prep deduplicates, keeps reopened and thin files, and writes joined batch 
     assert.deepEqual(manifest[0], ['id', 'source_file', 'source_url', 'bytes']);
     assert.deepEqual(manifest.slice(1).map(row => row[0]), ['1', '2', '3']);
     assert.ok(manifest.some(row => row[1] === path.resolve(thin) && row[2] === 'https://jobs.example.test/roles/400001'));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('prep deduplicates pipeline, handled and active reposts before max selection', () => {
+  const tmp = makeSandbox('obsidian-prep-dedup-max');
+  try {
+    const source = path.join(tmp, 'Open Roles');
+    const triaged = path.join(tmp, 'Triaged');
+    const dupes = path.join(tmp, 'Dupes');
+    const repo = path.join(tmp, 'repo');
+    for (const dir of [source, triaged, path.join(repo, 'data'), path.join(repo, 'batch')]) fs.mkdirSync(dir, { recursive: true });
+    const pipelineUrl = 'https://jobs.example.test/roles/900001';
+    const handledUrl = 'https://jobs.example.test/roles/900002';
+    fs.writeFileSync(path.join(repo, 'data', 'pipeline.md'), `- [ ] ${pipelineUrl} | Zorblax Widgetry | Pipeline Role\n`);
+    fs.writeFileSync(path.join(repo, 'data', 'triage-dismissed.tsv'), `url\treason\n${handledUrl}\tduplicate\n`);
+    fs.writeFileSync(path.join(repo, 'data', 'applications.md'), [
+      '# Applications Tracker', '', TRACKER_HEADER, TRACKER_SEPARATOR,
+      trackerRow({ num: 900003, company: 'Quennox Ratchet Works', role: 'Active Role', url: 'https://jobs.example.test/roles/900003', status: 'Applied' }),
+      '',
+    ].join('\n'));
+    fs.writeFileSync(path.join(source, 'Pipeline.md'), obsidian(pipelineUrl, 'Pipeline Role'));
+    fs.writeFileSync(path.join(source, 'Handled.md'), obsidian(handledUrl, 'Handled Role'));
+    fs.writeFileSync(path.join(source, 'Repost.md'), obsidian('https://jobs.example.test/roles/900004', 'Active Role', '', { company: 'Quennox Ratchet Works' }));
+    const dates = ['2030-01-04', '2030-01-01', '2030-01-03', '2030-01-02'];
+    const names = ['Fourth.md', 'First.md', 'Third.md', 'Second.md'];
+    names.forEach((name, index) => fs.writeFileSync(path.join(source, name),
+      obsidian(`https://jobs.example.test/roles/${900010 + index}`, `${name} Role`, '', { created: dates[index] })));
+
+    const output = execFileSync(process.execPath, [script,
+      flag('source'), source, flag('triaged'), triaged, flag('dupes'), dupes,
+      flag('repo'), repo, flag('max'), '2', flag('apply'),
+    ], { encoding: 'utf8' });
+
+    assert.match(output, /quarantined pipeline: 1/);
+    assert.match(output, /quarantined handled: 1/);
+    assert.match(output, /quarantined active-repost: 1/);
+    assert.match(output, /deferred: 2/);
+    const input = fs.readFileSync(path.join(repo, 'batch', 'batch-input.tsv'), 'utf8');
+    assert.match(input, /First\.md/);
+    assert.match(input, /Second\.md/);
+    assert.doesNotMatch(input, /Third\.md|Fourth\.md/);
+    assert.doesNotMatch(fs.readFileSync(script, 'utf8'), /roleSignature/);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

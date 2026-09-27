@@ -640,6 +640,44 @@ When spawning headless workers for batch processing, use the appropriate command
 | OpenCode | `opencode run "prompt"` |
 | Qwen | `qwen -p "prompt"` |
 
+### Obsidian batch workflow
+
+Obsidian notes must start with `---` on line 1. Prep reads one-line `source:`
+and `title:` fields. It also reads `company:` for active-repost deduplication.
+
+Manual flow:
+
+```bash
+node batch/obsidian-prep.mjs --source <dir> --triaged <dir> --dupes <dir> --apply
+bash batch/drain-wrapper.sh --fresh -- --sandbox
+node batch/obsidian-postfix.mjs --source <dir> --dest <triaged-dir> --apply
+node compute-scores.mjs --all --apply
+node resync-tracker-scores.mjs --apply --only <tonight-ids>
+node clean-generated-text.mjs reports --apply
+node merge-tracker.mjs
+node verify-actionable.mjs --apply
+node health-check.mjs
+node verify-pipeline.mjs
+```
+
+The runner sandbox uses the dashboard evaluation policy because web-sourced JDs
+are untrusted input. It permits report edits and the score command while denying
+sensitive reads and system-file writes.
+
+For unattended execution, use:
+
+```bash
+node batch/obsidian-nightly.mjs --source <dir> --triaged <dir> --dupes <dir> \
+  [--max 50] [--summary <file>] [--dry-run] [--no-sandbox] [--repo <dir>]
+```
+
+Path and limit fallbacks are `TJK_OBSIDIAN_SOURCE`, `TJK_OBSIDIAN_TRIAGED`,
+`TJK_OBSIDIAN_DUPES`, and `TJK_OBSIDIAN_MAX`. The summary defaults to
+`batch/nightly-summary.json`. Exit 0 means success, exit 1 means findings, and
+exit 2 means the run aborted. The nightly locks itself, refuses API-key billing,
+runs the post-evaluation checks in order, and records command tails and model
+verification in the summary.
+
 ## Stack and Conventions
 
 - Node.js (mjs modules), Playwright (PDF + scraping), YAML (config), HTML/CSS (template), Markdown (data), Canva MCP (optional visual CV)
