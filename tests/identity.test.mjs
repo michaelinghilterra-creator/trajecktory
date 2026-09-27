@@ -104,6 +104,15 @@ const sharedHostB = 'https://ats.example.com/recruitment/recruitment.html?cid=bb
 check(canonicalUrl(sharedHostA) !== canonicalUrl(sharedHostB),
   'two shared-host postings differing only by id query params do NOT collide');
 
+const ultiproA = 'https://careers.example.test/opportunities?opportunityId=900001';
+const ultiproB = 'https://careers.example.test/opportunities?opportunityId=900002';
+check(canonicalUrl(ultiproA) !== canonicalUrl(ultiproB),
+  'two UltiPro-style postings differing only by opportunityId do NOT collide');
+
+check(canonicalUrl('https://careers.example.test/jobs/900003?p_sid=a&p_uid=b&source=c&lever-source=d&utm_campaign=e&cid=keep')
+    === 'https://careers.example.test/jobs/900003?cid=keep',
+  'custom career URLs strip tracking keys while keeping cid');
+
 // Hosts vary the casing of the same param across links to one posting.
 check(canonicalUrl('https://x.com/r?jobId=9') === canonicalUrl('https://x.com/r?jobid=9'),
   'id query keys match case-insensitively');

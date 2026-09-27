@@ -19,6 +19,11 @@ All scripts live in the project root as `.mjs` modules and are exposed via `npm 
 | `npm run rollback` | `update-system.mjs rollback` | Rollback last update |
 | `npm run liveness` | `check-liveness.mjs` | Test if job URLs are still active |
 | `npm run scan` | `scan.mjs` | Zero-token portal scanner |
+| Direct: `node batch/obsidian-prep.mjs` | `batch/obsidian-prep.mjs` | Deduplicate and stage Obsidian notes for evaluation |
+| Direct: `bash batch/drain-wrapper.sh` | `batch/drain-wrapper.sh` | Drain a staged batch in groups with one retry pass |
+| Direct: `bash batch/batch-runner.sh --sandbox` | `batch/batch-runner.sh` | Run workers with the dashboard evaluation sandbox policy |
+| Direct: `node batch/obsidian-postfix.mjs` | `batch/obsidian-postfix.mjs` | Repair URLs and archive notes backed by valid reports |
+| Direct: `node batch/obsidian-nightly.mjs` | `batch/obsidian-nightly.mjs` | Run the locked unattended Obsidian evaluation chain |
 
 **Default CV generator:** the tailored Word resume is produced by
 `generate-docx-from-template.mjs` (invoked via the `docx` skill mode, or

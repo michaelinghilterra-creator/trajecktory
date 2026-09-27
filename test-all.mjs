@@ -650,6 +650,8 @@ for (const suite of [
   'tests/finish-draft.test.mjs',
   'tests/profile-narrative.test.mjs',
   'tests/obsidian-prep.test.mjs',
+  'tests/batch-runner-sandbox.test.mjs',
+  'tests/obsidian-nightly.test.mjs',
   'tests/obsidian-postfix.test.mjs',
   'tests/prune-gated.test.mjs',
   'tests/system-paths.test.mjs',

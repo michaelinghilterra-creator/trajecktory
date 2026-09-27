@@ -23,6 +23,9 @@ batch/logs/*
 # batch runner tee here, and the output names the employers being processed.
 batch/**/*.log
 batch/drain-wrapper.done
+batch/drain-wrapper.log
+batch/nightly-summary*.json
+batch/obsidian-nightly.lock
 # Manifest of pushed Obsidian notes: real posting URLs and ATS links.
 batch/obsidian-manifest.tsv
 !batch/logs/.gitkeep
