@@ -426,8 +426,8 @@ function StatStrip({ metrics, which }) {
   if (which === 'working') {
     const ta = (metrics.topArchetypes || [])[0];
     const ts = (metrics.topSectors || [])[0];
-    if (ta) cards.push(rateCard({ label: ta.archetype + ' response', conf: ta.conf, color: 'var(--green)' }));
-    if (ts) cards.push(rateCard({ label: ts.sector + ' sector', conf: ts.conf, color: 'var(--green)' }));
+    if (ta) cards.push(rateCard({ label: ta.archetype + ' screen rate', conf: ta.conf, color: 'var(--green)' }));
+    if (ts) cards.push(rateCard({ label: ts.sector + ' screen rate', conf: ts.conf, color: 'var(--green)' }));
   } else if (which === 'not') {
     if (metrics.staleTotal != null) cards.push({ label: 'Stale touchpoints', value: String(metrics.staleTotal), sub: 'awaiting follow-up', color: 'var(--yellow)' });
     if (metrics.worstArchetype) cards.push(rateCard({ label: metrics.worstArchetype.archetype + ' (overweight)', conf: metrics.worstArchetype.conf, color: 'var(--red)' }));

@@ -140,7 +140,7 @@ function weeklyEngagementRhythm(log, now = new Date()) {
   const engagements = (log || []).filter(a => !/connection request/i.test(a.actionType || ""));
   const count = engagements.filter(a => String(a.date || "").slice(0, 10) >= ymd(monday) && String(a.date || "").slice(0, 10) <= ymd(day)).length;
   const latest = engagements.map(a => String(a.date || "").slice(0, 10)).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().pop();
-  const lastDate = latest ? new Date(`${latest}T12:00:00`) : null;
+  const lastDate = latest ? (() => { const [y, m, d] = latest.split('-').map(Number); return new Date(y, m - 1, d); })() : null;
   const daysSince = lastDate ? Math.max(0, Math.floor((day - lastDate) / 86400000)) : null;
   return { count, daysSince };
 }

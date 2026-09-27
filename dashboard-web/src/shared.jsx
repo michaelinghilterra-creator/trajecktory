@@ -17,6 +17,66 @@ window.myEmailSignature = () => {
   return lines.join('\n');
 };
 
+// Metrics dictionary surfaces
+const metricEntry = (dict, id) => Array.isArray(dict)
+  ? dict.find(metric => metric.id === id)
+  : dict?.[id];
+
+window.MetricTip = function MetricTip({ id, dict, extraRows = [], tipId }) {
+  const metric = metricEntry(dict, id);
+  if (!metric) return null;
+  const rows = [
+    ['Definition', metric.definition],
+    ['Formula', metric.formula],
+    ['Window', metric.window],
+    ...extraRows,
+  ].filter(row => row && row[1] !== null && row[1] !== undefined && row[1] !== '');
+  return (
+    <div className="tip metric-tip" id={tipId} role="tooltip">
+      <div className="tip-head"><b>{metric.label}</b></div>
+      {rows.map(([label, value]) => (
+        <div className="tip-row" key={label}><span className="l">{label}</span><span className="v">{value}</span></div>
+      ))}
+      {metric.benchmark && (
+        <div className="tip-row"><span className="l">Benchmark</span><span className="v">{metric.benchmark.text} ({metric.benchmark.source}, {metric.benchmark.year})</span></div>
+      )}
+      <div className="tip-co">Definitions {metric.version || dict?.version || window.METRICS_VERSION || ''}</div>
+    </div>
+  );
+};
+
+let metricTipSeq = 0;
+window.MetricTile = function MetricTile({ id, dict, value, sub, rate, floor, limit, available = true, insight, extraRows = [] }) {
+  const metric = metricEntry(dict, id) || { label: id };
+  const tipId = React.useRef(`metric-tip-${++metricTipSeq}`).current;
+  const effectiveFloor = floor ?? metric.floor;
+  const effectiveLimit = limit ?? metric.limit;
+  let shown = value;
+  let rateSub = null;
+  if (available === false) shown = 'not logged';
+  else if (rate) {
+    shown = rate.sufficient ? `${Math.round(rate.pct)}%` : `${rate.k} of ${rate.n}`;
+    rateSub = rate.sufficient ? `${rate.k} of ${rate.n}` : 'too few to rate';
+  }
+  const numeric = typeof value === 'number' ? value : null;
+  const shortFloor = effectiveFloor != null && numeric != null && numeric < effectiveFloor;
+  const overLimit = effectiveLimit != null && numeric != null && numeric > effectiveLimit;
+  const verdict = available === false ? 'var(--text-mute)'
+    : effectiveFloor != null || effectiveLimit != null
+      ? shortFloor || overLimit ? 'var(--orange)' : 'var(--green)'
+      : 'var(--text)';
+  const rateBand = rate?.sufficient ? [`95% band`, `${Math.round(rate.lo)} to ${Math.round(rate.hi)}%`] : null;
+  return (
+    <div className="kpi metric-kpi" tabIndex={0} aria-describedby={tipId}>
+      <span className="kpi-label">{metric.label}</span>
+      <span className="kpi-value" style={{ color: verdict }}>{shown}</span>
+      {(sub || rateSub) && <span className="kpi-delta">{sub || rateSub}</span>}
+      {insight && <span className="kpi-insight">{insight}</span>}
+      <window.MetricTip id={id} dict={dict} tipId={tipId} extraRows={[...(rateBand ? [rateBand] : []), ...extraRows]} />
+    </div>
+  );
+};
+
 // ---------- Canonical icon set ----------
 // One source of truth so PI / TI / REC_I and any subtab icons stay visually
 // identical. Loads via shared.js which is imported before every page file.
@@ -458,8 +518,8 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
   // Launchpad: front-and-centre with an incomplete-count badge while setup is
   // unfinished; demoted to a quiet "Setup" hub entry once everything is ready.
   if (setupState) {
-    const REQ = ["cv","identity","roles","edge","comp","location","evaluation","companies","outputs"];
-    const incomplete = REQ.filter(id => (setupState.sections?.[id]?.status || "empty") !== "complete").length;
+    const refine = window.LP_REFINE || [];
+    const incomplete = refine.filter(id => (setupState.sections?.[id]?.status || "empty") !== "complete").length;
     if (setupState.firstRun || incomplete > 0) {
       items.unshift({ key: "launchpad", label: "Launchpad", icon: "◇", badge: incomplete || null });
     } else {

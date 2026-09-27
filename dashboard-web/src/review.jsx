@@ -37,6 +37,12 @@ function ReviewIndicator({ label, m }) {
   );
 }
 
+function ReviewRate({ label, rate }) {
+  const value = !rate ? 'not logged' : rate.sufficient ? `${Math.round(rate.pct)}%` : `${rate.k} of ${rate.n}`;
+  const detail = rate && !rate.sufficient ? 'too few to rate' : rate ? `${rate.k} of ${rate.n}; ${Math.round(rate.lo)} to ${Math.round(rate.hi)}%` : '';
+  return <div title={detail} tabIndex="0" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 2px', borderBottom: '1px solid var(--border)' }}><span style={{ fontSize: 13 }}>{label}</span><span className="mono" style={{ fontSize: 13, fontWeight: 600, color: rate ? 'var(--text)' : 'var(--text-mute)' }}>{value}</span></div>;
+}
+
 // Week-over-week trend, read from the FROZEN review log (status.history, which
 // GET /api/review/status already returns). Each row is one floor across recent
 // weeks; the values are the numbers AS THEY WERE at review time, so a past week
@@ -641,6 +647,7 @@ function RollingFloor({ toast }) {
 
 window.ReviewTab = function ReviewTab({ toast }) {
   const [data, setData] = useStateRv(null);
+  const [core, setCore] = useStateRv(null);
   const [status, setStatus] = useStateRv(null);
   const [err, setErr] = useStateRv(null);
   const [name, setName] = useStateRv('');
@@ -652,6 +659,7 @@ window.ReviewTab = function ReviewTab({ toast }) {
     fetch('/api/metrics/weekly').then(r => r.json())
       .then(d => { if (d && d.error) setErr(d.error); else setData(d); })
       .catch(e => setErr(e.message));
+    fetch('/api/metrics/core').then(r => r.json()).then(d => { if (d && !d.error) setCore(d); }).catch(() => {});
     fetch('/api/review/status').then(r => r.json()).then(setStatus).catch(() => {});
   }, []);
   const loadPending = useCallbackRv(() => {
@@ -690,7 +698,10 @@ window.ReviewTab = function ReviewTab({ toast }) {
   if (!data) return <div className="dim" style={{ padding: 28 }}>Loading weekly review…</div>;
 
   const m = data.metrics || {};
-  const floors = (data.floors && data.floors.results) || [];
+  const floors = ((data.floors && data.floors.results) || []).map(row => ({
+    ...row,
+    floor: data.floorValues?.[row.key] ?? row.floor,
+  }));
   const history = (status && status.history) || [];
 
   return (
@@ -730,8 +741,9 @@ window.ReviewTab = function ReviewTab({ toast }) {
           <h3 style={{ margin: '0 0 4px' }}>Leading indicators</h3>
           <div className="card" style={{ padding: '4px 16px', marginBottom: 24 }}>
             <ReviewIndicator label="Replies on delivered mail" m={m.replies} />
-            <ReviewIndicator label="Delivered reply rate % (cumulative)" m={m.deliveredReplyRatePct} />
-            <ReviewIndicator label="Screens booked" m={m.screensBooked} />
+            <ReviewRate label="Outreach reply rate (email)" rate={core?.results?.outreach?.email} />
+            <ReviewRate label="Outreach reply rate (LinkedIn)" rate={core?.results?.outreach?.linkedin} />
+            <ReviewIndicator label="Screens held" m={core ? { available: true, value: core.thisWeek?.screensHeld ?? 0 } : null} />
             <ReviewIndicator label="Screen objections logged" m={m.objectionsLogged} />
             <ReviewIndicator label="Unserviced applications (WIP)" m={m.unservicedApplications} />
           </div>

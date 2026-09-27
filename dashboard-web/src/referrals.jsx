@@ -177,13 +177,17 @@ window.ReferralsTab = function ReferralsTab({ search } = {}) {
     { k: 'last', label: 'Last touch', w: 110 },
   ];
 
+  // The API returns the referral ladder in templates/states.yml order. The live
+  // conversation is the asked rung through intro made; terminal and parked
+  // states follow it and are not conversations.
+  const conversationStates = useMemo(() => new Set(statuses.slice(2, 5)), [statuses]);
   const stats = useMemo(() => ({
     total: rows.length,
     notAsked: rows.filter(r => r.status === 'Not Asked').length,
-    asked: rows.filter(r => ['Asked', 'Catching Up'].includes(r.status)).length,
+    asked: rows.filter(r => conversationStates.has(r.status)).length,
     intros: rows.filter(r => r.status === 'Intro Made').length,
     applied: rows.filter(r => r.status === 'Applied w/ Referral').length,
-  }), [rows]);
+  }), [rows, conversationStates]);
 
   const patch = (id, updates) => {
     // optimistic

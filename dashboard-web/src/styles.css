@@ -590,6 +590,7 @@ select option, .inp option, .sel option { background: var(--panel); color: var(-
 }
 .kpi-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-mute); font-family: "JetBrains Mono", monospace; }
 .kpi-value { font-size: 28px; font-weight: 600; font-family: "JetBrains Mono", monospace; letter-spacing: -0.03em; line-height: 1.1; }
+.kpi-insight { color: var(--text-dim); font-size: 11px; line-height: 1.35; }
 .kpi-delta { font-size: 11px; font-family: "JetBrains Mono", monospace; }
 .kpi-delta.up { color: var(--green); }
 .kpi-delta.down { color: var(--red); }
@@ -994,6 +995,12 @@ select option, .inp option, .sel option { background: var(--panel); color: var(-
 .tip-row .v { font-family: "JetBrains Mono", monospace; }
 .tip-co { font-size: 11px; color: var(--text-dim); margin-top: 4px; line-height: 1.5; }
 .tip-co b { color: var(--text); font-weight: 500; }
+.metric-kpi { overflow: visible; outline: none; }
+.metric-kpi .metric-tip { left: 12px; top: calc(100% - 4px); display: none; max-width: 360px; z-index: 40; }
+.metric-kpi:hover .metric-tip,
+.metric-kpi:focus .metric-tip,
+.metric-kpi:focus-visible .metric-tip { display: block; }
+.metric-kpi:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
 
 /* Hover ring on bars/points */
 .hover-target.bar-hl { stroke: var(--text); stroke-width: 1.5; }

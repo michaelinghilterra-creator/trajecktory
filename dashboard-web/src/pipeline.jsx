@@ -20,7 +20,8 @@ const STATUS = [
   { id: 'Offer',         short: 'Offer',   color: 'var(--green)',  hex: '#22c55e', rgb: '34,197,94',   stage: 6, icon: '★' },
 ];
 const STATUS_MAP = Object.fromEntries(STATUS.map(s => [s.id, s]));
-const ACTIVE_STATUSES = STATUS.map(s => s.id);
+const ACTIVE_STATUSES = STATUS.filter(s => s.id !== 'Evaluated').map(s => s.id);
+const EVALUATED_AWAITING = 'Evaluated';
 const LAST_STAGE = STATUS.length - 1; // Offer
 
 const SOURCE = {
@@ -45,7 +46,11 @@ const STALE_DAYS = 14;
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const daysAgo = (iso) => {
   if (!iso) return 0;
-  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  const [year, month, day] = String(iso).slice(0, 10).split('-').map(Number);
+  const then = new Date(year, (month || 1) - 1, day || 1);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.floor((today - then) / 86400000);
 };
 const fmtScore = (s) => s == null ? 'N/A' : s.toFixed(1);
 const scoreBucket = (s) => s == null ? 'na' : s >= 4.0 ? 'strong' : s >= 3.0 ? 'border' : 'weak';
@@ -176,115 +181,37 @@ function SitBadge({ days, stale }) {
   return <span className={'sit-badge ' + cls}>{days}d</span>;
 }
 
-function Kpi({ k, v, sub, icon, color }) {
+let pipelineTipSeq = 0;
+function Kpi({ k, v, sub, icon, color, definition, insight, extraRows = [] }) {
+  const tipId = React.useRef(`pipeline-tip-${++pipelineTipSeq}`).current;
   return (
-    <div className="kpi">
+    <div className="kpi metric-kpi" tabIndex={0} aria-describedby={tipId}>
       {icon && <span className="ico"><PIcon d={icon} size={15} /></span>}
       <span className="kpi-label">{k}</span>
       <span className="kpi-value" style={color ? { color } : null}>{v}</span>
       {sub && <span className="kpi-delta">{sub}</span>}
+      {insight && <span className="kpi-insight">{insight}</span>}
+      <div className="tip metric-tip" id={tipId} role="tooltip">
+        <div className="tip-head"><b>{k}</b></div>
+        <div className="tip-row"><span className="l">Definition</span><span className="v">{definition}</span></div>
+        {extraRows.map(([label, value]) => <div className="tip-row" key={label}><span className="l">{label}</span><span className="v">{value}</span></div>)}
+      </div>
     </div>
   );
 }
 
 // ─── Overview sub-tab ──────────────────────────────────────────────────────
-function OverviewKpis({ apps, isStale = () => false }) {
+function OverviewKpis({ apps, allApps = apps, isStale = () => false }) {
   const inFlight = apps.filter(a => a.status === 'Offer' || window.isInterviewStage(a.status)).length;
-  const scored = apps.filter(a => a.score != null);
-  const avg = scored.length ? (scored.reduce((s, a) => s + a.score, 0) / scored.length).toFixed(2) : '-';
-  const strong = scored.filter(a => a.score >= 4.0).length;
-  const stale = apps.filter(a => isStale(a)).length;
   const interviews = apps.filter(a => window.isInterviewStage(a.status)).length;
-  return (
-    <div className="grid cols-4" style={{ marginBottom: 16 }}>
-      <Kpi k="Active Roles" v={apps.length} sub={`${inFlight} in flight · ${interviews} interviewing`} icon={PI.layers} color="var(--accent-2)" />
-      <Kpi k="Strong Fits" v={strong} sub={`score ≥ 4.0 · avg ${avg}`} icon={PI.star} />
-      <Kpi k="Interviewing" v={interviews} sub="active loops in progress" icon={PI.briefcase} color="var(--orange)" />
-      <Kpi k="Stale" v={stale} sub="per Follow-Ups engine" icon={PI.clock} color={stale ? 'var(--red)' : 'var(--text)'} />
-    </div>
-  );
-}
-
-function NeedsAttention({ apps, onOpen, selId, isStale = () => false, staleDays = () => null }) {
-  // Stale rows come from the canonical Follow-Ups engine — same data the
-  // parent PipelineTab fetched once and now shares with every sub-view.
-  const hot = apps.filter(a => a.status === 'Evaluated' && a.score != null && a.score >= 4.0)
-    .map(a => ({ a, label: 'Hot lead, apply', icon: PI.zap, color: 'var(--accent)' }));
-  const stale = apps.filter(a => isStale(a))
-    .sort((x, y) => (staleDays(y) || 0) - (staleDays(x) || 0))
-    .map(a => ({ a, label: `Follow up · ${staleDays(a) ?? daysAgo(a.date)}d silent`, icon: PI.send, color: 'var(--red)' }));
-  const intv = apps.filter(a => window.isInterviewStage(a.status))
-    .map(a => ({ a, label: 'Interview prep due', icon: PI.briefcase, color: 'var(--orange)' }));
-  // Dedupe by app id — a row that's both Interview status AND stale by the
-  // Follow-Ups engine would otherwise produce a duplicate-key React warning.
-  // Priority order: hot > stale > interview-prep.
-  const seen = new Set();
-  const queue = [];
-  for (const item of [...hot, ...stale, ...intv]) {
-    if (seen.has(item.a.id)) continue;
-    seen.add(item.a.id);
-    queue.push(item);
-    if (queue.length >= 7) break;
-  }
-
-  return (
-    <div className="card padded-lg">
-      <div className="card-head">
-        <span className="card-title"><span className="dot" />Needs Attention</span>
-        <span className="card-meta mono">{queue.length} items</span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {queue.length === 0 && <div className="no-data" style={{ padding: '8px 0' }}>Nothing urgent. Pipeline is clear.</div>}
-        {queue.map(({ a, label, icon, color }) => (
-          <div key={a.id} onClick={() => onOpen(a)} role="button" tabIndex={0} onKeyDown={window.kbdActivate(() => onOpen(a))}
-            style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto auto', gap: 12, alignItems: 'center',
-              padding: '8px 10px', borderRadius: 9, cursor: 'pointer',
-              background: selId === a.id ? 'var(--accent-bg)' : 'var(--panel-2)',
-              border: '1px solid var(--border)' }}>
-            <span style={{ width: 28, height: 28, borderRadius: 7, display: 'grid', placeItems: 'center',
-              background: 'var(--panel)', border: '1px solid var(--border)', color }}>
-              <PIcon d={icon} size={14} />
-            </span>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.company}</div>
-              <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.role}</div>
-            </div>
-            <span className="mono" style={{ fontSize: 11, color, whiteSpace: 'nowrap' }}>{label}</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <StatusBadge status={a.status} size="sm" />
-              <ScoreChip score={a.score} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function FunnelSnapshot({ apps }) {
-  const counts = STATUS.map(s => ({ s, n: apps.filter(a => a.status === s.id).length }));
-  const max = Math.max(...counts.map(c => c.n), 1);
-  return (
-    <div className="card padded-lg">
-      <div className="card-head">
-        <span className="card-title"><span className="dot" />Funnel Snapshot</span>
-        <span className="card-meta mono">active stages</span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 2 }}>
-        {counts.map(({ s, n }) => (
-          <div key={s.id} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 34px', gap: 10, alignItems: 'center' }}>
-            <span className="mono" style={{ fontSize: 11, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 7, height: 7, borderRadius: 99, background: s.color }} />{s.id}
-            </span>
-            <div style={{ height: 10, borderRadius: 99, background: 'var(--panel-2)', overflow: 'hidden' }}>
-              <span style={{ display: 'block', height: '100%', width: `${Math.max((n / max) * 100, n ? 6 : 0)}%`, background: s.color, opacity: 0.85, borderRadius: 99 }} />
-            </div>
-            <span className="mono" style={{ fontSize: 12, textAlign: 'right', color: n ? 'var(--text)' : 'var(--text-mute)' }}>{n}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  const evaluated = allApps.filter(a => a.status === EVALUATED_AWAITING).length;
+  const stale = apps.filter(a => window.isInterviewStage(a.status) && isStale(a)).length;
+  return <div className="grid cols-4" style={{ marginBottom: 16 }}>
+    <Kpi k="Active" v={apps.length} sub={`${inFlight} in flight`} icon={PI.layers} definition="Applications at Applied, an interview stage, or Offer." insight="Evaluated rows are awaiting your decision, not active." />
+    <Kpi k="Interviewing" v={interviews} sub="active interview stages" icon={PI.briefcase} definition="Active applications currently in a phone screen or interview stage." insight={interviews ? 'Prepare the next live round.' : 'No active interview loops.'} />
+    <Kpi k="Evaluated, awaiting decision" v={evaluated} sub="not active" icon={PI.star} definition="Evaluated roles where you have not yet decided whether to apply." insight={evaluated ? 'Decide on the strongest fits first.' : 'No decisions waiting.'} />
+    <Kpi k="Stale interview follow ups" v={stale} sub="interview stage only" icon={PI.clock} definition="Interview-stage applications flagged stale by the Follow-Ups engine." insight={stale ? 'Follow up on live interview threads.' : 'Interview follow ups are current.'} />
+  </div>;
 }
 
 // Pipeline → Overview is the dashboard home: it reuses the self-contained
@@ -664,6 +591,34 @@ function ResponseProgressCard({ progress, rejTiming }) {
   );
 }
 
+function SegmentRate({ rate }) {
+  if (!rate) return <span className="dim">not logged</span>;
+  const value = rate.sufficient ? `${Math.round(rate.pct)}%` : `${rate.k} of ${rate.n}`;
+  const title = rate.sufficient ? `${rate.k} of ${rate.n}; 95% band ${Math.round(rate.lo)} to ${Math.round(rate.hi)}%` : 'too few to rate';
+  return <span tabIndex="0" title={title}>{value}</span>;
+}
+
+function SegmentsCard({ core }) {
+  const dict = core?.dictionary || [], segments = core?.segments;
+  const entry = dict.find(metric => metric.id === 'segments');
+  const groups = [
+    ['Role type', segments?.archetype],
+    ['Source', segments?.source],
+  ];
+  const smallGroups = groups.reduce((sum, [, segment]) => sum + (segment?.small?.groups || 0), 0);
+  const smallN = groups.reduce((sum, [, segment]) => sum + (segment?.small?.n || 0), 0);
+  const qualified = groups.some(([, segment]) => segment?.rows?.length);
+  return <div className="card padded-lg metric-kpi" tabIndex="0" aria-describedby="pipeline-segments-tip" style={{ marginBottom: 14 }}>
+    <div className="card-head"><span className="card-title">What converts</span></div>
+    {!qualified ? <div className="no-data">No group has 10 applications yet; rates would be noise.</div> : <div className="grid cols-2">
+      {groups.map(([label, segment]) => <div key={label}><div className="mono dim" style={{ fontSize: 10.5, marginBottom: 6 }}>{label}</div><table className="atbl"><thead><tr><th>{label}</th><th>n</th><th>Response rate</th><th>Interview rate</th></tr></thead><tbody>{(segment?.rows || []).map(row => <tr key={row.key}><td>{row.key}</td><td>{row.n}</td><td><SegmentRate rate={row.response} /></td><td><SegmentRate rate={row.interview} /></td></tr>)}</tbody></table></div>)}
+    </div>}
+    {smallGroups > 0 && <div className="mono dim" style={{ fontSize: 10.5, marginTop: 10 }}>{smallGroups} more groups with fewer than 10 applications ({smallN} applications) are not rated</div>}
+    <div className="kpi-insight" style={{ marginTop: 8 }}>{entry?.why}</div>
+    <window.MetricTip id="segments" dict={dict} tipId="pipeline-segments-tip" />
+  </div>;
+}
+
 function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => false }) {
   // Neutral placeholder fallbacks — real comp targets come from compTweaks
   // (Tweaks panel) and the gitignored config/profile.yml. Never hardcode a
@@ -676,13 +631,17 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
   // column and the archetype bars counted only the rows still live on the
   // funnel, silently dropping every closed row that had already advanced.
   // window.appReached reads the server-stamped `reached` field.
-  const STAGE_AT = window.FUNNEL_ORDER;
-  const reached = (a, s) => window.appReached(a, STAGE_AT[s]);
 
   // The full tracker. Every historical measure on this view (rates, source
   // effectiveness, archetype conversion) runs over this rather than the active
   // subset the snapshot tiles use. `apps` is activeApps; `allApps` is everything.
   const ratePool = allApps || apps;
+  const [core, setCore] = useStateP(null);
+  useEffectP(() => {
+    let alive = true;
+    fetch('/api/metrics/core').then(r => r.json()).then(d => { if (alive && !d.error) { window.METRICS_VERSION = d.version; setCore(d); } }).catch(() => {});
+    return () => { alive = false; };
+  }, [ratePool]);
 
   // Time-to-rejection: days from application to the date a row was marked
   // Rejected, served from the status-event sidecar (fills in over time).
@@ -706,39 +665,6 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
     return () => { alive = false; };
   }, []);
 
-  // Both panels answer historical questions — "which channel produces roles that
-  // advance" and "which archetype converts" — so they run over the whole tracker,
-  // not the active subset. Scoped to active roles the advance counts collapse to
-  // almost nothing across every channel, because advancing usually ends in a
-  // rejection and a rejection leaves the active pool.
-  const srcKeys = Object.keys(SOURCE);
-  const bySource = srcKeys.map(k => {
-    const items = ratePool.filter(a => a.source === k);
-    const scored = items.filter(a => a.score != null);
-    const avg = scored.length ? scored.reduce((s, a) => s + a.score, 0) / scored.length : 0;
-    const strong = items.filter(a => a.score != null && a.score >= 4.0).length;
-    const advanced = items.filter(a => reached(a, 2)).length;
-    const strongRate = items.length ? Math.round((strong / items.length) * 100) : 0;
-    return { k, meta: SOURCE[k], n: items.length, avg, strong, strongRate, advanced };
-  }).filter(s => s.n > 0).sort((a, b) => b.avg - a.avg);
-  const bestSource = [...bySource].sort((a, b) => b.strongRate - a.strongRate)[0];
-
-  const byArch = window.ARCHETYPES.map(k => {
-    const items = ratePool.filter(a => a.archetype === k);
-    const applied = items.filter(a => reached(a, 1)).length;
-    const interviewed = items.filter(a => reached(a, 3)).length;
-    const conv = applied ? Math.round((interviewed / applied) * 100) : 0;
-    return { k, n: items.length, applied, interviewed, conv };
-  }).filter(a => a.n > 0).sort((a, b) => b.conv - a.conv);
-  // Needs a real sample before it gets to recommend anything. At the old >= 2 gate
-  // a single interview off two applications became "this archetype converts best,
-  // weight your applications toward it". 5 matches the server's own thin-sample
-  // floor in insights.mjs.
-  const MIN_ARCH_SAMPLE = 5;
-  // Never recommend the catch-all: "Unclassified converts best" would be advice
-  // to target a gap in the matching rules.
-  const bestArch = byArch.find(a => a.applied >= MIN_ARCH_SAMPLE && a.k !== 'Unclassified') || null;
-
   // Comp positioning: bucket each role's midpoint salary into four bands.
   // walkAway / targetLow / targetHigh come from the Tweaks panel.
   const withComp = apps.filter(a => a.salary != null && a.salary > 0);
@@ -756,12 +682,6 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
   // well things were going, reading a fraction of the true rate.
   // window.appReached reads the server-stamped `reached` rung (live status maxed
   // with the event log and the [reached:] tag), the same engine the Overview uses.
-  const appliedAll = ratePool.filter(a => window.appReached(a, 'Applied')).length;
-  // Responded is derived, not a rung: reached a screen or later, OR a rejection.
-  const respAll = ratePool.filter(a => window.appResponded(a)).length;
-  const intvAll = ratePool.filter(a => window.appReached(a, 'Phone Screen')).length;
-  const respRate = appliedAll ? Math.round((respAll / appliedAll) * 100) : 0;
-  const intvRate = appliedAll ? Math.round((intvAll / appliedAll) * 100) : 0;
 
   return (
     <div className="fade-up">
@@ -772,23 +692,24 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
         </div>
       </div>
 
-      <OverviewKpis apps={apps} isStale={isStale} />
+      <OverviewKpis apps={apps} allApps={ratePool} isStale={isStale} />
 
-      <div className="grid cols-4" style={{ marginBottom: 14 }}>
+      <div className="grid cols-2" style={{ marginBottom: 14 }}>
         {/* Labelled "all time" because every other tile on this view is scoped to
             the active roles named in the heading above. */}
-        <Kpi k="Response Rate" v={respRate + '%'} sub={`${respAll} of ${appliedAll} applied · all time`} icon={PI.msg} />
-        <Kpi k="Interview Rate" v={intvRate + '%'} sub={`${intvAll} reached a screen · all time`} icon={PI.briefcase} />
         <Kpi
           k="Silence Rate (14d)"
-          v={responseProgress?.silence?.['14']?.pct == null ? '-' : responseProgress.silence['14'].pct + '%'}
+          v={responseProgress?.silence?.['14']?.pct == null ? 'not logged' : responseProgress.silence['14'].pct + '%'}
           sub={responseProgress
             ? `${responseProgress.silence?.['30']?.pct == null ? '30d not mature' : `30d ${responseProgress.silence['30'].pct}%`} · n=${responseProgress.silence?.['14']?.eligible || 0}${responseProgress.silence?.['14']?.undated ? ` · ${responseProgress.silence['14'].undated} undated` : ''}`
             : 'loading response cohorts'}
           icon={PI.clock}
           color={responseProgress?.silence?.['14']?.pct >= 70 ? 'var(--red)' : 'var(--text)'}
+          definition="Applied rows old enough to judge that still have no employer response."
+          insight="Silence points to targeting or resume problems."
+          extraRows={[["You decided first", responseProgress ? responseProgress.candidateDecided : 'not logged']]}
         />
-        <Kpi k="On / Above Target" v={inOrAbovePct + '%'} sub={`avg posted comp $${avgComp}K`} color={inOrAbovePct < 40 ? 'var(--red)' : 'var(--text)'} icon={PI.trend} />
+        <Kpi k="On / Above Target" v={compTweaks?.fromProfile ? inOrAbovePct + '%' : 'profile incomplete'} sub={compTweaks?.fromProfile ? `avg posted comp $${avgComp}K` : 'set compensation in Launchpad'} icon={PI.trend} definition="Share of active roles whose posted midpoint meets or exceeds your saved target floor." insight={compTweaks?.fromProfile ? 'Compare posted compensation with your target.' : 'Complete your compensation profile before rating roles.'} />
       </div>
 
       <div style={{ marginBottom: 14 }}>
@@ -811,63 +732,7 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
         />
       </div>
 
-      <div className="grid cols-2" style={{ marginBottom: 14 }}>
-        <div className="card padded-lg">
-          <div className="card-head"><span className="card-title"><span className="dot" />Source Effectiveness</span><span className="card-meta mono">quality by channel</span></div>
-          <table className="atbl" style={{ marginTop: 2 }}>
-            <thead><tr><th>Source</th><th>Roles</th><th>Avg</th><th>Strong</th><th>Adv</th></tr></thead>
-            <tbody>
-              {bySource.map(s => (
-                <tr key={s.k} className={bestSource && s.k === bestSource.k ? 'top' : ''}>
-                  <td><span className="s-name"><span className="d" style={{ background: s.meta.color }} />{s.k}</span></td>
-                  <td>{s.n}</td>
-                  <td>{s.avg.toFixed(1)}</td>
-                  <td className={s.strongRate >= 60 ? 'pos' : ''}>{s.strongRate}%</td>
-                  <td className="mut">{s.advanced}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {bestSource && (
-            <Insight>
-              <b>{bestSource.k}</b> surfaces the highest-quality roles ({bestSource.strongRate}% score ≥4.0). Spend more sourcing time here.
-            </Insight>
-          )}
-        </div>
-
-        <div className="card padded-lg">
-          <div className="card-head"><span className="card-title"><span className="dot" />Archetype Conversion</span><span className="card-meta mono">apply → interview</span></div>
-          <div className="afun" style={{ marginTop: 2 }}>
-            {byArch.filter(a => a.interviewed > 0).length === 0 && (
-              <div className="mono dim" style={{ fontSize: 12, padding: '4px 0' }}>No archetype has reached an interview yet.</div>
-            )}
-            {byArch.filter(a => a.interviewed > 0).map(a => (
-              <div className="afun-row" key={a.k}>
-                <span className="afun-lbl"><span className="d" />{a.k}</span>
-                <div className="afun-track">
-                  <div className="afun-applied" />
-                  <div className="afun-intv" style={{ width: `${Math.max(a.conv, 4)}%` }}>{a.conv >= 16 ? a.conv + '%' : ''}</div>
-                </div>
-                <span className="afun-cap">{a.conv > 0 && a.conv < 16 ? <b>{a.conv}% · </b> : null}<b>{a.interviewed}</b>/{a.applied} to intv</span>
-              </div>
-            ))}
-          </div>
-          {bestArch && (
-            <Insight kind="good">
-              <b>{bestArch.k}</b> roles convert best: {bestArch.conv}% reach interview. Weight your daily applications toward {bestArch.k}.
-            </Insight>
-          )}
-        </div>
-      </div>
-
-      {/* Pipeline Flow Sankey — moved from main Analytics tab per user request */}
-      <div className="card padded-lg" style={{ marginTop: 14 }}>
-        <div className="card-head">
-          <span className="card-title">Pipeline Flow · archetype → offer</span>
-          <span className="card-meta mono">how every role moved through the funnel, by archetype</span>
-        </div>
-        {window.Sankey ? <window.Sankey apps={allApps || apps} /> : <div className="dim" style={{ fontSize: 12, padding: 12 }}>Sankey unavailable.</div>}
-      </div>
+      <SegmentsCard core={core} />
 
       {/* Interview stage funnel — per-round reach + rejection-by-stage attribution */}
       <div className="card padded-lg" style={{ marginTop: 14 }}>
@@ -1158,7 +1023,14 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
     ? [{ id: 'SKIP', label: 'Skip' }, { id: 'Not a Fit', label: 'Not a Fit' }, { id: 'Closed', label: 'Closed' }]
     : [{ id: 'Rejected', label: 'Rejected', danger: true }, { id: 'No Response', label: 'No Response' }, { id: 'Not a Fit', label: 'Not a Fit' }, { id: 'Closed', label: 'Closed' }];
 
-  const gap = (app.salary || 0) - (app.target || 0);
+  // Posted midpoint against the profile target band (app.jsx compBands). Null when either side is unknown.
+  const bands = window.tjkCompBands;
+  const compPosition = app.salary == null ? { text: 'No salary posted' }
+    : !bands || !bands.fromProfile ? { text: 'No target set' }
+    : app.salary < bands.walkAway ? { text: `${bands.walkAway - app.salary}k below walk-away`, color: 'var(--red)' }
+    : app.salary < bands.targetLow ? { text: `${bands.targetLow - app.salary}k below target`, color: 'var(--orange)' }
+    : app.salary > bands.targetHigh ? { text: `${app.salary - bands.targetHigh}k above target`, color: 'var(--green)' }
+    : { text: 'Within target', color: 'var(--green)' };
   const remoteChip = (cs && cs.remote) || (app.size ? `${app.size}-stage` : null);
   // Real structured fields from /api/cheatsheets/:id when present
   const tldr = cs && cs.tldr;
@@ -1225,7 +1097,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
             // Rejected / No Response imply at least Applied. The drop-off rung is
             // marked red so a glance reads "got to here, then lost", not "Evaluated".
             const isClosed = window.FUNNEL_ORDER.indexOf(app.status) < 0;
-            const reachedLabel = window.reachedStage(app);
+            const reachedLabel = app.reached != null ? app.reached : window.reachedStage(app);
             let dropStage = -1;
             if (isClosed) {
               if (reachedLabel && STATUS_MAP[reachedLabel]) dropStage = STATUS_MAP[reachedLabel].stage;
@@ -1341,9 +1213,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
                   <div className="rp-snap-value mono" style={{ fontSize: 16 }}>
                     {comp && comp.stated ? (comp.stated.length > 16 ? comp.stated.slice(0, 15) + '…' : comp.stated) : (app.salary != null ? `$${app.salary}k` : '-')}
                   </div>
-                  {app.salary != null && app.target != null && (
-                    <div className="rp-snap-sub" style={{ color: gap >= 0 ? 'var(--green)' : 'var(--red)' }}>{gap >= 0 ? '+' : ''}{gap}k vs target</div>
-                  )}
+                  <div className="rp-snap-sub" style={compPosition.color ? { color: compPosition.color } : undefined}>{compPosition.text}</div>
                 </div>
                 <div className="rp-snap">
                   <div className="rp-snap-label">Domain</div>
@@ -1967,9 +1837,9 @@ function DiscoveryInbox({ inbox, onReload }) {
     <div className="col" style={{ gap: 16 }}>
       <div className="card padded-lg col" style={{ gap: 10 }}>
         <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="stat-chip"><b>{counts.pending}</b> pending eval</span>
-          <span className="stat-chip"><b>{counts.gated}</b> gated</span>
-          <span className="stat-chip dim">{counts.done} done</span>
+          <span className="stat-chip" tabIndex="0" title="Scanned roles waiting for a readable snapshot and evaluation."><b>{counts.pending}</b> pending eval</span>
+          <span className="stat-chip" tabIndex="0" title="Roles stopped because the posting was dead, unavailable, or unreadable."><b>{counts.gated}</b> gated</span>
+          <span className="stat-chip dim" tabIndex="0" title="Roles already resolved out of the discovery queue.">{counts.done} done</span>
           <button type="button" className="btn sm" style={{ marginLeft: 'auto' }} onClick={onReload}>↻ Refresh</button>
         </div>
         <div className="dim" style={{ fontSize: 12, lineHeight: 1.5 }}>
