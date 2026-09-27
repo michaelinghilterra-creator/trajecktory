@@ -8,10 +8,11 @@
 // For each cheat sheet detected, infers the stage from the filename and
 // validates that the required §-headings for that stage are all present.
 //
-// Stages detected:
-//   *round-1-screen*       | *recruiter*    | *phone*          → screen template
-//   *round-N-{name-name}*  | *hiring-manager* | *hm*           → hm-round template
-//   *final-loop*           | *final*        | *onsite*         → final-loop template
+// Stages detected (descriptor first, round number only as a fallback):
+//   *final-loop* | *final-round* | *onsite* | *panel*  → final-loop template
+//   *hiring-manager* | *hm*                            → hm-round template
+//   *screen* | *recruiter* | *phone*                   → screen template
+//   no descriptor: round-1 → screen, round-2/3 → hm-round, round-4+ → final-loop
 //
 // Usage:
 //   node verify-interview-prep.mjs            # check all cheat sheets
@@ -49,15 +50,17 @@ const REQUIRED = {
 function inferStage(filename) {
   const lower = filename.toLowerCase();
   if (!/-round-\d+/.test(lower)) return null; // intel report — skip
+  // The stage descriptor outranks the round number: a recruiter screen can be
+  // round 2 when a hiring manager reached out first.
   if (/final-?loop|final-?round|onsite|panel/.test(lower)) return 'final-loop';
-  if (/hiring-?manager|\bhm\b|round-2|round-3/.test(lower)) return 'hm-round';
-  if (/screen|recruiter|phone|round-1/.test(lower))         return 'screen';
+  if (/hiring-?manager|\bhm\b/.test(lower))                return 'hm-round';
+  if (/screen|recruiter|phone/.test(lower))                return 'screen';
   // round-N with no stage hint — best guess by N
   const m = lower.match(/-round-(\d+)/);
   const n = m ? parseInt(m[1], 10) : 0;
   if (n === 1) return 'screen';
-  if (n === 2) return 'hm-round';
-  if (n >= 3)  return 'final-loop';
+  if (n === 2 || n === 3) return 'hm-round';
+  if (n >= 4)  return 'final-loop';
   return null;
 }
 
