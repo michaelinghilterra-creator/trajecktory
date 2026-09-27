@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.5.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.4.3...v5.5.0) (2026-09-27)
+
+
+### Features
+
+* **batch:** unattended Obsidian nightly chain with sandboxed workers ([#410](https://github.com/michaelinghilterra-creator/trajecktory/issues/410)) ([04ffae6](https://github.com/michaelinghilterra-creator/trajecktory/commit/04ffae63e7c95b565d1cbacd2fc6d1ee62c2237b))
+
 ## [5.4.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.4.2...v5.4.3) (2026-09-27)
 
 
