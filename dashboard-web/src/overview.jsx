@@ -77,11 +77,13 @@ const overviewDate = ymd => {
 function MetricChartCard({ id, dict, title, insight, children }) {
   const metric = (dict || []).find(item => item.id === id);
   const tipId = `chart-tip-${id}`;
-  return <div className="card padded-lg metric-kpi" tabIndex="0" aria-describedby={tipId} style={{ display: 'flex', flexDirection: 'column' }}>
-    <div className="card-head"><span className="card-title">{title || metric?.label}</span></div>
+  const cardTitle = title || metric?.label;
+  const { open, anchorProps, tipStyle, tipRef } = window.useAnchoredTip();
+  return <div className="card padded-lg" style={{ display: 'flex', flexDirection: 'column' }}>
+    <div className="card-head"><span className="card-title">{cardTitle}</span><button {...anchorProps} type="button" className="info-dot" aria-label={'About ' + cardTitle} aria-describedby={tipId}>i</button></div>
     {children}
     <div className="kpi-insight" style={{ marginTop: 10 }}>{insight || metric?.why}</div>
-    <window.MetricTip id={id} dict={dict} tipId={tipId} />
+    {open && <window.MetricTip id={id} dict={dict} tipId={tipId} tipRef={tipRef} tipStyle={tipStyle} />}
   </div>;
 }
 

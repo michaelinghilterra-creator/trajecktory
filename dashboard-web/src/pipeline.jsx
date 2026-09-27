@@ -182,20 +182,23 @@ function SitBadge({ days, stale }) {
 }
 
 let pipelineTipSeq = 0;
-function Kpi({ k, v, sub, icon, color, definition, insight, extraRows = [] }) {
+function Kpi({ k, v, sub, icon, color, definition, why, todo, insight, extraRows = [] }) {
   const tipId = React.useRef(`pipeline-tip-${++pipelineTipSeq}`).current;
+  const { open, anchorProps, tipStyle, tipRef } = window.useAnchoredTip();
   return (
-    <div className="kpi metric-kpi" tabIndex={0} aria-describedby={tipId}>
+    <div {...anchorProps} className="kpi metric-kpi" tabIndex={0} aria-describedby={tipId}>
       {icon && <span className="ico"><PIcon d={icon} size={15} /></span>}
       <span className="kpi-label">{k}</span>
       <span className="kpi-value" style={color ? { color } : null}>{v}</span>
       {sub && <span className="kpi-delta">{sub}</span>}
       {insight && <span className="kpi-insight">{insight}</span>}
-      <div className="tip metric-tip" id={tipId} role="tooltip">
+      {open && <div ref={tipRef} className="tip metric-tip" id={tipId} role="tooltip" style={tipStyle}>
         <div className="tip-head"><b>{k}</b></div>
         <div className="tip-row"><span className="l">Definition</span><span className="v">{definition}</span></div>
+        {why && <div className="tip-row"><span className="l">Why</span><span className="v">{why}</span></div>}
+        {todo && <div className="tip-row"><span className="l">What to do</span><span className="v">{todo}</span></div>}
         {extraRows.map(([label, value]) => <div className="tip-row" key={label}><span className="l">{label}</span><span className="v">{value}</span></div>)}
-      </div>
+      </div>}
     </div>
   );
 }
@@ -207,10 +210,10 @@ function OverviewKpis({ apps, allApps = apps, isStale = () => false }) {
   const evaluated = allApps.filter(a => a.status === EVALUATED_AWAITING).length;
   const stale = apps.filter(a => window.isInterviewStage(a.status) && isStale(a)).length;
   return <div className="grid cols-4" style={{ marginBottom: 16 }}>
-    <Kpi k="Active" v={apps.length} sub={`${inFlight} in flight`} icon={PI.layers} definition="Applications at Applied, an interview stage, or Offer." insight="Evaluated rows are awaiting your decision, not active." />
-    <Kpi k="Interviewing" v={interviews} sub="active interview stages" icon={PI.briefcase} definition="Active applications currently in a phone screen or interview stage." insight={interviews ? 'Prepare the next live round.' : 'No active interview loops.'} />
-    <Kpi k="Evaluated, awaiting decision" v={evaluated} sub="not active" icon={PI.star} definition="Evaluated roles where you have not yet decided whether to apply." insight={evaluated ? 'Decide on the strongest fits first.' : 'No decisions waiting.'} />
-    <Kpi k="Stale interview follow ups" v={stale} sub="interview stage only" icon={PI.clock} definition="Interview-stage applications flagged stale by the Follow-Ups engine." insight={stale ? 'Follow up on live interview threads.' : 'Interview follow ups are current.'} />
+    <Kpi k="Active" v={apps.length} sub={`${inFlight} in flight`} icon={PI.layers} definition="Applications at Applied, an interview stage, or Offer." why="Live applications are where the next result comes from." todo="Keep each one followed up; the Overview's Unserviced tile shows which are not." insight="Evaluated rows are awaiting your decision, not active." />
+    <Kpi k="Interviewing" v={interviews} sub="active interview stages" icon={PI.briefcase} definition="Active applications currently in a phone screen or interview stage." why="An interview is the closest step to an offer." todo="Prepare the next round from the Interview tab." insight={interviews ? 'Prepare the next live round.' : 'No active interview loops.'} />
+    <Kpi k="Evaluated, awaiting decision" v={evaluated} sub="not active" icon={PI.star} definition="Evaluated roles where you have not yet decided whether to apply." why="An evaluated role nobody decides on goes stale while the posting ages." todo="Apply or pass on each one within a few days." insight={evaluated ? 'Decide on the strongest fits first.' : 'No decisions waiting.'} />
+    <Kpi k="Stale interview follow ups" v={stale} sub="interview stage only" icon={PI.clock} definition="Interview-stage applications flagged stale by the Follow-Ups engine." why="A quiet interview thread cools fast." todo="Follow up today from Network, Follow-ups." insight={stale ? 'Follow up on live interview threads.' : 'Interview follow ups are current.'} />
   </div>;
 }
 
@@ -553,13 +556,13 @@ function ResponseProgressCard({ progress, rejTiming }) {
             <div>
               <div className="card-meta mono" style={{ marginBottom: 7 }}>fast decision composition</div>
               {[
-                ['Employer no', composition.employerNo || 0, 'var(--red)'],
-                ['Advanced', composition.advance || 0, 'var(--green)'],
-                ['You withdrew', composition.candidateSide || 0, 'var(--yellow)'],
-              ].map(([label, count, color]) => (
+                ['Employer no', composition.employerNo || 0],
+                ['Advanced', composition.advance || 0],
+                ['You withdrew', composition.candidateSide || 0],
+              ].map(([label, count]) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 12 }}>
                   <span style={{ color: 'var(--text-mute)' }}>{label}</span>
-                   <b className="mono" style={{ color }}>{compositionTotal ? `${Math.round(count / compositionTotal * 100)}%` : '0%'}</b>
+                   <b className="mono" style={{ color: 'var(--text)' }}>{compositionTotal ? `${Math.round(count / compositionTotal * 100)}%` : '0%'}</b>
                 </div>
               ))}
             </div>
@@ -599,6 +602,8 @@ function SegmentRate({ rate }) {
 function SegmentsCard({ core }) {
   const dict = core?.dictionary || [], segments = core?.segments;
   const entry = dict.find(metric => metric.id === 'segments');
+  const tipId = 'pipeline-segments-tip';
+  const { open, anchorProps, tipStyle, tipRef } = window.useAnchoredTip();
   const groups = [
     ['Role type', segments?.archetype],
     ['Source', segments?.source],
@@ -606,14 +611,14 @@ function SegmentsCard({ core }) {
   const smallGroups = groups.reduce((sum, [, segment]) => sum + (segment?.small?.groups || 0), 0);
   const smallN = groups.reduce((sum, [, segment]) => sum + (segment?.small?.n || 0), 0);
   const qualified = groups.some(([, segment]) => segment?.rows?.length);
-  return <div className="card padded-lg metric-kpi" tabIndex="0" aria-describedby="pipeline-segments-tip" style={{ marginBottom: 14 }}>
-    <div className="card-head"><span className="card-title">What converts</span></div>
+  return <div className="card padded-lg" style={{ marginBottom: 14 }}>
+    <div className="card-head"><span className="card-title">What converts</span><button {...anchorProps} type="button" className="info-dot" aria-label="About What converts" aria-describedby={tipId}>i</button></div>
     {!qualified ? <div className="no-data">No group has 10 applications yet; rates would be noise.</div> : <div className="grid cols-2">
       {groups.map(([label, segment]) => <div key={label}><div className="mono dim" style={{ fontSize: 10.5, marginBottom: 6 }}>{label}</div><table className="atbl"><thead><tr><th>{label}</th><th>n</th><th>Response rate</th><th>Interview rate</th></tr></thead><tbody>{(segment?.rows || []).map(row => <tr key={row.key}><td>{row.key}</td><td>{row.n}</td><td><SegmentRate rate={row.response} /></td><td><SegmentRate rate={row.interview} /></td></tr>)}</tbody></table></div>)}
     </div>}
     {smallGroups > 0 && <div className="mono dim" style={{ fontSize: 10.5, marginTop: 10 }}>{smallGroups} more {smallGroups === 1 ? 'group' : 'groups'} with fewer than 10 applications ({smallN} {smallN === 1 ? 'application' : 'applications'}) are not rated</div>}
     <div className="kpi-insight" style={{ marginTop: 8 }}>{entry?.why}</div>
-    <window.MetricTip id="segments" dict={dict} tipId="pipeline-segments-tip" />
+    {open && <window.MetricTip id="segments" dict={dict} tipId={tipId} tipRef={tipRef} tipStyle={tipStyle} />}
   </div>;
 }
 
@@ -704,10 +709,12 @@ function AnalyticsView({ apps, allApps, compTweaks, onOpen, isStale = () => fals
           icon={PI.clock}
           color="var(--accent)"
           definition="Applied rows old enough to judge that still have no employer response."
+          why="Silence points at targeting or the resume, not at interviews."
+          todo="If it climbs, look at the roles and resume behind the silent weeks."
           insight="Silence points to targeting or resume problems."
           extraRows={[["You decided first", responseProgress ? responseProgress.candidateDecided : 'not logged']]}
         />
-        <Kpi k="On / Above Target" v={compTweaks?.fromProfile ? inOrAbovePct + '%' : 'profile incomplete'} sub={compTweaks?.fromProfile ? `avg posted comp $${avgComp}K` : 'set compensation in Launchpad'} icon={PI.trend} definition="Share of active roles whose posted midpoint meets or exceeds your saved target floor." insight={compTweaks?.fromProfile ? 'Compare posted compensation with your target.' : 'Complete your compensation profile before rating roles.'} />
+        <Kpi k="On / Above Target" v={compTweaks?.fromProfile ? inOrAbovePct + '%' : 'profile incomplete'} sub={compTweaks?.fromProfile ? `avg posted comp $${avgComp}K` : 'set compensation in Launchpad'} icon={PI.trend} definition="Share of active roles whose posted midpoint meets or exceeds your saved target floor." why="Shows whether you are applying at the pay you want." todo="Check the roles below your walk-away before applying to them." insight={compTweaks?.fromProfile ? 'Compare posted compensation with your target.' : 'Complete your compensation profile before rating roles.'} />
       </div>
 
       <div style={{ marginBottom: 14 }}>
