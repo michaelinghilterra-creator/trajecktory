@@ -395,8 +395,16 @@ process_offer() {
         sandbox_args+=(--add-dir "$jd_dir")
       fi
     fi
-    claude -p "${sandbox_args[@]}" --append-system-prompt-file "$resolved_prompt" "$prompt" \
+    # Run from the project root, as the dashboard does: cv.md and reports/ must be inside the
+    # working directory, and the project's .claude/settings.json (WebSearch, WebFetch) must load.
+    # From batch/ every such read becomes a permission prompt nobody can answer headless.
+    (cd "$PROJECT_DIR" && claude -p "${sandbox_args[@]}" --append-system-prompt-file "$resolved_prompt" "$prompt") \
       > "$log_file" 2>&1 || exit_code=$?
+    # A worker that stops to ask for a permission still exits 0. Without a report it did nothing.
+    if [[ $exit_code -eq 0 ]] && ! compgen -G "$PROJECT_DIR/reports/${report_num}-*.md" > /dev/null; then
+      echo "sandbox worker exited 0 without writing reports/${report_num}-*.md" >> "$log_file"
+      exit_code=3
+    fi
   else
     claude -p --dangerously-skip-permissions --append-system-prompt-file "$resolved_prompt" "$prompt" \
       > "$log_file" 2>&1 || exit_code=$?
