@@ -52,6 +52,10 @@ const hits = [];
 const cannotCertify = [];
 const leak = (file, why, detail) => hits.push({ file, why, detail });
 const rx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// A term as a whole word: no letter, digit or underscore on either side. Unlike \b this also holds when the term
+// itself starts or ends with punctuation ("Example Co.", "Example (EMEA)"), where \b needs a word character next
+// to it and so never matched at all. Same boundary as lib/pii-blindspots.mjs, kept case-sensitive here.
+const wordRe = (s) => new RegExp(`(?<![\\p{L}\\p{N}_])${rx(s)}(?![\\p{L}\\p{N}_])`, 'u');
 
 // ── the files under scrutiny ────────────────────────────────────────────────
 // Repo mode: git ls-files (tracked == shipped). Payload mode: walk the dir.
@@ -625,7 +629,7 @@ function scanMessages() {
     for (const addr of thirdParty) if (body.includes(addr)) leak(where, 'THIRD-PARTY EMAIL', addr);
     for (const f of figures) if (body.includes(f)) leak(where, 'CAREER FIGURE', `${f} — from the owner CV/story bank`);
     for (const [t, why] of career) {
-      const re = t.length < 12 ? new RegExp(`\\b${rx(t)}\\b`) : null;
+      const re = t.length < 12 ? wordRe(t) : null;
       if (re ? re.test(body) : body.includes(t)) leak(where, 'CAREER CONTENT', `"${t}" — ${why}`);
     }
     for (const [p, co] of prepPaths) {
@@ -1001,7 +1005,7 @@ for (const abs of files) {
       }
     }
     for (const [t, why] of career) {
-      const re = t.length < 12 ? new RegExp(`\\b${rx(t)}\\b`) : null;
+      const re = t.length < 12 ? wordRe(t) : null;
       if (re ? re.test(text) : text.includes(t)) {
         leak(rel, 'CAREER CONTENT', `"${t}" — ${why}; example content in a shipped file must be invented`);
       }
@@ -1049,7 +1053,7 @@ for (const abs of files) {
       if (!OUTREACH_VERB.test(win)) continue;
       for (const co of pipeline.keys()) {
         if (hit.has(co)) continue;
-        if (!new RegExp(`\\b${rx(co)}\\b`).test(win)) continue;
+        if (!wordRe(co).test(win)) continue;
         hit.add(co);
         leak(`${rel}:${i + 1}`, 'INTERVIEW STATE (prose)',
           `"${co}" is a company in the tracker, named beside "${(win.match(OUTREACH_VERB) || [''])[0]}". A sentence can leak a live process with no date or score attached. Describe the shape, not the counterparty.`);
@@ -1113,7 +1117,7 @@ for (const abs of files) {
     const check = (hay, where) => {
       const nhay = norm(hay);
       for (const [co, rows] of pipeline) {
-        if (!new RegExp(`\\b${rx(co)}\\b`).test(hay)) continue;
+        if (!wordRe(co).test(hay)) continue;
         for (const r of rows) {
           if (seen.has(r.id)) continue;
           const match = [];
