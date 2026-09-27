@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.4.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.4.2...v5.4.3) (2026-09-27)
+
+
+### Bug Fixes
+
+* ship every root script and the test suites through self-update ([#408](https://github.com/michaelinghilterra-creator/trajecktory/issues/408)) ([18ca61c](https://github.com/michaelinghilterra-creator/trajecktory/commit/18ca61cccac65af0f12b729f479258a3a8b02f21))
+
 ## [5.4.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.4.1...v5.4.2) (2026-09-27)
 
 
