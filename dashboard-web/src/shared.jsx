@@ -17,6 +17,165 @@ window.myEmailSignature = () => {
   return lines.join('\n');
 };
 
+// Metrics dictionary surfaces
+const metricEntry = (dict, id) => Array.isArray(dict)
+  ? dict.find(metric => metric.id === id)
+  : dict?.[id];
+
+window.honestRate = function honestRate(k, n, pct = n ? (k / n) * 100 : null) {
+  if (pct == null) return 'not logged';
+  const rounded = Math.round(pct);
+  if (k > 0 && rounded === 0) return '<1%';
+  if (k < n && rounded === 100) return '>99%';
+  return `${rounded}%`;
+};
+
+window.placeTip = function placeTip(anchorRect, tipWidth, tipHeight) {
+  if (!anchorRect) return {};
+  const width = Math.min(320, window.innerWidth - 16);
+  const sidebar = document.querySelector('.sidebar');
+  const minimum = sidebar ? sidebar.getBoundingClientRect().right + 8 : 8;
+  const maximum = window.innerWidth - width - 8;
+  let left = anchorRect.left;
+  if (left + width > window.innerWidth) left = anchorRect.right - width;
+  left = Math.max(minimum, Math.min(left, maximum));
+
+  const measuredHeight = tipHeight || 0;
+  const below = anchorRect.bottom + 8;
+  const above = anchorRect.top - measuredHeight - 8;
+  const style = {
+    position: 'fixed',
+    width,
+    maxWidth: width,
+    left,
+    transform: 'none',
+    pointerEvents: 'none',
+    zIndex: 60,
+  };
+  if (below + measuredHeight <= window.innerHeight - 8) return { ...style, top: below };
+  if (above >= 8) return { ...style, top: above };
+  return { ...style, top: 8, maxHeight: window.innerHeight - 16, overflowY: 'auto' };
+};
+
+window.useAnchoredTip = function useAnchoredTip() {
+  const [open, setOpen] = React.useState(false);
+  const [tipStyle, setTipStyle] = React.useState({});
+  const anchorRef = React.useRef(null);
+  const tipRef = React.useRef(null);
+
+  React.useLayoutEffect(() => {
+    if (!open) return undefined;
+    const place = () => {
+      const anchor = anchorRef.current;
+      const tip = tipRef.current;
+      if (!anchor || !tip) return;
+      setTipStyle(window.placeTip(
+        anchor.getBoundingClientRect(),
+        tip.offsetWidth || 0,
+        tip.offsetHeight || 0,
+      ));
+    };
+    place();
+    const frame = requestAnimationFrame(place);
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const close = () => setOpen(false);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [open]);
+
+  const anchorProps = {
+    ref: anchorRef,
+    onMouseEnter: () => setOpen(true),
+    onMouseLeave: () => setOpen(false),
+    onFocus: () => setOpen(true),
+    onBlur: () => setOpen(false),
+  };
+  return { open, anchorProps, tipStyle, tipRef };
+};
+
+window.FixedTip = function FixedTip({ anchor, children, className = '' }) {
+  const ref = React.useRef(null);
+  const [style, setStyle] = React.useState(() => window.placeTip(anchor, 0, 0));
+  React.useLayoutEffect(() => {
+    if (!anchor) return undefined;
+    const place = () => setStyle(window.placeTip(
+      anchor,
+      ref.current?.offsetWidth || 0,
+      ref.current?.offsetHeight || 0,
+    ));
+    place();
+    const frame = requestAnimationFrame(place);
+    return () => cancelAnimationFrame(frame);
+  }, [anchor]);
+  return <div ref={ref} className={`tip fixed-tip ${className}`} role="tooltip" style={style}>{children}</div>;
+};
+
+window.MetricTip = function MetricTip({ id, dict, extraRows = [], tipId, tipRef, tipStyle }) {
+  const metric = metricEntry(dict, id);
+  if (!metric) return null;
+  const rows = [
+    ['Definition', metric.definition],
+    ['Formula', metric.formula],
+    ['Window', metric.window],
+    ['Why', metric.why],
+    ['What to do', metric.do],
+    ...extraRows,
+  ].filter(row => row && row[1] !== null && row[1] !== undefined && row[1] !== '');
+  return (
+    <div ref={tipRef} className="tip metric-tip" id={tipId} role="tooltip" style={tipStyle}>
+      <div className="tip-head"><b>{metric.label}</b></div>
+      {rows.map(([label, value]) => (
+        <div className="tip-row" key={label}><span className="l">{label}</span><span className="v">{value}</span></div>
+      ))}
+      {metric.benchmark && (
+        <div className="tip-row"><span className="l">Benchmark</span><span className="v">{metric.benchmark.text} ({metric.benchmark.source}, {metric.benchmark.year})</span></div>
+      )}
+      <div className="tip-co">Definitions {metric.version || dict?.version || window.METRICS_VERSION || ''}</div>
+    </div>
+  );
+};
+
+let metricTipSeq = 0;
+window.MetricTile = function MetricTile({ id, dict, value, sub, rate, floor, limit, available = true, insight, extraRows = [] }) {
+  const metric = metricEntry(dict, id) || { label: id };
+  const tipId = React.useRef(`metric-tip-${++metricTipSeq}`).current;
+  const { open, anchorProps, tipStyle, tipRef } = window.useAnchoredTip();
+  const effectiveFloor = floor ?? metric.floor;
+  const effectiveLimit = limit ?? metric.limit;
+  let shown = value;
+  let rateSub = null;
+  if (available === false) shown = 'not logged';
+  else if (rate) {
+    shown = rate.sufficient ? window.honestRate(rate.k, rate.n, rate.pct) : `${rate.k} of ${rate.n}`;
+    rateSub = rate.sufficient ? `${rate.k} of ${rate.n}` : 'too few to rate';
+  }
+  const numeric = typeof value === 'number' ? value : null;
+  const shortFloor = effectiveFloor != null && numeric != null && numeric < effectiveFloor;
+  const overLimit = effectiveLimit != null && numeric != null && numeric > effectiveLimit;
+  const verdict = available === false ? 'var(--text-mute)'
+    : effectiveFloor != null || effectiveLimit != null
+      ? shortFloor || overLimit ? 'var(--orange)' : 'var(--green)'
+      : 'var(--text)';
+  const rateBand = rate?.sufficient ? [`95% band`, `${Math.round(rate.lo)} to ${Math.round(rate.hi)}%`] : null;
+  return (
+    <div {...anchorProps} className="kpi metric-kpi" tabIndex={0} aria-describedby={tipId}>
+      <span className="kpi-label">{metric.label}</span>
+      <span className="kpi-value" style={{ color: verdict }}>{shown}</span>
+      {(sub || rateSub) && <span className="kpi-delta">{sub || rateSub}</span>}
+      {insight && <span className="kpi-insight">{insight}</span>}
+      {open && <window.MetricTip id={id} dict={dict} tipId={tipId} tipRef={tipRef} tipStyle={tipStyle} extraRows={[...(rateBand ? [rateBand] : []), ...extraRows]} />}
+    </div>
+  );
+};
+
 // ---------- Canonical icon set ----------
 // One source of truth so PI / TI / REC_I and any subtab icons stay visually
 // identical. Loads via shared.js which is imported before every page file.
@@ -458,8 +617,8 @@ window.Sidebar = function Sidebar({ tab, setTab, stats, setupState, onDataChange
   // Launchpad: front-and-centre with an incomplete-count badge while setup is
   // unfinished; demoted to a quiet "Setup" hub entry once everything is ready.
   if (setupState) {
-    const REQ = ["cv","identity","roles","edge","comp","location","evaluation","companies","outputs"];
-    const incomplete = REQ.filter(id => (setupState.sections?.[id]?.status || "empty") !== "complete").length;
+    const refine = window.LP_REFINE || [];
+    const incomplete = refine.filter(id => (setupState.sections?.[id]?.status || "empty") !== "complete").length;
     if (setupState.firstRun || incomplete > 0) {
       items.unshift({ key: "launchpad", label: "Launchpad", icon: "◇", badge: incomplete || null });
     } else {

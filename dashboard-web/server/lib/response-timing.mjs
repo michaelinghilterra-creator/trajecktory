@@ -1,14 +1,16 @@
 import { parseApplicationsMd } from './applications.mjs';
-import { isPostingClosed } from '../../../lib/passed.mjs';
 import { weekStartOf } from './activity.mjs';
 import { readApplyDates, parseStatusEvents } from './sidecars.mjs';
 import {
   FUNNEL_ORDER,
   RESPONSE_DECISION_BUCKETS,
+  canonicalStatus,
   makeApplyAnchor,
   makeFurthestIdx,
 } from './statuses.mjs';
 import { localToday } from '../../../lib/local-date.mjs';
+import { isPostingClosed } from '../../../lib/passed.mjs';
+import { buildActivities } from './twc.mjs';
 
 const DAY_MS = 86400000;
 const pct = (numerator, denominator) => denominator
@@ -27,9 +29,10 @@ function daysBetween(from, to) {
 }
 
 function decisionBucket(status) {
-  if (RESPONSE_DECISION_BUCKETS.employerNo.has(status)) return 'employerNo';
-  if (RESPONSE_DECISION_BUCKETS.advance.has(status)) return 'advance';
-  if (RESPONSE_DECISION_BUCKETS.candidateSide.has(status)) return 'candidateSide';
+  const canonical = canonicalStatus(status);
+  if (RESPONSE_DECISION_BUCKETS.employerNo.has(canonical)) return 'employerNo';
+  if (RESPONSE_DECISION_BUCKETS.advance.has(canonical)) return 'advance';
+  if (RESPONSE_DECISION_BUCKETS.candidateSide.has(canonical)) return 'candidateSide';
   return null;
 }
 
@@ -40,6 +43,9 @@ export function responseProgressStats({
   today = new Date(),
   windows = [14, 30],
   fastDays = 3,
+  applicationIds = null,
+  // TWC apply dates by application id: the export's date wins over the sidecars when given.
+  applicationDates = null,
 } = {}) {
   const todayYmd = toYmd(today);
   if (!todayYmd) throw new Error('today must be a valid date');
@@ -53,16 +59,15 @@ export function responseProgressStats({
   let preAnchorDropped = 0;
 
   const records = [];
-  let closedExcluded = 0;
+  const closedExcluded = 0;
   let noAnchor = 0;
-  const anchorSources = { both: 0, event: 0, applyDate: 0, rowDate: 0 };
+  const anchorSources = { both: 0, event: 0, applyDate: 0, rowDate: 0, twc: 0 };
 
   for (const app of apps) {
-    if (isPostingClosed(app)) {
-      closedExcluded++;
-      continue;
-    }
-    const anchor = applyAnchor(app);
+    if (applicationIds && !applicationIds.has(String(app.id))) continue;
+    const postingClosed = isPostingClosed(app);
+    const twcDate = applicationDates && applicationDates.get(String(app.id));
+    const anchor = twcDate ? { date: twcDate, source: 'twc' } : applyAnchor(app);
     if (!anchor.date) {
       noAnchor++;
       continue;
@@ -72,30 +77,41 @@ export function responseProgressStats({
       : anchor.source;
     anchorSources[sourceKey]++;
 
-    let firstDecision = null;
+    let firstEmployerDecision = null;
+    let firstCandidateDecision = null;
     for (const event of events) {
       if (String(event.app) !== String(app.id)) continue;
       const bucket = decisionBucket(event.status);
       if (!bucket) continue;
+      if (postingClosed && bucket === 'candidateSide') continue;
       const elapsed = daysBetween(anchor.date, event.date);
       if (elapsed == null) continue;
       if (elapsed < 0) {
         preAnchorDropped++;
         continue;
       }
-      if (!firstDecision || event.date < firstDecision.date) {
-        firstDecision = { date: event.date, days: elapsed, bucket };
-      }
+      const decision = { date: event.date, days: elapsed, bucket };
+      if (bucket === 'candidateSide') {
+        if (!firstCandidateDecision || event.date < firstCandidateDecision.date) firstCandidateDecision = decision;
+      } else if (!firstEmployerDecision || event.date < firstEmployerDecision.date) firstEmployerDecision = decision;
     }
     const stampedIdx = FUNNEL_ORDER.indexOf(app.reached);
     const reachedIdx = Math.max(furthestIdx(app), stampedIdx);
-    const rowDecision = decisionBucket(app.status) !== null || reachedIdx >= screenIdx;
+    const liveBucket = postingClosed ? null : decisionBucket(app.status);
+    const candidateDecidedFirst = firstCandidateDecision
+      && (!firstEmployerDecision || firstCandidateDecision.date <= firstEmployerDecision.date);
+    const decision = candidateDecidedFirst ? null : firstEmployerDecision;
+    const candidateDecision = candidateDecidedFirst ? firstCandidateDecision : null;
+    const rowDecision = reachedIdx >= screenIdx || (liveBucket !== 'candidateSide' && liveBucket !== null);
+    const rowCandidateDecision = liveBucket === 'candidateSide' && !firstEmployerDecision && reachedIdx < screenIdx;
     records.push({
       app,
       anchor,
       age: daysBetween(anchor.date, todayYmd),
-      decision: firstDecision,
+      decision,
+      candidateDecision,
       rowDecision,
+      rowCandidateDecision,
       week: weekStartOf(anchor.date),
     });
   }
@@ -107,7 +123,10 @@ export function responseProgressStats({
     let undated = 0;
     for (const record of records) {
       if (record.age == null || record.age < window) continue;
-      if (!record.decision && record.rowDecision) {
+      if (record.candidateDecision && record.candidateDecision.days <= window) continue;
+      const undatedDecision = !record.decision && !record.candidateDecision
+        && (record.rowDecision || record.rowCandidateDecision);
+      if (undatedDecision) {
         undated++;
         continue;
       }
@@ -123,7 +142,10 @@ export function responseProgressStats({
   const composition = { employerNo: 0, advance: 0, candidateSide: 0 };
   for (const record of records) {
     if (record.age == null || record.age < fastDays) continue;
-    if (!record.decision && record.rowDecision) {
+    if (record.candidateDecision && record.candidateDecision.days <= fastDays) continue;
+    const undatedDecision = !record.decision && !record.candidateDecision
+      && (record.rowDecision || record.rowCandidateDecision);
+    if (undatedDecision) {
       fastUndated++;
       continue;
     }
@@ -149,18 +171,21 @@ export function responseProgressStats({
       fastEligible: 0,
     };
     cohort.sent++;
-    const undatedDecision = !record.decision && record.rowDecision;
+    const undatedDecision = !record.decision && !record.candidateDecision
+      && (record.rowDecision || record.rowCandidateDecision);
     if (undatedDecision) cohort.undated++;
 
     for (const window of cleanWindows) {
-      if (record.age == null || record.age < window || undatedDecision) continue;
+      const candidateBeforeWindow = record.candidateDecision && record.candidateDecision.days <= window;
+      if (record.age == null || record.age < window || undatedDecision || candidateBeforeWindow) continue;
       const eligibleKey = window === 14 ? 'silence14Eligible' : window === 30 ? 'silence30Eligible' : null;
       const silentKey = window === 14 ? 'silent14' : window === 30 ? 'silent30' : null;
       if (!eligibleKey) continue;
       cohort[eligibleKey]++;
       if (!record.decision || record.decision.days > window) cohort[silentKey]++;
     }
-    if (record.age != null && record.age >= fastDays && !undatedDecision) {
+    const candidateBeforeFast = record.candidateDecision && record.candidateDecision.days <= fastDays;
+    if (record.age != null && record.age >= fastDays && !undatedDecision && !candidateBeforeFast) {
       cohort.fastEligible++;
       if (record.decision && record.decision.days <= fastDays) cohort.decidedFast++;
     }
@@ -185,6 +210,7 @@ export function responseProgressStats({
     today: todayYmd,
     fastDays,
     population: { n: records.length, closedExcluded, noAnchor, preAnchorDropped },
+    candidateDecided: records.filter(record => record.candidateDecision || record.rowCandidateDecision).length,
     silence,
     fastDecision: {
       eligible: fastEligible,
@@ -199,10 +225,18 @@ export function responseProgressStats({
 }
 
 export function readResponseProgressStats() {
+  const applications = buildActivities({ today: localToday() })
+    .filter(activity => activity.kind === 'application' && activity.appId !== undefined && activity.appId !== null && activity.appId !== '');
+  const applicationIds = new Set(applications.map(activity => String(activity.appId)));
+  // Only an exact TWC date overrides the sidecars; an estimated one (the evaluation date) stays a row date.
+  const applicationDates = new Map(applications.filter(activity => !activity.dateApprox)
+    .map(activity => [String(activity.appId), activity.date]));
   return responseProgressStats({
     apps: parseApplicationsMd(),
     applyDates: readApplyDates(),
     events: parseStatusEvents(),
     today: new Date(),
+    applicationIds,
+    applicationDates,
   });
 }

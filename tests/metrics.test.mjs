@@ -61,16 +61,18 @@ fs.writeFileSync(path.join(sandbox, 'applications.md'), [
   row(5, 'Epsilon', 'Discarded'),                               // off-funnel, no evidence
   row(6, 'Iota', 'No Response'),                                // floors at Applied
   row(7, 'Eta', 'Evaluated'),
-  row(8, 'Theta', 'SKIP'),                                      // + Applied EVENT lifts it
+  row(8, 'Theta', 'SKIP'),                                      // A screen event lifts it
+  row(9, 'Kappa', 'Closed', '[reached: Phone Screen]'),
+  row(10, 'Lambda', 'Passed', '[passed: posting_closed] [reached: Phone Screen]'),
   '',
 ].join('\n'));
 
 fs.writeFileSync(path.join(sandbox, 'status-events.tsv'),
   'app#\tdate\tstatus\tcompany\tlogged\n' +
   '2\t2024-03-11\t1st Interview\tBeta\t2024-03-11\n' +
-  '8\t2024-03-18\tApplied\tTheta\t2024-03-18\n');
+  '8\t2024-03-18\tPhone Screen\tTheta\t2024-03-18\n');
 
-const { makeFurthestIdx, appReached, FUNNEL_ORDER, INTERVIEW_STAGES, reachedStage } =
+const { makeFurthestIdx, appReached, FUNNEL_ORDER, INTERVIEW_STAGES, reachedStage, canonicalStatus } =
   await import('../dashboard-web/server/lib/statuses.mjs');
 const { parseApplicationsMd } = await import('../dashboard-web/server/lib/applications.mjs');
 const { parseStatusEvents } = await import('../dashboard-web/server/lib/sidecars.mjs');
@@ -90,7 +92,7 @@ try {
   eq(at(3, 'Rejected', '[reached: Phone Screen]'), idxOf('Phone Screen'), 'tag is credited when it is the only evidence');
   eq(at(4, 'Offer', '[reached: Phone Screen]'), idxOf('Offer'),
     'a STALE tag never drags a row backwards — live status wins by max (eff() gets this wrong)');
-  eq(at(8, 'SKIP', ''), idxOf('Applied'),
+  eq(at(8, 'SKIP', ''), idxOf('Phone Screen'),
     'an event lifts an off-funnel row — live-status engines return -1 here');
 
   // ── appReached: the client-side mirror ───────────────────────────────────
@@ -105,11 +107,11 @@ try {
   // ── parseApplicationsMd stamps `reached` on every row ────────────────────
   const rows = parseApplicationsMd();
   const byId = new Map(rows.map(r => [r.id, r]));
-  eq(rows.length, 8, 'fixture parses to 8 rows');
+  eq(rows.length, 10, 'fixture parses to 10 rows');
   eq(byId.get(2).reached, '1st Interview', 'row 2 stamped from its event');
   eq(byId.get(4).reached, 'Offer', 'row 4 stamped from live status, not its stale tag');
   eq(byId.get(5).reached, null, 'row 5 (off-funnel, no evidence) stamps null');
-  eq(byId.get(8).reached, 'Applied', 'row 8 (SKIP) stamped from its event');
+  eq(byId.get(8).reached, 'Phone Screen', 'row 8 (SKIP) stamped from its event');
 
   // ── stageFunnelStats: cumulative rungs + conversion ──────────────────────
   const f = stageFunnelStats();
@@ -127,7 +129,7 @@ try {
   // enteredFunnel() in statuses.mjs.
   eq(f.reached['Evaluated'], 8, 'the first rung counts every evaluated row, including ones later declined');
   eq(f.reached['Applied'], 6, 'Applied rung');
-  eq(f.reached['Phone Screen'], 3, 'Phone Screen rung');
+  eq(f.reached['Phone Screen'], 4, 'Phone Screen rung');
   eq(f.reached['1st Interview'], 2, '1st Interview rung');
   eq(f.reached['Offer'], 1, 'Offer rung');
   check(FUNNEL_ORDER.every((s, i) => i === 0 || f.reached[FUNNEL_ORDER[i - 1]] >= f.reached[s]),
@@ -148,6 +150,9 @@ try {
   // unknownStage bucket is gone; every terminal row lands in exactly one rung.)
   eq(f.rejections.preInterview, 1, 'a terminal row with no signal at all is a Pre-interview loss');
   eq(f.rejections.unknownStage, undefined, 'there is no separate "unknown" bucket anymore');
+  eq(f.rejections.withdrew['Phone Screen'], 1, 'a candidate withdrawal is attributed to its furthest rung');
+  eq(f.rejections.withdrewTotal, 1,
+    'only the screened SKIP withdrew; Closed and Passed for posting_closed are excluded');
   const attributed = f.rejections.preInterview
     + Object.values(f.rejections.byStage).reduce((s, n) => s + n, 0);
   eq(attributed, f.rejections.total, 'every terminal loss is attributed to exactly one rung (no leakage)');
@@ -161,6 +166,13 @@ try {
   const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
   const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
   const doc = yaml.load(read('templates/states.yml'));
+  for (const state of doc.states) {
+    eq(canonicalStatus(state.label), state.label, `canonical status ${state.label} maps to itself`);
+    for (const alias of (state.aliases || [])) {
+      eq(canonicalStatus(`  ${String(alias).toUpperCase()}  `), state.label,
+        `alias ${alias} maps case insensitively to ${state.label}`);
+    }
+  }
   const arrOf = (src, re) => { const m = src.match(re); return m ? m[1].split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean) : null; };
 
   const dataJs = read('dashboard-web/src/data.js');

@@ -29,6 +29,7 @@ import fs from 'fs';
 import { BUILD_FLOOR_PATH } from '../config.mjs';
 import { FLOORS } from './review-thresholds.mjs';
 import { parseTargetTalentMd, readTTCorrespondence } from './target-talent.mjs';
+import { isLinkedInEntry } from './channels.mjs';
 
 export const WINDOW_DAYS = 7;
 export const GRACE_DAYS = 3;
@@ -149,7 +150,11 @@ export function writeFloorState(s) {
 // touch is.
 export function gatherSentTouchDates() {
   const dates = [];
-  const add = (msgs) => { for (const m of (msgs || [])) if (m.direction === 'Sent' && m.timestamp) dates.push(String(m.timestamp).slice(0, 10)); };
+  const add = (msgs) => {
+    for (const m of (msgs || [])) {
+      if (m.direction === 'Sent' && m.timestamp && !isLinkedInEntry(m)) dates.push(String(m.timestamp).slice(0, 10));
+    }
+  };
   try { for (const c of parseTargetTalentMd()) add(readTTCorrespondence(c.id)); } catch { /* apps-only env */ }
   return dates;
 }

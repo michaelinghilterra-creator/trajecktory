@@ -28,6 +28,22 @@ try {
 // Every canonical status label.
 export const ALL_STATUSES = _states.map(s => s.label);
 
+const _canonicalByLabel = new Map();
+for (const state of _states) {
+  const label = String(state?.label || '').trim();
+  if (!label) continue;
+  _canonicalByLabel.set(label.toLowerCase(), label);
+  for (const alias of (Array.isArray(state.aliases) ? state.aliases : [])) {
+    const key = String(alias || '').trim().toLowerCase();
+    if (key) _canonicalByLabel.set(key, label);
+  }
+}
+
+export function canonicalStatus(raw) {
+  const trimmed = String(raw ?? '').trim();
+  return _canonicalByLabel.get(trimmed.toLowerCase()) || trimmed;
+}
+
 // Interview-family rungs, in funnel order (group: interview in states.yml).
 export const INTERVIEW_STAGES = _states
   .filter(s => s.group === 'interview')
@@ -214,11 +230,12 @@ export function makeFurthestIdx(events) {
   const idxOf = s => FUNNEL_ORDER.indexOf(s);
   const APPLIED_IDX = idxOf('Applied');
   const furthestIdx = (a) => {
-    let idx = idxOf(a.status);
-    if (a.status === 'Rejected' || a.status === 'No Response') idx = Math.max(idx, APPLIED_IDX);
-    for (const e of (eventsByApp.get(String(a.id)) || [])) idx = Math.max(idx, idxOf(e.status));
+    const liveStatus = canonicalStatus(a.status);
+    let idx = idxOf(liveStatus);
+    if (liveStatus === 'Rejected' || liveStatus === 'No Response') idx = Math.max(idx, APPLIED_IDX);
+    for (const e of (eventsByApp.get(String(a.id)) || [])) idx = Math.max(idx, idxOf(canonicalStatus(e.status)));
     const r = reachedStage(a.notes);
-    if (r) idx = Math.max(idx, idxOf(r));
+    if (r) idx = Math.max(idx, idxOf(canonicalStatus(r)));
     return idx;
   };
   return { furthestIdx, idxOf, eventsByApp };

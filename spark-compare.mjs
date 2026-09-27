@@ -21,7 +21,7 @@
  *
  * Usage:
  *   node spark-compare.mjs build-set [--size 120] [--strong 4.0] [--seed 20310101] [--force]
- *   node spark-compare.mjs run --label qwen3.6 [--resume] [--force] [--limit N]
+ *   node spark-compare.mjs run --label model-a [--resume] [--force] [--limit N]
  *   node spark-compare.mjs compare [labelA labelB ...] [--threshold 2.0] [--strong 4.0]
  *
  * build-set needs no endpoint. run needs one. compare reads saved runs only.
@@ -221,7 +221,7 @@ async function listModels() {
 async function cmdRun() {
   const label = safeLabel(opt('--label'));
   if (!label) {
-    console.log('run needs --label <name> (letters, digits, dot, dash, underscore), e.g. --label qwen3.6');
+    console.log('run needs --label <name> (letters, digits, dot, dash, underscore), e.g. --label model-a');
     return 1;
   }
   if (!isConfigured()) {

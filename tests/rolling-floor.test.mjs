@@ -6,10 +6,21 @@
  * calendar days (Definitions v1 section 2); a PTO day is skipped, never demanded.
  */
 import assert from 'node:assert/strict';
-import { computeRollingFloor } from '../dashboard-web/server/lib/rolling-floor.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { makeSandbox } from './helpers/sandbox.mjs';
+
+const sandbox = makeSandbox('rolling-floor');
+process.env.TJK_DATA_DIR = sandbox;
+const { computeRollingFloor, gatherSentTouchDates } = await import('../dashboard-web/server/lib/rolling-floor.mjs');
 
 let n = 0;
+let failed = 0;
 const ok = (m) => { n++; console.log('  ok ' + m); };
+const check = (condition, message) => {
+  if (condition) ok(message);
+  else { failed++; console.log('  FAIL ' + message); }
+};
 
 // A helper to make N touch dates all on the same day.
 const rep = (date, k) => Array.from({ length: k }, () => date);
@@ -140,4 +151,28 @@ const FRI = '2026-07-24';
   ok('ramp-in / no-data never lock a new user, and ramp-in ends once a full 7 day window of history exists');
 }
 
+fs.writeFileSync(path.join(sandbox, 'target-talent.md'), [
+  '# Target Talent',
+  '',
+  '| # | company | last | first | salute | title | city | state | zip | phone | email | linkedin | status | lastTouch | notes | website |',
+  '| 900001 | Zorblax Widgetry | Personone | Example | Example | Recruiter | | | | | example.personone@example.test | | Sent | 2030-03-05 | | |',
+  '',
+].join('\n'), 'utf8');
+const correspondence = path.join(sandbox, 'target-talent-correspondence');
+fs.mkdirSync(correspondence, { recursive: true });
+fs.writeFileSync(path.join(correspondence, '900001.md'), [
+  '## 2030-03-05 09:00 | Sent | Email | Application note',
+  '',
+  'Invented email.',
+  '',
+  '## 2030-03-06 09:00 | Sent | LinkedIn | LinkedIn connection request',
+  '',
+  'Invented request.',
+  '',
+].join('\n'), 'utf8');
+check(JSON.stringify(gatherSentTouchDates()) === JSON.stringify(['2030-03-05']),
+  'the rolling floor counts email touches and skips LinkedIn entries');
+
 console.log(`\n  ${n} rolling-floor checks passed`);
+fs.rmSync(sandbox, { recursive: true, force: true });
+process.exit(failed > 0 ? 1 : 0);

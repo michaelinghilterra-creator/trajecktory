@@ -19,8 +19,8 @@
 // The floors with teeth. Applications are deliberately uncapped; the WIP
 // limit (unserviced applications) governs volume instead of a cap.
 export const FLOORS = {
-  verifiedTouches:  { min: 13, label: 'Verified touches sent',   unit: '' },
-  linkedinConnects: { min: 50, label: 'LinkedIn connects sent',  unit: '' },
+  verifiedTouches:  { min: 13, label: 'Follow-ups sent',                     unit: '' },
+  linkedinConnects: { min: 50, label: 'LinkedIn connection requests sent',   unit: '' },
   cadencePct:       { min: 70, label: 'Cadence adherence',       unit: '%' },
 };
 

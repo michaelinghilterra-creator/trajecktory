@@ -515,7 +515,7 @@ const WEEKLY = {
     verifiedTouches:        { value: 0,  available: false, source: 'starts with the outreach motion' },
     replies:                { value: 4,  available: true,  source: 'correspondence' },
     deliveredReplyRatePct:  { value: 22, available: true,  source: 'cumulative, contact-based, bounces excluded' },
-    screensBooked:          { value: 2,  available: true,  source: 'status events (week-scoped)' },
+        screensHeld:            { value: 2,  available: true,  source: 'interview records (held in week)' },
     objectionsLogged:       { value: 1,  available: true,  source: 'debrief notes' },
     linkedinConnects:       { value: 0,  available: false, source: 'no connects log yet' },
     cadencePct:             { value: 82, available: true,  source: 'cadence log' },

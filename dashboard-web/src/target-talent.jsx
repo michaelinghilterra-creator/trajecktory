@@ -123,9 +123,11 @@ function ttDomain(email) {
 
 function relTouch(d) {
   if (!d) return "-";
-  const now = new Date();
-  const then = new Date(d);
-  const days = Math.round((now - then) / 864e5);
+  const nowRaw = new Date();
+  const now = new Date(nowRaw.getFullYear(), nowRaw.getMonth(), nowRaw.getDate());
+  const [year, month, day] = String(d).slice(0, 10).split('-').map(Number);
+  const then = new Date(year, (month || 1) - 1, day || 1);
+  const days = Math.floor((now - then) / 864e5);
   if (days <= 0) return "today";
   if (days === 1) return "1d ago";
   if (days < 7) return days + "d ago";
