@@ -279,5 +279,73 @@ for (const id of requiredIds) {
     'applications with no id are never merged into one row');
 }
 
+// Item 16: segments boundary cases
+const rows16a = [];
+for (let i = 0; i < 10; i++) rows16a.push({ archetype: 'A', level: 1 });
+const seg16a = segments(rows16a, 'archetype');
+check(seg16a.rows.length === 1, 'segments 10 rows has 1 row');
+check(seg16a.rows[0].key === 'A', 'segments 10 rows key is A');
+check(seg16a.rows[0].n === 10, 'segments 10 rows n is 10');
+check(eq(seg16a.small, { groups: 0, n: 0 }), 'segments 10 rows small is correct');
+const rows16b = [];
+for (let i = 0; i < 9; i++) rows16b.push({ archetype: 'A', level: 1 });
+const seg16b = segments(rows16b, 'archetype');
+check(seg16b.rows.length === 0, 'segments 9 rows has 0 rows');
+check(eq(seg16b.small, { groups: 1, n: 9 }), 'segments 9 rows small is correct');
+const seg16c = segments([{ archetype: 'B', level: 0 }, { archetype: 'A', level: 0 }], 'archetype', 1);
+check(eq(seg16c.rows.map(r => r.key), ['A', 'B']), 'segments sorts by key on equal n');
+
+// Item 17: scoreBands unscored cases
+check(scoreBands([{ id: 1, score: null }, { id: 2 }, { id: 3, score: 'abc' }, { id: 4, score: 5.5 }, { id: 5, score: 0 }], new Set()).unscored === 5, 'scoreBands unscored 5');
+check(scoreBands([{ id: 1, score: null }], new Set()).unscored === 1, 'scoreBands unscored null is 1');
+check(scoreBands([{ id: 1 }], new Set()).unscored === 1, 'scoreBands unscored missing is 1');
+check(scoreBands([{ id: 1, score: '' }], new Set()).unscored === 1, 'scoreBands unscored empty is 1');
+check(scoreBands([{ id: 1, score: 'abc' }], new Set()).unscored === 1, 'scoreBands unscored abc is 1');
+check(scoreBands([{ id: 1, score: 0.99 }], new Set()).unscored === 1, 'scoreBands unscored 0.99 is 1');
+check(scoreBands([{ id: 1, score: 5.01 }], new Set()).unscored === 1, 'scoreBands unscored 5.01 is 1');
+const sb17ok = scoreBands([{ id: 1, score: 1 }], new Set());
+check(sb17ok.unscored === 0, 'scoreBands score 1 unscored is 0');
+check(sb17ok.bands[0].total === 1, 'scoreBands score 1 band 0 total is 1');
+
+// Item 18: scoreBands version tie
+const sb18 = scoreBands([{ id: 1, score: 4, scorerVersion: 'v1' }, { id: 2, score: 2, scorerVersion: 'v2' }], new Set(['1', '2']));
+check(eq(sb18.appliedAvg, { value: 4, n: 1, version: 'v1' }), 'scoreBands version tie first wins');
+
+// Item 19: Saturday is inside the week
+const metrics19a = computeCoreMetrics({ today: '2030-03-13', activities: [{ kind: 'followup', date: '2030-03-16' }] });
+check(metrics19a.thisWeek.followups === 1, 'Saturday followup counts');
+const metrics19b = computeCoreMetrics({ today: '2030-03-13', activities: [{ kind: 'followup', date: '2030-03-17' }] });
+check(metrics19b.thisWeek.followups === 0, 'Sunday followup does not count');
+const metrics19c = computeCoreMetrics({ today: '2030-03-13', activities: [{ kind: 'followup', date: '2030-03-10' }] });
+check(metrics19c.thisWeek.followups === 1, 'Sunday start followup counts');
+
+// Item 20: Maturity at exactly 14 days
+const apps20 = [{ id: 900001, status: 'Rejected' }, { id: 900002, status: 'Rejected' }];
+const activities20 = [
+  { kind: 'application', date: '2030-02-27', appId: 900001 },
+  { kind: 'application', date: '2030-02-28', appId: 900002 },
+];
+const metrics20 = computeCoreMetrics({ today: '2030-03-13', activities: activities20, apps: apps20 });
+check(metrics20.results.response.mature.n === 1, 'maturity at exactly 14 days counts');
+check(metrics20.results.response.all.n === 2, 'maturity all n is 2');
+
+// Item 21: Cohort maturity at exactly 14 days
+const metrics21 = computeCoreMetrics({ today: '2030-03-16' });
+const cohort14 = metrics21.weeks.find(w => w.from === '2030-02-24');
+check(cohort14.cohort.ageDays === 14, 'cohort ageDays 14');
+check(cohort14.cohort.mature === true, 'cohort mature true at 14 days');
+const cohort7 = metrics21.weeks.find(w => w.from === '2030-03-03');
+check(cohort7.cohort.ageDays === 7, 'cohort ageDays 7');
+check(cohort7.cohort.mature === false, 'cohort mature false at 7 days');
+
+// Item 22: Positive stays true for held screen with negative reply
+const activities22 = [{ kind: 'application', date: '2030-03-02', appId: 900001 }];
+const apps22 = [{ id: 900001, status: 'Rejected', reached: 'Applied' }];
+const replies22 = { '900001': [{ sent_on: '2030-03-04', sentiment: 'negative' }] };
+const interviews22 = [{ appId: 900001, stage: 'Phone Screen', state: 'counted', held_on: '2030-03-05' }];
+const out22 = applicationOutcomes({ activities: activities22, apps: apps22, replies: replies22, interviews: interviews22 });
+check(out22[0].level === 2, 'held screen gives level 2');
+check(out22[0].positive === true, 'held screen positive stays true');
+
 console.log(`metrics-core: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
