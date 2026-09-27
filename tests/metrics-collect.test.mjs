@@ -6,6 +6,8 @@ import { TRACKER_SEPARATOR } from '../lib/tracker.mjs';
 
 const sandbox = makeSandbox('metrics-collect');
 process.env.TJK_DATA_DIR = sandbox;
+// Debrief and weekly dates are the user's local calendar dates; pin a US zone so CI (UTC) sees the same day.
+process.env.TZ = 'America/Chicago';
 
 const tracker = [
   '# Applications Tracker',
