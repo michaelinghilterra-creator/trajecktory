@@ -26,11 +26,11 @@ window.WeeklyTrend = function WeeklyTrend({ weeks = [], height = 210 }) {
         {heard > 0 && <rect x={x} y={base - heardH} width={barW} height={heardH} fill="var(--accent)" />}
         {n === 0 && <rect x={x} y={base - 1} width={barW} height="1" fill="var(--accent)" opacity=".35" />}
         {week.cohort?.mature === false && <rect x={x} y={y} width={barW} height={Math.max(h, 1)} fill="none" stroke="var(--text-dim)" strokeDasharray="4 3" />}
-        {(week.cohort?.screened || 0) > 0 && <text x={x + barW / 2} y={Math.max(11, y - 7)} textAnchor="middle" fill="var(--text)" fontSize="9.5" fontFamily="var(--mono)">{week.cohort.screened} {week.cohort.screened === 1 ? 'screen' : 'screens'}</text>}
+        {(week.cohort?.screened || 0) > 0 && <text x={x + barW / 2} y={Math.max(9, y - 19)} textAnchor="middle" fill="var(--text)" fontSize="9.5" fontFamily="var(--mono)">{week.cohort.screened} {week.cohort.screened === 1 ? 'screen' : 'screens'}</text>}
         <text x={x + barW / 2} y={H - 20} textAnchor="middle" fill="var(--text-mute)" fontSize="9.5" fontFamily="var(--mono)">{week.from.slice(5)}</text>
         {week.cohort?.mature === false && <text x={x + barW / 2} y={H - 7} textAnchor="middle" fill="var(--text-mute)" fontSize="8.5">maturing</text>}
         <rect className="hover-region" tabIndex="0" aria-label={`${shortDate(week.from)} to ${shortDate(week.to)}, ${n} applications`} x={pad.l + i * step} y="0" width={step} height={H - pad.b} onMouseMove={e => point(e, i)} onFocus={e => point(e, i)} onBlur={() => setFocus(null)} />
-        {n > 0 && !(week.cohort?.screened > 0) && <text x={x + barW / 2} y={Math.max(11, y - 5)} textAnchor="middle" fill="var(--text-dim)" fontSize="9.5" fontFamily="var(--mono)">{n}</text>}
+        {n > 0 && <text x={x + barW / 2} y={Math.max(21, y - 5)} textAnchor="middle" fill="var(--text-dim)" fontSize="9.5" fontFamily="var(--mono)">{n}</text>}
       </g>; })}
     </svg>
     <div className="row mono" style={{ gap: 14, fontSize: 10.5, color: 'var(--text-mute)', marginBottom: 8, flexWrap: 'wrap' }}><Swatch style={{ background: 'var(--accent)' }}>heard back</Swatch><Swatch style={{ background: 'var(--accent)', opacity: .35 }}>no reply yet</Swatch><Swatch style={{ borderTop: '2px solid var(--text)', height: 2 }}>screens</Swatch><Swatch style={{ border: '1px dashed var(--text-dim)', background: 'transparent' }}>maturing</Swatch></div>
