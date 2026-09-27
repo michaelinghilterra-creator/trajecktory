@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.3.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.2.0...v5.3.0) (2026-09-27)
+
+
+### Features
+
+* add spark-compare to test local pre-filter models head to head ([#399](https://github.com/michaelinghilterra-creator/trajecktory/issues/399)) ([6ab7801](https://github.com/michaelinghilterra-creator/trajecktory/commit/6ab780132fbdb049e4182527b487450da01b6b5c))
+
 ## [5.2.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.1.0...v5.2.0) (2026-09-25)
 
 
