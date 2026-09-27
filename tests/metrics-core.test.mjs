@@ -277,6 +277,21 @@ for (const id of requiredIds) {
   check(unlinked.results.response.all.n === 1 && unlinked.funnel[0].n === 1, 'unlinked applications stay out of rates and the funnel');
   check(applicationOutcomes({ activities: [{ kind: 'application', date: '2030-03-11' }, { kind: 'application', date: '2030-03-12' }] }).length === 0,
     'applications with no id are never merged into one row');
+  const mixed = computeCoreMetrics({
+    today: '2030-03-13',
+    activities: [
+      { kind: 'application', date: '2030-03-10', appId: 900001 },
+      { kind: 'application', date: '2030-03-10', appId: 900002 },
+      { kind: 'application', date: '2030-03-11' },
+      { kind: 'followup', date: '2030-03-11' },
+    ],
+  });
+  check(mixed.unlinkedApplications === 1 && mixed.ratedApplications === 2,
+    'two linked and one unlinked application are told apart');
+  for (const blank of [undefined, null, '']) {
+    const one = computeCoreMetrics({ today: '2030-03-13', activities: [{ kind: 'application', date: '2030-03-10', appId: 900001 }, { kind: 'application', date: '2030-03-11', appId: blank }] });
+    check(one.unlinkedApplications === 1 && one.ratedApplications === 1, `an application id of ${String(blank)} is unlinked`);
+  }
 }
 
 // Item 16: segments boundary cases
