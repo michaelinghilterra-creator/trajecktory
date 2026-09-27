@@ -138,14 +138,72 @@ export const SYSTEM_PATHS = [
   // hazard as render-runsheet.mjs above. Guarded by test-all.mjs section 7b.
   'verify-contacts.mjs',
   'find-contacts.mjs',
+  // Every other tracked root script. AGENTS.md puts all *.mjs scripts in the system
+  // layer, but root scripts are listed one by one, so each one added to the repo
+  // without a line here was frozen at install time: the default CV generator, the
+  // tracker editor the eval prompts require, and most of the batch workflow among
+  // them. The only root script deliberately left out is eslint.config.mjs (contributor
+  // lint config, never run by an install). Guarded by tests/system-paths.test.mjs.
+  'agent-edit.mjs',
+  'archive-discarded.mjs',
+  'audit-discards.mjs',
+  'audit-orphan-reports.mjs',
+  'auto-discard-low.mjs',
+  'backfill-bounces.mjs',
+  'backfill-connect-ids.mjs',
+  'backfill-linkedin-status.mjs',
+  'backfill-reply-correspondence.mjs',
+  'backfill-tracker-urls.mjs',
+  'company-audit.mjs',
+  'data-audit.mjs',
+  'fetch-jd.mjs',
+  'generate-docx-from-template.mjs',
+  'import-target-talent.mjs',
+  'match-linkedin-referrals.mjs',
+  'organize-interview-prep.mjs',
+  'probe-board-migrations.mjs',
+  'prune-gated.mjs',
+  'prune-history.mjs',
+  'rebuild-tracker-tsv.mjs',
+  'reconcile-pipeline.mjs',
+  'reconcile-ta.mjs',
+  'reconcile-triage.mjs',
+  'repair-twc-data.mjs',
+  'report-correspondence-drift.mjs',
+  'report-data-review.mjs',
+  'resolve-jds.mjs',
+  'resync-tracker-scores.mjs',
+  'spark-compare.mjs',
+  'spark-prefilter.mjs',
+  'verify-interview-prep.mjs',
+  'verify-pii-blindspots.mjs',
+  'verify-release-notes.mjs',
+  'verify-report-derivation.mjs',
+  'verify-report-numbering.mjs',
+  'verify-reports.mjs',
+  'verify-score-drift.mjs',
+  'weekly-review.mjs',
+  // test-all.mjs ships (below) and runs the suites under tests/, so without this
+  // line an updated install runs a new test-all against the tests it was installed
+  // with, and fails on every suite added since.
+  'tests/',
   'lib/',
   'dashboard-web/',
-  'batch/batch-prompt.md',
-  'batch/batch-runner.sh',
+  // The whole directory, not its two oldest files. User data under batch/ (the
+  // tracker additions, logs) is gitignored, and checkout only writes tracked paths,
+  // so a directory entry cannot touch it.
+  'batch/',
   'templates/',
+  // Onboarding copies this into config/profile.yml, so a new install needs the
+  // current schema, not the one from its installer.
+  'config/profile.example.yml',
   'fonts/',
+  // .claude/skills/trajecktory/SKILL.md is a one-line pointer to this file, so
+  // shipping the pointer without its target left the skill router frozen.
+  '.agents/skills/',
   '.claude/skills/',
   '.gemini/commands/',
+  '.opencode/commands/',
   'docs/',
   'VERSION',
   'DATA_CONTRACT.md',
