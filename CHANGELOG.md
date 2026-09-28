@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.5.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.2...v5.5.3) (2026-09-28)
+
+
+### Bug Fixes
+
+* **batch:** workers no longer try to allocate report numbers, and the prompt drops stale PDF wording ([#417](https://github.com/michaelinghilterra-creator/trajecktory/issues/417)) ([73d06bc](https://github.com/michaelinghilterra-creator/trajecktory/commit/73d06bc61304f2d07b0154ca6ec057052d5bb6a4))
+
 ## [5.5.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.1...v5.5.2) (2026-09-28)
 
 
