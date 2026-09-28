@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.5.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.1...v5.5.2) (2026-09-28)
+
+
+### Bug Fixes
+
+* match LinkedIn connections to renamed and legal-name companies ([#415](https://github.com/michaelinghilterra-creator/trajecktory/issues/415)) ([5fb2937](https://github.com/michaelinghilterra-creator/trajecktory/commit/5fb293781f81bc1af5489f331f14d1254c956426))
+
 ## [5.5.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.0...v5.5.1) (2026-09-28)
 
 
