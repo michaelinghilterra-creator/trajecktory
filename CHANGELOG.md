@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.5.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.0...v5.5.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **dashboard:** report drawer Comp tab no longer crashes the app ([#412](https://github.com/michaelinghilterra-creator/trajecktory/issues/412)) ([dd80e69](https://github.com/michaelinghilterra-creator/trajecktory/commit/dd80e6974f2505be575bb6f6b3dacb628c3f40a1))
+
 ## [5.5.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.4.3...v5.5.0) (2026-09-27)
 
 
