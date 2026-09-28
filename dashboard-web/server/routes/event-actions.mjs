@@ -189,7 +189,7 @@ router.get('/api/interviews/pending-outcome', (req, res) => {
 // recording is voided (D-10) so it stops counting or listing, and a plain note keeps why.
 router.post('/api/interviews/outcome', (req, res) => {
   try {
-    const { appId, stage, outcome, heldOn, result, newDate, newTime, durationMinutes } = req.body || {};
+    const { appId, stage, outcome, heldOn, result, newDate, newTime, durationMinutes, timeZone } = req.body || {};
     const id = parseInt(appId, 10);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'appId is required' });
     const wanted = typeof stage === 'string' ? stage.replace(/\s+/g, ' ').trim().toLowerCase() : '';
@@ -218,7 +218,7 @@ router.post('/api/interviews/outcome', (req, res) => {
     if (outcome === 'rescheduled') {
       let built;
       try {
-        built = buildScheduleFields({ date: newDate, time: newTime, durationMinutes });
+        built = buildScheduleFields({ date: newDate, time: newTime, durationMinutes, timeZone });
       } catch (error) {
         return res.status(400).json({ error: `Invalid reschedule.${error.message}` });
       }

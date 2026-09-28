@@ -75,7 +75,7 @@ function OutcomeItem({ item, onDone }) {
             style={{ fontSize: 12, padding: '3px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }} />
           <input type="time" value={newTime} onChange={e => setNewTime(e.target.value)}
             style={{ fontSize: 12, padding: '3px 6px', background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)' }} />
-          <button className="btn sm" disabled={busy || !newDate || !newTime} onClick={() => post({ outcome: 'rescheduled', newDate, newTime })}>Save</button>
+          <button className="btn sm" disabled={busy || !newDate || !newTime} onClick={() => post({ outcome: 'rescheduled', newDate, newTime, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })}>Save</button>
           <button className="btn ghost sm" onClick={() => setOpen(null)}>Cancel</button>
         </div>
       ) : (

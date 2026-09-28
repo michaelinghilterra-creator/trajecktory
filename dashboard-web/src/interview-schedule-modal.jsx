@@ -17,7 +17,7 @@ window.ScheduleModal = function ScheduleModal({ prompt, onClose }) {
   const set = (k, v) => setF(prev => ({ ...prev, [k]: v }));
   const ready = f.date && f.time && f.organizerName.trim();
 
-  const save = () => { if (ready) onClose({ ...f, organizerName: f.organizerName.trim() }); };
+  const save = () => { if (ready) onClose({ ...f, organizerName: f.organizerName.trim(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }); };
 
   return (
     <div onClick={() => onClose(null)}
