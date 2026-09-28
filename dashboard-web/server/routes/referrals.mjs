@@ -524,7 +524,7 @@ router.post('/api/referrals/:id/draft', async (req, res) => {
       cadence: false,
       ...finishOptionsFor(packet),
     });
-    res.json({ ok: true, draft: { subject: draft.subject, body: wrapReferralDraft(draft.body, packet) }, review: null, reviewStatus: 'pending', surfaceId: 'referral_email', gradeContext: {
+    res.json({ ok: true, draft: { subject: draft.subject, body: draft.body }, review: null, reviewStatus: 'pending', surfaceId: 'referral_email', gradeContext: {
       surfaceId: 'referral_email', source: 'referral', id, appId: topApp?.id ?? null,
       recipientRole, recipientTier, appliedRole, appliedDate,
     }, messageType: topic, relatedApp: topApp || null });

@@ -113,7 +113,6 @@ Ordered. Each renders one panel on the board.
 "sections": [
   { "id": "opening", "n": 1, "title": "Opening and why",
     "cues": [
-      { "cue": "First 15 seconds",              "answer": "opener" },
       { "cue": "Tell me about your background", "answer": "frame", "label": "90-sec frame" }
     ] },
   { "id": "hero",  "n": 2, "title": "Hero story, use once", "style": "hero",  "cues": [ ... ] },
@@ -198,7 +197,7 @@ board's shape.
 
 ### `story` is the load-bearing field
 
-Not every answer has one. `opener`, `qScope`, and `toolGap` are not stories, so they carry
+Not every answer has one. `qScope` and `toolGap` are not stories, so they carry
 `"story": null` or omit it. But every answer drawn from
 [`story-bank.md`](../interview-prep/story-bank.md) **must** carry its integer id.
 

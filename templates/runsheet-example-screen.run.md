@@ -24,7 +24,6 @@
       "n": 1,
       "title": "Opening and frame",
       "cues": [
-        { "cue": "First 15 seconds", "answer": "opener" },
         { "cue": "Tell me about your background", "answer": "frame", "label": "60-sec pitch" }
       ]
     },
@@ -82,19 +81,6 @@
   ],
 
   "answers": {
-    "opener": {
-      "title": "The warm open",
-      "tag": "first 15 sec",
-      "story": null,
-      "seconds": 15,
-      "spoken": [
-        "\"Marcus, thanks for the call. Quick context before you drive: I've spent my career on carrier and lane performance data, so a Director of Supply Chain Analytics role is squarely the work I want. Happy to go wherever is useful.\""
-      ],
-      "notes": [
-        "About 15 seconds, then **stop**. A screener has a form to get through.",
-        "Do not open with the hero story. He is not the audience for it."
-      ]
-    },
     "frame": {
       "title": "60-second pitch",
       "tag": "tight, then stop",

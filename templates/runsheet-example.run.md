@@ -24,7 +24,6 @@
       "n": 1,
       "title": "Opening and why",
       "cues": [
-        { "cue": "First 15 seconds", "answer": "opener" },
         { "cue": "Tell me about your background", "answer": "frame", "label": "90-sec frame" },
         { "cue": "Why this role / why now", "answer": "whyThem" }
       ]
@@ -81,19 +80,6 @@
   ],
 
   "answers": {
-    "opener": {
-      "title": "The enthusiasm opener",
-      "tag": "first 15 sec",
-      "story": null,
-      "seconds": 15,
-      "spoken": [
-        "\"Dana, thanks for making the time. I'll say up front, I'm genuinely excited about this one. The problem in your JD, three systems that disagree about landed cost, is the exact build I've done before and the work I care most about.\""
-      ],
-      "notes": [
-        "About 15 seconds. Say it warmly, then **stop** and let them drive.",
-        "Anchor the enthusiasm to a **specific reason**. Generic excitement reads as filler."
-      ]
-    },
     "frame": {
       "title": "90-second opening frame",
       "tag": "deliver near-verbatim",
