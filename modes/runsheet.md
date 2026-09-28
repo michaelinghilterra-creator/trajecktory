@@ -92,7 +92,6 @@ sibling (`{interview_prep_dir}/{Company Folder}/{company-slug}-round-{N}-{descri
   "sections": [                         // the board, ordered. DATA, not a fixed list. Cap: 8.
     { "id": "opening", "n": 1, "title": "Opening and why",
       "cues": [                         // cap: 48 cues across the whole board
-        { "cue": "First 15 seconds", "answer": "opener" },
         { "cue": "Tell me about your background", "answer": "frame", "label": "90-sec frame" }
       ] },
     { "id": "hero", "n": 2, "title": "Hero story, use once", "style": "hero", "cues": [ ... ] },
@@ -479,6 +478,13 @@ abridged 6 of these: it drops `facts` and `substance`):
 | §6 red-flag handling | `softspots` "Soft spots, answer straight" | 4 | |
 | **(mandatory, no prep source)** | `blank` "Blank? Bucket it, grab the default" | *(none)* | `panic` |
 | §7 questions to ask | `questions` "Your questions" | 5 | |
+
+**No "First 15 seconds" / warm-opener cue, on any template.** An earlier version of this mode put an
+`opener` answer first in the `opening` section on every board. Michael cut it standing, 2026-09-28: it
+does not earn its slot, and it kept coming back because the shipped examples still showed it, so a
+model compiling a new board would pattern-match it back in even after a board was hand-fixed to drop
+it. `opening` starts directly with `frame` (the 60/90-second pitch). Do not add an `opener` key to
+`answers{}` either.
 
 **`final-loop`** has **no shipped worked example.** Compile it from
 `templates/interview-cheatsheet-final-loop.md`'s sections (§2 panel-by-panel, §3 cross-panel
