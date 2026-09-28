@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.5.4](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.3...v5.5.4) (2026-09-28)
+
+
+### Bug Fixes
+
+* referral email duplication and runsheet opener/layout cleanup ([#419](https://github.com/michaelinghilterra-creator/trajecktory/issues/419)) ([106ce1b](https://github.com/michaelinghilterra-creator/trajecktory/commit/106ce1b09b02ce0ca5fb4369bf59e24dc732c9c1))
+
 ## [5.5.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.2...v5.5.3) (2026-09-28)
 
 
