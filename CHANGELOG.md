@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.5.5](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.4...v5.5.5) (2026-09-28)
+
+
+### Bug Fixes
+
+* interpret interview schedule times in the viewer's time zone ([#421](https://github.com/michaelinghilterra-creator/trajecktory/issues/421)) ([d1a1e9d](https://github.com/michaelinghilterra-creator/trajecktory/commit/d1a1e9d1fdd8212fe2a107a193e0eec37bc3708b))
+
 ## [5.5.4](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.3...v5.5.4) (2026-09-28)
 
 
