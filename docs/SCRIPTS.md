@@ -19,6 +19,7 @@ All scripts live in the project root as `.mjs` modules and are exposed via `npm 
 | `npm run rollback` | `update-system.mjs rollback` | Rollback last update |
 | `npm run liveness` | `check-liveness.mjs` | Test if job URLs are still active |
 | `npm run scan` | `scan.mjs` | Zero-token portal scanner |
+| Direct: `node tests/reviewed-binaries.test.mjs` | `lib/reviewed-binaries.mjs`, `tests/reviewed-binaries.test.mjs` | Require every tracked binary blob to have an explicit privacy review |
 | Direct: `node batch/obsidian-prep.mjs` | `batch/obsidian-prep.mjs` | Deduplicate and stage Obsidian notes for evaluation |
 | Direct: `bash batch/drain-wrapper.sh` | `batch/drain-wrapper.sh` | Drain a staged batch in groups with one retry pass |
 | Direct: `bash batch/batch-runner.sh --sandbox` | `batch/batch-runner.sh` | Run workers with the dashboard evaluation sandbox policy |
