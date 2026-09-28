@@ -20,9 +20,11 @@ fs.writeFileSync(path.join(sandbox, 'applications.md'),
   '|---|------|---------|------|-------|--------|-----|--------|--------|-------|-----|\n' +
   row(900001, 'Zorblax Widgetry', 'Example Cog Lead', 'Applied') +
   row(900002, 'Quennox Ratchet Works', 'Example Gear Manager', 'Applied') +
-  row(900003, 'Vantrix Sprocketry', 'Example Sprocket Designer', 'Applied'),
+  row(900003, 'Vantrix Sprocketry', 'Example Sprocket Designer', 'Applied') +
+  row(900004, 'Yarvex Pinion Labs', 'Example Pinion Builder', 'Applied') +
+  row(900005, 'Bexilon Gearworks', 'Example Gear Designer', 'Applied'),
   'utf8');
-fs.writeFileSync(path.join(sandbox, 'apply-dates.json'), JSON.stringify({ 900001: daysBack(20), 900002: daysBack(20), 900003: daysBack(20) }, null, 2) + '\n');
+fs.writeFileSync(path.join(sandbox, 'apply-dates.json'), JSON.stringify({ 900001: daysBack(20), 900002: daysBack(20), 900003: daysBack(20), 900004: daysBack(20), 900005: daysBack(20) }, null, 2) + '\n');
 fs.writeFileSync(path.join(sandbox, 'status-events.tsv'), 'app#\tdate\tstatus\tcompany\tlogged\n');
 fs.writeFileSync(path.join(sandbox, 'app-notes.json'), '{}\n');
 
@@ -46,7 +48,7 @@ const patch = (id, body) => fetch(`${base}/api/applications/${id}`, {
 }).then(async r => ({ status: r.status, body: await r.json() }));
 const applicationsPath = path.join(sandbox, 'applications.md');
 const statusOf = (id) => (fs.readFileSync(applicationsPath, 'utf8').split('\n').find(l => l.startsWith(`| ${id} |`)) || '').split('|')[6].trim();
-const schedule = { date: '2030-04-01', time: '14:00', organizerName: 'Example Personone', organizerType: 'recruiter_ta', channel: 'Phone' };
+const schedule = { date: '2030-04-01', time: '14:00', organizerName: 'Example Personone', organizerType: 'recruiter_ta', channel: 'Phone', timeZone: 'UTC' };
 
 console.log('interview-schedule-route.test.mjs (store off)');
 try {
@@ -105,10 +107,17 @@ try {
   let rec = recordOf(900003, 'Phone Screen');
   check(rec && rec.scheduled_for === '2030-04-01' && rec.slot_end === '2030-04-01T15:00:00.000Z' && !rec.held_on && rec.evidence.length === 0, 'and a scheduled recording is written, unconfirmed until held');
 
+  r = await patch2(900004, { status: 'Phone Screen', company: 'Yarvex Pinion Labs', schedule: { ...schedule, timeZone: 'America/Chicago' } });
+  rec = recordOf(900004, 'Phone Screen');
+  check(r.status === 200 && rec && rec.slot_end === '2030-04-01T20:00:00.000Z', 'a route schedule stores the Chicago daylight time as the correct UTC instant');
+
+  r = await patch2(900005, { status: 'Phone Screen', company: 'Bexilon Gearworks', schedule: { ...schedule, timeZone: 'Not/AZone' } });
+  check(r.status === 400 && /schedule\.timeZone/.test(r.body.error) && statusOf2(900005) === 'Applied' && !recordOf(900005, 'Phone Screen'), 'a bad time zone is a 400 and writes nothing');
+
   // Advancing to the NEXT round asks again.
   r = await patch2(900003, { status: '1st Interview', company: 'Vantrix Sprocketry' });
   check(r.status === 400 && statusOf2(900003) === 'Phone Screen', 'advancing to the next round without a schedule is also refused');
-  r = await patch2(900003, { status: '1st Interview', company: 'Vantrix Sprocketry', schedule: { date: '2030-04-08', time: '10:00', organizerName: 'Example Personone', organizerType: 'hiring_manager_panel', channel: 'Video' } });
+  r = await patch2(900003, { status: '1st Interview', company: 'Vantrix Sprocketry', schedule: { date: '2030-04-08', time: '10:00', organizerName: 'Example Personone', organizerType: 'hiring_manager_panel', channel: 'Video', timeZone: 'UTC' } });
   check(r.status === 200 && statusOf2(900003) === '1st Interview' && recordOf(900003, '1st Interview').scheduled_for === '2030-04-08', 'a second round is scheduled the same way, and the first round record is untouched');
   check(recordOf(900003, 'Phone Screen').scheduled_for === '2030-04-01', 'the earlier round keeps its own record');
 

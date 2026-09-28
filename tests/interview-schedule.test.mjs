@@ -8,12 +8,42 @@ function check(condition, message) {
   else { console.log(`  FAIL ${message}`); failed++; }
 }
 
-let f = buildScheduleFields({ date: '2030-03-08', time: '14:00' });
+let f = buildScheduleFields({ date: '2030-03-08', time: '14:00', timeZone: 'UTC' });
 check(f.scheduled_for === '2030-03-08' && f.slot_end === '2030-03-08T15:00:00.000Z', 'a default hour interview ends 60 minutes after it starts');
-f = buildScheduleFields({ date: '2030-03-08', time: '14:00', durationMinutes: 30 });
+f = buildScheduleFields({ date: '2030-03-08', time: '14:00', durationMinutes: 30, timeZone: 'UTC' });
 check(f.slot_end === '2030-03-08T14:30:00.000Z', 'an explicit duration is honored');
-f = buildScheduleFields({ date: '2030-03-08', time: '23:45', durationMinutes: 30 });
+f = buildScheduleFields({ date: '2030-03-08', time: '23:45', durationMinutes: 30, timeZone: 'UTC' });
 check(f.slot_end === '2030-03-09T00:15:00.000Z', 'a slot that crosses midnight rolls over correctly');
+
+f = buildScheduleFields({ date: '2030-06-10', time: '10:00', timeZone: 'America/Chicago' });
+check(f.slot_end === '2030-06-10T16:00:00.000Z', 'a Chicago summer wall time uses daylight time');
+f = buildScheduleFields({ date: '2030-12-10', time: '10:00', timeZone: 'America/Chicago' });
+check(f.slot_end === '2030-12-10T17:00:00.000Z', 'a Chicago winter wall time uses standard time');
+f = buildScheduleFields({ date: '2030-03-10', time: '01:30', timeZone: 'America/Chicago' });
+check(f.slot_end === '2030-03-10T08:30:00.000Z', 'a wall time before spring forward uses standard time');
+f = buildScheduleFields({ date: '2030-03-10', time: '03:30', timeZone: 'America/Chicago' });
+check(f.slot_end === '2030-03-10T09:30:00.000Z', 'a wall time after spring forward uses daylight time');
+f = buildScheduleFields({ date: '2030-11-03', time: '10:00', timeZone: 'America/Chicago' });
+check(f.slot_end === '2030-11-03T17:00:00.000Z', 'a wall time after fall back uses standard time');
+f = buildScheduleFields({ date: '2030-06-10', time: '10:00', timeZone: 'Asia/Kolkata' });
+check(f.slot_end === '2030-06-10T05:30:00.000Z', 'a zone with a half hour offset is converted correctly');
+
+for (const timeZone of ['Not/AZone', '', 42]) {
+  let threw = false;
+  try { buildScheduleFields({ date: '2030-06-10', time: '10:00', timeZone }); } catch (error) { threw = error instanceof TypeError && error.message === 'timeZone'; }
+  check(threw, `refuses time zone ${JSON.stringify(timeZone)}`);
+}
+
+let defaultZoneThrew = false;
+try {
+  f = buildScheduleFields({ date: '2030-06-10', time: '10:00' });
+} catch { defaultZoneThrew = true; }
+check(!defaultZoneThrew && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(f.slot_end), 'the server zone default returns a valid ISO slot end');
+
+let gapThrew = false;
+try { buildScheduleFields({ date: '2030-03-10', time: '02:30', timeZone: 'America/Chicago' }); }
+catch { gapThrew = true; }
+check(!gapThrew, 'a wall time in the spring forward gap returns a valid instant');
 
 for (const bad of [{}, { date: '2030-03-08' }, { date: '2030-03-08', time: '2:00' }, { date: '2030-03-08', time: '25:00' }, { date: 'not-a-date', time: '14:00' }, { date: '2030-03-08', time: '14:00', durationMinutes: 0 }, { date: '2030-03-08', time: '14:00', durationMinutes: -5 }]) {
   let threw = false;

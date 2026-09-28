@@ -198,7 +198,7 @@ router.patch('/api/applications/:id', (req, res) => {
       }
       let built;
       try {
-        built = buildScheduleFields({ date: s.date, time: s.time, durationMinutes: s.durationMinutes });
+        built = buildScheduleFields({ date: s.date, time: s.time, durationMinutes: s.durationMinutes, timeZone: s.timeZone });
       } catch (error) {
         return res.status(400).json({ error: `Invalid schedule.${error.message}` });
       }
