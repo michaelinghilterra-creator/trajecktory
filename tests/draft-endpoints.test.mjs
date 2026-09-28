@@ -195,9 +195,14 @@ for (const [name, p, body, expectedContext] of cases) {
 for (const [channel, body] of [['email', {}], ['LinkedIn', { channel: 'linkedin', topic: 'reconnect' }]]) {
   const res = await post(`/api/referrals/${refRow.id}/draft`, body);
   const expectedSender = buildPacket({ source: 'referral', id: refRow.id, kind: 'referral_email' }).sender.firstName;
-  const expectedBody = `Hi Rob,\n\nStub body for the smoke test.\n\nBest,${expectedSender ? `\n${expectedSender}` : ''}`;
-  check(res.body.draft?.body === expectedBody,
-    `referral ${channel} response includes deterministic greeting and sender sign-off`);
+  if (channel === 'LinkedIn') {
+    const expectedBody = `Hi Rob,\n\nStub body for the smoke test.\n\nBest,${expectedSender ? `\n${expectedSender}` : ''}`;
+    check(res.body.draft?.body === expectedBody,
+      `referral ${channel} response includes the deterministic greeting and sender sign-off`);
+  } else {
+    check(res.body.draft?.body === 'Stub body for the smoke test.',
+      `referral ${channel} response returns the clean body; the UI adds the greeting and sign-off`);
+  }
 }
 
 process.env.TJK_FAKE_LLM_TEXT = JSON.stringify({
