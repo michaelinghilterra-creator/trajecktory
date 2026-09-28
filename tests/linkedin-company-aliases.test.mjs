@@ -6,7 +6,7 @@ import { makeSandbox } from './helpers/sandbox.mjs';
 
 const dir = makeSandbox('aliases');
 writeFileSync(join(dir, 'company-aliases.json'), JSON.stringify({ groups: [
-  ['Quillfeather Storage', 'Evermoor'],
+  ['Zorblax Widgetry', 'Quennox Ratchet Works'],
   ['Brambleton Health', 'Brambleton', 'Brambleton Therapy Solutions Inc'],
 ] }));
 process.env.TJK_DATA_DIR = dir;
@@ -37,20 +37,20 @@ check('only one generic suffix layer is stripped', () => {
 });
 check('a non-generic word is kept', () => assert.ok(!has('Vexmoor Security', 'vexmoor')));
 check('alias matches in both directions', () => {
-  assert.ok(has('Evermoor', 'quillfeatherstorage'));
-  assert.ok(has('Quillfeather Storage', 'evermoor'));
+  assert.ok(has('Quennox Ratchet Works', 'zorblaxwidgetry'));
+  assert.ok(has('Zorblax Widgetry', 'quennoxratchetworks'));
 });
 check('a three-name alias group links every member', () => assert.ok(has('Brambleton Therapy Solutions Inc', 'brambletonhealth')));
-check('alias groups stay separate', () => assert.ok(!has('Evermoor', 'brambletonhealth')));
+check('alias groups stay separate', () => assert.ok(!has('Quennox Ratchet Works', 'brambletonhealth')));
 check('a company with no alias is unaffected', () => assert.deepEqual(companyForms('Zorblax'), ['zorblax']));
 check('a connection at the new name matches the tracker company', () => {
   const r = matchConnections({
-    connections: [{ first: 'Ada', last: 'Vance', company: 'Evermoor', position: 'Senior Recruiter', url: 'https://www.linkedin.com/in/ada-vance' }],
-    active: [{ company: 'Quillfeather Storage', role: 'Director, Widget Ops' }],
+    connections: [{ first: 'Example', last: 'Personone', company: 'Quennox Ratchet Works', position: 'Senior Recruiter', url: 'https://www.linkedin.com/in/example-personone' }],
+    active: [{ company: 'Zorblax Widgetry', role: 'Director, Widget Ops' }],
     existing: { names: new Set(), urls: new Set() },
   });
   assert.equal(r.stage1.length, 1);
-  assert.equal(r.stage1[0].target.company, 'Quillfeather Storage');
+  assert.equal(r.stage1[0].target.company, 'Zorblax Widgetry');
 });
 check('a referral row at the new name is Stage 1', () => {
   const stage = stageForRow({ how: '1st-degree LinkedIn connection', where: 'Brambleton Therapy Solutions Inc', notes: '' }, new Set(companyForms('Brambleton Health')));
