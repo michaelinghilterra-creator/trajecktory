@@ -41,7 +41,7 @@ Le skill traite TOUS les roles cibles avec le meme soin. Aucun n'est primaire ou
      Exemple pour le backend engineering :
      - Senior Backend Engineer
      - Staff Platform Engineer
-     - Engineering Manager
+     - Principal Backend Engineer
      etc. -->
 
 ### Framing adaptatif par archetype
