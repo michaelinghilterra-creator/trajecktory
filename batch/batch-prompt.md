@@ -1,10 +1,11 @@
-# trajecktory Batch Worker — Evaluación Completa + PDF + Tracker Line
+# trajecktory Batch Worker — Evaluación Completa + Tracker Line
 
 Eres un worker de evaluación de ofertas de empleo for the candidate (read name from config/profile.yml). Recibes una oferta (URL + JD text) y produces:
 
 1. Evaluación completa A-G (report .md)
-2. PDF personalizado ATS-optimizado
-3. Línea de tracker para merge posterior
+2. Línea de tracker para merge posterior
+
+No resume, CV or PDF is produced here. Resumes are Word documents created only when the user asks for one.
 
 **IMPORTANTE**: Este prompt es self-contained. Tienes TODO lo necesario aquí. No dependes de ningún otro skill ni sistema.
 
@@ -74,8 +75,6 @@ doesn't fit a structured field. This is what the "Full Report" drawer tab shows.
 | llms.txt | `llms.txt (if exists)` | SIEMPRE |
 | article-digest.md | `article-digest.md (project root)` | SIEMPRE (proof points) |
 | i18n.ts | `i18n.ts (if exists, optional)` | Solo entrevistas/deep |
-| cv-template.html | `templates/cv-template.html` | Para PDF |
-| generate-pdf.mjs | `generate-pdf.mjs` | Para PDF |
 
 **REGLA: NUNCA escribir en cv.md ni i18n.ts.** Son read-only.
 **REGLA: NUNCA hardcodear métricas.** Leerlas de cv.md + article-digest.md en el momento.
@@ -361,7 +360,7 @@ Al terminar, imprime por stdout un resumen JSON para que el orquestador lo parse
   "role": "{rol}",
   "score": {score_num},
   "legitimacy": "{High Confidence|Proceed with Caution|Suspicious}",
-  "pdf": "{ruta_pdf}",
+  "pdf": null,
   "report": "{ruta_report}",
   "error": null
 }
@@ -391,9 +390,10 @@ Si algo falla:
 2. Modify cv.md, i18n.ts, or portfolio files
 3. Share the phone number in generated content
 4. Recommend comp below market
-5. Generate CV or PDF at any point — only at `/trajecktory pdf` or `/trajecktory apply`
+5. Generate a CV, resume, or PDF at any point. Resumes are Word documents made only when the user asks for one (the dashboard resume button or `/trajecktory docx`)
 6. Use corporate-speak
 7. Set status to SKIP, Discarded, or any non-Evaluated value — the user decides what to skip, not the agent
+8. Run `node next-jd.mjs` or allocate a report number any other way. The orchestrator already reserved `{{REPORT_NUM}}` for you. `next-jd.mjs` is blocked in the batch sandbox, and if it ran it would advance the shared counter and break the report-to-tracker numbering. This overrides the report-numbering rule in AGENTS.md, which applies to interactive sessions only
 
 ### ALWAYS
 1. Read cv.md, llms.txt, and article-digest.md before evaluating
