@@ -806,6 +806,8 @@ node verify-report-numbering.mjs
 
 - **RULE: NEVER create new entries in applications.md if company+role already exists.** Update the existing entry.
 
+Any added or changed image, PDF, or other binary must be opened and checked for real personal data. Record its current Git blob id in `docs/reviewed-binaries.tsv`; `tests/reviewed-binaries.test.mjs` enforces the reviewed inventory in CI.
+
 ### Commit messages are published (RULE)
 
 `verify-no-pii.mjs` scans **files**. A commit message is not a file, and it is published

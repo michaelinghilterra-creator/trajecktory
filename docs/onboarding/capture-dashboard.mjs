@@ -24,6 +24,7 @@
  *   (cd dashboard-web && npm start)  — builds the UI then serves live data.
  *
  * Usage: node docs/onboarding/capture-dashboard.mjs
+ *        node docs/onboarding/capture-dashboard.mjs --gallery-drawer
  */
 import { chromium } from 'playwright';
 import { dirname, resolve } from 'path';
@@ -31,7 +32,9 @@ import { mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(__dirname, '..', '..');
 const OUT = resolve(__dirname, 'captures');
+const GALLERY_OUT = resolve(ROOT, 'docs', 'screenshots');
 mkdirSync(OUT, { recursive: true });
 
 const BASE = process.env.TRAJECKTORY_URL || 'http://localhost:3333';
@@ -56,6 +59,16 @@ const STATE_READY = {
   files: { cv: { exists: true }, profile: { exists: true }, portals: { exists: true }, modeProfile: { exists: true }, cvMaster: { exists: true }, pipeline: { exists: true } },
   sections: sectionsObj('complete'),
   values: { candidate: {}, compensation: {}, location: {}, outputs: {} },
+};
+const STATE_GALLERY = {
+  ...STATE_READY,
+  values: {
+    ...STATE_READY.values,
+    candidate: { name: 'Example Personone', email: 'example.personone@example.test' },
+    compensation: { minimum: '$163,000', target_range: '$183,000 to $223,000' },
+    location: { city: 'Example City', region: 'EX', timezone: 'Etc/UTC' },
+    outputs: {},
+  },
 };
 // Resume in, nothing else done. This is the ONLY state that renders the green
 // "You are ready to use trajecktory." banner and the "N/8 sharpened" meter,
@@ -371,6 +384,153 @@ const CHEATSHEET = {
   ],
 };
 
+// README gallery drawer fixture. Every value is invented and intentionally
+// obvious, so this capture can never be mistaken for a real application.
+const GALLERY_APP = {
+  id: 900001,
+  date: '2034-04-12',
+  company: 'Zorblax Widgetry',
+  role: 'Director of Ratchet Intelligence',
+  score: 4.4,
+  status: '2nd Interview',
+  archetype: 'Widget Operations',
+  sector: 'Imaginary Manufacturing',
+  sectorRaw: 'Imaginary Manufacturing',
+  source: 'Invented Board',
+  compStated: '$183,000 to $223,000',
+  salary: 203,
+  url: 'https://jobs.example.test/900001',
+  report: 'reports/900001-zorblax-widgetry-2034-04-12.md',
+  resume: 'trajecktory',
+  seniority: 'Director',
+  remote: 'Remote',
+  size: 'growth',
+  legitimacy: 'Invented fixture',
+  reached: '2nd Interview',
+};
+
+const GALLERY_CHEATSHEET = {
+  url: 'https://jobs.example.test/900001',
+  legitimacy: 'Invented fixture',
+  archetypeDetected: 'Widget Operations',
+  domain: 'Imaginary Manufacturing',
+  seniority: 'Director',
+  remote: 'Remote',
+  teamSize: '8',
+  compStated: '$183,000 to $223,000',
+  tldr: 'Invented role leading a fictional ratchet analytics team for Zorblax Widgetry.',
+  companyBrief: 'Zorblax Widgetry is an invented manufacturer of fictional widgets and ratchets.',
+  scoreSource: 'derived',
+  globalScore: [
+    { key: 'fit', dim: 'Fit / Resume Match', val: 4.4, max: 5 },
+    { key: 'northStar', dim: 'North Star Alignment', val: 4.5, max: 5 },
+    { key: 'level', dim: 'Level Match', val: 4.2, max: 5 },
+    { key: 'comp', dim: 'Comp', val: 4.6, max: 5 },
+    { key: 'location', dim: 'Location / Logistics', val: 5, max: 5 },
+    { key: 'redFlags', dim: 'Red flags', val: 5, max: 5 },
+  ],
+  scoreBasis: {
+    weights: { fit: 0.4, northStar: 0.3, level: 0.2, location: 0.1 },
+    contributions: [
+      { key: 'fit', val: 4.4, weight: 0.4, points: 1.76 },
+      { key: 'northStar', val: 4.5, weight: 0.3, points: 1.35 },
+      { key: 'level', val: 4.2, weight: 0.2, points: 0.84 },
+      { key: 'location', val: 5, weight: 0.1, points: 0.5 },
+    ],
+    penalty: 0,
+    weightedAverage: 4.45,
+  },
+  recommendation: 'Apply using the invented widget modernization story.',
+  keywords: ['widget telemetry', 'ratchet analytics', 'fictional operations'],
+  cvMatch: [
+    { req: 'Lead widget analytics strategy', evidence: 'Directed an invented eight-person widget insights team.', strength: 'strong', note: 'Exact fictional scope match.' },
+    { req: 'Modernize ratchet reporting', evidence: 'Designed a fictional dashboard used by 100 example operators.', strength: 'strong' },
+    { req: 'Present to executive stakeholders', evidence: 'Delivered invented monthly operating reviews to example executives.', strength: 'strong', note: 'Use the 20 percent fictional cycle-time result.' },
+    { req: 'Own forecasting and planning', evidence: 'Built an invented annual plan for 10,000 example widgets.', strength: 'moderate', note: 'Planning scale was smaller than this fictional role.' },
+    { req: 'Manage vendor integrations', evidence: 'Coordinated two invented telemetry vendors.', strength: 'moderate' },
+    { req: 'Hold an advanced ratchet certification', evidence: 'No fictional ratchet certification is listed.', strength: 'weak', note: 'This is a learnable gap, not a blocker.' },
+  ],
+  gaps: [
+    { gap: 'No advanced ratchet certification', blocker: 'No', mitigation: 'State the gap plainly and cite the invented integration work.' },
+    { gap: 'Smaller planning scope', blocker: 'No', mitigation: 'Focus on the repeatable planning method and round fictional outcomes.' },
+  ],
+  levelMatch: {
+    jdLevel: 'Director',
+    naturalLevel: 'Senior Manager / Director',
+    verdict: 'A credible invented step with direct fictional leadership evidence.',
+  },
+  sellSenior: [
+    { claim: 'Built an invented operating system from scratch', proof: 'One fictional scorecard replaced five sample spreadsheets', phrase: 'I turn scattered widget signals into one operating rhythm.' },
+    { claim: 'Led adoption beyond the analytics team', proof: '100 example operators used the fictional workflow', phrase: 'The work succeeds when the operators own it.' },
+  ],
+  downlevelPlan: 'Ask for written scope, a 2035 promotion checkpoint, and ownership of the fictional analytics roadmap.',
+  comp: {
+    stated: '$183,000 to $223,000',
+    score: 4.6,
+    walkaway: 163,
+    sources: [
+      { src: 'Invented job posting', data: '$183,000 to $223,000 base', note: 'Fictional range with no equity detail.' },
+      { src: 'Example market survey', data: '$173,000 to $233,000', note: 'Invented director benchmark.' },
+      { src: 'Quennox Ratchet Works sample', data: '$193,000 midpoint', note: 'Fictional peer comparison.' },
+    ],
+    verdict: 'The invented midpoint clears the $163,000 walk-away and sits inside the fictional target band.',
+    market: 'Invented director roles in widget analytics cluster around a round $203,000 midpoint.',
+  },
+  customizationCV: [
+    { current: 'Example analytics leader', change: 'Director of Ratchet Intelligence', why: 'Matches the fictional role language.' },
+  ],
+  customizationLI: [
+    { current: 'Example operations profile', change: 'Widget operations and ratchet analytics', why: 'Uses invented search terms.' },
+  ],
+  leadStory: {
+    title: 'The fictional widget telemetry rebuild',
+    reason: 'It combines invented strategy, adoption, and a plainly fictional round result.',
+    script: 'Five sample spreadsheets disagreed on widget output. I defined one fictional measure, launched a shared dashboard, and trained 100 example operators. The invented cycle time improved by 20 percent.',
+  },
+  starStories: [
+    { title: 'Unifying widget telemetry', req: 'Analytics strategy', S: 'Five fictional plants used different widget measures.', T: 'Create one invented operating view.', A: 'Defined a shared metric and piloted it with 20 example operators.', R: 'All five sample plants adopted it and cycle time improved by 20 percent.', Reflection: 'Start operator workshops earlier.' },
+    { title: 'Repairing a ratchet forecast', req: 'Forecasting', S: 'The invented forecast missed by 30 percent.', T: 'Build a stable fictional planning model.', A: 'Grouped sample demand into three round scenarios and reviewed assumptions weekly.', R: 'The invented miss narrowed to 10 percent.', Reflection: 'Keep scenario labels simple.' },
+    { title: 'Leading a vendor recovery', req: 'Vendor leadership', S: 'A fictional telemetry vendor slipped by 60 days.', T: 'Recover the sample launch without cutting validation.', A: 'Split delivery into two invented milestones and assigned one owner per interface.', R: 'The fictional launch recovered 30 days and passed 100 sample checks.', Reflection: 'Escalate dependency risk sooner.' },
+  ],
+  redFlagQs: [
+    { q: 'Why move into ratchet intelligence?', behind: 'Testing the invented career logic.', a: 'It joins fictional operations leadership with the example analytics work I already do.' },
+    { q: 'How will you close the certification gap?', behind: 'Testing learning speed.', a: 'I would complete the fictional certification in the first 90 days while pairing with a sample subject expert.' },
+  ],
+  legitimacyConclusion: 'Invented fixture for gallery capture only.',
+  legitimacySignals: [
+    { signal: 'Fixture status', finding: 'All names and numbers are invented', good: true },
+  ],
+};
+
+const GALLERY_IDENTITY = {
+  name: 'Example Personone',
+  email: 'example.personone@example.test',
+  phone: '(555) 010-9001',
+  location: 'Example City, EX',
+  linkedin: 'https://example.test/example-personone',
+  portfolio: 'https://portfolio.example.test',
+  github: '',
+  certifications: [],
+};
+
+const GALLERY_NOTES = { notes: [
+  { id: 'example-note-900001', text: 'Invented interview note for the fictional ratchet role.', createdAt: '2034-04-20T10:00:00.000Z' },
+] };
+
+const GALLERY_ARTIFACTS = {
+  resume: 'Example_Personone_Zorblax_Resume_2034.docx',
+  cover: 'Example_Personone_Zorblax_Cover_2034.docx',
+};
+
+const GALLERY_POSTING = {
+  path: 'jds/900001-zorblax-widgetry.txt',
+  text: ['Director of Ratchet Intelligence', 'Zorblax Widgetry', 'Entirely invented gallery fixture.'].join('\n'),
+};
+
+const GALLERY_CONTACTS = [
+  { id: 900001, company: 'Zorblax Widgetry', first: 'Example', last: 'Personone', title: 'Example Recruiter', email: 'recruiter@example.test', status: 'Not Contacted' },
+];
+
 const NOTES = { notes: [
   { id: 'n1', text: 'Recruiter screen went well. They pushed hard on CRM consolidation, which is the whole mandate. Next round is with the CRO.', createdAt: '2026-07-14T16:20:00.000Z' },
   { id: 'n2', text: 'Asked about equity. Answer was vague, so revisit before any offer conversation.', createdAt: '2026-07-10T09:05:00.000Z' },
@@ -609,7 +769,7 @@ async function installMocks(page) {
     const p = new URL(req.url()).pathname;
     const method = req.method();
     if (p.endsWith('/api/setup/state')) {
-      return json(route, stateMode === 'ready' ? STATE_READY : stateMode === 'started' ? STATE_STARTED : STATE_FIRSTRUN);
+      return json(route, stateMode === 'gallery' ? STATE_GALLERY : stateMode === 'ready' ? STATE_READY : stateMode === 'started' ? STATE_STARTED : STATE_FIRSTRUN);
     }
     if (p.endsWith('/api/setup/preflight')) return json(route, PREFLIGHT_OK);
     if (p.endsWith('/api/setup/healthcheck')) return json(route, HEALTH_OK);
@@ -635,21 +795,29 @@ async function installMocks(page) {
   // App shell: these three are fetched on every page load, and all three read
   // real user data. /api/identity is the user's name, email and phone outright.
   // Empty on first run, the invented search everywhere else.
-  await page.route('**/api/applications', route => json(route, dataMode === 'empty' ? [] : APPS));
-  await page.route('**/api/identity', route => json(route, IDENTITY));
-  await page.route('**/api/cheatsheets/**', route => json(route, CHEATSHEET));
-  await page.route('**/api/notes/**', route => json(route, NOTES));
+  await page.route('**/api/archetypes', route => json(route, ['Revenue Operations', 'Analytics Leadership']));
+  await page.route('**/api/pipeline/pending', route => json(route, { pending: 0 }));
+  await page.route('**/api/pipeline/needs-manual', route => json(route, { items: [] }));
+  await page.route('**/api/metrics/core', route => json(route, { error: 'not mocked for captures' }));
+  await page.route('**/api/applications', route => json(route, dataMode === 'empty' ? [] : dataMode === 'gallery' ? [GALLERY_APP] : APPS));
+  await page.route('**/api/identity', route => json(route, dataMode === 'gallery' ? GALLERY_IDENTITY : IDENTITY));
+  await page.route('**/api/cheatsheets/**', route => json(route, dataMode === 'gallery' ? GALLERY_CHEATSHEET : CHEATSHEET));
+  await page.route('**/api/notes/**', route => json(route, dataMode === 'gallery' ? GALLERY_NOTES : NOTES));
   // The Posting tab and the "Files for this application" row. Both are newer than
   // this script and were falling through to the live server, which on a real
   // install serves a genuine job advert and filenames carrying a real employer
   // and the Windows account name. captures/ is gitignored, so neither
   // verify-no-pii.mjs nor tests/no-real-postings.test.mjs would ever have seen
   // it — the leak's first reader would have been whoever opened the PDF.
-  await page.route('**/api/jd/**', route => json(route, POSTING));
-  await page.route('**/api/artifacts/**', route => json(route, ARTIFACTS));
-  await page.route('**/api/target-talent/by-company/**', route => json(route, []));
+  await page.route('**/api/jd/**', route => json(route, dataMode === 'gallery' ? GALLERY_POSTING : POSTING));
+  await page.route('**/api/artifacts/**', route => json(route, dataMode === 'gallery' ? GALLERY_ARTIFACTS : ARTIFACTS));
+  await page.route('**/api/target-talent/by-company/**', route => json(route, dataMode === 'gallery' ? GALLERY_CONTACTS : []));
+  await page.route('**/api/split-test', route => dataMode === 'gallery' ? json(route, { assignments: {} }) : route.continue());
+  await page.route('**/api/pipeline/inbox', route => dataMode === 'gallery'
+    ? json(route, { pending: [], gated: [], done: [], counts: { pending: 0, gated: 0, done: 0 } })
+    : route.continue());
   await page.route('**/api/followups/stale', route =>
-    json(route, dataMode === 'empty' ? { warm: [], cold: [], snoozed: [] } : FOLLOWUPS_STALE));
+    json(route, dataMode === 'populated' ? FOLLOWUPS_STALE : { warm: [], cold: [], snoozed: [] }));
   await page.route('**/api/followups', route => json(route, []));
   await page.route('**/api/recruiters', route => json(route, dataMode === 'empty' ? [] : RECRUITERS));
   await page.route('**/api/recruiters/*', route => json(route, { ...RECRUITERS[0], correspondence: [] }));
@@ -813,6 +981,18 @@ async function clickDrawerTab(page, label) {
     if (t) { t.scrollIntoView({ block: 'nearest', inline: 'center' }); t.click(); }
   }, label);
 }
+async function openActiveDrawer(page, company) {
+  await page.evaluate((wantedCompany) => {
+    const rows = [...document.querySelectorAll('tbody tr')]
+      .filter(r => getComputedStyle(r).cursor === 'pointer');
+    const row = rows.find(r => r.textContent.includes(wantedCompany)) || rows[0];
+    if (row) row.click();
+  }, company);
+  const drawer = page.locator('.pl-drawer.open').first();
+  await drawer.waitFor({ state: 'visible', timeout: 15000 });
+  await page.waitForTimeout(1400);
+  return drawer;
+}
 async function waitRailEnabled(page, label) {
   const btn = page.locator('button', { hasText: label }).first();
   for (let i = 0; i < 30; i++) {
@@ -825,6 +1005,49 @@ async function waitRailEnabled(page, label) {
     await page.waitForTimeout(200);
   }
   console.log(`  note: rail item "${label}" never became enabled, continuing anyway`);
+}
+
+async function galleryDrawerMain() {
+  stateMode = 'gallery';
+  dataMode = 'gallery';
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const ctx = await browser.newContext({
+      viewport: { width: 1440, height: 1000 },
+      deviceScaleFactor: 2,
+      permissions: ['clipboard-read', 'clipboard-write'],
+    });
+    const page = await ctx.newPage();
+    page.setDefaultTimeout(20000);
+    const unmocked = new Set();
+    await page.route('**/api/**', route => {
+      unmocked.add(new URL(route.request().url()).pathname);
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"unmocked gallery endpoint"}' });
+    });
+    await installMocks(page);
+    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(900);
+    await clickNav(page, 'Pipeline');
+    await page.waitForTimeout(900);
+    await page.locator('.subtab', { hasText: 'Roles' }).first().click();
+    await page.waitForTimeout(700);
+    await openActiveDrawer(page, 'Zorblax Widgetry');
+
+    for (const [label, filename] of [
+      ['Resume Match', '12-drawer-cvmatch.png'],
+      ['Comp', '13-drawer-comp.png'],
+      ['Interview', '14-drawer-interview.png'],
+    ]) {
+      await clickDrawerTab(page, label);
+      await page.waitForTimeout(900);
+      if (unmocked.size) throw new Error(`Unmocked gallery endpoint(s): ${[...unmocked].join(', ')}`);
+      await page.screenshot({ path: resolve(GALLERY_OUT, filename) });
+      console.log('  saved', filename);
+    }
+  } finally {
+    await browser.close();
+  }
+  console.log('Done. Gallery drawer screenshots in', GALLERY_OUT);
 }
 
 async function main() {
@@ -1022,16 +1245,8 @@ async function main() {
     // Open the row the CHEATSHEET fixture actually describes. The mock serves the
     // same report for every id, so opening any other row would pair a VP RevOps
     // write-up with a different company and title, which a careful reader spots.
-    await page.evaluate(() => {
-      const rows = [...document.querySelectorAll('tbody tr')]
-        .filter(r => getComputedStyle(r).cursor === 'pointer');
-      const row = rows.find(r => /Northwind Analytics/.test(r.textContent)) || rows[0];
-      if (row) row.click();
-    });
     // The Pipeline drawer is .pl-drawer. (.drawer is the Recruiters one.)
-    const drawer = page.locator('.pl-drawer.open').first();
-    await drawer.waitFor({ state: 'visible', timeout: 15000 });
-    await page.waitForTimeout(1400); // let the cheatsheet fetch settle + slide-in finish
+    const drawer = await openActiveDrawer(page, 'Northwind Analytics');
     await drawer.screenshot({ path: resolve(OUT, 'g3-drawer-overview.png') });
     console.log('  saved g3-drawer-overview.png');
     try {
@@ -1197,7 +1412,8 @@ async function main() {
 // can import installMocks/clickNav and reuse the PII-safe mock harness without
 // triggering this run.
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch((e) => { console.error('capture failed:', e); process.exit(1); });
+  const run = process.argv.includes('--gallery-drawer') ? galleryDrawerMain : main;
+  run().catch((e) => { console.error('capture failed:', e); process.exit(1); });
 }
 
 // Let an importer (capture-readme.mjs) drive the mock mode. The route handlers

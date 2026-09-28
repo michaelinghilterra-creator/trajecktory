@@ -501,6 +501,7 @@ for (const suite of [
   'tests/activity.test.mjs',
   'tests/response-progress.test.mjs',
   'tests/no-real-postings.test.mjs',
+  'tests/reviewed-binaries.test.mjs',
   'tests/outcome.test.mjs',
   'tests/tracker.test.mjs',
   'tests/tracker-writers.test.mjs',
