@@ -59,7 +59,7 @@ skill はすべてのターゲット求人を同等の注意で扱う。プラ�
      バックエンドエンジニアリングの例：
      - Senior Backend Engineer
      - Staff Platform Engineer
-     - Engineering Manager
+     - Principal Backend Engineer
      など -->
 
 ### アーキタイプ別の適応フレーミング

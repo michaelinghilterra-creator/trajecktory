@@ -41,7 +41,7 @@ Die Skill behandelt ALLE Zielrollen mit gleicher Sorgfalt. Keine ist primär ode
      Beispiel für Backend-Engineering:
      - Senior Backend Engineer
      - Staff Platform Engineer
-     - Engineering Manager
+     - Principal Backend Engineer
      etc. -->
 
 ### Adaptives Framing nach Archetyp

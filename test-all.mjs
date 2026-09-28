@@ -634,6 +634,7 @@ for (const suite of [
   'tests/person-context.test.mjs',
   'tests/data-dir-sandbox.test.mjs',
   'tests/linkedin-referrals.test.mjs',
+  'tests/linkedin-company-aliases.test.mjs',
   'tests/rolling-floor.test.mjs',
   'tests/twc-events.test.mjs',
   'tests/twc.test.mjs',

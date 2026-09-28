@@ -58,13 +58,62 @@ const DIRECTOR = /\bdirector\b/i;
 const FUNC = /revenue oper|revops|rev ops|sales oper|salesops|business oper|gtm|go[- ]to[- ]market|revenue|enablement|sales strateg|business intelligence|\banalytics\b|deal desk/i;
 
 // LinkedIn "Company" strings rarely match a tracker company byte-for-byte, so
-// accept the full normalized name plus a form with a trailing generic word
-// dropped (" Labs", " Inc", " Technologies"). NOT stripping "Security/Health/
-// Systems" etc. on purpose: stripping "Security" would fold a company like
-// "Acme Security" into "Acme", a different company entirely.
-const stripGeneric = (c) => c.replace(/\s+(labs|inc|technologies|software|hq)\.?$/i, '');
-function companyForms(company) {
-  const forms = new Set([norm(company), norm(stripGeneric(company))]);
+// accept the full normalized name plus a form with ONE trailing generic word
+// dropped (" Labs", " Inc", " Group", ", LLC"). One layer only: stripping twice
+// folds "Acme Software, LLC" into "Acme", which can be a different company. NOT
+// stripping "Security/Health/Systems" etc. on purpose: stripping "Security" would
+// fold a company like "Acme Security" into "Acme", a different company entirely.
+const stripGeneric = (c) => c.replace(/,?\s+(labs|inc|technologies|software|hq|group|corporation|corp|llc|ltd|co)\.?$/i, '');
+// "Acme (formerly Foo)" -> "Acme". The former name is NOT kept as a form: it often
+// belongs to an unrelated company today.
+const stripParens = (c) => c.replace(/\s*\([^)]*\)\s*$/, '');
+// "Acme.ai" -> "Acme".
+const stripTld = (c) => c.replace(/\.(ai|io|com|org|co)$/i, '');
+
+function baseForms(company) {
+  const s = String(company || '').trim();
+  const out = new Set();
+  // "Acme / Foo" names an acquirer and its acquisition; either one is the employer.
+  for (const part of [s, ...s.split(/\s+\/\s+/)]) {
+    const bare = stripTld(stripParens(part).trim());
+    for (const v of [part, bare, stripGeneric(bare)]) out.add(norm(v));
+  }
+  return out;
+}
+
+// Renames and legal names no generic rule can see (a rebrand shares no words with
+// the old name). User layer, gitignored: {"groups": [["Old Name", "New Name"], ...]},
+// every name in a group matching every other.
+export const COMPANY_ALIASES = path.join(DATA_DIR, 'company-aliases.json');
+let aliasCache = { checkedAt: 0, mtimeMs: null, index: new Map() };
+function aliasIndex() {
+  const now = Date.now();
+  // One stat per second at most: companyForms runs once per connection (~7k).
+  if (now - aliasCache.checkedAt < 1000) return aliasCache.index;
+  aliasCache.checkedAt = now;
+  let mtimeMs = null;
+  try { mtimeMs = fs.statSync(COMPANY_ALIASES).mtimeMs; } catch { /* no alias file */ }
+  if (mtimeMs === aliasCache.mtimeMs) return aliasCache.index;
+  const index = new Map();
+  if (mtimeMs !== null) {
+    try {
+      for (const group of JSON.parse(fs.readFileSync(COMPANY_ALIASES, 'utf8')).groups || []) {
+        if (!Array.isArray(group)) continue;
+        const all = new Set(group.flatMap((name) => [...baseForms(name)]));
+        for (const f of all) index.set(f, new Set([...(index.get(f) || []), ...all]));
+      }
+    } catch (error) {
+      console.warn(`[linkedin-referrals] ignoring ${COMPANY_ALIASES}: ${error.message}`);
+    }
+  }
+  aliasCache = { checkedAt: now, mtimeMs, index };
+  return index;
+}
+
+export function companyForms(company) {
+  const forms = baseForms(company);
+  const aliases = aliasIndex();
+  for (const f of [...forms]) for (const a of aliases.get(f) || []) forms.add(a);
   // Floor of 2 (was 4) so short real companies (IBM, GE, HP) still key the index;
   // 1-char leftovers from suffix stripping are dropped as noise.
   return [...forms].filter((f) => f.length >= 2);
