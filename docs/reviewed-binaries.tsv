@@ -3,21 +3,31 @@ blob	path	note
 d15208de03cd1ad7c5199f0a0ce915fe841e4722	dashboard-web/src/fonts/inter-latin.woff2	font
 82f96681c0762d98ec703df7836829d0ab44a785	dashboard-web/src/fonts/jetbrains-mono-latin-ext.woff2	font
 4d09cda4a4c3f4c08ae253dd8a9c5133a89b31b7	dashboard-web/src/fonts/jetbrains-mono-latin.woff2	font
-ac146b04ae350c8c5561cee8a958b48f50e9e1b1	dashboard-web/src/guide/coach.png	onboarding guide image
-6dd9dfcbaf69a3d1b5367704a29a9658ac25f688	dashboard-web/src/guide/followups.png	onboarding guide image
-e4a3255082a8e54f845b427ac2ae782cdc2f40e3	dashboard-web/src/guide/guide-map.png	onboarding guide image
-42769947c8f6cf5b47eced4bd7ef3b0c876c8afb	dashboard-web/src/guide/insights.png	onboarding guide image
-ad1b6e9a4a670e168337cab8537a8ae14bd376cd	dashboard-web/src/guide/interview-prep.png	onboarding guide image
-d3d70742783d0a47a40ff65163ec3e328b58517b	dashboard-web/src/guide/models-cost.png	onboarding guide image
-aa2a833eb3bb7f4c73195d571a93e02efdeec09c	dashboard-web/src/guide/network-referrals.png	onboarding guide image
-b1d61bdcba7d553335bc3f1375c6e8708f749f51	dashboard-web/src/guide/pipeline-analytics.png	onboarding guide image
-298cfa47654d54f70b22d4398a70b8edad0f1ed3	dashboard-web/src/guide/pipeline-overview.png	onboarding guide image
-e81a4b4e89c97df6710d1352b0f200e655b68201	dashboard-web/src/guide/posts.png	onboarding guide image
-a425c3bd92f9fca4f1d0bd8fc7b46c3d8de9ff71	dashboard-web/src/guide/report-drawer.png	onboarding guide image
-b172b196c7f0f1d0c50b12c7a72c4941f41c90b5	dashboard-web/src/guide/score-explainer.png	onboarding guide image
-aabaecf9b85cf1bca240ef673dffae37a8351213	dashboard-web/src/guide/social-dashboard.png	onboarding guide image
-1b071612af4068d7f44377756b3c8782e7f2fc67	dashboard-web/src/guide/today.png	onboarding guide image
-43cbd453def50ba78f0fe86332186f3fc70f77f0	dashboard-web/src/guide/workflow.png	onboarding guide image
+d071f8aba6f382a6b1549f1106fdfaf5fcf60896	dashboard-web/src/guide/coach.png	onboarding guide image, captured with capture-guide.mjs over invented data
+9c01a9efbdbe2a99b474e39dc7ca104fe91f2ca5	dashboard-web/src/guide/drawer-footer.png	onboarding guide image, captured with capture-guide.mjs over invented data
+fe81bf8f7db23ca2ca0a48cd0cb4cdecf951f5da	dashboard-web/src/guide/followups.png	onboarding guide image, captured with capture-guide.mjs over invented data
+7d4211bd268e58901d8a8b82e280388c7c622df2	dashboard-web/src/guide/guide-map.png	onboarding guide image, captured with capture-guide.mjs over invented data
+6bc2253aaa18aaf80b3632edc003ecb4b8ab1dc4	dashboard-web/src/guide/insights-review.png	onboarding guide image, captured with capture-guide.mjs over invented data
+c33f21bab43471870d2b38b60879dbaf23f96b8d	dashboard-web/src/guide/insights.png	onboarding guide image, captured with capture-guide.mjs over invented data
+51045a70ebea79057f434e63f9497211f6242d76	dashboard-web/src/guide/interview-live.png	onboarding guide image, captured with capture-guide.mjs over invented data
+73673b701059e38c15168bf992a82e0c91f6d1f8	dashboard-web/src/guide/interview-prep.png	onboarding guide image, captured with capture-guide.mjs over invented data
+8b92f0a1f01d67b5f2c3ebfca871691a00861791	dashboard-web/src/guide/interview-schedule.png	onboarding guide image, captured with capture-guide.mjs over invented data
+a50c42a0a2911606484902579247c52445c401ae	dashboard-web/src/guide/models-cost.png	onboarding guide image, captured with capture-guide.mjs over invented data
+140881bd13a40271096f5e5a5d4f561304569537	dashboard-web/src/guide/network-decision-makers.png	onboarding guide image, captured with capture-guide.mjs over invented data
+772ddc5a7b8cadd555d44944da29df9e1e90be05	dashboard-web/src/guide/network-influencers.png	onboarding guide image, captured with capture-guide.mjs over invented data
+42ac0ae678022e83ade9911f6250d3ecf0813757	dashboard-web/src/guide/network-referrals.png	onboarding guide image, captured with capture-guide.mjs over invented data
+5d0a1d7a7305aff2b6012f5ec976c665b4628911	dashboard-web/src/guide/palette.png	onboarding guide image, captured with capture-guide.mjs over invented data
+be851b5c951a582a0744b5f04820d58900e81322	dashboard-web/src/guide/pipeline-analytics.png	onboarding guide image, captured with capture-guide.mjs over invented data
+3d2ff30eb39396e348f71c5b772e1d3e2f1693b4	dashboard-web/src/guide/pipeline-overview.png	onboarding guide image, captured with capture-guide.mjs over invented data
+90bc54de55e2ea91683c53081af0b101b26f1e3f	dashboard-web/src/guide/pipeline-roles.png	onboarding guide image, captured with capture-guide.mjs over invented data
+d9ebb2bc9aa0733b5f287ef886f3d85d086281c8	dashboard-web/src/guide/posts.png	onboarding guide image, captured with capture-guide.mjs over invented data
+3c682ae2d0a8d1c7944d1d3d9ce9ba35353adcc4	dashboard-web/src/guide/report-drawer.png	onboarding guide image, captured with capture-guide.mjs over invented data
+afab833af50110edd153675263d01ad5075079f6	dashboard-web/src/guide/score-explainer.png	onboarding guide image, captured with capture-guide.mjs over invented data
+b16c6561b13f174077c9a19752d892b5d0f5869d	dashboard-web/src/guide/setup-launchpad.png	onboarding guide image, captured with capture-guide.mjs over invented data
+9199366ab2a65eb5a16f1fb6e8d52ab4c41b52d9	dashboard-web/src/guide/social-content.png	onboarding guide image, captured with capture-guide.mjs over invented data
+3a62bdd62592286db587f4696bf56e5e0ab22632	dashboard-web/src/guide/stage-track.png	onboarding guide image, captured with capture-guide.mjs over invented data
+3ac86b07b34adcc8d0aadec99597521ff377b002	dashboard-web/src/guide/today.png	onboarding guide image, captured with capture-guide.mjs over invented data
+2859528a233bc52806c521d8fbb643980acc20a9	dashboard-web/src/guide/workflow.png	onboarding guide image, captured with capture-guide.mjs over invented data
 39c288bdb75cb718391776aabe523254ae814857	docs/og-image.png	social preview image
 55f4810e1415d379d63fcda238a3e184388f97af	docs/screenshots/01-pipeline-overview.png	README gallery screenshot, invented fixture data
 ee484cb4d10b58e1fa4c80f4b816b8c2101f78e4	docs/screenshots/02-pipeline-active.png	README gallery screenshot, invented fixture data
@@ -25,6 +35,9 @@ fca6f01d60ef5ee5aa2caf26eae8efa16ba2d5c7	docs/screenshots/04-pipeline-analytics.
 3d669b4e4b7ec2d1e24cd03917974a251b1a92cd	docs/screenshots/05-followups.png	README gallery screenshot, invented fixture data
 618804fbdb3fbe9d3178a6045bfd1b19bb460c6c	docs/screenshots/09-insights.png	README gallery screenshot, invented fixture data
 1f92a097fa06be1941f936cbbb1be2a772bc18cc	docs/screenshots/11-drawer-overview.png	README gallery screenshot, invented fixture data
+04c4c46ab1f57a6085a9b6cf6043863056402ea6	docs/screenshots/12-drawer-cvmatch.png	README gallery screenshot, invented fixture data (captured with capture-dashboard.mjs --gallery-drawer)
+e755bfc70599ea610f521a8140dab680ffaae519	docs/screenshots/13-drawer-comp.png	README gallery screenshot, invented fixture data (captured with capture-dashboard.mjs --gallery-drawer)
+927178b6a677e2151044f160f98efbf046051de2	docs/screenshots/14-drawer-interview.png	README gallery screenshot, invented fixture data (captured with capture-dashboard.mjs --gallery-drawer)
 03b44e8baec194e46f22b0c303690b2e11c492dc	docs/screenshots/21-outreach-composer.png	README gallery screenshot, invented fixture data
 6130741e7ce8efc303d7b81b91ad7e1f775ac270	docs/screenshots/24-gmail-capture.png	README gallery screenshot, invented fixture data
 54363c3ffe0171b5c5fe4317d55a11294ffb8e83	docs/screenshots/25-crm-overview.png	README gallery screenshot, invented fixture data
@@ -34,6 +47,3 @@ fca6f01d60ef5ee5aa2caf26eae8efa16ba2d5c7	docs/screenshots/04-pipeline-analytics.
 e3aa61ccdd2ae7bd4b119f4f73285b44fff5c768	fonts/space-grotesk-latin-ext.woff2	font
 7b0e76a5c9bdfdb5ccc8c9ab44780b5ff788c6db	fonts/space-grotesk-latin.woff2	font
 1dbca06b92d3d07ba240e7330967802f2a7b8da8	installer/assets/trajecktory.ico	installer icon
-04c4c46ab1f57a6085a9b6cf6043863056402ea6	docs/screenshots/12-drawer-cvmatch.png	README gallery screenshot, invented fixture data (captured with capture-dashboard.mjs --gallery-drawer)
-e755bfc70599ea610f521a8140dab680ffaae519	docs/screenshots/13-drawer-comp.png	README gallery screenshot, invented fixture data (captured with capture-dashboard.mjs --gallery-drawer)
-927178b6a677e2151044f160f98efbf046051de2	docs/screenshots/14-drawer-interview.png	README gallery screenshot, invented fixture data (captured with capture-dashboard.mjs --gallery-drawer)
