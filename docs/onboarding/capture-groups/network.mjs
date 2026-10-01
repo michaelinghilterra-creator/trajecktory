@@ -16,7 +16,7 @@ export const meta = {
 };
 
 // Switches the mocks read at request time.
-const S = { queue: 'mixed', discover: 'idle' };
+export const S = { queue: 'mixed', discover: 'idle' };
 
 export async function install(page) {
   // A request handler that returns undefined falls through to the next route
