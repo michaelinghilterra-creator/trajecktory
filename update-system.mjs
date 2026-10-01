@@ -154,6 +154,7 @@ export const SYSTEM_PATHS = [
   'backfill-linkedin-status.mjs',
   'backfill-reply-correspondence.mjs',
   'backfill-tracker-urls.mjs',
+  'clear-closed-manual.mjs',
   'company-audit.mjs',
   'data-audit.mjs',
   'fetch-jd.mjs',
