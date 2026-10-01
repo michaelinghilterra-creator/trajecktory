@@ -76,7 +76,7 @@ try {
   check(readFileSync(needsManualPath, 'utf8') === expectedNeeds, 'apply removes only gone rows and preserves remaining lines');
 
   const gateAfter = readFileSync(gateHistoryPath, 'utf8');
-  const expiredRows = gateAfter.split('\n').filter((line) => line.includes(goneUrl));
+  const expiredRows = gateAfter.split('\n').filter((line) => line.split('\t')[1] === goneUrl);
   check(expiredRows.length === 2, 'gate history receives one row per closed posting');
   check(expiredRows.every((line) => line.includes('\texpired\tats-gone: greenhouse: job removed (404)')), 'gate history records expired ATS reasons');
 
