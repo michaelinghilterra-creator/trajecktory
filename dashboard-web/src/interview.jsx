@@ -228,6 +228,9 @@ function Board({ data, derived, cam, present, onMeasure, openRef, measureOnly })
   );
 
   // Rules panel: derived warnings first (amber, ⚠), then the authored guardrails.
+  // MUST be rendered (end of the right column, as in render-runsheet.mjs): it is the
+  // only in-app home for guardrails, and the one copy that reaches present mode.
+  // tests/interview-rules-panel.test.mjs fails if it is computed and dropped again.
   const warnings = der.warnings || [];
   const guardrails = data.guardrails || [];
   const rulesPanel = (warnings.length || guardrails.length) ? (
@@ -284,7 +287,7 @@ function Board({ data, derived, cam, present, onMeasure, openRef, measureOnly })
       {/* THE BOARD: one full-height grid, no scroll */}
       <div className="cols">
         <div>{col1.map(sectionFor)}</div>
-        <div>{col2.map(sectionFor)}</div>
+        <div>{col2.map(sectionFor)}{rulesPanel}</div>
       </div>
     </div>
   );
