@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.5.7](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.6...v5.5.7) (2026-10-01)
+
+
+### Bug Fixes
+
+* bring the in-app day-to-day guide up to date with the current tabs ([#427](https://github.com/michaelinghilterra-creator/trajecktory/issues/427)) ([5680f4d](https://github.com/michaelinghilterra-creator/trajecktory/commit/5680f4d621b70608f5767f8fc69c2d90cc5ef893))
+
 ## [5.5.6](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.5...v5.5.6) (2026-10-01)
 
 
