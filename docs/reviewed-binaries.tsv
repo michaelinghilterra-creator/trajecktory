@@ -29,19 +29,19 @@ b16c6561b13f174077c9a19752d892b5d0f5869d	dashboard-web/src/guide/setup-launchpad
 3ac86b07b34adcc8d0aadec99597521ff377b002	dashboard-web/src/guide/today.png	onboarding guide image, captured with capture-guide.mjs over invented data
 2859528a233bc52806c521d8fbb643980acc20a9	dashboard-web/src/guide/workflow.png	onboarding guide image, captured with capture-guide.mjs over invented data
 39c288bdb75cb718391776aabe523254ae814857	docs/og-image.png	social preview image
-55f4810e1415d379d63fcda238a3e184388f97af	docs/screenshots/01-pipeline-overview.png	README gallery screenshot, invented fixture data
-ee484cb4d10b58e1fa4c80f4b816b8c2101f78e4	docs/screenshots/02-pipeline-active.png	README gallery screenshot, invented fixture data
-fca6f01d60ef5ee5aa2caf26eae8efa16ba2d5c7	docs/screenshots/04-pipeline-analytics.png	README gallery screenshot, invented fixture data
-3d669b4e4b7ec2d1e24cd03917974a251b1a92cd	docs/screenshots/05-followups.png	README gallery screenshot, invented fixture data
-618804fbdb3fbe9d3178a6045bfd1b19bb460c6c	docs/screenshots/09-insights.png	README gallery screenshot, invented fixture data
-1f92a097fa06be1941f936cbbb1be2a772bc18cc	docs/screenshots/11-drawer-overview.png	README gallery screenshot, invented fixture data
-04c4c46ab1f57a6085a9b6cf6043863056402ea6	docs/screenshots/12-drawer-cvmatch.png	README gallery screenshot, invented fixture data (captured with capture-dashboard.mjs --gallery-drawer)
-e755bfc70599ea610f521a8140dab680ffaae519	docs/screenshots/13-drawer-comp.png	README gallery screenshot, invented fixture data (captured with capture-dashboard.mjs --gallery-drawer)
-927178b6a677e2151044f160f98efbf046051de2	docs/screenshots/14-drawer-interview.png	README gallery screenshot, invented fixture data (captured with capture-dashboard.mjs --gallery-drawer)
-03b44e8baec194e46f22b0c303690b2e11c492dc	docs/screenshots/21-outreach-composer.png	README gallery screenshot, invented fixture data
-6130741e7ce8efc303d7b81b91ad7e1f775ac270	docs/screenshots/24-gmail-capture.png	README gallery screenshot, invented fixture data
-54363c3ffe0171b5c5fe4317d55a11294ffb8e83	docs/screenshots/25-crm-overview.png	README gallery screenshot, invented fixture data
-27852c07f8bae84186d644de6de8ad2e51e7f8d4	docs/screenshots/27-today-tab.png	README gallery screenshot, invented fixture data
+6b151acf3edabd4f23087b2efe725a984a013f96	docs/screenshots/01-pipeline-overview.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
+61e864e91927d10032d078a3892fd80bbab8deea	docs/screenshots/02-pipeline-active.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
+d60aac99c6e2d87e24469a84a1089ccde1db4192	docs/screenshots/04-pipeline-analytics.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
+07c9be81c4409b1c77404a03734c086aa3606132	docs/screenshots/05-followups.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
+81778672c18a1055f5790aceb190615ff5b45005	docs/screenshots/09-insights.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
+3c682ae2d0a8d1c7944d1d3d9ce9ba35353adcc4	docs/screenshots/11-drawer-overview.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
+b96d89f0b31dd6ffd20feac696d8c791f664845c	docs/screenshots/12-drawer-cvmatch.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
+b591e5c2600be44ab5e13c7042252025251755c9	docs/screenshots/13-drawer-comp.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
+58cd13fb599da6076ab473f948fab1dc8b9a8e35	docs/screenshots/14-drawer-interview.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
+884a52b18da8ec48ee5e0562eea2a1605c39b75f	docs/screenshots/21-outreach-composer.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
+98e42e6204fbd17b2788e5a59cca65ac902c0de6	docs/screenshots/24-gmail-capture.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
+d3728daa08330a69cadf99414a73985de940b1e6	docs/screenshots/25-crm-overview.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
+3eff16a95ff4d695704af7a9dfb0237fea253cad	docs/screenshots/27-today-tab.png	README gallery image, captured with capture-readme-gallery.mjs over invented data
 9443ff9f45d3844e82c20f630bc5a0266bb7402e	fonts/dm-sans-latin-ext.woff2	font
 9313206b1ff91d44a7f48bd0e631aacb563a84ca	fonts/dm-sans-latin.woff2	font
 e3aa61ccdd2ae7bd4b119f4f73285b44fff5c768	fonts/space-grotesk-latin-ext.woff2	font

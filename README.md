@@ -19,17 +19,17 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/01-pipeline-overview.png" alt="Daily command center: KPI cards, activity and intake trends, and this-week floors" width="820">
+  <img src="docs/screenshots/01-pipeline-overview.png" alt="Overview: this week against your floors, the results of every application, and the weekly trend" width="820">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/02-pipeline-active.png" alt="Active deal board across the full stage taxonomy, Evaluated to Offer" width="405">
-  <img src="docs/screenshots/04-pipeline-analytics.png" alt="Diagnostics: stage conversion, source effectiveness, archetype conversion, and comp positioning" width="405">
+  <img src="docs/screenshots/02-pipeline-active.png" alt="Roles: every tracked role in one sortable table, with status chips, filters and Export CSV" width="405">
+  <img src="docs/screenshots/04-pipeline-analytics.png" alt="Analytics: silence rate, response progress, comp positioning against your target, and what converts" width="405">
 </p>
 
 <p align="center">
   <img src="docs/screenshots/11-drawer-overview.png" alt="Per-role agentic evaluation: a TL;DR, the score and its breakdown, and the stage tracker" width="405">
-  <img src="docs/screenshots/12-drawer-cvmatch.png" alt="The role's requirements mapped to real evidence from your CV" width="405">
+  <img src="docs/screenshots/12-drawer-cvmatch.png" alt="The role's requirements mapped to real evidence from your resume" width="405">
 </p>
 
 <p align="center">
@@ -38,13 +38,13 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/05-followups.png" alt="Follow-Ups: warm threads with speed-to-lead and ghosting cues, the nudge already drafted" width="405">
+  <img src="docs/screenshots/05-followups.png" alt="Follow-ups: one ranked queue of the people worth a touch, with channel filters and the hidden-contact rules visible" width="405">
   <img src="docs/screenshots/09-insights.png" alt="Insights: an honest weekly coaching read that cites specific roles, not fabricated benchmarks" width="405">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/25-crm-overview.png" alt="Contacts hub: referrals and talent acquisition tracked in one place" width="405">
-  <img src="docs/screenshots/21-outreach-composer.png" alt="Connect queue with a live AI-drafted note you edit before sending. Nothing auto-sends" width="405">
+  <img src="docs/screenshots/25-crm-overview.png" alt="Network: referrals by stage, with decision makers, TA outreach and influencers one tab away" width="405">
+  <img src="docs/screenshots/21-outreach-composer.png" alt="A follow-up card with a drafted LinkedIn note and email, both editable. Nothing auto-sends" width="405">
 </p>
 
 <p align="center">
