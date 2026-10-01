@@ -996,7 +996,11 @@ select option, .inp option, .sel option { background: var(--panel); color: var(-
 .tip-co { font-size: 11px; color: var(--text-dim); margin-top: 4px; line-height: 1.5; }
 .tip-co b { color: var(--text); font-weight: 500; }
 .metric-kpi { overflow: visible; outline: none; }
-.metric-tip { transform: none; }
+.metric-tip { transform: none; display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 12px; row-gap: 4px; align-items: baseline; }
+.metric-tip > .tip-head, .metric-tip > .tip-co { grid-column: 1 / -1; }
+.metric-tip > .tip-row { display: contents; }
+.metric-tip .tip-row .l { white-space: nowrap; }
+.metric-tip .tip-row .v { text-align: left; }
 .metric-kpi:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
 .info-dot {
   width: 16px; height: 16px; padding: 0;
