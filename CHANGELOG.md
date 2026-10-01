@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.5.6](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.5...v5.5.6) (2026-10-01)
+
+
+### Bug Fixes
+
+* lay out the metric tooltip rows in a two column grid ([#424](https://github.com/michaelinghilterra-creator/trajecktory/issues/424)) ([30a7d36](https://github.com/michaelinghilterra-creator/trajecktory/commit/30a7d368719a11c7794c6642af812cd092e93ac6))
+* stop listing closed Greenhouse, Lever and Ashby postings as "couldn't read" ([#423](https://github.com/michaelinghilterra-creator/trajecktory/issues/423)) ([0fe7df5](https://github.com/michaelinghilterra-creator/trajecktory/commit/0fe7df505960ecb6a19567272bd1414fedc74505))
+
 ## [5.5.5](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.4...v5.5.5) (2026-09-28)
 
 
