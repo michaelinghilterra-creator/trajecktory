@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { ROOT_DIR, DATA_DIR, APPS_MD } from '../config.mjs';
 import { reconcileHandled } from '../../../lib/pipeline.mjs';
 import { reconcileTriageResults } from '../../../lib/reconcile-triage.mjs';
+import { clearClosedFromNeedsManual } from '../../../lib/needs-manual.mjs';
 import { parsePortalAdditions, mergePortalAdditions, START_MARKER as PORTAL_START, END_MARKER as PORTAL_END } from '../../../lib/portal-additions.mjs';
 import { scanDiscoveryStalled } from '../../../lib/scan-stall.mjs';
 import { buildScanDiscoverySummary, logAgentRun, readAgentRuns, rollupByDay, sumRollup } from '../lib/agent-log.mjs';
@@ -245,6 +246,17 @@ function reconcilePipelineQueue() {
   } catch { /* never break a run on reconcile */ }
 }
 
+async function clearClosedManualRows() {
+  try {
+    await clearClosedFromNeedsManual({
+      needsManualPath: path.join(DATA_DIR, 'needs-manual-jd.tsv'),
+      pipelinePath: path.join(DATA_DIR, 'pipeline.md'),
+      gateHistoryPath: path.join(DATA_DIR, 'gate-history.tsv'),
+      apply: true,
+    });
+  } catch { /* never break a run on cleanup */ }
+}
+
 function clampedDone(jobId) {
   return (agentJobs.get(jobId) || {}).evaluationsDone || 0;
 }
@@ -285,6 +297,7 @@ async function retryBatch(jobId, target, res) {
   const max = batchRetries();
   // !rollingStop: a batch killed by Stop failed on purpose — never retry it.
   for (let attempt = 1; !res.ok && !rollingStop && attempt <= max && batchRetryable(jobId, res); attempt++) {
+    await clearClosedManualRows();
     reconcilePipelineQueue();                             // checkpoint what the failed attempt finished
     if (!(countPipelinePending() > 0)) break;             // nothing left → let the caller see it drained
     const j = agentJobs.get(jobId) || {};
@@ -321,6 +334,7 @@ async function rollPipeline(jobId, target, firstRes) {
     // Reconcile FIRST, then judge. If the queue drained we are done even if the
     // batch's exit was an error (it wrote everything, then hiccuped) — checkpoint
     // over exit code. Only a failure that ALSO left work behind stops the chain.
+    await clearClosedManualRows();
     reconcilePipelineQueue();
     const pending = countPipelinePending();
     mark({ rollPending: pending == null ? undefined : pending });
@@ -414,7 +428,7 @@ function dashboardConstraints(mode, opts) {
     return ' ' + common + reservedLine +
       ' Evaluate only the URLs already pending in data/pipeline.md and do not scan for new roles.' +
       ` Evaluate at most ${evalCap} pending unchecked URLs this run (${capWhy}). They are ordered best-fit first, so take them from the TOP of the pending list; once you have evaluated ${evalCap}, STOP even if more remain and tell me how many pending URLs are left so I can run Evaluate again for the next batch.` +
-      ' Do not run gate-pipeline.mjs or any browser tool; just evaluate the pending unchecked URLs as they are. To read each job description, your FIRST step is to run node fetch-jd.mjs from the repo root, passing the posting URL as its only argument (quote the URL in your own shell). it returns the full JD straight from the ATS API (Ashby, Greenhouse, Lever) and works where WebFetch cannot, because those postings are JavaScript single-page apps that a raw fetch sees as an empty shell. Evaluate ONLY from the text it prints. If fetch-jd.mjs exits non-zero (no ATS API available for that URL, e.g. a Workday posting), THEN try WebFetch. Only if BOTH fail do you defer: do NOT reconstruct the JD from WebSearch or aggregator mirrors — a stitched-together JD produces a confident score for a posting you never actually read, and that has shipped CLOSED roles as high scores. Instead append one tab-separated line (url, company, role) to data/needs-manual-jd.tsv (create it with that exact header row if it is missing), and write NO report and NO tracker TSV for it. The user will confirm the posting is live and paste the JD text themselves.' +
+      ' Do not run gate-pipeline.mjs or any browser tool; just evaluate the pending unchecked URLs as they are. To read each job description, your FIRST step is to run node fetch-jd.mjs from the repo root, passing the posting URL as its only argument (quote the URL in your own shell). it returns the full JD straight from the ATS API (Ashby, Greenhouse, Lever) and works where WebFetch cannot, because those postings are JavaScript single-page apps that a raw fetch sees as an empty shell. Evaluate ONLY from the text it prints. If fetch-jd.mjs exits non-zero (no ATS API available for that URL, e.g. a Workday posting), THEN try WebFetch. When it exits with code 3, the posting has been taken down, so skip WebFetch and defer it exactly as described below. Only if BOTH fail do you defer: do NOT reconstruct the JD from WebSearch or aggregator mirrors — a stitched-together JD produces a confident score for a posting you never actually read, and that has shipped CLOSED roles as high scores. Instead append one tab-separated line (url, company, role) to data/needs-manual-jd.tsv (create it with that exact header row if it is missing), and write NO report and NO tracker TSV for it. The user will confirm the posting is live and paste the JD text themselves.' +
       ' Do NOT edit data/pipeline.md at all — checking off evaluated, deferred, and already-decided rows is handled deterministically after the run, so an in-prompt edit is both unnecessary and unsafe when this run parallelizes across the batch.' +
       ' Record every evaluation as a single line nine column TSV in batch/tracker-additions/ and do not edit data/applications.md directly. Always write the report to reports/ even for a low score so the result is visible. Write each report in the trajecktory-report/v1 format (JSON frontmatter then narrative body) and you MUST populate the optional frontmatter sections so the dashboard drawer is complete, not just the score: include customizationCV and customizationLI (the CV and LinkedIn personalization plan), starStories plus a leadStory (interview prep, with the single story to lead with), and a legitimacy object with a tier and signals. Base EVERY section only on the JD text you actually fetched — never fabricate or infer missing content from search results. Legitimacy is assessed from the fetched posting (freshness, description quality, reposting, prompt-injection); set verification to unconfirmed (no live browser). If you could not fetch the posting, it does not belong here at all — it goes to data/needs-manual-jd.tsv per the rule above, not into a report. When done, the user will run Merge Tracker to fold your TSVs into the pipeline.' + snapshotJd;
   }
@@ -1117,6 +1131,7 @@ async function runAgent(jobId, mode, target) {
   // (the LLM's in-prompt check-off, merge-tracker, the dismiss route) having
   // worked — whichever one misfired, the queue self-corrects here. Same helper the
   // rolling chain calls between batches, so there is one reconcile implementation.
+  await clearClosedManualRows();
   reconcilePipelineQueue();
 
   // Tier-B text hygiene: evaluation reports and interview prep are authored by the

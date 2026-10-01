@@ -12,7 +12,8 @@
  *
  *   node fetch-jd.mjs <job-url>
  *
- * Exit 0 + JD text on stdout when found; exit 1 (and nothing on stdout) when the
+ * Exit 0 + JD text on stdout when found; exit 3 when the posting is confirmed
+ * gone; exit 1 (and nothing on stdout) when the
  * URL is an ATS this cannot read via API (e.g. Workday without a resolvable site,
  * or a company-hosted Greenhouse board whose token is not in the URL). The caller
  * then falls back to WebFetch, and only if THAT fails does it go to manual paste.
@@ -20,6 +21,7 @@
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { probePostingGone } from './lib/ats-gone.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const url = (process.argv[2] || '').trim();
@@ -132,6 +134,11 @@ async function main() {
   }
 
   if (!out || !out.text || out.text.length < 40) {
+    const gone = await probePostingGone(url);
+    if (gone.verdict === 'gone') {
+      process.stderr.write(`fetch-jd: posting is gone (closed): ${gone.reason}\n`);
+      process.exit(3);
+    }
     process.stderr.write('fetch-jd: no JD available via ATS API for this URL\n');
     process.exit(1);
   }

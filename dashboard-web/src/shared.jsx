@@ -1331,7 +1331,7 @@ window.WorkflowPanel = function WorkflowPanel({ onDataChanged }) {
             ⚠ COULDN'T READ ({needsManual.length})
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-mute)', marginBottom: 6, lineHeight: 1.4 }}>
-            These wouldn't load (usually Workday/Ashby). Open each, confirm it's live, paste its JD below, then clear it. No score was invented for these.
+            These didn't load and aren't confirmed closed (usually Workday or other script-only sites). Open each, confirm it's live, paste its JD below, then clear it. No score was invented for these.
           </div>
           {needsManual.map(it => (
             <div key={it.url} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, fontSize: 10.5 }}>
