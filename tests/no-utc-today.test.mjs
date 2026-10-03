@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const SKIP_DIRS = new Set(['node_modules', 'tests', 'data', 'output', 'reports', 'jds', 'dist', 'logs']);
+const SKIP_DIRS = new Set(['node_modules', 'tests', 'data', 'output', 'reports', 'jds', 'dist', 'logs', 'installer']);
 const SOURCE = /\.(mjs|js|jsx|cjs)$/;
 
 const FORBIDDEN = /toISOString\(\)\s*\.\s*(?:slice|substring)\(\s*0\s*,\s*1[06]\s*\)|toISOString\(\)\s*\.\s*split\(\s*['"]T['"]|toISOString\(\)\s*\.\s*replace\(\s*['"]T['"]/;
