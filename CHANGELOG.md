@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.5.8](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.7...v5.5.8) (2026-10-03)
+
+
+### Bug Fixes
+
+* replace bc with portable awk and fix test coverage ([#430](https://github.com/michaelinghilterra-creator/trajecktory/issues/430)) ([0402d3d](https://github.com/michaelinghilterra-creator/trajecktory/commit/0402d3d254445cc957ca24c64718d40cfa9a9833))
+
 ## [5.5.7](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.6...v5.5.7) (2026-10-01)
 
 
