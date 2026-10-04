@@ -27,7 +27,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { GOOGLE_TOKENS_PATH, GOOGLE_SYNC_PATH, DATA_DIR } from '../config.mjs';
 import { logWritesEnabled, openDataStore } from '../../../lib/log-writes.mjs';
-import { renderLegacyFile } from '../../../lib/legacy-files.mjs';
+import { activeLegacyFileEvents, renderLegacyFile } from '../../../lib/legacy-files.mjs';
 import { REPLY_STATE_FILE, REPLY_STATE_KEYS, normalizeReplyState } from '../../../lib/reply-state.mjs';
 import { classifyBounce } from '../../../lib/bounce-parse.mjs';
 import { normalizeCompany, sameRole } from '../../../lib/identity.mjs';
@@ -94,9 +94,26 @@ function projectedReplyState() {
   const text = renderLegacyFile(openDataStore(DATA_DIR), REPLY_STATE_FILE);
   return normalizeReplyState(text ? JSON.parse(text) : null);
 }
+// An install that switched the event store on before reply-state.json existed has its reply decisions only in the
+// sync file until the one-time cutover runs. Reading the (empty) projection then, or stripping the sets on the next
+// write, would silently drop them. So until the projection has any event of its own AND the file still holds
+// decisions, the file stays the source of truth for them, exactly as before the event store held them.
+function replyDecisionsStillInFile(sync) {
+  if (!logWritesEnabled(DATA_DIR)) return false;
+  const holdsDecisions = REPLY_STATE_KEYS.some((key) => {
+    const set = sync[key];
+    return set && typeof set === 'object' && Object.keys(set).length > 0;
+  });
+  if (!holdsDecisions) return false;
+  return activeLegacyFileEvents(openDataStore(DATA_DIR), REPLY_STATE_FILE).length === 0;
+}
+// True when reply decisions should be recorded as events: the store is on and they are not still waiting in the file.
+function replyDecisionsViaEvents() {
+  return logWritesEnabled(DATA_DIR) && !replyDecisionsStillInFile(readSyncFile());
+}
 function readSync() {
   const sync = readSyncFile();
-  if (!logWritesEnabled(DATA_DIR)) return sync;
+  if (!logWritesEnabled(DATA_DIR) || replyDecisionsStillInFile(sync)) return sync;
   return { ...sync, ...projectedReplyState() };
 }
 function readSyncFile() {
@@ -135,7 +152,7 @@ function readSyncFile() {
 // file would only drift from it.
 function writeSync(s) {
   let out = s;
-  if (logWritesEnabled(DATA_DIR)) {
+  if (replyDecisionsViaEvents()) {
     out = { ...s };
     for (const key of REPLY_STATE_KEYS) delete out[key];
   }
@@ -916,7 +933,7 @@ function logReplyToContact(contact, { subject, body, timestamp, advanceStatus = 
 }
 
 export {
-  readTokens, writeTokens, readSync, writeSync, tokenScopes,
+  readTokens, writeTokens, readSync, writeSync, replyDecisionsViaEvents, tokenScopes,
   clientConfigured, googleStatus, getAccessToken, checkHealth, listMessages, getMessage, fetchMessagesConcurrent,
   parseGmailMessage, extractEmail, classifyReply, matchAddress, matchByCompanyDomain, matchBySubject, scanDecisions, heldBackBounceIds,
   exchangeCode, fetchProfileEmail, candidateAppsFor, rankCandidateApps, createDraft, logReplyToContact, previewEntry,

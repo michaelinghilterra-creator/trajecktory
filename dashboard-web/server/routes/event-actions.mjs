@@ -11,6 +11,7 @@ import { appendEventsWithEffects } from '../../../lib/legacy-files.mjs';
 import { undoableActions, REPLY_EVENT_TYPE } from '../../../lib/event-undo.mjs';
 import { noteEffect } from '../lib/notes.mjs';
 import { REPLY_STATE_FILE, buildReplyReleasedEvent } from '../../../lib/reply-state.mjs';
+import { readSync, writeSync, replyDecisionsViaEvents } from '../lib/google.mjs';
 import { isCalendarDate } from '../../../lib/interview-dates.mjs';
 import { INTERVIEW_EVENT_TYPE, INTERVIEW_DEFINITIONS_VERSION, interviewKey } from '../../../lib/interview-store.mjs';
 import { buildScheduleFields, isOutcomeDue, OUTCOME_TYPES, RESULT_TYPES, OUTCOME_LABELS } from '../../../lib/interview-schedule.mjs';
@@ -150,10 +151,16 @@ router.post('/api/events/:id/undo', (req, res) => {
       // back on the sweep. One made before it carries no such effect: release the message with its own event.
       const ownsHandledRecord = (p.legacy_effects || []).some((effect) => effect.file === REPLY_STATE_FILE);
       if (p.msg_id && !ownsHandledRecord) {
-        try {
-          withLogWrite(DATA_DIR, (store) => appendEventsWithEffects(store, [buildReplyReleasedEvent({ msg_id: p.msg_id, occurred_on: localToday() })]));
-        } catch (error) {
-          renderPending = renderPendingResponse(error, 'event undo');
+        if (replyDecisionsViaEvents()) {
+          try {
+            withLogWrite(DATA_DIR, (store) => appendEventsWithEffects(store, [buildReplyReleasedEvent({ msg_id: p.msg_id, occurred_on: localToday() })]));
+          } catch (error) {
+            renderPending = renderPendingResponse(error, 'event undo');
+          }
+        } else {
+          // The decisions are still in google-sync.json (cutover not run yet): remove the record there, as before.
+          const sync = readSync();
+          if (sync.handledReplies && sync.handledReplies[p.msg_id]) { delete sync.handledReplies[p.msg_id]; writeSync(sync); }
         }
       }
     }

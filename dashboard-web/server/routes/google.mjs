@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import {
-  readTokens, writeTokens, readSync, writeSync, googleStatus, checkHealth, clientConfigured,
+  readTokens, writeTokens, readSync, writeSync, replyDecisionsViaEvents, googleStatus, checkHealth, clientConfigured,
   getAccessToken, listMessages, fetchMessagesConcurrent, scanDecisions, heldBackBounceIds,
   buildAuthUrl, exchangeCode, fetchProfileEmail, newPkce, randomState, rankCandidateApps, createDraft,
   getMessage, parseGmailMessage, extractEmail, logReplyToContact, previewEntry,
@@ -461,10 +461,12 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     // resurfacing on every full-rescan sweep. No note, no status change.
     // With the event store on, each decision below is one event that owns its records, so an undo is a void. With
     // it off, the records are written to google-sync.json as before.
+    // Until the one-time cutover has run, an install with the store on keeps these records in google-sync.json.
+    const viaEvents = replyDecisionsViaEvents();
     const recordEvent = (event) => withLogWrite(DATA_DIR, (store) => appendEventsWithEffects(store, [event]));
     if (action === 'dismiss') {
       try {
-        if (logWritesEnabled(DATA_DIR)) recordEvent(buildReplyDismissedEvent({ msg_id: msgId, occurred_on: today }));
+        if (viaEvents) recordEvent(buildReplyDismissedEvent({ msg_id: msgId, occurred_on: today }));
         else markHandled({ action: 'dismiss', appId: null, date: today });
       } catch (error) { return logWriteRouteError(res, error); }
       return res.json({ ok: true, dismissed: true });
@@ -476,7 +478,7 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     if (action === 'not-related') {
       const addr = senderAddress(req.body?.from);
       try {
-        if (logWritesEnabled(DATA_DIR)) {
+        if (viaEvents) {
           recordEvent(buildSenderNotRelatedEvent({ msg_id: msgId, address: addr, occurred_on: today }));
         } else {
           markHandled({ action: 'not-related', appId: null, date: today });
@@ -497,7 +499,7 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
         snippet: String(snippet || bodyPreview || '').slice(0, 400), company: company || '', parkedOn: today,
       };
       try {
-        if (logWritesEnabled(DATA_DIR)) {
+        if (viaEvents) {
           recordEvent(buildReplyUnmatchedEvent({ msg_id: msgId, entry, occurred_on: today }));
         } else {
           const s = readSync();
@@ -570,7 +572,7 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
         if (!alreadyLogged) {
           appendEventsWithEffects(store, [buildReplyAttachedEvent({
             application_id: id, msg_id: msgId, note_text: noteText, note_meta: noteMeta, action,
-            sentiment: sentiment || 'neutral', status_flip: statusFlip, occurred_on: today,
+            sentiment: sentiment || 'neutral', status_flip: statusFlip, occurred_on: today, with_state_effects: viaEvents,
           })]);
         }
       } else {
@@ -600,7 +602,7 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     const { statusFlip, contactLogged, alreadyLogged } = saved;
 
     // With the store on, the reply_attached event already carries the handled record.
-    if (!logWritesEnabled(DATA_DIR)) markHandled({ action, appId: id, date: today });
+    if (!viaEvents) markHandled({ action, appId: id, date: today });
     res.json({ ok: true, appId: id, statusFlip, contactLogged, alreadyLogged, ...renderPending });
   } catch (err) {
     logWriteRouteError(res, err);

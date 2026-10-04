@@ -473,6 +473,7 @@ for (const suite of [
   'tests/reply-state-routes.test.mjs',
   'tests/reply-state-cutover.test.mjs',
   'tests/cutover-reply-state-script.test.mjs',
+  'tests/reply-state-before-cutover.test.mjs',
   'tests/notes-event-store.test.mjs',
   'tests/log-writes.test.mjs',
   'tests/hand-edit-guard.test.mjs',
