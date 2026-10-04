@@ -56,7 +56,8 @@ function fixtureSync() {
 }
 
 function bookmarksOnlySync() {
-  const { handledReplies, notRelatedSenders, unmatchedReplies, ...bookmarks } = fixtureSync();
+  const bookmarks = { ...fixtureSync() };
+  for (const key of ['handledReplies', 'notRelatedSenders', 'unmatchedReplies']) delete bookmarks[key];
   return bookmarks;
 }
 
@@ -69,10 +70,6 @@ function noReplySetsOnDisk() {
   return !Object.hasOwn(disk, 'handledReplies')
     && !Object.hasOwn(disk, 'notRelatedSenders')
     && !Object.hasOwn(disk, 'unmatchedReplies');
-}
-
-function same(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function makeBackup() {
