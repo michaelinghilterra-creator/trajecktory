@@ -17,6 +17,7 @@ import { setVerifyTag } from '../../../lib/email-verify.mjs';
 import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
 import { evaluateReplyAttachment } from '../../../lib/reply-guards.mjs';
 import { buildReplyAttachedEvent } from '../../../lib/event-undo.mjs';
+import { buildReplyDismissedEvent, buildReplyUnmatchedEvent, buildSenderNotRelatedEvent } from '../../../lib/reply-state.mjs';
 import { appendEventsWithEffects } from '../../../lib/legacy-files.mjs';
 import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 import { localToday } from '../../../lib/local-date.mjs';
@@ -458,8 +459,14 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     // Dismiss: mark handled with no application. For a reply that cannot or need not
     // be logged (no matching application, or simply not relevant) so it stops
     // resurfacing on every full-rescan sweep. No note, no status change.
+    // With the event store on, each decision below is one event that owns its records, so an undo is a void. With
+    // it off, the records are written to google-sync.json as before.
+    const recordEvent = (event) => withLogWrite(DATA_DIR, (store) => appendEventsWithEffects(store, [event]));
     if (action === 'dismiss') {
-      markHandled({ action: 'dismiss', appId: null, date: today });
+      try {
+        if (logWritesEnabled(DATA_DIR)) recordEvent(buildReplyDismissedEvent({ msg_id: msgId, occurred_on: today }));
+        else markHandled({ action: 'dismiss', appId: null, date: today });
+      } catch (error) { return logWriteRouteError(res, error); }
       return res.json({ ok: true, dismissed: true });
     }
 
@@ -467,29 +474,40 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     // future sweeps drop their emails too — the user teaching the filter after a
     // random email got picked up. No application, no note, no status change.
     if (action === 'not-related') {
-      markHandled({ action: 'not-related', appId: null, date: today });
       const addr = senderAddress(req.body?.from);
-      if (addr) {
-        try { const s = readSync(); s.notRelatedSenders = s.notRelatedSenders || {}; s.notRelatedSenders[addr] = { date: today }; writeSync(s); }
-        catch { /* suppression is best-effort */ }
-      }
+      try {
+        if (logWritesEnabled(DATA_DIR)) {
+          recordEvent(buildSenderNotRelatedEvent({ msg_id: msgId, address: addr, occurred_on: today }));
+        } else {
+          markHandled({ action: 'not-related', appId: null, date: today });
+          if (addr) {
+            try { const s = readSync(); s.notRelatedSenders = s.notRelatedSenders || {}; s.notRelatedSenders[addr] = { date: today }; writeSync(s); }
+            catch { /* suppression is best-effort */ }
+          }
+        }
+      } catch (error) { return logWriteRouteError(res, error); }
       return res.json({ ok: true, notRelated: true });
     }
 
     // E-4: park the message on the unmatched list, with its evidence and no application. It is hidden from the sweep
     // until the person attaches it (or dismisses it) from that list.
     if (action === 'unmatched') {
+      const entry = {
+        from: from || '', subject: subject || '', date: date || null, threadId: threadId || null,
+        snippet: String(snippet || bodyPreview || '').slice(0, 400), company: company || '', parkedOn: today,
+      };
       try {
-        const s = readSync();
-        s.unmatchedReplies = s.unmatchedReplies || {};
-        s.unmatchedReplies[msgId] = {
-          from: from || '', subject: subject || '', date: date || null, threadId: threadId || null,
-          snippet: String(snippet || bodyPreview || '').slice(0, 400), company: company || '', parkedOn: today,
-        };
-        s.handledReplies = s.handledReplies || {};
-        s.handledReplies[msgId] = { action: 'unmatched', appId: null, date: today };
-        writeSync(s);
-      } catch (error) { return res.status(500).json({ error: error.message }); }
+        if (logWritesEnabled(DATA_DIR)) {
+          recordEvent(buildReplyUnmatchedEvent({ msg_id: msgId, entry, occurred_on: today }));
+        } else {
+          const s = readSync();
+          s.unmatchedReplies = s.unmatchedReplies || {};
+          s.unmatchedReplies[msgId] = entry;
+          s.handledReplies = s.handledReplies || {};
+          s.handledReplies[msgId] = { action: 'unmatched', appId: null, date: today };
+          writeSync(s);
+        }
+      } catch (error) { return logWriteRouteError(res, error); }
       return res.json({ ok: true, unmatched: true });
     }
 
@@ -581,7 +599,8 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
     if (saved.invalid) return res.status(400).json({ error: `Unknown action: ${action}` });
     const { statusFlip, contactLogged, alreadyLogged } = saved;
 
-    markHandled({ action, appId: id, date: today });
+    // With the store on, the reply_attached event already carries the handled record.
+    if (!logWritesEnabled(DATA_DIR)) markHandled({ action, appId: id, date: today });
     res.json({ ok: true, appId: id, statusFlip, contactLogged, alreadyLogged, ...renderPending });
   } catch (err) {
     logWriteRouteError(res, err);

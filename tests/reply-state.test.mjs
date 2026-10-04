@@ -4,10 +4,12 @@ import { EVENT_TYPES, openEventStore } from '../lib/event-store.mjs';
 import { appendEventsWithEffects, renderLegacyFile } from '../lib/legacy-files.mjs';
 import {
   REPLY_DISMISSED_EVENT_TYPE,
+  REPLY_RELEASED_EVENT_TYPE,
   REPLY_STATE_DEFINITIONS_VERSION,
   SENDER_NOT_RELATED_EVENT_TYPE,
   REPLY_UNMATCHED_EVENT_TYPE,
   buildReplyDismissedEvent,
+  buildReplyReleasedEvent,
   buildReplyUnmatchedEvent,
   buildSenderNotRelatedEvent,
   emptyReplyState,
@@ -213,6 +215,16 @@ check(unmatchedEvent.type === REPLY_UNMATCHED_EVENT_TYPE
     { file, op: 'json_nested_set', key: 'handledReplies', subkey: 'msg-900014', value: { action: 'unmatched', appId: null, date: '2030-08-13' } },
   ]), 'buildReplyUnmatchedEvent has the expected metadata and effects');
 
+const releasedEvent = buildReplyReleasedEvent({ msg_id: 'msg-900019', occurred_on: '2030-08-20' });
+check(releasedEvent.type === REPLY_RELEASED_EVENT_TYPE
+  && releasedEvent.source === 'dashboard'
+  && releasedEvent.occurred_on === '2030-08-20'
+  && releasedEvent.definitions_version === 'v1'
+  && releasedEvent.payload.msg_id === 'msg-900019'
+  && same(releasedEvent.payload.legacy_effects, [
+    handledReplyDelete('msg-900019'),
+  ]), 'buildReplyReleasedEvent has the expected metadata and one handled-delete effect');
+
 appendEventsWithEffects(store, [
   buildReplyDismissedEvent({ msg_id: 'msg-900015', occurred_on: '2030-08-14' }),
 ]);
@@ -277,9 +289,26 @@ const afterUnmatchedVoid = JSON.parse(renderLegacyFile(voidStore, file));
 check(!hasEntry(afterUnmatchedVoid, 'unmatchedReplies', 'msg-900018')
   && !hasEntry(afterUnmatchedVoid, 'handledReplies', 'msg-900018'), 'voiding unmatched removes parked entry and handled record');
 
+const releaseStore = openEventStore(join(root, 'release-store.db'));
+const [dismissedBeforeReleaseId] = appendEventsWithEffects(releaseStore, [
+  buildReplyDismissedEvent({ msg_id: 'msg-900020', occurred_on: '2030-08-22' }),
+]);
+const [releasedEventId] = appendEventsWithEffects(releaseStore, [
+  buildReplyReleasedEvent({ msg_id: 'msg-900020', occurred_on: '2030-08-23' }),
+]);
+check(!hasEntry(JSON.parse(renderLegacyFile(releaseStore, file)), 'handledReplies', 'msg-900020'), 'released event removes a handled record after dismiss');
+appendEventsWithEffects(releaseStore, [
+  voidEvent(releasedEventId, '2030-08-24'),
+]);
+check(same(JSON.parse(renderLegacyFile(releaseStore, file)).handledReplies['msg-900020'], { action: 'dismiss', appId: null, date: '2030-08-22' }), 'voiding released restores the handled record');
+appendEventsWithEffects(releaseStore, [
+  voidEvent(dismissedBeforeReleaseId, '2030-08-25'),
+]);
+
 check(EVENT_TYPES.includes(REPLY_DISMISSED_EVENT_TYPE)
   && EVENT_TYPES.includes(SENDER_NOT_RELATED_EVENT_TYPE)
-  && EVENT_TYPES.includes(REPLY_UNMATCHED_EVENT_TYPE), 'reply event types are registered in EVENT_TYPES');
+  && EVENT_TYPES.includes(REPLY_UNMATCHED_EVENT_TYPE)
+  && EVENT_TYPES.includes(REPLY_RELEASED_EVENT_TYPE), 'reply event types are registered in EVENT_TYPES');
 
 console.log(`reply-state.test.mjs: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

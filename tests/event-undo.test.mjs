@@ -37,9 +37,10 @@ check(list.length === 1 && list[0].event_id === applied.id && list[0].undoable, 
 const reply = { id: nextId++, ...buildReplyAttachedEvent({ application_id: 900003, msg_id: 'm900001', note_text: 'Invented reply note.', note_meta: { msgId: 'm900001' }, action: 'rejected', status_flip: 'Rejected', occurred_on: '2030-03-10' }) };
 const flip = ev({ application_id: '900003', payload: { to: 'Rejected' } });
 list = undoableActions([reply, flip]);
-check(reply.type === REPLY_EVENT_TYPE && reply.payload.legacy_effects.length === 1 && reply.payload.note_timestamp
+check(reply.type === REPLY_EVENT_TYPE && reply.payload.legacy_effects.length === 3 && reply.payload.legacy_effects[0].file === 'app-notes.json'
+  && reply.payload.legacy_effects.slice(1).every((effect) => effect.file === 'reply-state.json') && reply.payload.note_timestamp
   && list.length === 1 && list[0].event_id === reply.id && list[0].member_ids.join() === String(flip.id) && list[0].undoable,
-'a reply owns its note effect and the status it flipped is part of the same action');
+'a reply owns its note and handled-record effects and the status it flipped is part of the same action');
 
 // A reply that only logs has no members.
 const logOnly = { id: nextId++, ...buildReplyAttachedEvent({ application_id: 900004, msg_id: 'm900002', note_text: 'Invented log-only note.', action: 'log', occurred_on: '2030-03-10' }) };
