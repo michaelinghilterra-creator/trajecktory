@@ -265,7 +265,7 @@ const WEEKLY_BEHIND = {
     verifiedTouches: { value: 4, available: true, source: 'outreach log' },
     replies: { value: 1, available: true, source: 'correspondence' },
     deliveredReplyRatePct: { value: 12, available: true, source: 'cumulative' },
-        screensHeld: { value: 0, available: true, source: 'interview records' },
+    screensHeld: { value: 0, available: true, source: 'interview records' },
     objectionsLogged: { value: 0, available: true, source: 'debrief notes' },
     linkedinConnects: { value: 18, available: true, source: 'connects log' },
     cadencePct: { value: 48, available: true, source: 'cadence log' },

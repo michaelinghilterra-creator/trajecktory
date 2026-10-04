@@ -222,12 +222,12 @@ window.ICON = {
 };
 
 // ---------- Status Pill ----------
-window.StatusPill = function StatusPill({ status, size = "md" }) {
+window.StatusPill = function StatusPill({ status, size = "md", reason }) {
   const meta = window.STATUS_META[status] || window.STATUS_META.Evaluated;
   return (
     <span className="pill mono" style={{ background: meta.bg, color: meta.color, fontSize: size === "sm" ? 10 : 11 }}>
       <span className="dot" style={{ background: meta.color }}></span>
-      {status.toUpperCase()}
+      {status.toUpperCase()}{status === "Passed" ? ` · ${window.passedReasonLabel(reason).toUpperCase()}` : ""}
     </span>
   );
 };
