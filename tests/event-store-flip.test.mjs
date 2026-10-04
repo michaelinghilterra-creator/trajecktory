@@ -572,6 +572,7 @@ for (const [name, failure] of [
     'BYTES MATCH contact-links.json (absent)',
     'BYTES MATCH app-notes.json (absent)',
     'BYTES MATCH google-sync.json (absent)',
+    'BYTES MATCH reply-state.json (absent)',
   ];
   const lines = result.stdout.trimEnd().split(/\r?\n/);
   const firstExpected = lines.indexOf('TRACKER MATCH');

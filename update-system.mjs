@@ -156,6 +156,7 @@ export const SYSTEM_PATHS = [
   'backfill-tracker-urls.mjs',
   'clear-closed-manual.mjs',
   'company-audit.mjs',
+  'cutover-reply-state.mjs',
   'data-audit.mjs',
   'fetch-jd.mjs',
   'generate-docx-from-template.mjs',

@@ -67,6 +67,12 @@ const projectedNotes = () => {
   st.close();
   return text ? JSON.parse(text) : {};
 };
+const projectedReplyState = () => {
+  const st = openEventStore(path.join(sandbox, 'trajecktory.db'));
+  const text = renderLegacyFile(st, 'reply-state.json');
+  st.close();
+  return text ? JSON.parse(text) : {};
+};
 // The parsed tracker is cached on the file time; writes in the same millisecond would look unchanged, so move it on.
 let tick = Date.now();
 const statusOf = (id) => { tick += 2000; fs.utimesSync(path.join(sandbox, 'applications.md'), tick / 1000, tick / 1000); return parseApplicationsMd().find(r => r.id === id)?.status; };
@@ -107,7 +113,6 @@ try {
 
   // A logged reply that flips the status: the note, the handled record and the status all go back.
   const beforeReply = snapshot();
-  const syncPath = path.join(sandbox, 'google-sync.json');
   r = await send('POST', '/api/google/replies/m900001/rejected', { appId: 900003, company: 'Quennox Ratchet Works', from: 'Example Personone <example.personone@quennox.example>', subject: 'Your application', bodyPreview: 'Invented rejection.', date: '2030-03-12T10:00:00Z' });
   if (r.status !== 200) console.log(JSON.stringify(r.body).slice(0, 300));
   check(r.status === 200 && statusOf(900003) === 'Rejected' && projectedNotes()['900003']?.length === 1, 'the reply note is projected from the event and the status flipped');
@@ -116,10 +121,13 @@ try {
   const replyEventId = list.actions[0].event_id;
   const loggedReply = allEvents().find((event) => event.id === replyEventId);
   check(loggedReply?.payload?.legacy_effects?.some((effect) => effect.file === 'app-notes.json' && effect.op === 'json_nested_append'), 'the reply event itself owns the note effect');
+  check(projectedReplyState().handledReplies?.m900001?.action === 'rejected' && projectedReplyState().handledReplies.m900001.appId === 900003
+    && loggedReply?.payload?.legacy_effects?.some((effect) => effect.file === 'reply-state.json' && effect.op === 'json_nested_set' && effect.subkey === 'm900001'), 'the reply event also owns the handled record');
   r = await send('POST', `/api/events/${replyEventId}/undo`, { reason: 'wrong_record' });
   check(r.status === 200 && r.body.note_removed === true, 'undoing the reply removes the note');
   check(statusOf(900003) === 'Applied', 'the status is back');
-  check(!JSON.parse(fs.readFileSync(syncPath, 'utf8')).handledReplies?.m900001, 'the message is no longer marked handled, so the sweep shows it again');
+  check(!projectedReplyState().handledReplies?.m900001, 'the message is no longer marked handled, so the sweep shows it again');
+  check(!allEvents().some((event) => event.type === 'reply_released'), 'a reply that owns its handled record needs no release event');
   const after = snapshot();
   const history = allEvents();
   check(after['applications.md'] === beforeReply['applications.md'] && after['status-events.tsv'] === beforeReply['status-events.tsv']

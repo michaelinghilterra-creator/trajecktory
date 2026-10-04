@@ -420,7 +420,8 @@ fs.cpSync(path.join(ROOT, 'dashboard-web', 'server'), path.join(replyBackfill, '
 fs.cpSync(path.join(ROOT, 'templates'), path.join(replyBackfill, 'templates'), { recursive: true });
 fs.copyFileSync(path.join(ROOT, 'backfill-reply-correspondence.mjs'), path.join(replyBackfill, 'backfill-reply-correspondence.mjs'));
 fixture(path.join(replyBackfill, 'data'));
-fs.writeFileSync(path.join(replyBackfill, 'data', 'google-sync.json'), '{"handledReplies":{"fixture-msg-900001":{"action":"log","appId":900001,"date":"2030-04-10"}}}\n');
+// With the event store on, handled replies are read from the reply-state projection (the import snapshots this file).
+fs.writeFileSync(path.join(replyBackfill, 'data', 'reply-state.json'), '{"handledReplies":{"fixture-msg-900001":{"action":"log","appId":900001,"date":"2030-04-10"}},"notRelatedSenders":{},"unmatchedReplies":{}}\n');
 fs.writeFileSync(path.join(replyBackfill, 'data', 'google-tokens.json'), '{"access_token":"invented-token","refresh_token":"invented-refresh","expiry_date":4102444800000}\n');
 enable(path.join(replyBackfill, 'data'));
 const encodedBody = Buffer.from('Invented fetched reply body.', 'utf8').toString('base64url');

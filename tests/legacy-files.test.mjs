@@ -73,6 +73,7 @@ const writerJsonTexts = {
   'contact-links.json': `${JSON.stringify({ version: 1, pins: { 'ta:900001': { alone: true, at: '2030-01-05' } } }, null, 2)}\n`,
   'app-notes.json': `${JSON.stringify({ 900001: [{ timestamp: '2030-01-01T00:00:00.000Z', text: 'Invented note' }] }, null, 2)}\n`,
   'google-sync.json': `${JSON.stringify({ seenMessageIds: ['example00000001'], lastCheckedAt: '2030-01-01T00:00:00.000Z', handledReplies: {}, lastPreviewAt: '2030-01-01T00:00:00.000Z', notRelatedSenders: {} }, null, 2)}\n`,
+  'reply-state.json': `${JSON.stringify({ handledReplies: { 'example-msg-900001': { action: 'log', appId: 900001, date: '2030-01-01' } }, notRelatedSenders: {}, unmatchedReplies: {} }, null, 2)}\n`,
 };
 
 {

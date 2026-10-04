@@ -25,7 +25,10 @@
 
 import fs from 'fs';
 import crypto from 'crypto';
-import { GOOGLE_TOKENS_PATH, GOOGLE_SYNC_PATH } from '../config.mjs';
+import { GOOGLE_TOKENS_PATH, GOOGLE_SYNC_PATH, DATA_DIR } from '../config.mjs';
+import { logWritesEnabled, openDataStore } from '../../../lib/log-writes.mjs';
+import { renderLegacyFile } from '../../../lib/legacy-files.mjs';
+import { REPLY_STATE_FILE, REPLY_STATE_KEYS, normalizeReplyState } from '../../../lib/reply-state.mjs';
 import { classifyBounce } from '../../../lib/bounce-parse.mjs';
 import { normalizeCompany, sameRole } from '../../../lib/identity.mjs';
 import { parseTargetTalentMd, readTTCorrespondence, writeTTCorrespondence, updateTTLine } from './target-talent.mjs';
@@ -84,7 +87,19 @@ function writeTokens(t) {
 }
 // The Gmail scan cursor: which message ids we have already processed, so a
 // re-scan is idempotent and never double-logs a reply or re-flips a bounce.
+// With the event store on, the three reply sets (handledReplies, notRelatedSenders, unmatchedReplies) come from
+// the reply-state.json projection, so undoing a decision is a void. Everything else in google-sync.json (the scan
+// bookmarks) stays plain file state. With the store off, the file holds all of it, exactly as before.
+function projectedReplyState() {
+  const text = renderLegacyFile(openDataStore(DATA_DIR), REPLY_STATE_FILE);
+  return normalizeReplyState(text ? JSON.parse(text) : null);
+}
 function readSync() {
+  const sync = readSyncFile();
+  if (!logWritesEnabled(DATA_DIR)) return sync;
+  return { ...sync, ...projectedReplyState() };
+}
+function readSyncFile() {
   try {
     const s = JSON.parse(fs.readFileSync(GOOGLE_SYNC_PATH, 'utf8')) || {};
     // handledReplies: msgId → { action, appId, date }, so a reply already logged to
@@ -116,8 +131,15 @@ function readSync() {
     };
   } catch { return { seenMessageIds: [], lastCheckedAt: null, handledReplies: {}, lastPreviewAt: null, notRelatedSenders: {} }; }
 }
+// With the store on, the reply sets are never written here: they belong to the projection, and a copy left in this
+// file would only drift from it.
 function writeSync(s) {
-  fs.writeFileSync(GOOGLE_SYNC_PATH, JSON.stringify(s, null, 2) + '\n');
+  let out = s;
+  if (logWritesEnabled(DATA_DIR)) {
+    out = { ...s };
+    for (const key of REPLY_STATE_KEYS) delete out[key];
+  }
+  fs.writeFileSync(GOOGLE_SYNC_PATH, JSON.stringify(out, null, 2) + '\n');
 }
 
 // Space-separated scope string → array.
