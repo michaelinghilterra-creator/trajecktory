@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.6.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.6.1...v5.6.2) (2026-10-04)
+
+
+### Bug Fixes
+
+* **interview:** render the rules panel on the in-app Live board ([#437](https://github.com/michaelinghilterra-creator/trajecktory/issues/437)) ([061799e](https://github.com/michaelinghilterra-creator/trajecktory/commit/061799e073db28a08eebcf301143c9ab4bb2f958))
+
 ## [5.6.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.6.0...v5.6.1) (2026-10-04)
 
 
