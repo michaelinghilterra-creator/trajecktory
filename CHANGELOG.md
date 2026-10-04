@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.6.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.8...v5.6.0) (2026-10-04)
+
+
+### Features
+
+* record reply decisions as events so an undo is a void ([#432](https://github.com/michaelinghilterra-creator/trajecktory/issues/432)) ([f1fce28](https://github.com/michaelinghilterra-creator/trajecktory/commit/f1fce289697ec8d270d8b2591154cf696b83f842))
+
+
+### Bug Fixes
+
+* list Passed instead of the four retired statuses and show the reason on its badge ([#433](https://github.com/michaelinghilterra-creator/trajecktory/issues/433)) ([151e1da](https://github.com/michaelinghilterra-creator/trajecktory/commit/151e1da8a91b9d2aa4290a95bebf5df554c34a2a))
+
 ## [5.5.8](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.7...v5.5.8) (2026-10-03)
 
 
