@@ -616,6 +616,7 @@ for (const suite of [
   'tests/google-draft.test.mjs',
   'tests/gating.test.mjs',
   'tests/board-theme.test.mjs',
+  'tests/interview-rules-panel.test.mjs',
   'tests/security.test.mjs',
   'tests/security-review.test.mjs',
   'tests/v1-loader.test.mjs',
