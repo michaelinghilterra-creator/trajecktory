@@ -471,6 +471,8 @@ for (const suite of [
   'tests/legacy-files-nested-set.test.mjs',
   'tests/reply-state.test.mjs',
   'tests/reply-state-routes.test.mjs',
+  'tests/reply-state-cutover.test.mjs',
+  'tests/cutover-reply-state-script.test.mjs',
   'tests/notes-event-store.test.mjs',
   'tests/log-writes.test.mjs',
   'tests/hand-edit-guard.test.mjs',

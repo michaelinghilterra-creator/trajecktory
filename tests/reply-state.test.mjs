@@ -16,6 +16,7 @@ import {
   handledReplyDelete,
   handledReplySet,
   normalizeReplyState,
+  replyStateTextFromSync,
   notRelatedSenderSet,
   replyAttachedStateEffects,
   splitSync,
@@ -309,6 +310,14 @@ check(EVENT_TYPES.includes(REPLY_DISMISSED_EVENT_TYPE)
   && EVENT_TYPES.includes(SENDER_NOT_RELATED_EVENT_TYPE)
   && EVENT_TYPES.includes(REPLY_UNMATCHED_EVENT_TYPE)
   && EVENT_TYPES.includes(REPLY_RELEASED_EVENT_TYPE), 'reply event types are registered in EVENT_TYPES');
+
+// replyStateTextFromSync: what an import carries over from google-sync.json.
+check(replyStateTextFromSync(null) === null && replyStateTextFromSync(undefined) === null, 'replyStateTextFromSync: an absent sync file carries nothing');
+check(replyStateTextFromSync('not json') === null, 'replyStateTextFromSync: an unreadable sync file carries nothing');
+check(replyStateTextFromSync(JSON.stringify({ seenMessageIds: ['a'], handledReplies: {}, notRelatedSenders: {} })) === null, 'replyStateTextFromSync: bookmarks and empty sets carry nothing');
+const carriedText = replyStateTextFromSync(JSON.stringify({ seenMessageIds: ['a'], handledReplies: { 'msg-900020': { action: 'dismiss' } } }));
+check(typeof carriedText === 'string' && carriedText.endsWith('\n')
+  && same(JSON.parse(carriedText), { handledReplies: { 'msg-900020': { action: 'dismiss' } }, notRelatedSenders: {}, unmatchedReplies: {} }), 'replyStateTextFromSync: carries the three sets, in writer format, without the bookmarks');
 
 console.log(`reply-state.test.mjs: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
