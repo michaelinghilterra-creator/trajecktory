@@ -148,7 +148,7 @@ function ScoreChip({ score }) {
   );
 }
 
-function StatusBadge({ status, size = 'md' }) {
+function StatusBadge({ status, size = 'md', reason }) {
   const m = STATUS_MAP[status] || { hex: '#5d5d66', rgb: '93,93,102', id: status, color: 'var(--text-mute)' };
   const sm = size === 'sm';
   return (
@@ -164,6 +164,7 @@ function StatusBadge({ status, size = 'md' }) {
         boxShadow: `0 0 6px ${m.color}`,
       }} />
       {status}
+      {status === 'Passed' && <span className="sb-reason" style={{ opacity: 0.72, fontWeight: 400 }}>· {window.passedReasonLabel(reason)}</span>}
     </span>
   );
 }
@@ -276,8 +277,6 @@ function FilterBar({ apps, filtered, filters, setFilters, search, setSearch, rig
     const m = {};
     for (const a of apps) {
       m[a.status] = (m[a.status] || 0) + 1;
-      // a Passed row also counts under the old label its reason maps to (see window.statusMatches)
-      if (a.status === 'Passed') { const old = window.oldStatus(a); m[old] = (m[old] || 0) + 1; }
     }
     return m;
   }, [apps]);
@@ -359,9 +358,9 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
     { k: 'id',        label: '#',         w: 42,  cls: 'id' },
     { k: 'date',      label: 'Date',      w: 90,  cls: 't-date' },
     { k: 'company',   label: 'Company',   w: 190 },
-    { k: 'role',      label: 'Role',      w: 210, cls: 't-role' },
+    { k: 'role',      label: 'Role',      w: 146, cls: 't-role' },
     { k: 'salary',    label: 'Comp',      w: 112, cls: 't-comp' },
-    { k: 'status',    label: 'Status',    w: 116 },
+    { k: 'status',    label: 'Status',    w: 180 },
     { k: 'score',     label: 'Score',     w: 80 },
     { k: 'source',    label: 'Source',    w: 92 },
   ];
@@ -411,7 +410,7 @@ function TableView({ apps, filtered, filters, setFilters, search, setSearch, onO
                   <td className="t-comp" title={a.compStated || 'Not Stated'}>
                     {formatCompMidpoint(a)}
                   </td>
-                  <td><StatusBadge status={a.status} /></td>
+                  <td><StatusBadge status={a.status} reason={a.passedReason} /></td>
                   <td><ScoreChip score={a.score} /></td>
                   <td><SourcePill source={a.source} /></td>
                 </tr>
@@ -1072,7 +1071,7 @@ function PipelineDrawer({ app, onClose, onAction, onStatusChange, isStale = () =
           <div style={{ minWidth: 0, flex: 1 }}>
             <div className="row" style={{ gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
               <span className="mono dim" style={{ fontSize: 11 }}>#{String(app.id).padStart(3, '0')}</span>
-              <window.StatusPill status={app.status} />
+              <window.StatusPill status={app.status} reason={app.passedReason} />
               {splitAssignment && (
                 <span className="status-badge" style={{ color: m.color, borderColor: m.color, fontSize: 9.5, padding: '2px 8px' }}>
                   {splitAssignment.arm === 'A'
@@ -2106,11 +2105,11 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
     { k: 'id',         label: '#',         w: 50 },
     { k: 'date',       label: 'Date',      w: 80 },
     { k: 'company',    label: 'Company',   w: 210 },
-    { k: 'role',       label: 'Role',      w: 250 },
+    { k: 'role',       label: 'Role',      w: 186 },
     { k: 'archetype',  label: 'Archetype', w: 90 },
     { k: 'compStated', label: 'Comp',      w: 110 },
     { k: 'sector',     label: 'Sector',    w: 110 },
-    { k: 'status',     label: 'Status',    w: 116 },
+    { k: 'status',     label: 'Status',    w: 180 },
     { k: 'score',      label: 'Score',     w: 80 },
     { k: 'source',     label: 'Source',    w: 92 },
   ];
@@ -2177,7 +2176,7 @@ window.PipelineTable = function PipelineTableCompat({ rows, sortKey, sortDir, se
                 title={a.sectorRaw || a.sector || ''}>
                 {a.sector || '-'}
               </td>
-              <td><StatusBadge status={a.status} /></td>
+              <td><StatusBadge status={a.status} reason={a.passedReason} /></td>
               <td><ScoreChip score={a.score} /></td>
               <td><SourcePill source={a.source} /></td>
             </tr>

@@ -86,7 +86,14 @@ window.passedReasonForAction = (status) => window.PASSED_ACTIONS[status];
 window.statusMatches = (app, status) => !!app && (app.status === status || (app.status === "Passed" && window.oldStatus(app) === status));
 window.oldStatus = (app) => (app && app.status === "Passed" ? (window.PASSED_OLD_LABEL[app.passedReason] || "Discarded") : (app && app.status));
 
-window.STATUSES = ["Evaluated","Applied",...window.INTERVIEW_STAGES,"Offer","Rejected","Discarded","SKIP","Closed","Not a Fit","Passed","No Response"];
+// Passed is the one close status the UI lists; why a row was passed shows on its badge (passedReasonLabel).
+// SKIP, Not a Fit, Discarded and Closed are no longer offered as statuses. window.STATUS_META keeps their
+// colors only as a read fallback for a row from an old backup.
+window.STATUSES = ["Evaluated","Applied",...window.INTERVIEW_STAGES,"Offer","Rejected","Passed","No Response"];
+// Plain words for a Passed row's reason, shown beside the Passed badge. Unknown or missing reads as Discarded,
+// the same default oldLabel() uses.
+window.PASSED_REASON_LABEL = { not_a_fit: "not a fit", skip: "skipped", posting_closed: "posting closed", withdrew: "withdrew", low_score: "low score", discarded: "discarded" };
+window.passedReasonLabel = (reason) => window.PASSED_REASON_LABEL[reason] || "discarded";
 // The SINGLE source of the archetype list for the browser — the Sankey, the
 // Archetype list for pipeline filters, chart axes, and tracker grouping.
 // Fetched from /api/archetypes (derived from the user's profile.yml) at startup.
