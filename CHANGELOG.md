@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.6.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.6.0...v5.6.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* keep reply decisions in the file until the one-time cutover has run ([#435](https://github.com/michaelinghilterra-creator/trajecktory/issues/435)) ([78cb6db](https://github.com/michaelinghilterra-creator/trajecktory/commit/78cb6dbd5f6bb4625bfa9fb354e4cf90ea09418d))
+
 ## [5.6.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.5.8...v5.6.0) (2026-10-04)
 
 
