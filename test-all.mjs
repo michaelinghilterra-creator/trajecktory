@@ -469,6 +469,7 @@ for (const suite of [
   'tests/legacy-files.test.mjs',
   'tests/legacy-files-nested-append.test.mjs',
   'tests/legacy-files-nested-set.test.mjs',
+  'tests/reply-state.test.mjs',
   'tests/notes-event-store.test.mjs',
   'tests/log-writes.test.mjs',
   'tests/hand-edit-guard.test.mjs',
