@@ -15,6 +15,7 @@ import { computeStaleApps, computeStaleTA, computeConnectQueue, computeEmailQueu
 import { floorStatus } from './rolling-floor.mjs';
 import { createTodo } from './todos.mjs';
 import { getIdentity } from './profile.mjs';
+import { withPassedReason } from '../../../lib/passed.mjs';
 import { FUNNEL_ORDER } from './statuses.mjs';
 
 const MAX_MESSAGES = 200;
@@ -73,7 +74,7 @@ export function coachState() {
 
   // Active applications (Applied or further) — the set an outcome action can target.
   const active = apps
-    .filter(a => FUNNEL_ORDER.indexOf(a.reached) >= _APPLIED_IDX && !['Rejected', 'No Response', 'Discarded', 'Passed', 'Offer'].includes(a.status))
+    .filter(a => FUNNEL_ORDER.indexOf(a.reached) >= _APPLIED_IDX && !['Rejected', 'No Response', 'Passed', 'Offer'].includes(a.status))
     .slice(-40)
     .map(a => ({ id: a.id, company: a.company, role: a.role, status: a.status }));
 
@@ -117,7 +118,7 @@ CONFIRM-TO-ACT: You may PROPOSE an action, which the app shows as a one-tap Conf
 <action>{"kind":"...","label":"..."}</action>
 PROPOSE one whenever the user REPORTS an outcome or clearly wants a change made — e.g. "I got a rejection from X", "they want to schedule a screen", "I got an offer", "remind me to Y". A short warm line plus the button is ideal (e.g. "Sorry to hear it. I can log that for you:").
 Supported kinds:
-- Log an application outcome: {"kind":"logOutcome","appId":<number from the active-applications list>,"status":"Rejected","company":"<company>","label":"Mark <company> as Rejected"}. Use the matching appId from the live state; if you cannot find the company there, do NOT guess an id — ask which company instead. Allowed status values: Rejected, No Response, Discarded, Offer.
+- Log an application outcome: {"kind":"logOutcome","appId":<number from the active-applications list>,"status":"Rejected","company":"<company>","label":"Mark <company> as Rejected"}. Use the matching appId from the live state; if you cannot find the company there, do NOT guess an id — ask which company instead. Allowed status values: Rejected, No Response, Passed, Offer.
 - Add a to-do: {"kind":"addTodo","text":"<short task>","label":"Add to-do: <short task>"}.
 Do not mention the <action> tag or JSON in your prose; the app renders it as a button. If no change is wanted, do not emit one. Never emit more than one.`;
 
@@ -162,7 +163,8 @@ export function parseAction(reply) {
   return { text, action };
 }
 
-const OUTCOME_STATUSES = new Set(['Rejected', 'No Response', 'Discarded', 'Offer']);
+// Passed is the one "you are out" status; the retired Discarded label is no longer offered or written.
+const OUTCOME_STATUSES = new Set(['Rejected', 'No Response', 'Passed', 'Offer']);
 function validateAction(obj) {
   if (!obj || typeof obj !== 'object') return null;
   if (obj.kind === 'logOutcome') {
@@ -189,7 +191,9 @@ export function executeAction(action) {
     const apps = parseApplicationsMd();
     const row = apps.find(x => String(x.id) === String(a.appId));
     if (!row) throw new Error(`No application #${a.appId} found.`);
-    patchRowInMd(a.appId, { status: a.status }, { company: row.company });
+    const updates = { status: a.status };
+    if (a.status === 'Passed') updates.notes = withPassedReason(row.notes, 'discarded');
+    patchRowInMd(a.appId, updates, { company: row.company });
     return { ok: true, message: `Marked ${row.company} as ${a.status}.` };
   }
   if (a.kind === 'addTodo') {

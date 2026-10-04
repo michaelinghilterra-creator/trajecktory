@@ -46,6 +46,6 @@ Pre-configured portal scanner with 45+ tracked companies and search queries. Con
 
 ### states.yml
 
-Defines the 8 canonical application states (`Evaluated`, `Applied`, `Responded`, `Interview`, `Offer`, `Rejected`, `Discarded`, `SKIP`) with aliases for common variants. All pipeline scripts validate statuses against this file.
+Defines the canonical application states (`Evaluated`, `Applied`, `Phone Screen`, `1st Interview`, `2nd Interview`, `3rd Interview`, `Offer`, `Rejected`, `No Response`, `Passed`) with aliases for common variants. The retired labels (`Discarded`, `SKIP`, `Closed`, `Not a Fit`) stay listed only so old data still parses; they are read as `Passed` with a reason and nothing writes them. All pipeline scripts validate statuses against this file.
 
 **Do not rename states** -- the dashboard and all scripts depend on these exact IDs. You can add aliases if you encounter new variants that should map to an existing state.

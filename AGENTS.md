@@ -999,13 +999,9 @@ Guarded by `tests/tracker.test.mjs` and `tests/tracker-writers.test.mjs`.
 | `3rd Interview` | Third (final) interview round |
 | `Offer` | Offer received |
 | `Rejected` | Rejected by company |
-| `Discarded` | Discarded by candidate or offer closed |
-| `SKIP` | Doesn't fit, don't apply |
-| `Closed` | Job posting closed before you could act (distinct from Discarded; excluded from analytics denominators) |
-| `Not a Fit` | Role evaluated and determined a poor fit (signal noise, wrong level, wrong domain) |
 | `Passed` | You are out. Replaces SKIP, Not a Fit, Discarded and Closed; whether you applied comes from the evidence, not the status |
 
-Migration note: `Passed` is written today by auto-discard through `lib/discard.mjs`, `merge-tracker.mjs`, and `auto-discard-low.mjs`, and by `verify-actionable.mjs`. The four legacy labels are still accepted.
+Retired labels: `Discarded`, `SKIP`, `Closed` and `Not a Fit` are no longer states you write. They are still accepted as input (old backups, status-event history, batch tracker additions) and read as `Passed` with the matching reason (`discarded`, `skip`, `posting_closed`, `not_a_fit`) by `lib/passed.mjs`. Write `Passed` and carry the reason as the `[passed: reason]` tag at the start of the notes cell, or pass `passedReason` to the dashboard. A posting that closed before you could act is `Passed` with reason `posting_closed` and stays out of analytics denominators.
 
 **RULES:**
 - No markdown bold (`**`) in status field

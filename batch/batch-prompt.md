@@ -322,7 +322,7 @@ Formato TSV (una sola línea, sin header, 9 columnas tab-separated):
 | 2 | date | YYYY-MM-DD | `2026-03-14` | Fecha de evaluación |
 | 3 | company | string | `Zorblax` | Nombre corto de empresa |
 | 4 | role | string | `Staff AI Engineer` | Título del rol |
-| 5 | status | canonical | `Evaluated` | Must be canonical (see states.yml). ALWAYS `Evaluated` — NEVER `SKIP`, `Discarded`, or any other status at evaluation time. |
+| 5 | status | canonical | `Evaluated` | Must be canonical (see states.yml). ALWAYS `Evaluated` — NEVER `Passed` or any other status at evaluation time. |
 | 6 | score | X.XX/5 | `4.55/5` | O `N/A` si no evaluable |
 | 7 | pdf | emoji | `❌` siempre | CV generated only at apply time, never at evaluation |
 | 8 | report | md link | `[647](reports/647-...)` | Link al report |
@@ -330,9 +330,9 @@ Formato TSV (una sola línea, sin header, 9 columnas tab-separated):
 
 **IMPORTANTE:** El orden TSV tiene status ANTES de score (col 5→status, col 6→score). En applications.md el orden es inverso (col 5→score, col 6→status). merge-tracker.mjs maneja la conversión.
 
-**Valid canonical statuses:** `Evaluated`, `Applied`, `Responded`, `Interview`, `Offer`, `Rejected`, `Discarded`, `SKIP`
+**Valid canonical statuses:** `Evaluated`, `Applied`, `Phone Screen`, `1st Interview`, `2nd Interview`, `3rd Interview`, `Offer`, `Rejected`, `No Response`, `Passed`
 
-**RULE: Batch workers ALWAYS write `Evaluated`. NEVER write `SKIP`, `Discarded`, or any non-Evaluated status.** Recommendations go in the notes column. The user decides what to skip.
+**RULE: Batch workers ALWAYS write `Evaluated`. NEVER write `Passed` or any non-Evaluated status.** Recommendations go in the notes column. The user decides what to skip.
 
 Donde `{next_num}` se calcula leyendo la última línea de `data/applications.md`.
 
@@ -392,7 +392,7 @@ Si algo falla:
 4. Recommend comp below market
 5. Generate a CV, resume, or PDF at any point. Resumes are Word documents made only when the user asks for one (the dashboard resume button or `/trajecktory docx`)
 6. Use corporate-speak
-7. Set status to SKIP, Discarded, or any non-Evaluated value — the user decides what to skip, not the agent
+7. Set status to Passed or any non-Evaluated value — the user decides what to skip, not the agent
 8. Run `node next-jd.mjs` or allocate a report number any other way. The orchestrator already reserved `{{REPORT_NUM}}` for you. `next-jd.mjs` is blocked in the batch sandbox, and if it ran it would advance the shared counter and break the report-to-tracker numbering. This overrides the report-numbering rule in AGENTS.md, which applies to interactive sessions only
 
 ### ALWAYS
