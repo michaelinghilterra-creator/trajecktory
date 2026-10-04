@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.6.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.6.2...v5.6.3) (2026-10-04)
+
+
+### Bug Fixes
+
+* stop the coach and the withdrawal guard from offering the retired Discarded label ([#439](https://github.com/michaelinghilterra-creator/trajecktory/issues/439)) ([4ce4df4](https://github.com/michaelinghilterra-creator/trajecktory/commit/4ce4df4e4c2bd963b6d17931b9b84980828b5809))
+
 ## [5.6.2](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.6.1...v5.6.2) (2026-10-04)
 
 
