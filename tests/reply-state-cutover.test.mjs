@@ -79,7 +79,7 @@ async function makeStore({ carryOver = false } = {}) {
 }
 
 console.log('reply-state-cutover.test.mjs');
-const { openEventStore, readEvents } = await import('../lib/event-store.mjs');
+const { readEvents } = await import('../lib/event-store.mjs');
 const { appendEventsWithEffects, renderLegacyFile } = await import('../lib/legacy-files.mjs');
 const { planReplyStateCutover, applyReplyStateCutover, verifyReplyStateCutover } = await import('../lib/reply-state-cutover.mjs');
 const { buildReplyDismissedEvent } = await import('../lib/reply-state.mjs');
