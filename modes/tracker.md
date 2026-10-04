@@ -7,7 +7,7 @@ Read and display `data/applications.md`.
 | # | Date | Company | Role | Score | Status | PDF | Report |
 ```
 
-Possible statuses: `Evaluated` → `Applied` → `Responded` → `Contact` → `Interview` → `Offer` / `Rejected` / `Discarded` / `SKIP`
+Possible statuses: `Evaluated` → `Applied` → `Responded` → `Contact` → `Interview` → `Offer` / `Rejected` / `Passed`
 
 - `Applied` = the candidate sent their application
 - `Responded` = A recruiter/company reached out and the candidate replied (inbound)

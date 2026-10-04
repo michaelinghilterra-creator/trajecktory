@@ -58,7 +58,7 @@ v = evaluateStatusChange({ to: 'Rejected', messages: [], phone_rejection_on: 'ye
 check(!v.allowed && v.reason === 'invalid_phone_date', 'a phone rejection with no real date is blocked');
 
 v = evaluateStatusChange({ to: 'Rejected', messages: [reject('m900009', '2030-03-10')], withdrawn: true });
-check(!v.allowed && v.reason === 'withdrawal_is_not_rejection' && v.suggest === 'Discarded', 'a withdrawal is not a rejection and is offered as Discarded');
+check(!v.allowed && v.reason === 'withdrawal_is_not_rejection' && v.suggest === 'Passed', 'a withdrawal is not a rejection and is offered as Discarded');
 
 // Passed
 v = evaluateStatusChange({ to: 'Passed' });
