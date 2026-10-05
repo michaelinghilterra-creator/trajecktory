@@ -706,6 +706,7 @@ for (const suite of [
   'tests/passed-reason-shared.test.mjs',
   'tests/passed-ui-lists.test.mjs',
   'tests/coach-outcome-passed.test.mjs',
+  'tests/refresh-apps-after-reply.test.mjs',
   'tests/review-resolutions.test.mjs',
   'tests/weekly-review-exclude-route.test.mjs',
   'tests/passed-merge.test.mjs',

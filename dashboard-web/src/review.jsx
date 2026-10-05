@@ -5,6 +5,11 @@
 // never disagree. A blank source shows "not logged", never a fake zero.
 const { useState: useStateRv, useEffect: useEffectRv, useCallback: useCallbackRv, useRef: useRefRv } = React;
 
+// Logging a reply against an application can change that application (a Rejected or interview-stage flip), and the
+// list the Pipeline reads is held in the page. Ask the app to re-sync it now; if it cannot, the list still re-syncs
+// the next time the window is focused.
+const refreshApplications = () => { try { if (typeof window.tjkRefreshApps === 'function') window.tjkRefreshApps(); } catch { /* re-synced on the next focus */ } };
+
 function floorTone(r) {
   if (!r.available) return { color: 'var(--text-mute)', label: 'not logged' };
   return r.met
@@ -159,6 +164,7 @@ function ReplyRow({ reply, toast }) {
         // E-3: an old or automated message is held until the person confirms, logs it as neutral, or dismisses it.
         if (res.guard && res.guard.reason === 'needs_acknowledgement') { setGuard(res.guard); return; }
         if (res.error) { toast && toast(res.error, 'error'); return; }
+        if (!noApp) refreshApplications(); // an attach can flip the application's status
         setDone(action === 'unmatched' ? 'unmatched' : action === 'dismiss' ? 'dismissed' : action === 'not-related' ? 'not-related' : (res.statusFlip || 'logged'));
         toast && toast(action === 'unmatched' ? 'Parked on the unmatched list' : action === 'dismiss' ? 'Dismissed' : action === 'not-related' ? 'Marked not job-related' : (res.statusFlip ? `Marked ${res.statusFlip}` : 'Reply logged'), 'success');
       })
@@ -242,7 +248,7 @@ function UnmatchedList({ toast, refreshKey }) {
       : {};
     fetch(`/api/google/replies/${encodeURIComponent(item.msgId)}/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(r => r.json())
-      .then(res => { if (res.error) { toast && toast(res.error, 'error'); return; } toast && toast(action === 'log' ? 'Attached' : 'Dismissed', 'success'); setTick(t => t + 1); })
+      .then(res => { if (res.error) { toast && toast(res.error, 'error'); return; } toast && toast(action === 'log' ? 'Attached' : 'Dismissed', 'success'); if (action === 'log') refreshApplications(); setTick(t => t + 1); })
       .catch(e => toast && toast(e.message, 'error')).finally(() => setBusy(null));
   };
   return (

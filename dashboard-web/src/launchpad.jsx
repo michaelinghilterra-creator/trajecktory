@@ -3370,7 +3370,7 @@ function RecentChanges() {
     if (!window.confirm(`Undo: ${a.summary}${a.company ? ` (${a.company})` : ''}?`)) return;
     setBusy(a.event_id); setError('');
     window.tjkMutate(`/api/events/${a.event_id}/undo`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) })
-      .then(async r => { const body = await r.json().catch(() => ({})); if (!r.ok || body.error) throw new Error(body.error || 'Could not undo that.'); return load(); })
+      .then(async r => { const body = await r.json().catch(() => ({})); if (!r.ok || body.error) throw new Error(body.error || 'Could not undo that.'); if (window.tjkRefreshApps) window.tjkRefreshApps(); return load(); })
       .catch(e => setError(e.message))
       .finally(() => setBusy(null));
   };
