@@ -2,10 +2,13 @@ import fs from 'fs';
 import { computeCoreMetrics } from '../../../lib/metrics/core.mjs';
 import { parseReplyNote } from '../../../lib/data-review.mjs';
 import { classifyInbound, isApplicationReceipt } from '../../../lib/inbound-classify.mjs';
+import { INBOUND_EVENT_TYPE, inboundRepliesFromEvents, replyKey, respondedKey } from '../../../lib/inbound-events.mjs';
+import { readEvents } from '../../../lib/event-store.mjs';
+import { logWritesEnabled, withLogRead } from '../../../lib/log-writes.mjs';
 import { normalizeCompany, sameRole } from '../../../lib/identity.mjs';
 import { interviewState } from '../../../lib/interview-store.mjs';
 import { localToday } from '../../../lib/local-date.mjs';
-import { APPS_MD, FOLLOWUPS_MD } from '../config.mjs';
+import { APPS_MD, DATA_DIR, FOLLOWUPS_MD } from '../config.mjs';
 import { parseApplicationsMd } from './applications.mjs';
 import { isLinkedInEntry } from './channels.mjs';
 import { parseFollowupsMd } from './followups.mjs';
@@ -23,13 +26,30 @@ const safe = (read, fallback) => {
   try { return read(); } catch { return fallback; }
 };
 
+// The classified email_received events, when the event store is on: { replies, keys } or null when it is off.
+function readInboundEvents() {
+  if (!logWritesEnabled(DATA_DIR)) return null;
+  return withLogRead(DATA_DIR, (store) => inboundRepliesFromEvents([
+    ...readEvents(store, { type: INBOUND_EVENT_TYPE }),
+    ...readEvents(store, { type: 'event_undone' }),
+  ]));
+}
+
+// Replies come from the recorded events first. A note or a 'Responded' row is read only when no event records that
+// reply yet (the key is the same either way), so the switch is safe before, during and after the one-time backfill,
+// and with the event store off everything is read from the notes exactly as before.
 function collectReplies() {
+  const recorded = safe(readInboundEvents, null);
+  const recordedKeys = recorded ? recorded.keys : new Set();
   const replies = {};
   const add = (appId, reply) => {
     const key = String(appId);
     if (!replies[key]) replies[key] = [];
     replies[key].push(reply);
   };
+  for (const [appId, list] of Object.entries(recorded ? recorded.replies : {})) {
+    for (const reply of list) add(appId, reply);
+  }
 
   const notes = safe(readAppNotes, {}) || {};
   for (const [appId, entries] of Object.entries(notes)) {
@@ -37,6 +57,7 @@ function collectReplies() {
       const parsed = parseReplyNote(entry);
       if (!parsed || isApplicationReceipt(parsed)
         || classifyInbound({ subject: parsed.subject, body: parsed.body }) !== 'human') continue;
+      if (recordedKeys.has(replyKey({ msg_id: entry.msgId, application_id: appId, note_timestamp: entry.timestamp }))) continue;
       add(appId, { sent_on: parsed.sent_on, sentiment: parsed.sentiment });
     }
   }
@@ -44,6 +65,7 @@ function collectReplies() {
   const events = safe(parseStatusEvents, []) || [];
   for (const event of events) {
     if (String(event.status || '').trim().toLowerCase() !== 'responded') continue;
+    if (recordedKeys.has(respondedKey({ application_id: event.app, date: event.date }))) continue;
     add(event.app, { sent_on: event.date, sentiment: 'neutral' });
   }
   return replies;
