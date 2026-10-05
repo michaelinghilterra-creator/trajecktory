@@ -3,7 +3,7 @@
 ; Compile with the Inno Setup Compiler (iscc.exe) AFTER running build-bundle.ps1,
 ; which stages .\payload. Produces Output\TrajecktorySetup.exe.
 ;
-;   "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\trajecktory.iss
+;   "C:\Program Files\Inno Setup 7\ISCC.exe" installer\trajecktory.iss
 ;
 ; UNTESTED: authored without a build machine. Compile + clean-VM test before use.
 ; TODO before shipping: decide code signing (an unsigned .exe shows a SmartScreen

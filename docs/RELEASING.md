@@ -159,7 +159,7 @@ and the signed release:
 
 ```bash
 pwsh -ExecutionPolicy Bypass -File installer/build-bundle.ps1
-& "C:/Program Files (x86)/Inno Setup 6/ISCC.exe" installer/trajecktory.iss
+& "C:/Program Files/Inno Setup 7/ISCC.exe" installer/trajecktory.iss
 gh release upload vX.Y.Z installer/Output/trajecktory-setup-vX.Y.Z.exe
 ```
 
