@@ -5,7 +5,7 @@ A one-double-click installer for non-technical users. Bundles everything offline
 the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
 
 > **Status: built and smoke-tested.** `trajecktory-setup-v1.7.23.exe` compiles with
-> Inno Setup 6 and installs cleanly (silent + interactive); a fresh install boots
+> Inno Setup 7 and installs cleanly (silent + interactive); a fresh install boots
 > the dashboard with healthy API endpoints. v1.7.23 adds two requested conveniences:
 > a **progress meter** on the running Evaluate step ("Evaluated 3 of 5" + a bar + a
 > rough ETA, counting the per-eval TSV writes against the batch size; Agent Scan, being
@@ -186,9 +186,9 @@ the running dashboard on `http://localhost:3333`, ready for the Launchpad setup.
    pwsh -ExecutionPolicy Bypass -File installer\build-bundle.ps1
    ```
    Produces `installer\payload\` (gitignored).
-2. **Compile the installer** with Inno Setup 6:
+2. **Compile the installer** with Inno Setup 7:
    ```powershell
-   & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\trajecktory.iss
+   & "C:\Program Files\Inno Setup 7\ISCC.exe" installer\trajecktory.iss
    ```
    Produces `installer\Output\trajecktory-setup-v<version>.exe` (versioned from the
    `.iss` AppVersion / `VERSION`, e.g. `trajecktory-setup-v1.7.3.exe`).

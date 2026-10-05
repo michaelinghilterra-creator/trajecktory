@@ -60,7 +60,6 @@ export async function install(page) {
   await page.route('**/api/jd/**', (r) => json(r, { available: false }));
   await page.route('**/api/artifacts/**', (r) => json(r, { files: [] }));
   await page.route('**/api/target-talent/by-company/**', (r) => json(r, []));
-  await page.route('**/api/split-test', (r) => json(r, { assignments: {} }));
 }
 
 // ==== helpers ===============================================================

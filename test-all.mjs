@@ -628,7 +628,6 @@ for (const suite of [
   'tests/report-research.test.mjs',
   'tests/report-write-gate.test.mjs',
   'tests/weekly-review.test.mjs',
-  'tests/split-test.test.mjs',
   'tests/source-mix.test.mjs',
   'tests/influencer-floor.test.mjs',
   'tests/engagement-log.test.mjs',

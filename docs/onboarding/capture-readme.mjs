@@ -81,11 +81,6 @@ async function main() {
   await page.waitForTimeout(1100);
   await shotContent(page, 'dashboard-followups', 640);
 
-  // Recruiters.
-  await clickNav(page, 'Recruiters');
-  await page.waitForTimeout(1100);
-  await shotContent(page, 'dashboard-recruiters', 660);
-
   // Posts (Social -> Posts subtab).
   await clickNav(page, 'Social');
   await page.waitForTimeout(900);
