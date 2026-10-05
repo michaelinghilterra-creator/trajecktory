@@ -32,7 +32,6 @@ export async function install(page) {
   await page.route('**/api/setup/state', (r) =>
     json(r, { ...F.STATE_READY, values: { ...F.STATE_READY.values, compensation: COMPENSATION } }));
   await page.route('**/api/applications', (r) => json(r, APP_ROWS));
-  await page.route('**/api/split-test', (r) => json(r, { assignments: {} }));
   await page.route('**/api/cheatsheets/*', (r) => {
     const cs = cheatsheetFor(idFromUrl(r.request().url(), /cheatsheets\/(\d+)/));
     return cs ? json(r, cs) : json(r, { error: 'No report for this id' }, 404);

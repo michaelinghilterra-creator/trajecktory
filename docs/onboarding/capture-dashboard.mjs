@@ -812,7 +812,6 @@ async function installMocks(page) {
   await page.route('**/api/jd/**', route => json(route, dataMode === 'gallery' ? GALLERY_POSTING : POSTING));
   await page.route('**/api/artifacts/**', route => json(route, dataMode === 'gallery' ? GALLERY_ARTIFACTS : ARTIFACTS));
   await page.route('**/api/target-talent/by-company/**', route => json(route, dataMode === 'gallery' ? GALLERY_CONTACTS : []));
-  await page.route('**/api/split-test', route => dataMode === 'gallery' ? json(route, { assignments: {} }) : route.continue());
   await page.route('**/api/pipeline/inbox', route => dataMode === 'gallery'
     ? json(route, { pending: [], gated: [], done: [], counts: { pending: 0, gated: 0, done: 0 } })
     : route.continue());

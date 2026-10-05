@@ -9,7 +9,6 @@ import { readAppNotes } from '../lib/notes.mjs';
 import { repliesByApplication } from '../../../lib/data-review.mjs';
 import { evaluateStatusChange } from '../../../lib/status-guards.mjs';
 import { dialogFor } from '../../../lib/status-guard-dialog.mjs';
-import { assignSplitTest, splitTestSummary } from '../lib/split-test.mjs';
 import { pushObsidianNote } from '../lib/obsidian.mjs';
 import { ALL_STATUSES, INTERVIEW_STAGES } from '../lib/statuses.mjs';
 import { mdToHtml, escapeHtml } from '../lib/html.mjs';
@@ -76,14 +75,6 @@ router.get('/jd-preview/:file', (req, res) => {
 router.get('/api/applications', (req, res) => {
   try {
     res.json(parseApplicationsMd());
-  } catch (err) {
-    logWriteRouteError(res, err);
-  }
-});
-
-router.get('/api/split-test', (req, res) => {
-  try {
-    res.json(splitTestSummary());
   } catch (err) {
     logWriteRouteError(res, err);
   }
@@ -255,11 +246,6 @@ router.patch('/api/applications/:id', (req, res) => {
     // follow-up cadence counts from when the user actually applied — not the
     // evaluation/scrape date in the Date column. An explicit eventDate is the
     // user correcting the anchor, so it is allowed to overwrite.
-    if (becomingApplied && prevRow) {
-      try { assignSplitTest(id, prevRow.score, when); }
-      catch (err) { console.warn(`[split-test] failed to assign app ${id}: ${err.message}`); }
-    }
-
     // Read back the updated row — use company to disambiguate duplicate ids
     const rows = parseApplicationsMd();
     const updated = (company && rows.find(r => r.id === id && r.company === company))
