@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
 import * as defs from '../lib/definitions.mjs';
 import * as server from '../dashboard-web/server/lib/statuses.mjs';
+import { withRetiredStates } from '../lib/passed.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -63,7 +64,8 @@ check(problemsIn("// app.status === 'Ghosted'").length === 0, 'scanner skips com
 
 // The file agrees with templates/states.yml.
 const doc = yaml.load(readFileSync(join(root, 'templates', 'states.yml'), 'utf8'));
-check(sameSet(defs.ALL_APPLICATION_STATUSES, doc.states.map(s => s.label)), 'every application status in states.yml is defined here, and no others');
+check(sameSet(defs.ALL_APPLICATION_STATUSES, withRetiredStates(doc.states).map(s => s.label)), 'every application status in states.yml, plus the four retired labels from lib/passed.mjs, is defined here, and no others');
+check(!doc.states.some(s => defs.RETIRING_STATUSES.includes(s.label)), 'states.yml does not list the retired labels; lib/passed.mjs is the one place that does');
 const contactLabels = new Set([...doc.talent_states, ...doc.referral_states].map(s => s.label));
 check(sameSet(defs.CONTACT_STATUSES, contactLabels), 'every contact status in states.yml is defined here, and no others');
 check(same(defs.LADDER, doc.states.filter(s => Number.isFinite(s.funnel_order)).sort((a, b) => a.funnel_order - b.funnel_order).map(s => s.label)), 'the ladder matches the funnel order in states.yml');
