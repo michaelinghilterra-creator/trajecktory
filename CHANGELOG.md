@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.8.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.7.1...v5.8.0) (2026-10-05)
+
+
+### Features
+
+* record classified email_received events for logged replies ([#445](https://github.com/michaelinghilterra-creator/trajecktory/issues/445)) ([bebf08d](https://github.com/michaelinghilterra-creator/trajecktory/commit/bebf08d8d594d9ef7279a1fa58a64c8225ebce56))
+
 ## [5.7.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.7.0...v5.7.1) (2026-10-05)
 
 
