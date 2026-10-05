@@ -47,6 +47,24 @@ const logOnly = { id: nextId++, ...buildReplyAttachedEvent({ application_id: 900
 list = undoableActions([logOnly]);
 check(list.length === 1 && list[0].member_ids.length === 0, 'a log only reply is a single event');
 
+const replyWithEmail = { id: nextId++, ...buildReplyAttachedEvent({ application_id: 900009, msg_id: 'm900009', note_text: 'Invented inbound note.', action: 'log', occurred_on: '2030-03-10' }) };
+const emailMember = ev({ id: replyWithEmail.id + 1, application_id: '900009', type: 'email_received', payload: { key: 'msg:m900009' } });
+nextId = emailMember.id + 1;
+list = undoableActions([replyWithEmail, emailMember]);
+check(list.length === 1 && list[0].event_id === replyWithEmail.id && list[0].member_ids.join() === String(emailMember.id), 'a reply owns the following email received event');
+
+const replyWithLateEmail = { id: nextId++, ...buildReplyAttachedEvent({ application_id: 900010, msg_id: 'm900010', note_text: 'Invented late inbound note.', action: 'log', occurred_on: '2030-03-10' }) };
+const lateEmail = ev({ id: replyWithLateEmail.id + 2, application_id: '900010', type: 'email_received', payload: { key: 'msg:m900010' } });
+nextId = lateEmail.id + 1;
+list = undoableActions([replyWithLateEmail, lateEmail]);
+check(list.length === 1 && list[0].event_id === replyWithLateEmail.id && list[0].member_ids.length === 0, 'an email received event two ids later is not a reply member');
+
+const replyWithOtherEmail = { id: nextId++, ...buildReplyAttachedEvent({ application_id: 900011, msg_id: 'm900011', note_text: 'Invented other inbound note.', action: 'log', occurred_on: '2030-03-10' }) };
+const otherEmail = ev({ id: replyWithOtherEmail.id + 1, application_id: '900012', type: 'email_received', payload: { key: 'msg:m900012' } });
+nextId = otherEmail.id + 1;
+list = undoableActions([replyWithOtherEmail, otherEmail]);
+check(list.length === 1 && list[0].event_id === replyWithOtherEmail.id && list[0].member_ids.length === 0, 'an email received event for another application is not a reply member');
+
 // E-1: a status change into an interview stage that also schedules it is one action with the schedule event.
 const scheduled = ev({ application_id: '900007', payload: { from: 'Applied', to: 'Phone Screen' } });
 const recorded = ev({ application_id: '900007', type: 'interview_recorded', payload: { stage: 'Phone Screen', scheduled_for: '2030-04-01' } });

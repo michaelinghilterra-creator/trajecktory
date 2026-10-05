@@ -18,6 +18,7 @@ import { INTERVIEW_STAGES } from '../lib/statuses.mjs';
 import { evaluateReplyAttachment } from '../../../lib/reply-guards.mjs';
 import { buildReplyAttachedEvent } from '../../../lib/event-undo.mjs';
 import { buildReplyDismissedEvent, buildReplyUnmatchedEvent, buildSenderNotRelatedEvent } from '../../../lib/reply-state.mjs';
+import { buildEmailReceivedEvent, classifyForEvent } from '../../../lib/inbound-events.mjs';
 import { appendEventsWithEffects } from '../../../lib/legacy-files.mjs';
 import { logWriteRouteError, logWritesEnabled, renderPendingResponse, runLogWriteTestHook, withLogWrite } from '../../../lib/log-writes.mjs';
 import { localToday } from '../../../lib/local-date.mjs';
@@ -570,10 +571,16 @@ router.post('/api/google/replies/:msgId/:action', async (req, res) => {
       if (store) {
         alreadyLogged = Boolean(findNoteByMsgId(msgId));
         if (!alreadyLogged) {
-          appendEventsWithEffects(store, [buildReplyAttachedEvent({
+          const attached = buildReplyAttachedEvent({
             application_id: id, msg_id: msgId, note_text: noteText, note_meta: noteMeta, action,
             sentiment: sentiment || 'neutral', status_flip: statusFlip, occurred_on: today, with_state_effects: viaEvents,
-          })]);
+          });
+          // The classified inbound email is written right after the attach, so undoing the attach takes it out too.
+          const cls = classifyForEvent({ subject: message.subject || subject, body: fullBody, sentiment: sentiment || 'neutral' });
+          const received = buildEmailReceivedEvent({
+            application_id: id, msg_id: msgId, note_timestamp: attached.payload.note_timestamp, sent_on: today, ...cls, sentiment_source: 'owner',
+          });
+          appendEventsWithEffects(store, [attached, received]);
         }
       } else {
         alreadyLogged = addNote(id, noteText, noteMeta).added === false;

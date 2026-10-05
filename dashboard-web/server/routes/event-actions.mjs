@@ -11,6 +11,8 @@ import { appendEventsWithEffects } from '../../../lib/legacy-files.mjs';
 import { undoableActions, REPLY_EVENT_TYPE } from '../../../lib/event-undo.mjs';
 import { noteEffect } from '../lib/notes.mjs';
 import { REPLY_STATE_FILE, buildReplyReleasedEvent } from '../../../lib/reply-state.mjs';
+import { linkedInboundEventIds } from '../../../lib/inbound-events.mjs';
+import { readEvents } from '../../../lib/event-store.mjs';
 import { readSync, writeSync, replyDecisionsViaEvents } from '../lib/google.mjs';
 import { isCalendarDate } from '../../../lib/interview-dates.mjs';
 import { INTERVIEW_EVENT_TYPE, INTERVIEW_DEFINITIONS_VERSION, interviewKey } from '../../../lib/interview-store.mjs';
@@ -128,7 +130,11 @@ router.post('/api/events/:id/undo', (req, res) => {
     const action = undoableActions(dashboardEvents(), { limit: 1000 }).find((a) => a.event_id === target);
     if (!action) return res.status(404).json({ error: 'That change is not in the list of changes you made, or it was already undone.' });
     if (!action.undoable) return res.status(409).json({ error: 'A newer change on this application has to be undone first.', blocked_reason: action.blocked_reason });
-    const voids = [...action.member_ids, action.event_id].map((id) => buildVoidEvent({
+    // A backfilled reply is linked to the attach that logged it rather than written beside it; undo takes it out too.
+    const linkedIds = action.type === REPLY_EVENT_TYPE
+      ? withLogRead(DATA_DIR, (store) => linkedInboundEventIds([...readEvents(store, { type: 'email_received' }), ...readEvents(store, { type: 'event_undone' })], action.event_id))
+      : [];
+    const voids = [...action.member_ids, ...linkedIds, action.event_id].map((id) => buildVoidEvent({
       target_event_id: id,
       reason_code: reason,
       evidence_ref: 'owner',

@@ -117,7 +117,7 @@ try {
   if (r.status !== 200) console.log(JSON.stringify(r.body).slice(0, 300));
   check(r.status === 200 && statusOf(900003) === 'Rejected' && projectedNotes()['900003']?.length === 1, 'the reply note is projected from the event and the status flipped');
   list = await recent();
-  check(list.actions.length === 1 && list.actions[0].type === 'reply_attached' && list.actions[0].undoable && list.actions[0].member_ids.length === 1 && /Reply logged, status set to Rejected/.test(list.actions[0].summary), 'the reply and its status flip are one action');
+  check(list.actions.length === 1 && list.actions[0].type === 'reply_attached' && list.actions[0].undoable && list.actions[0].member_ids.length === 2 && /Reply logged, status set to Rejected/.test(list.actions[0].summary), 'the reply, its status flip and its classified inbound event are one action');
   const replyEventId = list.actions[0].event_id;
   const loggedReply = allEvents().find((event) => event.id === replyEventId);
   check(loggedReply?.payload?.legacy_effects?.some((effect) => effect.file === 'app-notes.json' && effect.op === 'json_nested_append'), 'the reply event itself owns the note effect');
