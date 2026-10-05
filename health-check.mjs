@@ -8,6 +8,7 @@ export const HEALTH_CHECKS = [
   'verify-reports.mjs',
   'verify-score-drift.mjs',
   'verify-report-derivation.mjs',
+  'verify-scorer-version.mjs',
   'verify-report-numbering.mjs',
   'audit-orphan-reports.mjs',
 ];

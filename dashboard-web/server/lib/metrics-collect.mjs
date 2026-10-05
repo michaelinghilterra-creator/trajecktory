@@ -128,6 +128,7 @@ export function collectCoreMetrics({ today = localToday() } = {}) {
     status: app.status,
     reached: app.reached,
     score: app.score,
+    scorerVersion: app.scorerVersion,
     warm: app.inbound === true || app.outbound === true || app.source === 'Referral' || referralIds.has(String(app.id)),
     referral: app.source === 'Referral' || referralIds.has(String(app.id)),
     archetype: app.archetype,

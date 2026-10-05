@@ -208,10 +208,18 @@ export function stripFrontmatter(md) {
   return md.slice(m[0].length);
 }
 
+// Which scoring rules produced this report's headline: the stamped scorerVersion, or 'authored' for a report whose
+// score was written by the model (no scoreSource: derived), or null for a derived report that has not been stamped.
+export function scorerVersionOf(data) {
+  if (data && typeof data.scorerVersion === 'string' && data.scorerVersion) return data.scorerVersion;
+  return data && data.scoreSource === 'derived' ? null : 'authored';
+}
+
 // Read the same fields readReportHeader() extracts from legacy markdown, but
-// from v1 frontmatter. Returns { url, domain, compStated, legitimacy }.
+// from v1 frontmatter. Returns { url, domain, compStated, legitimacy, scorerVersion }.
 export function v1Header(data) {
   return {
+    scorerVersion: scorerVersionOf(data),
     url: data.url || null,
     domain: data.domain || null,
     compStated: data.summary?.compStated || data.comp?.stated || null,
@@ -267,6 +275,7 @@ export function v1ToCheatsheet(data) {
     // penalty) so a derived headline stays traceable even if the weights change later.
     globalScore:    Array.isArray(data.globalScore) ? data.globalScore : [],
     scoreSource:    data.scoreSource === 'derived' ? 'derived' : 'legacy',
+    scorerVersion:  scorerVersionOf(data),
     scoreBasis:     data.scoreBasis && typeof data.scoreBasis === 'object' ? data.scoreBasis : null,
     recommendation: data.recommendation || null,
     keywords:       Array.isArray(data.keywords) ? data.keywords : [],
