@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.7.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.7.0...v5.7.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* refresh the Pipeline right after a reply is logged or a change is undone ([#443](https://github.com/michaelinghilterra-creator/trajecktory/issues/443)) ([e4c527b](https://github.com/michaelinghilterra-creator/trajecktory/commit/e4c527b9f0ef752ad830bda0a8c08b07369457d2))
+
 ## [5.7.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.6.3...v5.7.0) (2026-10-05)
 
 
