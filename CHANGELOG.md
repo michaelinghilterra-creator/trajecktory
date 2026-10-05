@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.8.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.8.0...v5.8.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* retire the follow-up split test and its misleading drawer badge ([#447](https://github.com/michaelinghilterra-creator/trajecktory/issues/447)) ([eeb058e](https://github.com/michaelinghilterra-creator/trajecktory/commit/eeb058e73fee486574bd20002306ba56ed3d740c))
+
 ## [5.8.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.7.1...v5.8.0) (2026-10-05)
 
 
