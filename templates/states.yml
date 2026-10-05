@@ -75,35 +75,12 @@ states:
     description: Rejected by company
     dashboard_group: rejected
 
-  - id: discarded
-    label: Discarded
-    aliases: [descartado, descartada, cerrada, cancelada]
-    description: Discarded by candidate or offer closed
-    dashboard_group: discarded
-
-  - id: skip
-    label: SKIP
-    aliases: [no_aplicar, no aplicar, skip, monitor]
-    description: Doesn't fit, don't apply
-    dashboard_group: skip
-
-  - id: closed
-    label: Closed
-    aliases: [no longer available, expired, nla, posting closed, role closed]
-    description: Job posting is no longer available or has been closed
-    dashboard_group: closed
-
-  - id: not_a_fit
-    label: Not a Fit
-    aliases: [not a fit, naf, no fit, poor fit]
-    description: "Role evaluated and determined to be a poor fit: signal noise, wrong level, wrong domain"
-    dashboard_group: not_a_fit
-
   # Passed folds SKIP, Not a Fit, Discarded and Closed (Definitions v1 section 3): you are out, whether
   # before or after applying. It is written by auto-discard, merge-tracker and the dashboard. The four
-  # labels above are retired: they stay here only so old backups, status-event history and batch input
-  # still parse (lib/passed.mjs reads them as Passed plus a reason). No aliases on purpose:
-  # normalize-statuses must not rewrite the four labels into Passed on its own.
+  # labels are retired and are NOT listed here: lib/passed.mjs (RETIRED_STATES) is the one place that knows
+  # them, so old backups, status-event history and batch input still parse. The readers of this file add
+  # them back with withRetiredStates(). No aliases on Passed on purpose: normalize-statuses must not rewrite
+  # the four labels into Passed on its own.
   - id: passed
     label: Passed
     aliases: []

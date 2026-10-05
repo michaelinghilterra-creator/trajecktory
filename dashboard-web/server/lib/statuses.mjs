@@ -9,7 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import { ROOT_DIR } from '../config.mjs';
-import { isPostingClosed } from '../../../lib/passed.mjs';
+import { isPostingClosed, withRetiredStates } from '../../../lib/passed.mjs';
 
 const STATES_FILE = path.join(ROOT_DIR, 'templates', 'states.yml');
 
@@ -18,7 +18,7 @@ let _talentStates = [];
 let _referralStates = [];
 try {
   const doc = yaml.load(fs.readFileSync(STATES_FILE, 'utf8'));
-  _states = Array.isArray(doc?.states) ? doc.states : [];
+  _states = withRetiredStates(Array.isArray(doc?.states) ? doc.states : []);
   _talentStates = Array.isArray(doc?.talent_states) ? doc.talent_states : [];
   _referralStates = Array.isArray(doc?.referral_states) ? doc.referral_states : [];
 } catch (e) {

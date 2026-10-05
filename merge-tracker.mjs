@@ -23,7 +23,7 @@ import { execFileSync } from 'child_process';
 import yaml from 'js-yaml';
 import { parseScore, shouldAutoDiscard, recommendsAgainst, AUTO_DISCARD_SCORE } from './lib/discard.mjs';
 import { parseTrackerLine, formatTrackerLine, TRACKER_HEADER, TRACKER_SEPARATOR } from './lib/tracker.mjs';
-import { withPassedReason, passedReasonOf } from './lib/passed.mjs';
+import { withPassedReason, passedReasonOf, withRetiredStates } from './lib/passed.mjs';
 // Read a report's DERIVED headline (see lib/score.mjs). Same v1 frontmatter reader
 // compute-scores.mjs uses, so the tracker score comes from the one source of truth.
 import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs';
@@ -85,7 +85,10 @@ mkdirSync(ADDITIONS_DIR, { recursive: true });
 // hand-patched (2026-06-23). Reading the file removes that whole class of bug.
 const STATES_FILE = join(CAREER_OPS, 'templates/states.yml');
 const statesDoc = yaml.load(readFileSync(STATES_FILE, 'utf-8'));
-const CANONICAL_STATES = statesDoc.states.map(s => s.label);
+// The four retired labels are not in states.yml; lib/passed.mjs lists them and they are added back here so old
+// input (batch additions, backups) still validates exactly as before.
+const STATES = withRetiredStates(statesDoc.states);
+const CANONICAL_STATES = STATES.map(s => s.label);
 
 // Code-only aliases that are intentionally NOT in states.yml: loose free-text
 // the writer occasionally emits, not canonical-state synonyms the dashboard
@@ -94,7 +97,7 @@ const STATUS_ALIASES = {
   condicional: 'Evaluated', hold: 'Evaluated', evaluar: 'Evaluated', verificar: 'Evaluated',
   'geo blocker': 'SKIP',
 };
-for (const state of statesDoc.states) {
+for (const state of STATES) {
   for (const alias of state.aliases || []) {
     STATUS_ALIASES[String(alias).toLowerCase()] = state.label;
   }

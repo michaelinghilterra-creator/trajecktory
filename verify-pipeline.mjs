@@ -18,6 +18,7 @@ import { readFileSync, readdirSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { parseTracker } from './lib/tracker.mjs';
+import { withRetiredStates } from './lib/passed.mjs';
 import { canonicalUrl, urlForRow } from './lib/identity.mjs';
 import { sourceUrlOf } from './lib/pipeline.mjs';
 
@@ -53,7 +54,7 @@ let CANONICAL_STATUSES = FALLBACK_STATUSES;
 let ALIASES = { ...EXTRA_ALIASES };
 try {
   const yaml = (await import('js-yaml')).default;
-  const states = yaml.load(readFileSync(STATES_FILE, 'utf-8')).states;
+  const states = withRetiredStates(yaml.load(readFileSync(STATES_FILE, 'utf-8')).states);
   CANONICAL_STATUSES = states.map(s => s.label.toLowerCase());
   for (const s of states) {
     for (const a of s.aliases || []) ALIASES[String(a).toLowerCase()] = s.label.toLowerCase();

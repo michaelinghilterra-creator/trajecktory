@@ -700,6 +700,7 @@ for (const suite of [
   'tests/bulk-no-response-guard.test.mjs',
   'tests/definitions.test.mjs',
   'tests/passed-alias.test.mjs',
+  'tests/retired-labels.test.mjs',
   'tests/passed.test.mjs',
   'tests/passed-writers.test.mjs',
   'tests/passed-reason-shared.test.mjs',
