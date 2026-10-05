@@ -363,7 +363,7 @@ them by code, not authored. After saving the report, run:
 node compute-scores.mjs reports/{###}-{company-slug}-{YYYY-MM-DD}.md --apply
 ```
 
-This writes `score`, `scoreSource: "derived"`, and `scoreBasis` into the report and
+This writes `score`, `scorerVersion`, `scoreSource: "derived"`, and `scoreBasis` into the report and
 prints the derived headline (e.g. `4.2`). **Use that printed number as the score in the
 tracker row below**. Do not invent one. If it prints `left as-is`, your `globalScore`
 entries are missing the `key` fields; fix them and re-run.

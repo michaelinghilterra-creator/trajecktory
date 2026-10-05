@@ -69,7 +69,7 @@ function readReportHeader(reportPath) {
   const cached = _reportHeaderCache.get(reportPath);
   if (cached && cached.mtimeMs === stat.mtimeMs) return cached.data;
 
-  let url = null, domain = null, compStated = null, legitimacy = null;
+  let url = null, domain = null, compStated = null, legitimacy = null, scorerVersion = null;
   try {
     const fd = fs.openSync(abs, 'r');
     const buf = Buffer.alloc(48000);
@@ -86,11 +86,13 @@ function readReportHeader(reportPath) {
         // what "Open JD" falls back to when the row's url is not web-openable (a
         // local: path, or the $file-style garbage a broken batch once wrote), so a
         // self-sourced role still has a readable JD instead of a dead button.
-        const out = { url: h.url, domain: h.domain, compStated: h.compStated, legitimacy: h.legitimacy, jdSnapshot: data.jdSnapshot || null };
+        const out = { url: h.url, domain: h.domain, compStated: h.compStated, legitimacy: h.legitimacy, jdSnapshot: data.jdSnapshot || null, scorerVersion: h.scorerVersion };
         _reportHeaderCache.set(reportPath, { mtimeMs: stat.mtimeMs, data: out });
         return out;
       } catch { /* malformed v1 — fall through to legacy regex */ }
     }
+    // A report with no v1 frontmatter has a model-authored score; a malformed v1 one is unknown.
+    scorerVersion = hasV1Frontmatter(head) ? null : 'authored';
 
     const urlMatch = head.match(/^\*\*URL:\*\*\s*(https?:\/\/[^\s()]+)/m);
     if (urlMatch) url = urlMatch[1];
@@ -122,7 +124,7 @@ function readReportHeader(reportPath) {
 
   // Legacy (non-v1) reports predate the jdSnapshot frontmatter key, so there is
   // nothing to capture — null keeps the object shape identical to the v1 branch.
-  const data = { url, domain, compStated, legitimacy, jdSnapshot: null };
+  const data = { url, domain, compStated, legitimacy, jdSnapshot: null, scorerVersion };
   _reportHeaderCache.set(reportPath, { mtimeMs: stat.mtimeMs, data });
   return data;
 }
@@ -316,6 +318,7 @@ function parseApplicationsMd() {
       jdSnapshot,          // in-repo `jds/<file>.md` — the Open JD fallback when url isn't web-openable
       source,              // 'Self-sourced' | 'Referral' | 'API Scan' | 'Agent Scan'
       legitimacy,          // 'High Confidence' | 'Proceed with Caution' | 'Suspicious' | null
+      scorerVersion: header?.scorerVersion ?? null, // which scoring rules made the score: a date, 'authored', or null
     });
   }
   // Stamp the furthest funnel rung each row ever reached. The browser cannot

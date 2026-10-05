@@ -115,6 +115,7 @@ re-derived. See **Derived vs legacy score** below.
 ### Derived vs legacy score
 ```json
 "score": 4.1,
+"scorerVersion": "2026-09-22",
 "scoreSource": "derived",
 "scoreBasis": {
   "weights": { "fit": 0.35, "northStar": 0.25, "level": 0.15, "comp": 0.15, "location": 0.10 },
@@ -125,6 +126,10 @@ re-derived. See **Derived vs legacy score** below.
   "weightedAverage": 4.1
 }
 ```
+- `scorerVersion`: written by `compute-scores.mjs` right after `score` on every derived report: the date of the
+  last scoring-rule change (`SCORER_VERSION` in `lib/score.mjs`). It says which rules produced the headline, so the
+  dashboard averages only scores made under one version. Never author it by hand. A report with no
+  `scoreSource: "derived"` is read as `authored` (a model-written score).
 - `scoreSource`: `"derived"` (headline computed by `deriveScore` from the keyed
   dimensions above) or `"legacy"` (authored under the old rubric). **Absent means
   legacy**: old reports are read as legacy without being rewritten, and their

@@ -27,9 +27,23 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { hasV1Frontmatter, parseV1 } from './dashboard-web/server/v1-loader.mjs';
-import { deriveScore, loadScoringWeights, SCORE_DIMENSIONS, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL, compCeiling, buildDepthCeiling } from './lib/score.mjs';
+import { deriveScore, loadScoringWeights, SCORE_DIMENSIONS, applyLevelFloor, leadTitle, DEFAULT_MINIMUM_LEVEL, compCeiling, buildDepthCeiling, SCORER_VERSION } from './lib/score.mjs';
 
 const round1 = (n) => Math.round(n * 10) / 10;
+
+// Returns a copy of the frontmatter with scorerVersion set right after `score`. It goes early, not at the end, so it
+// sits inside the 48,000 bytes the dashboard reads of a report header, and the position is the same on every run, so
+// re-deriving a stamped report rewrites nothing.
+export function withScorerVersion(data, version = SCORER_VERSION) {
+  const out = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (key === 'scorerVersion') continue;
+    out[key] = value;
+    if (key === 'score') out.scorerVersion = version;
+  }
+  if (!('scorerVersion' in out)) out.scorerVersion = version;
+  return out;
+}
 
 // Pure core: given a report's markdown, return the derivation outcome and (when
 // derivable) the rewritten markdown. No file I/O, so it is unit-tested directly.
@@ -127,12 +141,32 @@ export function deriveReportScore(md, { weights, redFlagPenalty, minimumLevel, c
   }
   // Preserve key order: keep score in place, append the new keys. The body is
   // re-emitted byte-for-byte; only the frontmatter JSON is rewritten.
-  const newData = { ...data, globalScore, score: res.score, scoreSource: 'derived', scoreBasis };
+  const newData = withScorerVersion({ ...data, globalScore, score: res.score, scoreSource: 'derived', scoreBasis });
   const newMd = `---\n${JSON.stringify(newData, null, 2)}\n---\n${body}`;
   return {
     ok: true, reason: 'ok', score: res.score, prevScore: data.score ?? null,
     changed: newMd !== md, newMd, scoreBasis,
   };
+}
+
+// Stamp-only: add scorerVersion to a derived report WITHOUT touching anything else. Safe only when a full re-derive
+// under the current scorer would produce exactly the same file plus that one key, so the stamp never moves a score,
+// a basis or a rating. Anything else is refused with a reason and left byte-for-byte alone.
+//   reason: 'not-v1' | 'no-keyed-dims' | 'not-derivable' | 'not-derived' | 'format-differs' | 'differs'
+export function stampScorerVersion(md, opts = {}) {
+  const r = deriveReportScore(md, opts);
+  if (!r.ok) return { ok: false, reason: r.reason };
+  let parsed;
+  try { parsed = parseV1(md); } catch { return { ok: false, reason: 'not-v1' }; }
+  const { data, body } = parsed;
+  if (data.scoreSource !== 'derived') return { ok: false, reason: 'not-derived' };
+  if (data.scorerVersion === SCORER_VERSION && r.newMd === md) return { ok: true, stamped: false, newMd: md, score: data.score };
+  const render = (d) => `---\n${JSON.stringify(d, null, 2)}\n---\n${body}`;
+  // The file must already be in the form this script writes, or a rewrite could change more than the key.
+  if (render(withScorerVersion(data, data.scorerVersion || SCORER_VERSION)) !== md && render(data) !== md) return { ok: false, reason: 'format-differs' };
+  const stampedMd = render(withScorerVersion(data));
+  if (r.newMd !== stampedMd) return { ok: false, reason: 'differs' };
+  return { ok: true, stamped: stampedMd !== md, newMd: stampedMd, score: data.score };
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
@@ -152,6 +186,36 @@ function listAllReports() {
   catch { return []; }
 }
 
+// --stamp-version: add scorerVersion to derived reports whose score already reproduces under the current scorer.
+// Prints counts only unless --verbose (a report file name carries a company name).
+function runStamp({ targets, apply, verbose, weights }) {
+  const counts = { stamped: 0, already: 0, notDerived: 0, refused: 0, unreadable: 0, written: 0 };
+  const refusedReasons = {};
+  for (const file of targets) {
+    let md;
+    try { md = fs.readFileSync(file, 'utf8'); } catch { counts.unreadable++; continue; }
+    const r = stampScorerVersion(md, weights);
+    if (!r.ok) {
+      if (['not-v1', 'no-keyed-dims', 'not-derived'].includes(r.reason)) { counts.notDerived++; continue; }
+      counts.refused++;
+      refusedReasons[r.reason] = (refusedReasons[r.reason] || 0) + 1;
+      if (verbose) console.log(`  ✗ ${path.basename(file)}: refused (${r.reason})`);
+      continue;
+    }
+    if (!r.stamped) { counts.already++; continue; }
+    counts.stamped++;
+    if (verbose) console.log(`  ${apply ? '✓' : '·'} ${path.basename(file)}: ${apply ? 'stamped' : 'would stamp'} ${SCORER_VERSION}`);
+    if (apply) {
+      try { if (writeReportIfChanged(file, md, r)) counts.written++; }
+      catch (e) { console.error(`    ✗ write failed: ${e.message}`); }
+    }
+  }
+  const mode = apply ? 'applied' : 'dry run';
+  console.log(`scorerVersion ${SCORER_VERSION}: ${counts.stamped} to stamp, ${counts.already} already stamped, ${counts.notDerived} not derived (left as-is), ${counts.refused} refused, ${counts.unreadable} unreadable, ${counts.written} written (${mode}).`);
+  if (counts.refused) console.log(`Refused by reason: ${JSON.stringify(refusedReasons)}. A refused report is never rewritten; re-derive it first.`);
+  if (!apply && counts.stamped > 0) console.log('Re-run with --apply to write.');
+}
+
 function main() {
   const args = process.argv.slice(2);
   const apply = args.includes('--apply');
@@ -165,6 +229,8 @@ function main() {
     console.error('Usage: node compute-scores.mjs <report.md> [--apply] | --all [--apply] | <report.md> --print-score');
     process.exit(2);
   }
+
+  if (args.includes('--stamp-version')) { runStamp({ targets, apply, verbose: args.includes('--verbose'), weights }); return; }
 
   let derived = 0, skipped = 0, wrote = 0, unchanged = 0;
   for (const file of targets) {

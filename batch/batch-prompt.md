@@ -278,7 +278,7 @@ saving the report, run:
 node compute-scores.mjs reports/{{REPORT_NUM}}-{company-slug}-{{DATE}}.md --apply
 ```
 
-It writes `score` / `scoreSource` / `scoreBasis` into the report and prints the derived
+It writes `score` / `scorerVersion` / `scoreSource` / `scoreBasis` into the report and prints the derived
 headline. **Use that printed number as `{score}` in the TSV line below**. Do not invent
 one. `left as-is` means your `globalScore` entries lack the `key` fields; fix and re-run.
 (If your worker cannot run node, leave the placeholder: the batch workflow runs
