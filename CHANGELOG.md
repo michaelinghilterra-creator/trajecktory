@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.7.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.6.3...v5.7.0) (2026-10-05)
+
+
+### Features
+
+* stamp which scoring rules produced each derived score ([#441](https://github.com/michaelinghilterra-creator/trajecktory/issues/441)) ([f3d88a4](https://github.com/michaelinghilterra-creator/trajecktory/commit/f3d88a4a8ae121322f85f0e98bb6817dcfad7eb4))
+
 ## [5.6.3](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.6.2...v5.6.3) (2026-10-04)
 
 
