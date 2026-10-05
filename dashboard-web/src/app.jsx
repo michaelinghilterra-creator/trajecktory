@@ -269,6 +269,10 @@ function App() {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [refreshApps]);
+  // Lets other tabs re-sync the applications on the spot: the Review tab after a reply is logged, and undo. Without
+  // it a status they changed (a reply logged as Rejected) stays invisible on the Pipeline tab until the window is
+  // refocused or the page reloaded.
+  useEffect(() => { window.tjkRefreshApps = refreshApps; }, [refreshApps]);
   // If a row-detail drawer is open when apps re-syncs (e.g. Merge wrote new
   // rows), swap in the fresh row so the panel isn't a stale snapshot.
   useEffect(() => {
