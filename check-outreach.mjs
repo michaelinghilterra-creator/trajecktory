@@ -8,7 +8,7 @@
  * `outreach:` block of config/profile.yml. The dashboard routes already call it.
  * Anything that drafts outreach from the command line (a headless agent running
  * the contacto mode, a script) did NOT, so for that path the limit was only a
- * request in a prompt. This script is the same verdict, callable from a shell.
+ * request in an instruction file. This script is the same verdict, callable from a shell.
  *
  * Usage:
  *   node check-outreach.mjs --source ta|referral|influencer --id <n> [--channel email|linkedin|both] [--json]
@@ -23,7 +23,7 @@
  *   1  blocked by a cap (reasons and next eligible date are printed)
  *   2  could not decide (bad arguments, contact not found, read error) — fails CLOSED
  *
- * There is deliberately no override flag. A person can override in the
+ * There is intentionally no override flag. A person can override in the
  * dashboard, where it is logged to data/outreach-overrides.tsv; an agent cannot.
  *
  * Not evaluated here (both are soft "save it for someone better" rules that need

@@ -4,12 +4,12 @@
  *
  * check-outreach.mjs exists so a headless agent (the contacto mode, a script) hits
  * the same caps the dashboard routes enforce, instead of a limit that only lives
- * in a prompt. The contract a caller depends on is the EXIT CODE: 0 allowed,
+ * in an instruction file. The contract a caller depends on is the EXIT CODE: 0 allowed,
  * 1 blocked, 2 could-not-decide. The one that matters most is 2. A failure to
  * decide must never read as 0, and must never be confused with 1 either, so a
  * missing contact, bad arguments and a crashed import all land on 2.
  *
- * Two layers, because the script deliberately has no flag for changing the clock
+ * Two layers, because the script intentionally has no flag for changing the clock
  * (a flag that lets a caller pick "today" is a flag that lets an agent walk past
  * every gap rule):
  *   - the date-dependent rules run in-process against a fixed clock in 2030;
