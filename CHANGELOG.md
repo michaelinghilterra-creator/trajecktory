@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.9.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.8.1...v5.9.0) (2026-10-06)
+
+
+### Features
+
+* add check-outreach CLI so headless outreach hits the same caps ([#450](https://github.com/michaelinghilterra-creator/trajecktory/issues/450)) ([a49e4e9](https://github.com/michaelinghilterra-creator/trajecktory/commit/a49e4e9525f889f892d7be29e83a63aa91209b7e))
+
 ## [5.8.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.8.0...v5.8.1) (2026-10-05)
 
 
