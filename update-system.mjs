@@ -121,6 +121,7 @@ export const SYSTEM_PATHS = [
   'verify-actionable.mjs',
   'doctor.mjs',
   'check-liveness.mjs',
+  'check-outreach.mjs',
   'liveness-core.mjs',
   'analyze-patterns.mjs',
   'followup-cadence.mjs',
