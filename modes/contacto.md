@@ -14,6 +14,13 @@
 
 3. **Select primary target**: the person who would benefit the most from having the candidate there
 
+3b. **Cap check -- MANDATORY before drafting.** Run the outreach gate for the chosen target:
+   - Already in the books (target-talent / referrals): `node check-outreach.mjs --source ta|referral --id <n> --channel linkedin|email`
+   - Not in the books yet: `node check-outreach.mjs --new --company "<company>" --channel linkedin|email`
+   - Exit `0` = proceed. Exit `1` = BLOCKED: do NOT draft. Show the user the reasons and the next eligible date it prints, then stop.
+   - Exit `2` = the check could not run: treat it exactly like blocked. Report the error; never proceed on a failed check.
+   - There is no override from this path. If the user wants to override a cap, that happens in the dashboard, where it is logged.
+
 4. **Generate message** using a 3-sentence framework adapted to the contact type:
 
    ### Recruiter
