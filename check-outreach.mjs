@@ -32,6 +32,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 const SOURCES = new Set(['ta', 'referral', 'influencer']);
 const CHANNELS = new Set(['email', 'linkedin', 'both']);
 
@@ -158,7 +159,7 @@ function render(result) {
   return lines.join('\n');
 }
 
-const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
+const invokedDirectly = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
 if (invokedDirectly) {
   const args = parseArgs(process.argv.slice(2));
   let result;
