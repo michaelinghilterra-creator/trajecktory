@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.9.1](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.9.0...v5.9.1) (2026-10-07)
+
+
+### Bug Fixes
+
+* stop re-queuing a contact already on file under another company label ([#453](https://github.com/michaelinghilterra-creator/trajecktory/issues/453)) ([9d51a25](https://github.com/michaelinghilterra-creator/trajecktory/commit/9d51a252d1d8f0a4f61bbde19edd92483a11b46a))
+
 ## [5.9.0](https://github.com/michaelinghilterra-creator/trajecktory/compare/v5.8.1...v5.9.0) (2026-10-06)
 
 
