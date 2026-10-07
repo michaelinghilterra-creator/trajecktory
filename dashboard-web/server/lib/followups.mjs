@@ -513,7 +513,7 @@ function _personSiblings({ ta, referrals, influencers }) {
 // must not be worked as a new contact? True when a sibling has been contacted,
 // replied, connected, or has an invite pending, or when an older live row
 // already represents them. An older ARCHIVED row never shadows: re-adding an
-// archived contact for a new application is a deliberate revival.
+// archived contact for a new application is an intentional revival.
 function _shadowedBySibling(row, siblings, liMap) {
   // A row with its own recorded contact carries its own thread; only a fresh,
   // untouched twin can be shadowed.
