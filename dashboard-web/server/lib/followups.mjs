@@ -374,6 +374,10 @@ function computeDueSequenceContacts({ apps } = {}) {
   try { taContacts = parseTargetTalentMd(); } catch { /* */ }
   const byId = new Map(taContacts.map(c => [String(c.id), c]));
   const today = _localToday();
+  // A cadence started on a fresh twin of a contact who already has history must
+  // not come due: it would re-pitch a person already invited or emailed.
+  const siblings = _personSiblings(_bothBooks({ taRows: taContacts }));
+  const liMap = readLinkedInMap() ?? {};
 
   const due = [];
   for (const active of getActiveSequences()) {
@@ -388,6 +392,7 @@ function computeDueSequenceContacts({ apps } = {}) {
     if (!c) continue;
     if (c.status === 'Archived') continue;
     if (!eligible.has(normalizeCompany(c.company))) continue;
+    if (_shadowedBySibling(c, siblings.get(c.id), liMap)) continue;
 
     const template = getTemplate(active.sequenceId);
     if (!template) continue;

@@ -103,9 +103,13 @@ fs.writeFileSync(path.join(tmp, 'contact-sequences.json'), JSON.stringify({ 'ta:
 const url = 'https://www.linkedin.com/in/tamsin-orde-ex/';
 const merged = () => computeContactFollowups({ apps }).filter(r => r.source === 'ta').map(r => r.id);
 writeBook([ttLine(10, 'Quillon Labs', 'Sent', url), ttLine(11, 'Quillon Labs Commerce', 'Not Contacted', url)]);
+const { computeDueSequenceContacts } = await import('../dashboard-web/server/lib/followups.mjs');
+const rawDue = () => computeDueSequenceContacts({ apps }).map(r => r.id);
 check(!merged().includes(11), 'a due sequence on a twin of a Sent contact is not surfaced');
+check(!rawDue().includes(11), 'the raw due-sequence list (nav badge, urgent queue) skips the twin too');
 writeBook([ttLine(11, 'Quillon Labs Commerce', 'Not Contacted', url)]);
 check(merged().includes(11), 'the same due sequence surfaces when there is no twin');
+check(rawDue().includes(11), 'the raw due-sequence list surfaces it when there is no twin');
 
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best-effort */ }
 
