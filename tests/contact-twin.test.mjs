@@ -87,6 +87,26 @@ const emailTwin = row({ ...twin, linkedin: '', email: 'tamsin.orde@quillon.examp
 const emailQ = computeEmailQueue({ taRows: [emailA, emailTwin], referralRows: [], influencers: [], apps });
 check(emailQ.length === 0, 'an email twin of a Sent contact is not queued (no shared profile: name and company)');
 
+
+console.log('\n4. A started sequence on the twin (the merged follow-up list)');
+const { computeContactFollowups } = await import('../dashboard-web/server/lib/followups.mjs');
+const day = off => { const d = new Date(); d.setDate(d.getDate() + off); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const ttLine = (id, company, status, url) =>
+  `| ${id} | ${company} | Orde | Tamsin |  | Recruiter |  |  |  |  |  | ${url} | ${status} | ${day(-3)} |  |  |`;
+const writeBook = lines => fs.writeFileSync(path.join(tmp, 'target-talent.md'), [
+  '# Target Talent', '',
+  '| # | Company | Last | First | Salute | Title | City | State | Zip | Phone | Email | LinkedIn | Status | Last Touch | Notes | Website |',
+  '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+  ...lines, ''].join('\n'), 'utf8');
+const dueStep = { sequenceId: 'application-day-0-1-5-12', startedAt: day(-20), step: 0, nextStepDue: day(-3), paused: false, completedAt: null, firstChannel: 'linkedin' };
+fs.writeFileSync(path.join(tmp, 'contact-sequences.json'), JSON.stringify({ 'ta:11': dueStep }));
+const url = 'https://www.linkedin.com/in/tamsin-orde-ex/';
+const merged = () => computeContactFollowups({ apps }).filter(r => r.source === 'ta').map(r => r.id);
+writeBook([ttLine(10, 'Quillon Labs', 'Sent', url), ttLine(11, 'Quillon Labs Commerce', 'Not Contacted', url)]);
+check(!merged().includes(11), 'a due sequence on a twin of a Sent contact is not surfaced');
+writeBook([ttLine(11, 'Quillon Labs Commerce', 'Not Contacted', url)]);
+check(merged().includes(11), 'the same due sequence surfaces when there is no twin');
+
 try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* best-effort */ }
 
 console.log(`\n${passed} passed, ${failed} failed`);

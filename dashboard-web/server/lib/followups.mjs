@@ -510,6 +510,9 @@ function _personSiblings({ ta, referrals, influencers }) {
 // already represents them. An older ARCHIVED row never shadows: re-adding an
 // archived contact for a new application is a deliberate revival.
 function _shadowedBySibling(row, siblings, liMap) {
+  // A row with its own recorded contact carries its own thread; only a fresh,
+  // untouched twin can be shadowed.
+  if (CONTACTED_STATUSES.has(row.status) || row.status === 'Connected') return false;
   for (const other of siblings || []) {
     if (CONTACTED_STATUSES.has(other.status) || other.status === 'Connected') return true;
     const state = liMap?.[String(other.id)]?.state;
@@ -1240,6 +1243,12 @@ function computeContactFollowups(opts = {}) {
   // Only rows whose ref resolves to a person are collapsed; anything unresolved
   // falls back to its own row key and behaves exactly as before.
   let personByRef = new Map();
+  // Every trigger below (outreach, stale app, due sequence) can surface a fresh
+  // twin of a contact already on file; a started cadence on the twin is enough.
+  // Shadow it here, once, so no trigger re-pitches a person who has history.
+  let siblings = new Map();
+  let taById = new Map();
+  let liMap = {};
   try {
     const books = _bothBooks(opts);
     const people = resolvePeople({
@@ -1247,10 +1256,17 @@ function computeContactFollowups(opts = {}) {
       pins: opts.pins ?? readPins(),
     });
     personByRef = new Map(people.flatMap(p => p.refs.map(ref => [ref, p.id])));
+    siblings = _personSiblings(books);
+    taById = new Map(books.ta.map(row => [row.id, row]));
+    liMap = readLinkedInMap() ?? {};
   } catch { /* resolution unavailable → fall back to row keys, never throw here */ }
 
   const put = (item) => {
     if (!item || item.channel === 'none') return;   // no reachable channel → nothing to action
+    if (item.source === 'ta') {
+      const taRow = taById.get(Number(item.id));
+      if (taRow && _shadowedBySibling(taRow, siblings.get(taRow.id), liMap)) return;
+    }
     const rowKey = `${item.source}:${item.id}`;
     const key = personByRef.get(rowKey) || rowKey;
     const prev = byKey.get(key);
